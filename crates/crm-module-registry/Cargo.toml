@@ -1,0 +1,10 @@
+[package]
+name = "crm-module-registry"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-module-manifest = { path = "../crm-module-manifest" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+semver = "1"
