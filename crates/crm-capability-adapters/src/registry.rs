@@ -127,15 +127,14 @@ fn validate_definition(definition: &CapabilityDefinition) -> Result<(), Capabili
     {
         return Err(invalid("input contract is incomplete"));
     }
-    if let Some(output) = &definition.output_contract {
-        if output.owner != definition.owner_module_id
+    if let Some(output) = &definition.output_contract
+        && (output.owner != definition.owner_module_id
             || output.allowed_data_classes.is_empty()
             || output.allowed_encodings.is_empty()
             || output.maximum_size_bytes == 0
-            || output.descriptor_hash.iter().all(|byte| *byte == 0)
-        {
-            return Err(invalid("output contract is incomplete"));
-        }
+            || output.descriptor_hash.iter().all(|byte| *byte == 0))
+    {
+        return Err(invalid("output contract is incomplete"));
     }
     if definition.requires_idempotency && !definition.mutation {
         return Err(invalid("read-only capability cannot require idempotency"));
