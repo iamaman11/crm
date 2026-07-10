@@ -150,13 +150,16 @@ async fn postgres_adapter_enforces_atomicity_and_tenant_visibility() {
         .expect("query fault-injected record");
     assert!(rolled_back.is_none(), "failed transaction must leave no record");
 
-    let audit_head: (i64, Vec<u8>) = sqlx::query_as(
-        "SELECT next_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1",
-    )
-    .bind("tenant-a")
-    .fetch_one(store.pool())
-    .await
-    .expect("read tenant audit head");
-    assert_eq!(audit_head.0, 4);
-    assert_eq!(audit_head.1, vec![0x33; 32]);
+    let after_fault = plan(
+        "rust-after-fault-record",
+        "tx-rust-after-fault",
+        "idem-rust-after-fault",
+        4,
+        [0x33; 32],
+        [0x55; 32],
+    );
+    store
+        .create_record(&after_fault)
+        .await
+        .expect("audit sequence and head must have rolled back with the failed transaction");
 }
