@@ -6,11 +6,11 @@ lint:
     - STANDARD
   ignore_only:
     RPC_REQUEST_STANDARD_NAME:
-      - crm/core/v1/policy.proto
-      - crm/sales/v1/deal.proto
+      - proto/crm/core/v1/policy.proto
+      - proto/crm/sales/v1/deal.proto
     RPC_RESPONSE_STANDARD_NAME:
-      - crm/core/v1/policy.proto
-      - crm/sales/v1/deal.proto
+      - proto/crm/core/v1/policy.proto
+      - proto/crm/sales/v1/deal.proto
 breaking:
   use:
     - FILE
