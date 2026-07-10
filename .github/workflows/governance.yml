@@ -35,7 +35,7 @@ on:
       - ".github/workflows/governance.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   governance:
@@ -61,41 +61,3 @@ jobs:
         run: python -m unittest tests/test_module_manifest_validation.py
       - name: Enforce architecture boundaries
         run: python scripts/check_architecture.py
-
-  apply-replay-fix:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feature/capability-gateway-e2e-v1
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Apply and validate replay assertion fix
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('crates/crm-capability-ingress/tests/postgres_gateway_e2e.rs')
-          content = path.read_text()
-          old = "    assert!(success_result(&replay.body).replayed);\n    assert_eq!(success_result(&replay.body), success_result(&first.body));\n"
-          new = "    let first_result = success_result(&first.body);\n    let replay_result = success_result(&replay.body);\n    assert!(replay_result.replayed);\n    assert_eq!(replay_result.output, first_result.output);\n    assert_eq!(\n        replay_result.affected_resources,\n        first_result.affected_resources\n    );\n"
-          if old not in content:
-              raise SystemExit('expected replay assertion was not found')
-          path.write_text(content.replace(old, new))
-          PY
-          cargo fmt --all
-          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e --no-run
-          git diff --check
-      - name: Commit focused test fix
-        shell: bash
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add crates/crm-capability-ingress/tests/postgres_gateway_e2e.rs
-          git commit -m "Compare replay payload independently of replay marker"
-          git push origin HEAD:feature/capability-gateway-e2e-v1
