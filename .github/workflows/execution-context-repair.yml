@@ -21,22 +21,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Add distinct business transaction identity
+      - name: Finalize transaction identity and SQL fixtures
         run: |
           python - <<'PY'
           from pathlib import Path
-
-          types = Path("crates/crm-module-sdk/src/types.rs")
-          text = types.read_text(encoding="utf-8")
-          text = text.replace(
-              "identifier_type!(IdempotencyKey);\nidentifier_type!(ModuleId);",
-              "identifier_type!(IdempotencyKey);\nidentifier_type!(BusinessTransactionId);\nidentifier_type!(ModuleId);",
-          )
-          text = text.replace(
-              "    pub idempotency_key: IdempotencyKey,\n    pub schema_version: SchemaVersion,",
-              "    pub idempotency_key: IdempotencyKey,\n    pub business_transaction_id: BusinessTransactionId,\n    pub schema_version: SchemaVersion,",
-          )
-          types.write_text(text, encoding="utf-8")
 
           testing = Path("crates/crm-module-sdk/src/testing.rs")
           text = testing.read_text(encoding="utf-8")
@@ -74,13 +62,31 @@ jobs:
               ".bind(plan.context.execution.business_transaction_id.as_str())",
           )
           postgres.write_text(text, encoding="utf-8")
+
+          sql = Path("database/tests/0001_platform_foundation.sql")
+          text = sql.read_text(encoding="utf-8")
+          text = text.replace(
+              "  descriptor_hash,\n  data_class,\n  maximum_payload_size,",
+              "  descriptor_hash,\n  data_class,\n  payload_encoding,\n  maximum_payload_size,",
+          )
+          text = text.replace(
+              "      descriptor_hash,\n      data_class,\n      maximum_payload_size,",
+              "      descriptor_hash,\n      data_class,\n      payload_encoding,\n      maximum_payload_size,",
+          )
+          text = text.replace("  'internal',\n  16,", "  'internal',\n  'protobuf',\n  16,")
+          text = text.replace("      'internal',\n      0,", "      'internal',\n      'protobuf',\n      0,")
+          sql.write_text(text, encoding="utf-8")
           PY
           cargo fmt --all
           git diff --check
-      - name: Commit context repair
+      - name: Commit repair
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-module-sdk/src crates/crm-core-data/src modules/crm-sales/src
-          git commit -m "fix: add distinct business transaction identity to SDK context"
-          git push origin HEAD:feature/postgres-data-adapter-v1
+          git add crates/crm-module-sdk/src crates/crm-core-data/src modules/crm-sales/src database/tests/0001_platform_foundation.sql
+          if git diff --cached --quiet; then
+            echo "No repair changes required"
+          else
+            git commit -m "fix: align transaction context and payload encoding fixtures"
+            git push origin HEAD:feature/postgres-data-adapter-v1
+          fi
