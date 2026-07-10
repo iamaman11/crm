@@ -52,19 +52,19 @@ pub enum TaskStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Task {
-    pub task_id: RecordId,
-    pub subject: String,
-    pub description: Option<String>,
-    pub owner: TaskOwner,
-    pub related_resources: Vec<ResourceRef>,
-    pub priority: TaskPriority,
-    pub status: TaskStatus,
-    pub due_at_unix_nanos: Option<i64>,
-    pub reminder_at_unix_nanos: Option<i64>,
-    pub completed_at_unix_nanos: Option<i64>,
-    pub created_at_unix_nanos: i64,
-    pub updated_at_unix_nanos: i64,
-    pub version: i64,
+    task_id: RecordId,
+    subject: String,
+    description: Option<String>,
+    owner: TaskOwner,
+    related_resources: Vec<ResourceRef>,
+    priority: TaskPriority,
+    status: TaskStatus,
+    due_at_unix_nanos: Option<i64>,
+    reminder_at_unix_nanos: Option<i64>,
+    completed_at_unix_nanos: Option<i64>,
+    created_at_unix_nanos: i64,
+    updated_at_unix_nanos: i64,
+    version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,6 +127,46 @@ pub struct TaskListQuery {
 }
 
 impl Task {
+    pub fn task_id(&self) -> &RecordId {
+        &self.task_id
+    }
+    pub fn subject(&self) -> &str {
+        &self.subject
+    }
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn owner(&self) -> &TaskOwner {
+        &self.owner
+    }
+    pub fn related_resources(&self) -> &[ResourceRef] {
+        &self.related_resources
+    }
+    pub const fn priority(&self) -> TaskPriority {
+        self.priority
+    }
+    pub const fn status(&self) -> TaskStatus {
+        self.status
+    }
+    pub const fn due_at_unix_nanos(&self) -> Option<i64> {
+        self.due_at_unix_nanos
+    }
+    pub const fn reminder_at_unix_nanos(&self) -> Option<i64> {
+        self.reminder_at_unix_nanos
+    }
+    pub const fn completed_at_unix_nanos(&self) -> Option<i64> {
+        self.completed_at_unix_nanos
+    }
+    pub const fn created_at_unix_nanos(&self) -> i64 {
+        self.created_at_unix_nanos
+    }
+    pub const fn updated_at_unix_nanos(&self) -> i64 {
+        self.updated_at_unix_nanos
+    }
+    pub const fn version(&self) -> i64 {
+        self.version
+    }
+
     pub fn create(command: CreateTask) -> Result<Self, SdkError> {
         validate_subject(&command.subject)?;
         validate_optional_description(command.description.as_deref())?;

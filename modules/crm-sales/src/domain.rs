@@ -39,12 +39,24 @@ pub enum DealOwner {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DealStage {
-    pub pipeline_id: PipelineId,
-    pub stage_id: StageId,
-    pub ordinal: u16,
+    pipeline_id: PipelineId,
+    stage_id: StageId,
+    ordinal: u16,
 }
 
 impl DealStage {
+    pub fn pipeline_id(&self) -> &PipelineId {
+        &self.pipeline_id
+    }
+
+    pub fn stage_id(&self) -> &StageId {
+        &self.stage_id
+    }
+
+    pub const fn ordinal(&self) -> u16 {
+        self.ordinal
+    }
+
     pub fn try_new(
         pipeline_id: PipelineId,
         stage_id: StageId,
@@ -74,27 +86,41 @@ pub enum DealStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DealCloseOutcome {
-    pub status: DealStatus,
-    pub reason_code: ReasonCode,
-    pub closed_at_unix_nanos: i64,
+    status: DealStatus,
+    reason_code: ReasonCode,
+    closed_at_unix_nanos: i64,
+}
+
+impl DealCloseOutcome {
+    pub const fn status(&self) -> DealStatus {
+        self.status
+    }
+
+    pub fn reason_code(&self) -> &ReasonCode {
+        &self.reason_code
+    }
+
+    pub const fn closed_at_unix_nanos(&self) -> i64 {
+        self.closed_at_unix_nanos
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Deal {
-    pub deal_id: RecordId,
-    pub name: String,
-    pub owner: DealOwner,
-    pub account: Option<ResourceRef>,
-    pub primary_contact: Option<ResourceRef>,
-    pub stage: DealStage,
-    pub status: DealStatus,
-    pub amount: Option<Money>,
-    pub expected_close_date: Option<CalendarDate>,
-    pub probability: BasisPoints,
-    pub close_outcome: Option<DealCloseOutcome>,
-    pub created_at_unix_nanos: i64,
-    pub updated_at_unix_nanos: i64,
-    pub version: i64,
+    deal_id: RecordId,
+    name: String,
+    owner: DealOwner,
+    account: Option<ResourceRef>,
+    primary_contact: Option<ResourceRef>,
+    stage: DealStage,
+    status: DealStatus,
+    amount: Option<Money>,
+    expected_close_date: Option<CalendarDate>,
+    probability: BasisPoints,
+    close_outcome: Option<DealCloseOutcome>,
+    created_at_unix_nanos: i64,
+    updated_at_unix_nanos: i64,
+    version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,6 +192,49 @@ pub struct DealListQuery {
 }
 
 impl Deal {
+    pub fn deal_id(&self) -> &RecordId {
+        &self.deal_id
+    }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn owner(&self) -> &DealOwner {
+        &self.owner
+    }
+    pub fn account(&self) -> Option<&ResourceRef> {
+        self.account.as_ref()
+    }
+    pub fn primary_contact(&self) -> Option<&ResourceRef> {
+        self.primary_contact.as_ref()
+    }
+    pub fn stage(&self) -> &DealStage {
+        &self.stage
+    }
+    pub const fn status(&self) -> DealStatus {
+        self.status
+    }
+    pub fn amount(&self) -> Option<&Money> {
+        self.amount.as_ref()
+    }
+    pub const fn expected_close_date(&self) -> Option<CalendarDate> {
+        self.expected_close_date
+    }
+    pub const fn probability(&self) -> BasisPoints {
+        self.probability
+    }
+    pub fn close_outcome(&self) -> Option<&DealCloseOutcome> {
+        self.close_outcome.as_ref()
+    }
+    pub const fn created_at_unix_nanos(&self) -> i64 {
+        self.created_at_unix_nanos
+    }
+    pub const fn updated_at_unix_nanos(&self) -> i64 {
+        self.updated_at_unix_nanos
+    }
+    pub const fn version(&self) -> i64 {
+        self.version
+    }
+
     pub fn create(command: CreateDeal) -> Result<Self, SdkError> {
         validate_name(&command.name)?;
         validate_timestamp(
@@ -408,7 +477,7 @@ fn validate_resource(field: &'static str, reference: &ResourceRef) -> Result<(),
 }
 
 fn validate_optional_amount(amount: Option<&Money>) -> Result<(), SdkError> {
-    if amount.is_some_and(|amount| amount.minor_units < 0) {
+    if amount.is_some_and(|amount| amount.minor_units() < 0) {
         return Err(invalid(
             "SALES_DEAL_AMOUNT_NEGATIVE",
             "deal.amount.minor_units",
@@ -527,7 +596,7 @@ mod tests {
         let deal = open_deal();
         assert_eq!(deal.version, 1);
         assert_eq!(deal.status, DealStatus::Open);
-        assert_eq!(deal.amount.unwrap().minor_units, 1_250_000);
+        assert_eq!(deal.amount().unwrap().minor_units(), 1_250_000);
     }
 
     #[test]

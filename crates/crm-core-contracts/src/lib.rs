@@ -65,8 +65,8 @@ impl fmt::Display for CurrencyCode {
 /// Binary floating point is intentionally impossible at this boundary.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Money {
-    pub minor_units: i128,
-    pub currency: CurrencyCode,
+    minor_units: i128,
+    currency: CurrencyCode,
 }
 
 impl Money {
@@ -75,6 +75,14 @@ impl Money {
             minor_units,
             currency,
         }
+    }
+
+    pub const fn minor_units(&self) -> i128 {
+        self.minor_units
+    }
+
+    pub const fn currency(&self) -> &CurrencyCode {
+        &self.currency
     }
 
     pub fn non_negative(self) -> Result<Self, ContractError> {
@@ -111,12 +119,24 @@ impl BasisPoints {
 /// Time-zone-independent Gregorian calendar date.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CalendarDate {
-    pub year: i32,
-    pub month: u8,
-    pub day: u8,
+    year: i32,
+    month: u8,
+    day: u8,
 }
 
 impl CalendarDate {
+    pub const fn year(self) -> i32 {
+        self.year
+    }
+
+    pub const fn month(self) -> u8 {
+        self.month
+    }
+
+    pub const fn day(self) -> u8 {
+        self.day
+    }
+
     pub fn try_new(year: i32, month: u8, day: u8) -> Result<Self, ContractError> {
         if !(1..=9999).contains(&year) {
             return Err(ContractError::new(
@@ -243,7 +263,7 @@ mod tests {
         let money = Money::new(12_345, CurrencyCode::try_new("USD").unwrap())
             .non_negative()
             .unwrap();
-        assert_eq!(money.minor_units, 12_345);
+        assert_eq!(money.minor_units(), 12_345);
         assert_eq!(money.currency.as_str(), "USD");
         assert!(CurrencyCode::try_new("usd").is_err());
         assert!(
