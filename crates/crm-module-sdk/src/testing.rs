@@ -359,9 +359,9 @@ mod tests {
     use super::*;
     use crate::ports::{Clock, RandomSource};
     use crate::types::{
-        ActorId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, DataClass,
-        ExecutionContext, IdempotencyKey, ModuleId, PayloadEncoding, RequestId, RetentionPolicyId,
-        SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
+        ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,
+        CorrelationId, DataClass, ExecutionContext, IdempotencyKey, ModuleId, PayloadEncoding,
+        RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
     };
     use std::future::Future;
     use std::task::{Context, Poll, Waker};
@@ -388,6 +388,7 @@ mod tests {
                 capability_id: CapabilityId::try_new("sales.test").unwrap(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
                 idempotency_key: IdempotencyKey::try_new("idempotency-1").unwrap(),
+                business_transaction_id: BusinessTransactionId::try_new("transaction-1").unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 request_started_at_unix_nanos: 1,
             },

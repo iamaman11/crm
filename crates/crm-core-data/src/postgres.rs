@@ -152,7 +152,8 @@ impl PostgresDataStore {
         &self,
         plan: &RecordCreatePlan,
     ) -> Result<RecordSnapshot, DataError> {
-        self.create_record_with_fault(plan, FaultInjection::None).await
+        self.create_record_with_fault(plan, FaultInjection::None)
+            .await
     }
 
     #[doc(hidden)]
@@ -219,7 +220,8 @@ impl PostgresDataStore {
         .await?;
 
         transaction.commit().await?;
-        row.map(|row| decode_record(reference.clone(), row)).transpose()
+        row.map(|row| decode_record(reference.clone(), row))
+            .transpose()
     }
 }
 
@@ -243,7 +245,7 @@ async fn bind_execution_context(
     .bind(context.execution.request_id.as_str())
     .bind(context.execution.capability_id.as_str())
     .bind(context.execution.capability_version.as_str())
-    .bind(context.execution.idempotency_key.as_str())
+    .bind(context.execution.business_transaction_id.as_str())
     .execute(&mut **transaction)
     .await?;
     Ok(())
@@ -288,7 +290,7 @@ async fn insert_record(
     .bind(maximum_size)
     .bind(plan.record_payload.retention_policy_id.as_str())
     .bind(plan.record_payload.bytes.as_slice())
-    .bind(plan.context.execution.idempotency_key.as_str())
+    .bind(plan.context.execution.business_transaction_id.as_str())
     .execute(&mut **transaction)
     .await?;
 
@@ -324,7 +326,7 @@ async fn insert_idempotency(
     .bind(&plan.idempotency.scope)
     .bind(&plan.idempotency.key)
     .bind(plan.idempotency.request_hash.as_slice())
-    .bind(plan.context.execution.idempotency_key.as_str())
+    .bind(plan.context.execution.business_transaction_id.as_str())
     .bind(plan.idempotency.expires_at_unix_nanos)
     .execute(&mut **transaction)
     .await?;
@@ -366,7 +368,7 @@ async fn insert_outbox_event(
     )
     .bind(plan.context.execution.tenant_id.as_str())
     .bind(&plan.event_id)
-    .bind(plan.context.execution.idempotency_key.as_str())
+    .bind(plan.context.execution.business_transaction_id.as_str())
     .bind(plan.event.aggregate.record_type.as_str())
     .bind(plan.event.aggregate.record_id.as_str())
     .bind(plan.event.event_type.as_str())
@@ -413,7 +415,7 @@ async fn insert_audit_record(
     .bind(plan.context.execution.tenant_id.as_str())
     .bind(plan.audit.audit_sequence)
     .bind(&plan.audit.audit_record_id)
-    .bind(plan.context.execution.idempotency_key.as_str())
+    .bind(plan.context.execution.business_transaction_id.as_str())
     .bind(plan.context.execution.actor_id.as_str())
     .bind(plan.context.execution.capability_id.as_str())
     .bind(plan.context.execution.capability_version.as_str())
@@ -448,7 +450,7 @@ async fn insert_completion_marker(
         "#,
     )
     .bind(plan.context.execution.tenant_id.as_str())
-    .bind(plan.context.execution.idempotency_key.as_str())
+    .bind(plan.context.execution.business_transaction_id.as_str())
     .bind(plan.context.execution.actor_id.as_str())
     .bind(plan.context.execution.request_id.as_str())
     .bind(plan.context.execution.capability_id.as_str())
@@ -458,25 +460,26 @@ async fn insert_completion_marker(
     Ok(())
 }
 
-fn decode_record(reference: RecordRef, row: sqlx::postgres::PgRow) -> Result<RecordSnapshot, DataError> {
+fn decode_record(
+    reference: RecordRef,
+    row: sqlx::postgres::PgRow,
+) -> Result<RecordSnapshot, DataError> {
     let owner = ModuleId::try_new(row.try_get::<String, _>("owner_module_id")?)
         .map_err(|error| DataError::InvalidStoredValue(error.to_string()))?;
     let schema_id = SchemaId::try_new(row.try_get::<String, _>("schema_id")?)
         .map_err(|error| DataError::InvalidStoredValue(error.to_string()))?;
     let schema_version = SchemaVersion::try_new(row.try_get::<String, _>("schema_version")?)
         .map_err(|error| DataError::InvalidStoredValue(error.to_string()))?;
-    let retention_policy_id = RetentionPolicyId::try_new(
-        row.try_get::<String, _>("retention_policy_id")?,
-    )
-    .map_err(|error| DataError::InvalidStoredValue(error.to_string()))?;
+    let retention_policy_id =
+        RetentionPolicyId::try_new(row.try_get::<String, _>("retention_policy_id")?)
+            .map_err(|error| DataError::InvalidStoredValue(error.to_string()))?;
     let descriptor_hash: Vec<u8> = row.try_get("descriptor_hash")?;
-    let descriptor_hash: [u8; 32] = descriptor_hash.try_into().map_err(|_| {
-        DataError::InvalidStoredValue("descriptor hash is not 32 bytes".to_owned())
-    })?;
+    let descriptor_hash: [u8; 32] = descriptor_hash
+        .try_into()
+        .map_err(|_| DataError::InvalidStoredValue("descriptor hash is not 32 bytes".to_owned()))?;
     let maximum_payload_size: i64 = row.try_get("maximum_payload_size")?;
-    let maximum_payload_size = u64::try_from(maximum_payload_size).map_err(|_| {
-        DataError::InvalidStoredValue("negative maximum payload size".to_owned())
-    })?;
+    let maximum_payload_size = u64::try_from(maximum_payload_size)
+        .map_err(|_| DataError::InvalidStoredValue("negative maximum payload size".to_owned()))?;
 
     Ok(RecordSnapshot {
         reference,

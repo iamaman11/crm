@@ -18,8 +18,9 @@ mod tests {
     use super::*;
     use crm_module_sdk::testing::FixedClock;
     use crm_module_sdk::{
-        ActorId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, ExecutionContext,
-        IdempotencyKey, ModuleId, RequestId, SchemaVersion, TenantId, TraceId,
+        ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,
+        CorrelationId, ExecutionContext, IdempotencyKey, ModuleId, RequestId, SchemaVersion,
+        TenantId, TraceId,
     };
 
     #[test]
@@ -36,6 +37,7 @@ mod tests {
                 capability_id: CapabilityId::try_new("sales.observe").unwrap(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
                 idempotency_key: IdempotencyKey::try_new("idempotency-a").unwrap(),
+                business_transaction_id: BusinessTransactionId::try_new("transaction-a").unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 request_started_at_unix_nanos: 1,
             },
