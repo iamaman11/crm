@@ -82,18 +82,8 @@ jobs:
 
           test_path = Path('crates/crm-capability-ingress/tests/postgres_gateway_e2e.rs')
           content = test_path.read_text()
-          old = '''    assert!(success_result(&replay.body).replayed);
-          assert_eq!(success_result(&replay.body), success_result(&first.body));
-          '''
-          new = '''    let first_result = success_result(&first.body);
-          let replay_result = success_result(&replay.body);
-          assert!(replay_result.replayed);
-          assert_eq!(replay_result.output, first_result.output);
-          assert_eq!(
-              replay_result.affected_resources,
-              first_result.affected_resources
-          );
-          '''
+          old = "    assert!(success_result(&replay.body).replayed);\n    assert_eq!(success_result(&replay.body), success_result(&first.body));\n"
+          new = "    let first_result = success_result(&first.body);\n    let replay_result = success_result(&replay.body);\n    assert!(replay_result.replayed);\n    assert_eq!(replay_result.output, first_result.output);\n    assert_eq!(\n        replay_result.affected_resources,\n        first_result.affected_resources\n    );\n"
           if old not in content:
               raise SystemExit('expected replay assertion was not found')
           test_path.write_text(content.replace(old, new))
