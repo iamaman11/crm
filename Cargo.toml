@@ -9,6 +9,7 @@ members = [
   "crates/crm-core-files",
   "crates/crm-core-integrations",
   "crates/crm-module-manifest",
+  "crates/crm-module-sdk",
   "modules/crm-sales",
   "services/crm-api",
 ]

@@ -6,3 +6,4 @@ publish = false
 
 [dependencies]
 crm-core-contracts = { path = "../../crates/crm-core-contracts" }
+crm-module-sdk = { path = "../../crates/crm-module-sdk" }
