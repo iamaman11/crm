@@ -1,0 +1,26 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/common.proto";
+
+message ModuleManifest {
+  string module_id = 1;
+  string publisher_id = 2;
+  string name = 3;
+  string version = 4;
+  bytes wasm_hash = 5;
+  bytes signature = 6;
+  repeated string requested_capabilities = 7;
+  repeated DataClass requested_data_classes = 8;
+  repeated string requested_network_egress = 9;
+  repeated string requested_secrets = 10;
+  repeated string requested_event_subscriptions = 11;
+  repeated string ui_extensions = 12;
+  map<string, int64> quotas = 13;
+  string minimum_platform_version = 14;
+  string upgrade_policy_id = 15;
+  string rollback_policy_id = 16;
+  bytes sbom = 17;
+  bytes build_attestation = 18;
+}
+message ModuleInstall { string install_id = 1; string tenant_id = 2; string module_id = 3; string version = 4; repeated string approved_capabilities = 5; repeated DataClass approved_data_classes = 6; string status = 7; }

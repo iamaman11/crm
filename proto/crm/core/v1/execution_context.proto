@@ -1,0 +1,19 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/actor.proto";
+
+message ExecutionContext {
+  string tenant_id = 1;
+  ActorIdentity actor = 2;
+  string request_id = 3;
+  string correlation_id = 4;
+  string causation_id = 5;
+  string trace_id = 6;
+  string idempotency_key = 7;
+  string capability_id = 8;
+  string capability_version = 9;
+  string request_schema_version = 10;
+  int64 requested_at_unix_nanos = 11;
+  reserved 12 to 30;
+}

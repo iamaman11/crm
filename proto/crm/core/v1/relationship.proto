@@ -1,0 +1,38 @@
+syntax = "proto3";
+package crm.core.v1;
+
+enum RelationshipKind {
+  RELATIONSHIP_KIND_UNSPECIFIED = 0;
+  RELATIONSHIP_KIND_ONE_TO_ONE = 1;
+  RELATIONSHIP_KIND_ONE_TO_MANY = 2;
+  RELATIONSHIP_KIND_MANY_TO_MANY = 3;
+  RELATIONSHIP_KIND_POLYMORPHIC = 4;
+  RELATIONSHIP_KIND_OWNERSHIP = 5;
+  RELATIONSHIP_KIND_PARENT_CHILD = 6;
+  RELATIONSHIP_KIND_SOFT_REFERENCE = 7;
+  RELATIONSHIP_KIND_TEMPORAL = 8;
+  RELATIONSHIP_KIND_EXTERNAL_REFERENCE = 9;
+}
+
+message RelationshipDefinition {
+  string relationship_id = 1;
+  string tenant_id = 2;
+  string api_name = 3;
+  string source_object_type = 4;
+  string target_object_type = 5;
+  RelationshipKind kind = 6;
+  string cardinality = 7;
+  bool required = 8;
+  string cascade_policy_id = 9;
+  string delete_policy_id = 10;
+  string visibility_policy_id = 11;
+}
+message RecordRelationship {
+  string relationship_instance_id = 1;
+  string tenant_id = 2;
+  string relationship_id = 3;
+  string source_record_id = 4;
+  string target_record_id = 5;
+  int64 valid_from_unix_nanos = 6;
+  optional int64 valid_to_unix_nanos = 7;
+}

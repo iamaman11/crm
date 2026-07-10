@@ -1,0 +1,52 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/core/v1/execution_context.proto";
+
+enum PolicyEffect {
+  POLICY_EFFECT_UNSPECIFIED = 0;
+  POLICY_EFFECT_ALLOW = 1;
+  POLICY_EFFECT_DENY = 2;
+  POLICY_EFFECT_MASK = 3;
+}
+
+enum PolicyDecision {
+  POLICY_DECISION_UNSPECIFIED = 0;
+  POLICY_DECISION_ALLOW = 1;
+  POLICY_DECISION_DENY = 2;
+  POLICY_DECISION_ALLOW_WITH_MASK = 3;
+  POLICY_DECISION_APPROVAL_REQUIRED = 4;
+}
+
+message ResourceMatcher {
+  optional string object_type = 1;
+  optional string record_id = 2;
+  optional string field_api_name = 3;
+  optional string relationship_api_name = 4;
+  repeated DataClass data_classes = 5;
+}
+message Policy {
+  string policy_id = 1;
+  string tenant_id = 2;
+  string name = 3;
+  PolicyEffect effect = 4;
+  string action = 5;
+  ResourceMatcher resource = 6;
+  string condition_cel = 7;
+  int32 priority = 8;
+  bool enabled = 9;
+  string policy_version = 10;
+}
+message EvaluatePolicyRequest { ExecutionContext context = 1; ResourceMatcher resource = 2; repeated string requested_fields = 3; }
+message EvaluatePolicyResponse { PolicyDecision decision = 1; repeated string fields_removed = 2; repeated string fields_masked = 3; bool approval_required = 4; repeated string matched_policy_ids = 5; }
+message ExplainPolicyRequest { EvaluatePolicyRequest request = 1; }
+message ExplainPolicyResponse { EvaluatePolicyResponse result = 1; repeated string matched_allow_policy_ids = 2; repeated string matched_deny_policy_ids = 3; repeated string matched_mask_policy_ids = 4; }
+message ValidatePolicyRequest { ExecutionContext context = 1; Policy policy = 2; }
+message ValidatePolicyResponse { bool valid = 1; repeated string errors = 2; repeated string warnings = 3; }
+
+service PolicyService {
+  rpc Evaluate(EvaluatePolicyRequest) returns (EvaluatePolicyResponse);
+  rpc Explain(ExplainPolicyRequest) returns (ExplainPolicyResponse);
+  rpc ValidatePolicy(ValidatePolicyRequest) returns (ValidatePolicyResponse);
+}

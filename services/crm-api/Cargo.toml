@@ -1,0 +1,13 @@
+[package]
+name = "crm-api"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-core-contracts = { path = "../../crates/crm-core-contracts" }
+crm-core-data = { path = "../../crates/crm-core-data" }
+crm-core-events = { path = "../../crates/crm-core-events" }
+crm-core-permissions = { path = "../../crates/crm-core-permissions" }
+crm-core-workflow = { path = "../../crates/crm-core-workflow" }
+crm-sales = { path = "../../modules/crm-sales" }

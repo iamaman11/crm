@@ -1,0 +1,24 @@
+syntax = "proto3";
+package crm.core.v1;
+
+enum ActorType {
+  ACTOR_TYPE_UNSPECIFIED = 0;
+  ACTOR_TYPE_USER = 1;
+  ACTOR_TYPE_AI_AGENT = 2;
+  ACTOR_TYPE_WORKFLOW = 3;
+  ACTOR_TYPE_SYSTEM = 4;
+  ACTOR_TYPE_TRUSTED_MODULE = 5;
+  ACTOR_TYPE_MARKETPLACE_MODULE = 6;
+  ACTOR_TYPE_INTEGRATION = 7;
+  ACTOR_TYPE_SERVICE_ACCOUNT = 8;
+}
+
+message ActorIdentity {
+  string actor_id = 1;
+  ActorType actor_type = 2;
+  optional string on_behalf_of_actor_id = 3;
+  optional string service_account_id = 4;
+  repeated string authenticated_scopes = 5;
+  string authentication_session_id = 6;
+  reserved 7 to 20;
+}

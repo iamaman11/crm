@@ -1,0 +1,3 @@
+syntax = "proto3";
+package crm.billing.v1;
+message Payment { string payment_id = 1; string tenant_id = 2; string invoice_id = 3; string provider = 4; string provider_payment_id = 5; int64 amount_minor = 6; string currency = 7; string status = 8; }

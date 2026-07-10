@@ -1,0 +1,6 @@
+syntax = "proto3";
+package crm.billing.v1;
+message Invoice { string invoice_id = 1; string tenant_id = 2; string deal_id = 3; int64 total_minor = 4; string currency = 5; string status = 6; }
+message IssueInvoiceRequest { string deal_id = 1; int64 expected_deal_version = 2; int64 total_minor = 3; string currency = 4; }
+message IssueInvoiceResponse { Invoice invoice = 1; string business_transaction_id = 2; }
+service InvoiceService { rpc IssueInvoice(IssueInvoiceRequest) returns (IssueInvoiceResponse); }

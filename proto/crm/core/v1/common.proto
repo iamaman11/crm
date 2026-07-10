@@ -1,0 +1,40 @@
+syntax = "proto3";
+package crm.core.v1;
+
+enum DataClass {
+  DATA_CLASS_UNSPECIFIED = 0;
+  DATA_CLASS_PUBLIC = 1;
+  DATA_CLASS_INTERNAL = 2;
+  DATA_CLASS_CONFIDENTIAL = 3;
+  DATA_CLASS_PII = 4;
+  DATA_CLASS_FINANCIAL = 5;
+  DATA_CLASS_BIOMETRIC = 6;
+  DATA_CLASS_LEGAL = 7;
+  DATA_CLASS_SECRET = 8;
+  DATA_CLASS_AUTH_TOKEN = 9;
+  DATA_CLASS_SYSTEM_INTERNAL = 10;
+}
+
+enum CapabilityRiskLevel {
+  CAPABILITY_RISK_LEVEL_UNSPECIFIED = 0;
+  CAPABILITY_RISK_LEVEL_LOW = 1;
+  CAPABILITY_RISK_LEVEL_MEDIUM = 2;
+  CAPABILITY_RISK_LEVEL_HIGH = 3;
+  CAPABILITY_RISK_LEVEL_CRITICAL = 4;
+}
+
+message PageRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message PageInfo {
+  string next_page_token = 1;
+  int64 total_size = 2;
+}
+
+message ResourceRef {
+  string tenant_id = 1;
+  string resource_type = 2;
+  string resource_id = 3;
+}

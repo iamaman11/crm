@@ -1,0 +1,41 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/actor.proto";
+import "crm/core/v1/common.proto";
+
+message AuditEnvelopeV1 {
+  string envelope_version = 1;
+  string canonical_encoder_version = 2;
+  string audit_record_id = 3;
+  string event_id = 4;
+  string tenant_id = 5;
+  int64 chain_sequence = 6;
+  int32 chain_partition_id = 7;
+  int64 occurred_at_unix_nanos = 8;
+  ActorIdentity actor = 9;
+  string capability_id = 10;
+  string action = 11;
+  optional string record_id = 12;
+  optional int64 record_version = 13;
+  string event_type = 14;
+  bytes schema_fingerprint = 15;
+  optional string payload_reference = 16;
+  bytes payload_hash = 17;
+  repeated DataClass data_classes = 18;
+  bytes prev_hash = 19;
+  bytes self_hash = 20;
+  bytes canonical_hash_input_bytes = 21;
+  reserved 22 to 40;
+}
+
+message AuditCheckpoint {
+  string checkpoint_id = 1;
+  string tenant_id = 2;
+  int32 chain_partition_id = 3;
+  int64 chain_sequence = 4;
+  bytes self_hash = 5;
+  int64 created_at_unix_nanos = 6;
+  bytes platform_signature = 7;
+  string worm_object_reference = 8;
+}

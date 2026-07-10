@@ -1,0 +1,80 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/core/v1/execution_context.proto";
+
+enum FieldLifecycleState {
+  FIELD_LIFECYCLE_STATE_UNSPECIFIED = 0;
+  FIELD_LIFECYCLE_STATE_DRAFT = 1;
+  FIELD_LIFECYCLE_STATE_ACTIVE = 2;
+  FIELD_LIFECYCLE_STATE_DEPRECATED = 3;
+  FIELD_LIFECYCLE_STATE_HIDDEN_FROM_UI = 4;
+  FIELD_LIFECYCLE_STATE_STOP_WRITES = 5;
+  FIELD_LIFECYCLE_STATE_ARCHIVED = 6;
+  FIELD_LIFECYCLE_STATE_RESERVED = 7;
+}
+
+message FieldRegistryEntry {
+  string field_id = 1;
+  string tenant_id = 2;
+  string object_type = 3;
+  int32 field_number = 4;
+  string api_name = 5;
+  string label = 6;
+  string description = 7;
+  string data_type = 8;
+  string cardinality = 9;
+  bool is_required = 10;
+  bool is_unique = 11;
+  bool is_indexed = 12;
+  bool is_searchable = 13;
+  bool is_sortable = 14;
+  bool is_sensitive = 15;
+  DataClass data_class = 16;
+  string encryption_policy_id = 17;
+  string masking_policy_id = 18;
+  string ai_visibility_policy_id = 19;
+  string export_visibility_policy_id = 20;
+  string workflow_visibility_policy_id = 21;
+  string reporting_visibility_policy_id = 22;
+  string integration_visibility_policy_id = 23;
+  string retention_policy_id = 24;
+  FieldLifecycleState lifecycle_state = 25;
+  int64 created_at_unix_nanos = 26;
+  optional int64 deprecated_at_unix_nanos = 27;
+  bool reserved_after_delete = 28;
+  reserved 29 to 50;
+}
+
+message MetadataPackage {
+  string package_id = 1;
+  string package_version = 2;
+  string tenant_id = 3;
+  string source_environment = 4;
+  string target_platform_version = 5;
+  bytes descriptor_set = 6;
+  repeated FieldRegistryEntry fields = 7;
+  bytes dependency_manifest = 8;
+  bytes content_hash = 9;
+  bytes signature = 10;
+}
+message ImpactReport { repeated string blocking_errors = 1; repeated string warnings = 2; repeated ResourceRef affected_resources = 3; }
+message ValidatePackageRequest { ExecutionContext context = 1; MetadataPackage package = 2; }
+message ValidatePackageResponse { bool valid = 1; ImpactReport impact = 2; }
+message PublishPackageRequest { ExecutionContext context = 1; MetadataPackage package = 2; }
+message PublishPackageResponse { string published_version = 1; ImpactReport impact = 2; }
+message GetImpactReportRequest { string tenant_id = 1; MetadataPackage package = 2; }
+message GetImpactReportResponse { ImpactReport impact = 1; }
+message RollbackPackageRequest { ExecutionContext context = 1; string package_id = 2; string target_version = 3; }
+message RollbackPackageResponse { string active_version = 1; }
+message GetDescriptorSetRequest { string tenant_id = 1; string package_version = 2; }
+message GetDescriptorSetResponse { bytes descriptor_set = 1; bytes descriptor_hash = 2; }
+
+service MetadataService {
+  rpc ValidatePackage(ValidatePackageRequest) returns (ValidatePackageResponse);
+  rpc PublishPackage(PublishPackageRequest) returns (PublishPackageResponse);
+  rpc GetImpactReport(GetImpactReportRequest) returns (GetImpactReportResponse);
+  rpc RollbackPackage(RollbackPackageRequest) returns (RollbackPackageResponse);
+  rpc GetDescriptorSet(GetDescriptorSetRequest) returns (GetDescriptorSetResponse);
+}

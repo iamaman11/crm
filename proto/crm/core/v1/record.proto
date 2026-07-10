@@ -1,0 +1,67 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "google/protobuf/field_mask.proto";
+import "crm/core/v1/common.proto";
+import "crm/core/v1/execution_context.proto";
+
+message Record {
+  string record_id = 1;
+  string tenant_id = 2;
+  string object_type = 3;
+  string schema_version = 4;
+  bytes descriptor_hash = 5;
+  bytes payload_bytes = 6;
+  int64 record_version = 7;
+  int64 created_at_unix_nanos = 8;
+  int64 updated_at_unix_nanos = 9;
+  optional int64 deleted_at_unix_nanos = 10;
+  reserved 11 to 30;
+}
+
+message RecordMutation {
+  string mutation_id = 1;
+  string mutation_type = 2;
+  string record_id = 3;
+  string object_type = 4;
+  bytes payload_bytes = 5;
+  bytes descriptor_hash = 6;
+  optional int64 expected_record_version = 7;
+  google.protobuf.FieldMask update_mask = 8;
+}
+
+message ExecuteMutationSetRequest {
+  ExecutionContext context = 1;
+  string business_transaction_id = 2;
+  string primary_aggregate_id = 3;
+  repeated RecordMutation record_mutations = 4;
+  repeated string affected_aggregate_ids = 5;
+}
+message ExecuteMutationSetResponse {
+  string business_transaction_id = 1;
+  repeated Record records = 2;
+  repeated string event_ids = 3;
+}
+
+message CreateRecordRequest { ExecutionContext context = 1; Record record = 2; }
+message CreateRecordResponse { Record record = 1; }
+message GetRecordRequest { string tenant_id = 1; string object_type = 2; string record_id = 3; }
+message GetRecordResponse { Record record = 1; }
+message UpdateRecordRequest { ExecutionContext context = 1; Record record = 2; google.protobuf.FieldMask update_mask = 3; int64 expected_record_version = 4; }
+message UpdateRecordResponse { Record record = 1; }
+message DeleteRecordRequest { ExecutionContext context = 1; string object_type = 2; string record_id = 3; int64 expected_record_version = 4; }
+message DeleteRecordResponse { Record record = 1; }
+message ListRecordsRequest { string tenant_id = 1; string object_type = 2; string filter = 3; string order_by = 4; PageRequest page = 5; }
+message ListRecordsResponse { repeated Record records = 1; PageInfo page = 2; }
+message BatchGetRecordsRequest { string tenant_id = 1; string object_type = 2; repeated string record_ids = 3; }
+message BatchGetRecordsResponse { repeated Record records = 1; }
+
+service RecordService {
+  rpc CreateRecord(CreateRecordRequest) returns (CreateRecordResponse);
+  rpc GetRecord(GetRecordRequest) returns (GetRecordResponse);
+  rpc UpdateRecord(UpdateRecordRequest) returns (UpdateRecordResponse);
+  rpc DeleteRecord(DeleteRecordRequest) returns (DeleteRecordResponse);
+  rpc ListRecords(ListRecordsRequest) returns (ListRecordsResponse);
+  rpc BatchGetRecords(BatchGetRecordsRequest) returns (BatchGetRecordsResponse);
+  rpc ExecuteMutationSet(ExecuteMutationSetRequest) returns (ExecuteMutationSetResponse);
+}

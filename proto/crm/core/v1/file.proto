@@ -1,0 +1,52 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/core/v1/execution_context.proto";
+
+enum FileStatus {
+  FILE_STATUS_UNSPECIFIED = 0;
+  FILE_STATUS_PENDING_UPLOAD = 1;
+  FILE_STATUS_SCANNING = 2;
+  FILE_STATUS_ACTIVE = 3;
+  FILE_STATUS_QUARANTINED = 4;
+  FILE_STATUS_DELETED = 5;
+}
+
+message FileRecord {
+  string file_id = 1;
+  string tenant_id = 2;
+  optional string owner_record_id = 3;
+  string filename = 4;
+  string declared_content_type = 5;
+  string detected_content_type = 6;
+  int64 byte_size = 7;
+  string object_storage_key = 8;
+  bytes content_hash = 9;
+  string encryption_key_version = 10;
+  repeated DataClass data_classes = 11;
+  FileStatus status = 12;
+  string malware_scan_status = 13;
+  string preview_status = 14;
+  string retention_policy_id = 15;
+  optional string legal_hold_id = 16;
+  int64 created_at_unix_nanos = 17;
+}
+message RequestUploadRequest { ExecutionContext context = 1; string filename = 2; string content_type = 3; int64 byte_size = 4; repeated DataClass data_classes = 5; optional string owner_record_id = 6; }
+message RequestUploadResponse { FileRecord file = 1; string signed_upload_url = 2; int64 expires_at_unix_nanos = 3; }
+message CompleteUploadRequest { ExecutionContext context = 1; string file_id = 2; bytes content_hash = 3; }
+message CompleteUploadResponse { FileRecord file = 1; }
+message GetDownloadAuthorizationRequest { ExecutionContext context = 1; string file_id = 2; }
+message GetDownloadAuthorizationResponse { string signed_download_url = 1; int64 expires_at_unix_nanos = 2; }
+message DeleteFileRequest { ExecutionContext context = 1; string file_id = 2; }
+message DeleteFileResponse { FileRecord file = 1; }
+message PlaceLegalHoldRequest { ExecutionContext context = 1; string file_id = 2; string legal_hold_id = 3; }
+message PlaceLegalHoldResponse { FileRecord file = 1; }
+
+service FileService {
+  rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+  rpc GetDownloadAuthorization(GetDownloadAuthorizationRequest) returns (GetDownloadAuthorizationResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc PlaceLegalHold(PlaceLegalHoldRequest) returns (PlaceLegalHoldResponse);
+}

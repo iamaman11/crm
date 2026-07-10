@@ -1,0 +1,49 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/actor.proto";
+import "crm/core/v1/execution_context.proto";
+
+message CommandEnvelope {
+  string command_id = 1;
+  string business_transaction_id = 2;
+  ExecutionContext context = 3;
+  string command_type = 4;
+  bytes command_payload = 5;
+  bytes command_descriptor_hash = 6;
+  optional int64 expected_primary_record_version = 7;
+  reserved 8 to 20;
+}
+
+message EventEnvelope {
+  string event_id = 1;
+  string tenant_id = 2;
+  string aggregate_type = 3;
+  string aggregate_id = 4;
+  optional string record_id = 5;
+  int64 aggregate_version = 6;
+  int64 event_sequence = 7;
+  string event_type = 8;
+  int64 occurred_at_unix_nanos = 9;
+  ActorIdentity actor = 10;
+  string capability_id = 11;
+  string capability_version = 12;
+  string business_transaction_id = 13;
+  string causation_id = 14;
+  string correlation_id = 15;
+  string trace_id = 16;
+  string schema_version = 17;
+  bytes schema_fingerprint = 18;
+  bytes payload_bytes = 19;
+  bytes payload_descriptor_hash = 20;
+  string audit_record_id = 21;
+  int64 audit_chain_sequence = 22;
+  reserved 23 to 40;
+}
+
+message TransactionCommitted {
+  string business_transaction_id = 1;
+  repeated string event_ids = 2;
+  repeated string affected_aggregate_ids = 3;
+  int64 committed_at_unix_nanos = 4;
+}

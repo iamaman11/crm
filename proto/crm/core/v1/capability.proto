@@ -1,0 +1,47 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/core/v1/execution_context.proto";
+
+message CapabilityRegistryEntry {
+  string capability_id = 1;
+  string service_name = 2;
+  string method_name = 3;
+  string owner_module = 4;
+  string capability_version = 5;
+  bytes input_descriptor_hash = 6;
+  bytes output_descriptor_hash = 7;
+  CapabilityRiskLevel risk_level = 8;
+  bool idempotency_required = 9;
+  bool audit_required = 10;
+  bool approval_required = 11;
+  bool ai_callable = 12;
+  bool marketplace_callable = 13;
+  bool bulk_allowed = 14;
+  bool export_allowed = 15;
+  repeated string required_permissions = 16;
+  repeated DataClass data_classes_touched = 17;
+  string rate_limit_policy_id = 18;
+  string approval_policy_id = 19;
+  reserved 20 to 40;
+}
+
+message RegisterCapabilityRequest {
+  ExecutionContext context = 1;
+  CapabilityRegistryEntry capability = 2;
+}
+message RegisterCapabilityResponse { CapabilityRegistryEntry capability = 1; }
+message ResolveCapabilityRequest { string tenant_id = 1; string capability_id = 2; string capability_version = 3; }
+message ResolveCapabilityResponse { CapabilityRegistryEntry capability = 1; }
+message ListCapabilitiesRequest { string tenant_id = 1; PageRequest page = 2; }
+message ListCapabilitiesResponse { repeated CapabilityRegistryEntry capabilities = 1; PageInfo page = 2; }
+message GetToolDescriptorRequest { string tenant_id = 1; string capability_id = 2; string capability_version = 3; }
+message GetToolDescriptorResponse { bytes json_schema_utf8 = 1; bytes descriptor_hash = 2; }
+
+service CapabilityRegistryService {
+  rpc RegisterCapability(RegisterCapabilityRequest) returns (RegisterCapabilityResponse);
+  rpc ResolveCapability(ResolveCapabilityRequest) returns (ResolveCapabilityResponse);
+  rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
+  rpc GetToolDescriptor(GetToolDescriptorRequest) returns (GetToolDescriptorResponse);
+}

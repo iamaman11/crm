@@ -1,0 +1,7 @@
+syntax = "proto3";
+package crm.core.v1;
+
+message ProjectionDefinition { string projection_id = 1; string name = 2; string version = 3; repeated string subscribed_event_types = 4; }
+message ProjectionCheckpoint { string projection_id = 1; string tenant_id = 2; string projection_version = 3; string last_event_id = 4; int64 last_event_sequence = 5; int64 updated_at_unix_nanos = 6; }
+message ProjectionRebuildRequest { string tenant_id = 1; string projection_id = 2; string target_version = 3; bool dry_run = 4; }
+message ProjectionRebuildResult { string rebuild_id = 1; string status = 2; int64 processed_events = 3; repeated string errors = 4; }

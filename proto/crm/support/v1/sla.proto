@@ -1,0 +1,3 @@
+syntax = "proto3";
+package crm.support.v1;
+message SlaPolicy { string sla_policy_id = 1; string tenant_id = 2; int64 first_response_millis = 3; int64 resolution_millis = 4; }

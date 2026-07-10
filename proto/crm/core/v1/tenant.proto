@@ -1,0 +1,39 @@
+syntax = "proto3";
+package crm.core.v1;
+
+enum DeploymentTier {
+  DEPLOYMENT_TIER_UNSPECIFIED = 0;
+  DEPLOYMENT_TIER_SHARED = 1;
+  DEPLOYMENT_TIER_SCHEMA_PER_TENANT = 2;
+  DEPLOYMENT_TIER_DEDICATED = 3;
+}
+
+message Tenant {
+  string tenant_id = 1;
+  string display_name = 2;
+  DeploymentTier deployment_tier = 3;
+  string region = 4;
+  string status = 5;
+  string active_metadata_package_id = 6;
+  string active_key_version = 7;
+  reserved 8 to 20;
+}
+
+message TenantMigrationManifest {
+  string migration_id = 1;
+  string tenant_id = 2;
+  DeploymentTier source_tier = 3;
+  DeploymentTier target_tier = 4;
+  string source_region = 5;
+  string target_region = 6;
+  string metadata_version = 7;
+  bytes schema_descriptor_set_hash = 8;
+  int64 record_high_watermark = 9;
+  int64 audit_high_watermark = 10;
+  bytes object_storage_manifest_hash = 11;
+  bytes workflow_state_manifest_hash = 12;
+  bytes integration_state_manifest_hash = 13;
+  string encryption_key_plan_id = 14;
+  string cutover_mode = 15;
+  int64 rollback_deadline_unix_nanos = 16;
+}
