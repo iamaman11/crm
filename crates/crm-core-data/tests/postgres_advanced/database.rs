@@ -24,6 +24,27 @@ async fn bind_context(
     .unwrap();
 }
 
+async fn audit_head(
+    store: &PostgresDataStore,
+    context: &ModuleExecutionContext,
+) -> (i64, [u8; 32]) {
+    let mut transaction = store.pool().begin().await.unwrap();
+    bind_context(&mut transaction, context).await;
+    let row = sqlx::query(
+        "SELECT last_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1",
+    )
+    .bind(context.execution.tenant_id.as_str())
+    .fetch_one(&mut *transaction)
+    .await
+    .unwrap();
+    transaction.commit().await.unwrap();
+
+    let sequence: i64 = row.try_get("last_sequence").unwrap();
+    let hash: Vec<u8> = row.try_get("last_hash").unwrap();
+    let hash: [u8; 32] = hash.try_into().expect("audit head hash must be 32 bytes");
+    (sequence, hash)
+}
+
 async fn record_count(
     store: &PostgresDataStore,
     context: &ModuleExecutionContext,
