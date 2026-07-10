@@ -1,18 +1,51 @@
 name: Rust CI
+
 on:
   push:
   pull_request:
+
 permissions:
   contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - run: python scripts/check_architecture.py
-      - run: cargo fmt --all -- --check
+      - name: Generate resolved Cargo lockfile
+        run: cargo generate-lockfile
+      - name: Upload resolved Cargo lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lockfile
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify committed Cargo lockfile is current
+        run: |
+          if [ -n "$(git status --porcelain -- Cargo.lock)" ]; then
+            echo "Cargo.lock is missing or out of date. Download the cargo-lockfile artifact and commit it."
+            git status --short -- Cargo.lock
+            exit 1
+          fi
+      - name: Check Rust formatting
+        id: rustfmt
+        run: cargo fmt --all -- --check
+      - name: Generate formatted source diagnostics
+        if: failure() && steps.rustfmt.outcome == 'failure'
+        run: cargo fmt --all
+      - name: Upload formatted source diagnostics
+        if: failure() && steps.rustfmt.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-diagnostics
+          path: crates/crm-module-manifest/src/
+          if-no-files-found: error
+          retention-days: 7
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-features

@@ -12,6 +12,10 @@ The repository implements the following Google Drive documents, in precedence or
 
 ADR and compilable contracts take precedence over descriptive text unless they violate an absolute architecture invariant.
 
+## Delivery plan
+
+The executable step-by-step delivery plan is [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md). GitHub issue [#2](https://github.com/iamaman11/crm/issues/2) is the parent epic; issues #3–#14 contain phase scope, dependencies and acceptance gates.
+
 ## Invariants
 
 - Actors mutate state only through governed capabilities.
@@ -27,15 +31,16 @@ The complete normative rules are in [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_IN
 ## Repository layout
 
 - `proto/` — Contract Pack v1.0 source of truth.
-- `crates/` — platform core Rust crates.
+- `crates/` — platform core and governed runtime crates.
 - `modules/` — independently governed domain modules without infrastructure access.
 - `services/` — executable service boundaries.
 - `schemas/` — strict authoring schemas compiled into typed runtime IR.
 - `docs/adr/` — accepted architecture decisions.
 - `scripts/check_architecture.py` — dependency-boundary enforcement.
 - `scripts/validate_module_manifests.py` — strict YAML, schema and module dependency enforcement.
+- `scripts/compile_module_manifest_ir.py` — normalized JSON IR and digest generation.
 - `.github/workflows/` — contract, governance and Rust CI.
-- `artifacts/contracts/` — validated descriptor set and checksum.
+- `build/` and workflow artifacts — generated descriptors, normalized IR and diagnostics; they are reproducible outputs and are not authoritative source files.
 
 ## Local validation
 
@@ -43,6 +48,8 @@ The complete normative rules are in [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_IN
 python -m pip install -r requirements-dev.txt
 python scripts/validate_contracts.py
 python scripts/validate_module_manifests.py
+python scripts/compile_module_manifest_ir.py --output-dir build/module-ir
+cargo run --quiet -p crm-module-manifest --bin validate-module-manifest -- build/module-ir/*.json
 python -m unittest tests/test_module_manifest_validation.py
 python scripts/check_architecture.py
 cargo fmt --all -- --check
@@ -52,8 +59,8 @@ cargo test --workspace --all-features
 
 ## Module authoring policy
 
-A module is authored as `modules/<module>/module.yaml`, but raw YAML is never runtime truth. Governance CI requires a strict JSON-compatible YAML 1.2 subset, validates it against `schemas/module.schema.json`, performs semantic and dependency checks, and emits a `crm.cjson/v1` digest. Runtime installation will consume the future typed immutable Module Manifest IR rather than the source YAML.
+A module is authored as `modules/<module>/module.yaml`, but raw YAML is never runtime truth. Governance CI requires a strict JSON-compatible YAML 1.2 subset, validates it against `schemas/module.schema.json`, performs semantic and dependency checks, emits normalized JSON IR and a `crm.cjson/v1` digest, and verifies that the Rust runtime representation derives the same identity.
 
 ## Current stage
 
-Phase 0 repository skeleton and Contract Pack are present. System invariants and Module Manifest authoring governance are defined. Production readiness remains gated by implementation, benchmarks, security testing and restore drills.
+Governance Foundation v1 is complete. The executable roadmap and Typed Module Manifest IR are in active implementation under issues #3 and #4. Production readiness remains gated by the later platform, module, security, benchmark and restore-drill phases.

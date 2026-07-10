@@ -8,6 +8,7 @@ members = [
   "crates/crm-core-workflow",
   "crates/crm-core-files",
   "crates/crm-core-integrations",
+  "crates/crm-module-manifest",
   "modules/crm-sales",
   "services/crm-api",
 ]
