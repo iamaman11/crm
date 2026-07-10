@@ -1,4 +1,4 @@
-name: Fix gateway replay assertion
+name: Fix gateway replay assertion v2
 
 on:
   pull_request:
