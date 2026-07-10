@@ -16,6 +16,24 @@
     "anthropic"
   ],
   "allowed_module_prefixes": [
-    "crm-core-contracts"
+    "crm-core-contracts",
+    "crm-module-sdk"
+  ],
+  "sdk_crate_paths": [
+    "crates/crm-module-sdk"
+  ],
+  "sdk_allowed_dependencies": [
+    "serde"
+  ],
+  "forbidden_source_markers": [
+    "sqlx::",
+    "tokio_postgres",
+    "async_nats",
+    "aws_sdk_s3",
+    "object_store::",
+    "reqwest::",
+    "secrecy::",
+    "openai::",
+    "anthropic::"
   ]
 }
