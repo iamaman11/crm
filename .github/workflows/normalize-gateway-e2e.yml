@@ -51,9 +51,27 @@ jobs:
           cargo fmt --all
           cargo generate-lockfile
           python scripts/check_architecture.py
-          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e --no-run
-          rm .github/workflows/normalize-gateway-e2e.yml
-          git diff --check
+
+      - name: Compile gateway acceptance target
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e --no-run 2>&1 | tee gateway-normalize.log
+
+      - name: Upload normalization diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-normalization-diagnostics
+          path: |
+            Cargo.lock
+            crates/crm-capability-ingress/tests/postgres_gateway_e2e.rs
+            gateway-normalize.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove one-shot workflow
+        run: rm .github/workflows/normalize-gateway-e2e.yml
 
       - name: Commit normalized branch
         shell: bash
