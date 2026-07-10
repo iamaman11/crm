@@ -1,0 +1,130 @@
+name: Transparent Phase 4C diagnostic gate
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v2
+    paths:
+      - .github/workflows/phase4c-diagnostic.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Run and persist diagnostics
+        shell: bash
+        run: |
+          set +e
+          mkdir -p diagnostics .phase4c-logs
+
+          python scripts/check_architecture.py >.phase4c-logs/architecture.txt 2>&1
+          architecture_status=$?
+
+          cargo generate-lockfile >.phase4c-logs/lockfile.txt 2>&1
+          lock_generate_status=$?
+          if [ -n "$(git status --porcelain -- Cargo.lock)" ]; then
+            lock_current_status=1
+            git diff -- Cargo.lock >>.phase4c-logs/lockfile.txt
+          else
+            lock_current_status=0
+          fi
+
+          cargo fmt --all -- --check >.phase4c-logs/rustfmt.txt 2>&1
+          rustfmt_status=$?
+
+          cargo clippy --workspace --all-targets --all-features -- -D warnings >.phase4c-logs/clippy.txt 2>&1
+          clippy_status=$?
+
+          cargo test --workspace --all-features >.phase4c-logs/workspace-tests.txt 2>&1
+          workspace_tests_status=$?
+
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql >.phase4c-logs/migration-0001.txt 2>&1
+          migration_0001_status=$?
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql >.phase4c-logs/migration-0002.txt 2>&1
+          migration_0002_status=$?
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql >.phase4c-logs/migration-0003.txt 2>&1
+          migration_0003_status=$?
+
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql >.phase4c-logs/sql-invariants.txt 2>&1
+          sql_invariants_status=$?
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'" >.phase4c-logs/runtime-role.txt 2>&1
+          runtime_role_status=$?
+
+          cargo test -p crm-core-data --features postgres-integration --test postgres_foundation >.phase4c-logs/postgres-foundation.txt 2>&1
+          postgres_foundation_status=$?
+          cargo test -p crm-core-data --features postgres-integration --test postgres_advanced >.phase4c-logs/postgres-advanced.txt 2>&1
+          postgres_advanced_status=$?
+
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql >.phase4c-logs/down-0003.txt 2>&1
+          down_0003_status=$?
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql >.phase4c-logs/down-0002.txt 2>&1
+          down_0002_status=$?
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql >.phase4c-logs/down-0001.txt 2>&1
+          down_0001_status=$?
+
+          {
+            echo "source_sha=${GITHUB_SHA}"
+            echo "architecture=${architecture_status}"
+            echo "lock_generate=${lock_generate_status}"
+            echo "lock_current=${lock_current_status}"
+            echo "rustfmt=${rustfmt_status}"
+            echo "clippy=${clippy_status}"
+            echo "workspace_tests=${workspace_tests_status}"
+            echo "migration_0001=${migration_0001_status}"
+            echo "migration_0002=${migration_0002_status}"
+            echo "migration_0003=${migration_0003_status}"
+            echo "sql_invariants=${sql_invariants_status}"
+            echo "runtime_role=${runtime_role_status}"
+            echo "postgres_foundation=${postgres_foundation_status}"
+            echo "postgres_advanced=${postgres_advanced_status}"
+            echo "down_0003=${down_0003_status}"
+            echo "down_0002=${down_0002_status}"
+            echo "down_0001=${down_0001_status}"
+            for log in .phase4c-logs/*.txt; do
+              echo
+              echo "===== ${log} ====="
+              tail -n 120 "${log}"
+            done
+          } >diagnostics/phase4c.txt
+
+          git checkout -- Cargo.lock
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diagnostics/phase4c.txt
+          git commit -m "test: record Phase 4C diagnostic results"
+          git push origin HEAD:feature/postgres-data-adapter-v2
