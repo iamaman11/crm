@@ -312,14 +312,22 @@ impl ModuleManifest {
         validate_module_id(&self.module_id, "$.module_id", &mut issues);
         validate_semver(&self.version, "$.version", &mut issues);
 
-        if self.display_name.as_ref().is_some_and(|value| value.is_empty() || value.len() > 120) {
+        if self
+            .display_name
+            .as_ref()
+            .is_some_and(|value| value.is_empty() || value.len() > 120)
+        {
             issues.push(ValidationIssue::new(
                 "display_name",
                 "$.display_name",
                 "must contain 1 to 120 bytes",
             ));
         }
-        if self.description.as_ref().is_some_and(|value| value.len() > 2_000) {
+        if self
+            .description
+            .as_ref()
+            .is_some_and(|value| value.len() > 2_000)
+        {
             issues.push(ValidationIssue::new(
                 "description",
                 "$.description",
@@ -382,12 +390,18 @@ impl ModuleManifest {
             _ => {}
         }
 
-        let minimum = parse_semver(&self.platform.minimum_version, "$.platform.minimum_version", &mut issues);
+        let minimum = parse_semver(
+            &self.platform.minimum_version,
+            "$.platform.minimum_version",
+            &mut issues,
+        );
         let maximum = self
             .platform
             .maximum_exclusive_version
             .as_ref()
-            .and_then(|value| parse_semver(value, "$.platform.maximum_exclusive_version", &mut issues));
+            .and_then(|value| {
+                parse_semver(value, "$.platform.maximum_exclusive_version", &mut issues)
+            });
         if let (Some(minimum), Some(maximum)) = (minimum, maximum)
             && minimum >= maximum
         {
@@ -399,13 +413,25 @@ impl ModuleManifest {
         }
 
         validate_dependencies(self, &mut issues);
-        validate_contracts(&self.provides.capabilities, "$.provides.capabilities", &mut issues);
+        validate_contracts(
+            &self.provides.capabilities,
+            "$.provides.capabilities",
+            &mut issues,
+        );
         validate_contracts(&self.provides.events, "$.provides.events", &mut issues);
-        validate_contracts(&self.consumes.capabilities, "$.consumes.capabilities", &mut issues);
+        validate_contracts(
+            &self.consumes.capabilities,
+            "$.consumes.capabilities",
+            &mut issues,
+        );
         validate_contracts(&self.consumes.events, "$.consumes.events", &mut issues);
 
         validate_namespaced_list(&self.provides.objects, "$.provides.objects", &mut issues);
-        validate_namespaced_list(&self.storage.record_types, "$.storage.record_types", &mut issues);
+        validate_namespaced_list(
+            &self.storage.record_types,
+            "$.storage.record_types",
+            &mut issues,
+        );
         validate_namespaced_list(
             &self.storage.private_state_namespaces,
             "$.storage.private_state_namespaces",
@@ -449,8 +475,16 @@ impl ModuleManifest {
 
         let mut ui_ids = BTreeSet::new();
         for (index, extension) in self.provides.ui_extensions.iter().enumerate() {
-            validate_namespaced_id(&extension.id, &format!("$.provides.ui_extensions[{index}].id"), &mut issues);
-            validate_semver(&extension.version, &format!("$.provides.ui_extensions[{index}].version"), &mut issues);
+            validate_namespaced_id(
+                &extension.id,
+                &format!("$.provides.ui_extensions[{index}].id"),
+                &mut issues,
+            );
+            validate_semver(
+                &extension.version,
+                &format!("$.provides.ui_extensions[{index}].version"),
+                &mut issues,
+            );
             validate_namespaced_id(
                 &extension.permission,
                 &format!("$.provides.ui_extensions[{index}].permission"),
@@ -465,14 +499,21 @@ impl ModuleManifest {
             }
         }
 
-        if duplicates(self.security.data_classes.iter().copied()).next().is_some() {
+        if duplicates(self.security.data_classes.iter().copied())
+            .next()
+            .is_some()
+        {
             issues.push(ValidationIssue::new(
                 "duplicate_data_class",
                 "$.security.data_classes",
                 "data classes must be unique",
             ));
         }
-        validate_unique_strings(&self.security.network_egress, "$.security.network_egress", &mut issues);
+        validate_unique_strings(
+            &self.security.network_egress,
+            "$.security.network_egress",
+            &mut issues,
+        );
         for (index, target) in self.security.network_egress.iter().enumerate() {
             if !valid_network_target(target) {
                 issues.push(ValidationIssue::new(
@@ -482,7 +523,11 @@ impl ModuleManifest {
                 ));
             }
         }
-        validate_namespaced_list(&self.security.secret_handles, "$.security.secret_handles", &mut issues);
+        validate_namespaced_list(
+            &self.security.secret_handles,
+            "$.security.secret_handles",
+            &mut issues,
+        );
 
         for (name, value) in &self.quotas {
             validate_ascii_id(name, &format!("$.quotas.{name}"), &mut issues);
@@ -539,7 +584,9 @@ pub struct ManifestCatalog {
 }
 
 impl ManifestCatalog {
-    pub fn build(manifests: impl IntoIterator<Item = ModuleManifest>) -> Result<Self, ManifestError> {
+    pub fn build(
+        manifests: impl IntoIterator<Item = ModuleManifest>,
+    ) -> Result<Self, ManifestError> {
         let mut issues = Vec::new();
         let mut by_module = BTreeMap::new();
         let mut capability_owners = BTreeMap::new();
@@ -707,14 +754,7 @@ fn visit_dependency_node(
     stack.push(node.to_owned());
     if let Some(dependencies) = graph.get(node) {
         for dependency in dependencies {
-            visit_dependency_node(
-                dependency,
-                graph,
-                visiting,
-                visited,
-                stack,
-                issues,
-            );
+            visit_dependency_node(dependency, graph, visiting, visited, stack, issues);
         }
     }
     stack.pop();
@@ -746,9 +786,17 @@ fn validate_dependencies(manifest: &ModuleManifest, issues: &mut Vec<ValidationI
         "$.dependencies.optional",
         issues,
     );
-    validate_unique_strings(&manifest.dependencies.conflicts, "$.dependencies.conflicts", issues);
+    validate_unique_strings(
+        &manifest.dependencies.conflicts,
+        "$.dependencies.conflicts",
+        issues,
+    );
     for (index, conflict) in manifest.dependencies.conflicts.iter().enumerate() {
-        validate_module_id(conflict, &format!("$.dependencies.conflicts[{index}]"), issues);
+        validate_module_id(
+            conflict,
+            &format!("$.dependencies.conflicts[{index}]"),
+            issues,
+        );
     }
 
     let required: BTreeSet<_> = required_ids.iter().collect();
@@ -791,7 +839,10 @@ fn validate_dependency_list(
             issues.push(ValidationIssue::new(
                 "version_range",
                 format!("{path}[{index}].version_range"),
-                format!("invalid semantic version requirement {}", dependency.version_range),
+                format!(
+                    "invalid semantic version requirement {}",
+                    dependency.version_range
+                ),
             ));
         }
         if !ids.insert(dependency.module_id.clone()) {
@@ -812,7 +863,11 @@ fn validate_contracts(
     let mut keys = BTreeSet::new();
     for (index, contract) in contracts.iter().enumerate() {
         validate_namespaced_id(&contract.id, &format!("{path}[{index}].id"), issues);
-        validate_semver(&contract.version, &format!("{path}[{index}].version"), issues);
+        validate_semver(
+            &contract.version,
+            &format!("{path}[{index}].version"),
+            issues,
+        );
         if !keys.insert((contract.id.clone(), contract.version.clone())) {
             issues.push(ValidationIssue::new(
                 "duplicate_contract",
@@ -888,11 +943,7 @@ fn validate_semver(value: &str, path: &str, issues: &mut Vec<ValidationIssue>) {
     let _ = parse_semver(value, path, issues);
 }
 
-fn parse_semver(
-    value: &str,
-    path: &str,
-    issues: &mut Vec<ValidationIssue>,
-) -> Option<Version> {
+fn parse_semver(value: &str, path: &str, issues: &mut Vec<ValidationIssue>) -> Option<Version> {
     match Version::parse(value) {
         Ok(version) if value.len() <= 80 => Some(version),
         _ => {
@@ -910,32 +961,36 @@ fn valid_ascii_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     (2..=64).contains(&bytes.len())
         && bytes[0].is_ascii_lowercase()
-        && bytes[1..]
-            .iter()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-'))
+        && bytes[1..].iter().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(*byte, b'_' | b'-')
+        })
 }
 
 fn valid_segmented_id(value: &str, separators: &[char], maximum: usize) -> bool {
     !value.is_empty()
         && value.len() <= maximum
         && value.is_ascii()
-        && value.chars().any(|character| separators.contains(&character))
-        && value.split(|character| separators.contains(&character)).all(|segment| {
-            !segment.is_empty()
-                && segment.as_bytes()[0].is_ascii_lowercase()
-                && segment
-                    .as_bytes()
-                    .iter()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
-        })
+        && value
+            .chars()
+            .any(|character| separators.contains(&character))
+        && value
+            .split(|character| separators.contains(&character))
+            .all(|segment| {
+                !segment.is_empty()
+                    && segment.as_bytes()[0].is_ascii_lowercase()
+                    && segment
+                        .as_bytes()
+                        .iter()
+                        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            })
 }
 
 fn valid_contact(value: &str) -> bool {
     value.len() <= 254
         && !value.contains(char::is_whitespace)
-        && value
-            .split_once('@')
-            .is_some_and(|(local, domain)| !local.is_empty() && domain.contains('.') && !domain.ends_with('.'))
+        && value.split_once('@').is_some_and(|(local, domain)| {
+            !local.is_empty() && domain.contains('.') && !domain.ends_with('.')
+        })
 }
 
 fn valid_codeowner(value: &str) -> bool {
@@ -963,9 +1018,12 @@ fn valid_path(value: &str, allow_colon: bool) -> bool {
 }
 
 fn valid_sha256_reference(value: &str) -> bool {
-    value
-        .strip_prefix("sha256:")
-        .is_some_and(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()))
+    value.strip_prefix("sha256:").is_some_and(|digest| {
+        digest.len() == 64
+            && digest
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    })
 }
 
 fn valid_network_target(value: &str) -> bool {
@@ -973,7 +1031,9 @@ fn valid_network_target(value: &str) -> bool {
         return false;
     }
     let (host, port) = match value.rsplit_once(':') {
-        Some((host, port)) if !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()) => {
+        Some((host, port))
+            if !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
             let Ok(port) = port.parse::<u16>() else {
                 return false;
             };
@@ -988,7 +1048,9 @@ fn valid_network_target(value: &str) -> bool {
     let _ = port;
     let labels: Vec<_> = host.split('.').collect();
     labels.len() >= 2
-        && labels.last().is_some_and(|label| (2..=63).contains(&label.len()) && label.bytes().all(|byte| byte.is_ascii_alphabetic()))
+        && labels.last().is_some_and(|label| {
+            (2..=63).contains(&label.len()) && label.bytes().all(|byte| byte.is_ascii_alphabetic())
+        })
         && labels.iter().all(|label| {
             !label.is_empty()
                 && !label.starts_with('-')
@@ -1099,7 +1161,8 @@ mod tests {
 
     #[test]
     fn parses_and_matches_authoring_digest() {
-        let manifest = ModuleManifest::from_normalized_json(SALES_MANIFEST).expect("valid manifest");
+        let manifest =
+            ModuleManifest::from_normalized_json(SALES_MANIFEST).expect("valid manifest");
         let identity = manifest.identity().expect("canonical identity");
         assert_eq!(identity.profile, CANONICALIZATION_PROFILE);
         assert_eq!(
@@ -1110,7 +1173,8 @@ mod tests {
 
     #[test]
     fn canonical_identity_ignores_json_object_input_order() {
-        let manifest = ModuleManifest::from_normalized_json(SALES_MANIFEST).expect("valid manifest");
+        let manifest =
+            ModuleManifest::from_normalized_json(SALES_MANIFEST).expect("valid manifest");
         let pretty = serde_json::to_string_pretty(&manifest).expect("serialize manifest");
         let reparsed = ModuleManifest::from_normalized_json(&pretty).expect("reparse manifest");
         assert_eq!(manifest.identity().unwrap(), reparsed.identity().unwrap());
@@ -1136,7 +1200,12 @@ mod tests {
             module_id: manifest.module_id.clone(),
             version_range: "^0.1".to_owned(),
         });
-        assert!(manifest.validate().iter().any(|issue| issue.code == "self_dependency"));
+        assert!(
+            manifest
+                .validate()
+                .iter()
+                .any(|issue| issue.code == "self_dependency")
+        );
     }
 
     #[test]
