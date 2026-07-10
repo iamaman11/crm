@@ -23,7 +23,6 @@ mod tests {
                 idempotency_key: IdempotencyKey::try_new("idempotency-1").unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 request_started_at_unix_nanos: 1,
-                deadline_unix_nanos: 100,
             },
         }
     }
@@ -55,6 +54,7 @@ mod tests {
             event: DomainEvent {
                 event_type: EventType::try_new("sales.deal.created").unwrap(),
                 aggregate: reference(),
+                expected_aggregate_version: None,
                 payload: payload(),
                 deduplication_key: "deal-1-created".to_owned(),
             },
