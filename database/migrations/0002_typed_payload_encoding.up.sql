@@ -12,9 +12,15 @@ ALTER TABLE crm.outbox_events ALTER COLUMN payload_encoding DROP DEFAULT;
 
 ALTER TABLE crm.outbox_events
   ADD COLUMN deduplication_key text;
+
+ALTER TABLE crm.outbox_events DISABLE TRIGGER outbox_events_immutable;
+ALTER TABLE crm.outbox_events DISABLE TRIGGER require_write_context;
 UPDATE crm.outbox_events
 SET deduplication_key = 'legacy:' || event_id
 WHERE deduplication_key IS NULL;
+ALTER TABLE crm.outbox_events ENABLE TRIGGER require_write_context;
+ALTER TABLE crm.outbox_events ENABLE TRIGGER outbox_events_immutable;
+
 ALTER TABLE crm.outbox_events
   ALTER COLUMN deduplication_key SET NOT NULL,
   ADD CONSTRAINT outbox_deduplication_key_length
