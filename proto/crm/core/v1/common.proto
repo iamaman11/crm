@@ -37,4 +37,81 @@ message ResourceRef {
   string tenant_id = 1;
   string resource_type = 2;
   string resource_id = 3;
+  optional int64 version = 4;
+}
+
+// ExactMoney carries an arbitrary precision signed integer encoded in canonical
+// base-10 minor units. Binary floating point is forbidden for authoritative CRM
+// money values.
+message ExactMoney {
+  string minor_units = 1;
+  string currency_code = 2;
+}
+
+message CalendarDate {
+  int32 year = 1;
+  uint32 month = 2;
+  uint32 day = 3;
+}
+
+message UnixTime {
+  sint64 unix_nanos = 1;
+}
+
+message ActorOrTeamOwner {
+  oneof owner {
+    string actor_id = 1;
+    string team_id = 2;
+  }
+}
+
+// An absent patch message means Keep. Within a present patch message, exactly
+// one operation must be selected.
+message StringPatch {
+  oneof operation {
+    string set = 1;
+    bool clear = 2;
+  }
+}
+
+message ResourceRefPatch {
+  oneof operation {
+    ResourceRef set = 1;
+    bool clear = 2;
+  }
+}
+
+message ExactMoneyPatch {
+  oneof operation {
+    ExactMoney set = 1;
+    bool clear = 2;
+  }
+}
+
+message CalendarDatePatch {
+  oneof operation {
+    CalendarDate set = 1;
+    bool clear = 2;
+  }
+}
+
+message UInt32Patch {
+  oneof operation {
+    uint32 set = 1;
+    bool clear = 2;
+  }
+}
+
+message UnixTimePatch {
+  oneof operation {
+    UnixTime set = 1;
+    bool clear = 2;
+  }
+}
+
+message ActorOrTeamOwnerPatch {
+  oneof operation {
+    ActorOrTeamOwner set = 1;
+    bool clear = 2;
+  }
 }
