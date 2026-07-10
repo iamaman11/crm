@@ -20,7 +20,8 @@ pub struct AuditIntent {
 
 impl AuditIntent {
     pub fn validate(&self) -> Result<(), String> {
-        if self.audit_record_id.is_empty() || self.audit_record_id.len() > MAX_AUDIT_RECORD_ID_BYTES
+        if self.audit_record_id.is_empty()
+            || self.audit_record_id.len() > MAX_AUDIT_RECORD_ID_BYTES
         {
             return Err(format!(
                 "audit record id must contain between 1 and {MAX_AUDIT_RECORD_ID_BYTES} bytes"
@@ -109,11 +110,12 @@ pub(crate) async fn materialize_audit_chain(
         .fetch_one(&mut **transaction)
         .await?;
 
-    let row =
-        sqlx::query("SELECT next_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1")
-            .bind(context.execution.tenant_id.as_str())
-            .fetch_optional(&mut **transaction)
-            .await?;
+    let row = sqlx::query(
+        "SELECT next_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1",
+    )
+    .bind(context.execution.tenant_id.as_str())
+    .fetch_optional(&mut **transaction)
+    .await?;
 
     let (mut sequence, mut previous_hash) = match row {
         Some(row) => {
@@ -136,7 +138,14 @@ pub(crate) async fn materialize_audit_chain(
 
     let mut records = Vec::with_capacity(intents.len());
     for intent in intents {
-        let record_hash = audit_record_hash(context, sequence, previous_hash, intent)?;
+        let occurred_at_unix_nanos = postgres_timestamp_nanos(intent.occurred_at_unix_nanos);
+        let record_hash = audit_record_hash(
+            context,
+            sequence,
+            previous_hash,
+            intent,
+            occurred_at_unix_nanos,
+        )?;
         records.push(MaterializedAuditRecord {
             audit_sequence: sequence,
             audit_record_id: intent.audit_record_id.clone(),
@@ -144,7 +153,7 @@ pub(crate) async fn materialize_audit_chain(
             previous_hash,
             record_hash,
             canonical_envelope: intent.canonical_envelope.clone(),
-            occurred_at_unix_nanos: intent.occurred_at_unix_nanos,
+            occurred_at_unix_nanos,
         });
         previous_hash = record_hash;
         sequence = sequence.checked_add(1).ok_or_else(|| {
@@ -162,19 +171,19 @@ fn audit_record_hash(
     sequence: i64,
     previous_hash: [u8; 32],
     intent: &AuditIntent,
+    occurred_at_unix_nanos: i64,
 ) -> Result<[u8; 32], AuditMaterializationError> {
     let mut hasher = Sha256::new();
     hasher.update(AUDIT_HASH_DOMAIN);
-    append_field(&mut hasher, context.execution.tenant_id.as_str().as_bytes())?;
+    append_field(
+        &mut hasher,
+        context.execution.tenant_id.as_str().as_bytes(),
+    )?;
     hasher.update(sequence.to_be_bytes());
     append_field(&mut hasher, intent.audit_record_id.as_bytes())?;
     append_field(
         &mut hasher,
-        context
-            .execution
-            .business_transaction_id
-            .as_str()
-            .as_bytes(),
+        context.execution.business_transaction_id.as_str().as_bytes(),
     )?;
     append_field(&mut hasher, context.execution.actor_id.as_str().as_bytes())?;
     append_field(
@@ -188,13 +197,22 @@ fn audit_record_hash(
     append_field(&mut hasher, intent.canonicalization_profile.as_bytes())?;
     hasher.update(previous_hash);
     append_field(&mut hasher, &intent.canonical_envelope)?;
-    hasher.update(intent.occurred_at_unix_nanos.to_be_bytes());
+    hasher.update(occurred_at_unix_nanos.to_be_bytes());
     Ok(hasher.finalize().into())
 }
 
-fn append_field(hasher: &mut Sha256, value: &[u8]) -> Result<(), AuditMaterializationError> {
+const fn postgres_timestamp_nanos(value: i64) -> i64 {
+    (value / 1_000) * 1_000
+}
+
+fn append_field(
+    hasher: &mut Sha256,
+    value: &[u8],
+) -> Result<(), AuditMaterializationError> {
     let length = u64::try_from(value.len()).map_err(|_| {
-        AuditMaterializationError::InvalidIntent("audit hash field length exceeds u64".to_owned())
+        AuditMaterializationError::InvalidIntent(
+            "audit hash field length exceeds u64".to_owned(),
+        )
     })?;
     hasher.update(length.to_be_bytes());
     hasher.update(value);
@@ -243,13 +261,38 @@ mod tests {
     fn hash_is_deterministic_and_chain_sensitive() {
         let context = context();
         let intent = intent();
-        let first = audit_record_hash(&context, 1, [0; 32], &intent).unwrap();
-        let same = audit_record_hash(&context, 1, [0; 32], &intent).unwrap();
-        let chained = audit_record_hash(&context, 2, first, &intent).unwrap();
+        let persisted_time = postgres_timestamp_nanos(intent.occurred_at_unix_nanos);
+        let first = audit_record_hash(&context, 1, [0; 32], &intent, persisted_time).unwrap();
+        let same = audit_record_hash(&context, 1, [0; 32], &intent, persisted_time).unwrap();
+        let chained = audit_record_hash(&context, 2, first, &intent, persisted_time).unwrap();
 
         assert_eq!(first, same);
         assert_ne!(first, chained);
         assert_ne!(first, [0; 32]);
+    }
+
+    #[test]
+    fn hash_uses_postgresql_microsecond_timestamp_precision() {
+        let context = context();
+        let mut first_intent = intent();
+        first_intent.occurred_at_unix_nanos = 1_234_567;
+        let mut same_persisted_time = first_intent.clone();
+        same_persisted_time.occurred_at_unix_nanos = 1_234_999;
+
+        let first_time = postgres_timestamp_nanos(first_intent.occurred_at_unix_nanos);
+        let second_time = postgres_timestamp_nanos(same_persisted_time.occurred_at_unix_nanos);
+        assert_eq!(first_time, second_time);
+        assert_eq!(
+            audit_record_hash(&context, 1, [0; 32], &first_intent, first_time).unwrap(),
+            audit_record_hash(
+                &context,
+                1,
+                [0; 32],
+                &same_persisted_time,
+                second_time,
+            )
+            .unwrap(),
+        );
     }
 
     #[test]
