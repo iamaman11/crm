@@ -1,0 +1,67 @@
+name: Database CI
+
+on:
+  push:
+    paths:
+      - "database/**"
+      - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
+      - ".github/workflows/database.yml"
+  pull_request:
+    paths:
+      - "database/**"
+      - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
+      - ".github/workflows/database.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply clean migration
+        run: psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+      - name: Verify platform invariants
+        run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+      - name: Roll back migration
+        run: psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
+      - name: Verify rollback removed authoritative schema
+        run: |
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply migration after rollback
+        run: psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+      - name: Upload SQL sources on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-foundation-sources
+          path: database/
+          if-no-files-found: error
+          retention-days: 7
