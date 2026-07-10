@@ -3,12 +3,10 @@ use crate::ports::{
     ModuleStateEntry, ModuleStateStore, ObservabilityContext, PortFuture, PortResult,
     PublishedEvent, PutModuleStateRequest, TelemetryEvent,
 };
-use crate::types::{
-    ErrorCategory, ModuleExecutionContext, SdkError, StateKey,
-};
+use crate::types::{ErrorCategory, ModuleExecutionContext, SdkError, StateKey};
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 #[derive(Debug)]
 pub struct FixedClock {
@@ -23,14 +21,11 @@ impl FixedClock {
     }
 
     pub fn set(&self, now_unix_nanos: i64) {
-        self.now_unix_nanos
-            .store(now_unix_nanos, Ordering::SeqCst);
+        self.now_unix_nanos.store(now_unix_nanos, Ordering::SeqCst);
     }
 
     pub fn advance(&self, delta_nanos: i64) -> i64 {
-        self.now_unix_nanos
-            .fetch_add(delta_nanos, Ordering::SeqCst)
-            + delta_nanos
+        self.now_unix_nanos.fetch_add(delta_nanos, Ordering::SeqCst) + delta_nanos
     }
 }
 
@@ -153,10 +148,7 @@ pub struct RecordingEventPublisher {
 
 impl RecordingEventPublisher {
     pub fn events(&self) -> Vec<RecordedEvent> {
-        self.events
-            .lock()
-            .expect("event mutex poisoned")
-            .clone()
+        self.events.lock().expect("event mutex poisoned").clone()
     }
 }
 
@@ -256,10 +248,7 @@ impl ModuleStateStore for InMemoryModuleStateStore {
             }
 
             let storage_key = Self::storage_key(context, &request.key);
-            let mut entries = self
-                .entries
-                .lock()
-                .expect("module state mutex poisoned");
+            let mut entries = self.entries.lock().expect("module state mutex poisoned");
             let current = entries.get(&storage_key);
             match (current, request.expected_version) {
                 (None, Some(_)) => {
@@ -299,10 +288,7 @@ impl ModuleStateStore for InMemoryModuleStateStore {
         Box::pin(async move {
             context.validate()?;
             let storage_key = Self::storage_key(context, &key);
-            let mut entries = self
-                .entries
-                .lock()
-                .expect("module state mutex poisoned");
+            let mut entries = self.entries.lock().expect("module state mutex poisoned");
             let Some(current) = entries.get(&storage_key) else {
                 return Ok(());
             };
@@ -374,8 +360,8 @@ mod tests {
     use crate::ports::{Clock, RandomSource};
     use crate::types::{
         ActorId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, DataClass,
-        ExecutionContext, IdempotencyKey, ModuleId, PayloadEncoding, RequestId,
-        RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
+        ExecutionContext, IdempotencyKey, ModuleId, PayloadEncoding, RequestId, RetentionPolicyId,
+        SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
     };
     use std::future::Future;
     use std::sync::Arc;
@@ -460,7 +446,11 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(created.version, 1);
-        assert!(run_ready(store.get(&activities, key.clone())).unwrap().is_none());
+        assert!(
+            run_ready(store.get(&activities, key.clone()))
+                .unwrap()
+                .is_none()
+        );
         assert!(run_ready(store.get(&sales, key)).unwrap().is_some());
     }
 

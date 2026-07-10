@@ -8,10 +8,7 @@ pub const CRATE_NAME: &str = "crm-sales";
 /// Minimal host-bound proof that a business module consumes governed SDK ports
 /// rather than infrastructure clients. Domain behavior is added in the first
 /// vertical slice after the capability execution pipeline exists.
-pub fn observed_at(
-    context: &ModuleExecutionContext,
-    clock: &dyn Clock,
-) -> Result<i64, SdkError> {
+pub fn observed_at(context: &ModuleExecutionContext, clock: &dyn Clock) -> Result<i64, SdkError> {
     context.validate()?;
     Ok(clock.now_unix_nanos())
 }
@@ -21,9 +18,8 @@ mod tests {
     use super::*;
     use crm_module_sdk::testing::FixedClock;
     use crm_module_sdk::{
-        ActorId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
-        ExecutionContext, IdempotencyKey, ModuleId, RequestId, SchemaVersion, TenantId,
-        TraceId,
+        ActorId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, ExecutionContext,
+        IdempotencyKey, ModuleId, RequestId, SchemaVersion, TenantId, TraceId,
     };
 
     #[test]
