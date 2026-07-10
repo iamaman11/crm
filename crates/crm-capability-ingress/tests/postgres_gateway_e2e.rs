@@ -1,13 +1,15 @@
+use ::http::{HeaderMap, HeaderValue, StatusCode};
 use crm_capability_adapters::{
-    AccessTokenGrant, AccessTokenStore, ApprovalStore, AuthorizationGrant,
-    BearerTokenAuthenticator, CapabilityCatalog, FixedWindowPolicy, FixedWindowRateLimiter,
-    LiveAuthorizationStore, LiveCapabilityAuthorizer, RateLimitPolicyStore, StoredApprovalVerifier,
+    ApprovalStore, AuthorizationGrant, CapabilityCatalog, FixedWindowPolicy,
+    FixedWindowRateLimiter, LiveAuthorizationStore, LiveCapabilityAuthorizer, RateLimitPolicyStore,
+    StoredApprovalVerifier,
 };
 use crm_capability_ingress::{
-    BUSINESS_TRANSACTION_HEADER, CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityCallEnvelope,
-    CapabilityIngress, CapabilityRoute, ExecutionContextResolver, HttpCapabilityBody,
-    HttpCapabilityMiddleware, HttpCapabilityRequest, IDEMPOTENCY_KEY_HEADER, REQUEST_ID_HEADER,
-    TENANT_HEADER, TIMEOUT_HEADER, TRACE_ID_HEADER, TimeoutPolicy, semantic_input_hash,
+    AccessTokenGrant, AccessTokenStore, BUSINESS_TRANSACTION_HEADER, BearerTokenAuthenticator,
+    CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityIngress, CapabilityRoute,
+    ExecutionContextResolver, HttpCapabilityBody, HttpCapabilityMiddleware, HttpCapabilityRequest,
+    IDEMPOTENCY_KEY_HEADER, REQUEST_ID_HEADER, TENANT_HEADER, TIMEOUT_HEADER, TRACE_ID_HEADER,
+    TimeoutPolicy, semantic_input_hash,
 };
 use crm_capability_runtime::{
     AuthorizationDecision, CapabilityAuthorizer, CapabilityDefinition, CapabilityGateway,
@@ -22,13 +24,11 @@ use crm_core_data::{
 use crm_module_sdk::testing::{DeterministicRandom, FixedClock};
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, Clock, DataClass, DomainEvent, ErrorCategory,
-    EventType, ModuleExecutionContext, ModuleId, PayloadEncoding, PortFuture, RecordId, RecordRef,
-    RecordType, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TenantId, TypedPayload,
+    EventType, ModuleId, PayloadEncoding, PortFuture, RecordId, RecordRef, RecordType,
+    RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TenantId, TypedPayload,
 };
-use http::{HeaderMap, HeaderValue, StatusCode};
 use sqlx::{Postgres, Row, Transaction};
 use std::collections::BTreeSet;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 const TENANT: &str = "tenant-a";
@@ -240,7 +240,10 @@ async fn public_gateway_proves_no_bypass_replay_live_authorization_and_atomic_ro
         ))
         .await;
     assert_eq!(invalid_credentials.status, StatusCode::UNAUTHORIZED);
-    assert_eq!(error_code(&invalid_credentials.body), "AUTHENTICATION_INVALID");
+    assert_eq!(
+        error_code(&invalid_credentials.body),
+        "AUTHENTICATION_INVALID"
+    );
     assert_call_order(&composition.calls, &[]);
     assert_eq!(evidence_counts(&store).await, initial_counts);
 
@@ -373,7 +376,12 @@ async fn public_gateway_proves_no_bypass_replay_live_authorization_and_atomic_ro
         "The capability could not be persisted at this time."
     );
     assert!(!rollback_error.safe_message.to_lowercase().contains("sql"));
-    assert!(!rollback_error.safe_message.to_lowercase().contains("database"));
+    assert!(
+        !rollback_error
+            .safe_message
+            .to_lowercase()
+            .contains("database")
+    );
     assert_call_order(&rollback.calls, &["authorize", "batch"]);
     assert_eq!(evidence_counts(&store).await, before_rollback);
     assert_eq!(audit_head(&store).await, current_head);
@@ -387,6 +395,7 @@ fn compose(
     token_store: AccessTokenStore,
 ) -> Composition {
     let definition = capability_definition();
+    let clock_port: Arc<dyn Clock> = clock.clone();
     let catalog = CapabilityCatalog::new([definition.clone()]).expect("valid capability catalog");
     let rate_policies = RateLimitPolicyStore::default();
     rate_policies
@@ -402,10 +411,7 @@ fn compose(
         .expect("valid authorization grant");
     let calls = Arc::new(Mutex::new(Vec::new()));
     let authorizer = RecordingAuthorizer {
-        inner: LiveCapabilityAuthorizer::new(
-            authorization_store.clone(),
-            Arc::clone(&clock) as Arc<dyn Clock>,
-        ),
+        inner: LiveCapabilityAuthorizer::new(authorization_store.clone(), Arc::clone(&clock_port)),
         calls: Arc::clone(&calls),
     };
     let runtime = RecordingBatchRuntime {
@@ -413,24 +419,22 @@ fn compose(
         fault,
         calls: Arc::clone(&calls),
     };
-    let executor = PostgresTransactionalCapabilityExecutor::from_runtime(
-        Arc::new(runtime),
-        Arc::new(planner),
-    );
+    let executor =
+        PostgresTransactionalCapabilityExecutor::from_runtime(Arc::new(runtime), Arc::new(planner));
     let gateway = Arc::new(CapabilityGateway::new(
         Arc::new(catalog),
         Arc::new(SemanticHashValidator),
         Arc::new(FixedWindowRateLimiter::new(
             rate_policies,
-            Arc::clone(&clock) as Arc<dyn Clock>,
+            Arc::clone(&clock_port),
         )),
         Arc::new(StoredApprovalVerifier::new(ApprovalStore::default())),
         Arc::new(authorizer),
         Arc::new(executor),
-        Arc::clone(&clock) as Arc<dyn Clock>,
+        Arc::clone(&clock_port),
     ));
     let resolver = ExecutionContextResolver::new(
-        Arc::clone(&clock) as Arc<dyn Clock>,
+        Arc::clone(&clock_port),
         Arc::new(DeterministicRandom::from_bytes(vec![0x7f; 512])),
         TimeoutPolicy {
             default_millis: 2_000,
@@ -438,10 +442,7 @@ fn compose(
         },
     )
     .expect("valid context resolver");
-    let authenticator = BearerTokenAuthenticator::new(
-        token_store,
-        Arc::clone(&clock) as Arc<dyn Clock>,
-    );
+    let authenticator = BearerTokenAuthenticator::new(token_store, Arc::clone(&clock_port));
     Composition {
         middleware: HttpCapabilityMiddleware::new(CapabilityIngress::new(
             Arc::new(authenticator),
@@ -663,7 +664,7 @@ async fn evidence_counts(store: &PostgresDataStore) -> EvidenceCounts {
     }
 }
 
-async fn count_prefix(transaction: &mut Transaction<'_, Postgres>, query: &str) -> i64 {
+async fn count_prefix(transaction: &mut Transaction<'_, Postgres>, query: &'static str) -> i64 {
     sqlx::query_scalar(query)
         .bind(TENANT)
         .fetch_one(&mut **transaction)
@@ -674,13 +675,12 @@ async fn count_prefix(transaction: &mut Transaction<'_, Postgres>, query: &str) 
 async fn audit_head(store: &PostgresDataStore) -> (i64, [u8; 32]) {
     let mut transaction = store.pool().begin().await.expect("begin audit inspection");
     bind_context(&mut transaction).await;
-    let row = sqlx::query(
-        "SELECT next_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1",
-    )
-    .bind(TENANT)
-    .fetch_one(&mut *transaction)
-    .await
-    .expect("read tenant audit head");
+    let row =
+        sqlx::query("SELECT next_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1")
+            .bind(TENANT)
+            .fetch_one(&mut *transaction)
+            .await
+            .expect("read tenant audit head");
     transaction.commit().await.expect("commit audit inspection");
     let next_sequence: i64 = row.try_get("next_sequence").expect("valid sequence");
     let hash: Vec<u8> = row.try_get("last_hash").expect("valid audit hash");

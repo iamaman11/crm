@@ -135,12 +135,6 @@ name = "crm-api"
 version = "0.1.0"
 dependencies = [
  "crm-capability-ingress",
- "crm-core-contracts",
- "crm-core-data",
- "crm-core-events",
- "crm-core-permissions",
- "crm-core-workflow",
- "crm-sales",
 ]
 
 [[package]]
@@ -157,10 +151,13 @@ dependencies = [
 name = "crm-capability-ingress"
 version = "0.1.0"
 dependencies = [
+ "crm-capability-adapters",
  "crm-capability-runtime",
+ "crm-core-data",
  "crm-module-sdk",
  "http",
  "sha2 0.10.9",
+ "sqlx",
  "tokio",
  "tonic",
 ]
