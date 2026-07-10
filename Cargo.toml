@@ -16,6 +16,7 @@ members = [
   "crates/crm-capability-adapters",
   "crates/crm-capability-ingress",
   "modules/crm-sales",
+  "modules/crm-activities",
   "services/crm-api",
 ]
 

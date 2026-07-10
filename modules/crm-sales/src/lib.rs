@@ -1,13 +1,17 @@
 #![forbid(unsafe_code)]
 
+pub mod domain;
+
+pub use domain::*;
+
 use crm_module_sdk::{Clock, ModuleExecutionContext, SdkError};
 
 /// Architecture marker for `crm-sales`.
 pub const CRATE_NAME: &str = "crm-sales";
 
-/// Minimal host-bound proof that a business module consumes governed SDK ports
-/// rather than infrastructure clients. Domain behavior is added in the first
-/// vertical slice after the capability execution pipeline exists.
+/// Host-bound proof that the module consumes governed SDK ports rather than
+/// infrastructure clients. Domain behavior remains deterministic under an
+/// injected clock.
 pub fn observed_at(context: &ModuleExecutionContext, clock: &dyn Clock) -> Result<i64, SdkError> {
     context.validate()?;
     Ok(clock.now_unix_nanos())

@@ -1,18 +1,18 @@
 schema_version: crm.module/v1
-module_id: crm.sales
-version: "0.2.0"
-display_name: CRM Sales
-description: Expert sales domain module owning leads, deals and quotes.
+module_id: crm.activities
+version: "0.1.0"
+display_name: CRM Activities
+description: Independent activities domain module owning tasks and reminder state.
 
 owner:
-  team: sales-platform
+  team: activities-platform
   contact: crm-owner@example.com
   codeowners:
     - "@iamaman11"
 
 runtime:
   kind: in_process
-  entrypoint: modules/crm-sales
+  entrypoint: modules/crm-activities
 
 platform:
   minimum_version: "0.1.0"
@@ -24,37 +24,39 @@ dependencies:
 
 provides:
   capabilities:
-    - id: sales.deal.create
+    - id: activities.task.create
       version: "1.0.0"
-    - id: sales.deal.update
+    - id: activities.task.update
       version: "1.0.0"
-    - id: sales.deal.advance_stage
+    - id: activities.task.complete
       version: "1.0.0"
-    - id: sales.deal.get
+    - id: activities.task.schedule_reminder
       version: "1.0.0"
-    - id: sales.deal.list
+    - id: activities.task.get
+      version: "1.0.0"
+    - id: activities.task.list
       version: "1.0.0"
   events:
-    - id: sales.deal.created
+    - id: activities.task.created
       version: "1.0.0"
-    - id: sales.deal.updated
+    - id: activities.task.updated
       version: "1.0.0"
-    - id: sales.deal.stage_changed
+    - id: activities.task.completed
+      version: "1.0.0"
+    - id: activities.task.reminder_scheduled
       version: "1.0.0"
   objects:
-    - sales.lead
-    - sales.deal
-    - sales.quote
+    - activities.task
   ui_extensions:
-    - id: sales.pipeline.navigation
+    - id: activities.tasks.navigation
       type: navigation.item
       version: "1.0.0"
-      permission: sales.deal.read
+      permission: activities.task.read
       fallback: hide
-    - id: sales.deal.summary
+    - id: activities.related_tasks.panel
       type: record_page.panel
       version: "1.0.0"
-      permission: sales.deal.read
+      permission: activities.task.read
       fallback: readonly
 
 consumes:
@@ -63,11 +65,9 @@ consumes:
 
 storage:
   record_types:
-    - sales.lead
-    - sales.deal
-    - sales.quote
+    - activities.task
   private_state_namespaces:
-    - crm.sales
+    - crm.activities
 
 security:
   data_classes:
@@ -85,8 +85,6 @@ lifecycle:
   upgrade_policy: manual
   rollback_policy: supported
   uninstall_policy: retain_business_records
-  migrations_path: modules/crm-sales/migrations
+  migrations_path: modules/crm-activities/migrations
   retained_record_types:
-    - sales.lead
-    - sales.deal
-    - sales.quote
+    - activities.task
