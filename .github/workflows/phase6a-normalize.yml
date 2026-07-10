@@ -1,0 +1,44 @@
+name: Phase 6A normalize
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/sales-activities-domain-contracts-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Normalize and validate Phase 6A
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo generate-lockfile
+          cargo fmt --all
+          cargo test -p crm-core-contracts -p crm-sales -p crm-activities
+          cargo clippy -p crm-core-contracts -p crm-sales -p crm-activities --all-targets -- -D warnings
+          git diff --check
+      - name: Commit normalized files
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No normalization changes required."
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Cargo.lock crates/crm-core-contracts/src/lib.rs modules/crm-sales/src modules/crm-activities/src
+          git commit -m "Normalize Phase 6A domain contracts"
+          git push origin HEAD:feature/sales-activities-domain-contracts-v1
