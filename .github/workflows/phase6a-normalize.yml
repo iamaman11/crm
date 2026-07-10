@@ -26,6 +26,21 @@ jobs:
         run: |
           set -o pipefail
           {
+            python3 - <<'PY'
+            from pathlib import Path
+
+            path = Path('crates/crm-core-contracts/src/lib.rs')
+            content = path.read_text()
+            content = content.replace(
+                '#[derive(Debug, Clone, PartialEq, Eq)]\npub enum Patch<T> {\n    Keep,\n    Set(T),\n    Clear,\n}\n\nimpl<T> Default for Patch<T> {\n    fn default() -> Self {\n        Self::Keep\n    }\n}\n',
+                '#[derive(Debug, Clone, PartialEq, Eq, Default)]\npub enum Patch<T> {\n    #[default]\n    Keep,\n    Set(T),\n    Clear,\n}\n',
+            )
+            content = content.replace(
+                '#[derive(Debug, Clone, PartialEq, Eq)]\npub struct PageRequest {\n    pub cursor: Option<Cursor>,\n    pub page_size: PageSize,\n}\n\nimpl Default for PageRequest {\n    fn default() -> Self {\n        Self {\n            cursor: None,\n            page_size: PageSize::default(),\n        }\n    }\n}\n',
+                '#[derive(Debug, Clone, PartialEq, Eq, Default)]\npub struct PageRequest {\n    pub cursor: Option<Cursor>,\n    pub page_size: PageSize,\n}\n',
+            )
+            path.write_text(content)
+            PY
             cargo generate-lockfile
             cargo fmt --all
             cargo test -p crm-core-contracts -p crm-sales -p crm-activities
