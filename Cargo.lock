@@ -98,6 +98,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-module-registry"
+version = "0.1.0"
+dependencies = [
+ "crm-module-manifest",
+ "crm-module-sdk",
+ "semver",
+]
+
+[[package]]
 name = "crm-module-sdk"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,177 @@
+syntax = "proto3";
+package crm.core.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/core/v1/execution_context.proto";
+import "crm/core/v1/marketplace.proto";
+
+message ModuleCoordinate {
+  string module_id = 1;
+  string version = 2;
+}
+
+message ModuleDependencyConstraint {
+  string module_id = 1;
+  string version_requirement = 2;
+  bool optional = 3;
+}
+
+message PublishedModuleVersion {
+  ModuleCoordinate coordinate = 1;
+  string canonicalization_profile = 2;
+  bytes manifest_sha256 = 3;
+  bytes normalized_manifest_json = 4;
+  int64 published_at_unix_nanos = 5;
+  repeated ModuleDependencyConstraint dependencies = 6;
+  repeated string conflicts = 7;
+  bytes publisher_signature = 8;
+  bytes provenance_digest = 9;
+  reserved 10 to 20;
+}
+
+message ModuleDependencyResolution {
+  repeated ModuleCoordinate installation_order = 1;
+  repeated ModuleCoordinate already_satisfied = 2;
+  repeated string warnings = 3;
+}
+
+message ModuleLifecycleImpactReport {
+  repeated string blocking_errors = 1;
+  repeated string warnings = 2;
+  repeated ModuleCoordinate affected_modules = 3;
+  repeated ResourceRef affected_resources = 4;
+  bool requires_approval = 5;
+}
+
+message ModuleInstallationView {
+  string install_id = 1;
+  string tenant_id = 2;
+  ModuleCoordinate current = 3;
+  ModuleInstallStatus status = 4;
+  optional ModuleCoordinate previous = 5;
+  optional ModuleCoordinate pending = 6;
+  int64 generation = 7;
+  optional string failure_code = 8;
+  int64 updated_at_unix_nanos = 9;
+  bytes grant_set_digest = 10;
+  reserved 11 to 20;
+}
+
+message ValidateModuleRequest {
+  ExecutionContext context = 1;
+  PublishedModuleVersion candidate = 2;
+}
+
+message ValidateModuleResponse {
+  bool valid = 1;
+  ModuleLifecycleImpactReport impact = 2;
+}
+
+message PublishModuleRequest {
+  ExecutionContext context = 1;
+  PublishedModuleVersion candidate = 2;
+}
+
+message PublishModuleResponse {
+  PublishedModuleVersion published = 1;
+  bool already_published = 2;
+}
+
+message ResolveModuleDependenciesRequest {
+  ExecutionContext context = 1;
+  ModuleCoordinate target = 2;
+}
+
+message ResolveModuleDependenciesResponse {
+  ModuleDependencyResolution resolution = 1;
+  ModuleLifecycleImpactReport impact = 2;
+}
+
+message InstallModuleRequest {
+  ExecutionContext context = 1;
+  ModuleCoordinate target = 2;
+  bytes approved_grant_set_digest = 3;
+}
+
+message InstallModuleResponse {
+  repeated ModuleInstallationView installations = 1;
+  ModuleLifecycleImpactReport impact = 2;
+}
+
+message ActivateModuleRequest {
+  ExecutionContext context = 1;
+  string module_id = 2;
+  int64 expected_generation = 3;
+}
+
+message ActivateModuleResponse {
+  ModuleInstallationView installation = 1;
+}
+
+message SuspendModuleRequest {
+  ExecutionContext context = 1;
+  string module_id = 2;
+  int64 expected_generation = 3;
+  string reason_code = 4;
+}
+
+message SuspendModuleResponse {
+  ModuleInstallationView installation = 1;
+}
+
+message UpgradeModuleRequest {
+  ExecutionContext context = 1;
+  ModuleCoordinate target = 2;
+  int64 expected_generation = 3;
+}
+
+message UpgradeModuleResponse {
+  ModuleInstallationView installation = 1;
+  ModuleLifecycleImpactReport impact = 2;
+}
+
+message RollbackModuleRequest {
+  ExecutionContext context = 1;
+  string module_id = 2;
+  int64 expected_generation = 3;
+}
+
+message RollbackModuleResponse {
+  ModuleInstallationView installation = 1;
+  ModuleLifecycleImpactReport impact = 2;
+}
+
+message UninstallModuleRequest {
+  ExecutionContext context = 1;
+  string module_id = 2;
+  int64 expected_generation = 3;
+  bool confirm_retained_business_records = 4;
+}
+
+message UninstallModuleResponse {
+  bool uninstalled = 1;
+  ModuleLifecycleImpactReport impact = 2;
+}
+
+message GetModuleImpactReportRequest {
+  ExecutionContext context = 1;
+  string operation = 2;
+  ModuleCoordinate target = 3;
+}
+
+message GetModuleImpactReportResponse {
+  ModuleLifecycleImpactReport impact = 1;
+}
+
+service ModuleLifecycleService {
+  rpc ValidateModule(ValidateModuleRequest) returns (ValidateModuleResponse);
+  rpc PublishModule(PublishModuleRequest) returns (PublishModuleResponse);
+  rpc ResolveModuleDependencies(ResolveModuleDependenciesRequest) returns (ResolveModuleDependenciesResponse);
+  rpc InstallModule(InstallModuleRequest) returns (InstallModuleResponse);
+  rpc ActivateModule(ActivateModuleRequest) returns (ActivateModuleResponse);
+  rpc SuspendModule(SuspendModuleRequest) returns (SuspendModuleResponse);
+  rpc UpgradeModule(UpgradeModuleRequest) returns (UpgradeModuleResponse);
+  rpc RollbackModule(RollbackModuleRequest) returns (RollbackModuleResponse);
+  rpc UninstallModule(UninstallModuleRequest) returns (UninstallModuleResponse);
+  rpc GetModuleImpactReport(GetModuleImpactReportRequest) returns (GetModuleImpactReportResponse);
+}
