@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-capability-ingress = { path = "../../crates/crm-capability-ingress" }
 crm-core-contracts = { path = "../../crates/crm-core-contracts" }
 crm-core-data = { path = "../../crates/crm-core-data" }
 crm-core-events = { path = "../../crates/crm-core-events" }

@@ -13,6 +13,7 @@ members = [
   "crates/crm-module-registry",
   "crates/crm-capability-runtime",
   "crates/crm-capability-adapters",
+  "crates/crm-capability-ingress",
   "modules/crm-sales",
   "services/crm-api",
 ]
