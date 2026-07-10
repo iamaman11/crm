@@ -3,6 +3,18 @@ package crm.core.v1;
 
 import "crm/core/v1/common.proto";
 
+enum ModuleInstallStatus {
+  MODULE_INSTALL_STATUS_UNSPECIFIED = 0;
+  MODULE_INSTALL_STATUS_VALIDATING = 1;
+  MODULE_INSTALL_STATUS_INSTALLED = 2;
+  MODULE_INSTALL_STATUS_ACTIVE = 3;
+  MODULE_INSTALL_STATUS_SUSPENDED = 4;
+  MODULE_INSTALL_STATUS_UPGRADING = 5;
+  MODULE_INSTALL_STATUS_ROLLING_BACK = 6;
+  MODULE_INSTALL_STATUS_UNINSTALLING = 7;
+  MODULE_INSTALL_STATUS_FAILED = 8;
+}
+
 message ModuleManifest {
   string module_id = 1;
   string publisher_id = 2;
@@ -22,5 +34,17 @@ message ModuleManifest {
   string rollback_policy_id = 16;
   bytes sbom = 17;
   bytes build_attestation = 18;
+  reserved 19 to 40;
 }
-message ModuleInstall { string install_id = 1; string tenant_id = 2; string module_id = 3; string version = 4; repeated string approved_capabilities = 5; repeated DataClass approved_data_classes = 6; string status = 7; }
+
+message ModuleInstall {
+  string install_id = 1;
+  string tenant_id = 2;
+  string module_id = 3;
+  string version = 4;
+  repeated string approved_capabilities = 5;
+  repeated DataClass approved_data_classes = 6;
+  string legacy_status = 7 [deprecated = true];
+  ModuleInstallStatus status = 8;
+  reserved 9 to 20;
+}
