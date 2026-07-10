@@ -1,0 +1,33 @@
+name: One-shot PostgreSQL adapter lockfile
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v1
+    paths:
+      - .github/workflows/postgres-lockfile-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v1
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo generate-lockfile
+      - name: Commit exact Cargo lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Cargo.lock is already current"
+          else
+            git commit -m "build: lock PostgreSQL adapter dependencies"
+            git push origin HEAD:feature/postgres-data-adapter-v1
+          fi
