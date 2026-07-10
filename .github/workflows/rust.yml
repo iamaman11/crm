@@ -44,7 +44,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rustfmt-diagnostics
-          path: crates/crm-module-manifest/src/
+          path: |
+            crates/*/src/
+            modules/*/src/
+            services/*/src/
           if-no-files-found: error
           retention-days: 7
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
