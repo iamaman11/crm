@@ -31,7 +31,7 @@ async fn audit_head(
     let mut transaction = store.pool().begin().await.unwrap();
     bind_context(&mut transaction, context).await;
     let row = sqlx::query(
-        "SELECT last_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1",
+        "SELECT next_sequence - 1 AS last_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1",
     )
     .bind(context.execution.tenant_id.as_str())
     .fetch_one(&mut *transaction)
