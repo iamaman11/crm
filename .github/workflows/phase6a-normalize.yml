@@ -21,32 +21,76 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Apply focused Clippy normalization
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/crm-core-contracts/src/lib.rs')
+          content = path.read_text()
+
+          old_patch = '''#[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum Patch<T> {
+              Keep,
+              Set(T),
+              Clear,
+          }
+
+          impl<T> Default for Patch<T> {
+              fn default() -> Self {
+                  Self::Keep
+              }
+          }
+          '''
+          new_patch = '''#[derive(Debug, Clone, PartialEq, Eq, Default)]
+          pub enum Patch<T> {
+              #[default]
+              Keep,
+              Set(T),
+              Clear,
+          }
+          '''
+          old_page = '''#[derive(Debug, Clone, PartialEq, Eq)]
+          pub struct PageRequest {
+              pub cursor: Option<Cursor>,
+              pub page_size: PageSize,
+          }
+
+          impl Default for PageRequest {
+              fn default() -> Self {
+                  Self {
+                      cursor: None,
+                      page_size: PageSize::default(),
+                  }
+              }
+          }
+          '''
+          new_page = '''#[derive(Debug, Clone, PartialEq, Eq, Default)]
+          pub struct PageRequest {
+              pub cursor: Option<Cursor>,
+              pub page_size: PageSize,
+          }
+          '''
+
+          if old_patch not in content:
+              raise SystemExit('manual Patch<T> Default implementation was not found')
+          if old_page not in content:
+              raise SystemExit('manual PageRequest Default implementation was not found')
+
+          content = content.replace(old_patch, new_patch, 1)
+          content = content.replace(old_page, new_page, 1)
+          path.write_text(content)
+          PY
       - name: Normalize and validate Phase 6A
         shell: bash
         run: |
           set -o pipefail
-          {
-            python3 - <<'PY'
-            from pathlib import Path
-
-            path = Path('crates/crm-core-contracts/src/lib.rs')
-            content = path.read_text()
-            content = content.replace(
-                '#[derive(Debug, Clone, PartialEq, Eq)]\npub enum Patch<T> {\n    Keep,\n    Set(T),\n    Clear,\n}\n\nimpl<T> Default for Patch<T> {\n    fn default() -> Self {\n        Self::Keep\n    }\n}\n',
-                '#[derive(Debug, Clone, PartialEq, Eq, Default)]\npub enum Patch<T> {\n    #[default]\n    Keep,\n    Set(T),\n    Clear,\n}\n',
-            )
-            content = content.replace(
-                '#[derive(Debug, Clone, PartialEq, Eq)]\npub struct PageRequest {\n    pub cursor: Option<Cursor>,\n    pub page_size: PageSize,\n}\n\nimpl Default for PageRequest {\n    fn default() -> Self {\n        Self {\n            cursor: None,\n            page_size: PageSize::default(),\n        }\n    }\n}\n',
-                '#[derive(Debug, Clone, PartialEq, Eq, Default)]\npub struct PageRequest {\n    pub cursor: Option<Cursor>,\n    pub page_size: PageSize,\n}\n',
-            )
-            path.write_text(content)
-            PY
-            cargo generate-lockfile
-            cargo fmt --all
-            cargo test -p crm-core-contracts -p crm-sales -p crm-activities
-            cargo clippy -p crm-core-contracts -p crm-sales -p crm-activities --all-targets -- -D warnings
-            git diff --check
-          } 2>&1 | tee phase6a-normalize.log
+          cargo generate-lockfile 2>&1 | tee phase6a-normalize.log
+          cargo fmt --all 2>&1 | tee -a phase6a-normalize.log
+          cargo test -p crm-core-contracts -p crm-sales -p crm-activities 2>&1 | tee -a phase6a-normalize.log
+          cargo clippy -p crm-core-contracts -p crm-sales -p crm-activities --all-targets -- -D warnings 2>&1 | tee -a phase6a-normalize.log
+          git diff --check 2>&1 | tee -a phase6a-normalize.log
       - name: Upload normalization diagnostics
         if: always()
         uses: actions/upload-artifact@v4
