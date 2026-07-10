@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = []
+postgres-integration = []
+
 [dependencies]
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-module-sdk = { path = "../crm-module-sdk" }
@@ -13,4 +17,12 @@ tokio = { version = "1", features = ["time"] }
 tonic = { version = "0.14", default-features = false }
 
 [dev-dependencies]
+crm-capability-adapters = { path = "../crm-capability-adapters" }
+crm-core-data = { path = "../crm-core-data" }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }
 tokio = { version = "1", features = ["macros", "rt", "time"] }
+
+[[test]]
+name = "postgres_gateway_e2e"
+path = "tests/postgres_gateway_e2e.rs"
+required-features = ["postgres-integration"]

@@ -8,9 +8,13 @@ on:
       - "crates/crm-core-data/**"
       - "crates/crm-module-sdk/**"
       - "crates/crm-capability-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "services/crm-api/**"
       - "modules/crm-sales/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
+      - "docs/adr/ADR-030-public-gateway-acceptance.md"
       - ".github/workflows/database.yml"
   pull_request:
     paths:
@@ -19,9 +23,13 @@ on:
       - "crates/crm-core-data/**"
       - "crates/crm-module-sdk/**"
       - "crates/crm-capability-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "services/crm-api/**"
       - "modules/crm-sales/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
+      - "docs/adr/ADR-030-public-gateway-acceptance.md"
       - ".github/workflows/database.yml"
 
 permissions:
@@ -79,6 +87,13 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-core-data --features postgres-integration --test postgres_advanced -- --nocapture 2>&1 | tee database/postgres-advanced.log
+      - name: Verify public capability gateway acceptance
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e -- --nocapture 2>&1 | tee database/postgres-gateway-e2e.log
       - name: Roll back migrations
         run: |
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
@@ -103,6 +118,7 @@ jobs:
           path: |
             database/
             crates/crm-core-data/
+            crates/crm-capability-ingress/
           if-no-files-found: error
           retention-days: 7
 

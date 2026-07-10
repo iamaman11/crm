@@ -37,5 +37,26 @@
     "secrecy::",
     "openai::",
     "anthropic::"
+  ],
+  "governed_transport_crates": {
+    "services/crm-api": [
+      "crm-capability-ingress"
+    ],
+    "crates/crm-capability-ingress": [
+      "crm-capability-runtime",
+      "crm-module-sdk",
+      "http",
+      "sha2",
+      "tokio",
+      "tonic"
+    ]
+  },
+  "governed_transport_forbidden_source_markers": [
+    "crm_core_data",
+    "crm_sales",
+    "PostgresDataStore",
+    "BatchMutationRuntime",
+    "TransactionalCapabilityExecutor",
+    "execute_batch("
   ]
 }
