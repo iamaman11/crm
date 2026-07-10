@@ -3,11 +3,10 @@ use crm_core_data::{
     IdempotencyEvidence, PostgresDataStore, RecordMutation, RelationshipMutation,
 };
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,
-    CorrelationId, DataClass, DomainEvent, EventType, ExecutionContext, IdempotencyKey,
-    ModuleExecutionContext, ModuleId, PayloadEncoding, RecordId, RecordRef, RecordType,
-    RelationshipRef, RelationshipType, RequestId, RetentionPolicyId, SchemaId, SchemaVersion,
-    TenantId, TraceId, TypedPayload,
+    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
+    DataClass, DomainEvent, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext,
+    ModuleId, PayloadEncoding, RecordId, RecordRef, RecordType, RelationshipRef, RelationshipType,
+    RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
 };
 use sqlx::{Postgres, Transaction};
 
@@ -25,8 +24,7 @@ fn context(transaction_id: &str, idempotency_key: &str) -> ModuleExecutionContex
             request_id: RequestId::try_new(format!("request-{transaction_id}")).unwrap(),
             correlation_id: CorrelationId::try_new(format!("correlation-{transaction_id}"))
                 .unwrap(),
-            causation_id: CausationId::try_new(format!("causation-{transaction_id}"))
-                .unwrap(),
+            causation_id: CausationId::try_new(format!("causation-{transaction_id}")).unwrap(),
             trace_id: TraceId::try_new(format!("trace-{transaction_id}")).unwrap(),
             capability_id: CapabilityId::try_new(CAPABILITY).unwrap(),
             capability_version: CapabilityVersion::try_new(CAPABILITY_VERSION).unwrap(),
@@ -268,12 +266,7 @@ fn unlink_plan() -> BatchMutationPlan {
             0xab,
         )],
         idempotency: idempotency(idempotency_key, [0xac; 32]),
-        audits: vec![audit(
-            9,
-            "audit-batch-unlink",
-            [0x99; 32],
-            [0xaa; 32],
-        )],
+        audits: vec![audit(9, "audit-batch-unlink", [0x99; 32], [0xaa; 32])],
     }
 }
 
@@ -323,10 +316,7 @@ async fn record_count(
     count
 }
 
-async fn relationship_count(
-    store: &PostgresDataStore,
-    context: &ModuleExecutionContext,
-) -> i64 {
+async fn relationship_count(store: &PostgresDataStore, context: &ModuleExecutionContext) -> i64 {
     let mut transaction = store.pool().begin().await.unwrap();
     bind_context(&mut transaction, context).await;
     let count: i64 = sqlx::query_scalar(
@@ -382,7 +372,10 @@ async fn batch_executor_is_atomic_idempotent_and_optimistic() {
     let replayed = store.execute_batch(&create).await.unwrap();
     assert!(replayed.replayed);
     assert_eq!(replayed.records, created.records);
-    assert_eq!(record_count(&store, &create.context, &["batch-a", "batch-b"]).await, 2);
+    assert_eq!(
+        record_count(&store, &create.context, &["batch-a", "batch-b"]).await,
+        2
+    );
     assert_eq!(relationship_count(&store, &create.context).await, 1);
 
     let mut mismatched = create.clone();

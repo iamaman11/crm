@@ -223,7 +223,10 @@ impl BatchMutationPlan {
                     audit.audit_record_id
                 )));
             }
-            if let Some(previous) = index.checked_sub(1).and_then(|value| self.audits.get(value)) {
+            if let Some(previous) = index
+                .checked_sub(1)
+                .and_then(|value| self.audits.get(value))
+            {
                 if audit.audit_sequence != previous.audit_sequence + 1 {
                     return Err(BatchError::InvalidPlan(
                         "audit records in a batch must use contiguous sequences".to_owned(),
@@ -267,9 +270,8 @@ impl fmt::Display for BatchError {
             Self::Sdk(error) => write!(formatter, "SDK validation failed: {error}"),
             Self::InvalidPlan(message) => write!(formatter, "invalid batch plan: {message}"),
             Self::Conflict(message) => write!(formatter, "mutation conflict: {message}"),
-            Self::IdempotencyKeyReused => formatter.write_str(
-                "idempotency key was previously used for a different semantic request",
-            ),
+            Self::IdempotencyKeyReused => formatter
+                .write_str("idempotency key was previously used for a different semantic request"),
             Self::IdempotencyInProgress => {
                 formatter.write_str("idempotent request is already in progress")
             }
@@ -305,7 +307,8 @@ impl PostgresDataStore {
         &self,
         plan: &BatchMutationPlan,
     ) -> Result<BatchMutationResult, BatchError> {
-        self.execute_batch_with_fault(plan, FaultInjection::None).await
+        self.execute_batch_with_fault(plan, FaultInjection::None)
+            .await
     }
 
     #[doc(hidden)]
@@ -520,14 +523,7 @@ async fn apply_record_mutation(
             reference,
             expected_version,
             payload,
-        } => update_record(
-            transaction,
-            context,
-            reference,
-            *expected_version,
-            payload,
-        )
-        .await,
+        } => update_record(transaction, context, reference, *expected_version, payload).await,
     }
 }
 
@@ -861,8 +857,7 @@ async fn insert_completion_marker(
 }
 
 fn checked_size(value: u64, label: &str) -> Result<i64, BatchError> {
-    i64::try_from(value)
-        .map_err(|_| BatchError::InvalidPlan(format!("{label} size exceeds i64")))
+    i64::try_from(value).map_err(|_| BatchError::InvalidPlan(format!("{label} size exceeds i64")))
 }
 
 fn relationship_key(relationship: &RelationshipRef) -> String {
@@ -906,12 +901,14 @@ const fn payload_encoding_name(value: PayloadEncoding) -> &'static str {
 pub fn batch_error_to_sdk(error: BatchError) -> SdkError {
     match error {
         BatchError::Sdk(error) => error,
-        BatchError::InvalidPlan(message) | BatchError::InvalidStoredValue(message) => SdkError::new(
-            "DATA_INVALID",
-            ErrorCategory::InvalidArgument,
-            false,
-            message,
-        ),
+        BatchError::InvalidPlan(message) | BatchError::InvalidStoredValue(message) => {
+            SdkError::new(
+                "DATA_INVALID",
+                ErrorCategory::InvalidArgument,
+                false,
+                message,
+            )
+        }
         BatchError::Conflict(message) | BatchError::IdempotencyKeyReused => SdkError::new(
             "DATA_CONFLICT",
             ErrorCategory::Conflict,
