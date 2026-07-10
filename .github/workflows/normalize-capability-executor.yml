@@ -1,0 +1,56 @@
+name: Normalize capability executor branch
+
+on:
+  push:
+    branches:
+      - feature/capability-postgres-executor-v1
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/capability-postgres-executor-v1
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Normalize source and lockfile
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/crm-core-data/src/capability_executor.rs')
+          content = path.read_text()
+          content = content.replace(
+              '    BatchError, BatchMutationPlan, BatchMutationResult, PostgresDataStore, RelationshipMutation,\n};',
+              '    BatchError, BatchMutationPlan, BatchMutationResult, PostgresDataStore,\n};',
+          )
+          content = content.replace(
+              '    use crate::{AuditEvidence, EventEvidence, IdempotencyEvidence, RecordMutation};',
+              '    use crate::{\n        AuditEvidence, EventEvidence, IdempotencyEvidence, RecordMutation, RelationshipMutation,\n    };',
+          )
+          path.write_text(content)
+          PY
+          cargo fmt --all
+          cargo generate-lockfile
+          rm .github/workflows/normalize-capability-executor.yml
+          git diff --check
+
+      - name: Commit normalized branch
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Cargo.lock crates/crm-core-data/src/capability_executor.rs .github/workflows/normalize-capability-executor.yml
+          git commit -m "Normalize capability PostgreSQL executor"
+          git push origin HEAD:feature/capability-postgres-executor-v1
