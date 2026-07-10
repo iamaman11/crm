@@ -95,7 +95,7 @@ impl TransactionalCapabilityExecutor for PostgresTransactionalCapabilityExecutor
                 .runtime
                 .execute_batch(&execution_plan.batch)
                 .await
-                .map_err(batch_error_to_sdk)?;
+                .map_err(capability_batch_error_to_sdk)?;
 
             Ok(CapabilityExecutionResult {
                 output: execution_plan.output,
@@ -144,7 +144,7 @@ fn validate_execution_plan(
     execution_plan
         .batch
         .validate()
-        .map_err(batch_error_to_sdk)?;
+        .map_err(capability_batch_error_to_sdk)?;
     validate_planned_output(definition, execution_plan.output.as_ref())?;
     Ok(())
 }
@@ -176,7 +176,7 @@ fn invalid_execution_plan() -> SdkError {
     )
 }
 
-pub fn batch_error_to_sdk(error: BatchError) -> SdkError {
+pub fn capability_batch_error_to_sdk(error: BatchError) -> SdkError {
     match error {
         BatchError::Sdk(error) => error,
         BatchError::Conflict(_) => SdkError::new(
