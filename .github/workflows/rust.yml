@@ -17,6 +17,22 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: python scripts/check_architecture.py
+      - name: Generate resolved Cargo lockfile
+        run: cargo generate-lockfile
+      - name: Upload resolved Cargo lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lockfile
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify committed Cargo lockfile is current
+        run: |
+          if [ -n "$(git status --porcelain -- Cargo.lock)" ]; then
+            echo "Cargo.lock is missing or out of date. Download the cargo-lockfile artifact and commit it."
+            git status --short -- Cargo.lock
+            exit 1
+          fi
       - name: Check Rust formatting
         id: rustfmt
         run: cargo fmt --all -- --check
