@@ -1,0 +1,52 @@
+name: One-shot Module SDK waker repair
+
+on:
+  push:
+    branches:
+      - feature/module-sdk-v1
+    paths:
+      - .github/workflows/module-sdk-waker-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/module-sdk-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Replace manual no-op waker
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("crates/crm-module-sdk/src/testing.rs")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "    use std::sync::Arc;\n    use std::task::{Context, Poll, Wake, Waker};\n\n    struct NoopWake;\n\n    impl Wake for NoopWake {\n        fn wake(self: Arc<Self>) {}\n    }\n",
+              "    use std::task::{Context, Poll, Waker};\n",
+          )
+          text = text.replace(
+              "        let waker = Waker::from(Arc::new(NoopWake));\n        let mut context = Context::from_waker(&waker);",
+              "        let mut context = Context::from_waker(Waker::noop());",
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+          cargo fmt --all
+          git diff --check
+      - name: Commit repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-module-sdk/src/testing.rs
+          if git diff --cached --quiet; then
+            echo "No repair changes required"
+          else
+            git commit -m "fix: use standard no-op waker in SDK tests"
+            git push origin HEAD:feature/module-sdk-v1
+          fi
