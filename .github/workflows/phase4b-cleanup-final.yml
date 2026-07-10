@@ -1,0 +1,39 @@
+name: Final self-cleaning Phase 4B cleanup
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v1
+    paths:
+      - .github/workflows/phase4b-cleanup-final.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v1
+      - name: Remove all temporary Phase 4B material
+        run: |
+          rm -f .github/workflows/phase4b-verification.yml
+          rm -f .github/workflows/phase4b-verification-marker.yml
+          rm -f .github/workflows/phase4b-cleanup.yml
+          rm -f .github/workflows/phase4b-cleanup-final.yml
+          rm -f verification/phase4b.pass
+          rmdir verification 2>/dev/null || true
+      - name: Commit cleanup when needed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Temporary material is already absent"
+          else
+            git commit -m "chore: finalize Phase 4B verification cleanup"
+            git push origin HEAD:feature/postgres-data-adapter-v1
+          fi
