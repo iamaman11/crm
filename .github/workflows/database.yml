@@ -25,9 +25,34 @@ on:
       - ".github/workflows/database.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  branch-rustfmt:
+    if: github.event_name == 'push' && github.ref_name == 'feature/capability-execution-gateway-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/capability-execution-gateway-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format the complete workspace
+        run: cargo fmt --all
+      - name: Commit formatting when changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates modules services
+          if git diff --cached --quiet; then
+            echo "Rust sources are already formatted"
+          else
+            git commit -m "style: format capability runtime"
+            git push origin HEAD:feature/capability-execution-gateway-v1
+          fi
+
   postgres-foundation:
     runs-on: ubuntu-latest
     timeout-minutes: 35
