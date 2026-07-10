@@ -3,11 +3,21 @@ name: Database CI
 on:
   push:
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-core-data/**"
+      - "crates/crm-module-sdk/**"
+      - "modules/crm-sales/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - ".github/workflows/database.yml"
   pull_request:
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-core-data/**"
+      - "crates/crm-module-sdk/**"
+      - "modules/crm-sales/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - ".github/workflows/database.yml"
@@ -18,7 +28,7 @@ permissions:
 jobs:
   postgres-foundation:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17-alpine
@@ -41,27 +51,42 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Apply clean migration
-        run: psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
-      - name: Verify platform invariants
+      - name: Apply clean migrations
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+      - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
-      - name: Roll back migration
-        run: psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
+      - name: Enable the isolated runtime test role
+        run: psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify Rust adapter atomicity and tenant isolation
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+        run: cargo test -p crm-core-data --features postgres-integration --test postgres_foundation
+      - name: Roll back migrations
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
       - name: Verify rollback removed authoritative schema
         run: |
           count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
           test "${count}" = "0"
-      - name: Reapply migration after rollback
-        run: psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
-      - name: Upload SQL sources on failure
+      - name: Reapply migrations after rollback
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+      - name: Upload database and Rust diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: database-foundation-sources
-          path: database/
+          name: database-adapter-diagnostics
+          path: |
+            database/
+            crates/crm-core-data/
           if-no-files-found: error
           retention-days: 7

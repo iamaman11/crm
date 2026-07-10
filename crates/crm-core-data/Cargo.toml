@@ -4,5 +4,19 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = []
+postgres-integration = []
+
 [dependencies]
 crm-core-contracts = { path = "../crm-core-contracts" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[[test]]
+name = "postgres_foundation"
+path = "tests/postgres_foundation.rs"
+required-features = ["postgres-integration"]

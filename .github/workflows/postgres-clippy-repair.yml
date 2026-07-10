@@ -1,0 +1,45 @@
+name: One-shot PostgreSQL adapter Clippy repair
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v1
+    paths:
+      - .github/workflows/postgres-clippy-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Remove unused adapter imports
+        run: |
+          echo "Applying Clippy repair to current branch head"
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("crates/crm-core-data/src/postgres.rs")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "ModuleExecutionContext, ModuleId, PayloadEncoding, RecordId, RecordRef, RecordSnapshot,\n    RecordType, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,",
+              "ModuleExecutionContext, ModuleId, PayloadEncoding, RecordRef, RecordSnapshot, RetentionPolicyId,\n    SchemaId, SchemaVersion, SdkError, TypedPayload,",
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+          cargo fmt --all
+          git diff --check
+      - name: Commit repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-core-data/src/postgres.rs
+          git commit -m "fix: remove unused PostgreSQL adapter imports"
+          git push origin HEAD:feature/postgres-data-adapter-v1
