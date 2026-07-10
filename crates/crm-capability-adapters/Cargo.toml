@@ -1,0 +1,13 @@
+[package]
+name = "crm-capability-adapters"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
