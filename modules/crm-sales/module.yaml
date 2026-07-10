@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.sales
-version: "0.1.0"
+version: "0.2.0"
 display_name: CRM Sales
 description: Expert sales domain module owning leads, deals and quotes.
 
@@ -29,6 +29,10 @@ provides:
     - id: sales.deal.update
       version: "1.0.0"
     - id: sales.deal.advance_stage
+      version: "1.0.0"
+    - id: sales.deal.get
+      version: "1.0.0"
+    - id: sales.deal.list
       version: "1.0.0"
   events:
     - id: sales.deal.created
