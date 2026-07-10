@@ -8,7 +8,7 @@ use crm_module_sdk::{
     ModuleId, PayloadEncoding, RecordId, RecordRef, RecordType, RelationshipRef, RelationshipType,
     RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
 };
-use sqlx::{Postgres, Transaction};
+use sqlx::{Postgres, Row, Transaction};
 
 include!("postgres_advanced/support.rs");
 include!("postgres_advanced/plans.rs");
