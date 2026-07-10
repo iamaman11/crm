@@ -1,3 +1,4 @@
+# Public mutation entrypoints are governed by crm-capability-ingress and ADR-030.
 [workspace]
 resolver = "2"
 members = [
