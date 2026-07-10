@@ -1,0 +1,131 @@
+{
+  "schema_version": "crm.contract-bindings/v1",
+  "modules": [
+    {
+      "module_id": "crm.sales",
+      "capabilities": [
+        {
+          "id": "sales.deal.create",
+          "version": "1.0.0",
+          "rpc": "crm.sales.v1.DealService.CreateDeal",
+          "request": "crm.sales.v1.CreateDealRequest",
+          "response": "crm.sales.v1.CreateDealResponse"
+        },
+        {
+          "id": "sales.deal.update",
+          "version": "1.0.0",
+          "rpc": "crm.sales.v1.DealService.UpdateDeal",
+          "request": "crm.sales.v1.UpdateDealRequest",
+          "response": "crm.sales.v1.UpdateDealResponse"
+        },
+        {
+          "id": "sales.deal.advance_stage",
+          "version": "1.0.0",
+          "rpc": "crm.sales.v1.DealService.AdvanceStage",
+          "request": "crm.sales.v1.AdvanceStageRequest",
+          "response": "crm.sales.v1.AdvanceStageResponse"
+        },
+        {
+          "id": "sales.deal.get",
+          "version": "1.0.0",
+          "rpc": "crm.sales.v1.DealService.GetDeal",
+          "request": "crm.sales.v1.GetDealRequest",
+          "response": "crm.sales.v1.GetDealResponse"
+        },
+        {
+          "id": "sales.deal.list",
+          "version": "1.0.0",
+          "rpc": "crm.sales.v1.DealService.ListDeals",
+          "request": "crm.sales.v1.ListDealsRequest",
+          "response": "crm.sales.v1.ListDealsResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "sales.deal.created",
+          "version": "1.0.0",
+          "message": "crm.sales.v1.DealCreatedEvent"
+        },
+        {
+          "id": "sales.deal.updated",
+          "version": "1.0.0",
+          "message": "crm.sales.v1.DealUpdatedEvent"
+        },
+        {
+          "id": "sales.deal.stage_changed",
+          "version": "1.0.0",
+          "message": "crm.sales.v1.DealStageChangedEvent"
+        }
+      ]
+    },
+    {
+      "module_id": "crm.activities",
+      "capabilities": [
+        {
+          "id": "activities.task.create",
+          "version": "1.0.0",
+          "rpc": "crm.activities.v1.TaskService.CreateTask",
+          "request": "crm.activities.v1.CreateTaskRequest",
+          "response": "crm.activities.v1.CreateTaskResponse"
+        },
+        {
+          "id": "activities.task.update",
+          "version": "1.0.0",
+          "rpc": "crm.activities.v1.TaskService.UpdateTask",
+          "request": "crm.activities.v1.UpdateTaskRequest",
+          "response": "crm.activities.v1.UpdateTaskResponse"
+        },
+        {
+          "id": "activities.task.complete",
+          "version": "1.0.0",
+          "rpc": "crm.activities.v1.TaskService.CompleteTask",
+          "request": "crm.activities.v1.CompleteTaskRequest",
+          "response": "crm.activities.v1.CompleteTaskResponse"
+        },
+        {
+          "id": "activities.task.schedule_reminder",
+          "version": "1.0.0",
+          "rpc": "crm.activities.v1.TaskService.ScheduleReminder",
+          "request": "crm.activities.v1.ScheduleReminderRequest",
+          "response": "crm.activities.v1.ScheduleReminderResponse"
+        },
+        {
+          "id": "activities.task.get",
+          "version": "1.0.0",
+          "rpc": "crm.activities.v1.TaskService.GetTask",
+          "request": "crm.activities.v1.GetTaskRequest",
+          "response": "crm.activities.v1.GetTaskResponse"
+        },
+        {
+          "id": "activities.task.list",
+          "version": "1.0.0",
+          "rpc": "crm.activities.v1.TaskService.ListTasks",
+          "request": "crm.activities.v1.ListTasksRequest",
+          "response": "crm.activities.v1.ListTasksResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "activities.task.created",
+          "version": "1.0.0",
+          "message": "crm.activities.v1.TaskCreatedEvent"
+        },
+        {
+          "id": "activities.task.updated",
+          "version": "1.0.0",
+          "message": "crm.activities.v1.TaskUpdatedEvent"
+        },
+        {
+          "id": "activities.task.completed",
+          "version": "1.0.0",
+          "message": "crm.activities.v1.TaskCompletedEvent"
+        },
+        {
+          "id": "activities.task.reminder_scheduled",
+          "version": "1.0.0",
+          "message": "crm.activities.v1.TaskReminderScheduledEvent"
+        }
+      ]
+    }
+  ]
+}
