@@ -44,7 +44,7 @@ message ModuleInstall {
   string version = 4;
   repeated string approved_capabilities = 5;
   repeated DataClass approved_data_classes = 6;
-  string legacy_status = 7 [deprecated = true];
-  ModuleInstallStatus status = 8;
+  string status = 7 [deprecated = true];
+  ModuleInstallStatus typed_status = 8;
   reserved 9 to 20;
 }
