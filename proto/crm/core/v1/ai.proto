@@ -12,6 +12,30 @@ enum AiExecutionMode {
   AI_EXECUTION_MODE_EXECUTE_WITH_APPROVAL = 4;
   AI_EXECUTION_MODE_EXECUTE_AUTONOMOUS = 5;
 }
-message AiAgentDefinition { string agent_id = 1; string tenant_id = 2; string name = 3; AiExecutionMode mode = 4; repeated string allowed_capability_ids = 5; repeated DataClass allowed_data_classes = 6; string model_routing_policy_id = 7; string cost_budget_policy_id = 8; }
-message AiToolCall { string tool_call_id = 1; ExecutionContext context = 2; string agent_id = 3; string capability_id = 4; bytes input = 5; bytes input_hash = 6; string model_id = 7; bool external_content_present = 8; }
-message AiToolResult { string tool_call_id = 1; bytes output = 2; bytes output_hash = 3; string status = 4; bool approval_required = 5; }
+message AiAgentDefinition {
+  string agent_id = 1;
+  string tenant_id = 2;
+  string name = 3;
+  AiExecutionMode mode = 4;
+  repeated string allowed_capability_ids = 5;
+  repeated DataClass allowed_data_classes = 6;
+  string model_routing_policy_id = 7;
+  string cost_budget_policy_id = 8;
+}
+message AiToolCall {
+  string tool_call_id = 1;
+  ExecutionContext context = 2;
+  string agent_id = 3;
+  string capability_id = 4;
+  bytes input = 5;
+  bytes input_hash = 6;
+  string model_id = 7;
+  bool external_content_present = 8;
+}
+message AiToolResult {
+  string tool_call_id = 1;
+  bytes output = 2;
+  bytes output_hash = 3;
+  string status = 4;
+  bool approval_required = 5;
+}

@@ -1,11 +1,63 @@
 syntax = "proto3";
 package crm.core.v1;
 
-message IdentityUser { string user_id = 1; string email = 2; string display_name = 3; string status = 4; }
-message TenantMembership { string membership_id = 1; string tenant_id = 2; string user_id = 3; repeated string role_ids = 4; string status = 5; }
-message Team { string team_id = 1; string tenant_id = 2; string name = 3; repeated string member_ids = 4; }
-message Role { string role_id = 1; string tenant_id = 2; string name = 3; repeated string policy_ids = 4; }
-message ServiceAccount { string service_account_id = 1; string tenant_id = 2; string name = 3; repeated string scopes = 4; string status = 5; }
-message DelegationGrant { string grant_id = 1; string tenant_id = 2; string grantor_actor_id = 3; string grantee_actor_id = 4; repeated string capability_ids = 5; int64 starts_at_unix_nanos = 6; int64 expires_at_unix_nanos = 7; bool revoked = 8; }
-message RecordOwnership { string tenant_id = 1; string record_id = 2; string owner_type = 3; string owner_id = 4; int64 valid_from_unix_nanos = 5; optional int64 valid_to_unix_nanos = 6; }
-message RecordShare { string share_id = 1; string tenant_id = 2; string record_id = 3; string grantee_type = 4; string grantee_id = 5; repeated string permissions = 6; string field_mask_policy_id = 7; optional int64 expires_at_unix_nanos = 8; }
+message IdentityUser {
+  string user_id = 1;
+  string email = 2;
+  string display_name = 3;
+  string status = 4;
+}
+message TenantMembership {
+  string membership_id = 1;
+  string tenant_id = 2;
+  string user_id = 3;
+  repeated string role_ids = 4;
+  string status = 5;
+}
+message Team {
+  string team_id = 1;
+  string tenant_id = 2;
+  string name = 3;
+  repeated string member_ids = 4;
+}
+message Role {
+  string role_id = 1;
+  string tenant_id = 2;
+  string name = 3;
+  repeated string policy_ids = 4;
+}
+message ServiceAccount {
+  string service_account_id = 1;
+  string tenant_id = 2;
+  string name = 3;
+  repeated string scopes = 4;
+  string status = 5;
+}
+message DelegationGrant {
+  string grant_id = 1;
+  string tenant_id = 2;
+  string grantor_actor_id = 3;
+  string grantee_actor_id = 4;
+  repeated string capability_ids = 5;
+  int64 starts_at_unix_nanos = 6;
+  int64 expires_at_unix_nanos = 7;
+  bool revoked = 8;
+}
+message RecordOwnership {
+  string tenant_id = 1;
+  string record_id = 2;
+  string owner_type = 3;
+  string owner_id = 4;
+  int64 valid_from_unix_nanos = 5;
+  optional int64 valid_to_unix_nanos = 6;
+}
+message RecordShare {
+  string share_id = 1;
+  string tenant_id = 2;
+  string record_id = 3;
+  string grantee_type = 4;
+  string grantee_id = 5;
+  repeated string permissions = 6;
+  string field_mask_policy_id = 7;
+  optional int64 expires_at_unix_nanos = 8;
+}

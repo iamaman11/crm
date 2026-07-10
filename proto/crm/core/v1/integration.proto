@@ -14,18 +14,66 @@ enum ConflictResolutionStrategy {
   CONFLICT_RESOLUTION_STRATEGY_IGNORE_EXTERNAL_DELETE = 7;
   CONFLICT_RESOLUTION_STRATEGY_SOFT_DELETE_INTERNAL = 8;
 }
-message ExternalConnection { string connection_id = 1; string tenant_id = 2; string connector_type = 3; string status = 4; repeated string scopes = 5; }
-message SyncState { string connector_id = 1; string tenant_id = 2; string external_object_type = 3; string external_id = 4; string internal_record_id = 5; string last_seen_external_version = 6; int64 last_synced_at_unix_nanos = 7; string mapping_version = 8; string conflict_status = 9; }
-message CreateConnectionRequest { ExecutionContext context = 1; ExternalConnection connection = 2; }
-message CreateConnectionResponse { ExternalConnection connection = 1; }
-message RotateCredentialRequest { ExecutionContext context = 1; string connection_id = 2; bytes encrypted_credential = 3; }
-message RotateCredentialResponse { ExternalConnection connection = 1; }
-message StartSyncRequest { ExecutionContext context = 1; string connection_id = 2; string object_type = 3; }
-message StartSyncResponse { string sync_job_id = 1; }
-message ResolveConflictRequest { ExecutionContext context = 1; string connection_id = 2; string external_id = 3; ConflictResolutionStrategy strategy = 4; }
-message ResolveConflictResponse { SyncState sync_state = 1; }
-message ReceiveWebhookRequest { ExecutionContext context = 1; string connection_id = 2; string external_event_id = 3; bytes payload = 4; bytes signature = 5; }
-message ReceiveWebhookResponse { string accepted_event_id = 1; }
+message ExternalConnection {
+  string connection_id = 1;
+  string tenant_id = 2;
+  string connector_type = 3;
+  string status = 4;
+  repeated string scopes = 5;
+}
+message SyncState {
+  string connector_id = 1;
+  string tenant_id = 2;
+  string external_object_type = 3;
+  string external_id = 4;
+  string internal_record_id = 5;
+  string last_seen_external_version = 6;
+  int64 last_synced_at_unix_nanos = 7;
+  string mapping_version = 8;
+  string conflict_status = 9;
+}
+message CreateConnectionRequest {
+  ExecutionContext context = 1;
+  ExternalConnection connection = 2;
+}
+message CreateConnectionResponse {
+  ExternalConnection connection = 1;
+}
+message RotateCredentialRequest {
+  ExecutionContext context = 1;
+  string connection_id = 2;
+  bytes encrypted_credential = 3;
+}
+message RotateCredentialResponse {
+  ExternalConnection connection = 1;
+}
+message StartSyncRequest {
+  ExecutionContext context = 1;
+  string connection_id = 2;
+  string object_type = 3;
+}
+message StartSyncResponse {
+  string sync_job_id = 1;
+}
+message ResolveConflictRequest {
+  ExecutionContext context = 1;
+  string connection_id = 2;
+  string external_id = 3;
+  ConflictResolutionStrategy strategy = 4;
+}
+message ResolveConflictResponse {
+  SyncState sync_state = 1;
+}
+message ReceiveWebhookRequest {
+  ExecutionContext context = 1;
+  string connection_id = 2;
+  string external_event_id = 3;
+  bytes payload = 4;
+  bytes signature = 5;
+}
+message ReceiveWebhookResponse {
+  string accepted_event_id = 1;
+}
 
 service IntegrationService {
   rpc CreateConnection(CreateConnectionRequest) returns (CreateConnectionResponse);

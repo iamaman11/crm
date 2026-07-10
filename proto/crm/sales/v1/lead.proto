@@ -1,3 +1,9 @@
 syntax = "proto3";
 package crm.sales.v1;
-message Lead { string lead_id = 1; string tenant_id = 2; string name = 3; string status = 4; string owner_id = 5; }
+message Lead {
+  string lead_id = 1;
+  string tenant_id = 2;
+  string name = 3;
+  string status = 4;
+  string owner_id = 5;
+}

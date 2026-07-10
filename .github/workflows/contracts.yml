@@ -47,6 +47,7 @@ jobs:
 
           breaking_status=0
           if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git branch --force "${BASE_REF}" "origin/${BASE_REF}"
             buf breaking proto --against ".git#branch=${BASE_REF}" >contract-diagnostics/breaking.txt 2>&1
             breaking_status=$?
           else

@@ -59,17 +59,50 @@ message MetadataPackage {
   bytes content_hash = 9;
   bytes signature = 10;
 }
-message ImpactReport { repeated string blocking_errors = 1; repeated string warnings = 2; repeated ResourceRef affected_resources = 3; }
-message ValidatePackageRequest { ExecutionContext context = 1; MetadataPackage package = 2; }
-message ValidatePackageResponse { bool valid = 1; ImpactReport impact = 2; }
-message PublishPackageRequest { ExecutionContext context = 1; MetadataPackage package = 2; }
-message PublishPackageResponse { string published_version = 1; ImpactReport impact = 2; }
-message GetImpactReportRequest { string tenant_id = 1; MetadataPackage package = 2; }
-message GetImpactReportResponse { ImpactReport impact = 1; }
-message RollbackPackageRequest { ExecutionContext context = 1; string package_id = 2; string target_version = 3; }
-message RollbackPackageResponse { string active_version = 1; }
-message GetDescriptorSetRequest { string tenant_id = 1; string package_version = 2; }
-message GetDescriptorSetResponse { bytes descriptor_set = 1; bytes descriptor_hash = 2; }
+message ImpactReport {
+  repeated string blocking_errors = 1;
+  repeated string warnings = 2;
+  repeated ResourceRef affected_resources = 3;
+}
+message ValidatePackageRequest {
+  ExecutionContext context = 1;
+  MetadataPackage package = 2;
+}
+message ValidatePackageResponse {
+  bool valid = 1;
+  ImpactReport impact = 2;
+}
+message PublishPackageRequest {
+  ExecutionContext context = 1;
+  MetadataPackage package = 2;
+}
+message PublishPackageResponse {
+  string published_version = 1;
+  ImpactReport impact = 2;
+}
+message GetImpactReportRequest {
+  string tenant_id = 1;
+  MetadataPackage package = 2;
+}
+message GetImpactReportResponse {
+  ImpactReport impact = 1;
+}
+message RollbackPackageRequest {
+  ExecutionContext context = 1;
+  string package_id = 2;
+  string target_version = 3;
+}
+message RollbackPackageResponse {
+  string active_version = 1;
+}
+message GetDescriptorSetRequest {
+  string tenant_id = 1;
+  string package_version = 2;
+}
+message GetDescriptorSetResponse {
+  bytes descriptor_set = 1;
+  bytes descriptor_hash = 2;
+}
 
 service MetadataService {
   rpc ValidatePackage(ValidatePackageRequest) returns (ValidatePackageResponse);
