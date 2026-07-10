@@ -1,4 +1,4 @@
-fn faulted_multi_record_plan() -> BatchMutationPlan {
+fn faulted_multi_record_plan(base_sequence: i64, base_hash: [u8; 32]) -> BatchMutationPlan {
     let transaction_id = "tx-batch-fault";
     let idempotency_key = "idem-batch-fault";
     BatchMutationPlan {
@@ -33,11 +33,16 @@ fn faulted_multi_record_plan() -> BatchMutationPlan {
             ),
         ],
         idempotency: idempotency(idempotency_key, [0x65; 32]),
-        audits: vec![audit(5, "audit-batch-fault", [0x55; 32], [0x60; 32])],
+        audits: vec![audit(
+            base_sequence + 1,
+            "audit-batch-fault",
+            base_hash,
+            [0x60; 32],
+        )],
     }
 }
 
-fn create_and_link_plan() -> BatchMutationPlan {
+fn create_and_link_plan(base_sequence: i64, base_hash: [u8; 32]) -> BatchMutationPlan {
     let transaction_id = "tx-batch-create";
     let idempotency_key = "idem-batch-create";
     BatchMutationPlan {
@@ -87,8 +92,18 @@ fn create_and_link_plan() -> BatchMutationPlan {
         ],
         idempotency: idempotency(idempotency_key, [0x77; 32]),
         audits: vec![
-            audit(5, "audit-batch-create-1", [0x55; 32], [0x66; 32]),
-            audit(6, "audit-batch-create-2", [0x66; 32], [0x77; 32]),
+            audit(
+                base_sequence + 1,
+                "audit-batch-create-1",
+                base_hash,
+                [0x66; 32],
+            ),
+            audit(
+                base_sequence + 2,
+                "audit-batch-create-2",
+                [0x66; 32],
+                [0x77; 32],
+            ),
         ],
     }
 }
@@ -131,7 +146,7 @@ fn update_plan(spec: UpdatePlanSpec<'_>) -> BatchMutationPlan {
     }
 }
 
-fn unlink_plan() -> BatchMutationPlan {
+fn unlink_plan(audit_sequence: i64, previous_hash: [u8; 32]) -> BatchMutationPlan {
     let transaction_id = "tx-batch-unlink";
     let idempotency_key = "idem-batch-unlink";
     BatchMutationPlan {
@@ -152,6 +167,11 @@ fn unlink_plan() -> BatchMutationPlan {
             0xab,
         )],
         idempotency: idempotency(idempotency_key, [0xac; 32]),
-        audits: vec![audit(9, "audit-batch-unlink", [0x99; 32], [0xaa; 32])],
+        audits: vec![audit(
+            audit_sequence,
+            "audit-batch-unlink",
+            previous_hash,
+            [0xaa; 32],
+        )],
     }
 }
