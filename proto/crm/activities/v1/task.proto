@@ -1,0 +1,150 @@
+syntax = "proto3";
+package crm.activities.v1;
+
+import "crm/core/v1/common.proto";
+
+enum TaskPriority {
+  TASK_PRIORITY_UNSPECIFIED = 0;
+  TASK_PRIORITY_LOW = 1;
+  TASK_PRIORITY_NORMAL = 2;
+  TASK_PRIORITY_HIGH = 3;
+  TASK_PRIORITY_URGENT = 4;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_OPEN = 1;
+  TASK_STATUS_COMPLETED = 2;
+}
+
+enum TaskSort {
+  TASK_SORT_UNSPECIFIED = 0;
+  TASK_SORT_DUE_AT_ASCENDING = 1;
+  TASK_SORT_UPDATED_AT_DESCENDING = 2;
+  TASK_SORT_PRIORITY_DESCENDING = 3;
+}
+
+message Task {
+  string task_id = 1;
+  string tenant_id = 2;
+  string subject = 3;
+  optional string description = 4;
+  crm.core.v1.ActorOrTeamOwner owner = 5;
+  repeated crm.core.v1.ResourceRef related_resources = 6;
+  TaskPriority priority = 7;
+  TaskStatus status = 8;
+  crm.core.v1.UnixTime due_at = 9;
+  crm.core.v1.UnixTime reminder_at = 10;
+  crm.core.v1.UnixTime completed_at = 11;
+  crm.core.v1.UnixTime created_at = 12;
+  crm.core.v1.UnixTime updated_at = 13;
+  int64 version = 14;
+}
+
+message CreateTaskRequest {
+  string task_id = 1;
+  string subject = 2;
+  optional string description = 3;
+  crm.core.v1.ActorOrTeamOwner owner = 4;
+  repeated crm.core.v1.ResourceRef related_resources = 5;
+  TaskPriority priority = 6;
+  crm.core.v1.UnixTime due_at = 7;
+  crm.core.v1.UnixTime reminder_at = 8;
+}
+
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+message UpdateTaskRequest {
+  string task_id = 1;
+  int64 expected_version = 2;
+  crm.core.v1.StringPatch subject = 3;
+  crm.core.v1.StringPatch description = 4;
+  crm.core.v1.ActorOrTeamOwnerPatch owner = 5;
+  TaskPriorityPatch priority = 6;
+  crm.core.v1.UnixTimePatch due_at = 7;
+}
+
+message UpdateTaskResponse {
+  Task task = 1;
+}
+
+message TaskPriorityPatch {
+  oneof operation {
+    TaskPriority set = 1;
+    bool clear = 2;
+  }
+}
+
+message CompleteTaskRequest {
+  string task_id = 1;
+  int64 expected_version = 2;
+}
+
+message CompleteTaskResponse {
+  Task task = 1;
+  bool changed = 2;
+}
+
+message ScheduleReminderRequest {
+  string task_id = 1;
+  int64 expected_version = 2;
+  crm.core.v1.UnixTime reminder_at = 3;
+}
+
+message ScheduleReminderResponse {
+  Task task = 1;
+  bool changed = 2;
+}
+
+message GetTaskRequest {
+  string task_id = 1;
+}
+
+message GetTaskResponse {
+  Task task = 1;
+}
+
+message ListTasksRequest {
+  crm.core.v1.PageRequest page = 1;
+  crm.core.v1.ActorOrTeamOwner owner = 2;
+  optional TaskStatus status = 3;
+  crm.core.v1.ResourceRef related_resource = 4;
+  TaskSort sort = 5;
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  crm.core.v1.PageInfo page = 2;
+}
+
+message TaskCreatedEvent {
+  Task task = 1;
+}
+
+message TaskUpdatedEvent {
+  Task task = 1;
+  repeated string changed_fields = 2;
+}
+
+message TaskCompletedEvent {
+  string task_id = 1;
+  crm.core.v1.UnixTime completed_at = 2;
+  int64 version = 3;
+}
+
+message TaskReminderScheduledEvent {
+  string task_id = 1;
+  crm.core.v1.UnixTime reminder_at = 2;
+  int64 version = 3;
+}
+
+service TaskService {
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
+  rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskResponse);
+  rpc ScheduleReminder(ScheduleReminderRequest) returns (ScheduleReminderResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+}
