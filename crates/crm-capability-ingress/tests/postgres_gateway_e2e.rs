@@ -16,7 +16,7 @@ use crm_capability_runtime::{
     CapabilityRequest, CapabilityRisk, CapabilitySemanticValidator, PayloadContract,
 };
 use crm_core_data::{
-    AuditEvidence, BatchError, BatchMutationPlan, BatchMutationResult, BatchMutationRuntime,
+    AuditIntent, BatchError, BatchMutationPlan, BatchMutationResult, BatchMutationRuntime,
     CapabilityBatchExecutionPlan, CapabilityBatchPlanner, EventEvidence, FaultInjection,
     IdempotencyEvidence, PostgresDataStore, PostgresTransactionalCapabilityExecutor,
     RecordMutation, capability_idempotency_scope,
@@ -132,9 +132,6 @@ impl BatchMutationRuntime for RecordingBatchRuntime {
 #[derive(Debug, Clone)]
 struct CreateRecordPlanner {
     record_id: String,
-    audit_sequence: i64,
-    previous_hash: [u8; 32],
-    record_hash: [u8; 32],
 }
 
 impl CapabilityBatchPlanner for CreateRecordPlanner {
@@ -178,12 +175,9 @@ impl CapabilityBatchPlanner for CreateRecordPlanner {
                     request_hash: request.input_hash,
                     expires_at_unix_nanos: occurred_at + 1_000_000_000_000,
                 },
-                audits: vec![AuditEvidence {
-                    audit_sequence: self.audit_sequence,
+                audits: vec![AuditIntent {
                     audit_record_id: format!("audit-{}", self.record_id),
                     canonicalization_profile: "crm.cjson/v1".to_owned(),
-                    previous_hash: self.previous_hash,
-                    record_hash: self.record_hash,
                     canonical_envelope: format!(r#"{{"record_id":"{}"}}"#, self.record_id)
                         .into_bytes(),
                     occurred_at_unix_nanos: occurred_at + 2,
@@ -215,9 +209,6 @@ async fn public_gateway_proves_no_bypass_replay_live_authorization_and_atomic_ro
     let success_record_id = format!("e2e-gateway-success-{suffix}");
     let success_planner = CreateRecordPlanner {
         record_id: success_record_id,
-        audit_sequence: initial_head.0,
-        previous_hash: initial_head.1,
-        record_hash: [0xa1; 32],
     };
     let clock = Arc::new(FixedClock::new(NOW));
     let token_store = token_store();
@@ -355,9 +346,6 @@ async fn public_gateway_proves_no_bypass_replay_live_authorization_and_atomic_ro
         store.clone(),
         CreateRecordPlanner {
             record_id: rollback_record_id,
-            audit_sequence: current_head.0,
-            previous_hash: current_head.1,
-            record_hash: [0xb1; 32],
         },
         FaultInjection::OmitOutbox,
         clock,

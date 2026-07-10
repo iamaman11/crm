@@ -1,6 +1,6 @@
 use crm_core_data::{
-    AuditEvidence, BatchError, BatchMutationPlan, EventEvidence, FaultInjection,
-    IdempotencyEvidence, PostgresDataStore, RecordMutation, RelationshipMutation,
+    AuditIntent, BatchError, BatchMutationPlan, EventEvidence, FaultInjection, IdempotencyEvidence,
+    PostgresDataStore, RecordMutation, RelationshipMutation,
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
