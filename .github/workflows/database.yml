@@ -7,6 +7,7 @@ on:
       - "Cargo.lock"
       - "crates/crm-core-data/**"
       - "crates/crm-module-sdk/**"
+      - "crates/crm-capability-runtime/**"
       - "modules/crm-sales/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
@@ -17,15 +18,39 @@ on:
       - "Cargo.lock"
       - "crates/crm-core-data/**"
       - "crates/crm-module-sdk/**"
+      - "crates/crm-capability-runtime/**"
       - "modules/crm-sales/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - ".github/workflows/database.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  branch-lockfile-refresh:
+    if: github.event_name == 'push' && github.ref_name == 'feature/capability-execution-gateway-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/capability-execution-gateway-v1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate exact workspace lockfile
+        run: cargo generate-lockfile
+      - name: Commit lockfile when changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Cargo.lock is already current"
+          else
+            git commit -m "chore: refresh capability runtime Cargo lockfile"
+            git push origin HEAD:feature/capability-execution-gateway-v1
+          fi
+
   postgres-foundation:
     runs-on: ubuntu-latest
     timeout-minutes: 35
