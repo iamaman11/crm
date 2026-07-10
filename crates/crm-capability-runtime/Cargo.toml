@@ -1,0 +1,9 @@
+[package]
+name = "crm-capability-runtime"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-module-sdk = { path = "../crm-module-sdk" }
+serde = { version = "1", features = ["derive"] }

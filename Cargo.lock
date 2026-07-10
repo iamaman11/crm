@@ -143,6 +143,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-capability-runtime"
+version = "0.1.0"
+dependencies = [
+ "crm-module-sdk",
+ "serde",
+]
+
+[[package]]
 name = "crm-core-contracts"
 version = "0.1.0"
 

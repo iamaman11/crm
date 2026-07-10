@@ -20,9 +20,11 @@
     "crm-module-sdk"
   ],
   "sdk_crate_paths": [
-    "crates/crm-module-sdk"
+    "crates/crm-module-sdk",
+    "crates/crm-capability-runtime"
   ],
   "sdk_allowed_dependencies": [
+    "crm-module-sdk",
     "serde"
   ],
   "forbidden_source_markers": [
