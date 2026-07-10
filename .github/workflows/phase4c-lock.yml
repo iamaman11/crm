@@ -1,0 +1,29 @@
+name: One-shot Phase 4C lockfile
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v2
+    paths:
+      - .github/workflows/phase4c-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v2
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo generate-lockfile
+      - name: Commit generated lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "build: update Phase 4C dependency lock"
+          git push origin HEAD:feature/postgres-data-adapter-v2
