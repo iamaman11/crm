@@ -93,7 +93,9 @@ fn plan(
 #[tokio::test(flavor = "current_thread")]
 async fn postgres_adapter_enforces_atomicity_and_tenant_visibility() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping PostgreSQL integration scenario because DATABASE_URL is not configured");
+        eprintln!(
+            "skipping PostgreSQL integration scenario because DATABASE_URL is not configured"
+        );
         return;
     };
     let store = PostgresDataStore::connect(&database_url, 4)
