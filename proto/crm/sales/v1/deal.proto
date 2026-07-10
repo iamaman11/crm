@@ -1,24 +1,163 @@
 syntax = "proto3";
 package crm.sales.v1;
 
+import "crm/core/v1/common.proto";
+
+enum DealStatus {
+  DEAL_STATUS_UNSPECIFIED = 0;
+  DEAL_STATUS_OPEN = 1;
+  DEAL_STATUS_WON = 2;
+  DEAL_STATUS_LOST = 3;
+}
+
+enum DealSort {
+  DEAL_SORT_UNSPECIFIED = 0;
+  DEAL_SORT_UPDATED_AT_DESCENDING = 1;
+  DEAL_SORT_EXPECTED_CLOSE_DATE_ASCENDING = 2;
+  DEAL_SORT_AMOUNT_DESCENDING = 3;
+}
+
+message DealStage {
+  string pipeline_id = 1;
+  string stage_id = 2;
+  uint32 ordinal = 3;
+}
+
+message DealCloseOutcome {
+  DealStatus status = 1;
+  string reason_code = 2;
+  crm.core.v1.UnixTime closed_at = 3;
+}
+
+// Deal retains the original v1 fields for wire compatibility. New callers
+// should use the structured fields added from field 9 onward.
 message Deal {
   string deal_id = 1;
   string tenant_id = 2;
   string name = 3;
-  string stage = 4;
-  int64 amount_minor = 5;
-  string currency = 6;
-  string owner_id = 7;
+  string stage = 4 [deprecated = true];
+  int64 amount_minor = 5 [deprecated = true];
+  string currency = 6 [deprecated = true];
+  string owner_id = 7 [deprecated = true];
   int64 version = 8;
+  DealStage stage_details = 9;
+  crm.core.v1.ExactMoney amount = 10;
+  crm.core.v1.ActorOrTeamOwner owner = 11;
+  crm.core.v1.ResourceRef account = 12;
+  crm.core.v1.ResourceRef primary_contact = 13;
+  crm.core.v1.CalendarDate expected_close_date = 14;
+  uint32 probability_basis_points = 15;
+  DealStatus status = 16;
+  DealCloseOutcome close_outcome = 17;
+  crm.core.v1.UnixTime created_at = 18;
+  crm.core.v1.UnixTime updated_at = 19;
 }
+
+// Legacy stage-change RPC retained for compatibility.
 message ChangeDealStageRequest {
   string deal_id = 1;
   string target_stage = 2;
   int64 expected_version = 3;
 }
+
 message ChangeDealStageResponse {
   Deal deal = 1;
 }
+
+message CreateDealRequest {
+  string deal_id = 1;
+  string name = 2;
+  crm.core.v1.ActorOrTeamOwner owner = 3;
+  crm.core.v1.ResourceRef account = 4;
+  crm.core.v1.ResourceRef primary_contact = 5;
+  DealStage stage = 6;
+  crm.core.v1.ExactMoney amount = 7;
+  crm.core.v1.CalendarDate expected_close_date = 8;
+  uint32 probability_basis_points = 9;
+}
+
+message CreateDealResponse {
+  Deal deal = 1;
+}
+
+message UpdateDealRequest {
+  string deal_id = 1;
+  int64 expected_version = 2;
+  crm.core.v1.StringPatch name = 3;
+  crm.core.v1.ActorOrTeamOwnerPatch owner = 4;
+  crm.core.v1.ResourceRefPatch account = 5;
+  crm.core.v1.ResourceRefPatch primary_contact = 6;
+  crm.core.v1.ExactMoneyPatch amount = 7;
+  crm.core.v1.CalendarDatePatch expected_close_date = 8;
+  crm.core.v1.UInt32Patch probability_basis_points = 9;
+}
+
+message UpdateDealResponse {
+  Deal deal = 1;
+}
+
+message StageTransitionPolicy {
+  bool allow_regression = 1;
+  bool allow_skip = 2;
+}
+
+message AdvanceStageRequest {
+  string deal_id = 1;
+  int64 expected_version = 2;
+  DealStage target_stage = 3;
+  DealStatus target_status = 4;
+  optional string close_reason_code = 5;
+  StageTransitionPolicy policy = 6;
+}
+
+message AdvanceStageResponse {
+  Deal deal = 1;
+}
+
+message GetDealRequest {
+  string deal_id = 1;
+}
+
+message GetDealResponse {
+  Deal deal = 1;
+}
+
+message ListDealsRequest {
+  crm.core.v1.PageRequest page = 1;
+  crm.core.v1.ActorOrTeamOwner owner = 2;
+  optional string pipeline_id = 3;
+  optional DealStatus status = 4;
+  DealSort sort = 5;
+}
+
+message ListDealsResponse {
+  repeated Deal deals = 1;
+  crm.core.v1.PageInfo page = 2;
+}
+
+message DealCreatedEvent {
+  Deal deal = 1;
+}
+
+message DealUpdatedEvent {
+  Deal deal = 1;
+  repeated string changed_fields = 2;
+}
+
+message DealStageChangedEvent {
+  string deal_id = 1;
+  DealStage previous_stage = 2;
+  DealStage current_stage = 3;
+  DealStatus status = 4;
+  DealCloseOutcome close_outcome = 5;
+  int64 version = 6;
+}
+
 service DealService {
   rpc ChangeStage(ChangeDealStageRequest) returns (ChangeDealStageResponse);
+  rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse);
+  rpc UpdateDeal(UpdateDealRequest) returns (UpdateDealResponse);
+  rpc AdvanceStage(AdvanceStageRequest) returns (AdvanceStageResponse);
+  rpc GetDeal(GetDealRequest) returns (GetDealResponse);
+  rpc ListDeals(ListDealsRequest) returns (ListDealsResponse);
 }
