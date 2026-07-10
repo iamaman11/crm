@@ -143,6 +143,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-capability-adapters"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-module-sdk",
+ "sha2 0.10.9",
+ "tokio",
+]
+
+[[package]]
 name = "crm-capability-runtime"
 version = "0.1.0"
 dependencies = [

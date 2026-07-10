@@ -44,7 +44,7 @@ impl AuthorizationGrant {
                 "policy ID and version must not be empty",
             ));
         }
-        if self.expires_at_unix_nanos == Some(0) {
+        if self.expires_at_unix_nanos.is_some_and(|value| value <= 0) {
             return Err(AuthorizationStoreError::InvalidGrant(
                 "grant expiry must not be zero",
             ));
@@ -232,7 +232,13 @@ mod tests {
         let definition = definition();
         let request = request();
 
-        assert!(authorizer.authorize(&definition, &request).await.unwrap().allowed);
+        assert!(
+            authorizer
+                .authorize(&definition, &request)
+                .await
+                .unwrap()
+                .allowed
+        );
         store
             .revoke(&grant.tenant_id, &grant.actor_id, &grant.policy_id)
             .unwrap();
@@ -247,10 +253,7 @@ mod tests {
         let mut grant = grant();
         grant.capability_version = CapabilityVersion::try_new("2.0.0").unwrap();
         store.upsert(grant).unwrap();
-        let authorizer = LiveCapabilityAuthorizer::new(
-            store,
-            Arc::new(FixedClock::new(100)),
-        );
+        let authorizer = LiveCapabilityAuthorizer::new(store, Arc::new(FixedClock::new(100)));
 
         let denied = authorizer
             .authorize(&definition(), &request())

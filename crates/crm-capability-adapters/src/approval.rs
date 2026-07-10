@@ -187,7 +187,9 @@ fn sha256(bytes: &[u8]) -> [u8; 32] {
 fn constant_time_equal(left: &[u8; 32], right: &[u8; 32]) -> bool {
     left.iter()
         .zip(right.iter())
-        .fold(0_u8, |difference, (left, right)| difference | (left ^ right))
+        .fold(0_u8, |difference, (left, right)| {
+            difference | (*left ^ *right)
+        })
         == 0
 }
 

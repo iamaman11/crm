@@ -1,6 +1,4 @@
-use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityRegistryPort,
-};
+use crm_capability_runtime::{CapabilityDefinition, CapabilityRegistryPort};
 use crm_module_sdk::{CapabilityId, CapabilityVersion, ErrorCategory, PortFuture, SdkError};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -101,11 +99,7 @@ impl CapabilityRegistryPort for CapabilityCatalog {
         capability_id: &'a CapabilityId,
         capability_version: &'a CapabilityVersion,
     ) -> PortFuture<'a, Result<Option<CapabilityDefinition>, SdkError>> {
-        Box::pin(async move {
-            Ok(self
-                .definition(capability_id, capability_version)
-                .cloned())
-        })
+        Box::pin(async move { Ok(self.definition(capability_id, capability_version).cloned()) })
     }
 }
 
@@ -166,9 +160,7 @@ pub fn catalog_dependency_error(reference: impl Into<String>) -> SdkError {
 mod tests {
     use super::*;
     use crm_capability_runtime::{CapabilityRisk, PayloadContract};
-    use crm_module_sdk::{
-        DataClass, ModuleId, PayloadEncoding, SchemaId, SchemaVersion,
-    };
+    use crm_module_sdk::{DataClass, ModuleId, PayloadEncoding, SchemaId, SchemaVersion};
 
     #[tokio::test]
     async fn resolves_only_exact_version() {
@@ -196,8 +188,7 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_coordinate() {
-        let error = CapabilityCatalog::new([definition("1.0.0"), definition("1.0.0")])
-            .unwrap_err();
+        let error = CapabilityCatalog::new([definition("1.0.0"), definition("1.0.0")]).unwrap_err();
         assert!(matches!(error, CapabilityCatalogError::Duplicate { .. }));
     }
 

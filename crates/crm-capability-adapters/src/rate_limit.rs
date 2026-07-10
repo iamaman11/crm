@@ -128,15 +128,19 @@ impl CapabilityRateLimiter for FixedWindowRateLimiter {
                 .state
                 .read()
                 .map_err(|_| unavailable_error())?;
-            let policy = policy_state.policies.get(policy_id).cloned().ok_or_else(|| {
-                SdkError::new(
-                    "RATE_LIMIT_POLICY_NOT_FOUND",
-                    ErrorCategory::Dependency,
-                    false,
-                    "The rate-limit policy is unavailable.",
-                )
-                .with_internal_reference(policy_id)
-            })?;
+            let policy = policy_state
+                .policies
+                .get(policy_id)
+                .cloned()
+                .ok_or_else(|| {
+                    SdkError::new(
+                        "RATE_LIMIT_POLICY_NOT_FOUND",
+                        ErrorCategory::Dependency,
+                        false,
+                        "The rate-limit policy is unavailable.",
+                    )
+                    .with_internal_reference(policy_id)
+                })?;
             let policy_revision = policy_state.revision;
             drop(policy_state);
 
@@ -185,11 +189,7 @@ impl CapabilityRateLimiter for FixedWindowRateLimiter {
                 allowed,
                 decision_id: format!(
                     "rate:{}:{}:{}:{}:{}",
-                    policy_revision,
-                    key.tenant_id,
-                    key.actor_id,
-                    window_start,
-                    counter.count
+                    policy_revision, key.tenant_id, key.actor_id, window_start, counter.count
                 ),
                 retry_after_millis,
             })
