@@ -72,7 +72,10 @@ jobs:
       - name: Verify multi-record replay optimistic and relationship semantics
         env:
           DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
-        run: cargo test -p crm-core-data --features postgres-integration --test postgres_advanced
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-core-data --features postgres-integration --test postgres_advanced -- --nocapture 2>&1 | tee database/postgres-advanced.log
       - name: Roll back migrations
         run: |
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
