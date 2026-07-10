@@ -61,6 +61,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
       - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
       - name: Enable the isolated runtime test role
@@ -78,6 +79,7 @@ jobs:
           cargo test -p crm-core-data --features postgres-integration --test postgres_advanced -- --nocapture 2>&1 | tee database/postgres-advanced.log
       - name: Roll back migrations
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
@@ -90,6 +92,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
       - name: Upload database and Rust diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -135,8 +138,10 @@ jobs:
         run: |
           set -o pipefail
           psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql 2>&1 | tee database/legacy-upgrade.log
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
       - name: Verify upgraded schema can roll back cleanly
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
