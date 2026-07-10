@@ -2,17 +2,13 @@ use crm_core_data::{
     AuditEvidence, FaultInjection, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan,
 };
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,
-    CorrelationId, DataClass, DomainEvent, EventType, ExecutionContext, IdempotencyKey,
-    ModuleExecutionContext, ModuleId, PayloadEncoding, RecordId, RecordRef, RecordType,
-    RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
+    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
+    DataClass, DomainEvent, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext,
+    ModuleId, PayloadEncoding, RecordId, RecordRef, RecordType, RequestId, RetentionPolicyId,
+    SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
 };
 
-fn context(
-    tenant_id: &str,
-    transaction_id: &str,
-    idempotency_key: &str,
-) -> ModuleExecutionContext {
+fn context(tenant_id: &str, transaction_id: &str, idempotency_key: &str) -> ModuleExecutionContext {
     ModuleExecutionContext {
         module_id: ModuleId::try_new("crm.test").unwrap(),
         execution: ExecutionContext {
@@ -148,7 +144,10 @@ async fn postgres_adapter_enforces_atomicity_and_tenant_visibility() {
         .get_record(&faulted.context, &faulted.record)
         .await
         .expect("query fault-injected record");
-    assert!(rolled_back.is_none(), "failed transaction must leave no record");
+    assert!(
+        rolled_back.is_none(),
+        "failed transaction must leave no record"
+    );
 
     let after_fault = plan(
         "rust-after-fault-record",
