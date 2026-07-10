@@ -1,6 +1,4 @@
-use crate::{
-    BatchError, BatchMutationPlan, BatchMutationResult, PostgresDataStore, RelationshipMutation,
-};
+use crate::{BatchError, BatchMutationPlan, BatchMutationResult, PostgresDataStore};
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     TransactionalCapabilityExecutor,
@@ -259,7 +257,9 @@ fn relationship_resource(relationship: &crm_module_sdk::RelationshipRef) -> Reso
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AuditEvidence, EventEvidence, IdempotencyEvidence, RecordMutation};
+    use crate::{
+        AuditEvidence, EventEvidence, IdempotencyEvidence, RecordMutation, RelationshipMutation,
+    };
     use crm_capability_runtime::{CapabilityRisk, PayloadContract};
     use crm_module_sdk::{
         ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,

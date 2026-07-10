@@ -158,6 +158,7 @@ version = "0.1.0"
 name = "crm-core-data"
 version = "0.1.0"
 dependencies = [
+ "crm-capability-runtime",
  "crm-core-contracts",
  "crm-module-sdk",
  "serde",
