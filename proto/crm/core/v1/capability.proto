@@ -31,13 +31,34 @@ message RegisterCapabilityRequest {
   ExecutionContext context = 1;
   CapabilityRegistryEntry capability = 2;
 }
-message RegisterCapabilityResponse { CapabilityRegistryEntry capability = 1; }
-message ResolveCapabilityRequest { string tenant_id = 1; string capability_id = 2; string capability_version = 3; }
-message ResolveCapabilityResponse { CapabilityRegistryEntry capability = 1; }
-message ListCapabilitiesRequest { string tenant_id = 1; PageRequest page = 2; }
-message ListCapabilitiesResponse { repeated CapabilityRegistryEntry capabilities = 1; PageInfo page = 2; }
-message GetToolDescriptorRequest { string tenant_id = 1; string capability_id = 2; string capability_version = 3; }
-message GetToolDescriptorResponse { bytes json_schema_utf8 = 1; bytes descriptor_hash = 2; }
+message RegisterCapabilityResponse {
+  CapabilityRegistryEntry capability = 1;
+}
+message ResolveCapabilityRequest {
+  string tenant_id = 1;
+  string capability_id = 2;
+  string capability_version = 3;
+}
+message ResolveCapabilityResponse {
+  CapabilityRegistryEntry capability = 1;
+}
+message ListCapabilitiesRequest {
+  string tenant_id = 1;
+  PageRequest page = 2;
+}
+message ListCapabilitiesResponse {
+  repeated CapabilityRegistryEntry capabilities = 1;
+  PageInfo page = 2;
+}
+message GetToolDescriptorRequest {
+  string tenant_id = 1;
+  string capability_id = 2;
+  string capability_version = 3;
+}
+message GetToolDescriptorResponse {
+  bytes json_schema_utf8 = 1;
+  bytes descriptor_hash = 2;
+}
 
 service CapabilityRegistryService {
   rpc RegisterCapability(RegisterCapabilityRequest) returns (RegisterCapabilityResponse);

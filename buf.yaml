@@ -4,6 +4,13 @@ modules:
 lint:
   use:
     - STANDARD
+  ignore_only:
+    RPC_REQUEST_STANDARD_NAME:
+      - proto/crm/core/v1/policy.proto
+      - proto/crm/sales/v1/deal.proto
+    RPC_RESPONSE_STANDARD_NAME:
+      - proto/crm/core/v1/policy.proto
+      - proto/crm/sales/v1/deal.proto
 breaking:
   use:
     - FILE

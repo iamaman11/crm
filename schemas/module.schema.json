@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ultimate-crm.local/module/v1/module.schema.json",
+  "title": "Ultimate CRM Module Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "module_id",
+    "version",
+    "owner",
+    "runtime",
+    "platform",
+    "dependencies",
+    "provides",
+    "consumes",
+    "storage",
+    "security",
+    "lifecycle"
+  ],
+  "properties": {
+    "schema_version": { "const": "crm.module/v1" },
+    "module_id": { "$ref": "#/$defs/moduleId" },
+    "version": { "$ref": "#/$defs/semver" },
+    "display_name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 2000 },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team", "contact"],
+      "properties": {
+        "team": { "$ref": "#/$defs/asciiId" },
+        "contact": { "type": "string", "format": "email", "maxLength": 254 },
+        "codeowners": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^@[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?$" }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["in_process", "service", "wasm"] },
+        "entrypoint": { "type": "string", "pattern": "^[A-Za-z0-9_./:-]+$", "maxLength": 240 },
+        "artifact_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_version"],
+      "properties": {
+        "minimum_version": { "$ref": "#/$defs/semver" },
+        "maximum_exclusive_version": { "$ref": "#/$defs/semver" }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "optional", "conflicts"],
+      "properties": {
+        "required": { "$ref": "#/$defs/dependencyList" },
+        "optional": { "$ref": "#/$defs/dependencyList" },
+        "conflicts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/moduleId" }
+        }
+      }
+    },
+    "provides": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilities", "events", "objects", "ui_extensions"],
+      "properties": {
+        "capabilities": { "$ref": "#/$defs/versionedContractList" },
+        "events": { "$ref": "#/$defs/versionedContractList" },
+        "objects": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/namespacedId" }
+        },
+        "ui_extensions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/uiExtension" }
+        }
+      }
+    },
+    "consumes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilities", "events"],
+      "properties": {
+        "capabilities": { "$ref": "#/$defs/versionedContractList" },
+        "events": { "$ref": "#/$defs/versionedContractList" }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_types", "private_state_namespaces"],
+      "properties": {
+        "record_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/namespacedId" }
+        },
+        "private_state_namespaces": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/namespacedId" }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_classes", "network_egress", "secret_handles"],
+      "properties": {
+        "data_classes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "public",
+              "internal",
+              "confidential",
+              "restricted",
+              "personal",
+              "sensitive_personal",
+              "biometric",
+              "financial",
+              "credential"
+            ]
+          }
+        },
+        "network_egress": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}(?::[0-9]{1,5})?$" }
+        },
+        "secret_handles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/namespacedId" }
+        }
+      }
+    },
+    "quotas": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/asciiId" },
+      "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["upgrade_policy", "rollback_policy", "uninstall_policy", "retained_record_types"],
+      "properties": {
+        "upgrade_policy": { "enum": ["automatic_compatible", "manual", "blocked"] },
+        "rollback_policy": { "enum": ["supported", "compensating_only", "not_supported"] },
+        "uninstall_policy": { "enum": ["delete_private_state", "retain_business_records", "blocked_while_referenced"] },
+        "migrations_path": { "type": "string", "pattern": "^[A-Za-z0-9_./-]+$", "maxLength": 240 },
+        "retained_record_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/namespacedId" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "asciiId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "moduleId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z][a-z0-9]*)+$",
+      "maxLength": 120
+    },
+    "namespacedId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z][a-z0-9]*)+$",
+      "maxLength": 180
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+      "maxLength": 80
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module_id", "version_range"],
+      "properties": {
+        "module_id": { "$ref": "#/$defs/moduleId" },
+        "version_range": { "type": "string", "pattern": "^[0-9A-Za-z.*<>=~^| ,+-]{1,120}$" }
+      }
+    },
+    "dependencyList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+    "versionedContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/namespacedId" },
+        "version": { "$ref": "#/$defs/semver" }
+      }
+    },
+    "versionedContractList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/versionedContract" }
+    },
+    "uiExtension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "version", "permission", "fallback"],
+      "properties": {
+        "id": { "$ref": "#/$defs/namespacedId" },
+        "type": {
+          "enum": [
+            "navigation.item",
+            "record_page.tab",
+            "record_page.panel",
+            "list_view.column",
+            "command_palette.action",
+            "dashboard.widget",
+            "workflow.node",
+            "admin_builder.component"
+          ]
+        },
+        "version": { "$ref": "#/$defs/semver" },
+        "permission": { "$ref": "#/$defs/namespacedId" },
+        "fallback": { "enum": ["hide", "readonly", "placeholder"] }
+      }
+    }
+  }
+}

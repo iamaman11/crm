@@ -1,9 +1,9 @@
 syntax = "proto3";
 package crm.core.v1;
 
-import "google/protobuf/field_mask.proto";
 import "crm/core/v1/common.proto";
 import "crm/core/v1/execution_context.proto";
+import "google/protobuf/field_mask.proto";
 
 message Record {
   string record_id = 1;
@@ -43,18 +43,58 @@ message ExecuteMutationSetResponse {
   repeated string event_ids = 3;
 }
 
-message CreateRecordRequest { ExecutionContext context = 1; Record record = 2; }
-message CreateRecordResponse { Record record = 1; }
-message GetRecordRequest { string tenant_id = 1; string object_type = 2; string record_id = 3; }
-message GetRecordResponse { Record record = 1; }
-message UpdateRecordRequest { ExecutionContext context = 1; Record record = 2; google.protobuf.FieldMask update_mask = 3; int64 expected_record_version = 4; }
-message UpdateRecordResponse { Record record = 1; }
-message DeleteRecordRequest { ExecutionContext context = 1; string object_type = 2; string record_id = 3; int64 expected_record_version = 4; }
-message DeleteRecordResponse { Record record = 1; }
-message ListRecordsRequest { string tenant_id = 1; string object_type = 2; string filter = 3; string order_by = 4; PageRequest page = 5; }
-message ListRecordsResponse { repeated Record records = 1; PageInfo page = 2; }
-message BatchGetRecordsRequest { string tenant_id = 1; string object_type = 2; repeated string record_ids = 3; }
-message BatchGetRecordsResponse { repeated Record records = 1; }
+message CreateRecordRequest {
+  ExecutionContext context = 1;
+  Record record = 2;
+}
+message CreateRecordResponse {
+  Record record = 1;
+}
+message GetRecordRequest {
+  string tenant_id = 1;
+  string object_type = 2;
+  string record_id = 3;
+}
+message GetRecordResponse {
+  Record record = 1;
+}
+message UpdateRecordRequest {
+  ExecutionContext context = 1;
+  Record record = 2;
+  google.protobuf.FieldMask update_mask = 3;
+  int64 expected_record_version = 4;
+}
+message UpdateRecordResponse {
+  Record record = 1;
+}
+message DeleteRecordRequest {
+  ExecutionContext context = 1;
+  string object_type = 2;
+  string record_id = 3;
+  int64 expected_record_version = 4;
+}
+message DeleteRecordResponse {
+  Record record = 1;
+}
+message ListRecordsRequest {
+  string tenant_id = 1;
+  string object_type = 2;
+  string filter = 3;
+  string order_by = 4;
+  PageRequest page = 5;
+}
+message ListRecordsResponse {
+  repeated Record records = 1;
+  PageInfo page = 2;
+}
+message BatchGetRecordsRequest {
+  string tenant_id = 1;
+  string object_type = 2;
+  repeated string record_ids = 3;
+}
+message BatchGetRecordsResponse {
+  repeated Record records = 1;
+}
 
 service RecordService {
   rpc CreateRecord(CreateRecordRequest) returns (CreateRecordResponse);

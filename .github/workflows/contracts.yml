@@ -1,15 +1,26 @@
 name: Contract CI
+
 on:
   push:
-    paths: ["proto/**", "buf.yaml", "buf.gen.yaml", ".github/workflows/contracts.yml"]
+    paths:
+      - "proto/**"
+      - "buf.yaml"
+      - "buf.gen.yaml"
+      - ".github/workflows/contracts.yml"
   pull_request:
-    paths: ["proto/**", "buf.yaml", "buf.gen.yaml", ".github/workflows/contracts.yml"]
+    paths:
+      - "proto/**"
+      - "buf.yaml"
+      - "buf.gen.yaml"
+      - ".github/workflows/contracts.yml"
+
 permissions:
   contents: read
-  pull-requests: write
+
 jobs:
-  buf:
+  contracts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -17,9 +28,50 @@ jobs:
       - uses: bufbuild/buf-action@v1
         with:
           version: 1.50.1
-          push: false
-          archive: false
-          lint: true
-          format: true
-          breaking: ${{ github.event_name == 'pull_request' }}
-          input: proto
+          setup_only: true
+      - name: Build, format, lint and breaking checks
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          mkdir -p contract-diagnostics
+          set +e
+
+          buf build proto >contract-diagnostics/build.txt 2>&1
+          build_status=$?
+
+          buf format -d --exit-code proto >contract-diagnostics/format.diff 2>&1
+          format_status=$?
+
+          buf lint proto >contract-diagnostics/lint.txt 2>&1
+          lint_status=$?
+
+          breaking_status=0
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git branch --force "${BASE_REF}" "origin/${BASE_REF}"
+            buf breaking proto --against ".git#branch=${BASE_REF}" >contract-diagnostics/breaking.txt 2>&1
+            breaking_status=$?
+          else
+            echo "Breaking check skipped outside pull requests" >contract-diagnostics/breaking.txt
+          fi
+
+          for report in contract-diagnostics/*; do
+            echo "::group::${report}"
+            cat "${report}"
+            echo "::endgroup::"
+          done
+
+          printf 'build=%s format=%s lint=%s breaking=%s\n' \
+            "${build_status}" "${format_status}" "${lint_status}" "${breaking_status}"
+
+          if [ "${build_status}" -ne 0 ] || [ "${format_status}" -ne 0 ] || \
+             [ "${lint_status}" -ne 0 ] || [ "${breaking_status}" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Upload contract diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-diagnostics
+          path: contract-diagnostics/
+          if-no-files-found: error
+          retention-days: 14

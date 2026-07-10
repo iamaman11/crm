@@ -1,7 +1,24 @@
 syntax = "proto3";
 package crm.sales.v1;
 
-message Deal { string deal_id = 1; string tenant_id = 2; string name = 3; string stage = 4; int64 amount_minor = 5; string currency = 6; string owner_id = 7; int64 version = 8; }
-message ChangeDealStageRequest { string deal_id = 1; string target_stage = 2; int64 expected_version = 3; }
-message ChangeDealStageResponse { Deal deal = 1; }
-service DealService { rpc ChangeStage(ChangeDealStageRequest) returns (ChangeDealStageResponse); }
+message Deal {
+  string deal_id = 1;
+  string tenant_id = 2;
+  string name = 3;
+  string stage = 4;
+  int64 amount_minor = 5;
+  string currency = 6;
+  string owner_id = 7;
+  int64 version = 8;
+}
+message ChangeDealStageRequest {
+  string deal_id = 1;
+  string target_stage = 2;
+  int64 expected_version = 3;
+}
+message ChangeDealStageResponse {
+  Deal deal = 1;
+}
+service DealService {
+  rpc ChangeStage(ChangeDealStageRequest) returns (ChangeDealStageResponse);
+}

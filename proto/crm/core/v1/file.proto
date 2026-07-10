@@ -32,16 +32,50 @@ message FileRecord {
   optional string legal_hold_id = 16;
   int64 created_at_unix_nanos = 17;
 }
-message RequestUploadRequest { ExecutionContext context = 1; string filename = 2; string content_type = 3; int64 byte_size = 4; repeated DataClass data_classes = 5; optional string owner_record_id = 6; }
-message RequestUploadResponse { FileRecord file = 1; string signed_upload_url = 2; int64 expires_at_unix_nanos = 3; }
-message CompleteUploadRequest { ExecutionContext context = 1; string file_id = 2; bytes content_hash = 3; }
-message CompleteUploadResponse { FileRecord file = 1; }
-message GetDownloadAuthorizationRequest { ExecutionContext context = 1; string file_id = 2; }
-message GetDownloadAuthorizationResponse { string signed_download_url = 1; int64 expires_at_unix_nanos = 2; }
-message DeleteFileRequest { ExecutionContext context = 1; string file_id = 2; }
-message DeleteFileResponse { FileRecord file = 1; }
-message PlaceLegalHoldRequest { ExecutionContext context = 1; string file_id = 2; string legal_hold_id = 3; }
-message PlaceLegalHoldResponse { FileRecord file = 1; }
+message RequestUploadRequest {
+  ExecutionContext context = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 byte_size = 4;
+  repeated DataClass data_classes = 5;
+  optional string owner_record_id = 6;
+}
+message RequestUploadResponse {
+  FileRecord file = 1;
+  string signed_upload_url = 2;
+  int64 expires_at_unix_nanos = 3;
+}
+message CompleteUploadRequest {
+  ExecutionContext context = 1;
+  string file_id = 2;
+  bytes content_hash = 3;
+}
+message CompleteUploadResponse {
+  FileRecord file = 1;
+}
+message GetDownloadAuthorizationRequest {
+  ExecutionContext context = 1;
+  string file_id = 2;
+}
+message GetDownloadAuthorizationResponse {
+  string signed_download_url = 1;
+  int64 expires_at_unix_nanos = 2;
+}
+message DeleteFileRequest {
+  ExecutionContext context = 1;
+  string file_id = 2;
+}
+message DeleteFileResponse {
+  FileRecord file = 1;
+}
+message PlaceLegalHoldRequest {
+  ExecutionContext context = 1;
+  string file_id = 2;
+  string legal_hold_id = 3;
+}
+message PlaceLegalHoldResponse {
+  FileRecord file = 1;
+}
 
 service FileService {
   rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);

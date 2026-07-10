@@ -1,6 +1,21 @@
 syntax = "proto3";
 package crm.communications.v1;
-message EmailDraft { string draft_id = 1; string tenant_id = 2; repeated string to = 3; string subject = 4; string body_text = 5; string status = 6; }
-message SendEmailRequest { string draft_id = 1; bytes approval_input_hash = 2; }
-message SendEmailResponse { string message_id = 1; string status = 2; }
-service EmailService { rpc SendEmail(SendEmailRequest) returns (SendEmailResponse); }
+message EmailDraft {
+  string draft_id = 1;
+  string tenant_id = 2;
+  repeated string to = 3;
+  string subject = 4;
+  string body_text = 5;
+  string status = 6;
+}
+message SendEmailRequest {
+  string draft_id = 1;
+  bytes approval_input_hash = 2;
+}
+message SendEmailResponse {
+  string message_id = 1;
+  string status = 2;
+}
+service EmailService {
+  rpc SendEmail(SendEmailRequest) returns (SendEmailResponse);
+}

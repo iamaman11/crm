@@ -1,3 +1,10 @@
 syntax = "proto3";
 package crm.sales.v1;
-message Quote { string quote_id = 1; string tenant_id = 2; string deal_id = 3; int64 total_minor = 4; string currency = 5; string status = 6; }
+message Quote {
+  string quote_id = 1;
+  string tenant_id = 2;
+  string deal_id = 3;
+  int64 total_minor = 4;
+  string currency = 5;
+  string status = 6;
+}
