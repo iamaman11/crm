@@ -23,6 +23,7 @@ jobs:
           components: rustfmt
       - name: Remove unused adapter imports
         run: |
+          echo "Applying Clippy repair to current branch head"
           python - <<'PY'
           from pathlib import Path
           path = Path("crates/crm-core-data/src/postgres.rs")
