@@ -1,0 +1,37 @@
+name: One-shot Module SDK formatting repair
+
+on:
+  push:
+    branches:
+      - feature/module-sdk-v1
+    paths:
+      - .github/workflows/module-sdk-format-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/module-sdk-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: |
+          cargo fmt --all
+          git diff --check
+      - name: Commit formatted sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-module-sdk/src modules/crm-sales/src
+          if git diff --cached --quiet; then
+            echo "No formatting changes required"
+          else
+            git commit -m "style: format module SDK implementation"
+            git push origin HEAD:feature/module-sdk-v1
+          fi
