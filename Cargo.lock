@@ -98,6 +98,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-module-registry"
+version = "0.1.0"
+dependencies = [
+ "crm-module-manifest",
+ "crm-module-sdk",
+ "semver",
+]
+
+[[package]]
 name = "crm-module-sdk"
 version = "0.1.0"
 dependencies = [
@@ -265,7 +274,7 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+checksum = "0b928f33d97565d9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "zmij"
