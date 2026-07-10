@@ -59,6 +59,31 @@ for relative_path in policy.get("sdk_crate_paths", []):
                     f"{source.relative_to(root)} contains forbidden infrastructure marker: {marker}"
                 )
 
+transport_markers = tuple(policy.get("governed_transport_forbidden_source_markers", []))
+for relative_path, allowed_dependencies in policy.get("governed_transport_crates", {}).items():
+    transport_dir = root / relative_path
+    cargo = transport_dir / "Cargo.toml"
+    if not cargo.exists():
+        errors.append(f"configured governed transport crate is missing Cargo.toml: {relative_path}")
+        continue
+
+    data = tomllib.loads(cargo.read_text(encoding="utf-8"))
+    runtime_dependencies = set(data.get("dependencies", {}))
+    unexpected = runtime_dependencies - set(allowed_dependencies)
+    if unexpected:
+        errors.append(
+            f"{cargo.relative_to(root)} can bypass the capability gateway through runtime "
+            f"dependencies: {sorted(unexpected)}"
+        )
+
+    for source in sorted((transport_dir / "src").rglob("*.rs")):
+        text = source.read_text(encoding="utf-8")
+        for marker in transport_markers:
+            if marker in text:
+                errors.append(
+                    f"{source.relative_to(root)} contains forbidden gateway-bypass marker: {marker}"
+                )
+
 if errors:
     print("Architecture boundary check FAILED:")
     for error in errors:
