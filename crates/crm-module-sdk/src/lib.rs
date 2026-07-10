@@ -11,10 +11,6 @@ pub mod ports;
 pub mod testing;
 pub mod types;
 
-use ports::{
-    CapabilityClient, Clock, EventPublisher, FileClient, ModuleStateStore, ObservabilityContext,
-    RandomSource, RecordClient, RelationshipClient, WorkflowClient,
-};
 use std::sync::Arc;
 
 pub use ports::*;

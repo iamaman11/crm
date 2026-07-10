@@ -328,8 +328,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn identifier_deserialization_rejects_empty_values() {
-        let error = serde_json::from_str::<TenantId>("\"\"").expect_err("empty id must fail");
+    fn identifier_constructor_rejects_empty_values() {
+        let error = TenantId::try_new("").expect_err("empty id must fail");
         assert!(error.to_string().contains("must not be empty"));
     }
 
