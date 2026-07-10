@@ -1,0 +1,86 @@
+name: One-shot business transaction context repair
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v1
+    paths:
+      - .github/workflows/execution-context-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Add distinct business transaction identity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          types = Path("crates/crm-module-sdk/src/types.rs")
+          text = types.read_text(encoding="utf-8")
+          text = text.replace(
+              "identifier_type!(IdempotencyKey);\nidentifier_type!(ModuleId);",
+              "identifier_type!(IdempotencyKey);\nidentifier_type!(BusinessTransactionId);\nidentifier_type!(ModuleId);",
+          )
+          text = text.replace(
+              "    pub idempotency_key: IdempotencyKey,\n    pub schema_version: SchemaVersion,",
+              "    pub idempotency_key: IdempotencyKey,\n    pub business_transaction_id: BusinessTransactionId,\n    pub schema_version: SchemaVersion,",
+          )
+          types.write_text(text, encoding="utf-8")
+
+          testing = Path("crates/crm-module-sdk/src/testing.rs")
+          text = testing.read_text(encoding="utf-8")
+          text = text.replace(
+              "ActorId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, DataClass,",
+              "ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, DataClass,",
+          )
+          text = text.replace(
+              "                idempotency_key: IdempotencyKey::try_new(\"idempotency-1\").unwrap(),\n                schema_version:",
+              "                idempotency_key: IdempotencyKey::try_new(\"idempotency-1\").unwrap(),\n                business_transaction_id: BusinessTransactionId::try_new(\"transaction-1\").unwrap(),\n                schema_version:",
+          )
+          testing.write_text(text, encoding="utf-8")
+
+          sales = Path("modules/crm-sales/src/lib.rs")
+          text = sales.read_text(encoding="utf-8")
+          text = text.replace(
+              "ActorId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, ExecutionContext,",
+              "ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, ExecutionContext,",
+          )
+          text = text.replace(
+              "                idempotency_key: IdempotencyKey::try_new(\"idempotency-a\").unwrap(),\n                schema_version:",
+              "                idempotency_key: IdempotencyKey::try_new(\"idempotency-a\").unwrap(),\n                business_transaction_id: BusinessTransactionId::try_new(\"transaction-a\").unwrap(),\n                schema_version:",
+          )
+          sales.write_text(text, encoding="utf-8")
+
+          postgres = Path("crates/crm-core-data/src/postgres.rs")
+          text = postgres.read_text(encoding="utf-8")
+          text = text.replace(
+              ".bind(context.execution.idempotency_key.as_str())\n    .execute(&mut **transaction)",
+              ".bind(context.execution.business_transaction_id.as_str())\n    .execute(&mut **transaction)",
+              1,
+          )
+          text = text.replace(
+              ".bind(plan.context.execution.idempotency_key.as_str())",
+              ".bind(plan.context.execution.business_transaction_id.as_str())",
+          )
+          postgres.write_text(text, encoding="utf-8")
+          PY
+          cargo fmt --all
+          git diff --check
+      - name: Commit context repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-module-sdk/src crates/crm-core-data/src modules/crm-sales/src
+          git commit -m "fix: add distinct business transaction identity to SDK context"
+          git push origin HEAD:feature/postgres-data-adapter-v1
