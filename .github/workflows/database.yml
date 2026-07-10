@@ -28,7 +28,7 @@ permissions:
 jobs:
   postgres-foundation:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:17-alpine
@@ -60,16 +60,22 @@ jobs:
         run: |
           psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
       - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
       - name: Enable the isolated runtime test role
         run: psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
-      - name: Verify Rust adapter atomicity and tenant isolation
+      - name: Verify atomic record adapter
         env:
           DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
         run: cargo test -p crm-core-data --features postgres-integration --test postgres_foundation
+      - name: Verify multi-record replay optimistic and relationship semantics
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+        run: cargo test -p crm-core-data --features postgres-integration --test postgres_advanced
       - name: Roll back migrations
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
       - name: Verify rollback removed authoritative schema
@@ -80,6 +86,7 @@ jobs:
         run: |
           psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
       - name: Upload database and Rust diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -88,5 +95,52 @@ jobs:
           path: |
             database/
             crates/crm-core-data/
+          if-no-files-found: error
+          retention-days: 7
+
+  legacy-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_upgrade_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_upgrade_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5433
+      PGDATABASE: crm_upgrade_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Verify legacy data upgrade through migrations 0002 and 0003
+        run: psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql
+      - name: Verify upgraded schema can roll back cleanly
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Upload upgrade diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-upgrade-diagnostics
+          path: database/
           if-no-files-found: error
           retention-days: 7
