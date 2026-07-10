@@ -291,8 +291,14 @@ async fn public_gateway_proves_no_bypass_replay_live_authorization_and_atomic_ro
         ))
         .await;
     assert_eq!(replay.status, StatusCode::OK);
-    assert!(success_result(&replay.body).replayed);
-    assert_eq!(success_result(&replay.body), success_result(&first.body));
+    let first_result = success_result(&first.body);
+    let replay_result = success_result(&replay.body);
+    assert!(replay_result.replayed);
+    assert_eq!(replay_result.output, first_result.output);
+    assert_eq!(
+        replay_result.affected_resources,
+        first_result.affected_resources
+    );
     assert_call_order(&composition.calls, &["authorize", "batch"]);
     assert_eq!(evidence_counts(&store).await, after_first);
 
