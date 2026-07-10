@@ -23,6 +23,8 @@ Database CI runs one sequential public-boundary scenario after the established P
 8. the PostgreSQL transactional capability executor;
 9. the existing batch runtime, RLS, idempotency, outbox, audit and completion-marker constraints.
 
+The acceptance target must also compile from the committed exact workspace lockfile under the same Rust toolchain and architecture policy used by permanent CI. A transient generated lockfile or an uncommitted formatting change is not acceptable merge evidence.
+
 ## Required evidence
 
 The acceptance scenario must prove all of the following through `HttpCapabilityMiddleware`:
