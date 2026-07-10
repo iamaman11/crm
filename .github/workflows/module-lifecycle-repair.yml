@@ -1,0 +1,57 @@
+name: One-shot module lifecycle repair
+
+on:
+  push:
+    branches:
+      - feature/module-lifecycle-v1
+    paths:
+      - .github/workflows/module-lifecycle-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/module-lifecycle-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply exact deterministic repairs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          lockfile = Path("Cargo.lock")
+          text = lockfile.read_text(encoding="utf-8")
+          text = text.replace(
+              "0b928f33d97565d9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a",
+              "0b928f33d9756ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a",
+          )
+          lockfile.write_text(text, encoding="utf-8")
+
+          state = Path("crates/crm-module-registry/src/state.rs")
+          text = state.read_text(encoding="utf-8")
+          text = text.replace(
+              "matches!(Self::Installed | Self::Active | Self::Suspended, self)",
+              "matches!(self, Self::Installed | Self::Active | Self::Suspended)",
+          )
+          state.write_text(text, encoding="utf-8")
+          PY
+          cargo fmt --all
+          git diff --check
+      - name: Commit repairs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates/crm-module-registry/src
+          if git diff --cached --quiet; then
+            echo "No repair changes required"
+          else
+            git commit -m "fix: normalize lifecycle lockfile and state matching"
+            git push origin HEAD:feature/module-lifecycle-v1
+          fi
