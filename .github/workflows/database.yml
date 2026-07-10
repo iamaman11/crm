@@ -128,7 +128,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
       - name: Verify legacy data upgrade through migrations 0002 and 0003
-        run: psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql
+        shell: bash
+        run: |
+          set -o pipefail
+          psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql 2>&1 | tee database/legacy-upgrade.log
       - name: Verify upgraded schema can roll back cleanly
         run: |
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
