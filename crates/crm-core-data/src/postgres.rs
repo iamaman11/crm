@@ -350,6 +350,7 @@ async fn insert_outbox_event(
           aggregate_version,
           event_sequence,
           event_type,
+          deduplication_key,
           schema_id,
           schema_version,
           descriptor_hash,
@@ -361,8 +362,8 @@ async fn insert_outbox_event(
           occurred_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, 1, 1, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-          TIMESTAMPTZ 'epoch' + ($15::bigint / 1000) * INTERVAL '1 microsecond'
+          $1, $2, $3, $4, $5, 1, 1, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+          TIMESTAMPTZ 'epoch' + ($16::bigint / 1000) * INTERVAL '1 microsecond'
         )
         "#,
     )
@@ -372,6 +373,7 @@ async fn insert_outbox_event(
     .bind(plan.event.aggregate.record_type.as_str())
     .bind(plan.event.aggregate.record_id.as_str())
     .bind(plan.event.event_type.as_str())
+    .bind(&plan.event.deduplication_key)
     .bind(plan.event.payload.schema_id.as_str())
     .bind(plan.event.payload.schema_version.as_str())
     .bind(plan.event.payload.descriptor_hash.as_slice())
