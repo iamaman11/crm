@@ -1,9 +1,9 @@
 name: Normalize gateway acceptance branch
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/capability-gateway-e2e-v1
+      - main
 
 permissions:
   contents: write
