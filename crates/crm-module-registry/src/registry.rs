@@ -1,6 +1,4 @@
-use crate::state::{
-    InstallationStatus, ModuleCoordinate, ModuleInstallation, TransitionError,
-};
+use crate::state::{InstallationStatus, ModuleCoordinate, ModuleInstallation, TransitionError};
 use crm_module_manifest::{
     ManifestError, ManifestIdentity, ModuleDependency, ModuleManifest, UninstallPolicy,
 };
@@ -226,12 +224,17 @@ impl ModuleRegistry {
                     ),
                 ));
             }
-            let digest = grant_set_digests.get(&coordinate.module_id).ok_or_else(|| {
-                RegistryError::new(
-                    RegistryErrorCode::InvalidManifest,
-                    format!("missing approved grant-set digest for {}", coordinate.module_id),
-                )
-            })?;
+            let digest = grant_set_digests
+                .get(&coordinate.module_id)
+                .ok_or_else(|| {
+                    RegistryError::new(
+                        RegistryErrorCode::InvalidManifest,
+                        format!(
+                            "missing approved grant-set digest for {}",
+                            coordinate.module_id
+                        ),
+                    )
+                })?;
             let install_id = format!("module-install-{}", self.next_install_sequence);
             self.next_install_sequence += 1;
             let installation = ModuleInstallation::installed(
@@ -368,12 +371,17 @@ impl ModuleRegistry {
                 format!("module {module_id} is not installed for tenant {tenant_id}"),
             )
         })?;
-        let published = self.published_version(&installation.current).ok_or_else(|| {
-            RegistryError::new(
-                RegistryErrorCode::ModuleNotPublished,
-                format!("installed version {} is not published", installation.current),
-            )
-        })?;
+        let published = self
+            .published_version(&installation.current)
+            .ok_or_else(|| {
+                RegistryError::new(
+                    RegistryErrorCode::ModuleNotPublished,
+                    format!(
+                        "installed version {} is not published",
+                        installation.current
+                    ),
+                )
+            })?;
         let mut report = ImpactReport::default();
         report.blockers = self.installed_dependents(tenant_id, module_id)?;
         report.affected_modules.push(installation.current.clone());
@@ -382,13 +390,17 @@ impl ModuleRegistry {
                 .blockers
                 .push("module must be suspended before uninstall".to_owned());
         }
-        if published.manifest.lifecycle.uninstall_policy
-            == UninstallPolicy::BlockedWhileReferenced
+        if published.manifest.lifecycle.uninstall_policy == UninstallPolicy::BlockedWhileReferenced
             && !report.blockers.is_empty()
         {
             report.requires_approval = true;
         }
-        if !published.manifest.lifecycle.retained_record_types.is_empty() {
+        if !published
+            .manifest
+            .lifecycle
+            .retained_record_types
+            .is_empty()
+        {
             report.warnings.push(format!(
                 "business records will be retained: {}",
                 published
@@ -510,10 +522,14 @@ impl ModuleRegistry {
         }
         for dependency in &published.manifest.dependencies.optional {
             let requirement = parse_requirement(dependency)?;
-            if let Some(installed) = self.installation(tenant_id, &ModuleId::try_new(dependency.module_id.clone())?)
+            if let Some(installed) =
+                self.installation(tenant_id, &ModuleId::try_new(dependency.module_id.clone())?)
                 && requirement.matches(&installed.current.version)
             {
-                state.resolution.already_satisfied.push(installed.current.clone());
+                state
+                    .resolution
+                    .already_satisfied
+                    .push(installed.current.clone());
             } else {
                 state.resolution.warnings.push(format!(
                     "optional dependency {} {} was not selected",
@@ -559,8 +575,9 @@ impl ModuleRegistry {
             .iter()
             .rev()
             .find_map(|(version, published)| {
-                (requirement.matches(version) && self.is_platform_compatible(&published.manifest).is_ok())
-                    .then(|| published.coordinate.clone())
+                (requirement.matches(version)
+                    && self.is_platform_compatible(&published.manifest).is_ok())
+                .then(|| published.coordinate.clone())
             })
             .ok_or_else(|| {
                 RegistryError::new(
@@ -585,7 +602,10 @@ impl ModuleRegistry {
             if selected.contains_key(&conflict_id)
                 || self.installation(tenant_id, &conflict_id).is_some()
             {
-                conflicts.push(format!("{} conflicts with {conflict_id}", manifest.module_id));
+                conflicts.push(format!(
+                    "{} conflicts with {conflict_id}",
+                    manifest.module_id
+                ));
             }
         }
         if conflicts.is_empty() {
@@ -614,7 +634,10 @@ impl ModuleRegistry {
     }
 
     fn is_platform_compatible(&self, manifest: &ModuleManifest) -> Result<(), RegistryError> {
-        let minimum = parse_version(&manifest.platform.minimum_version, "minimum platform version")?;
+        let minimum = parse_version(
+            &manifest.platform.minimum_version,
+            "minimum platform version",
+        )?;
         if self.platform_version < minimum {
             return Err(RegistryError::new(
                 RegistryErrorCode::PlatformIncompatible,

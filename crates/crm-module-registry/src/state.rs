@@ -41,7 +41,7 @@ pub enum InstallationStatus {
 
 impl InstallationStatus {
     pub const fn is_stable(self) -> bool {
-        matches!(Self::Installed | Self::Active | Self::Suspended, self)
+        matches!(self, Self::Installed | Self::Active | Self::Suspended)
     }
 
     pub const fn stable(self) -> Option<StableInstallationStatus> {
@@ -175,9 +175,10 @@ impl ModuleInstallation {
         now_unix_nanos: i64,
     ) -> Result<(), TransitionError> {
         self.ensure_generation(expected_generation)?;
-        let resume_status = self.status.stable().ok_or_else(|| {
-            self.invalid_transition("begin upgrade", self.status)
-        })?;
+        let resume_status = self
+            .status
+            .stable()
+            .ok_or_else(|| self.invalid_transition("begin upgrade", self.status))?;
         if target == self.current {
             return Err(TransitionError::new(
                 TransitionErrorCode::SameVersion,
@@ -215,7 +216,10 @@ impl ModuleInstallation {
                 "upgrade has no pending module version",
             )
         })?;
-        let resume_status = self.resume_status.take().unwrap_or(StableInstallationStatus::Installed);
+        let resume_status = self
+            .resume_status
+            .take()
+            .unwrap_or(StableInstallationStatus::Installed);
         self.current = pending;
         self.status = resume_status.into();
         self.failure_code = None;
@@ -347,11 +351,7 @@ impl ModuleInstallation {
         }
     }
 
-    fn invalid_transition(
-        &self,
-        operation: &str,
-        status: InstallationStatus,
-    ) -> TransitionError {
+    fn invalid_transition(&self, operation: &str, status: InstallationStatus) -> TransitionError {
         TransitionError::new(
             TransitionErrorCode::InvalidTransition,
             format!("cannot {operation} while installation is {status:?}"),
@@ -400,12 +400,18 @@ mod tests {
             .begin_upgrade(2, coordinate("2.0.0"), 3)
             .unwrap();
         installation.complete_upgrade(3, 4).unwrap();
-        assert_eq!(installation.current.version, Version::parse("2.0.0").unwrap());
+        assert_eq!(
+            installation.current.version,
+            Version::parse("2.0.0").unwrap()
+        );
         assert_eq!(installation.status, InstallationStatus::Active);
 
         installation.begin_rollback(4, 5).unwrap();
         installation.complete_rollback(5, 6).unwrap();
-        assert_eq!(installation.current.version, Version::parse("1.0.0").unwrap());
+        assert_eq!(
+            installation.current.version,
+            Version::parse("1.0.0").unwrap()
+        );
         assert_eq!(installation.status, InstallationStatus::Active);
     }
 

@@ -27,9 +27,7 @@ mod tests {
         let required = required
             .iter()
             .map(|(module_id, version_range)| {
-                format!(
-                    r#"{{"module_id":"{module_id}","version_range":"{version_range}"}}"#
-                )
+                format!(r#"{{"module_id":"{module_id}","version_range":"{version_range}"}}"#)
             })
             .collect::<Vec<_>>()
             .join(",");
@@ -132,12 +130,7 @@ mod tests {
             .unwrap();
         registry
             .publish(
-                manifest(
-                    "crm.sales",
-                    "1.0.0",
-                    &[("crm.activities", "^1.0")],
-                    &[],
-                ),
+                manifest("crm.sales", "1.0.0", &[("crm.activities", "^1.0")], &[]),
                 2,
             )
             .unwrap();
@@ -202,14 +195,22 @@ mod tests {
             .unwrap();
         registry.complete_upgrade(&tenant, &sales, 3, 6).unwrap();
         assert_eq!(
-            registry.installation(&tenant, &sales).unwrap().current.version,
+            registry
+                .installation(&tenant, &sales)
+                .unwrap()
+                .current
+                .version,
             Version::parse("2.0.0").unwrap()
         );
 
         registry.begin_rollback(&tenant, &sales, 4, 7).unwrap();
         registry.complete_rollback(&tenant, &sales, 5, 8).unwrap();
         assert_eq!(
-            registry.installation(&tenant, &sales).unwrap().current.version,
+            registry
+                .installation(&tenant, &sales)
+                .unwrap()
+                .current
+                .version,
             Version::parse("1.0.0").unwrap()
         );
     }
@@ -225,12 +226,7 @@ mod tests {
             .unwrap();
         registry
             .publish(
-                manifest(
-                    "crm.sales",
-                    "1.0.0",
-                    &[("crm.activities", "^1.0")],
-                    &[],
-                ),
+                manifest("crm.sales", "1.0.0", &[("crm.activities", "^1.0")], &[]),
                 2,
             )
             .unwrap();
@@ -248,7 +244,12 @@ mod tests {
         registry.suspend(&tenant, &activities, 2, 7).unwrap();
 
         let impact = registry.uninstall_impact(&tenant, &activities).unwrap();
-        assert!(impact.blockers.iter().any(|value| value.contains("crm.sales")));
+        assert!(
+            impact
+                .blockers
+                .iter()
+                .any(|value| value.contains("crm.sales"))
+        );
         assert_eq!(
             registry
                 .begin_uninstall(&tenant, &activities, 3, 8)
