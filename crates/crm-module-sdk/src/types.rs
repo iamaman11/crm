@@ -107,6 +107,7 @@ identifier_type!(TraceId);
 identifier_type!(CapabilityId);
 identifier_type!(CapabilityVersion);
 identifier_type!(IdempotencyKey);
+identifier_type!(BusinessTransactionId);
 identifier_type!(ModuleId);
 identifier_type!(RecordId);
 identifier_type!(RecordType);
@@ -133,6 +134,7 @@ pub struct ExecutionContext {
     pub capability_id: CapabilityId,
     pub capability_version: CapabilityVersion,
     pub idempotency_key: IdempotencyKey,
+    pub business_transaction_id: BusinessTransactionId,
     pub schema_version: SchemaVersion,
     pub request_started_at_unix_nanos: i64,
 }
