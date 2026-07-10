@@ -8,6 +8,7 @@
 /crates/crm-module-sdk/ @iamaman11
 /crates/crm-module-registry/ @iamaman11
 /crates/crm-capability-runtime/ @iamaman11
+/crates/crm-capability-adapters/ @iamaman11
 /crates/crm-core-data/ @iamaman11
 /crates/crm-core-events/ @iamaman11
 /crates/crm-core-permissions/ @iamaman11
