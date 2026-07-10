@@ -36,8 +36,8 @@ impl GrpcCapabilityMiddleware {
         let authorization = metadata_value(request.metadata(), "authorization")
             .map_err(status_from_safe_error)?
             .unwrap_or_default();
-        let ingress_metadata = metadata_from_grpc(request.metadata())
-            .map_err(status_from_safe_error)?;
+        let ingress_metadata =
+            metadata_from_grpc(request.metadata()).map_err(status_from_safe_error)?;
         let message = request.into_inner();
         let envelope = CapabilityCallEnvelope {
             route: message.route,
@@ -103,7 +103,10 @@ fn optional_u64_metadata(
     let Some(value) = metadata_value(metadata, name)? else {
         return Ok(None);
     };
-    value.parse().map(Some).map_err(|_| invalid_metadata_error())
+    value
+        .parse()
+        .map(Some)
+        .map_err(|_| invalid_metadata_error())
 }
 
 fn invalid_metadata_error() -> SafeTransportError {

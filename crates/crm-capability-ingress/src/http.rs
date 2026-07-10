@@ -1,9 +1,9 @@
 use crate::{
     CapabilityCallEnvelope, CapabilityIngress, CapabilityRoute, IngressMetadata, SafeTransportError,
 };
+use ::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use crm_capability_runtime::{ApprovalEvidence, CapabilityExecutionResult};
 use crm_module_sdk::{ErrorCategory, TypedPayload};
-use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use std::str::FromStr;
 
 pub const TENANT_HEADER: &str = "x-tenant-id";
@@ -65,7 +65,11 @@ impl HttpCapabilityMiddleware {
         match self.ingress.execute(&authorization, envelope).await {
             Ok(receipt) => {
                 let mut headers = HeaderMap::new();
-                insert_response_header(&mut headers, REQUEST_ID_HEADER, receipt.request_id.as_str());
+                insert_response_header(
+                    &mut headers,
+                    REQUEST_ID_HEADER,
+                    receipt.request_id.as_str(),
+                );
                 insert_response_header(
                     &mut headers,
                     CORRELATION_ID_HEADER,
@@ -160,9 +164,7 @@ fn status_for_category(category: ErrorCategory) -> StatusCode {
         ErrorCategory::Conflict => StatusCode::CONFLICT,
         ErrorCategory::NotFound => StatusCode::NOT_FOUND,
         ErrorCategory::RateLimit => StatusCode::TOO_MANY_REQUESTS,
-        ErrorCategory::Dependency | ErrorCategory::Unavailable => {
-            StatusCode::SERVICE_UNAVAILABLE
-        }
+        ErrorCategory::Dependency | ErrorCategory::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
         ErrorCategory::Internal => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }

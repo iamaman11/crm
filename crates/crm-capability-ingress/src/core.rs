@@ -3,7 +3,7 @@ use crate::{
     RequestAuthenticator,
 };
 use crm_capability_runtime::{
-    gateway_error_to_sdk, CapabilityExecutionResult, CapabilityGateway, GatewayError,
+    CapabilityExecutionResult, CapabilityGateway, GatewayError, gateway_error_to_sdk,
 };
 use crm_module_sdk::{CorrelationId, ErrorCategory, RequestId, SdkError, TraceId};
 use std::error::Error;
@@ -76,8 +76,7 @@ impl From<IngressError> for SafeTransportError {
                 }
             }
             IngressError::Gateway(GatewayError::RateLimited {
-                retry_after_millis,
-                ..
+                retry_after_millis, ..
             }) => Self {
                 code: "CAPABILITY_RATE_LIMITED".to_owned(),
                 category: ErrorCategory::RateLimit,
@@ -204,10 +203,10 @@ mod tests {
         IngressMetadata, TimeoutPolicy,
     };
     use crm_capability_runtime::{
-        ApprovalEvidence, AuthorizationDecision, CapabilityApprovalVerifier,
-        CapabilityAuthorizer, CapabilityDefinition, CapabilityRateLimiter, CapabilityRegistryPort,
-        CapabilityRequest, CapabilityRisk, CapabilitySemanticValidator, PayloadContract,
-        RateLimitDecision, TransactionalCapabilityExecutor,
+        ApprovalEvidence, AuthorizationDecision, CapabilityApprovalVerifier, CapabilityAuthorizer,
+        CapabilityDefinition, CapabilityRateLimiter, CapabilityRegistryPort, CapabilityRequest,
+        CapabilityRisk, CapabilitySemanticValidator, PayloadContract, RateLimitDecision,
+        TransactionalCapabilityExecutor,
     };
     use crm_module_sdk::testing::{DeterministicRandom, FixedClock};
     use crm_module_sdk::{
@@ -346,7 +345,10 @@ mod tests {
         );
 
         let denied = ingress
-            .execute("Bearer invalid-invalid-invalid-invalid", envelope("tenant-1"))
+            .execute(
+                "Bearer invalid-invalid-invalid-invalid",
+                envelope("tenant-1"),
+            )
             .await
             .unwrap_err();
         assert!(matches!(denied, IngressError::Authentication(_)));

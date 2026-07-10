@@ -175,8 +175,8 @@ impl ExecutionContextResolver {
             .tenant_id
             .as_deref()
             .ok_or(ContextResolutionError::TenantRequired)?;
-        let tenant_id = TenantId::try_new(tenant_value)
-            .map_err(|_| ContextResolutionError::TenantInvalid)?;
+        let tenant_id =
+            TenantId::try_new(tenant_value).map_err(|_| ContextResolutionError::TenantInvalid)?;
         if !principal.permits_tenant(&tenant_id) {
             return Err(ContextResolutionError::TenantForbidden);
         }
@@ -298,10 +298,7 @@ pub fn semantic_input_hash(payload: &TypedPayload) -> [u8; 32] {
     hash_field(&mut hasher, &payload.descriptor_hash);
     hash_field(&mut hasher, &[data_class_tag(payload.data_class)]);
     hash_field(&mut hasher, &[encoding_tag(payload.encoding)]);
-    hash_field(
-        &mut hasher,
-        payload.retention_policy_id.as_str().as_bytes(),
-    );
+    hash_field(&mut hasher, payload.retention_policy_id.as_str().as_bytes());
     hash_field(&mut hasher, &payload.maximum_size_bytes.to_be_bytes());
     hash_field(&mut hasher, &payload.bytes);
     hasher.finalize().into()
@@ -408,8 +405,14 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(resolved.request.context.execution.actor_id.as_str(), "actor-1");
-        assert_eq!(resolved.request.context.execution.tenant_id.as_str(), "tenant-1");
+        assert_eq!(
+            resolved.request.context.execution.actor_id.as_str(),
+            "actor-1"
+        );
+        assert_eq!(
+            resolved.request.context.execution.tenant_id.as_str(),
+            "tenant-1"
+        );
         assert_eq!(resolved.timeout.duration_millis, 750);
         assert_eq!(resolved.timeout.deadline_unix_nanos, 750_001_000);
         assert_ne!(resolved.request.input_hash, [0; 32]);
@@ -460,7 +463,10 @@ mod tests {
         let original = payload();
         let mut changed = original.clone();
         changed.retention_policy_id = RetentionPolicyId::try_new("short").unwrap();
-        assert_ne!(semantic_input_hash(&original), semantic_input_hash(&changed));
+        assert_ne!(
+            semantic_input_hash(&original),
+            semantic_input_hash(&changed)
+        );
     }
 
     fn route() -> CapabilityRoute {
