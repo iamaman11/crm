@@ -1,7 +1,6 @@
 use crm_module_sdk::{
     DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, ModuleId, PayloadEncoding,
-    RecordId, RecordRef, RecordSnapshot, RecordType, RetentionPolicyId, SchemaId, SchemaVersion,
-    SdkError, TypedPayload,
+    RecordRef, RecordSnapshot, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
 };
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Postgres, Row, Transaction};
