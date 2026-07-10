@@ -1,0 +1,6 @@
+version: v2
+plugins:
+  - local: protoc
+    out: gen/descriptor
+    opt:
+      - include_imports

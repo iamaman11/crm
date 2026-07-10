@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/crm-core-contracts",
+  "crates/crm-core-data",
+  "crates/crm-core-events",
+  "crates/crm-core-permissions",
+  "crates/crm-core-workflow",
+  "crates/crm-core-files",
+  "crates/crm-core-integrations",
+  "modules/crm-sales",
+  "services/crm-api",
+]
+
+[workspace.package]
+edition = "2024"
+license = "Proprietary"

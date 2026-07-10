@@ -1,0 +1,13 @@
+/target/
+/.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/
+coverage/
+*.log
+artifacts/generated/

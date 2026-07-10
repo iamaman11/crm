@@ -1,0 +1,25 @@
+name: Contract CI
+on:
+  push:
+    paths: ["proto/**", "buf.yaml", "buf.gen.yaml", ".github/workflows/contracts.yml"]
+  pull_request:
+    paths: ["proto/**", "buf.yaml", "buf.gen.yaml", ".github/workflows/contracts.yml"]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  buf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: bufbuild/buf-action@v1
+        with:
+          version: 1.50.1
+          push: false
+          archive: false
+          lint: true
+          format: true
+          breaking: ${{ github.event_name == 'pull_request' }}
+          input: proto

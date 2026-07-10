@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "documents": [
+    "v2.0",
+    "v2.1",
+    "v2.2"
+  ],
+  "proto_files": [
+    "proto/crm/billing/v1/invoice.proto",
+    "proto/crm/billing/v1/payment.proto",
+    "proto/crm/communications/v1/email.proto",
+    "proto/crm/communications/v1/message.proto",
+    "proto/crm/core/v1/actor.proto",
+    "proto/crm/core/v1/ai.proto",
+    "proto/crm/core/v1/audit.proto",
+    "proto/crm/core/v1/capability.proto",
+    "proto/crm/core/v1/common.proto",
+    "proto/crm/core/v1/error.proto",
+    "proto/crm/core/v1/event.proto",
+    "proto/crm/core/v1/execution_context.proto",
+    "proto/crm/core/v1/file.proto",
+    "proto/crm/core/v1/identity.proto",
+    "proto/crm/core/v1/integration.proto",
+    "proto/crm/core/v1/marketplace.proto",
+    "proto/crm/core/v1/metadata.proto",
+    "proto/crm/core/v1/policy.proto",
+    "proto/crm/core/v1/projection.proto",
+    "proto/crm/core/v1/record.proto",
+    "proto/crm/core/v1/relationship.proto",
+    "proto/crm/core/v1/tenant.proto",
+    "proto/crm/core/v1/workflow.proto",
+    "proto/crm/sales/v1/deal.proto",
+    "proto/crm/sales/v1/lead.proto",
+    "proto/crm/sales/v1/quote.proto",
+    "proto/crm/support/v1/sla.proto",
+    "proto/crm/support/v1/ticket.proto"
+  ]
+}

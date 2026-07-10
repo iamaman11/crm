@@ -1,0 +1,21 @@
+{
+  "business_module_globs": [
+    "modules/*"
+  ],
+  "forbidden_dependencies": [
+    "sqlx",
+    "tokio-postgres",
+    "postgres",
+    "async-nats",
+    "nats",
+    "aws-sdk-s3",
+    "object_store",
+    "reqwest",
+    "secrecy",
+    "openai",
+    "anthropic"
+  ],
+  "allowed_module_prefixes": [
+    "crm-core-contracts"
+  ]
+}
