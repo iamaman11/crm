@@ -11,6 +11,7 @@ members = [
   "crates/crm-module-manifest",
   "crates/crm-module-sdk",
   "crates/crm-module-registry",
+  "crates/crm-capability-runtime",
   "modules/crm-sales",
   "services/crm-api",
 ]
