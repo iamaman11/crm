@@ -20,8 +20,7 @@ pub struct AuditIntent {
 
 impl AuditIntent {
     pub fn validate(&self) -> Result<(), String> {
-        if self.audit_record_id.is_empty()
-            || self.audit_record_id.len() > MAX_AUDIT_RECORD_ID_BYTES
+        if self.audit_record_id.is_empty() || self.audit_record_id.len() > MAX_AUDIT_RECORD_ID_BYTES
         {
             return Err(format!(
                 "audit record id must contain between 1 and {MAX_AUDIT_RECORD_ID_BYTES} bytes"
@@ -110,12 +109,11 @@ pub(crate) async fn materialize_audit_chain(
         .fetch_one(&mut **transaction)
         .await?;
 
-    let row = sqlx::query(
-        "SELECT next_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1",
-    )
-    .bind(context.execution.tenant_id.as_str())
-    .fetch_optional(&mut **transaction)
-    .await?;
+    let row =
+        sqlx::query("SELECT next_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1")
+            .bind(context.execution.tenant_id.as_str())
+            .fetch_optional(&mut **transaction)
+            .await?;
 
     let (mut sequence, mut previous_hash) = match row {
         Some(row) => {
@@ -175,15 +173,16 @@ fn audit_record_hash(
 ) -> Result<[u8; 32], AuditMaterializationError> {
     let mut hasher = Sha256::new();
     hasher.update(AUDIT_HASH_DOMAIN);
-    append_field(
-        &mut hasher,
-        context.execution.tenant_id.as_str().as_bytes(),
-    )?;
+    append_field(&mut hasher, context.execution.tenant_id.as_str().as_bytes())?;
     hasher.update(sequence.to_be_bytes());
     append_field(&mut hasher, intent.audit_record_id.as_bytes())?;
     append_field(
         &mut hasher,
-        context.execution.business_transaction_id.as_str().as_bytes(),
+        context
+            .execution
+            .business_transaction_id
+            .as_str()
+            .as_bytes(),
     )?;
     append_field(&mut hasher, context.execution.actor_id.as_str().as_bytes())?;
     append_field(
@@ -205,14 +204,9 @@ const fn postgres_timestamp_nanos(value: i64) -> i64 {
     (value / 1_000) * 1_000
 }
 
-fn append_field(
-    hasher: &mut Sha256,
-    value: &[u8],
-) -> Result<(), AuditMaterializationError> {
+fn append_field(hasher: &mut Sha256, value: &[u8]) -> Result<(), AuditMaterializationError> {
     let length = u64::try_from(value.len()).map_err(|_| {
-        AuditMaterializationError::InvalidIntent(
-            "audit hash field length exceeds u64".to_owned(),
-        )
+        AuditMaterializationError::InvalidIntent("audit hash field length exceeds u64".to_owned())
     })?;
     hasher.update(length.to_be_bytes());
     hasher.update(value);
@@ -284,14 +278,7 @@ mod tests {
         assert_eq!(first_time, second_time);
         assert_eq!(
             audit_record_hash(&context, 1, [0; 32], &first_intent, first_time).unwrap(),
-            audit_record_hash(
-                &context,
-                1,
-                [0; 32],
-                &same_persisted_time,
-                second_time,
-            )
-            .unwrap(),
+            audit_record_hash(&context, 1, [0; 32], &same_persisted_time, second_time,).unwrap(),
         );
     }
 
