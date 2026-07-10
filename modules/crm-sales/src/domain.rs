@@ -168,12 +168,12 @@ pub struct DealListQuery {
 impl Deal {
     pub fn create(command: CreateDeal) -> Result<Self, SdkError> {
         validate_name(&command.name)?;
-        validate_timestamp("deal.occurred_at_unix_nanos", command.occurred_at_unix_nanos)?;
-        validate_optional_resource("deal.account", command.account.as_ref())?;
-        validate_optional_resource(
-            "deal.primary_contact",
-            command.primary_contact.as_ref(),
+        validate_timestamp(
+            "deal.occurred_at_unix_nanos",
+            command.occurred_at_unix_nanos,
         )?;
+        validate_optional_resource("deal.account", command.account.as_ref())?;
+        validate_optional_resource("deal.primary_contact", command.primary_contact.as_ref())?;
         validate_optional_amount(command.amount.as_ref())?;
 
         Ok(Self {
@@ -468,11 +468,7 @@ fn validate_timestamp(field: &'static str, value: i64) -> Result<(), SdkError> {
     Ok(())
 }
 
-fn invalid(
-    code: &'static str,
-    field: &'static str,
-    safe_message: impl Into<String>,
-) -> SdkError {
+fn invalid(code: &'static str, field: &'static str, safe_message: impl Into<String>) -> SdkError {
     let safe_message = safe_message.into();
     let mut error = SdkError::new(
         code,
@@ -518,10 +514,7 @@ mod tests {
             }),
             primary_contact: None,
             stage: stage("qualification", 1),
-            amount: Some(Money::new(
-                1_250_000,
-                CurrencyCode::try_new("USD").unwrap(),
-            )),
+            amount: Some(Money::new(1_250_000, CurrencyCode::try_new("USD").unwrap())),
             expected_close_date: Some(CalendarDate::try_new(2026, 12, 31).unwrap()),
             probability: BasisPoints::try_new(2_500).unwrap(),
             occurred_at_unix_nanos: 10,

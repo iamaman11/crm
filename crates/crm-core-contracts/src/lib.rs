@@ -156,17 +156,12 @@ const fn days_in_month(year: i32, month: u8) -> u8 {
 }
 
 /// Explicit update semantics. `Keep`, `Set` and `Clear` cannot be confused.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Patch<T> {
+    #[default]
     Keep,
     Set(T),
     Clear,
-}
-
-impl<T> Default for Patch<T> {
-    fn default() -> Self {
-        Self::Keep
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -227,19 +222,10 @@ impl Cursor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PageRequest {
     pub cursor: Option<Cursor>,
     pub page_size: PageSize,
-}
-
-impl Default for PageRequest {
-    fn default() -> Self {
-        Self {
-            cursor: None,
-            page_size: PageSize::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -260,9 +246,11 @@ mod tests {
         assert_eq!(money.minor_units, 12_345);
         assert_eq!(money.currency.as_str(), "USD");
         assert!(CurrencyCode::try_new("usd").is_err());
-        assert!(Money::new(-1, CurrencyCode::try_new("EUR").unwrap())
-            .non_negative()
-            .is_err());
+        assert!(
+            Money::new(-1, CurrencyCode::try_new("EUR").unwrap())
+                .non_negative()
+                .is_err()
+        );
     }
 
     #[test]
@@ -277,7 +265,10 @@ mod tests {
         assert_eq!(PageSize::default().get(), 50);
         assert!(PageSize::try_new(0).is_err());
         assert!(PageSize::try_new(MAX_PAGE_SIZE + 1).is_err());
-        assert_eq!(Cursor::try_new("signed.cursor").unwrap().as_str(), "signed.cursor");
+        assert_eq!(
+            Cursor::try_new("signed.cursor").unwrap().as_str(),
+            "signed.cursor"
+        );
         assert!(Cursor::try_new("\n").is_err());
     }
 

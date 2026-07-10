@@ -131,7 +131,10 @@ impl Task {
         validate_subject(&command.subject)?;
         validate_optional_description(command.description.as_deref())?;
         validate_related_resources(&command.related_resources)?;
-        validate_timestamp("task.occurred_at_unix_nanos", command.occurred_at_unix_nanos)?;
+        validate_timestamp(
+            "task.occurred_at_unix_nanos",
+            command.occurred_at_unix_nanos,
+        )?;
         validate_optional_timestamp("task.due_at_unix_nanos", command.due_at_unix_nanos)?;
         validate_optional_timestamp(
             "task.reminder_at_unix_nanos",
@@ -364,7 +367,10 @@ fn validate_related_resources(resources: &[ResourceRef]) -> Result<(), SdkError>
                 "resource reference type and id must be non-empty and contain no control characters",
             ));
         }
-        if !unique.insert((resource.resource_type.as_str(), resource.resource_id.as_str())) {
+        if !unique.insert((
+            resource.resource_type.as_str(),
+            resource.resource_id.as_str(),
+        )) {
             return Err(invalid(
                 "ACTIVITIES_RELATED_RESOURCE_DUPLICATE",
                 "task.related_resources",
@@ -436,11 +442,7 @@ fn validate_identifier(field: &'static str, value: &str) -> Result<(), SdkError>
     Ok(())
 }
 
-fn invalid(
-    code: &'static str,
-    field: &'static str,
-    safe_message: impl Into<String>,
-) -> SdkError {
+fn invalid(code: &'static str, field: &'static str, safe_message: impl Into<String>) -> SdkError {
     let safe_message = safe_message.into();
     let mut error = SdkError::new(
         code,
