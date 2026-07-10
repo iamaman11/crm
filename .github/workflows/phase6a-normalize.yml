@@ -25,11 +25,21 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo generate-lockfile
-          cargo fmt --all
-          cargo test -p crm-core-contracts -p crm-sales -p crm-activities
-          cargo clippy -p crm-core-contracts -p crm-sales -p crm-activities --all-targets -- -D warnings
-          git diff --check
+          {
+            cargo generate-lockfile
+            cargo fmt --all
+            cargo test -p crm-core-contracts -p crm-sales -p crm-activities
+            cargo clippy -p crm-core-contracts -p crm-sales -p crm-activities --all-targets -- -D warnings
+            git diff --check
+          } 2>&1 | tee phase6a-normalize.log
+      - name: Upload normalization diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6a-normalize-diagnostics
+          path: phase6a-normalize.log
+          if-no-files-found: error
+          retention-days: 7
       - name: Commit normalized files
         shell: bash
         run: |
