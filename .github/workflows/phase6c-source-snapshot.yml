@@ -17,21 +17,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Collect audit references
+      - name: Collect complete source snapshot
         shell: bash
         run: |
           mkdir -p phase6c-snapshot
-          rg -n "AuditEvidence|audit_sequence|previous_hash|record_hash|canonical_envelope" \
+          grep -RInE "AuditEvidence|audit_sequence|previous_hash|record_hash|canonical_envelope" \
             crates tests database .github docs > phase6c-snapshot/audit-references.txt || true
-          tar -czf phase6c-snapshot/source.tar.gz \
-            Cargo.toml Cargo.lock \
-            crates/crm-core-data \
-            crates/crm-capability-runtime \
-            crates/crm-capability-ingress \
-            crates/crm-module-sdk \
-            tests database \
-            .github/workflows/database.yml \
-            docs/SYSTEM_INVARIANTS.md
+          tar --exclude=.git --exclude=target --exclude=phase6c-snapshot \
+            -czf phase6c-snapshot/source.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: phase6c-source-snapshot
