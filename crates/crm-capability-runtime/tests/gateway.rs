@@ -204,8 +204,8 @@ fn input_contract_mismatch_stops_before_semantic_validation() {
     let log = call_log();
     let mut value = request();
     value.input.descriptor_hash = [8; 32];
-    let error = block_on(gateway(&log, Some(definition()), true, true, false).execute(value))
-        .unwrap_err();
+    let error =
+        block_on(gateway(&log, Some(definition()), true, true, false).execute(value)).unwrap_err();
 
     assert!(matches!(error, GatewayError::InputContractMismatch));
     assert_eq!(calls(&log), vec!["registry"]);
@@ -226,8 +226,8 @@ fn approval_binding_is_checked_before_proof_verification() {
     let log = call_log();
     let mut value = request();
     value.approval.as_mut().unwrap().input_hash = [4; 32];
-    let error = block_on(gateway(&log, Some(definition()), true, true, false).execute(value))
-        .unwrap_err();
+    let error =
+        block_on(gateway(&log, Some(definition()), true, true, false).execute(value)).unwrap_err();
 
     assert!(matches!(error, GatewayError::ApprovalBindingMismatch));
     assert_eq!(calls(&log), vec!["registry", "validate", "rate"]);

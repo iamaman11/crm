@@ -101,7 +101,12 @@ impl CapabilityGateway {
                 .approval
                 .as_ref()
                 .ok_or(GatewayError::ApprovalRequired)?;
-            validate_approval_binding(&definition, &request, approval, self.clock.now_unix_nanos())?;
+            validate_approval_binding(
+                &definition,
+                &request,
+                approval,
+                self.clock.now_unix_nanos(),
+            )?;
             self.approval_verifier
                 .verify(&definition, &request, approval)
                 .await
@@ -157,7 +162,12 @@ fn validate_definition_binding(
         return Err(GatewayError::InvalidDefinition);
     }
     if definition.requires_idempotency
-        && request.context.execution.idempotency_key.as_str().is_empty()
+        && request
+            .context
+            .execution
+            .idempotency_key
+            .as_str()
+            .is_empty()
     {
         return Err(GatewayError::IdempotencyRequired);
     }
@@ -250,7 +260,9 @@ impl fmt::Display for GatewayError {
             Self::InputHashMissing => "semantic input hash is missing",
             Self::Registry(_) => "capability registry is unavailable",
             Self::CapabilityNotFound => "capability was not found",
-            Self::DefinitionMismatch => "capability definition does not match the execution context",
+            Self::DefinitionMismatch => {
+                "capability definition does not match the execution context"
+            }
             Self::InvalidDefinition => "capability definition is invalid",
             Self::IdempotencyRequired => "capability requires idempotency",
             Self::InputContractMismatch => "capability input contract does not match",
