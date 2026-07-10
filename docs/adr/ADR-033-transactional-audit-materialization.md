@@ -27,11 +27,11 @@ For every non-replayed mutation the runtime:
 3. acquires a transaction-scoped advisory lock derived from the tenant identity and a fixed audit namespace;
 4. reads `crm.audit_heads` inside that transaction;
 5. assigns contiguous audit sequence numbers and previous hashes;
-6. computes each record hash with SHA-256 over a versioned, length-prefixed envelope containing the persisted audit identity, tenant, sequence, business transaction, actor, capability, canonicalization profile, previous hash, canonical envelope and occurrence time;
+6. normalizes occurrence time to PostgreSQL's persisted microsecond precision and computes each record hash with SHA-256 over a versioned, length-prefixed envelope containing the persisted audit identity, tenant, sequence, business transaction, actor, capability, canonicalization profile, previous hash, canonical envelope and normalized occurrence time;
 7. inserts the materialized audit records in order;
 8. commits only after the existing deferred transaction-evidence constraint confirms the required event, audit and idempotency counts.
 
-The hash domain separator is `crm.audit.record.sha256/v1`. Changing field order, field set, length-prefix rules or digest algorithm requires a new hash profile and must not reinterpret existing records.
+The hash domain separator is `crm.audit.record.sha256/v1`. The timestamp component is the Unix nanosecond value truncated to a whole microsecond, matching PostgreSQL `timestamptz` persistence, so an independent verifier can reproduce the hash from stored rows. Changing field order, field set, timestamp normalization, length-prefix rules or digest algorithm requires a new hash profile and must not reinterpret existing records.
 
 The same materialization path is used by both the multi-record batch runtime and the legacy single-record adapter so no supported PostgreSQL mutation API requires callers to supply chain position or chain hash.
 
@@ -47,6 +47,7 @@ If state mutation, outbox insertion, audit insertion, idempotency completion or 
 - deterministic planners no longer read or predict infrastructure-owned audit state;
 - concurrent same-tenant mutations produce one contiguous append-only chain;
 - audit hashes cover the persisted identity and execution metadata rather than only opaque planner-provided bytes;
+- stored audit rows contain all information required to reproduce their hash profile;
 - existing table shape and triggers remain compatible, so no migration is required;
 - all planner constructors and tests must migrate from `AuditEvidence` to `AuditIntent`;
 - Database CI must prove concurrent allocation, rollback preservation and replay without chain growth before merge.
