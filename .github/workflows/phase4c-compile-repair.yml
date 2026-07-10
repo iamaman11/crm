@@ -1,0 +1,92 @@
+name: One-shot Phase 4C compile repair
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v2
+    paths:
+      - .github/workflows/phase4c-compile-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply exact compiler repairs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          postgres = Path("crates/crm-core-data/src/postgres.rs")
+          text = postgres.read_text(encoding="utf-8")
+          old = """    DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    RecordId, RecordRef, RecordSnapshot, RecordType, RetentionPolicyId, SchemaId, SchemaVersion,
+    SdkError, TypedPayload,
+"""
+          new = """    DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    RecordRef, RecordSnapshot, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
+"""
+          if old not in text:
+              raise SystemExit("postgres.rs import anchor not found")
+          postgres.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          batch = Path("crates/crm-core-data/src/postgres_batch.rs")
+          text = batch.read_text(encoding="utf-8")
+          old = """    DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    RecordRef, RecordSnapshot, RelationshipRef, RetentionPolicyId, SchemaId, SchemaVersion,
+    SdkError, TypedPayload,
+"""
+          new = """    DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, PayloadEncoding, RecordRef,
+    RecordSnapshot, RelationshipRef, SdkError, TypedPayload,
+"""
+          if old not in text:
+              raise SystemExit("postgres_batch.rs import anchor not found")
+          text = text.replace(old, new, 1)
+
+          old = """        BatchError::Conflict(message) | BatchError::IdempotencyKeyReused => SdkError::new(
+            \"DATA_CONFLICT\",
+            ErrorCategory::Conflict,
+            false,
+            match error {
+                BatchError::IdempotencyKeyReused => {
+                    \"The idempotency key was used for a different request.\".to_owned()
+                }
+                _ => message,
+            },
+        ),
+"""
+          new = """        BatchError::Conflict(message) => SdkError::new(
+            \"DATA_CONFLICT\",
+            ErrorCategory::Conflict,
+            false,
+            message,
+        ),
+        BatchError::IdempotencyKeyReused => SdkError::new(
+            \"DATA_CONFLICT\",
+            ErrorCategory::Conflict,
+            false,
+            \"The idempotency key was used for a different request.\",
+        ),
+"""
+          if old not in text:
+              raise SystemExit("batch error mapping anchor not found")
+          batch.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          cargo fmt --all
+          git diff --check
+      - name: Commit repaired sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-core-data/src/postgres.rs crates/crm-core-data/src/postgres_batch.rs
+          git commit -m "fix: resolve Phase 4C compiler findings"
+          git push origin HEAD:feature/postgres-data-adapter-v2
