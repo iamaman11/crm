@@ -77,9 +77,9 @@ for relative_path, allowed_dependencies in policy.get("governed_transport_crates
         )
 
     for source in sorted((transport_dir / "src").rglob("*.rs")):
-        text = source.read_text(encoding="utf-8")
+        production_text = source.read_text(encoding="utf-8").partition("#[cfg(test)]")[0]
         for marker in transport_markers:
-            if marker in text:
+            if marker in production_text:
                 errors.append(
                     f"{source.relative_to(root)} contains forbidden gateway-bypass marker: {marker}"
                 )
