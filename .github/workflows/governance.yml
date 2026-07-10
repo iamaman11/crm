@@ -3,10 +3,14 @@ name: Governance CI
 on:
   push:
     paths:
+      - "Cargo.toml"
+      - "crates/crm-module-manifest/**"
       - "docs/SYSTEM_INVARIANTS.md"
+      - "docs/IMPLEMENTATION_ROADMAP.md"
       - "docs/adr/ADR-024-controlled-data-formats-and-canonicalization.md"
       - "schemas/**"
       - "modules/*/module.yaml"
+      - "scripts/compile_module_manifest_ir.py"
       - "scripts/validate_module_manifests.py"
       - "scripts/check_architecture.py"
       - "tests/test_module_manifest_validation.py"
@@ -15,10 +19,14 @@ on:
       - ".github/workflows/governance.yml"
   pull_request:
     paths:
+      - "Cargo.toml"
+      - "crates/crm-module-manifest/**"
       - "docs/SYSTEM_INVARIANTS.md"
+      - "docs/IMPLEMENTATION_ROADMAP.md"
       - "docs/adr/ADR-024-controlled-data-formats-and-canonicalization.md"
       - "schemas/**"
       - "modules/*/module.yaml"
+      - "scripts/compile_module_manifest_ir.py"
       - "scripts/validate_module_manifests.py"
       - "scripts/check_architecture.py"
       - "tests/test_module_manifest_validation.py"
@@ -40,10 +48,15 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: requirements-dev.txt
+      - uses: dtolnay/rust-toolchain@stable
       - name: Install validation dependencies
         run: python -m pip install --requirement requirements-dev.txt
       - name: Validate module manifests
         run: python scripts/validate_module_manifests.py
+      - name: Compile normalized module IR
+        run: python scripts/compile_module_manifest_ir.py --output-dir build/module-ir
+      - name: Verify Rust runtime IR and digest parity
+        run: cargo run --quiet -p crm-module-manifest --bin validate-module-manifest -- build/module-ir/*.json
       - name: Test strict format and dependency enforcement
         run: python -m unittest tests/test_module_manifest_validation.py
       - name: Enforce architecture boundaries
