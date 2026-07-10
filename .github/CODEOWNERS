@@ -5,6 +5,7 @@
 /scripts/compile_module_manifest_ir.py @iamaman11
 /crates/crm-module-manifest/ @iamaman11
 /crates/crm-module-sdk/ @iamaman11
+/crates/crm-module-registry/ @iamaman11
 /crates/crm-core-data/ @iamaman11
 /crates/crm-core-events/ @iamaman11
 /crates/crm-core-permissions/ @iamaman11
