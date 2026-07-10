@@ -1,0 +1,72 @@
+name: One-shot outbox deduplication repair
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v1
+    paths:
+      - .github/workflows/outbox-dedup-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Persist outbox deduplication identity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          postgres = Path("crates/crm-core-data/src/postgres.rs")
+          text = postgres.read_text(encoding="utf-8")
+          text = text.replace(
+              "          event_type,\n          schema_id,",
+              "          event_type,\n          deduplication_key,\n          schema_id,",
+              1,
+          )
+          text = text.replace(
+              "          $1, $2, $3, $4, $5, 1, 1, $6, $7, $8, $9, $10, $11, $12, $13, $14,\n          TIMESTAMPTZ 'epoch' + ($15::bigint / 1000) * INTERVAL '1 microsecond'",
+              "          $1, $2, $3, $4, $5, 1, 1, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,\n          TIMESTAMPTZ 'epoch' + ($16::bigint / 1000) * INTERVAL '1 microsecond'",
+              1,
+          )
+          text = text.replace(
+              "    .bind(plan.event.event_type.as_str())\n    .bind(plan.event.payload.schema_id.as_str())",
+              "    .bind(plan.event.event_type.as_str())\n    .bind(&plan.event.deduplication_key)\n    .bind(plan.event.payload.schema_id.as_str())",
+              1,
+          )
+          postgres.write_text(text, encoding="utf-8")
+
+          sql = Path("database/tests/0001_platform_foundation.sql")
+          text = sql.read_text(encoding="utf-8")
+          text = text.replace(
+              "  event_type,\n  schema_id,",
+              "  event_type,\n  deduplication_key,\n  schema_id,",
+          )
+          text = text.replace(
+              "  'actor.created',\n  'crm.actor.created.v1',",
+              "  'actor.created',\n  'bootstrap-a',\n  'crm.actor.created.v1',",
+          )
+          text = text.replace(
+              "  'actor.observed',\n  'crm.actor.observed.v1',",
+              "  'actor.observed',\n  'second-audit',\n  'crm.actor.observed.v1',",
+          )
+          sql.write_text(text, encoding="utf-8")
+          PY
+          cargo fmt --all
+          git diff --check
+      - name: Commit repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-core-data/src/postgres.rs database/tests/0001_platform_foundation.sql
+          git commit -m "feat: persist tenant-scoped outbox deduplication keys"
+          git push origin HEAD:feature/postgres-data-adapter-v1
