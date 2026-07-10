@@ -1,0 +1,114 @@
+name: Self-cleaning Phase 4C repair
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v2
+    paths:
+      - .github/workflows/phase4c-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply deterministic integration repairs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          cargo = Path('crates/crm-core-data/Cargo.toml')
+          text = cargo.read_text(encoding='utf-8')
+          for dep in ('serde = { version = "1", features = ["derive"] }', 'serde_json = "1"', 'sha2 = "0.10"'):
+              if dep not in text:
+                  text = text.replace('sqlx = ', dep + '\nsqlx = ', 1)
+          if 'name = "postgres_advanced"' not in text:
+              text += '\n[[test]]\nname = "postgres_advanced"\npath = "tests/postgres_advanced.rs"\nrequired-features = ["postgres-integration"]\n'
+          cargo.write_text(text, encoding='utf-8')
+
+          lib = Path('crates/crm-core-data/src/lib.rs')
+          text = lib.read_text(encoding='utf-8')
+          if 'pub mod postgres_batch;' not in text:
+              text = text.replace('pub mod postgres;\n', 'pub mod postgres;\npub mod postgres_batch;\n', 1)
+          if 'pub use postgres_batch::*;' not in text:
+              text = text.replace('pub use postgres::*;\n', 'pub use postgres::*;\npub use postgres_batch::*;\n', 1)
+          lib.write_text(text, encoding='utf-8')
+
+          postgres = Path('crates/crm-core-data/src/postgres.rs')
+          text = postgres.read_text(encoding='utf-8')
+          text = text.replace('    RecordId, RecordRef, RecordSnapshot, RecordType, RetentionPolicyId, SchemaId, SchemaVersion,\n', '    RecordRef, RecordSnapshot, RetentionPolicyId, SchemaId, SchemaVersion,\n', 1)
+          postgres.write_text(text, encoding='utf-8')
+
+          batch = Path('crates/crm-core-data/src/postgres_batch.rs')
+          text = batch.read_text(encoding='utf-8')
+          text = text.replace('stored_hash.as_slice() != plan.idempotency.request_hash', 'stored_hash.as_slice() != plan.idempotency.request_hash.as_slice()')
+          text = text.replace('descriptor_hash.as_deref() != Some(batch_result_descriptor_hash().as_slice())', 'descriptor_hash.as_deref() != Some(expected_descriptor_hash.as_slice())')
+          marker = '    if schema_id.as_deref() != Some(BATCH_RESULT_SCHEMA_ID)'
+          if 'let expected_descriptor_hash = batch_result_descriptor_hash();' not in text and marker in text:
+              text = text.replace(marker, '    let expected_descriptor_hash = batch_result_descriptor_hash();\n' + marker, 1)
+          old = '''        BatchError::Conflict(message) | BatchError::IdempotencyKeyReused => SdkError::new(
+            "DATA_CONFLICT",
+            ErrorCategory::Conflict,
+            false,
+            match error {
+                BatchError::IdempotencyKeyReused => {
+                    "The idempotency key was used for a different request.".to_owned()
+                }
+                _ => message,
+            },
+        ),'''
+          new = '''        BatchError::Conflict(message) => SdkError::new(
+            "DATA_CONFLICT",
+            ErrorCategory::Conflict,
+            false,
+            message,
+        ),
+        BatchError::IdempotencyKeyReused => SdkError::new(
+            "DATA_CONFLICT",
+            ErrorCategory::Conflict,
+            false,
+            "The idempotency key was used for a different request.",
+        ),'''
+          text = text.replace(old, new, 1)
+          batch.write_text(text, encoding='utf-8')
+
+          workflow = Path('.github/workflows/database.yml')
+          text = workflow.read_text(encoding='utf-8')
+          if '0003_relationship_payload_governance.up.sql' not in text:
+              text = text.replace('          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql\n', '          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql\n')
+          if 'Verify multi-record, replay, optimistic and relationship semantics' not in text:
+              anchor = '''      - name: Roll back migrations\n'''
+              step = '''      - name: Verify multi-record, replay, optimistic and relationship semantics\n        env:\n          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test\n        run: cargo test -p crm-core-data --features postgres-integration --test postgres_advanced\n'''
+              text = text.replace(anchor, step + anchor, 1)
+          if '0003_relationship_payload_governance.down.sql' not in text:
+              text = text.replace('      - name: Roll back migrations\n        run: |\n', '      - name: Roll back migrations\n        run: |\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql\n', 1)
+          workflow.write_text(text, encoding='utf-8')
+
+          for path in (
+              '.github/workflows/phase4c-bootstrap-repair.yml',
+              '.github/workflows/phase4c-diagnostic.yml',
+              '.github/workflows/phase4c-integration-finalize.yml',
+              'diagnostics/phase4c.txt',
+              '.github/workflows/phase4c-repair.yml',
+          ):
+              Path(path).unlink(missing_ok=True)
+          PY
+          cargo fmt --all
+          cargo generate-lockfile
+          git diff --check
+      - name: Commit repaired Phase 4C sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: finalize Phase 4C integration wiring"
+          git push origin HEAD:feature/postgres-data-adapter-v2
