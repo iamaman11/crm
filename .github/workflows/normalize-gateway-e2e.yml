@@ -38,7 +38,8 @@ jobs:
               '    BUSINESS_TRANSACTION_HEADER, CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityCallEnvelope,\n    CapabilityIngress, CapabilityRoute, ExecutionContextResolver, HttpCapabilityBody,\n',
               '    AccessTokenGrant, AccessTokenStore, BUSINESS_TRANSACTION_HEADER, BearerTokenAuthenticator,\n    CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityIngress, CapabilityRoute,\n    ExecutionContextResolver, HttpCapabilityBody,\n',
           )
-          content = content.replace(', EventType, ModuleExecutionContext, ModuleId,', ', EventType, ModuleId,')
+          content = content.replace('ModuleExecutionContext, ', '')
+          content = content.replace('use std::str::FromStr;\n', '')
           content = content.replace('use http::{HeaderMap, HeaderValue, StatusCode};', 'use ::http::{HeaderMap, HeaderValue, StatusCode};')
           content = content.replace(
               '    let definition = capability_definition();\n',
@@ -46,6 +47,10 @@ jobs:
               1,
           )
           content = content.replace('Arc::clone(&clock) as Arc<dyn Clock>', 'Arc::clone(&clock_port)')
+          content = content.replace(
+              "async fn count_prefix(transaction: &mut Transaction<'_, Postgres>, query: &str) -> i64",
+              "async fn count_prefix(transaction: &mut Transaction<'_, Postgres>, query: &'static str) -> i64",
+          )
           path.write_text(content)
           PY
           cargo fmt --all
