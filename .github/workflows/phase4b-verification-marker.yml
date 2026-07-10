@@ -1,0 +1,79 @@
+name: Marker-based Phase 4B verification
+
+on:
+  push:
+    branches:
+      - feature/postgres-data-adapter-v1
+    paths:
+      - .github/workflows/phase4b-verification-marker.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/postgres-data-adapter-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Verify architecture and Rust dependency lock
+        run: |
+          python scripts/check_architecture.py
+          cargo generate-lockfile
+          test -z "$(git status --porcelain -- Cargo.lock)"
+      - name: Verify Rust quality
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo test --workspace --all-features
+      - name: Verify PostgreSQL adapter and migrations
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+          cargo test -p crm-core-data --features postgres-integration --test postgres_foundation
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
+          test "$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")" = "0"
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+      - name: Commit verification marker
+        run: |
+          mkdir -p verification
+          printf 'phase=4B\nverified_source_sha=%s\nchecks=architecture,lockfile,rustfmt,clippy,workspace-tests,postgresql17,migrations,sql-invariants,sqlx-fault-injection,rollback,reapply\n' "${GITHUB_SHA}" > verification/phase4b.pass
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add verification/phase4b.pass
+          git commit -m "test: record Phase 4B independent verification"
+          git push origin HEAD:feature/postgres-data-adapter-v1
