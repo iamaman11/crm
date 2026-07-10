@@ -23,6 +23,7 @@ jobs:
           components: rustfmt
       - name: Persist outbox deduplication identity
         run: |
+          echo "Applying deduplication repair to current branch head"
           python - <<'PY'
           from pathlib import Path
 
