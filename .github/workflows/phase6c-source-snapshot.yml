@@ -1,0 +1,37 @@
+name: Phase 6C source snapshot
+
+on:
+  push:
+    branches:
+      - feature/transactional-audit-materialization-v1
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Collect audit references
+        shell: bash
+        run: |
+          mkdir -p phase6c-snapshot
+          rg -n "AuditEvidence|audit_sequence|previous_hash|record_hash|canonical_envelope" \
+            crates tests database .github docs > phase6c-snapshot/audit-references.txt || true
+          tar -czf phase6c-snapshot/source.tar.gz \
+            Cargo.toml Cargo.lock \
+            crates/crm-core-data \
+            crates/crm-capability-runtime \
+            crates/crm-capability-ingress \
+            crates/crm-module-sdk \
+            tests database \
+            .github/workflows/database.yml \
+            docs/SYSTEM_INVARIANTS.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-source-snapshot
+          path: phase6c-snapshot/
+          if-no-files-found: error
+          retention-days: 3
