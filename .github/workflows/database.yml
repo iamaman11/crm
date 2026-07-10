@@ -23,66 +23,9 @@ on:
       - ".github/workflows/database.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  branch-repair:
-    if: github.event_name == 'push' && github.ref_name == 'feature/postgres-data-adapter-v2'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: feature/postgres-data-adapter-v2
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Apply remaining Phase 4C compiler repairs
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          batch = Path("crates/crm-core-data/src/postgres_batch.rs")
-          text = batch.read_text(encoding="utf-8")
-          for token in ("ModuleId, ", "RetentionPolicyId, ", "SchemaId, ", "SchemaVersion, "):
-              text = text.replace(token, "", 1)
-          pattern = re.compile(
-              r"        BatchError::Conflict\(message\) \| BatchError::IdempotencyKeyReused => SdkError::new\(.*?\n        \),\n        BatchError::IdempotencyInProgress",
-              re.S,
-          )
-          replacement = '''        BatchError::Conflict(message) => SdkError::new(
-            "DATA_CONFLICT",
-            ErrorCategory::Conflict,
-            false,
-            message,
-        ),
-        BatchError::IdempotencyKeyReused => SdkError::new(
-            "DATA_CONFLICT",
-            ErrorCategory::Conflict,
-            false,
-            "The idempotency key was used for a different request.",
-        ),
-        BatchError::IdempotencyInProgress'''
-          text, count = pattern.subn(replacement, text, count=1)
-          if count not in (0, 1):
-              raise SystemExit(f"unexpected replacement count {count}")
-          batch.write_text(text, encoding="utf-8")
-          PY
-          cargo fmt --all
-          git diff --check
-      - name: Commit repaired source when needed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-core-data/src/postgres_batch.rs
-          if git diff --cached --quiet; then
-            echo "Compiler repair already applied"
-          else
-            git commit -m "fix: resolve remaining Phase 4C compiler findings"
-            git push origin HEAD:feature/postgres-data-adapter-v2
-          fi
-
   postgres-foundation:
     runs-on: ubuntu-latest
     timeout-minutes: 35
