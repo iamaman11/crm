@@ -10,6 +10,13 @@ ALTER TABLE crm.outbox_events
   CHECK (payload_encoding IN ('protobuf', 'json', 'utf8_text', 'binary'));
 ALTER TABLE crm.outbox_events ALTER COLUMN payload_encoding DROP DEFAULT;
 
+ALTER TABLE crm.outbox_events
+  ADD COLUMN deduplication_key text NOT NULL DEFAULT 'legacy'
+  CHECK (length(deduplication_key) BETWEEN 1 AND 240);
+ALTER TABLE crm.outbox_events ALTER COLUMN deduplication_key DROP DEFAULT;
+CREATE UNIQUE INDEX outbox_deduplication_idx
+  ON crm.outbox_events (tenant_id, event_type, deduplication_key);
+
 ALTER TABLE crm.workflow_runs
   ADD COLUMN state_encoding text NOT NULL DEFAULT 'protobuf'
   CHECK (state_encoding IN ('protobuf', 'json', 'utf8_text', 'binary'));
