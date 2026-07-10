@@ -9,6 +9,7 @@ default = []
 postgres-integration = []
 
 [dependencies]
+crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-contracts = { path = "../crm-core-contracts" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 serde = { version = "1", features = ["derive"] }
