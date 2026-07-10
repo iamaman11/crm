@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from google.protobuf import descriptor_pb2
+from google.protobuf.message import DecodeError
 from ruamel.yaml import YAML
 
 EXPECTED_SCHEMA_VERSION = "crm.contract-bindings/v1"
@@ -65,7 +66,7 @@ def load_descriptor_set(path: Path) -> descriptor_pb2.FileDescriptorSet:
     descriptor_set = descriptor_pb2.FileDescriptorSet()
     try:
         descriptor_set.ParseFromString(path.read_bytes())
-    except (OSError, descriptor_pb2.DecodeError) as error:
+    except (OSError, DecodeError) as error:
         raise ValueError(f"cannot read descriptor set {path}: {error}") from error
     if not descriptor_set.file:
         raise ValueError(f"descriptor set {path} is empty")
