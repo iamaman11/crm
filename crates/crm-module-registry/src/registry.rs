@@ -382,8 +382,10 @@ impl ModuleRegistry {
                     ),
                 )
             })?;
-        let mut report = ImpactReport::default();
-        report.blockers = self.installed_dependents(tenant_id, module_id)?;
+        let mut report = ImpactReport {
+            blockers: self.installed_dependents(tenant_id, module_id)?,
+            ..ImpactReport::default()
+        };
         report.affected_modules.push(installation.current.clone());
         if installation.status == InstallationStatus::Active {
             report
