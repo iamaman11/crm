@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 
+pub mod capability_executor;
 pub mod postgres;
 pub mod postgres_batch;
 
+pub use capability_executor::*;
 pub use postgres::*;
 pub use postgres_batch::*;
 
