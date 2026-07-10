@@ -11,6 +11,9 @@ postgres-integration = []
 [dependencies]
 crm-core-contracts = { path = "../crm-core-contracts" }
 crm-module-sdk = { path = "../crm-module-sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }
 
 [dev-dependencies]
@@ -19,4 +22,9 @@ tokio = { version = "1", features = ["macros", "rt"] }
 [[test]]
 name = "postgres_foundation"
 path = "tests/postgres_foundation.rs"
+required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_advanced"
+path = "tests/postgres_advanced.rs"
 required-features = ["postgres-integration"]
