@@ -29,7 +29,9 @@ The repository now contains a complete first production-composed modular CRM pro
 
 Current phase: **Phase 7 — In progress**.
 
-The first Phase 7 packet, **golden module scaffolding and permanent repository commands** (#56 / PR #64), has completed its implementation and acceptance work. Its merge closes #56 and makes the next executable packet **#65 — generalized projection runtime and rebuild orchestration**, followed by **#66 — tenant- and permission-aware search with deterministic reindexing**.
+The golden module foundation (#56 / PR #64) is complete and merged as `15bf3ddeac0375325a3c59518e3ac55a3903c20d`.
+
+The current Phase 7 packet is **#65 / PR #67 — generalized projection runtime and rebuild orchestration**. Implementation and PostgreSQL/runtime acceptance are complete; the packet is in final exact-head gate review. Its merge closes #65 and makes **#66 — tenant- and permission-aware search with deterministic reindexing** the next executable packet.
 
 ## Phase 6 completion
 
@@ -50,9 +52,11 @@ The first Phase 7 packet, **golden module scaffolding and permanent repository c
 
 Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously before merge.
 
-## Phase 7 golden module foundation
+## Phase 7 foundations
 
-Issue #56 / PR #64 establishes the repository-supported golden module foundation:
+### Golden module foundation — Complete
+
+Issue #56 / merged PR #64 established the repository-supported module creation path:
 
 - separate governed scaffolding for authoritative owner modules and optional link modules;
 - explicit owner-object and link-dependency decisions before generation;
@@ -63,6 +67,20 @@ Issue #56 / PR #64 establishes the repository-supported golden module foundation
 - Governance CI that validates generated manifests, compiles a freshly generated module with `cargo check --all-targets`, and verifies generated dependencies against `architecture-policy.json`.
 
 A generated module is **Foundation only** and does not count as a production vertical slice.
+
+### Generalized projection runtime — Gate review
+
+Issue #65 / PR #67 generalizes the Phase 6 projection proof without moving business-event decoding into infrastructure:
+
+- `crm-projection-runtime` owns typed projection registration, checkpoint-based history paging, deterministic handler execution, poison/failure handling and rebuild orchestration;
+- `crm-core-events` exposes the platform `ProjectionStore` port and failure contract;
+- `crm-core-data` adapts the existing PostgreSQL projection tables/runtime to that port without a new migration;
+- a deterministic handler failure marks the projection checkpoint failed without advancing the last successful cursor and blocks further replay until reset or repair;
+- the existing Deal timeline and Task status handlers remain concrete composition-layer handlers but execute through the generic runner;
+- the existing `Phase6ProjectionWorker` remains only as a compatibility facade around the generic runner;
+- dedicated `Projection Runtime CI` proves failed-checkpoint persistence/reset and existing Deal/Task rebuild behavior against real PostgreSQL.
+
+The generic runtime has no Sales, Activities or PostgreSQL implementation dependency.
 
 ## Product readiness summary
 
@@ -79,7 +97,6 @@ The architecture and backend platform now have a complete first production-compo
 
 ### Not yet complete
 
-- generalized projection/indexing runtime and deterministic rebuild orchestration — #65;
 - tenant- and permission-aware search and deterministic reindexing — #66;
 - Admin Studio metadata builders and publication workflows;
 - web/mobile product shell and product-quality frontend;
@@ -92,8 +109,8 @@ The architecture and backend platform now have a complete first production-compo
 
 ## Immediate delivery sequence
 
-1. Generalize the Phase 6 projection proof into a reusable projection runtime and rebuild orchestrator — #65.
-2. Build tenant- and permission-aware search with deterministic reindexing on that shared runtime — #66.
+1. Merge the exact-head-green generalized projection runtime packet #65 / PR #67.
+2. Build tenant- and permission-aware search with deterministic reindexing on the shared runtime — #66.
 3. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
 4. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
 5. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
