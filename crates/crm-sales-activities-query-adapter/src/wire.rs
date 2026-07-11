@@ -8,7 +8,7 @@ use crm_activities::{
 };
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_core_data::RecordSnapshot;
-use crm_module_sdk::{RecordType, ResourceRef, SdkError, TenantId};
+use crm_module_sdk::{RecordType, SdkError, TenantId};
 use crm_proto_contracts::crm::{
     activities::v1 as activities, core::v1 as core, sales::v1 as sales,
 };
@@ -346,16 +346,4 @@ pub(crate) fn validate_related_resource_tenant(
         }
     }
     Ok(())
-}
-
-pub(crate) fn resource_ref_for_visibility(snapshot: &RecordSnapshot) -> &crm_module_sdk::RecordRef {
-    &snapshot.reference
-}
-
-pub(crate) fn domain_resource_matches(actual: &ResourceRef, expected: &core::ResourceRef) -> bool {
-    actual.resource_type == expected.resource_type
-        && actual.resource_id == expected.resource_id
-        && expected
-            .version
-            .is_none_or(|version| actual.version == Some(version))
 }
