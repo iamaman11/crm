@@ -78,37 +78,3 @@ jobs:
           path: tests.txt
           if-no-files-found: error
           retention-days: 7
-
-  phase6h-query-ingress-duplicate-import-fix:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/phase6h-query-ingress-v1'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: feature/phase6h-query-ingress-v1
-          fetch-depth: 0
-      - name: Remove duplicate adapter auth imports
-        shell: python
-        run: |
-          from pathlib import Path
-          path = Path('crates/crm-capability-ingress/tests/postgres_production_queries.rs')
-          text = path.read_text()
-          text = text.replace(
-              '    AccessTokenGrant, AccessTokenStore, ApprovalStore, AuthorizationGrant,\n    BearerTokenAuthenticator, FixedWindowRateLimiter, LiveAuthorizationStore,\n',
-              '    ApprovalStore, AuthorizationGrant, FixedWindowRateLimiter, LiveAuthorizationStore,\n',
-          )
-          path.write_text(text)
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --all
-      - name: Commit import fix only
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-capability-ingress/tests/postgres_production_queries.rs
-          git diff --cached --quiet && exit 0
-          git commit -m "fix(query): remove duplicate adapter auth imports"
-          git push origin HEAD:feature/phase6h-query-ingress-v1
