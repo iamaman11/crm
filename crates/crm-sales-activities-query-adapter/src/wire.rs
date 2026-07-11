@@ -9,12 +9,14 @@ use crm_activities::{
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_core_data::RecordSnapshot;
 use crm_module_sdk::{RecordType, ResourceRef, SdkError, TenantId};
-use crm_proto_contracts::crm::{activities::v1 as activities, core::v1 as core, sales::v1 as sales};
+use crm_proto_contracts::crm::{
+    activities::v1 as activities, core::v1 as core, sales::v1 as sales,
+};
 use crm_query_runtime::QueryVisibilityDecision;
 use crm_sales::{
     DEAL_STATE_MAXIMUM_BYTES, DEAL_STATE_RETENTION_POLICY_ID, DEAL_STATE_SCHEMA_ID,
     DEAL_STATE_SCHEMA_VERSION, Deal, DealCloseOutcome, DealOwner, DealStage, DealStatus,
-    decode_deal_state, deal_state_descriptor_hash,
+    deal_state_descriptor_hash, decode_deal_state,
 };
 
 pub(crate) fn sales_record_type() -> RecordType {
@@ -108,7 +110,9 @@ pub(crate) fn deal_to_wire(
     sales::Deal {
         deal_id: deal.deal_id().as_str().to_owned(),
         tenant_id: tenant.as_str().to_owned(),
-        name: show_name.then(|| deal.name().to_owned()).unwrap_or_default(),
+        name: show_name
+            .then(|| deal.name().to_owned())
+            .unwrap_or_default(),
         stage: show_stage
             .then(|| deal.stage().stage_id().as_str().to_owned())
             .unwrap_or_default(),
@@ -117,7 +121,9 @@ pub(crate) fn deal_to_wire(
         owner_id: legacy_owner,
         version: deal.version(),
         stage_details: show_stage.then(|| stage_to_wire(deal.stage())),
-        amount: show_amount.then(|| deal.amount().map(support::domain_money_to_wire)).flatten(),
+        amount: show_amount
+            .then(|| deal.amount().map(support::domain_money_to_wire))
+            .flatten(),
         owner: show_owner.then(|| owner_to_wire(deal.owner())),
         account: show_account
             .then(|| {
@@ -236,7 +242,9 @@ pub(crate) fn task_matches(
             task.related_resources().iter().any(|actual| {
                 actual.resource_type == expected.resource_type
                     && actual.resource_id == expected.resource_id
-                    && expected.version.is_none_or(|version| actual.version == Some(version))
+                    && expected
+                        .version
+                        .is_none_or(|version| actual.version == Some(version))
             })
         })
 }
@@ -347,5 +355,7 @@ pub(crate) fn resource_ref_for_visibility(snapshot: &RecordSnapshot) -> &crm_mod
 pub(crate) fn domain_resource_matches(actual: &ResourceRef, expected: &core::ResourceRef) -> bool {
     actual.resource_type == expected.resource_type
         && actual.resource_id == expected.resource_id
-        && expected.version.is_none_or(|version| actual.version == Some(version))
+        && expected
+            .version
+            .is_none_or(|version| actual.version == Some(version))
 }

@@ -2,9 +2,7 @@ use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, Clock, ErrorCategory, ModuleId, PortFuture, RecordId,
     RecordRef, RecordType, SdkError, TenantId,
 };
-use crm_query_runtime::{
-    QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision,
-};
+use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
@@ -100,10 +98,7 @@ pub struct LiveQueryVisibilityStore {
 }
 
 impl LiveQueryVisibilityStore {
-    pub fn upsert(
-        &self,
-        grant: QueryVisibilityGrant,
-    ) -> Result<u64, QueryVisibilityStoreError> {
+    pub fn upsert(&self, grant: QueryVisibilityGrant) -> Result<u64, QueryVisibilityStoreError> {
         grant.validate()?;
         let mut state = self
             .state
@@ -256,10 +251,8 @@ mod tests {
                 BTreeSet::from(["name".to_owned(), "amount".to_owned()]),
             ))
             .unwrap();
-        let authorizer = LiveQueryVisibilityAuthorizer::new(
-            store.clone(),
-            Arc::new(FixedClock::new(100)),
-        );
+        let authorizer =
+            LiveQueryVisibilityAuthorizer::new(store.clone(), Arc::new(FixedClock::new(100)));
 
         let exact = authorizer
             .authorize_visibility(&request, &resource)

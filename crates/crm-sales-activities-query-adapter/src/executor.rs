@@ -11,7 +11,9 @@ use crm_core_data::{
 use crm_module_sdk::{
     ActorId, DataClass, ErrorCategory, ModuleId, PortFuture, RecordId, SdkError, TypedPayload,
 };
-use crm_proto_contracts::crm::{activities::v1 as activities, core::v1 as core, sales::v1 as sales};
+use crm_proto_contracts::crm::{
+    activities::v1 as activities, core::v1 as core, sales::v1 as sales,
+};
 use crm_query_runtime::{
     CursorBinding, CursorCodec, CursorContinuation, PageSizePolicy, QueryExecutionResult,
     QueryExecutor, QueryRequest, QuerySemanticValidator, QueryVisibilityAuthorizer,
@@ -89,8 +91,11 @@ impl QuerySemanticValidator for SalesActivitiesQueryAdapter {
                     validate_record_id(&command.task_id, "task.task_id")?;
                 }
                 ACTIVITIES_LIST_CAPABILITY => {
-                    let command: activities::ListTasksRequest =
-                        decode_input(request, ACTIVITIES_MODULE_ID, ACTIVITIES_LIST_REQUEST_SCHEMA)?;
+                    let command: activities::ListTasksRequest = decode_input(
+                        request,
+                        ACTIVITIES_MODULE_ID,
+                        ACTIVITIES_LIST_REQUEST_SCHEMA,
+                    )?;
                     validate_activities_list(self, request, &command)?;
                 }
                 _ => return Err(unsupported_query()),
@@ -219,8 +224,11 @@ impl SalesActivitiesQueryAdapter {
     }
 
     async fn execute_list_tasks(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
-        let command: activities::ListTasksRequest =
-            decode_input(request, ACTIVITIES_MODULE_ID, ACTIVITIES_LIST_REQUEST_SCHEMA)?;
+        let command: activities::ListTasksRequest = decode_input(
+            request,
+            ACTIVITIES_MODULE_ID,
+            ACTIVITIES_LIST_REQUEST_SCHEMA,
+        )?;
         let page_size = resolve_page_size(self.page_policy, command.page.as_ref())?;
         let filter_hash = activities_filter_hash(&command);
         let binding = cursor_binding(
@@ -268,7 +276,14 @@ impl SalesActivitiesQueryAdapter {
             if remaining == 0 {
                 let anchor = after.clone();
                 let has_more = self
-                    .has_more_visible_deal(request, anchor.clone(), owner, pipeline_id, status, &mut scanned)
+                    .has_more_visible_deal(
+                        request,
+                        anchor.clone(),
+                        owner,
+                        pipeline_id,
+                        status,
+                        &mut scanned,
+                    )
                     .await?;
                 return Ok((output, has_more.then_some(anchor).flatten()));
             }
@@ -295,11 +310,7 @@ impl SalesActivitiesQueryAdapter {
                     .authorize_visibility(request, &snapshot.reference)
                     .await?;
                 if visibility.resource_visible {
-                    output.push(deal_to_wire(
-                        &deal,
-                        &request.context.tenant_id,
-                        &visibility,
-                    ));
+                    output.push(deal_to_wire(&deal, &request.context.tenant_id, &visibility));
                 }
             }
             after = page.next;
@@ -340,7 +351,8 @@ impl SalesActivitiesQueryAdapter {
                 .store
                 .list_records_for_query(&RecordListQuery {
                     tenant_id: request.context.tenant_id.clone(),
-                    owner_module_id: ModuleId::try_new(ACTIVITIES_MODULE_ID).map_err(config_error)?,
+                    owner_module_id: ModuleId::try_new(ACTIVITIES_MODULE_ID)
+                        .map_err(config_error)?,
                     record_type: activities_record_type(),
                     page_size: u32::try_from(remaining).map_err(|_| scan_limit_error())?,
                     sort: RecordQuerySort::UpdatedAtDescending,
@@ -359,11 +371,7 @@ impl SalesActivitiesQueryAdapter {
                     .authorize_visibility(request, &snapshot.reference)
                     .await?;
                 if visibility.resource_visible {
-                    output.push(task_to_wire(
-                        &task,
-                        &request.context.tenant_id,
-                        &visibility,
-                    ));
+                    output.push(task_to_wire(&task, &request.context.tenant_id, &visibility));
                 }
             }
             after = page.next;
@@ -427,7 +435,8 @@ impl SalesActivitiesQueryAdapter {
                 .store
                 .list_records_for_query(&RecordListQuery {
                     tenant_id: request.context.tenant_id.clone(),
-                    owner_module_id: ModuleId::try_new(ACTIVITIES_MODULE_ID).map_err(config_error)?,
+                    owner_module_id: ModuleId::try_new(ACTIVITIES_MODULE_ID)
+                        .map_err(config_error)?,
                     record_type: activities_record_type(),
                     page_size: MAXIMUM_PAGE_SIZE,
                     sort: RecordQuerySort::UpdatedAtDescending,
@@ -507,7 +516,10 @@ fn validate_activities_list(
             }
         }
     }
-    validate_related_resource_tenant(command.related_resource.as_ref(), &request.context.tenant_id)?;
+    validate_related_resource_tenant(
+        command.related_resource.as_ref(),
+        &request.context.tenant_id,
+    )?;
     validate_activities_sort(command.sort)?;
     let page_size = resolve_page_size(adapter.page_policy, command.page.as_ref())?;
     let binding = cursor_binding(
@@ -534,7 +546,9 @@ fn validate_sales_sort(sort: i32) -> Result<(), SdkError> {
 
 fn validate_activities_sort(sort: i32) -> Result<(), SdkError> {
     match activities::TaskSort::try_from(sort).ok() {
-        Some(activities::TaskSort::Unspecified | activities::TaskSort::UpdatedAtDescending) => Ok(()),
+        Some(activities::TaskSort::Unspecified | activities::TaskSort::UpdatedAtDescending) => {
+            Ok(())
+        }
         Some(_) => Err(unsupported_sort("task.sort")),
         None => Err(SdkError::invalid_argument(
             "task.sort",
@@ -543,7 +557,10 @@ fn validate_activities_sort(sort: i32) -> Result<(), SdkError> {
     }
 }
 
-fn validate_owner(value: Option<&core::ActorOrTeamOwner>, field: &'static str) -> Result<(), SdkError> {
+fn validate_owner(
+    value: Option<&core::ActorOrTeamOwner>,
+    field: &'static str,
+) -> Result<(), SdkError> {
     use core::actor_or_team_owner::Owner;
     if let Some(value) = value {
         match value.owner.as_ref() {
@@ -559,7 +576,8 @@ fn validate_owner(value: Option<&core::ActorOrTeamOwner>, field: &'static str) -
 }
 
 fn validate_record_id(value: &str, field: &'static str) -> Result<RecordId, SdkError> {
-    RecordId::try_new(value.to_owned()).map_err(|error| SdkError::invalid_argument(field, error.to_string()))
+    RecordId::try_new(value.to_owned())
+        .map_err(|error| SdkError::invalid_argument(field, error.to_string()))
 }
 
 fn resolve_page_size(
@@ -641,8 +659,16 @@ fn encode_next(
 }
 
 fn sales_filter_hash(command: &sales::ListDealsRequest) -> [u8; 32] {
-    let owner = command.owner.as_ref().map(Message::encode_to_vec).unwrap_or_default();
-    let pipeline = command.pipeline_id.as_deref().unwrap_or_default().as_bytes();
+    let owner = command
+        .owner
+        .as_ref()
+        .map(Message::encode_to_vec)
+        .unwrap_or_default();
+    let pipeline = command
+        .pipeline_id
+        .as_deref()
+        .unwrap_or_default()
+        .as_bytes();
     let status = command.status.unwrap_or_default().to_be_bytes();
     normalized_filter_hash([
         ("owner", owner.as_slice()),
@@ -652,7 +678,11 @@ fn sales_filter_hash(command: &sales::ListDealsRequest) -> [u8; 32] {
 }
 
 fn activities_filter_hash(command: &activities::ListTasksRequest) -> [u8; 32] {
-    let owner = command.owner.as_ref().map(Message::encode_to_vec).unwrap_or_default();
+    let owner = command
+        .owner
+        .as_ref()
+        .map(Message::encode_to_vec)
+        .unwrap_or_default();
     let status = command.status.unwrap_or_default().to_be_bytes();
     let related = command
         .related_resource

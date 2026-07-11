@@ -35,9 +35,7 @@ pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkEr
         .collect()
 }
 
-pub fn query_capability_definition(
-    capability_id: &str,
-) -> Result<CapabilityDefinition, SdkError> {
+pub fn query_capability_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkError> {
     let (owner, input_schema, output_schema) = match capability_id {
         SALES_GET_CAPABILITY => (
             SALES_MODULE_ID,
