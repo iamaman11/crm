@@ -22,36 +22,16 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
+
           path = Path('crates/crm-capability-adapters/src/query_visibility.rs')
           text = path.read_text()
-          old = '''    pub fn revoke(
-              &self,
-              tenant_id: &TenantId,
-              actor_id: &ActorId,
-              capability_id: &CapabilityId,
-              capability_version: &CapabilityVersion,
-              owner_module_id: &ModuleId,
-              record_type: &RecordType,
-              record_id: Option<&RecordId>,
-          ) -> Result<bool, QueryVisibilityStoreError> {
-              let mut state = self
-                  .state
-                  .write()
-                  .map_err(|_| QueryVisibilityStoreError::Poisoned)?;
-              let removed = state
-                  .grants
-                  .remove(&VisibilityKey {
-                      tenant_id: tenant_id.clone(),
-                      actor_id: actor_id.clone(),
-                      capability_id: capability_id.clone(),
-                      capability_version: capability_version.clone(),
-                      owner_module_id: owner_module_id.clone(),
-                      record_type: record_type.clone(),
-                      record_id: record_id.cloned(),
-                  })
-                  .is_some();
-          '''
-          new = '''    pub fn revoke(
+
+          pattern = re.compile(
+              r'''    pub fn revoke\(\n.*?^        Ok\(removed\)\n    \}\n''',
+              re.MULTILINE | re.DOTALL,
+          )
+          replacement = '''    pub fn revoke(
               &self,
               grant: &QueryVisibilityGrant,
           ) -> Result<bool, QueryVisibilityStoreError> {
@@ -60,41 +40,40 @@ jobs:
                   .write()
                   .map_err(|_| QueryVisibilityStoreError::Poisoned)?;
               let removed = state.grants.remove(&grant.key()).is_some();
-          '''
-          if old not in text:
-              raise SystemExit('revoke implementation pattern not found')
-          text = text.replace(old, new, 1)
-          old_call = '''        store
-              .revoke(
-                  &request.context.tenant_id,
-                  &request.context.actor_id,
-                  &request.context.capability_id,
-                  &request.context.capability_version,
-                  &request.owner_module_id,
-                  &resource.record_type,
-                  Some(&resource.record_id),
-              )
-              .unwrap();
-          '''
-          new_call = '''        let exact_grant = grant(
+              if removed {
+                  state.revision = state.revision.saturating_add(1);
+              }
+              Ok(removed)
+          }
+'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'revoke implementation replacements: {count}')
+
+          call_pattern = re.compile(
+              r'''        store\n            \.revoke\(\n.*?            \.unwrap\(\);\n''',
+              re.MULTILINE | re.DOTALL,
+          )
+          call_replacement = '''        let exact_grant = grant(
               Some("deal-1"),
               BTreeSet::from(["name".to_owned(), "amount".to_owned()]),
           );
           store.revoke(&exact_grant).unwrap();
-          '''
-          if old_call not in text:
-              raise SystemExit('revoke test call pattern not found')
-          text = text.replace(old_call, new_call, 1)
+'''
+          text, count = call_pattern.subn(call_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'revoke test replacements: {count}')
+
           path.write_text(text)
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --all
-      - name: Commit source fix only
+      - name: Commit fix and remove temporary workflow
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/phase6h-fix-visibility-revoke.yml
           git add crates/crm-capability-adapters/src/query_visibility.rs
-          git diff --cached --quiet && exit 0
           git commit -m "fix(query): bind visibility revoke to grant identity"
           git push origin HEAD:feature/phase6h-production-query-adapter-v1
