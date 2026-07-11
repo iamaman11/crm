@@ -1,4 +1,4 @@
-name: Phase 6F recovery commit valid payloads
+name: Phase 6F recovery export materialized sources
 
 on:
   pull_request:
@@ -6,10 +6,10 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  materialize:
+  export:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -18,12 +18,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh repo clone "$GITHUB_REPOSITORY" repo -- --quiet --branch feature/phase6f-recovery-v1 --depth 1
-      - name: Materialize and publish valid non-workflow entries
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Materialize valid payload entries
         working-directory: repo
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
           python - <<'PY'
           import ast
           import base64
@@ -53,10 +53,8 @@ jobs:
                   target.parent.mkdir(parents=True, exist_ok=True)
                   target.write_bytes(zlib.decompress(base64.b64decode(encoded)))
           PY
-          cargo generate-lockfile >/tmp/cargo-lock.log 2>&1
-          cargo fmt --all >/tmp/cargo-fmt.log 2>&1
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cargo generate-lockfile
+          cargo fmt --all
           git add -A
           git reset -- \
             .github/workflows/phase6-apply-capability-adapters.yml \
@@ -65,6 +63,22 @@ jobs:
             scripts/phase6_payload_2.py \
             scripts/phase6_payload_3.py \
             scripts/phase6_payload_4.py
-          git status --short
-          git commit -m "feat: materialize valid Phase 6F capability sources"
-          git push origin HEAD:feature/phase6f-recovery-v1
+          git diff --cached --binary > ../phase6-materialized.patch
+          tar --create --gzip --file ../phase6-materialized-tree.tar.gz \
+            --exclude=.git \
+            --exclude=.github/workflows/phase6-apply-capability-adapters.yml \
+            --exclude=.github/workflows/database.yml \
+            --exclude=scripts/phase6_payload_1.py \
+            --exclude=scripts/phase6_payload_2.py \
+            --exclude=scripts/phase6_payload_3.py \
+            --exclude=scripts/phase6_payload_4.py \
+            .
+          test -s ../phase6-materialized.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase6-materialized-sources
+          path: |
+            phase6-materialized.patch
+            phase6-materialized-tree.tar.gz
+          if-no-files-found: error
+          retention-days: 7
