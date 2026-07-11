@@ -1,0 +1,35 @@
+name: Phase 6H sync lockfile
+
+on:
+  push:
+    branches:
+      - feature/phase6h-permission-bound-queries-v1
+    paths:
+      - Cargo.toml
+      - crates/crm-query-runtime/Cargo.toml
+      - .github/workflows/phase6h-sync-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6h-permission-bound-queries-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate current Cargo lockfile
+        run: cargo generate-lockfile
+      - name: Commit lockfile only when changed
+        run: |
+          if git diff --quiet -- Cargo.lock; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "Update Cargo lockfile for Phase 6H query runtime"
+          git push origin HEAD:feature/phase6h-permission-bound-queries-v1
