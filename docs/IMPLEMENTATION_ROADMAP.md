@@ -52,8 +52,8 @@ Universal means that Sales is not allowed to become the owner of customer identi
 | 3 | [#6](https://github.com/iamaman11/crm/issues/6) | Module lifecycle and registry runtime | **Complete** | #4, #5 |
 | 4 | [#7](https://github.com/iamaman11/crm/issues/7) | PostgreSQL tenant, record, outbox and audit foundation | **Complete** | #6 |
 | 5 | [#8](https://github.com/iamaman11/crm/issues/8) | Capability execution gateway | **Complete** | #5, #7 |
-| 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link/projection/application vertical proof | **Gate review** | #8 |
-| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, generalized projections, Admin Studio and product shell | **Planned** | #9 |
+| 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link/projection/application vertical proof | **Complete** | #8 |
+| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, generalized projections, Admin Studio and product shell | **Ready** | #9 |
 | 8 | [#11](https://github.com/iamaman11/crm/issues/11) | Expert modules and product-quality UX | **Planned** | #5, #9, #10 |
 | 8A | [#28](https://github.com/iamaman11/crm/issues/28) | Canonical customer master, identity resolution and consent | **Planned** | #9, #10 |
 | 8B | [#29](https://github.com/iamaman11/crm/issues/29) | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | #9, #10, #28 |
@@ -63,12 +63,7 @@ Universal means that Sales is not allowed to become the owner of customer identi
 
 ## 5. Phase 0.1 — Repository hardening — Complete
 
-Delivered:
-
-- version-controlled roadmap and issue hierarchy;
-- stable CODEOWNERS and executable architecture-policy boundaries;
-- correct generated-artifact and validation documentation;
-- required Contract, Governance, Rust and Database checks.
+Delivered version-controlled roadmap and issue hierarchy, stable CODEOWNERS, executable architecture-policy boundaries, generated-artifact/validation documentation and required Contract/Governance/Rust/Database checks.
 
 Gate: the repository must not claim stale checksums, warnings or committed artifacts that do not exist. Every implementation phase has an issue, prerequisites and measurable acceptance criteria.
 
@@ -88,7 +83,7 @@ module.yaml
 → immutable publication
 ```
 
-Delivered guarantees include strict typed structures, unknown-field rejection, SemVer/dependency validation, ownership indexes, dependency-cycle detection and deterministic Python-to-Rust canonical identity parity.
+Delivered strict typed structures, unknown-field rejection, SemVer/dependency validation, ownership indexes, dependency-cycle detection and deterministic Python-to-Rust canonical identity parity.
 
 ## 7. Phase 2 — Governed Module SDK — Complete
 
@@ -102,15 +97,7 @@ Delivered validate, publish, install, activate, suspend, upgrade, rollback and u
 
 ## 9. Phase 4 — PostgreSQL foundation — Complete
 
-Authoritative guarantees:
-
-- tenant-scoped records and relationships;
-- FORCE-RLS boundaries where required;
-- optimistic versions;
-- atomic business state, idempotency, outbox and audit evidence;
-- append-only tenant audit ledger;
-- controlled typed payload metadata;
-- clean install, legacy upgrade, rollback and reapply tests.
+Authoritative guarantees include tenant-scoped records and relationships, FORCE-RLS boundaries where required, optimistic versions, atomic business state/idempotency/outbox/audit evidence, append-only tenant audit ledger, controlled typed payload metadata and clean-install/legacy-upgrade/rollback/reapply tests.
 
 Cross-tenant negative tests and transaction fault injection remain required regression gates after every later runtime or migration change.
 
@@ -142,90 +129,92 @@ Delivered guarantees:
 - missing required evidence rolls back state and preserves audit integrity;
 - external behavior does not depend on parsing error text.
 
-## 11. Phase 6 — First modular proof — Gate review
+## 11. Phase 6 — First modular production proof — Complete
 
 Issue: [#9](https://github.com/iamaman11/crm/issues/9)  
-Delivery packet: PR #63 / issue #55.
+Delivery packet: merged PR #63 / issue #55.  
+Merge commit: `82910fa17f21074b1e091615a4251092cfa8ab2f`.
 
-### Completed slices 6A–6H
+### 6A–6H — owner modules, contracts, mutations and queries
 
-6A–6H established:
+Established:
 
 - typed independent Sales `Deal` and Activities `Task` owner-domain aggregates;
 - publication-compatible versioned Protobuf contracts;
 - transactional audit materialization and transaction-aware aggregate execution;
 - validated persisted codecs and generated contract runtime;
 - production Sales/Activities mutation planners and PostgreSQL execution;
-- authenticated production mutation acceptance with replay/conflict/revocation/rollback evidence;
+- authenticated mutation acceptance with replay/conflict/revocation/rollback evidence;
 - permission-bound Deal/Task get/list queries;
 - HMAC-bound opaque keyset cursors;
 - resource/field visibility, non-disclosing denial and authenticated HTTP/gRPC query ingress.
 
-Authoritative merged work includes PRs #26, #27, #30, #31, #33, #34, #37, #40 and #42–#46.
+### 6I — optional Sales–Activities link and governed event delivery
 
-### Gate-review slice 6I — optional Sales–Activities link and governed event delivery
+Delivered:
 
-Implementation packet: PR #63. Tracking issue: #47.
+- restart-safe event lineage and immutable outbox-to-`EventDelivery` reconstruction;
+- durable consumer delivery ledger with lease, retry, recovery and dead-letter behavior;
+- lifecycle-aware link processing that checks tenant installation state before target invocation;
+- pure link-module core free of PostgreSQL, generated Protobuf and target owner internals;
+- target execution through `GatewayCapabilityClient` and the production `CapabilityGateway`;
+- duplicate delivery, retry recovery, delivery-ledger rebuild, suspension/removal and cross-tenant acceptance.
 
-- Added restart-safe event lineage and reconstruction of immutable `EventDelivery` from authoritative outbox history.
-- Added a durable consumer delivery ledger with lease, retry, recovery and dead-letter behavior.
-- Added lifecycle-aware link processing that checks tenant installation state before contract decoding or target invocation.
-- Preserved the pure link-module boundary: generated Protobuf, PostgreSQL and target owner internals remain outside `modules/crm-sales-activities-link`.
-- Routed target execution through `GatewayCapabilityClient` and the production `CapabilityGateway`, preserving tenant, actor, idempotency and correlation/causation/trace lineage.
-- Proved duplicate delivery, retry recovery, delivery-ledger rebuild, suspension/removal and cross-tenant denial without duplicate Activities business effects.
+### 6J — rebuildable Deal timeline and Task status projections
 
-### Gate-review slice 6J — rebuildable Deal timeline and Task status projections
+Delivered:
 
-Implementation packet: PR #63. Tracking issue: #48.
+- FORCE-RLS projection checkpoints, applied-event deduplication and rebuildable JSON documents;
+- keyset replay over immutable event history with tenant-scoped checkpoints;
+- Deal timeline and Task status projection handlers based on published event contracts;
+- atomic `applied event + projection documents + checkpoint` application;
+- resume, duplicate-idle, cross-tenant non-disclosure and reset/rebuild equivalence;
+- no authoritative owner-state writes or mutation evidence from projection processing.
 
-- Added FORCE-RLS rebuildable projection checkpoints, applied-event deduplication and JSON projection documents.
-- Added keyset replay over immutable event history with tenant-scoped checkpoints.
-- Added Deal timeline and Task status projection handlers that depend on published event contracts rather than owner-module internals.
-- Applied `applied event + projection documents + checkpoint` atomically.
-- Proved resume, duplicate-idle behavior, cross-tenant non-disclosure and reset/rebuild equivalence without creating authoritative mutation evidence.
+### 6K — production application composition root
 
-### Gate-review slice 6K — production application composition root
+Delivered:
 
-Implementation packet: PR #63. Tracking issue: #49.
+- `crm-application-runtime` as the single production composition boundary;
+- thin `services/crm-api` process host depending only on the application runtime;
+- validated environment configuration and PostgreSQL/gateway/auth/visibility/worker composition;
+- governed HTTP mutation/query endpoints;
+- versioned `crm.gateway.v1.ApplicationGatewayService` gRPC mutation/query transport;
+- health, readiness, background link/projection workers and graceful shutdown;
+- architecture enforcement preventing direct process-host imports of PostgreSQL adapters or owner-module internals.
 
-- Added `crm-application-runtime` as the single production composition boundary.
-- Made `services/crm-api` a thin process host that depends only on the application runtime.
-- Added validated environment configuration, PostgreSQL construction, mutation/query gateways, authentication, live authorization, query visibility and worker composition.
-- Added governed HTTP mutation/query endpoints and versioned `crm.gateway.v1.ApplicationGatewayService` gRPC mutation/query transport.
-- Added health, readiness, background link/projection workers and graceful shutdown.
-- Enforced the thin-host architecture boundary so process/transport code cannot directly import owner-domain internals or PostgreSQL adapters.
+### 6L — complete process-level production acceptance
 
-### Gate-review slice 6L — complete process-level production acceptance
+Application Runtime CI proves:
 
-Implementation packet: PR #63. Tracking issue: #50.
+1. PostgreSQL startup and migrations `0001`–`0008`;
+2. production fixture seeding;
+3. real `crm-api` process startup and readiness;
+4. unauthenticated HTTP denial;
+5. authenticated Sales mutations;
+6. background Sales-to-Activities link delivery;
+7. Deal timeline and Task status projection materialization;
+8. governed gRPC query execution;
+9. clean SIGINT graceful shutdown.
 
-- Added dedicated Application Runtime CI that applies migrations `0001` through `0008`, seeds production fixtures and starts the real `crm-api` binary against PostgreSQL.
-- Proved unauthenticated HTTP denial, authenticated Sales mutations, background Sales-to-Activities link delivery, Deal timeline and Task status projection materialization, governed gRPC query execution and clean SIGINT shutdown.
-- Added migration `0008` to canonical clean install, rollback, reapply and legacy-upgrade Database CI paths.
-- Preserved Database and Event Runtime regression acceptance alongside the process-level gate.
+Migration `0008` is also part of canonical clean-install, rollback, reapply and legacy-upgrade Database CI paths.
 
-### Final Phase 6 merge gate
+Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously before merge.
 
-Implementation checkpoint `acba0b0d97998e7a0a347749032e1f7002fa6b34` passed **Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously**.
+## 12. Phase 7 — Search, generalized projections, Admin Studio and product-shell foundation — Ready
 
-Sales and Activities remain independently governed owner modules. The optional link is lifecycle-gated and cannot bypass the target capability gateway. Duplicate source-event delivery produces no duplicate Task or projection business effect. Every mutation follows the authenticated gateway and commits state only with required idempotency, outbox and audit evidence. Query paths are permission-bound, projections are rebuildable, and `crm-api` is a real governed production process rather than a skeleton.
+Phase 7 is the next active roadmap phase.
 
-Phase 6 remains **Gate review** until PR #63 is merged. After merge, Phase 6 becomes **Complete** and Phase 7 becomes the next active roadmap phase.
-
-## 12. Phase 7 — Search, generalized projections, Admin Studio and product-shell foundation — Planned
-
-Phase 7 begins after the Phase 6 production composition proof is merged.
-
-Platform deliverables:
+### Platform deliverables
 
 - generalize the proven projection/checkpoint/retry/rebuild runtime for broader read models;
 - tenant- and permission-aware search with deterministic reindexing;
 - object, field, relationship, layout, view, pipeline, permission and workflow builders;
 - impact reports, immutable metadata versions and rollback behavior;
 - typed UI-extension runtime with safe fallback;
-- golden module generator and permanent repository commands so new modules inherit architecture/gates by construction.
+- golden module generator and permanent repository commands so new modules inherit architecture and gates by construction.
 
-Product-plane deliverables:
+### Product-plane deliverables
 
 - web product shell and typed generated client boundary;
 - navigation, authentication/session integration and permission-aware routing;
@@ -233,7 +222,9 @@ Product-plane deliverables:
 - localization/time-zone strategy and consistent error/loading conventions;
 - first Admin Studio workflows against governed metadata publication APIs.
 
-Gate: deleting search or projections cannot destroy authoritative data; permission changes cannot leak stale results; Admin changes are validated, audited and reversible; UI-extension failure cannot break the host shell; frontend code cannot bypass governed mutation/query paths.
+### Gate
+
+Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Admin changes are validated, audited and reversible. UI-extension failure cannot break the host shell. Frontend code cannot bypass governed mutation/query paths.
 
 ## 13. Phase 8 — Expert modules and product experience — Planned
 
@@ -241,33 +232,26 @@ After Phase 7, backend and frontend evolve as end-to-end vertical slices rather 
 
 Required owner-domain programs include:
 
-- canonical customer master, identity resolution and consent — [#28](https://github.com/iamaman11/crm/issues/28);
+- canonical customer master, identity resolution and consent — #28;
 - Sales and Activities expert expansion;
 - communications and omnichannel interaction history;
 - support and service management;
 - marketing segmentation, journeys and attribution;
-- Product Catalog, Price Books, CPQ, Quote, Order, Contract and Subscription lifecycle — [#29](https://github.com/iamaman11/crm/issues/29);
-- governed billing/ERP/payment/tax/fulfillment integration boundaries;
-- projects, cases and configurable work management;
+- product catalog, pricing, CPQ, quote, order, contract and subscription lifecycle — #29;
+- billing and governed ERP/payment/tax integrations;
+- projects/cases/configurable work management;
 - documents and e-signature;
 - analytics, forecasting and performance management.
 
 Product experience includes global search, command palette, keyboard navigation, fast tables, saved views, bulk actions, timelines, explainable permissions, transparent automation runs, onboarding, imports, responsive/mobile behavior, accessibility and localization.
 
-Gate: each module owns typed domain invariants, contracts, manifest, CI target and release evidence. Critical rules cannot be bypassed by arbitrary metadata, scripts or AI. Customer identity and commercial commitment ownership remain explicit and non-overlapping.
+Gate: each module owns typed domain invariants, contracts, manifest, CI target and release notes. Critical rules cannot be bypassed by arbitrary metadata, scripts or AI. Customer identity and commercial commitment ownership remain explicit and non-overlapping.
 
 ## 14. Phase 9 — AI-native layer — Planned
 
 AI is an Actor, not an infrastructure shortcut.
 
-Deliverables:
-
-- AI Gateway and model routing by tenant, data class, purpose, residency and cost;
-- permission-scoped tools generated from Capability Registry;
-- permission-filtered retrieval;
-- approval flows, reversible actions and budgets;
-- prompt-injection, leakage and correctness evaluations;
-- complete actor, tool, model and cost audit evidence.
+Deliver model routing by tenant/data class/purpose/residency/cost, permission-scoped tools generated from the Capability Registry, permission-filtered retrieval, approval flows, reversible actions, budgets, prompt-injection/leakage/correctness evaluations and complete actor/tool/model/cost audit evidence.
 
 Gate: AI has no alternate mutation path. Restricted data is default-deny for external providers. Every tool call repeats live authorization before side effects.
 
@@ -281,4 +265,4 @@ Gate: untrusted or policy-violating modules cannot install. Marketplace code can
 
 Deliver SSO/OIDC/SAML, SCIM, tenant key hierarchy, field encryption, legal hold, WORM audit export, privacy deletion, crypto-shredding, backup/PITR, tenant restore, tenant mobility, data residency, SBOM/dependency/secret scans, penetration/load/chaos tests, SLOs and runbooks.
 
-Gate: production deployment requires documented restore, failover, security, privacy, observability and SLO evidence. Enterprise controls must preserve the same governed capability, tenant and audit invariants rather than introducing bypass paths.
+Gate: enterprise claims require automated and operational evidence, not configuration placeholders.
