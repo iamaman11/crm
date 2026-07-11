@@ -29,9 +29,7 @@ The repository now contains a complete first production-composed modular CRM pro
 
 Current phase: **Phase 7 — In progress**.
 
-Current delivery packet: **golden module scaffolding and permanent repository commands — issue #56 / draft PR #64**.
-
-Current implementation focus: establish module-generation and repository-command foundations so later Phase 7 platform work and domain waves inherit architecture/gate discipline by construction, then continue tenant- and permission-aware search/generalized projections, Admin Studio foundations and the typed web product shell.
+The first Phase 7 packet, **golden module scaffolding and permanent repository commands** (#56 / PR #64), has completed its implementation and acceptance work. Its merge closes #56 and makes the next executable packet **#65 — generalized projection runtime and rebuild orchestration**, followed by **#66 — tenant- and permission-aware search with deterministic reindexing**.
 
 ## Phase 6 completion
 
@@ -52,18 +50,19 @@ Current implementation focus: establish module-generation and repository-command
 
 Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously before merge.
 
-## Phase 7 active packet
+## Phase 7 golden module foundation
 
-Issue #56 / draft PR #64 is establishing the repository-supported golden module foundation:
+Issue #56 / PR #64 establishes the repository-supported golden module foundation:
 
 - separate governed scaffolding for authoritative owner modules and optional link modules;
 - explicit owner-object and link-dependency decisions before generation;
-- overwrite-safe and dry-run generation;
-- architecture-safe module crate/manifests plus explicit acceptance TODO gates;
+- overwrite-safe generation, workspace duplicate protection, dependency-range validation and `--dry-run`;
+- architecture-safe module crate/manifests plus explicit contract, adapter and acceptance-test TODO boundaries;
+- a compiling ignored acceptance-test scaffold gate that must be replaced before module readiness can rise above Foundation;
 - stable cross-platform commands for architecture checks, manifest validation, formatting, lockfile synchronization, focused tests, full tests and the common Rust quality gate;
-- Governance CI coverage for the generator itself.
+- Governance CI that validates generated manifests, compiles a freshly generated module with `cargo check --all-targets`, and verifies generated dependencies against `architecture-policy.json`.
 
-This packet remains **In progress** until the exact final PR head is green and the normative roadmap/issue state are synchronized. A generated module is Foundation only and does not count as a production vertical slice.
+A generated module is **Foundation only** and does not count as a production vertical slice.
 
 ## Product readiness summary
 
@@ -80,7 +79,8 @@ The architecture and backend platform now have a complete first production-compo
 
 ### Not yet complete
 
-- tenant- and permission-aware search and generalized indexing/reindexing;
+- generalized projection/indexing runtime and deterministic rebuild orchestration — #65;
+- tenant- and permission-aware search and deterministic reindexing — #66;
 - Admin Studio metadata builders and publication workflows;
 - web/mobile product shell and product-quality frontend;
 - canonical customer master, identity resolution and consent;
@@ -92,8 +92,8 @@ The architecture and backend platform now have a complete first production-compo
 
 ## Immediate delivery sequence
 
-1. Complete the Phase 7 golden module tooling packet tracked by #56 and PR #64 with green exact-head Governance/Rust acceptance and synchronized documentation.
-2. Continue Phase 7 with tenant- and permission-aware search plus generalized projection/indexing infrastructure.
+1. Generalize the Phase 6 projection proof into a reusable projection runtime and rebuild orchestrator — #65.
+2. Build tenant- and permission-aware search with deterministic reindexing on that shared runtime — #66.
 3. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
 4. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
 5. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
