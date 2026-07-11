@@ -99,24 +99,14 @@ async fn production_link_delivery_is_lifecycle_gated_tenant_safe_and_exactly_onc
         &gateway,
         definition("sales.deal.create"),
         sales_create_payload(),
-        "phase6i-sales-create-idempotency",
-        "phase6i-sales-create-tx",
-        "phase6i-sales-create-request",
-        "phase6i-sales-create-correlation",
-        "phase6i-sales-create-causation",
-        "phase6i-sales-create-trace",
+        "phase6i-sales-create",
     )
     .await;
     execute_capability(
         &gateway,
         definition("sales.deal.advance_stage"),
         sales_advance_payload(),
-        "phase6i-sales-advance-idempotency",
-        "phase6i-sales-advance-tx",
-        "phase6i-sales-advance-request",
-        "phase6i-sales-advance-correlation",
-        "phase6i-sales-advance-causation",
-        "phase6i-sales-advance-trace",
+        "phase6i-sales-advance",
     )
     .await;
 
@@ -133,7 +123,11 @@ async fn production_link_delivery_is_lifecycle_gated_tenant_safe_and_exactly_onc
         Arc::clone(&clock_port),
         ActorId::try_new(ACTOR).unwrap(),
     ));
-    let runtime = EventDeliveryRuntime::new(event_reader.clone(), module_runtime.clone(), handler);
+    let runtime = EventDeliveryRuntime::new(
+        event_reader.clone(),
+        module_runtime.clone(),
+        handler,
+    );
     let lookup = delivery_lookup(TENANT, &source_event_id, DELIVERY_ID);
 
     let cross_tenant = EventDeliveryReader::load(
@@ -208,24 +202,14 @@ async fn production_link_delivery_is_lifecycle_gated_tenant_safe_and_exactly_onc
         &gateway,
         definition("sales.deal.update"),
         sales_update_payload(),
-        "phase6i-independent-sales-idempotency",
-        "phase6i-independent-sales-tx",
-        "phase6i-independent-sales-request",
-        "phase6i-independent-sales-correlation",
-        "phase6i-independent-sales-causation",
-        "phase6i-independent-sales-trace",
+        "phase6i-independent-sales",
     )
     .await;
     execute_capability(
         &gateway,
         definition("activities.task.create"),
         independent_task_payload(),
-        "phase6i-independent-task-idempotency",
-        "phase6i-independent-task-tx",
-        "phase6i-independent-task-request",
-        "phase6i-independent-task-correlation",
-        "phase6i-independent-task-causation",
-        "phase6i-independent-task-trace",
+        "phase6i-independent-task",
     )
     .await;
     assert_eq!(record_count(&admin, "phase6i-independent-task").await, 1);
@@ -239,10 +223,7 @@ async fn production_link_delivery_is_lifecycle_gated_tenant_safe_and_exactly_onc
         ))
         .await
         .expect("uninstalled link must be skipped safely");
-    assert_eq!(
-        missing.disposition,
-        EventDeliveryDisposition::SkippedMissing
-    );
+    assert_eq!(missing.disposition, EventDeliveryDisposition::SkippedMissing);
     assert_eq!(module_state_count(&admin).await, 0);
 }
 
@@ -296,12 +277,7 @@ async fn execute_capability(
     gateway: &CapabilityGateway,
     definition: CapabilityDefinition,
     input: TypedPayload,
-    idempotency_key: &str,
-    business_transaction_id: &str,
-    request_id: &str,
-    correlation_id: &str,
-    causation_id: &str,
-    trace_id: &str,
+    identity_prefix: &str,
 ) -> crm_capability_runtime::CapabilityExecutionResult {
     let request = CapabilityRequest {
         context: ModuleExecutionContext {
@@ -309,15 +285,27 @@ async fn execute_capability(
             execution: ExecutionContext {
                 tenant_id: TenantId::try_new(TENANT).unwrap(),
                 actor_id: ActorId::try_new(ACTOR).unwrap(),
-                request_id: crm_module_sdk::RequestId::try_new(request_id).unwrap(),
-                correlation_id: CorrelationId::try_new(correlation_id).unwrap(),
-                causation_id: CausationId::try_new(causation_id).unwrap(),
-                trace_id: TraceId::try_new(trace_id).unwrap(),
+                request_id: crm_module_sdk::RequestId::try_new(format!(
+                    "{identity_prefix}-request"
+                ))
+                .unwrap(),
+                correlation_id: CorrelationId::try_new(format!(
+                    "{identity_prefix}-correlation"
+                ))
+                .unwrap(),
+                causation_id: CausationId::try_new(format!("{identity_prefix}-causation"))
+                    .unwrap(),
+                trace_id: TraceId::try_new(format!("{identity_prefix}-trace")).unwrap(),
                 capability_id: definition.capability_id.clone(),
                 capability_version: definition.capability_version.clone(),
-                idempotency_key: IdempotencyKey::try_new(idempotency_key).unwrap(),
-                business_transaction_id: BusinessTransactionId::try_new(business_transaction_id)
-                    .unwrap(),
+                idempotency_key: IdempotencyKey::try_new(format!(
+                    "{identity_prefix}-idempotency"
+                ))
+                .unwrap(),
+                business_transaction_id: BusinessTransactionId::try_new(format!(
+                    "{identity_prefix}-tx"
+                ))
+                .unwrap(),
                 schema_version: definition.input_contract.schema_version.clone(),
                 request_started_at_unix_nanos: NOW,
             },
@@ -488,10 +476,7 @@ async fn assert_source_event_lineage(pool: &PgPool, event_id: &str) {
     .fetch_one(pool)
     .await
     .expect("load source event lineage");
-    assert_eq!(
-        row.try_get::<String, _>("source_module_id").unwrap(),
-        "crm.sales"
-    );
+    assert_eq!(row.try_get::<String, _>("source_module_id").unwrap(), "crm.sales");
     assert_eq!(row.try_get::<String, _>("source_actor_id").unwrap(), ACTOR);
     assert_eq!(
         row.try_get::<String, _>("correlation_id").unwrap(),
@@ -539,10 +524,7 @@ async fn install_link_module(pool: &PgPool, source_transaction_id: &str) {
     .execute(&mut *transaction)
     .await
     .expect("install active link module");
-    transaction
-        .commit()
-        .await
-        .expect("commit link installation");
+    transaction.commit().await.expect("commit link installation");
 }
 
 async fn set_link_status(pool: &PgPool, status: &str, transaction_id: &str) {
@@ -558,10 +540,7 @@ async fn set_link_status(pool: &PgPool, status: &str, transaction_id: &str) {
     .execute(&mut *transaction)
     .await
     .expect("update link status");
-    transaction
-        .commit()
-        .await
-        .expect("commit link status update");
+    transaction.commit().await.expect("commit link status update");
 }
 
 async fn delete_link_installation(pool: &PgPool, transaction_id: &str) {

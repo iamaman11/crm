@@ -11,17 +11,61 @@ ALTER TABLE crm.outbox_events DISABLE TRIGGER outbox_events_immutable;
 ALTER TABLE crm.outbox_events DISABLE TRIGGER require_write_context;
 
 UPDATE crm.outbox_events AS event
-   SET source_module_id = capability.owner_module_id,
+   SET source_module_id = COALESCE(
+         (
+           SELECT capability.owner_module_id
+             FROM crm.business_transactions AS business_transaction
+             JOIN crm.capability_registry AS capability
+               ON capability.capability_id = business_transaction.capability_id
+              AND capability.capability_version = business_transaction.capability_version
+            WHERE business_transaction.tenant_id = event.tenant_id
+              AND business_transaction.business_transaction_id = event.business_transaction_id
+         ),
+         (
+           SELECT record.owner_module_id
+             FROM crm.records AS record
+            WHERE record.tenant_id = event.tenant_id
+              AND record.record_type = event.aggregate_type
+              AND record.record_id = event.aggregate_id
+            LIMIT 1
+         ),
+         'crm.legacy'
+       ),
        event_version = event.schema_version,
-       source_actor_id = business_transaction.actor_id,
-       correlation_id = business_transaction.request_id,
-       trace_id = business_transaction.request_id
-  FROM crm.business_transactions AS business_transaction
-  JOIN crm.capability_registry AS capability
-    ON capability.capability_id = business_transaction.capability_id
-   AND capability.capability_version = business_transaction.capability_version
- WHERE event.tenant_id = business_transaction.tenant_id
-   AND event.business_transaction_id = business_transaction.business_transaction_id;
+       source_actor_id = COALESCE(
+         (
+           SELECT business_transaction.actor_id
+             FROM crm.business_transactions AS business_transaction
+            WHERE business_transaction.tenant_id = event.tenant_id
+              AND business_transaction.business_transaction_id = event.business_transaction_id
+         ),
+         (
+           SELECT actor.actor_id
+             FROM crm.actors AS actor
+            WHERE actor.tenant_id = event.tenant_id
+            ORDER BY actor.actor_id
+            LIMIT 1
+         ),
+         'legacy-unknown'
+       ),
+       correlation_id = COALESCE(
+         (
+           SELECT business_transaction.request_id
+             FROM crm.business_transactions AS business_transaction
+            WHERE business_transaction.tenant_id = event.tenant_id
+              AND business_transaction.business_transaction_id = event.business_transaction_id
+         ),
+         event.event_id
+       ),
+       trace_id = COALESCE(
+         (
+           SELECT business_transaction.request_id
+             FROM crm.business_transactions AS business_transaction
+            WHERE business_transaction.tenant_id = event.tenant_id
+              AND business_transaction.business_transaction_id = event.business_transaction_id
+         ),
+         event.event_id
+       );
 
 ALTER TABLE crm.outbox_events ENABLE TRIGGER require_write_context;
 ALTER TABLE crm.outbox_events ENABLE TRIGGER outbox_events_immutable;
