@@ -73,10 +73,7 @@ async fn failed_projection_checkpoint_preserves_last_success_and_requires_reset(
     .fetch_one(&admin)
     .await
     .expect("read failed projection checkpoint evidence");
-    assert_eq!(
-        row.get::<String, _>("last_event_id"),
-        "event-last-success"
-    );
+    assert_eq!(row.get::<String, _>("last_event_id"), "event-last-success");
     assert_eq!(row.get::<i64, _>("applied_event_count"), 7);
     assert_eq!(row.get::<String, _>("status"), "failed");
     assert_eq!(
