@@ -90,10 +90,12 @@ pub(crate) fn deal_to_wire(
     let show_created_at = visibility.allows_field("created_at");
     let show_updated_at = visibility.allows_field("updated_at");
 
-    let legacy_amount = show_amount
-        .then(|| deal.amount())
-        .flatten()
-        .and_then(|value| i64::try_from(value.minor_units()).ok());
+    let legacy_amount = if show_amount {
+        deal.amount()
+            .and_then(|value| i64::try_from(value.minor_units()).ok())
+    } else {
+        None
+    };
     let legacy_currency = legacy_amount
         .and_then(|_| deal.amount())
         .map(|value| value.currency().as_str().to_owned())
@@ -110,49 +112,77 @@ pub(crate) fn deal_to_wire(
     sales::Deal {
         deal_id: deal.deal_id().as_str().to_owned(),
         tenant_id: tenant.as_str().to_owned(),
-        name: show_name
-            .then(|| deal.name().to_owned())
-            .unwrap_or_default(),
-        stage: show_stage
-            .then(|| deal.stage().stage_id().as_str().to_owned())
-            .unwrap_or_default(),
+        name: if show_name {
+            deal.name().to_owned()
+        } else {
+            String::new()
+        },
+        stage: if show_stage {
+            deal.stage().stage_id().as_str().to_owned()
+        } else {
+            String::new()
+        },
         amount_minor: legacy_amount.unwrap_or_default(),
         currency: legacy_currency,
         owner_id: legacy_owner,
         version: deal.version(),
-        stage_details: show_stage.then(|| stage_to_wire(deal.stage())),
-        amount: show_amount
-            .then(|| deal.amount().map(support::domain_money_to_wire))
-            .flatten(),
-        owner: show_owner.then(|| owner_to_wire(deal.owner())),
-        account: show_account
-            .then(|| {
-                deal.account()
-                    .map(|value| support::domain_resource_to_wire(value, tenant))
-            })
-            .flatten(),
-        primary_contact: show_primary_contact
-            .then(|| {
-                deal.primary_contact()
-                    .map(|value| support::domain_resource_to_wire(value, tenant))
-            })
-            .flatten(),
-        expected_close_date: show_expected_close
-            .then(|| deal.expected_close_date().map(support::domain_date_to_wire))
-            .flatten(),
-        probability_basis_points: show_probability
-            .then(|| u32::from(deal.probability().get()))
-            .unwrap_or_default(),
-        status: show_status
-            .then(|| deal_status_to_wire(deal.status()))
-            .unwrap_or_default(),
-        close_outcome: show_close_outcome
-            .then(|| deal.close_outcome().map(close_outcome_to_wire))
-            .flatten(),
-        created_at: show_created_at
-            .then(|| support::nanos_to_wire_time(deal.created_at_unix_nanos())),
-        updated_at: show_updated_at
-            .then(|| support::nanos_to_wire_time(deal.updated_at_unix_nanos())),
+        stage_details: if show_stage {
+            Some(stage_to_wire(deal.stage()))
+        } else {
+            None
+        },
+        amount: if show_amount {
+            deal.amount().map(support::domain_money_to_wire)
+        } else {
+            None
+        },
+        owner: if show_owner {
+            Some(owner_to_wire(deal.owner()))
+        } else {
+            None
+        },
+        account: if show_account {
+            deal.account()
+                .map(|value| support::domain_resource_to_wire(value, tenant))
+        } else {
+            None
+        },
+        primary_contact: if show_primary_contact {
+            deal.primary_contact()
+                .map(|value| support::domain_resource_to_wire(value, tenant))
+        } else {
+            None
+        },
+        expected_close_date: if show_expected_close {
+            deal.expected_close_date().map(support::domain_date_to_wire)
+        } else {
+            None
+        },
+        probability_basis_points: if show_probability {
+            u32::from(deal.probability().get())
+        } else {
+            0
+        },
+        status: if show_status {
+            deal_status_to_wire(deal.status())
+        } else {
+            0
+        },
+        close_outcome: if show_close_outcome {
+            deal.close_outcome().map(close_outcome_to_wire)
+        } else {
+            None
+        },
+        created_at: if show_created_at {
+            Some(support::nanos_to_wire_time(deal.created_at_unix_nanos()))
+        } else {
+            None
+        },
+        updated_at: if show_updated_at {
+            Some(support::nanos_to_wire_time(deal.updated_at_unix_nanos()))
+        } else {
+            None
+        },
     }
 }
 
@@ -164,17 +194,21 @@ pub(crate) fn task_to_wire(
     activities::Task {
         task_id: task.task_id().as_str().to_owned(),
         tenant_id: tenant.as_str().to_owned(),
-        subject: visibility
-            .allows_field("subject")
-            .then(|| task.subject().to_owned())
-            .unwrap_or_default(),
-        description: visibility
-            .allows_field("description")
-            .then(|| task.description().map(str::to_owned))
-            .flatten(),
-        owner: visibility
-            .allows_field("owner")
-            .then(|| task_owner_to_wire(task.owner())),
+        subject: if visibility.allows_field("subject") {
+            task.subject().to_owned()
+        } else {
+            String::new()
+        },
+        description: if visibility.allows_field("description") {
+            task.description().map(str::to_owned)
+        } else {
+            None
+        },
+        owner: if visibility.allows_field("owner") {
+            Some(task_owner_to_wire(task.owner()))
+        } else {
+            None
+        },
         related_resources: if visibility.allows_field("related_resources") {
             task.related_resources()
                 .iter()
@@ -183,38 +217,43 @@ pub(crate) fn task_to_wire(
         } else {
             Vec::new()
         },
-        priority: visibility
-            .allows_field("priority")
-            .then(|| task_priority_to_wire(task.priority()))
-            .unwrap_or_default(),
-        status: visibility
-            .allows_field("status")
-            .then(|| task_status_to_wire(task.status()))
-            .unwrap_or_default(),
-        due_at: visibility
-            .allows_field("due_at")
-            .then(|| task.due_at_unix_nanos().map(support::nanos_to_wire_time))
-            .flatten(),
-        reminder_at: visibility
-            .allows_field("reminder_at")
-            .then(|| {
-                task.reminder_at_unix_nanos()
-                    .map(support::nanos_to_wire_time)
-            })
-            .flatten(),
-        completed_at: visibility
-            .allows_field("completed_at")
-            .then(|| {
-                task.completed_at_unix_nanos()
-                    .map(support::nanos_to_wire_time)
-            })
-            .flatten(),
-        created_at: visibility
-            .allows_field("created_at")
-            .then(|| support::nanos_to_wire_time(task.created_at_unix_nanos())),
-        updated_at: visibility
-            .allows_field("updated_at")
-            .then(|| support::nanos_to_wire_time(task.updated_at_unix_nanos())),
+        priority: if visibility.allows_field("priority") {
+            task_priority_to_wire(task.priority())
+        } else {
+            0
+        },
+        status: if visibility.allows_field("status") {
+            task_status_to_wire(task.status())
+        } else {
+            0
+        },
+        due_at: if visibility.allows_field("due_at") {
+            task.due_at_unix_nanos().map(support::nanos_to_wire_time)
+        } else {
+            None
+        },
+        reminder_at: if visibility.allows_field("reminder_at") {
+            task.reminder_at_unix_nanos()
+                .map(support::nanos_to_wire_time)
+        } else {
+            None
+        },
+        completed_at: if visibility.allows_field("completed_at") {
+            task.completed_at_unix_nanos()
+                .map(support::nanos_to_wire_time)
+        } else {
+            None
+        },
+        created_at: if visibility.allows_field("created_at") {
+            Some(support::nanos_to_wire_time(task.created_at_unix_nanos()))
+        } else {
+            None
+        },
+        updated_at: if visibility.allows_field("updated_at") {
+            Some(support::nanos_to_wire_time(task.updated_at_unix_nanos()))
+        } else {
+            None
+        },
         version: task.version(),
     }
 }
