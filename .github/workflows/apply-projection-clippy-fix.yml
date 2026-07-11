@@ -1,0 +1,72 @@
+name: Apply projection Clippy fix
+
+on:
+  push:
+    branches:
+      - develop/phase7-generalized-projection-runtime
+    paths:
+      - ".github/workflows/apply-projection-clippy-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase7-generalized-projection-runtime
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Box the large projection application error payload
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-projection-runtime/src/lib.rs")
+          text = path.read_text(encoding="utf-8")
+
+          old_match = '''                Err((delivery, error)) => {
+                    self.mark_failed(definition, &delivery, &error).await?;
+                    return Err(error);
+                }
+'''
+          new_match = '''                Err(failure) => {
+                    let (delivery, error) = *failure;
+                    self.mark_failed(definition, &delivery, &error).await?;
+                    return Err(error);
+                }
+'''
+          old_signature = ''') -> Result<ProjectionEventApplication, (EventDelivery, SdkError)> {'''
+          new_signature = ''') -> Result<ProjectionEventApplication, Box<(EventDelivery, SdkError)>> {'''
+
+          if old_match not in text:
+              raise SystemExit("expected run_batch failure match not found")
+          if old_signature not in text:
+              raise SystemExit("expected projection_application signature not found")
+
+          text = text.replace(old_match, new_match, 1)
+          text = text.replace(old_signature, new_signature, 1)
+          text = text.replace(
+              "return Err((delivery, error));",
+              "return Err(Box::new((delivery, error)));",
+          )
+          text = text.replace(
+              "return Err((application.delivery, error));",
+              "return Err(Box::new((application.delivery, error)));",
+              1,
+          )
+          path.write_text(text, encoding="utf-8")
+
+          workflow = Path(".github/workflows/apply-projection-clippy-fix.yml")
+          workflow.unlink()
+          PY
+          cargo fmt --all
+      - name: Commit the scoped fix and remove this temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-projection-runtime/src/lib.rs .github/workflows/apply-projection-clippy-fix.yml
+          git commit -m "box projection application failure payload"
+          git push origin HEAD:develop/phase7-generalized-projection-runtime
