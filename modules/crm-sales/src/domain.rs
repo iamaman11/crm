@@ -124,6 +124,31 @@ pub struct Deal {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DealSnapshot {
+    pub deal_id: RecordId,
+    pub name: String,
+    pub owner: DealOwner,
+    pub account: Option<ResourceRef>,
+    pub primary_contact: Option<ResourceRef>,
+    pub stage: DealStage,
+    pub status: DealStatus,
+    pub amount: Option<Money>,
+    pub expected_close_date: Option<CalendarDate>,
+    pub probability: BasisPoints,
+    pub close_outcome: Option<DealCloseOutcomeSnapshot>,
+    pub created_at_unix_nanos: i64,
+    pub updated_at_unix_nanos: i64,
+    pub version: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DealCloseOutcomeSnapshot {
+    pub status: DealStatus,
+    pub reason_code: ReasonCode,
+    pub closed_at_unix_nanos: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateDeal {
     pub deal_id: RecordId,
     pub name: String,
@@ -233,6 +258,117 @@ impl Deal {
     }
     pub const fn version(&self) -> i64 {
         self.version
+    }
+
+    pub fn rehydrate(snapshot: DealSnapshot) -> Result<Self, SdkError> {
+        validate_name(&snapshot.name)?;
+        validate_optional_resource("deal.account", snapshot.account.as_ref())?;
+        validate_optional_resource("deal.primary_contact", snapshot.primary_contact.as_ref())?;
+        validate_optional_amount(snapshot.amount.as_ref())?;
+        validate_timestamp("deal.created_at_unix_nanos", snapshot.created_at_unix_nanos)?;
+        validate_timestamp("deal.updated_at_unix_nanos", snapshot.updated_at_unix_nanos)?;
+        if snapshot.updated_at_unix_nanos < snapshot.created_at_unix_nanos {
+            return Err(invalid(
+                "SALES_DEAL_PERSISTED_TIME_INVALID",
+                "deal.updated_at_unix_nanos",
+                "updated time cannot precede created time",
+            ));
+        }
+        if snapshot.version <= 0 {
+            return Err(invalid(
+                "SALES_DEAL_PERSISTED_VERSION_INVALID",
+                "deal.version",
+                "persisted deal version must be positive",
+            ));
+        }
+
+        let close_outcome = match (snapshot.status, snapshot.close_outcome) {
+            (DealStatus::Open, None) => None,
+            (DealStatus::Open, Some(_)) => {
+                return Err(invalid(
+                    "SALES_OPEN_DEAL_CLOSE_OUTCOME_FORBIDDEN",
+                    "deal.close_outcome",
+                    "an open deal cannot contain a close outcome",
+                ));
+            }
+            (DealStatus::Won | DealStatus::Lost, None) => {
+                return Err(invalid(
+                    "SALES_CLOSED_DEAL_OUTCOME_REQUIRED",
+                    "deal.close_outcome",
+                    "a closed deal requires a close outcome",
+                ));
+            }
+            (status, Some(outcome)) => {
+                if outcome.status != status {
+                    return Err(invalid(
+                        "SALES_CLOSE_OUTCOME_STATUS_MISMATCH",
+                        "deal.close_outcome.status",
+                        "close outcome status must match the deal status",
+                    ));
+                }
+                validate_timestamp(
+                    "deal.close_outcome.closed_at_unix_nanos",
+                    outcome.closed_at_unix_nanos,
+                )?;
+                if outcome.closed_at_unix_nanos < snapshot.created_at_unix_nanos
+                    || outcome.closed_at_unix_nanos > snapshot.updated_at_unix_nanos
+                {
+                    return Err(invalid(
+                        "SALES_CLOSE_OUTCOME_TIME_INVALID",
+                        "deal.close_outcome.closed_at_unix_nanos",
+                        "close time must fall between created and updated time",
+                    ));
+                }
+                Some(DealCloseOutcome {
+                    status: outcome.status,
+                    reason_code: outcome.reason_code,
+                    closed_at_unix_nanos: outcome.closed_at_unix_nanos,
+                })
+            }
+        };
+
+        Ok(Self {
+            deal_id: snapshot.deal_id,
+            name: snapshot.name,
+            owner: snapshot.owner,
+            account: snapshot.account,
+            primary_contact: snapshot.primary_contact,
+            stage: snapshot.stage,
+            status: snapshot.status,
+            amount: snapshot.amount,
+            expected_close_date: snapshot.expected_close_date,
+            probability: snapshot.probability,
+            close_outcome,
+            created_at_unix_nanos: snapshot.created_at_unix_nanos,
+            updated_at_unix_nanos: snapshot.updated_at_unix_nanos,
+            version: snapshot.version,
+        })
+    }
+
+    pub fn snapshot(&self) -> DealSnapshot {
+        DealSnapshot {
+            deal_id: self.deal_id.clone(),
+            name: self.name.clone(),
+            owner: self.owner.clone(),
+            account: self.account.clone(),
+            primary_contact: self.primary_contact.clone(),
+            stage: self.stage.clone(),
+            status: self.status,
+            amount: self.amount.clone(),
+            expected_close_date: self.expected_close_date,
+            probability: self.probability,
+            close_outcome: self
+                .close_outcome
+                .as_ref()
+                .map(|outcome| DealCloseOutcomeSnapshot {
+                    status: outcome.status,
+                    reason_code: outcome.reason_code.clone(),
+                    closed_at_unix_nanos: outcome.closed_at_unix_nanos,
+                }),
+            created_at_unix_nanos: self.created_at_unix_nanos,
+            updated_at_unix_nanos: self.updated_at_unix_nanos,
+            version: self.version,
+        }
     }
 
     pub fn create(command: CreateDeal) -> Result<Self, SdkError> {
@@ -466,11 +602,12 @@ fn validate_resource(field: &'static str, reference: &ResourceRef) -> Result<(),
         || reference.resource_id.is_empty()
         || reference.resource_type.chars().any(char::is_control)
         || reference.resource_id.chars().any(char::is_control)
+        || reference.version.is_some_and(|version| version <= 0)
     {
         return Err(invalid(
             "SALES_RESOURCE_REFERENCE_INVALID",
             field,
-            "resource reference type and id must be non-empty and contain no control characters",
+            "resource reference type and id must be non-empty, contain no control characters, and any version must be positive",
         ));
     }
     Ok(())

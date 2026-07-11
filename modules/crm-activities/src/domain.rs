@@ -68,6 +68,23 @@ pub struct Task {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskSnapshot {
+    pub task_id: RecordId,
+    pub subject: String,
+    pub description: Option<String>,
+    pub owner: TaskOwner,
+    pub related_resources: Vec<ResourceRef>,
+    pub priority: TaskPriority,
+    pub status: TaskStatus,
+    pub due_at_unix_nanos: Option<i64>,
+    pub reminder_at_unix_nanos: Option<i64>,
+    pub completed_at_unix_nanos: Option<i64>,
+    pub created_at_unix_nanos: i64,
+    pub updated_at_unix_nanos: i64,
+    pub version: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateTask {
     pub task_id: RecordId,
     pub subject: String,
@@ -165,6 +182,115 @@ impl Task {
     }
     pub const fn version(&self) -> i64 {
         self.version
+    }
+
+    pub fn rehydrate(snapshot: TaskSnapshot) -> Result<Self, SdkError> {
+        validate_subject(&snapshot.subject)?;
+        validate_optional_description(snapshot.description.as_deref())?;
+        validate_related_resources(&snapshot.related_resources)?;
+        validate_optional_timestamp("task.due_at_unix_nanos", snapshot.due_at_unix_nanos)?;
+        validate_optional_timestamp(
+            "task.reminder_at_unix_nanos",
+            snapshot.reminder_at_unix_nanos,
+        )?;
+        validate_optional_timestamp(
+            "task.completed_at_unix_nanos",
+            snapshot.completed_at_unix_nanos,
+        )?;
+        validate_timestamp("task.created_at_unix_nanos", snapshot.created_at_unix_nanos)?;
+        validate_timestamp("task.updated_at_unix_nanos", snapshot.updated_at_unix_nanos)?;
+        if snapshot.updated_at_unix_nanos < snapshot.created_at_unix_nanos {
+            return Err(invalid(
+                "ACTIVITIES_TASK_PERSISTED_TIME_INVALID",
+                "task.updated_at_unix_nanos",
+                "updated time cannot precede created time",
+            ));
+        }
+        if snapshot.version <= 0 {
+            return Err(invalid(
+                "ACTIVITIES_TASK_PERSISTED_VERSION_INVALID",
+                "task.version",
+                "persisted task version must be positive",
+            ));
+        }
+        if snapshot.due_at_unix_nanos.is_some_and(|due| {
+            snapshot
+                .reminder_at_unix_nanos
+                .is_some_and(|reminder| reminder > due)
+        }) {
+            return Err(invalid(
+                "ACTIVITIES_REMINDER_AFTER_DUE",
+                "task.reminder_at_unix_nanos",
+                "reminder must not be scheduled after the task due time",
+            ));
+        }
+        match snapshot.status {
+            TaskStatus::Open if snapshot.completed_at_unix_nanos.is_some() => {
+                return Err(invalid(
+                    "ACTIVITIES_OPEN_TASK_COMPLETION_FORBIDDEN",
+                    "task.completed_at_unix_nanos",
+                    "an open task cannot contain a completion time",
+                ));
+            }
+            TaskStatus::Completed if snapshot.completed_at_unix_nanos.is_none() => {
+                return Err(invalid(
+                    "ACTIVITIES_COMPLETED_TASK_TIME_REQUIRED",
+                    "task.completed_at_unix_nanos",
+                    "a completed task requires a completion time",
+                ));
+            }
+            TaskStatus::Completed if snapshot.reminder_at_unix_nanos.is_some() => {
+                return Err(invalid(
+                    "ACTIVITIES_COMPLETED_TASK_REMINDER_FORBIDDEN",
+                    "task.reminder_at_unix_nanos",
+                    "a completed task cannot retain a reminder",
+                ));
+            }
+            _ => {}
+        }
+        if snapshot.completed_at_unix_nanos.is_some_and(|completed| {
+            completed < snapshot.created_at_unix_nanos || completed > snapshot.updated_at_unix_nanos
+        }) {
+            return Err(invalid(
+                "ACTIVITIES_COMPLETION_TIME_INVALID",
+                "task.completed_at_unix_nanos",
+                "completion time must fall between created and updated time",
+            ));
+        }
+
+        Ok(Self {
+            task_id: snapshot.task_id,
+            subject: snapshot.subject,
+            description: snapshot.description,
+            owner: snapshot.owner,
+            related_resources: snapshot.related_resources,
+            priority: snapshot.priority,
+            status: snapshot.status,
+            due_at_unix_nanos: snapshot.due_at_unix_nanos,
+            reminder_at_unix_nanos: snapshot.reminder_at_unix_nanos,
+            completed_at_unix_nanos: snapshot.completed_at_unix_nanos,
+            created_at_unix_nanos: snapshot.created_at_unix_nanos,
+            updated_at_unix_nanos: snapshot.updated_at_unix_nanos,
+            version: snapshot.version,
+        })
+    }
+
+    pub fn snapshot(&self) -> TaskSnapshot {
+        TaskSnapshot {
+            task_id: self.task_id.clone(),
+            subject: self.subject.clone(),
+            description: self.description.clone(),
+            owner: self.owner.clone(),
+            related_resources: self.related_resources.clone(),
+            priority: self.priority,
+            status: self.status,
+            due_at_unix_nanos: self.due_at_unix_nanos,
+            reminder_at_unix_nanos: self.reminder_at_unix_nanos,
+            completed_at_unix_nanos: self.completed_at_unix_nanos,
+            created_at_unix_nanos: self.created_at_unix_nanos,
+            updated_at_unix_nanos: self.updated_at_unix_nanos,
+            version: self.version,
+        }
     }
 
     pub fn create(command: CreateTask) -> Result<Self, SdkError> {
@@ -400,11 +526,12 @@ fn validate_related_resources(resources: &[ResourceRef]) -> Result<(), SdkError>
             || resource.resource_id.is_empty()
             || resource.resource_type.chars().any(char::is_control)
             || resource.resource_id.chars().any(char::is_control)
+            || resource.version.is_some_and(|version| version <= 0)
         {
             return Err(invalid(
                 "ACTIVITIES_RESOURCE_REFERENCE_INVALID",
                 "task.related_resources",
-                "resource reference type and id must be non-empty and contain no control characters",
+                "resource reference type and id must be non-empty, contain no control characters, and any version must be positive",
             ));
         }
         if !unique.insert((
