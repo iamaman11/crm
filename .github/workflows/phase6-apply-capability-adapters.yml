@@ -36,12 +36,11 @@ jobs:
           python scripts/check_architecture.py
           cargo test --workspace
           cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: Commit implementation and remove temporary tooling
+      - name: Commit implementation and remove temporary payloads
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm \
-            .github/workflows/phase6-apply-capability-adapters.yml \
             scripts/phase6_payload_1.py \
             scripts/phase6_payload_2.py \
             scripts/phase6_payload_3.py \
