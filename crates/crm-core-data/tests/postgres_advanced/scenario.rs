@@ -7,6 +7,16 @@ async fn batch_executor_is_atomic_idempotent_and_optimistic() {
     let store = PostgresDataStore::connect(&database_url, 4)
         .await
         .expect("connect to PostgreSQL");
+    let mut scenario_lock = store
+        .pool()
+        .begin()
+        .await
+        .expect("begin PostgreSQL advanced-test isolation transaction");
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(0x4352_4d54_4553_5431_i64)
+        .execute(&mut *scenario_lock)
+        .await
+        .expect("acquire PostgreSQL advanced-test isolation lock");
 
     let head_context = context("tx-audit-head-read", "idem-audit-head-read");
     let initial_head = audit_head(&store, &head_context).await;
@@ -146,7 +156,6 @@ async fn batch_executor_is_atomic_idempotent_and_optimistic() {
     );
 }
 
-
 #[tokio::test(flavor = "current_thread")]
 async fn transaction_aware_executor_locks_authoritative_state_and_replays_original_output() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
@@ -156,6 +165,16 @@ async fn transaction_aware_executor_locks_authoritative_state_and_replays_origin
     let store = PostgresDataStore::connect(&database_url, 4)
         .await
         .expect("connect to PostgreSQL");
+    let mut scenario_lock = store
+        .pool()
+        .begin()
+        .await
+        .expect("begin PostgreSQL advanced-test isolation transaction");
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(0x4352_4d54_4553_5431_i64)
+        .execute(&mut *scenario_lock)
+        .await
+        .expect("acquire PostgreSQL advanced-test isolation lock");
 
     let seed = BatchMutationPlan {
         context: context("tx-aggregate-seed", "idem-aggregate-seed"),
