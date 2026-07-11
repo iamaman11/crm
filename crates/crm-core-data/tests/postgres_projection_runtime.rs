@@ -12,7 +12,9 @@ const PROJECTION_ID: &str = "phase7.test-poison.v1";
 #[tokio::test(flavor = "current_thread")]
 async fn failed_projection_checkpoint_preserves_last_success_and_requires_reset() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping projection runtime PostgreSQL acceptance because DATABASE_URL is absent");
+        eprintln!(
+            "skipping projection runtime PostgreSQL acceptance because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
