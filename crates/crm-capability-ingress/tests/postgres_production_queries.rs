@@ -1,8 +1,7 @@
 #![cfg(feature = "postgres-integration")]
 
 use crm_capability_adapters::{
-    AccessTokenGrant, AccessTokenStore, ApprovalStore, AuthorizationGrant,
-    BearerTokenAuthenticator, FixedWindowRateLimiter, LiveAuthorizationStore,
+    ApprovalStore, AuthorizationGrant, FixedWindowRateLimiter, LiveAuthorizationStore,
     LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore,
     QueryVisibilityGrant, RateLimitPolicyStore, StoredApprovalVerifier,
 };
