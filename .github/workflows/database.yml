@@ -134,6 +134,14 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-capability-ingress --features postgres-integration --test postgres_production_mutations -- --nocapture 2>&1 | tee database/postgres-production-mutations.log
+      - name: Verify production evidence omission rollback
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_production_evidence_rollback -- --nocapture 2>&1 | tee database/postgres-production-evidence-rollback.log
       - name: Verify Sales PostgreSQL mutation planner
         env:
           DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
