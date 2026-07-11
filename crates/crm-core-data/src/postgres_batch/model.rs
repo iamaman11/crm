@@ -68,7 +68,7 @@ pub struct BatchMutationPlan {
     pub relationships: Vec<RelationshipMutation>,
     pub events: Vec<EventEvidence>,
     pub idempotency: IdempotencyEvidence,
-    pub audits: Vec<AuditEvidence>,
+    pub audits: Vec<AuditIntent>,
 }
 
 impl BatchMutationPlan {
@@ -194,36 +194,13 @@ impl BatchMutationPlan {
         }
 
         let mut audit_ids = BTreeSet::new();
-        for (index, audit) in self.audits.iter().enumerate() {
-            if audit.audit_record_id.is_empty()
-                || audit.canonicalization_profile.is_empty()
-                || audit.audit_sequence <= 0
-                || audit.record_hash.iter().all(|byte| *byte == 0)
-            {
-                return Err(BatchError::InvalidPlan(
-                    "audit identifiers, sequence and hash must be valid".to_owned(),
-                ));
-            }
+        for audit in &self.audits {
+            audit.validate().map_err(BatchError::InvalidPlan)?;
             if !audit_ids.insert(audit.audit_record_id.clone()) {
                 return Err(BatchError::InvalidPlan(format!(
                     "duplicate audit record id {}",
                     audit.audit_record_id
                 )));
-            }
-            if let Some(previous) = index
-                .checked_sub(1)
-                .and_then(|value| self.audits.get(value))
-            {
-                if audit.audit_sequence != previous.audit_sequence + 1 {
-                    return Err(BatchError::InvalidPlan(
-                        "audit records in a batch must use contiguous sequences".to_owned(),
-                    ));
-                }
-                if audit.previous_hash != previous.record_hash {
-                    return Err(BatchError::InvalidPlan(
-                        "audit records in a batch must form a continuous hash chain".to_owned(),
-                    ));
-                }
             }
         }
         Ok(())

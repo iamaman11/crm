@@ -56,7 +56,14 @@ impl PostgresDataStore {
             }
         }
         if fault != FaultInjection::OmitAudit {
-            for audit in &plan.audits {
+            let materialized = materialize_audit_chain(
+                &mut transaction,
+                &plan.context,
+                &plan.audits,
+            )
+            .await
+            .map_err(audit_materialization_to_batch_error)?;
+            for audit in &materialized {
                 insert_audit_record(&mut transaction, &plan.context, audit).await?;
             }
         }

@@ -45,7 +45,7 @@ async fn insert_outbox_event(
 async fn insert_audit_record(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
-    audit: &AuditEvidence,
+    audit: &MaterializedAuditRecord,
 ) -> Result<(), BatchError> {
     sqlx::query(
         r#"

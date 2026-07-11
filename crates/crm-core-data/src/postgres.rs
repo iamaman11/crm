@@ -1,3 +1,6 @@
+use crate::audit::{
+    AuditIntent, AuditMaterializationError, MaterializedAuditRecord, materialize_audit_chain,
+};
 use crm_module_sdk::{
     DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, ModuleId, PayloadEncoding,
     RecordRef, RecordSnapshot, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
@@ -16,17 +19,6 @@ pub struct IdempotencyEvidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AuditEvidence {
-    pub audit_sequence: i64,
-    pub audit_record_id: String,
-    pub canonicalization_profile: String,
-    pub previous_hash: [u8; 32],
-    pub record_hash: [u8; 32],
-    pub canonical_envelope: Vec<u8>,
-    pub occurred_at_unix_nanos: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordCreatePlan {
     pub context: ModuleExecutionContext,
     pub record: RecordRef,
@@ -34,7 +26,7 @@ pub struct RecordCreatePlan {
     pub event_id: String,
     pub event: DomainEvent,
     pub idempotency: IdempotencyEvidence,
-    pub audit: AuditEvidence,
+    pub audit: AuditIntent,
 }
 
 impl RecordCreatePlan {
@@ -51,23 +43,15 @@ impl RecordCreatePlan {
         if self.event_id.is_empty()
             || self.idempotency.scope.is_empty()
             || self.idempotency.key.is_empty()
-            || self.audit.audit_record_id.is_empty()
-            || self.audit.canonicalization_profile.is_empty()
         {
             return Err(DataError::InvalidPlan(
-                "event, idempotency and audit identifiers must not be empty".to_owned(),
+                "event and idempotency identifiers must not be empty".to_owned(),
             ));
         }
-        if self.audit.audit_sequence <= 0 {
+        self.audit.validate().map_err(DataError::InvalidPlan)?;
+        if self.idempotency.request_hash.iter().all(|byte| *byte == 0) {
             return Err(DataError::InvalidPlan(
-                "audit sequence must be positive".to_owned(),
-            ));
-        }
-        if self.idempotency.request_hash.iter().all(|byte| *byte == 0)
-            || self.audit.record_hash.iter().all(|byte| *byte == 0)
-        {
-            return Err(DataError::InvalidPlan(
-                "request and audit record hashes must not be all zeroes".to_owned(),
+                "request hash must not be all zeroes".to_owned(),
             ));
         }
         if self.context.module_id != self.record_payload.owner {
@@ -173,7 +157,14 @@ impl PostgresDataStore {
             insert_outbox_event(&mut transaction, plan).await?;
         }
         if fault != FaultInjection::OmitAudit {
-            insert_audit_record(&mut transaction, plan).await?;
+            let materialized = materialize_audit_chain(
+                &mut transaction,
+                &plan.context,
+                std::slice::from_ref(&plan.audit),
+            )
+            .await
+            .map_err(audit_materialization_to_data_error)?;
+            insert_audit_record(&mut transaction, &plan.context, &materialized[0]).await?;
         }
         if fault != FaultInjection::OmitCompletionMarker {
             insert_completion_marker(&mut transaction, plan).await?;
@@ -389,7 +380,8 @@ async fn insert_outbox_event(
 
 async fn insert_audit_record(
     transaction: &mut Transaction<'_, Postgres>,
-    plan: &RecordCreatePlan,
+    context: &ModuleExecutionContext,
+    audit: &MaterializedAuditRecord,
 ) -> Result<(), DataError> {
     sqlx::query(
         r#"
@@ -413,21 +405,31 @@ async fn insert_audit_record(
         )
         "#,
     )
-    .bind(plan.context.execution.tenant_id.as_str())
-    .bind(plan.audit.audit_sequence)
-    .bind(&plan.audit.audit_record_id)
-    .bind(plan.context.execution.business_transaction_id.as_str())
-    .bind(plan.context.execution.actor_id.as_str())
-    .bind(plan.context.execution.capability_id.as_str())
-    .bind(plan.context.execution.capability_version.as_str())
-    .bind(&plan.audit.canonicalization_profile)
-    .bind(plan.audit.previous_hash.as_slice())
-    .bind(plan.audit.record_hash.as_slice())
-    .bind(plan.audit.canonical_envelope.as_slice())
-    .bind(plan.audit.occurred_at_unix_nanos)
+    .bind(context.execution.tenant_id.as_str())
+    .bind(audit.audit_sequence)
+    .bind(&audit.audit_record_id)
+    .bind(context.execution.business_transaction_id.as_str())
+    .bind(context.execution.actor_id.as_str())
+    .bind(context.execution.capability_id.as_str())
+    .bind(context.execution.capability_version.as_str())
+    .bind(&audit.canonicalization_profile)
+    .bind(audit.previous_hash.as_slice())
+    .bind(audit.record_hash.as_slice())
+    .bind(audit.canonical_envelope.as_slice())
+    .bind(audit.occurred_at_unix_nanos)
     .execute(&mut **transaction)
     .await?;
     Ok(())
+}
+
+fn audit_materialization_to_data_error(error: AuditMaterializationError) -> DataError {
+    match error {
+        AuditMaterializationError::Database(error) => DataError::Database(error),
+        AuditMaterializationError::InvalidIntent(message) => DataError::InvalidPlan(message),
+        AuditMaterializationError::InvalidStoredValue(message) => {
+            DataError::InvalidStoredValue(message)
+        }
+    }
 }
 
 async fn insert_completion_marker(

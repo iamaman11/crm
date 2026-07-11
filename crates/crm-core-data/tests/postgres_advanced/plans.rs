@@ -1,4 +1,4 @@
-fn faulted_multi_record_plan(base_sequence: i64, base_hash: [u8; 32]) -> BatchMutationPlan {
+fn faulted_multi_record_plan() -> BatchMutationPlan {
     let transaction_id = "tx-batch-fault";
     let idempotency_key = "idem-batch-fault";
     BatchMutationPlan {
@@ -33,16 +33,11 @@ fn faulted_multi_record_plan(base_sequence: i64, base_hash: [u8; 32]) -> BatchMu
             ),
         ],
         idempotency: idempotency(idempotency_key, [0x65; 32]),
-        audits: vec![audit(
-            base_sequence + 1,
-            "audit-batch-fault",
-            base_hash,
-            [0x60; 32],
-        )],
+        audits: vec![audit("audit-batch-fault", 1)],
     }
 }
 
-fn create_and_link_plan(base_sequence: i64, base_hash: [u8; 32]) -> BatchMutationPlan {
+fn create_and_link_plan() -> BatchMutationPlan {
     let transaction_id = "tx-batch-create";
     let idempotency_key = "idem-batch-create";
     BatchMutationPlan {
@@ -92,18 +87,8 @@ fn create_and_link_plan(base_sequence: i64, base_hash: [u8; 32]) -> BatchMutatio
         ],
         idempotency: idempotency(idempotency_key, [0x77; 32]),
         audits: vec![
-            audit(
-                base_sequence + 1,
-                "audit-batch-create-1",
-                base_hash,
-                [0x66; 32],
-            ),
-            audit(
-                base_sequence + 2,
-                "audit-batch-create-2",
-                [0x66; 32],
-                [0x77; 32],
-            ),
+            audit("audit-batch-create-1", 2),
+            audit("audit-batch-create-2", 3),
         ],
     }
 }
@@ -113,9 +98,6 @@ struct UpdatePlanSpec<'a> {
     idempotency_key: &'a str,
     expected_version: i64,
     result_version: i64,
-    audit_sequence: i64,
-    previous_hash: [u8; 32],
-    record_hash: [u8; 32],
     payload_value: u8,
 }
 
@@ -138,15 +120,13 @@ fn update_plan(spec: UpdatePlanSpec<'_>) -> BatchMutationPlan {
         )],
         idempotency: idempotency(spec.idempotency_key, [spec.payload_value; 32]),
         audits: vec![audit(
-            spec.audit_sequence,
             &format!("audit-{}", spec.transaction_id),
-            spec.previous_hash,
-            spec.record_hash,
+            spec.result_version + 10,
         )],
     }
 }
 
-fn unlink_plan(audit_sequence: i64, previous_hash: [u8; 32]) -> BatchMutationPlan {
+fn unlink_plan() -> BatchMutationPlan {
     let transaction_id = "tx-batch-unlink";
     let idempotency_key = "idem-batch-unlink";
     BatchMutationPlan {
@@ -167,11 +147,30 @@ fn unlink_plan(audit_sequence: i64, previous_hash: [u8; 32]) -> BatchMutationPla
             0xab,
         )],
         idempotency: idempotency(idempotency_key, [0xac; 32]),
-        audits: vec![audit(
-            audit_sequence,
-            "audit-batch-unlink",
-            previous_hash,
-            [0xaa; 32],
+        audits: vec![audit("audit-batch-unlink", 20)],
+    }
+}
+
+fn concurrent_create_plan(index: u8) -> BatchMutationPlan {
+    let transaction_id = format!("tx-batch-concurrent-{index}");
+    let idempotency_key = format!("idem-batch-concurrent-{index}");
+    let record_id = format!("batch-concurrent-{index}");
+    BatchMutationPlan {
+        context: context(&transaction_id, &idempotency_key),
+        records: vec![RecordMutation::Create {
+            reference: record(&record_id),
+            payload: payload(index.max(1), "test.batch_record.v1"),
+        }],
+        relationships: Vec::new(),
+        events: vec![record_event(
+            &format!("event-batch-concurrent-{index}"),
+            "test.batch_record.created",
+            record(&record_id),
+            1,
+            1,
+            index.wrapping_add(1).max(1),
         )],
+        idempotency: idempotency(&idempotency_key, [index.max(1); 32]),
+        audits: vec![audit(&format!("audit-batch-concurrent-{index}"), 100 + i64::from(index))],
     }
 }

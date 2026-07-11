@@ -40,6 +40,17 @@ const fn payload_encoding_name(value: PayloadEncoding) -> &'static str {
     }
 }
 
+
+fn audit_materialization_to_batch_error(error: AuditMaterializationError) -> BatchError {
+    match error {
+        AuditMaterializationError::Database(error) => BatchError::Database(error),
+        AuditMaterializationError::InvalidIntent(message) => BatchError::InvalidPlan(message),
+        AuditMaterializationError::InvalidStoredValue(message) => {
+            BatchError::InvalidStoredValue(message)
+        }
+    }
+}
+
 pub fn batch_error_to_sdk(error: BatchError) -> SdkError {
     match error {
         BatchError::Sdk(error) => error,

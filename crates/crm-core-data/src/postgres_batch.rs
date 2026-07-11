@@ -1,4 +1,7 @@
-use crate::postgres::{AuditEvidence, FaultInjection, IdempotencyEvidence, PostgresDataStore};
+use crate::audit::{
+    AuditIntent, AuditMaterializationError, MaterializedAuditRecord, materialize_audit_chain,
+};
+use crate::postgres::{FaultInjection, IdempotencyEvidence, PostgresDataStore};
 use crm_module_sdk::{
     DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, PayloadEncoding, RecordRef,
     RecordSnapshot, RelationshipRef, SdkError, TypedPayload,

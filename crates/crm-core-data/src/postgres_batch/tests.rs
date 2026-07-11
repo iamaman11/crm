@@ -64,15 +64,12 @@ mod tests {
         }
     }
 
-    fn audit(sequence: i64, previous_hash: [u8; 32], record_hash: [u8; 32]) -> AuditEvidence {
-        AuditEvidence {
-            audit_sequence: sequence,
-            audit_record_id: format!("audit-{sequence}"),
+    fn audit(identifier: &str, occurred_at_unix_nanos: i64) -> AuditIntent {
+        AuditIntent {
+            audit_record_id: identifier.to_owned(),
             canonicalization_profile: "crm.cjson/v1".to_owned(),
-            previous_hash,
-            record_hash,
-            canonical_envelope: vec![sequence as u8],
-            occurred_at_unix_nanos: 10 + sequence,
+            canonical_envelope: format!(r#"{{"audit":"{identifier}"}}"#).into_bytes(),
+            occurred_at_unix_nanos,
         }
     }
 
@@ -91,7 +88,7 @@ mod tests {
                 request_hash: [8; 32],
                 expires_at_unix_nanos: 1_000,
             },
-            audits: vec![audit(1, [0; 32], [9; 32])],
+            audits: vec![audit("audit-1", 11)],
         }
     }
 
@@ -112,9 +109,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_disconnected_audit_chain() {
+    fn rejects_duplicate_audit_record_identity() {
         let mut value = plan();
-        value.audits.push(audit(2, [4; 32], [10; 32]));
+        value.audits.push(audit("audit-1", 12));
+        assert!(matches!(value.validate(), Err(BatchError::InvalidPlan(_))));
+    }
+
+    #[test]
+    fn rejects_empty_audit_envelope() {
+        let mut value = plan();
+        value.audits[0].canonical_envelope.clear();
         assert!(matches!(value.validate(), Err(BatchError::InvalidPlan(_))));
     }
 

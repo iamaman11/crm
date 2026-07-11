@@ -76,20 +76,12 @@ fn record_event(
     }
 }
 
-fn audit(
-    sequence: i64,
-    audit_id: &str,
-    previous_hash: [u8; 32],
-    record_hash: [u8; 32],
-) -> AuditEvidence {
-    AuditEvidence {
-        audit_sequence: sequence,
+fn audit(audit_id: &str, occurred_at_offset: i64) -> AuditIntent {
+    AuditIntent {
         audit_record_id: audit_id.to_owned(),
         canonicalization_profile: "crm.cjson/v1".to_owned(),
-        previous_hash,
-        record_hash,
         canonical_envelope: format!(r#"{{"audit":"{audit_id}"}}"#).into_bytes(),
-        occurred_at_unix_nanos: 1_700_000_000_000_000_000 + sequence,
+        occurred_at_unix_nanos: 1_700_000_000_000_000_000 + occurred_at_offset,
     }
 }
 

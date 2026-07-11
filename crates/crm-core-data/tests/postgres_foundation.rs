@@ -1,5 +1,5 @@
 use crm_core_data::{
-    AuditEvidence, FaultInjection, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan,
+    AuditIntent, FaultInjection, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan,
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
@@ -48,14 +48,7 @@ fn payload(value: u8, schema: &str) -> TypedPayload {
     }
 }
 
-fn plan(
-    record_id: &str,
-    transaction_id: &str,
-    idempotency_key: &str,
-    audit_sequence: i64,
-    previous_hash: [u8; 32],
-    record_hash: [u8; 32],
-) -> RecordCreatePlan {
+fn plan(record_id: &str, transaction_id: &str, idempotency_key: &str) -> RecordCreatePlan {
     let record = RecordRef {
         record_type: RecordType::try_new("test.record").unwrap(),
         record_id: RecordId::try_new(record_id).unwrap(),
@@ -78,12 +71,9 @@ fn plan(
             request_hash: [73; 32],
             expires_at_unix_nanos: 1_800_000_000_000_000_000,
         },
-        audit: AuditEvidence {
-            audit_sequence,
+        audit: AuditIntent {
             audit_record_id: format!("audit-{transaction_id}"),
             canonicalization_profile: "crm.cjson/v1".to_owned(),
-            previous_hash,
-            record_hash,
             canonical_envelope: format!(r#"{{"transaction":"{transaction_id}"}}"#).into_bytes(),
             occurred_at_unix_nanos: 1_700_000_000_000_000_000,
         },
@@ -102,14 +92,7 @@ async fn postgres_adapter_enforces_atomicity_and_tenant_visibility() {
         .await
         .expect("connect to PostgreSQL");
 
-    let valid = plan(
-        "rust-valid-record",
-        "tx-rust-valid",
-        "idem-rust-valid",
-        3,
-        [0x22; 32],
-        [0x33; 32],
-    );
+    let valid = plan("rust-valid-record", "tx-rust-valid", "idem-rust-valid");
     let created = store
         .create_record(&valid)
         .await
@@ -133,9 +116,6 @@ async fn postgres_adapter_enforces_atomicity_and_tenant_visibility() {
         "rust-invalid-record",
         "tx-rust-invalid",
         "idem-rust-invalid",
-        4,
-        [0x33; 32],
-        [0x44; 32],
     );
     assert!(
         store
@@ -154,9 +134,6 @@ async fn postgres_adapter_enforces_atomicity_and_tenant_visibility() {
         "rust-follow-up-record",
         "tx-rust-follow-up",
         "idem-rust-follow-up",
-        4,
-        [0x33; 32],
-        [0x44; 32],
     );
     store
         .create_record(&follow_up)

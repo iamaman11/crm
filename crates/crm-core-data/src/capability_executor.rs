@@ -258,7 +258,7 @@ fn relationship_resource(relationship: &crm_module_sdk::RelationshipRef) -> Reso
 mod tests {
     use super::*;
     use crate::{
-        AuditEvidence, EventEvidence, IdempotencyEvidence, RecordMutation, RelationshipMutation,
+        AuditIntent, EventEvidence, IdempotencyEvidence, RecordMutation, RelationshipMutation,
     };
     use crm_capability_runtime::{CapabilityRisk, PayloadContract};
     use crm_module_sdk::{
@@ -478,12 +478,9 @@ mod tests {
                     request_hash: request.input_hash,
                     expires_at_unix_nanos: 1_000,
                 },
-                audits: vec![AuditEvidence {
-                    audit_sequence: 1,
+                audits: vec![AuditIntent {
                     audit_record_id: "audit-1".to_owned(),
                     canonicalization_profile: "crm.cjson/v1".to_owned(),
-                    previous_hash: [0; 32],
-                    record_hash: [3; 32],
                     canonical_envelope: vec![1],
                     occurred_at_unix_nanos: 2,
                 }],
