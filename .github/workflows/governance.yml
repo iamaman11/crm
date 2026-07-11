@@ -7,13 +7,17 @@ on:
       - "crates/crm-module-manifest/**"
       - "docs/SYSTEM_INVARIANTS.md"
       - "docs/IMPLEMENTATION_ROADMAP.md"
+      - "docs/MODULE_DEVELOPMENT.md"
       - "docs/adr/ADR-024-controlled-data-formats-and-canonicalization.md"
       - "schemas/**"
       - "modules/*/module.yaml"
       - "scripts/compile_module_manifest_ir.py"
       - "scripts/validate_module_manifests.py"
       - "scripts/check_architecture.py"
+      - "scripts/scaffold_module.py"
+      - "scripts/repo.py"
       - "tests/test_module_manifest_validation.py"
+      - "tests/test_module_scaffolding.py"
       - "architecture-policy.json"
       - "requirements-dev.txt"
       - ".github/workflows/governance.yml"
@@ -23,13 +27,17 @@ on:
       - "crates/crm-module-manifest/**"
       - "docs/SYSTEM_INVARIANTS.md"
       - "docs/IMPLEMENTATION_ROADMAP.md"
+      - "docs/MODULE_DEVELOPMENT.md"
       - "docs/adr/ADR-024-controlled-data-formats-and-canonicalization.md"
       - "schemas/**"
       - "modules/*/module.yaml"
       - "scripts/compile_module_manifest_ir.py"
       - "scripts/validate_module_manifests.py"
       - "scripts/check_architecture.py"
+      - "scripts/scaffold_module.py"
+      - "scripts/repo.py"
       - "tests/test_module_manifest_validation.py"
+      - "tests/test_module_scaffolding.py"
       - "architecture-policy.json"
       - "requirements-dev.txt"
       - ".github/workflows/governance.yml"
@@ -57,7 +65,7 @@ jobs:
         run: python scripts/compile_module_manifest_ir.py --output-dir build/module-ir
       - name: Verify Rust runtime IR and digest parity
         run: cargo run --quiet -p crm-module-manifest --bin validate-module-manifest -- build/module-ir/*.json
-      - name: Test strict format and dependency enforcement
-        run: python -m unittest tests/test_module_manifest_validation.py
+      - name: Test strict format, dependency and scaffolding enforcement
+        run: python -m unittest tests/test_module_manifest_validation.py tests/test_module_scaffolding.py
       - name: Enforce architecture boundaries
         run: python scripts/check_architecture.py
