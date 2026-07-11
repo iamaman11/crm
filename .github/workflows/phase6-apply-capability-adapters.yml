@@ -1,11 +1,9 @@
 name: Phase 6F recovery materialize valid payloads
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/phase6f-recovery-v1
-    paths:
-      - .github/workflows/phase6-apply-capability-adapters.yml
+      - main
 
 permissions:
   contents: write
