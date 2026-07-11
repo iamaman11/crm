@@ -1,0 +1,73 @@
+name: Phase 6G sync roadmap v2
+
+on:
+  push:
+    branches: [feature/phase6g-authenticated-postgres-mutations-v1]
+    paths: [.github/workflows/phase6g-sync-roadmap-v2.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6g-authenticated-postgres-mutations-v1
+          fetch-depth: 0
+      - name: Rewrite Phase 6 progress block
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          path = Path('docs/IMPLEMENTATION_ROADMAP.md')
+          text = path.read_text()
+          replacement = r'''### Completed slice 6F — audited no-op foundation and Sales/Activities capability adapters
+
+Merged in PR #37 as `0969eb657cd03479c27fe6ee0825c57af8565419`.
+
+- Recovered the incomplete PR #35 merge into ordinary reviewable source code and removed all temporary payload/bootstrap artifacts.
+- Added shared deterministic `crm-capability-plan-support`, audited semantic no-op transactions and migration `0005_audited_noop_transactions`.
+- Added production Sales deal create/update/stage-advance planners and Activities task create/update/complete/reminder planners with exact money, tenant/resource validation and generated Protobuf mapping.
+- Verified mutation, replay, stale conflict, semantic no-op, rollback, migration and evidence behavior.
+
+Exact PR head `94e0735ff5698989d8b1f28dd5d506ebdf413fcc` passed Rust, Governance and both Database CI jobs before merge. The temporary hosted-runner allocation blocker was resolved without bypassing required checks.
+
+### Completed slice 6G — authenticated production PostgreSQL mutation acceptance
+
+Authoritative PR: #40. Issue: #39.
+
+- Added `crm-sales-activities-capability-composition` as the non-transport boundary for exactly seven published Sales and Activities mutation capabilities.
+- Added a deterministic exact-version catalog and synchronous planner router that rejects unsupported, version-mismatched, owner-mismatched and request-mismatched coordinates before PostgreSQL.
+- Preserved transport boundaries: `crm-capability-ingress` and `services/crm-api` gained no production dependency on business owner modules or persistence implementations.
+- Exercised real Sales create/update/stage-advance and Activities create/update/reminder/complete commands through authenticated HTTP/gRPC ingress, semantic validation, live authorization and `PostgresTransactionalAggregateExecutor`.
+- Proved invalid bearer and tenant denial, cross-tenant resource rejection, exact replay, idempotency conflict, stale-version conflict, live permission revocation and audited semantic no-op behavior.
+- Measured exact committed evidence and proved that replay, denied and conflicting requests add no duplicate or partial evidence.
+- Added production evidence-omission rollback acceptance for missing outbox, audit and idempotency evidence, with typed safe failure and zero committed transactional side effects.
+- Fixed the runtime registry fixture to register all seven production mutation coordinates, including `activities.task.update` and `activities.task.schedule_reminder`.
+
+Implementation head `c6c3711ec404d762a094c2836cc25d6a79fe9a1b` passed Rust, Governance and both Database CI jobs. The final merge head must repeat those required gates after roadmap synchronization.
+
+'''
+          pattern = r'### Current gate-review slice 6F.*?(?=### Next implementation sequence)'
+          updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'expected one Phase 6F block, replaced {count}')
+          updated = updated.replace(
+              '1. **6G — authenticated public PostgreSQL mutation acceptance:** HTTP/gRPC → capability registry → live authorization → locked aggregate → one record/outbox/audit/idempotency transaction → typed response.\n2. **6H — permission-bound queries:**',
+              '1. **6H — permission-bound queries:**'
+          )
+          updated = updated.replace('3. **6I — optional Sales–Activities link module:**', '2. **6I — optional Sales–Activities link module:**')
+          updated = updated.replace('4. **6J — rebuildable projections:**', '3. **6J — rebuildable projections:**')
+          updated = updated.replace('5. **6K — complete Phase 6 E2E:**', '4. **6K — complete Phase 6 E2E:**')
+          path.write_text(updated)
+          PY
+      - name: Commit roadmap
+        run: |
+          git add docs/IMPLEMENTATION_ROADMAP.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update roadmap through Phase 6G acceptance"
+          git push origin HEAD:feature/phase6g-authenticated-postgres-mutations-v1
