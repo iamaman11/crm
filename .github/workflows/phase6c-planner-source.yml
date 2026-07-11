@@ -19,11 +19,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Archive repository source
         run: |
-          tar --exclude=.git --exclude=target --exclude=phase6c-planner-source.tar.gz \
-            -czf phase6c-planner-source.tar.gz .
+          git archive --format=tar.gz --output=/tmp/phase6c-planner-source.tar.gz HEAD
       - uses: actions/upload-artifact@v4
         with:
           name: phase6c-planner-source
-          path: phase6c-planner-source.tar.gz
+          path: /tmp/phase6c-planner-source.tar.gz
           if-no-files-found: error
           retention-days: 3
