@@ -327,9 +327,11 @@ name = "crm-query-runtime"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "crm-capability-runtime",
  "crm-module-sdk",
  "hmac 0.12.1",
  "sha2 0.10.9",
+ "tokio",
 ]
 
 [[package]]
