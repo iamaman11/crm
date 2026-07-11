@@ -1,8 +1,12 @@
+const AGGREGATE_LOCK_NAMESPACE: i64 = 0x4352_4d41_4747_5247;
+
 pub(crate) async fn load_record_for_update(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     reference: &RecordRef,
 ) -> Result<Option<RecordSnapshot>, BatchError> {
+    lock_aggregate_target(transaction, context, reference).await?;
+
     let row = sqlx::query(
         r#"
         SELECT
@@ -34,6 +38,31 @@ pub(crate) async fn load_record_for_update(
 
     row.map(|row| decode_locked_record(reference.clone(), row))
         .transpose()
+}
+
+async fn lock_aggregate_target(
+    transaction: &mut Transaction<'_, Postgres>,
+    context: &ModuleExecutionContext,
+    reference: &RecordRef,
+) -> Result<(), BatchError> {
+    let tenant_id = context.execution.tenant_id.as_str();
+    let module_id = context.module_id.as_str();
+    let record_type = reference.record_type.as_str();
+    let record_id = reference.record_id.as_str();
+    let lock_identity = format!(
+        "{}:{tenant_id}|{}:{module_id}|{}:{record_type}|{}:{record_id}",
+        tenant_id.len(),
+        module_id.len(),
+        record_type.len(),
+        record_id.len(),
+    );
+
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, $2))")
+        .bind(lock_identity)
+        .bind(AGGREGATE_LOCK_NAMESPACE)
+        .fetch_one(&mut **transaction)
+        .await?;
+    Ok(())
 }
 
 fn decode_locked_record(
