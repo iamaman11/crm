@@ -1,11 +1,14 @@
-name: Phase 6 apply capability adapters
+name: Phase 6F recovery apply capability implementation
 
 on:
   push:
     branches:
-      - feature/sales-activities-capability-adapters-v1
+      - feature/phase6f-recovery-v1
     paths:
       - .github/workflows/phase6-apply-capability-adapters.yml
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -18,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: feature/sales-activities-capability-adapters-v1
+          ref: feature/phase6f-recovery-v1
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -36,17 +39,16 @@ jobs:
           python scripts/check_architecture.py
           cargo test --workspace
           cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: Commit implementation and remove temporary tooling
+      - name: Commit implementation and remove temporary payloads
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm \
-            .github/workflows/phase6-apply-capability-adapters.yml \
             scripts/phase6_payload_1.py \
             scripts/phase6_payload_2.py \
             scripts/phase6_payload_3.py \
             scripts/phase6_payload_4.py
           git add .
           git diff --cached --check
-          git commit -m "feat: add Sales and Activities capability adapters"
-          git push origin HEAD:feature/sales-activities-capability-adapters-v1
+          git commit -m "feat: materialize Phase 6F capability implementation"
+          git push origin HEAD:feature/phase6f-recovery-v1
