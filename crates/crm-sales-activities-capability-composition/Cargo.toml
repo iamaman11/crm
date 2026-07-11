@@ -10,4 +10,5 @@ crm-capability-adapters = { path = "../crm-capability-adapters" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-module-sdk = { path = "../crm-module-sdk" }
+crm-sales-activities-query-adapter = { path = "../crm-sales-activities-query-adapter" }
 crm-sales-capability-adapter = { path = "../crm-sales-capability-adapter" }
