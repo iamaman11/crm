@@ -6,12 +6,14 @@
 
 mod approval;
 mod authorization;
+mod client;
 mod query_visibility;
 mod rate_limit;
 mod registry;
 
 pub use approval::*;
 pub use authorization::*;
+pub use client::*;
 pub use query_visibility::*;
 pub use rate_limit::*;
 pub use registry::*;

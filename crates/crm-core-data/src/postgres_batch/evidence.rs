@@ -174,16 +174,19 @@ async fn insert_completion_marker(
         r#"
         INSERT INTO crm.business_transactions (
           tenant_id, business_transaction_id, actor_id, request_id,
+          correlation_id, trace_id,
           capability_id, capability_version,
           expected_outbox_events, expected_audit_records, expected_idempotency_records
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
         "#,
     )
     .bind(plan.context.execution.tenant_id.as_str())
     .bind(plan.context.execution.business_transaction_id.as_str())
     .bind(plan.context.execution.actor_id.as_str())
     .bind(plan.context.execution.request_id.as_str())
+    .bind(plan.context.execution.correlation_id.as_str())
+    .bind(plan.context.execution.trace_id.as_str())
     .bind(plan.context.execution.capability_id.as_str())
     .bind(plan.context.execution.capability_version.as_str())
     .bind(expected_events)

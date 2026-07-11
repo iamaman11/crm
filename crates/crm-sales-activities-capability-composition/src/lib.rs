@@ -2,14 +2,17 @@
 
 //! Production composition for the first independent Sales and Activities vertical slice.
 //!
-//! This crate owns no business state and performs no I/O. It composes the seven
-//! published Phase 6 mutation definitions into one deterministic catalog and
-//! routes transactional aggregate planning to the owning adapter by exact
-//! capability ID, version and owner-module coordinate. Read-only query
-//! definitions are composed into a separate exact-version catalog.
+//! This crate owns no business state. It composes published mutation/query
+//! contracts, owner-module planners and the optional Sales→Activities event
+//! integration over governed platform adapters. Transport and persistence
+//! implementations remain outside business owner modules.
 
+mod link_event_processor;
+mod phase6_projections;
 mod query_catalog;
 
+pub use link_event_processor::*;
+pub use phase6_projections::*;
 pub use query_catalog::*;
 
 use crm_activities_capability_adapter::{

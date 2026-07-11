@@ -40,7 +40,7 @@
   ],
   "governed_transport_crates": {
     "services/crm-api": [
-      "crm-capability-ingress"
+      "crm-application-runtime"
     ],
     "crates/crm-capability-ingress": [
       "crm-capability-runtime",

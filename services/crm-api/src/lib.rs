@@ -1,10 +1,11 @@
 #![forbid(unsafe_code)]
 
-//! Composition boundary for public CRM transports.
-//! Route implementations must call the governed capability ingress and must not
-//! invoke module mutation or PostgreSQL batch APIs directly.
+//! Thin production process host for Ultimate CRM.
+//!
+//! All dependency assembly, governed transports, PostgreSQL adapters and
+//! background workers live in `crm-application-runtime`. This package exposes
+//! no direct owner-module or infrastructure bypass.
 
-pub use crm_capability_ingress::{GrpcCapabilityMiddleware, HttpCapabilityMiddleware};
+pub use crm_application_runtime::{ApplicationConfig, ApplicationRuntime, run_from_env};
 
-/// Architecture marker for `crm-api`.
 pub const CRATE_NAME: &str = "crm-api";

@@ -5,6 +5,7 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "crates/crm-application-runtime/**"
       - "crates/crm-core-data/**"
       - "crates/crm-module-sdk/**"
       - "crates/crm-capability-runtime/**"
@@ -25,6 +26,7 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "crates/crm-application-runtime/**"
       - "crates/crm-core-data/**"
       - "crates/crm-module-sdk/**"
       - "crates/crm-capability-runtime/**"
@@ -83,6 +85,9 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
       - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
       - name: Enable the isolated runtime test role
@@ -106,6 +111,14 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-core-data --features postgres-integration --test postgres_query -- --nocapture 2>&1 | tee database/postgres-query.log
+      - name: Verify restart-safe PostgreSQL event delivery lineage
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-core-data --features postgres-integration --test postgres_event_delivery -- --nocapture 2>&1 | tee database/postgres-event-delivery.log
       - name: Verify public capability gateway acceptance
         env:
           DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
@@ -115,6 +128,9 @@ jobs:
           cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e -- --nocapture 2>&1 | tee database/postgres-gateway-e2e.log
       - name: Roll back migrations
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.down.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.down.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
@@ -131,6 +147,9 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
       - name: Rebuild runtime fixtures after rollback
         run: |
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
@@ -185,6 +204,7 @@ jobs:
           name: database-adapter-diagnostics
           path: |
             database/
+            crates/crm-application-runtime/
             crates/crm-core-data/
             crates/crm-capability-ingress/
             crates/crm-sales-activities-capability-composition/
@@ -221,15 +241,21 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Verify legacy data upgrade through migrations 0002 and 0003
+      - name: Verify legacy data upgrade through current runtime schema
         shell: bash
         run: |
           set -o pipefail
           psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql 2>&1 | tee database/legacy-upgrade.log
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
       - name: Verify upgraded schema can roll back cleanly
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.down.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.down.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
