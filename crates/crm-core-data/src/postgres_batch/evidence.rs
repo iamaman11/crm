@@ -11,11 +11,13 @@ async fn insert_outbox_event(
           aggregate_type, aggregate_id, aggregate_version, event_sequence,
           event_type, deduplication_key, schema_id, schema_version, descriptor_hash,
           data_class, payload_encoding, maximum_payload_size, retention_policy_id,
-          payload_bytes, occurred_at
+          payload_bytes, occurred_at,
+          source_module_id, event_version, source_actor_id, correlation_id, trace_id
         )
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-          TIMESTAMPTZ 'epoch' + ($18::bigint / 1000) * INTERVAL '1 microsecond'
+          TIMESTAMPTZ 'epoch' + ($18::bigint / 1000) * INTERVAL '1 microsecond',
+          $19, $20, $21, $22, $23
         )
         "#,
     )
@@ -37,6 +39,11 @@ async fn insert_outbox_event(
     .bind(evidence.event.payload.retention_policy_id.as_str())
     .bind(evidence.event.payload.bytes.as_slice())
     .bind(evidence.occurred_at_unix_nanos)
+    .bind(context.module_id.as_str())
+    .bind(evidence.event.payload.schema_version.as_str())
+    .bind(context.execution.actor_id.as_str())
+    .bind(context.execution.correlation_id.as_str())
+    .bind(context.execution.trace_id.as_str())
     .execute(&mut **transaction)
     .await?;
     Ok(())
