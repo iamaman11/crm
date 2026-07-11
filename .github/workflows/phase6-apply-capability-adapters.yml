@@ -18,7 +18,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh repo clone "$GITHUB_REPOSITORY" repo -- --quiet --branch feature/phase6f-recovery-v1 --depth 1
-      - name: Materialize and publish valid entries
+      - name: Materialize and publish valid non-workflow entries
         working-directory: repo
         env:
           GH_TOKEN: ${{ github.token }}
@@ -30,7 +30,10 @@ jobs:
           from pathlib import Path
           import zlib
 
-          corrupt_path = "crates/crm-core-data/tests/postgres_advanced/support.rs"
+          skipped = {
+              ".github/workflows/database.yml",
+              "crates/crm-core-data/tests/postgres_advanced/support.rs",
+          }
           for script_path in [
               "scripts/phase6_payload_1.py",
               "scripts/phase6_payload_2.py",
@@ -44,7 +47,7 @@ jobs:
                   and any(isinstance(target, ast.Name) and target.id == "FILES" for target in node.targets)
               )
               for path, encoded in ast.literal_eval(assignment.value).items():
-                  if path == corrupt_path:
+                  if path in skipped:
                       print(f"SKIP {path}")
                       continue
                   target = Path(path)
@@ -59,6 +62,7 @@ jobs:
           git add -A
           git reset -- \
             .github/workflows/phase6-apply-capability-adapters.yml \
+            .github/workflows/database.yml \
             scripts/phase6_payload_1.py \
             scripts/phase6_payload_2.py \
             scripts/phase6_payload_3.py \
