@@ -1,12 +1,16 @@
 name: Phase 6F recovery build Git commit
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - feature/phase6f-recovery-v1
+    paths:
+      - .github/workflows/phase6-apply-capability-adapters.yml
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   build-commit:
@@ -179,7 +183,7 @@ fn creating_request(
           PY
           cargo generate-lockfile >/tmp/cargo-lock.log 2>&1
           cargo fmt --all >/tmp/cargo-fmt.log 2>&1
-      - name: Create unattached Git commit
+      - name: Create unattached Git commit and report SHA
         working-directory: repo
         env:
           GH_TOKEN: ${{ github.token }}
@@ -233,6 +237,10 @@ fn creating_request(
               stdout=subprocess.PIPE,
               check=True,
           ).stdout.decode().strip()
-          print(f"MATERIALIZED_FILES={len(entries)}")
-          print(f"MATERIALIZED_COMMIT_SHA={commit_sha}")
+          body = f"Phase 6F recovery object built.\n\nMATERIALIZED_FILES={len(entries)}\nMATERIALIZED_COMMIT_SHA={commit_sha}"
+          subprocess.run(
+              ["gh", "pr", "comment", "37", "--repo", repo, "--body", body],
+              check=True,
+          )
+          print(body)
           PY
