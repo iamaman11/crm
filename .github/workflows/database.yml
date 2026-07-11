@@ -12,6 +12,7 @@ on:
       - "crates/crm-capability-plan-support/**"
       - "crates/crm-sales-capability-adapter/**"
       - "crates/crm-activities-capability-adapter/**"
+      - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
@@ -30,6 +31,7 @@ on:
       - "crates/crm-capability-plan-support/**"
       - "crates/crm-sales-capability-adapter/**"
       - "crates/crm-activities-capability-adapter/**"
+      - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
@@ -124,6 +126,14 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify authenticated production Sales and Activities gateway
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_production_mutations -- --nocapture 2>&1 | tee database/postgres-production-mutations.log
       - name: Verify Sales PostgreSQL mutation planner
         env:
           DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
