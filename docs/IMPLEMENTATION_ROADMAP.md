@@ -53,7 +53,7 @@ Universal means that Sales is not allowed to become the owner of customer identi
 | 4 | [#7](https://github.com/iamaman11/crm/issues/7) | PostgreSQL tenant, record, outbox and audit foundation | **Complete** | #6 |
 | 5 | [#8](https://github.com/iamaman11/crm/issues/8) | Capability execution gateway | **Complete** | #5, #7 |
 | 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link/projection/application vertical proof | **Complete** | #8 |
-| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, generalized projections, Admin Studio and product shell | **Ready** | #9 |
+| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, generalized projections, Admin Studio and product shell | **In progress** | #9 |
 | 8 | [#11](https://github.com/iamaman11/crm/issues/11) | Expert modules and product-quality UX | **Planned** | #5, #9, #10 |
 | 8A | [#28](https://github.com/iamaman11/crm/issues/28) | Canonical customer master, identity resolution and consent | **Planned** | #9, #10 |
 | 8B | [#29](https://github.com/iamaman11/crm/issues/29) | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | #9, #10, #28 |
@@ -201,9 +201,23 @@ Migration `0008` is also part of canonical clean-install, rollback, reapply and 
 
 Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously before merge.
 
-## 12. Phase 7 — Search, generalized projections, Admin Studio and product-shell foundation — Ready
+## 12. Phase 7 — Search, generalized projections, Admin Studio and product-shell foundation — In progress
 
-Phase 7 is the next active roadmap phase.
+Phase 7 is the active roadmap phase.
+
+### Current delivery packet — golden module tooling (#56 / draft PR #64)
+
+The first active Phase 7 packet establishes repository-supported module creation and validation so later platform/domain work inherits the proven architecture by construction:
+
+- separate owner-module and optional link-module scaffolding patterns;
+- explicit owner object declarations before generation;
+- explicit source/target dependencies and no authoritative record ownership for link modules;
+- overwrite-safe and dry-run generation;
+- architecture-safe Rust crate/manifests, explicit acceptance TODO gates and catalog-entry seed;
+- permanent cross-platform repository commands for architecture, manifest validation, formatting, lockfile synchronization, focused tests, full tests and the common Rust quality gate;
+- Governance CI coverage for the generator itself.
+
+This packet remains **In progress** until the exact final PR head is green and #56/documentation are synchronized. Generated scaffolds are Foundation only and do not count as production vertical slices.
 
 ### Platform deliverables
 
