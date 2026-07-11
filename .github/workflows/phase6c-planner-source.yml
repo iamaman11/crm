@@ -19,7 +19,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Archive repository source
         run: |
-          tar --exclude=.git --exclude=target -czf phase6c-planner-source.tar.gz .
+          tar --exclude=.git --exclude=target --exclude=phase6c-planner-source.tar.gz \
+            -czf phase6c-planner-source.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: phase6c-planner-source
