@@ -1,4 +1,4 @@
-name: Phase 6F recovery inspect corrupt support payload
+name: Phase 6F recovery materialize valid payloads
 
 on:
   push:
@@ -6,89 +6,67 @@ on:
       - feature/phase6f-recovery-v1
     paths:
       - .github/workflows/phase6-apply-capability-adapters.yml
-  pull_request:
-    branches:
-      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  materialize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
-      - name: Fetch branch source quietly
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          curl --fail --silent --show-error --location \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/tarball/feature/phase6f-recovery-v1" \
-            | tar --extract --gzip --strip-components=1
-      - name: Inspect and attempt repair
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6f-recovery-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Materialize every valid payload entry
         run: |
           python - <<'PY'
           import ast
           import base64
-          import itertools
           from pathlib import Path
-          import string
           import zlib
 
-          source = Path("scripts/phase6_payload_2.py").read_text()
-          module = ast.parse(source)
-          assignment = next(
-              node for node in module.body
-              if isinstance(node, ast.Assign)
-              and any(isinstance(target, ast.Name) and target.id == "FILES" for target in node.targets)
-          )
-          files = ast.literal_eval(assignment.value)
-          path = "crates/crm-core-data/tests/postgres_advanced/support.rs"
-          encoded = files[path]
-          alphabet = string.ascii_letters + string.digits + "+/="
-          invalid = [(index, char) for index, char in enumerate(encoded) if char not in alphabet]
-          print(f"encoded_length={len(encoded)} modulo4={len(encoded) % 4}")
-          print(f"invalid_count={len(invalid)} invalid={invalid}")
-          for index, char in invalid:
-              print(f"context[{index}]={encoded[max(0,index-40):index+41]!r}")
-
-          cleaned = ''.join(char for char in encoded if char in alphabet)
-          print(f"cleaned_length={len(cleaned)} modulo4={len(cleaned) % 4}")
-          try:
-              data = zlib.decompress(base64.b64decode(cleaned + '=' * (-len(cleaned) % 4)))
-              print(f"CLEANED_OK bytes={len(data)}")
-              raise SystemExit(0)
-          except Exception as error:
-              print(f"cleaned_failed={error!r}")
-
-          # Try replacing each invalid run with 1-4 Base64 characters. This repairs
-          # common payload corruption where an ellipsis replaced a short fragment.
-          if invalid:
-              start = invalid[0][0]
-              end = invalid[-1][0] + 1
-              prefix = encoded[:start]
-              suffix = encoded[end:]
-              prefix = ''.join(char for char in prefix if char in alphabet)
-              suffix = ''.join(char for char in suffix if char in alphabet)
-              base64_alphabet = string.ascii_letters + string.digits + "+/"
-              for width in range(1, 5):
-                  attempts = 0
-                  for replacement_tuple in itertools.product(base64_alphabet, repeat=width):
-                      attempts += 1
-                      replacement = ''.join(replacement_tuple)
-                      candidate = prefix + replacement + suffix
-                      if len(candidate) % 4:
-                          continue
-                      try:
-                          data = zlib.decompress(base64.b64decode(candidate, validate=True))
-                      except Exception:
-                          continue
-                      print(f"REPAIRED width={width} replacement={replacement!r} attempts={attempts} bytes={len(data)}")
-                      print(data.decode())
-                      raise SystemExit(0)
-                  print(f"no repair width={width} attempts={attempts}")
-          raise SystemExit(1)
+          corrupt_path = "crates/crm-core-data/tests/postgres_advanced/support.rs"
+          for script_path in [
+              "scripts/phase6_payload_1.py",
+              "scripts/phase6_payload_2.py",
+              "scripts/phase6_payload_3.py",
+              "scripts/phase6_payload_4.py",
+          ]:
+              module = ast.parse(Path(script_path).read_text())
+              assignment = next(
+                  node for node in module.body
+                  if isinstance(node, ast.Assign)
+                  and any(isinstance(target, ast.Name) and target.id == "FILES" for target in node.targets)
+              )
+              files = ast.literal_eval(assignment.value)
+              for path, encoded in files.items():
+                  if path == corrupt_path:
+                      print(f"SKIP corrupt entry {path}")
+                      continue
+                  target = Path(path)
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(zlib.decompress(base64.b64decode(encoded)))
+                  print(f"WROTE {path}")
           PY
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit materialized source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git reset -- \
+            .github/workflows/phase6-apply-capability-adapters.yml \
+            scripts/phase6_payload_1.py \
+            scripts/phase6_payload_2.py \
+            scripts/phase6_payload_3.py \
+            scripts/phase6_payload_4.py
+          git diff --cached --check
+          git commit -m "feat: materialize valid Phase 6F capability sources"
+          git push origin HEAD:feature/phase6f-recovery-v1
