@@ -88,11 +88,7 @@ impl PostgresDataStore {
         &self,
         query: &RecordGetQuery,
     ) -> Result<Option<RecordSnapshot>, SdkError> {
-        let mut transaction = self
-            .pool()
-            .begin()
-            .await
-            .map_err(database_unavailable)?;
+        let mut transaction = self.pool().begin().await.map_err(database_unavailable)?;
         bind_read_context(&mut transaction, &query.tenant_id).await?;
         let row = sqlx::query(
             r#"
@@ -141,11 +137,7 @@ impl PostgresDataStore {
             .as_ref()
             .map(|value| value.record_id.as_str())
             .unwrap_or("");
-        let mut transaction = self
-            .pool()
-            .begin()
-            .await
-            .map_err(database_unavailable)?;
+        let mut transaction = self.pool().begin().await.map_err(database_unavailable)?;
         bind_read_context(&mut transaction, &query.tenant_id).await?;
 
         let rows = match query.sort {
@@ -262,10 +254,7 @@ impl PostgresDataStore {
         } else {
             None
         };
-        let records = decoded
-            .into_iter()
-            .map(|(snapshot, _)| snapshot)
-            .collect();
+        let records = decoded.into_iter().map(|(snapshot, _)| snapshot).collect();
         Ok(RecordQueryPage { records, next })
     }
 }

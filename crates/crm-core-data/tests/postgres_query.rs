@@ -53,7 +53,10 @@ async fn tenant_scoped_get_and_keyset_list_are_stable_and_read_only() {
         .expect("connect query evidence reader");
 
     let seed = seed_plan();
-    let seeded = store.execute_batch(&seed).await.expect("seed query records");
+    let seeded = store
+        .execute_batch(&seed)
+        .await
+        .expect("seed query records");
     assert!(!seeded.replayed);
     assert_eq!(seeded.records.len(), RECORD_IDS.len());
 
@@ -159,7 +162,10 @@ async fn tenant_scoped_get_and_keyset_list_are_stable_and_read_only() {
 
         assert_eq!(paged, expected);
         assert_eq!(paged.len(), RECORD_IDS.len());
-        assert_eq!(paged.iter().collect::<BTreeSet<_>>().len(), RECORD_IDS.len());
+        assert_eq!(
+            paged.iter().collect::<BTreeSet<_>>().len(),
+            RECORD_IDS.len()
+        );
     }
 
     let other_tenant_page = store
