@@ -1,4 +1,4 @@
-name: Phase 6F recovery apply capability implementation
+name: Phase 6F recovery diagnose payloads
 
 on:
   push:
@@ -11,68 +11,33 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
+  diagnose:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: feature/phase6f-recovery-v1
-          fetch-depth: 1
-          show-progress: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - name: Apply reviewed implementation
-        id: apply
-        continue-on-error: true
+      - name: Fetch branch source quietly
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -o pipefail
-          {
-            for payload in \
-              scripts/phase6_payload_1.py \
-              scripts/phase6_payload_2.py \
-              scripts/phase6_payload_3.py \
-              scripts/phase6_payload_4.py
-            do
-              echo ">>> ${payload}"
-              python "${payload}"
-            done
-          } 2>&1 | tee /tmp/phase6-bootstrap.log
-      - name: Persist bootstrap diagnostics
-        if: steps.apply.outcome == 'failure'
+          curl --fail --silent --show-error --location \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/tarball/feature/phase6f-recovery-v1" \
+            | tar --extract --gzip --strip-components=1
+      - name: Apply payloads with concise diagnostics
         run: |
-          git reset --hard HEAD
-          cp /tmp/phase6-bootstrap.log phase6-bootstrap.log
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add phase6-bootstrap.log
-          git commit -m "ci: capture Phase 6F bootstrap failure"
-          git push origin HEAD:feature/phase6f-recovery-v1
-          exit 1
-      - name: Resolve, format and verify
-        if: steps.apply.outcome == 'success'
-        run: |
-          cargo generate-lockfile
-          cargo fmt --all
-          python scripts/check_architecture.py
-          cargo test --workspace
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: Commit implementation and remove temporary payloads
-        if: steps.apply.outcome == 'success'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm \
+          set -euxo pipefail
+          for payload in \
             scripts/phase6_payload_1.py \
             scripts/phase6_payload_2.py \
             scripts/phase6_payload_3.py \
             scripts/phase6_payload_4.py
-          git add .
-          git diff --cached --check
-          git commit -m "feat: materialize Phase 6F capability implementation"
-          git push origin HEAD:feature/phase6f-recovery-v1
+          do
+            echo ">>> ${payload}"
+            python "${payload}"
+          done
+          echo "All payloads applied successfully"
