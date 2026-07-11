@@ -1,8 +1,7 @@
 #![forbid(unsafe_code)]
 
-mod cursor {
-    include!("lib.rs");
-}
+#[path = "lib.rs"]
+mod cursor;
 mod gateway;
 
 pub use cursor::*;
