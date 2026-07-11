@@ -6,17 +6,13 @@
 //! event into the pure link-module core, builds the consumer execution context and delegates all
 //! target mutation and durable private-state access through governed SDK ports.
 
-use crm_core_events::{
-    EventHandlingDisposition, EventHandlingResult, GovernedEventHandler,
-};
+use crm_core_events::{EventHandlingDisposition, EventHandlingResult, GovernedEventHandler};
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityClient, CapabilityId, CapabilityVersion, CausationId,
     Clock, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, ModuleStateStore,
     PortFuture, PortResult, RequestId, SchemaVersion, SdkError,
 };
-use crm_sales_activities_link::{
-    LinkDisposition, MODULE_ID, SalesActivitiesLink,
-};
+use crm_sales_activities_link::{LinkDisposition, MODULE_ID, SalesActivitiesLink};
 use crm_sales_activities_link_contract_adapter::ProtobufSalesActivitiesLinkContractAdapter;
 use sha2::{Digest, Sha256};
 use std::fmt;

@@ -379,6 +379,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-sales-activities-link-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-adapters",
+ "crm-capability-ingress",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-core-events",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-sales-activities-capability-composition",
+ "crm-sales-activities-link",
+ "crm-sales-activities-link-contract-adapter",
+ "prost",
+ "sha2 0.10.9",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "crm-sales-activities-link-contract-adapter"
 version = "0.1.0"
 dependencies = [
