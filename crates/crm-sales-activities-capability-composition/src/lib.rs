@@ -5,7 +5,12 @@
 //! This crate owns no business state and performs no I/O. It composes the seven
 //! published Phase 6 mutation definitions into one deterministic catalog and
 //! routes transactional aggregate planning to the owning adapter by exact
-//! capability ID, version and owner-module coordinate.
+//! capability ID, version and owner-module coordinate. Read-only query
+//! definitions are composed into a separate exact-version catalog.
+
+mod query_catalog;
+
+pub use query_catalog::*;
 
 use crm_activities_capability_adapter::{
     ActivitiesTaskCapabilityPlanner, COMPLETE_CAPABILITY as ACTIVITIES_COMPLETE_CAPABILITY,
