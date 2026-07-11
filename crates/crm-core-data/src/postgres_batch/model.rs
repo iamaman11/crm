@@ -73,15 +73,41 @@ pub struct BatchMutationPlan {
 
 impl BatchMutationPlan {
     pub fn validate(&self) -> Result<(), BatchError> {
-        self.context.validate().map_err(BatchError::Sdk)?;
+        self.validate_common()?;
         if self.records.is_empty() && self.relationships.is_empty() {
             return Err(BatchError::InvalidPlan(
                 "at least one record or relationship mutation is required".to_owned(),
             ));
         }
-        if self.events.is_empty() || self.audits.is_empty() {
+        if self.events.is_empty() {
             return Err(BatchError::InvalidPlan(
-                "every batch requires at least one outbox event and audit record".to_owned(),
+                "every mutating batch requires at least one outbox event".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate_transactional_aggregate(&self) -> Result<(), BatchError> {
+        self.validate_common()?;
+        let has_mutation = !self.records.is_empty() || !self.relationships.is_empty();
+        if has_mutation && self.events.is_empty() {
+            return Err(BatchError::InvalidPlan(
+                "every aggregate state change requires at least one outbox event".to_owned(),
+            ));
+        }
+        if !has_mutation && !self.events.is_empty() {
+            return Err(BatchError::InvalidPlan(
+                "an aggregate no-op must not publish outbox events".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_common(&self) -> Result<(), BatchError> {
+        self.context.validate().map_err(BatchError::Sdk)?;
+        if self.audits.is_empty() {
+            return Err(BatchError::InvalidPlan(
+                "every batch requires at least one audit record".to_owned(),
             ));
         }
         if self.idempotency.scope.is_empty() || self.idempotency.key.is_empty() {

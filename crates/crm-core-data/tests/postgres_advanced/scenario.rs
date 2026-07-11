@@ -244,4 +244,53 @@ async fn transaction_aware_executor_locks_authoritative_state_and_replays_origin
         .count();
     assert_eq!(successes, 1);
     assert_eq!(conflicts, 1);
+
+    let create_executor = PostgresTransactionalAggregateExecutor::new(
+        store.clone(),
+        Arc::new(CreatingAggregatePlanner),
+    );
+    let create_a = creating_request(
+        "tx-aggregate-create-a",
+        "idem-aggregate-create-a",
+        "aggregate-create-race",
+        41,
+    );
+    let create_b = creating_request(
+        "tx-aggregate-create-b",
+        "idem-aggregate-create-b",
+        "aggregate-create-race",
+        42,
+    );
+    let (created_a, created_b) = tokio::join!(
+        create_executor.execute(&definition, create_a),
+        create_executor.execute(&definition, create_b),
+    );
+    let create_results = [&created_a, &created_b];
+    assert_eq!(
+        create_results.iter().filter(|result| result.is_ok()).count(),
+        1
+    );
+    assert_eq!(
+        create_results
+            .iter()
+            .filter(|result| {
+                matches!(
+                    result,
+                    Err(error)
+                        if error.code == "CAPABILITY_AGGREGATE_ALREADY_EXISTS"
+                            && error.category == crm_module_sdk::ErrorCategory::Conflict
+                )
+            })
+            .count(),
+        1
+    );
+    assert_eq!(
+        record_count(
+            &store,
+            &context("tx-aggregate-count", "idem-aggregate-count"),
+            &["aggregate-create-race"],
+        )
+        .await,
+        1
+    );
 }

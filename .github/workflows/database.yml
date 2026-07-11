@@ -9,6 +9,9 @@ on:
       - "crates/crm-module-sdk/**"
       - "crates/crm-capability-runtime/**"
       - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-plan-support/**"
+      - "crates/crm-sales-capability-adapter/**"
+      - "crates/crm-activities-capability-adapter/**"
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
@@ -24,6 +27,9 @@ on:
       - "crates/crm-module-sdk/**"
       - "crates/crm-capability-runtime/**"
       - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-plan-support/**"
+      - "crates/crm-sales-capability-adapter/**"
+      - "crates/crm-activities-capability-adapter/**"
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
@@ -72,6 +78,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
       - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
       - name: Enable the isolated runtime test role
@@ -94,12 +101,9 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e -- --nocapture 2>&1 | tee database/postgres-gateway-e2e.log
-      - name: Remove ephemeral no-op rollback fixtures
-        run: |
-          psql --set ON_ERROR_STOP=1 --command \
-            "DELETE FROM crm.business_transactions WHERE expected_outbox_events = 0"
       - name: Roll back migrations
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
@@ -114,6 +118,22 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+      - name: Rebuild runtime fixtures after rollback
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify Sales PostgreSQL mutation planner
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+        run: cargo test -p crm-sales-capability-adapter --features postgres-integration --test postgres_mutations -- --nocapture
+      - name: Verify Activities audited no-op transaction
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+        run: cargo test -p crm-activities-capability-adapter --features postgres-integration --test postgres_noop -- --nocapture
       - name: Upload database and Rust diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -161,8 +181,10 @@ jobs:
           set -o pipefail
           psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql 2>&1 | tee database/legacy-upgrade.log
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
       - name: Verify upgraded schema can roll back cleanly
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql

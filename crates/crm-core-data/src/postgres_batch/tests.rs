@@ -123,6 +123,27 @@ mod tests {
     }
 
     #[test]
+    fn aggregate_noop_requires_audit_but_not_outbox() {
+        let mut value = plan();
+        value.records.clear();
+        value.events.clear();
+
+        value.validate_transactional_aggregate().unwrap();
+        assert!(matches!(value.validate(), Err(BatchError::InvalidPlan(_))));
+    }
+
+    #[test]
+    fn aggregate_noop_rejects_false_outbox_evidence() {
+        let mut value = plan();
+        value.records.clear();
+
+        assert!(matches!(
+            value.validate_transactional_aggregate(),
+            Err(BatchError::InvalidPlan(_))
+        ));
+    }
+
+    #[test]
     fn descriptor_hash_is_stable() {
         assert_eq!(batch_result_descriptor_hash(), batch_result_descriptor_hash());
         assert_ne!(batch_result_descriptor_hash(), [0; 32]);

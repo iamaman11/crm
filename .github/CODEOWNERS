@@ -17,6 +17,9 @@
 /crates/crm-capability-adapters/ @iamaman11
 /crates/crm-capability-ingress/ @iamaman11
 /crates/crm-proto-contracts/ @iamaman11
+/crates/crm-capability-plan-support/ @iamaman11
+/crates/crm-activities-capability-adapter/ @iamaman11
+/crates/crm-sales-capability-adapter/ @iamaman11
 /crates/crm-core-data/ @iamaman11
 /crates/crm-core-events/ @iamaman11
 /crates/crm-core-permissions/ @iamaman11

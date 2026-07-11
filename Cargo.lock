@@ -157,6 +157,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-activities-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-activities",
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-contracts",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "crm-api"
 version = "0.1.0"
 dependencies = [
@@ -186,6 +202,21 @@ dependencies = [
  "sqlx",
  "tokio",
  "tonic",
+]
+
+[[package]]
+name = "crm-capability-plan-support"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-core-contracts",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
+ "prost-types",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -297,6 +328,22 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-sales-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-contracts",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-sales",
+ "prost",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]

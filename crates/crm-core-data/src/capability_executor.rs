@@ -132,6 +132,32 @@ pub(crate) fn validate_execution_plan(
     request: &CapabilityRequest,
     execution_plan: &CapabilityBatchExecutionPlan,
 ) -> Result<(), SdkError> {
+    validate_execution_plan_identity(definition, request, execution_plan)?;
+    execution_plan
+        .batch
+        .validate()
+        .map_err(capability_batch_error_to_sdk)?;
+    validate_planned_output(definition, execution_plan.output.as_ref())
+}
+
+pub(crate) fn validate_transactional_aggregate_execution_plan(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    execution_plan: &CapabilityBatchExecutionPlan,
+) -> Result<(), SdkError> {
+    validate_execution_plan_identity(definition, request, execution_plan)?;
+    execution_plan
+        .batch
+        .validate_transactional_aggregate()
+        .map_err(capability_batch_error_to_sdk)?;
+    validate_planned_output(definition, execution_plan.output.as_ref())
+}
+
+fn validate_execution_plan_identity(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    execution_plan: &CapabilityBatchExecutionPlan,
+) -> Result<(), SdkError> {
     if execution_plan.batch.context != request.context {
         return Err(invalid_execution_plan());
     }
@@ -142,12 +168,6 @@ pub(crate) fn validate_execution_plan(
     {
         return Err(invalid_execution_plan());
     }
-
-    execution_plan
-        .batch
-        .validate()
-        .map_err(capability_batch_error_to_sdk)?;
-    validate_planned_output(definition, execution_plan.output.as_ref())?;
     Ok(())
 }
 

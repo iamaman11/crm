@@ -6,7 +6,7 @@ use crate::audit::{
 };
 use crate::capability_executor::{
     CapabilityBatchExecutionPlan, affected_resources, capability_idempotency_scope,
-    validate_execution_plan,
+    validate_transactional_aggregate_execution_plan,
 };
 use crate::postgres::{FaultInjection, IdempotencyEvidence, PostgresDataStore};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest};

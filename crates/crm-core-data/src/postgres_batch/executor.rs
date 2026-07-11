@@ -82,8 +82,12 @@ impl PostgresDataStore {
         let execution_plan = planner
             .plan(definition, &request, current.as_ref())
             .map_err(BatchError::Sdk)?;
-        validate_execution_plan(definition, &request, &execution_plan)
-            .map_err(BatchError::Sdk)?;
+        validate_transactional_aggregate_execution_plan(
+            definition,
+            &request,
+            &execution_plan,
+        )
+        .map_err(BatchError::Sdk)?;
         validate_target_mutation(&target, current.as_ref(), &execution_plan)?;
 
         let batch_result = apply_planned_batch(
@@ -154,6 +158,19 @@ fn validate_target_mutation(
     current: Option<&RecordSnapshot>,
     plan: &CapabilityBatchExecutionPlan,
 ) -> Result<(), BatchError> {
+    if plan.batch.records.is_empty() {
+        if matches!(target.presence, AggregatePresence::MustExist)
+            && current.is_some()
+            && plan.batch.relationships.is_empty()
+            && plan.batch.events.is_empty()
+        {
+            return Ok(());
+        }
+        return Err(BatchError::InvalidPlan(
+            "aggregate no-op requires an existing locked target and no business side effects"
+                .to_owned(),
+        ));
+    }
     let mut matching = plan.batch.records.iter().filter(|mutation| match mutation {
         RecordMutation::Create { reference, .. } | RecordMutation::Update { reference, .. } => {
             reference == &target.reference
