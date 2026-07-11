@@ -1,0 +1,56 @@
+name: Phase 6F apply source lint fixes
+
+on:
+  push:
+    branches:
+      - feature/phase6f-recovery-v1
+    paths:
+      - .github/workflows/phase6-source-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6f-recovery-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply exact lint fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          activities = Path("crates/crm-activities-capability-adapter/src/lib.rs")
+          source = activities.read_text()
+          old = "RecordRef, RecordSnapshot, ResourceRef, SdkError, TenantId, TypedPayload,"
+          new = "RecordRef, RecordSnapshot, SdkError, TenantId, TypedPayload,"
+          if old not in source:
+              raise SystemExit("expected Activities import not found")
+          activities.write_text(source.replace(old, new, 1))
+
+          sales = Path("crates/crm-sales-capability-adapter/src/lib.rs")
+          source = sales.read_text()
+          old = "fn deal_to_wire(deal: &Deal, tenant: &TenantId) -> wire::Deal {"
+          new = "#[allow(deprecated)]\nfn deal_to_wire(deal: &Deal, tenant: &TenantId) -> wire::Deal {"
+          if old not in source:
+              raise SystemExit("expected Sales compatibility function not found")
+          sales.write_text(source.replace(old, new, 1))
+          PY
+          cargo fmt --all
+      - name: Commit source-only fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            crates/crm-activities-capability-adapter/src/lib.rs \
+            crates/crm-sales-capability-adapter/src/lib.rs
+          git diff --cached --check
+          git commit -m "fix: satisfy adapter lint gates"
+          git push origin HEAD:feature/phase6f-recovery-v1
