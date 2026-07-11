@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-11
+Status date: 2026-07-12
 
 This document is the concise human-readable status page. The normative sequence remains `IMPLEMENTATION_ROADMAP.md`; absolute rules remain `SYSTEM_INVARIANTS.md`; implementation grouping follows `DEVELOPMENT_WORKFLOW.md`.
 
@@ -27,9 +27,9 @@ The repository now contains a complete first production-composed modular CRM pro
 - health, readiness, background workers and graceful shutdown;
 - process-level acceptance covering real `crm-api`, PostgreSQL, HTTP, gRPC, link delivery and projections.
 
-Current phase: **Phase 7 — Ready**.
+Current phase: **Phase 7 — In progress**.
 
-Current implementation focus: **search/generalized projections, Admin Studio foundations, typed web product shell, and golden module tooling**.
+The first Phase 7 packet, **golden module scaffolding and permanent repository commands** (#56 / PR #64), has completed its implementation and acceptance work. Its merge closes #56 and makes the next executable packet **#65 — generalized projection runtime and rebuild orchestration**, followed by **#66 — tenant- and permission-aware search with deterministic reindexing**.
 
 ## Phase 6 completion
 
@@ -50,6 +50,20 @@ Current implementation focus: **search/generalized projections, Admin Studio fou
 
 Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously before merge.
 
+## Phase 7 golden module foundation
+
+Issue #56 / PR #64 establishes the repository-supported golden module foundation:
+
+- separate governed scaffolding for authoritative owner modules and optional link modules;
+- explicit owner-object and link-dependency decisions before generation;
+- overwrite-safe generation, workspace duplicate protection, dependency-range validation and `--dry-run`;
+- architecture-safe module crate/manifests plus explicit contract, adapter and acceptance-test TODO boundaries;
+- a compiling ignored acceptance-test scaffold gate that must be replaced before module readiness can rise above Foundation;
+- stable cross-platform commands for architecture checks, manifest validation, formatting, lockfile synchronization, focused tests, full tests and the common Rust quality gate;
+- Governance CI that validates generated manifests, compiles a freshly generated module with `cargo check --all-targets`, and verifies generated dependencies against `architecture-policy.json`.
+
+A generated module is **Foundation only** and does not count as a production vertical slice.
+
 ## Product readiness summary
 
 The architecture and backend platform now have a complete first production-composed modular proof. The breadth of end-user CRM functionality is still intentionally much smaller than the target universal expert CRM.
@@ -65,7 +79,8 @@ The architecture and backend platform now have a complete first production-compo
 
 ### Not yet complete
 
-- tenant- and permission-aware search and generalized indexing/reindexing;
+- generalized projection/indexing runtime and deterministic rebuild orchestration — #65;
+- tenant- and permission-aware search and deterministic reindexing — #66;
 - Admin Studio metadata builders and publication workflows;
 - web/mobile product shell and product-quality frontend;
 - canonical customer master, identity resolution and consent;
@@ -77,8 +92,8 @@ The architecture and backend platform now have a complete first production-compo
 
 ## Immediate delivery sequence
 
-1. Begin Phase 7 with tenant- and permission-aware search and generalized projection/indexing infrastructure.
-2. Establish the golden module generator and permanent repository commands tracked by #56 so later domain waves inherit architecture and gates by construction.
+1. Generalize the Phase 6 projection proof into a reusable projection runtime and rebuild orchestrator — #65.
+2. Build tenant- and permission-aware search with deterministic reindexing on that shared runtime — #66.
 3. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
 4. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
 5. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
@@ -92,7 +107,7 @@ The architecture and backend platform now have a complete first production-compo
 - final PR history is reduced to semantic commits where repository tooling permits;
 - architecture, contract, tenant, authorization, audit and rollback gates remain strict.
 
-See `DEVELOPMENT_WORKFLOW.md`.
+See `DEVELOPMENT_WORKFLOW.md` and `MODULE_DEVELOPMENT.md`.
 
 ## Documentation hygiene rule
 

@@ -51,7 +51,7 @@ Current count of product-complete expert modules: **0**.
 
 | Module | Type | State | Implemented production slice |
 |---|---|---|---|
-| `crm.sales-activities-link` | Link module | **Production integration slice — Gate review in PR #63** | Consumes versioned Sales stage-change events through restart-safe governed delivery, checks tenant installation lifecycle, invokes Activities only through the governed capability gateway, uses durable retry/dead-letter delivery state and target idempotency, and remains independently suspendable/uninstallable |
+| `crm.sales-activities-link` | Link module | **Production integration slice — Complete** | Consumes versioned Sales stage-change events through restart-safe governed delivery, checks tenant installation lifecycle, invokes Activities only through the governed capability gateway, uses durable retry/dead-letter delivery state and target idempotency, and remains independently suspendable/uninstallable |
 
 The published `module_id` is fixed as **`crm.sales-activities-link`** and is treated as immutable module identity.
 

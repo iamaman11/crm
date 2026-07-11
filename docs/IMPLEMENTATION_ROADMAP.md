@@ -53,7 +53,7 @@ Universal means that Sales is not allowed to become the owner of customer identi
 | 4 | [#7](https://github.com/iamaman11/crm/issues/7) | PostgreSQL tenant, record, outbox and audit foundation | **Complete** | #6 |
 | 5 | [#8](https://github.com/iamaman11/crm/issues/8) | Capability execution gateway | **Complete** | #5, #7 |
 | 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link/projection/application vertical proof | **Complete** | #8 |
-| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, generalized projections, Admin Studio and product shell | **Ready** | #9 |
+| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, generalized projections, Admin Studio and product shell | **In progress** | #9 |
 | 8 | [#11](https://github.com/iamaman11/crm/issues/11) | Expert modules and product-quality UX | **Planned** | #5, #9, #10 |
 | 8A | [#28](https://github.com/iamaman11/crm/issues/28) | Canonical customer master, identity resolution and consent | **Planned** | #9, #10 |
 | 8B | [#29](https://github.com/iamaman11/crm/issues/29) | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | #9, #10, #28 |
@@ -201,18 +201,36 @@ Migration `0008` is also part of canonical clean-install, rollback, reapply and 
 
 Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously before merge.
 
-## 12. Phase 7 — Search, generalized projections, Admin Studio and product-shell foundation — Ready
+## 12. Phase 7 — Search, generalized projections, Admin Studio and product-shell foundation — In progress
 
-Phase 7 is the next active roadmap phase.
+Phase 7 is the active roadmap phase.
 
-### Platform deliverables
+### Golden module tooling — #56 / PR #64
 
-- generalize the proven projection/checkpoint/retry/rebuild runtime for broader read models;
-- tenant- and permission-aware search with deterministic reindexing;
+The first Phase 7 packet establishes repository-supported module creation and validation so later platform/domain work inherits the proven architecture by construction:
+
+- separate owner-module and optional link-module scaffolding patterns;
+- explicit owner object declarations before generation;
+- explicit source/target dependencies and no authoritative record ownership for link modules;
+- overwrite-safe generation, dependency-range validation and dry-run preview;
+- architecture-safe Rust crate/manifests plus explicit contract, adapter and acceptance-test TODO boundaries;
+- compiling generated acceptance-test placeholder that remains ignored until replaced with real production evidence;
+- permanent cross-platform repository commands for architecture, manifest validation, formatting, lockfile synchronization, focused tests, full tests and the common Rust quality gate;
+- Governance CI that validates generated manifests, compiles a fresh generated module with `cargo check --all-targets` and verifies generated dependencies against `architecture-policy.json`.
+
+Generated scaffolds are **Foundation only** and do not count as production vertical slices. Merge of PR #64 closes #56.
+
+### Next executable platform packets
+
+1. [#65](https://github.com/iamaman11/crm/issues/65) — generalize the Phase 6 projection proof into a reusable projection runtime and rebuild orchestrator while keeping concrete owner-domain handlers outside generic infrastructure.
+2. [#66](https://github.com/iamaman11/crm/issues/66) — build tenant- and permission-aware search with deterministic reindexing on the shared projection runtime.
+
+### Remaining platform deliverables
+
 - object, field, relationship, layout, view, pipeline, permission and workflow builders;
 - impact reports, immutable metadata versions and rollback behavior;
 - typed UI-extension runtime with safe fallback;
-- golden module generator and permanent repository commands so new modules inherit architecture and gates by construction.
+- further golden-module/tooling evolution as new module classes prove additional stable patterns.
 
 ### Product-plane deliverables
 
