@@ -1,12 +1,14 @@
-use crm_core_data::PostgresDataStore;
-use crm_core_events::{EventHistoryRequest, ProjectionDocumentWrite, ProjectionEventApplication};
+use crm_core_events::ProjectionDocumentWrite;
 use crm_module_sdk::{
     DataClass, ErrorCategory, EventDelivery, EventType, ModuleId, PayloadEncoding, SdkError,
-    TenantId,
+};
+use crm_projection_runtime::{
+    ProjectionDefinition, ProjectionHandler, ProjectionId, ProjectionRegistry,
 };
 use crm_proto_contracts::{crm::activities::v1 as activities, message_descriptor_hash};
 use prost::Message;
 use serde_json::json;
+use std::sync::Arc;
 
 pub const DEAL_TIMELINE_PROJECTION_ID: &str = "phase6.deal-timeline.v1";
 pub const TASK_STATUS_PROJECTION_ID: &str = "phase6.task-status.v1";
@@ -34,105 +36,52 @@ const TASK_UPDATED_SCHEMA: &str = "crm.activities.v1.TaskUpdatedEvent";
 const TASK_COMPLETED_SCHEMA: &str = "crm.activities.v1.TaskCompletedEvent";
 const TASK_REMINDER_SCHEMA: &str = "crm.activities.v1.TaskReminderScheduledEvent";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProjectionBatchResult {
-    pub events_seen: u32,
-    pub events_applied: u32,
-    pub replayed_events: u32,
-    pub has_more: bool,
-}
+#[derive(Debug, Clone, Copy)]
+struct DealTimelineProjectionHandler;
 
-#[derive(Debug, Clone)]
-pub struct Phase6ProjectionWorker {
-    store: PostgresDataStore,
-}
-
-impl Phase6ProjectionWorker {
-    pub const fn new(store: PostgresDataStore) -> Self {
-        Self { store }
-    }
-
-    pub async fn run_batch(
-        &self,
-        tenant_id: TenantId,
-        projection_id: &str,
-        page_size: u32,
-    ) -> Result<ProjectionBatchResult, SdkError> {
-        let checkpoint = self
-            .store
-            .projection_checkpoint(&tenant_id, projection_id)
-            .await?;
-        let event_types = projection_event_types(projection_id)?;
-        let page = self
-            .store
-            .list_event_history(&EventHistoryRequest {
-                tenant_id: tenant_id.clone(),
-                consumer_module_id: configured_module_id(PROJECTION_CONSUMER_MODULE_ID)?,
-                event_types,
-                after: checkpoint.map(|checkpoint| checkpoint.cursor),
-                page_size,
-            })
-            .await?;
-        let has_more = page.next_cursor.is_some();
-        let events_seen = u32::try_from(page.deliveries.len()).unwrap_or(u32::MAX);
-        let mut events_applied = 0_u32;
-        let mut replayed_events = 0_u32;
-
-        for delivery in page.deliveries {
-            let application = projection_application(projection_id, delivery)?;
-            let result = self.store.apply_projection_event(&application).await?;
-            if result.replayed {
-                replayed_events = replayed_events.saturating_add(1);
-            } else {
-                events_applied = events_applied.saturating_add(1);
-            }
-        }
-
-        Ok(ProjectionBatchResult {
-            events_seen,
-            events_applied,
-            replayed_events,
-            has_more,
-        })
-    }
-
-    pub async fn rebuild(
-        &self,
-        tenant_id: TenantId,
-        projection_id: &str,
-        page_size: u32,
-    ) -> Result<u64, SdkError> {
-        self.store
-            .reset_projection(&tenant_id, projection_id)
-            .await?;
-        let mut applied = 0_u64;
-        loop {
-            let result = self
-                .run_batch(tenant_id.clone(), projection_id, page_size)
-                .await?;
-            applied = applied.saturating_add(u64::from(result.events_applied));
-            if !result.has_more {
-                return Ok(applied);
-            }
-        }
+impl ProjectionHandler for DealTimelineProjectionHandler {
+    fn project(&self, delivery: &EventDelivery) -> Result<Vec<ProjectionDocumentWrite>, SdkError> {
+        deal_timeline_writes(delivery)
     }
 }
 
-fn projection_event_types(projection_id: &str) -> Result<Vec<EventType>, SdkError> {
-    let values: &[&str] = match projection_id {
-        DEAL_TIMELINE_PROJECTION_ID => &[SALES_CREATED, SALES_UPDATED, SALES_STAGE_CHANGED],
-        TASK_STATUS_PROJECTION_ID => &[
-            TASK_CREATED,
-            TASK_UPDATED,
-            TASK_COMPLETED,
-            TASK_REMINDER_SCHEDULED,
-        ],
-        _ => {
-            return Err(projection_configuration_invalid(
-                "projection id is unsupported",
-            ));
-        }
-    };
+#[derive(Debug, Clone, Copy)]
+struct TaskStatusProjectionHandler;
+
+impl ProjectionHandler for TaskStatusProjectionHandler {
+    fn project(&self, delivery: &EventDelivery) -> Result<Vec<ProjectionDocumentWrite>, SdkError> {
+        task_status_writes(delivery)
+    }
+}
+
+/// Registers the concrete Phase 6 projections with the generic platform runtime.
+///
+/// Business-contract decoding remains in this composition crate; paging,
+/// checkpointing, poison handling and rebuild orchestration live in
+/// `crm-projection-runtime`.
+pub fn phase6_projection_registry() -> Result<ProjectionRegistry, SdkError> {
+    ProjectionRegistry::new(vec![
+        ProjectionDefinition::new(
+            configured_projection_id(DEAL_TIMELINE_PROJECTION_ID)?,
+            configured_module_id(PROJECTION_CONSUMER_MODULE_ID)?,
+            configured_event_types(&[SALES_CREATED, SALES_UPDATED, SALES_STAGE_CHANGED])?,
+            Arc::new(DealTimelineProjectionHandler),
+        )?,
+        ProjectionDefinition::new(
+            configured_projection_id(TASK_STATUS_PROJECTION_ID)?,
+            configured_module_id(PROJECTION_CONSUMER_MODULE_ID)?,
+            configured_event_types(&[
+                TASK_CREATED,
+                TASK_UPDATED,
+                TASK_COMPLETED,
+                TASK_REMINDER_SCHEDULED,
+            ])?,
+            Arc::new(TaskStatusProjectionHandler),
+        )?,
+    ])
+}
+
+fn configured_event_types(values: &[&str]) -> Result<Vec<EventType>, SdkError> {
     values
         .iter()
         .map(|value| {
@@ -140,26 +89,6 @@ fn projection_event_types(projection_id: &str) -> Result<Vec<EventType>, SdkErro
                 .map_err(|error| projection_configuration_invalid(error.to_string()))
         })
         .collect()
-}
-
-fn projection_application(
-    projection_id: &str,
-    delivery: EventDelivery,
-) -> Result<ProjectionEventApplication, SdkError> {
-    let writes = match projection_id {
-        DEAL_TIMELINE_PROJECTION_ID => deal_timeline_writes(&delivery)?,
-        TASK_STATUS_PROJECTION_ID => task_status_writes(&delivery)?,
-        _ => {
-            return Err(projection_configuration_invalid(
-                "projection id is unsupported",
-            ));
-        }
-    };
-    Ok(ProjectionEventApplication {
-        projection_id: projection_id.to_owned(),
-        delivery,
-        writes,
-    })
 }
 
 fn deal_timeline_writes(
@@ -319,6 +248,11 @@ where
         .map_err(|error| projection_event_invalid(error.to_string()))
 }
 
+fn configured_projection_id(value: &str) -> Result<ProjectionId, SdkError> {
+    ProjectionId::try_new(value)
+        .map_err(|error| projection_configuration_invalid(error.to_string()))
+}
+
 fn configured_module_id(value: &str) -> Result<ModuleId, SdkError> {
     ModuleId::try_new(value).map_err(|error| projection_configuration_invalid(error.to_string()))
 }
@@ -328,7 +262,7 @@ fn projection_configuration_invalid(internal: impl Into<String>) -> SdkError {
         "PHASE6_PROJECTION_CONFIGURATION_INVALID",
         ErrorCategory::Internal,
         false,
-        "The Phase 6 projection runtime is misconfigured.",
+        "The Phase 6 projection registry is misconfigured.",
     )
     .with_internal_reference(internal)
 }
@@ -350,15 +284,21 @@ mod tests {
     #[test]
     fn projection_coordinates_are_stable_and_non_overlapping() {
         assert_ne!(DEAL_TIMELINE_PROJECTION_ID, TASK_STATUS_PROJECTION_ID);
+        let registry = phase6_projection_registry().expect("valid Phase 6 projection registry");
+        assert_eq!(registry.len(), 2);
         assert_eq!(
-            projection_event_types(DEAL_TIMELINE_PROJECTION_ID)
+            registry
+                .get(DEAL_TIMELINE_PROJECTION_ID)
                 .unwrap()
+                .event_types()
                 .len(),
             3
         );
         assert_eq!(
-            projection_event_types(TASK_STATUS_PROJECTION_ID)
+            registry
+                .get(TASK_STATUS_PROJECTION_ID)
                 .unwrap()
+                .event_types()
                 .len(),
             4
         );
