@@ -34,3 +34,8 @@ required-features = ["postgres-integration"]
 name = "postgres_production_mutations"
 path = "tests/postgres_production_mutations.rs"
 required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_production_evidence_rollback"
+path = "tests/postgres_production_evidence_rollback.rs"
+required-features = ["postgres-integration"]
