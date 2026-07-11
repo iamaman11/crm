@@ -185,6 +185,7 @@ version = "0.1.0"
 dependencies = [
  "crm-capability-runtime",
  "crm-module-sdk",
+ "crm-query-runtime",
  "sha2 0.10.9",
  "tokio",
 ]
