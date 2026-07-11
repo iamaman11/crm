@@ -206,40 +206,38 @@ Merged in PR #33 and PR #34.
 - Canonical generated Rust Protobuf types and one descriptor universe for published wire contracts.
 - Public wire schema identity remains independent from owner-module persisted-state identity.
 
-### Current gate-review slice 6F — audited no-op foundation and Sales/Activities capability adapters
+### Completed slice 6F — audited no-op foundation and Sales/Activities capability adapters
 
-Authoritative PR: #37. Branch: `feature/phase6f-recovery-v1`.
+Merged in PR #37 as `0969eb657cd03479c27fe6ee0825c57af8565419`.
 
-PR #35 was merged incompletely: only temporary payload/bootstrap artifacts reached `main`; its claimed crates, migration, ADRs and adapters were not materialized. PR #37 repairs that state from a clean branch and is the only authoritative implementation path for this slice.
+- Recovered the incomplete PR #35 merge into ordinary reviewable source code and removed all temporary payload/bootstrap artifacts.
+- Added shared deterministic `crm-capability-plan-support`, audited semantic no-op transactions and migration `0005_audited_noop_transactions`.
+- Added production Sales deal create/update/stage-advance planners and Activities task create/update/complete/reminder planners with exact money, tenant/resource validation and generated Protobuf mapping.
+- Verified mutation, replay, stale conflict, semantic no-op, rollback, migration and evidence behavior.
 
-Materialized scope:
+Exact PR head `94e0735ff5698989d8b1f28dd5d506ebdf413fcc` passed Rust, Governance and both Database CI jobs before merge. The temporary hosted-runner allocation blocker was resolved without bypassing required checks.
 
-- shared deterministic `crm-capability-plan-support` conversions, descriptor identity, event evidence, canonical audit intent and idempotency helpers;
-- audited aggregate no-op transactions that preserve an immutable typed response and audit/idempotency evidence without a false state mutation or outbox event;
-- migration `0005_audited_noop_transactions`, including refusal to roll back while zero-outbox transaction history exists;
-- `crm-sales-capability-adapter` planners for create, update and stage advance;
-- `crm-activities-capability-adapter` planners for create, update, complete and schedule-reminder;
-- exact-money base-10 conversion, tenant/resource validation, generated Protobuf input/output/event mapping and independent internal persisted schemas;
-- PostgreSQL mutation, replay, no-op, rollback and evidence tests;
-- ADR-036, ADR-037, CODEOWNERS and system-invariant updates.
+### Completed slice 6G — authenticated production PostgreSQL mutation acceptance
 
-Verified on the clean materialized source tree:
+Authoritative PR: #40. Issue: #39.
 
-- architecture enforcement passes;
-- committed `Cargo.lock` is current;
-- rustfmt passes;
-- Governance CI passes;
-- legacy database-upgrade CI passes.
+- Added `crm-sales-activities-capability-composition` as the non-transport boundary for exactly seven published Sales and Activities mutation capabilities.
+- Added a deterministic exact-version catalog and synchronous planner router that rejects unsupported, version-mismatched, owner-mismatched and request-mismatched coordinates before PostgreSQL.
+- Preserved transport boundaries: `crm-capability-ingress` and `services/crm-api` gained no production dependency on business owner modules or persistence implementations.
+- Exercised real Sales create/update/stage-advance and Activities create/update/reminder/complete commands through authenticated HTTP/gRPC ingress, semantic validation, live authorization and `PostgresTransactionalAggregateExecutor`.
+- Proved invalid bearer and tenant denial, cross-tenant resource rejection, exact replay, idempotency conflict, stale-version conflict, live permission revocation and audited semantic no-op behavior.
+- Measured exact committed evidence and proved that replay, denied and conflicting requests add no duplicate or partial evidence.
+- Added production evidence-omission rollback acceptance for missing outbox, audit and idempotency evidence, with typed safe failure and zero committed transactional side effects.
+- Fixed the runtime registry fixture to register all seven production mutation coordinates, including `activities.task.update` and `activities.task.schedule_reminder`.
 
-The first executable Rust gate found only five localized lint findings: one unused import and four intentional writes to deprecated Sales v1 compatibility fields. Exact source fixes are prepared. Later GitHub-hosted Governance, Rust and Database jobs currently fail before runner allocation (`steps: null`), which is an external CI-execution blocker rather than product test evidence. PR #37 remains draft and must not merge until one clean head receives executable and green required checks.
+Implementation head `c6c3711ec404d762a094c2836cc25d6a79fe9a1b` passed Rust, Governance and both Database CI jobs. The final merge head must repeat those required gates after roadmap synchronization.
 
 ### Next implementation sequence
 
-1. **6G — authenticated public PostgreSQL mutation acceptance:** HTTP/gRPC → capability registry → live authorization → locked aggregate → one record/outbox/audit/idempotency transaction → typed response.
-2. **6H — permission-bound queries:** get/list paths with field/resource authorization and stable opaque cursor pagination.
-3. **6I — optional Sales–Activities link module:** source events consumed through governed ports; task creation through `CapabilityClient` only; deterministic delivery deduplication; independent disable and uninstall.
-4. **6J — rebuildable projections:** deal timeline and task-status projections with tenant checkpoints, retries, replay and deletion/rebuild equivalence.
-5. **6K — complete Phase 6 E2E:** cross-tenant denial, stale conflict, duplicate delivery, disabled link, transaction rollback/fault injection and projection rebuild.
+1. **6H — permission-bound queries:** get/list paths with field/resource authorization and stable opaque cursor pagination.
+2. **6I — optional Sales–Activities link module:** source events consumed through governed ports; task creation through `CapabilityClient` only; deterministic delivery deduplication; independent disable and uninstall.
+3. **6J — rebuildable projections:** deal timeline and task-status projections with tenant checkpoints, retries, replay and deletion/rebuild equivalence.
+4. **6K — complete Phase 6 E2E:** cross-tenant denial, stale conflict, duplicate delivery, disabled link, transaction rollback/fault injection and projection rebuild.
 
 ### Completion gate
 
