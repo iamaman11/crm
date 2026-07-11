@@ -109,10 +109,7 @@ impl LiveQueryVisibilityStore {
         Ok(state.revision)
     }
 
-    pub fn revoke(
-        &self,
-        grant: &QueryVisibilityGrant,
-    ) -> Result<bool, QueryVisibilityStoreError> {
+    pub fn revoke(&self, grant: &QueryVisibilityGrant) -> Result<bool, QueryVisibilityStoreError> {
         let mut state = self
             .state
             .write()
