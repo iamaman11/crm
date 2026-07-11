@@ -40,7 +40,6 @@ const fn payload_encoding_name(value: PayloadEncoding) -> &'static str {
     }
 }
 
-
 fn audit_materialization_to_batch_error(error: AuditMaterializationError) -> BatchError {
     match error {
         AuditMaterializationError::Database(error) => BatchError::Database(error),
@@ -90,7 +89,7 @@ pub fn batch_error_to_sdk(error: BatchError) -> SdkError {
     }
 }
 
-fn parse_data_class(value: String) -> Result<DataClass, BatchError> {
+pub(crate) fn parse_data_class(value: String) -> Result<DataClass, BatchError> {
     match value.as_str() {
         "public" => Ok(DataClass::Public),
         "internal" => Ok(DataClass::Internal),
@@ -107,7 +106,7 @@ fn parse_data_class(value: String) -> Result<DataClass, BatchError> {
     }
 }
 
-fn parse_payload_encoding(value: String) -> Result<PayloadEncoding, BatchError> {
+pub(crate) fn parse_payload_encoding(value: String) -> Result<PayloadEncoding, BatchError> {
     match value.as_str() {
         "protobuf" => Ok(PayloadEncoding::Protobuf),
         "json" => Ok(PayloadEncoding::Json),

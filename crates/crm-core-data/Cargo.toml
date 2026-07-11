@@ -29,3 +29,8 @@ required-features = ["postgres-integration"]
 name = "postgres_advanced"
 path = "tests/postgres_advanced.rs"
 required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_query"
+path = "tests/postgres_query.rs"
+required-features = ["postgres-integration"]

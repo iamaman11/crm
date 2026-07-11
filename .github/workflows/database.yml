@@ -96,6 +96,14 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-core-data --features postgres-integration --test postgres_advanced -- --nocapture 2>&1 | tee database/postgres-advanced.log
+      - name: Verify tenant-scoped PostgreSQL keyset query reader
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-core-data --features postgres-integration --test postgres_query -- --nocapture 2>&1 | tee database/postgres-query.log
       - name: Verify public capability gateway acceptance
         env:
           DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
