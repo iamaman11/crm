@@ -177,6 +177,12 @@ pub struct ProjectionBatchResult {
     pub has_more: bool,
 }
 
+#[derive(Debug)]
+struct ProjectionApplicationFailure {
+    delivery: EventDelivery,
+    error: SdkError,
+}
+
 #[derive(Clone)]
 pub struct ProjectionRunner {
     store: Arc<dyn ProjectionStore>,
@@ -232,8 +238,11 @@ impl ProjectionRunner {
         for delivery in page.deliveries {
             let application = match projection_application(definition, &tenant_id, delivery) {
                 Ok(application) => application,
-                Err((delivery, error)) => {
-                    self.mark_failed(definition, &delivery, &error).await?;
+                Err(failure) => {
+                    let ProjectionApplicationFailure { delivery, error } = *failure;
+                    if delivery.tenant_id == tenant_id {
+                        self.mark_failed(definition, &delivery, &error).await?;
+                    }
                     return Err(error);
                 }
             };
@@ -304,13 +313,15 @@ fn projection_application(
     definition: &ProjectionDefinition,
     tenant_id: &TenantId,
     delivery: EventDelivery,
-) -> Result<ProjectionEventApplication, (EventDelivery, SdkError)> {
+) -> Result<ProjectionEventApplication, Box<ProjectionApplicationFailure>> {
     if let Err(error) = validate_delivery_binding(definition, tenant_id, &delivery) {
-        return Err((delivery, error));
+        return Err(Box::new(ProjectionApplicationFailure { delivery, error }));
     }
     let writes = match definition.handler.project(&delivery) {
         Ok(writes) => writes,
-        Err(error) => return Err((delivery, error)),
+        Err(error) => {
+            return Err(Box::new(ProjectionApplicationFailure { delivery, error }));
+        }
     };
     let application = ProjectionEventApplication {
         projection_id: definition.projection_id.to_string(),
@@ -325,7 +336,10 @@ fn projection_application(
             "The projection handler produced invalid output.",
         )
         .with_internal_reference(message);
-        return Err((application.delivery, error));
+        return Err(Box::new(ProjectionApplicationFailure {
+            delivery: application.delivery,
+            error,
+        }));
     }
     Ok(application)
 }
@@ -568,7 +582,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn runner_resumes_from_checkpoint_and_rebuild_resets_state() {
-        let store = Arc::new(TestStore::with_delivery(delivery()));
+        let store = Arc::new(TestStore::with_delivery(delivery_for_tenant("tenant-a")));
         let runner = ProjectionRunner::new(
             store.clone(),
             ProjectionRegistry::new(vec![definition(Arc::new(WriteHandler))]).unwrap(),
@@ -599,7 +613,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn deterministic_handler_failure_poison_marks_without_advancing_checkpoint() {
-        let store = Arc::new(TestStore::with_delivery(delivery()));
+        let store = Arc::new(TestStore::with_delivery(delivery_for_tenant("tenant-a")));
         let runner = ProjectionRunner::new(
             store.clone(),
             ProjectionRegistry::new(vec![definition(Arc::new(FailingHandler))]).unwrap(),
@@ -619,6 +633,26 @@ mod tests {
         assert_eq!(state.failures[0].failure_code, "TEST_PROJECTION_POISON");
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn cross_tenant_delivery_is_rejected_without_poisoning_another_tenant() {
+        let store = Arc::new(TestStore::with_delivery(delivery_for_tenant("tenant-b")));
+        let runner = ProjectionRunner::new(
+            store.clone(),
+            ProjectionRegistry::new(vec![definition(Arc::new(WriteHandler))]).unwrap(),
+        );
+
+        let error = runner
+            .run_batch(tenant(), "test.projection.v1", 10)
+            .await
+            .expect_err("cross-tenant delivery must be rejected");
+        assert_eq!(error.code, "PROJECTION_DELIVERY_TENANT_MISMATCH");
+
+        let state = store.state.lock().unwrap();
+        assert_eq!(state.applied, 0);
+        assert!(state.checkpoint.is_none());
+        assert!(state.failures.is_empty());
+    }
+
     fn definition(handler: Arc<dyn ProjectionHandler>) -> ProjectionDefinition {
         ProjectionDefinition::new(
             ProjectionId::try_new("test.projection.v1").unwrap(),
@@ -633,11 +667,11 @@ mod tests {
         TenantId::try_new("tenant-a").unwrap()
     }
 
-    fn delivery() -> EventDelivery {
+    fn delivery_for_tenant(tenant_id: &str) -> EventDelivery {
         EventDelivery {
             delivery_id: DeliveryId::try_new("delivery-1").unwrap(),
             event_id: EventId::try_new("event-1").unwrap(),
-            tenant_id: tenant(),
+            tenant_id: TenantId::try_new(tenant_id).unwrap(),
             source_module_id: ModuleId::try_new("crm.test-source").unwrap(),
             consumer_module_id: ModuleId::try_new("crm.test-projection").unwrap(),
             source_actor_id: ActorId::try_new("actor-a").unwrap(),
