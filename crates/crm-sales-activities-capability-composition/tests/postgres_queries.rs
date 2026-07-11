@@ -11,10 +11,9 @@ use crm_capability_runtime::{
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
 use crm_module_sdk::testing::FixedClock;
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, Clock,
-    CorrelationId, DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
-    PayloadEncoding, PortFuture, RecordId, RecordType, RequestId, RetentionPolicyId, SchemaVersion,
-    SdkError, TenantId, TraceId, TypedPayload,
+    ActorId, BusinessTransactionId, CausationId, Clock, CorrelationId, DataClass, ExecutionContext,
+    IdempotencyKey, ModuleExecutionContext, PayloadEncoding, PortFuture, RecordId, RecordType,
+    RequestId, RetentionPolicyId, SchemaVersion, SdkError, TenantId, TraceId, TypedPayload,
 };
 use crm_proto_contracts::crm::{
     activities::v1 as activities, core::v1 as core, sales::v1 as sales,
