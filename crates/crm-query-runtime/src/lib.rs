@@ -8,9 +8,7 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, RecordId, RecordType, TenantId,
-};
+use crm_module_sdk::{ActorId, CapabilityId, CapabilityVersion, RecordId, RecordType, TenantId};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use std::error::Error;
@@ -146,7 +144,8 @@ impl CursorCodec {
         let mut mac = HmacSha256::new_from_slice(&self.signing_key)
             .map_err(|_| CursorError::SigningUnavailable)?;
         mac.update(payload);
-        mac.verify_slice(tag).map_err(|_| CursorError::IntegrityFailed)
+        mac.verify_slice(tag)
+            .map_err(|_| CursorError::IntegrityFailed)
     }
 }
 
@@ -158,9 +157,7 @@ pub struct PageSizePolicy {
 
 impl PageSizePolicy {
     pub fn validate(self) -> Result<Self, CursorError> {
-        if self.default_size == 0
-            || self.maximum_size == 0
-            || self.default_size > self.maximum_size
+        if self.default_size == 0 || self.maximum_size == 0 || self.default_size > self.maximum_size
         {
             return Err(CursorError::InvalidPagePolicy);
         }
@@ -183,7 +180,9 @@ impl PageSizePolicy {
     }
 }
 
-pub fn normalized_filter_hash<'a>(fields: impl IntoIterator<Item = (&'a str, &'a [u8])>) -> [u8; 32] {
+pub fn normalized_filter_hash<'a>(
+    fields: impl IntoIterator<Item = (&'a str, &'a [u8])>,
+) -> [u8; 32] {
     let mut fields = fields.into_iter().collect::<Vec<_>>();
     fields.sort_by(|left, right| left.0.cmp(right.0).then(left.1.cmp(right.1)));
     let mut hasher = Sha256::new();
@@ -215,7 +214,9 @@ pub enum CursorError {
 impl CursorError {
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::SigningKeyTooShort | Self::SigningUnavailable => "QUERY_CURSOR_CONFIGURATION_INVALID",
+            Self::SigningKeyTooShort | Self::SigningUnavailable => {
+                "QUERY_CURSOR_CONFIGURATION_INVALID"
+            }
             Self::InvalidBinding => "QUERY_CURSOR_BINDING_INVALID",
             Self::ContinuationTooLarge | Self::TokenTooLarge => "QUERY_CURSOR_TOO_LARGE",
             Self::MalformedToken | Self::InvalidStoredValue => "QUERY_CURSOR_INVALID",
@@ -289,24 +290,28 @@ fn decode_payload(payload: &[u8]) -> Result<(CursorBinding, CursorContinuation),
     if version != CURSOR_VERSION {
         return Err(CursorError::UnsupportedVersion);
     }
-    let tenant_id = TenantId::try_new(reader.string()?).map_err(|_| CursorError::InvalidStoredValue)?;
+    let tenant_id =
+        TenantId::try_new(reader.string()?).map_err(|_| CursorError::InvalidStoredValue)?;
     let actor_id = match reader.byte()? {
         0 => None,
-        1 => Some(
-            ActorId::try_new(reader.string()?).map_err(|_| CursorError::InvalidStoredValue)?,
-        ),
+        1 => Some(ActorId::try_new(reader.string()?).map_err(|_| CursorError::InvalidStoredValue)?),
         _ => return Err(CursorError::InvalidStoredValue),
     };
     let capability_id =
         CapabilityId::try_new(reader.string()?).map_err(|_| CursorError::InvalidStoredValue)?;
-    let capability_version =
-        CapabilityVersion::try_new(reader.string()?).map_err(|_| CursorError::InvalidStoredValue)?;
+    let capability_version = CapabilityVersion::try_new(reader.string()?)
+        .map_err(|_| CursorError::InvalidStoredValue)?;
     let resource_type =
         RecordType::try_new(reader.string()?).map_err(|_| CursorError::InvalidStoredValue)?;
     let mut normalized_filter_hash = [0_u8; 32];
     normalized_filter_hash.copy_from_slice(reader.take(32)?);
     let sort_id = reader.string()?;
-    let page_size = u32::from_be_bytes(reader.take(4)?.try_into().map_err(|_| CursorError::InvalidStoredValue)?);
+    let page_size = u32::from_be_bytes(
+        reader
+            .take(4)?
+            .try_into()
+            .map_err(|_| CursorError::InvalidStoredValue)?,
+    );
     let sort_key = reader.bytes()?;
     let record_id =
         RecordId::try_new(reader.string()?).map_err(|_| CursorError::InvalidStoredValue)?;
@@ -324,7 +329,10 @@ fn decode_payload(payload: &[u8]) -> Result<(CursorBinding, CursorContinuation),
         page_size,
     };
     binding.validate()?;
-    let continuation = CursorContinuation { sort_key, record_id };
+    let continuation = CursorContinuation {
+        sort_key,
+        record_id,
+    };
     continuation.validate()?;
     Ok((binding, continuation))
 }
@@ -497,7 +505,10 @@ mod tests {
         assert_eq!(policy.resolve(0).unwrap(), 50);
         assert_eq!(policy.resolve(1).unwrap(), 1);
         assert_eq!(policy.resolve(200).unwrap(), 200);
-        assert_eq!(policy.resolve(-1).unwrap_err(), CursorError::InvalidPageSize);
+        assert_eq!(
+            policy.resolve(-1).unwrap_err(),
+            CursorError::InvalidPageSize
+        );
         assert_eq!(
             policy.resolve(201).unwrap_err(),
             CursorError::PageSizeTooLarge
