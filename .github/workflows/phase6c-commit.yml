@@ -1,0 +1,43 @@
+name: Phase 6C source commit
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/sales-activities-persistence-planners-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply validated patch and focused correction
+        shell: bash
+        run: |
+          sed -n '/^[[:space:]]*H4sI/{s/^[[:space:]]*//;p;q;}' \
+            .github/workflows/phase6c-planner-source.yml \
+            | base64 --decode | gzip --decompress > /tmp/phase6c.patch
+          patch -p1 < /tmp/phase6c.patch
+          sed -i 's/    BatchError, CapabilityBatchExecutionPlan/    CapabilityBatchExecutionPlan/' \
+            crates/crm-core-data/src/aggregate_executor.rs
+          cargo fmt --all
+          cargo test -p crm-core-data --lib
+          cargo clippy -p crm-core-data --all-targets --all-features -- -D warnings
+      - name: Commit normalized source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-core-data docs/adr/ADR-034-transaction-aware-aggregate-planning.md
+          git diff --cached --check
+          git commit -m "feat: add transaction-aware aggregate executor"
+          git push origin HEAD:feature/sales-activities-persistence-planners-v1
