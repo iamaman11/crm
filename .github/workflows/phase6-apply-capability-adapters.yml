@@ -1,4 +1,4 @@
-name: Phase 6F recovery materialize valid payloads
+name: Phase 6F recovery commit valid payloads
 
 on:
   pull_request:
@@ -14,15 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: feature/phase6f-recovery-v1
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Materialize every valid payload entry
+      - name: Clone recovery branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh repo clone "$GITHUB_REPOSITORY" repo -- --quiet --branch feature/phase6f-recovery-v1 --depth 1
+      - name: Materialize and publish valid entries
+        working-directory: repo
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euxo pipefail
           python - <<'PY'
           import ast
           import base64
@@ -42,10 +43,9 @@ jobs:
                   if isinstance(node, ast.Assign)
                   and any(isinstance(target, ast.Name) and target.id == "FILES" for target in node.targets)
               )
-              files = ast.literal_eval(assignment.value)
-              for path, encoded in files.items():
+              for path, encoded in ast.literal_eval(assignment.value).items():
                   if path == corrupt_path:
-                      print(f"SKIP corrupt entry {path}")
+                      print(f"SKIP {path}")
                       continue
                   target = Path(path)
                   target.parent.mkdir(parents=True, exist_ok=True)
@@ -54,8 +54,6 @@ jobs:
           PY
           cargo generate-lockfile
           cargo fmt --all
-      - name: Commit materialized source
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
@@ -65,6 +63,7 @@ jobs:
             scripts/phase6_payload_2.py \
             scripts/phase6_payload_3.py \
             scripts/phase6_payload_4.py
+          git status --short
           git diff --cached --check
           git commit -m "feat: materialize valid Phase 6F capability sources"
           git push origin HEAD:feature/phase6f-recovery-v1
