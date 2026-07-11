@@ -41,18 +41,29 @@ A manifest may declare future owned object names. That declaration does not mean
 |---|---|---|---|---|
 | `crm.sales` | Sales owner domain | **Vertical slice** | Deal create/update/stage advance/get/list | Leads, qualification, pipelines/admin depth, territories, quotas, forecasts, account plans, revenue intelligence, coaching and other expert Sales scope |
 | `crm.activities` | Activities/productivity owner domain | **Vertical slice** | Task create/update/complete/reminder/get/list | Appointments, recurring work, queues, calendars, synchronization and other expert activity scope |
+| `crm.sales-activities-link` | Optional Sales→Activities coordination | **Foundation / production integration in progress** | Installable pure link core, exact Sales event contract decode, Activities command encode, deterministic delivery identity and governed `CapabilityClient` target path | Production outbox delivery, lifecycle gate, durable receipt recovery and PostgreSQL acceptance in PR #54 |
 
-Current count: **2 implemented owner modules with production vertical slices**.
+Current count: **2 implemented owner modules with production vertical slices plus 1 independently governed link module in production integration**.
 
 Current count of product-complete expert modules: **0**.
 
-## 4. Current next module
+## 4. Current module delivery
 
-| Module | Type | State | Purpose |
-|---|---|---|---|
-| Sales–Activities link module | Link module | **Planned / next** | Consume versioned Sales events and invoke Activities capabilities through governed ports with deterministic delivery deduplication; remain independently disableable/uninstallable |
+The current active module delivery is `crm.sales-activities-link` in Phase 6I / issue #47 / PR #54.
 
-The exact published `module_id` must be fixed when the 6I manifest is introduced and then treated as immutable identity.
+Its immutable published identity is now fixed as `crm.sales-activities-link`.
+
+The module must remain:
+
+- independently installable and activatable;
+- independently suspendable and uninstallable;
+- unable to read Sales or Activities internals directly;
+- unable to mutate Activities except through the governed `CapabilityClient` path;
+- owner only of its private delivery/configuration state;
+- safe under duplicate delivery and retry;
+- irrelevant to the independent operation of Sales and Activities when disabled or absent.
+
+Production completion is not claimed until the permanent PostgreSQL acceptance gate proves those properties.
 
 ## 5. Mandatory customer-master owner domains
 
@@ -139,6 +150,6 @@ Do not create a module solely because a directory, screen, table or team exists.
 
 ## 10. Target scale
 
-The final universal CRM will contain substantially more than the current two business modules. The roadmap already implies **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
+The final universal CRM will contain substantially more than the current owner/link modules. The roadmap already implies **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
 
 The exact count becomes authoritative only as domains receive stable published module identities.
