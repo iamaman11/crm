@@ -1,6 +1,4 @@
-use crm_capability_runtime::{
-    AuthorizationDecision, CapabilityDefinition, CapabilityRegistryPort,
-};
+use crm_capability_runtime::{AuthorizationDecision, CapabilityDefinition, CapabilityRegistryPort};
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, ErrorCategory, ModuleId, PortFuture,
     RequestId, SchemaVersion, SdkError, TenantId, TraceId, TypedPayload,
@@ -199,7 +197,10 @@ fn validate_output_contract(
         .output_contract
         .as_ref()
         .ok_or(QueryGatewayError::OutputContractMismatch)?;
-    result.output.validate().map_err(QueryGatewayError::Output)?;
+    result
+        .output
+        .validate()
+        .map_err(QueryGatewayError::Output)?;
     if contract.matches(&result.output) {
         Ok(())
     } else {
@@ -243,9 +244,7 @@ impl fmt::Display for QueryGatewayError {
             Self::AuthorizationDependency(_) => "query authorization service is unavailable",
             Self::PermissionDenied { .. } => "query authorization was denied",
             Self::Execution(_) => "query execution failed",
-            Self::Output(_) | Self::OutputContractMismatch => {
-                "query output contract is invalid"
-            }
+            Self::Output(_) | Self::OutputContractMismatch => "query output contract is invalid",
         })
     }
 }
