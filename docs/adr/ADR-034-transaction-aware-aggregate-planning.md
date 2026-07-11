@@ -30,6 +30,8 @@ Introduce `TransactionalAggregatePlanner` with two synchronous, no-I/O operation
 
 Capability replay responses use the internal immutable schema `crm.core.data.capability_execution_result@1.0.0`. The stored payload includes output and affected-resource versions. Replay changes only the transient `replayed` flag.
 
+PostgreSQL acceptance scenarios that intentionally share the repository fixture tenant acquire a dedicated test-only advisory transaction lock. This serializes only those test cases so one scenario cannot advance the fixture audit head between another scenario's assertions. Production aggregate concurrency continues to rely on the target row lock, capability idempotency and the tenant audit-chain serialization defined by ADR-033.
+
 ## Consequences
 
 - Business modules remain free of SQL and infrastructure clients.
