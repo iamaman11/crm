@@ -1,9 +1,11 @@
 name: Phase 6F emit Clippy-fix blobs
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - feature/phase6f-recovery-v1
+    paths:
+      - .github/workflows/phase6-clippy-fix.yml
 
 permissions:
   contents: write
@@ -12,7 +14,6 @@ permissions:
 
 jobs:
   emit:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,19 +35,21 @@ jobs:
           import subprocess
 
           activities = Path("crates/crm-activities-capability-adapter/src/lib.rs")
-          source = activities.read_text().replace(
-              "RecordRef, RecordSnapshot, ResourceRef, SdkError, TenantId, TypedPayload,",
-              "RecordRef, RecordSnapshot, SdkError, TenantId, TypedPayload,",
+          activities.write_text(
+              activities.read_text().replace(
+                  "RecordRef, RecordSnapshot, ResourceRef, SdkError, TenantId, TypedPayload,",
+                  "RecordRef, RecordSnapshot, SdkError, TenantId, TypedPayload,",
+              )
           )
-          activities.write_text(source)
 
           sales = Path("crates/crm-sales-capability-adapter/src/lib.rs")
-          source = sales.read_text().replace(
-              "fn deal_to_wire(deal: &Deal, tenant: &TenantId) -> wire::Deal {",
-              "#[allow(deprecated)]\nfn deal_to_wire(deal: &Deal, tenant: &TenantId) -> wire::Deal {",
-              1,
+          sales.write_text(
+              sales.read_text().replace(
+                  "fn deal_to_wire(deal: &Deal, tenant: &TenantId) -> wire::Deal {",
+                  "#[allow(deprecated)]\nfn deal_to_wire(deal: &Deal, tenant: &TenantId) -> wire::Deal {",
+                  1,
+              )
           )
-          sales.write_text(source)
           subprocess.run(["cargo", "fmt", "--all"], check=True)
 
           repo = os.environ["GITHUB_REPOSITORY"]
