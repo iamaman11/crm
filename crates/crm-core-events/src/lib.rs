@@ -171,10 +171,7 @@ pub trait ProjectionStore: Send + Sync {
         application: ProjectionEventApplication,
     ) -> ProjectionStoreFuture<'_, ProjectionApplyResult>;
 
-    fn mark_projection_failed(
-        &self,
-        failure: ProjectionFailure,
-    ) -> ProjectionStoreFuture<'_, ()>;
+    fn mark_projection_failed(&self, failure: ProjectionFailure) -> ProjectionStoreFuture<'_, ()>;
 
     fn reset_projection(
         &self,

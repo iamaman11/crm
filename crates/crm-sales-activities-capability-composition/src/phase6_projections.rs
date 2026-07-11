@@ -123,7 +123,9 @@ impl Phase6ProjectionWorker {
         projection_id: &str,
         page_size: u32,
     ) -> Result<u64, SdkError> {
-        self.runner.rebuild(tenant_id, projection_id, page_size).await
+        self.runner
+            .rebuild(tenant_id, projection_id, page_size)
+            .await
     }
 
     pub fn runner(&self) -> &ProjectionRunner {

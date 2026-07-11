@@ -439,6 +439,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-projection-runtime"
+version = "0.1.0"
+dependencies = [
+ "crm-core-events",
+ "crm-module-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "crm-proto-contracts"
 version = "0.1.0"
 dependencies = [
@@ -482,6 +492,7 @@ dependencies = [
  "crm-core-data",
  "crm-core-events",
  "crm-module-sdk",
+ "crm-projection-runtime",
  "crm-proto-contracts",
  "crm-query-runtime",
  "crm-sales-activities-link",

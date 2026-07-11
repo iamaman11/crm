@@ -33,10 +33,7 @@ impl ProjectionStore for PostgresDataStore {
         Box::pin(async move { PostgresDataStore::apply_projection_event(self, &application).await })
     }
 
-    fn mark_projection_failed(
-        &self,
-        failure: ProjectionFailure,
-    ) -> ProjectionStoreFuture<'_, ()> {
+    fn mark_projection_failed(&self, failure: ProjectionFailure) -> ProjectionStoreFuture<'_, ()> {
         Box::pin(async move { self.record_projection_failure(&failure).await })
     }
 
@@ -118,13 +115,8 @@ impl PostgresDataStore {
         }
     }
 
-    async fn record_projection_failure(
-        &self,
-        failure: &ProjectionFailure,
-    ) -> Result<(), SdkError> {
-        failure
-            .validate()
-            .map_err(projection_request_invalid)?;
+    async fn record_projection_failure(&self, failure: &ProjectionFailure) -> Result<(), SdkError> {
+        failure.validate().map_err(projection_request_invalid)?;
         let mut transaction = self
             .pool()
             .begin()

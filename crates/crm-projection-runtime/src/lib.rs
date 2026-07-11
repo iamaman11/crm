@@ -461,7 +461,9 @@ mod tests {
             Box::pin(async move {
                 let state = self.state.lock().expect("test store lock");
                 let deliveries = match (&state.delivery, &request.after) {
-                    (Some(delivery), Some(cursor)) if cursor.event_id == delivery.event_id => Vec::new(),
+                    (Some(delivery), Some(cursor)) if cursor.event_id == delivery.event_id => {
+                        Vec::new()
+                    }
                     (Some(delivery), _) => vec![delivery.clone()],
                     (None, _) => Vec::new(),
                 };
