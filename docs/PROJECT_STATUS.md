@@ -6,40 +6,32 @@ This document is the concise human-readable status page. The normative sequence 
 
 ## Current position
 
-The repository has completed implementation and automated acceptance for the complete Phase 6 first modular production proof. PR #63 is in **Gate review**: all required implementation gates are green, but Phase 6 becomes **Complete** only after the delivery packet is merged.
+**Phase 6 is complete.** PR #63 was merged into `main` as merge commit `82910fa17f21074b1e091615a4251092cfa8ab2f` after the final one-commit review head passed all required gates.
 
-Delivered through Phase 6:
+The repository now contains a complete first production-composed modular CRM proof:
 
 - repository governance and executable architecture rules;
 - typed Module Manifest IR and immutable module identity;
 - governed Module SDK and deterministic test harness;
 - module lifecycle and registry runtime;
 - PostgreSQL tenant/RLS, record, relationship, idempotency, outbox and append-only audit foundation;
-- capability execution gateway and authenticated HTTP/gRPC mutation ingress;
+- authenticated mutation and permission-bound query gateways;
 - independent Sales Deal and Activities Task owner-domain vertical slices;
-- generated Protobuf contract runtime and validated persisted-state codecs;
-- production Sales/Activities mutation composition through PostgreSQL;
-- permission-bound Deal/Task get/list queries with stable opaque cursor pagination;
-- authenticated HTTP/gRPC query ingress with query-only execution context;
-- governed inbound `EventDelivery` contract and restart-safe event lineage;
-- independently installable `crm.sales-activities-link` module with published contract adapter;
-- durable consumer delivery ledger with lease, retry and dead-letter behavior;
-- lifecycle-aware Sales-to-Activities event processing through the governed `CapabilityGateway`;
+- governed inbound `EventDelivery` and restart-safe event lineage;
+- independently governed `crm.sales-activities-link` module;
+- durable consumer delivery ledger with lease, retry, recovery and dead-letter behavior;
+- lifecycle-aware Sales-to-Activities processing through the production `CapabilityGateway`;
 - rebuildable Deal timeline and Task status projections with tenant checkpoints and replay;
 - real `crm-application-runtime` composition boundary and thin deployable `services/crm-api` process host;
-- versioned generic gRPC application gateway plus governed HTTP mutation/query endpoints;
+- governed HTTP mutation/query endpoints and versioned gRPC application gateway;
 - health, readiness, background workers and graceful shutdown;
-- process-level Phase 6 acceptance covering real `crm-api`, PostgreSQL, HTTP, gRPC, link delivery and projections.
+- process-level acceptance covering real `crm-api`, PostgreSQL, HTTP, gRPC, link delivery and projections.
 
-Current phase: **Phase 6 — Gate review**.
+Current phase: **Phase 7 — Ready**.
 
-Current working branch: **`develop/phase6-runtime-completion`**.
+Current implementation focus: **search/generalized projections, Admin Studio foundations, typed web product shell, and golden module tooling**.
 
-Current delivery packet: **PR #63 / issue #55 — Phase 6 runtime completion**.
-
-Current implementation focus: **final review and merge of the complete Phase 6 delivery packet**.
-
-## Phase 6 progress
+## Phase 6 completion
 
 | Slice | Result | State |
 |---|---|---|
@@ -51,14 +43,12 @@ Current implementation focus: **final review and merge of the complete Phase 6 d
 | 6F | Production Sales/Activities capability adapters | Complete |
 | 6G | Authenticated production PostgreSQL mutations | Complete |
 | 6H | Permission-bound production queries | Complete |
-| 6I | Optional Sales–Activities link module and production event delivery | **Gate review — implemented and acceptance green in PR #63** |
-| 6J | Rebuildable Deal timeline and Task status projections | **Gate review — implemented and acceptance green in PR #63** |
-| 6K | Production `crm-api` application composition root | **Gate review — implemented and acceptance green in PR #63** |
-| 6L | Complete Phase 6 process-level production E2E and closure | **Gate review — implemented and acceptance green in PR #63** |
+| 6I | Optional Sales–Activities link module and production event delivery | Complete — merged in PR #63 |
+| 6J | Rebuildable Deal timeline and Task status projections | Complete — merged in PR #63 |
+| 6K | Production `crm-api` application composition root | Complete — merged in PR #63 |
+| 6L | Complete Phase 6 process-level production E2E and closure | Complete — merged in PR #63 |
 
-Implementation checkpoint `acba0b0d97998e7a0a347749032e1f7002fa6b34` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously.
-
-Phase 6 becomes **Complete** when PR #63 is merged with the required gates preserved.
+Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously before merge.
 
 ## Product readiness summary
 
@@ -72,10 +62,6 @@ The architecture and backend platform now have a complete first production-compo
 ### Implemented link module
 
 - `crm.sales-activities-link` — independently governed optional link module with pure core, published contract adapter, durable event delivery, lifecycle gating and production end-to-end acceptance.
-
-### Important distinction
-
-The workspace contains many technical crates, but those are platform components, not CRM business modules. Module counting follows `MODULE_CATALOG.md`.
 
 ### Not yet complete
 
@@ -91,11 +77,12 @@ The workspace contains many technical crates, but those are platform components,
 
 ## Immediate delivery sequence
 
-1. Complete review and merge of PR #63; after merge, mark Phase 6 and issues #47–#50/#55/#9 complete.
-2. Establish the golden module generator and permanent repository commands tracked by #56 so later domain waves can be created from one enforced architecture template.
-3. Begin Phase 7: permission-aware search, generalized projections/indexing, Admin Studio foundations and the typed web product shell.
-4. Begin the domain-wave program tracked by #57, with customer master/identity/consent (#28) and commercial lifecycle/catalog/CPQ (#29) remaining explicit owner-domain programs rather than being absorbed into Sales.
-5. Continue frontend and expert backend modules as end-to-end vertical slices after the Phase 7 product-plane foundation is established.
+1. Begin Phase 7 with tenant- and permission-aware search and generalized projection/indexing infrastructure.
+2. Establish the golden module generator and permanent repository commands tracked by #56 so later domain waves inherit architecture and gates by construction.
+3. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
+4. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
+5. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
+6. Continue frontend and expert backend modules as end-to-end vertical slices.
 
 ## Development mode
 
