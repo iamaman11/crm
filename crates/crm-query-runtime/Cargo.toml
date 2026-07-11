@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[lib]
+path = "src/query_lib.rs"
+
 [dependencies]
 base64 = "0.22"
 crm-capability-runtime = { path = "../crm-capability-runtime" }
