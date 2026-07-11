@@ -355,6 +355,7 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-module-sdk",
+ "crm-sales-activities-query-adapter",
  "crm-sales-capability-adapter",
 ]
 
