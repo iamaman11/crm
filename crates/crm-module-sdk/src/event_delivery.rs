@@ -109,10 +109,7 @@ impl EventDelivery {
     /// bound across delivery. The host may use a service principal as the
     /// processing actor, so the execution actor is intentionally not required
     /// to equal the source actor.
-    pub fn validate_for_consumer(
-        &self,
-        context: &ModuleExecutionContext,
-    ) -> Result<(), SdkError> {
+    pub fn validate_for_consumer(&self, context: &ModuleExecutionContext) -> Result<(), SdkError> {
         self.validate()?;
         context.validate()?;
         if context.module_id != self.consumer_module_id {
@@ -145,7 +142,10 @@ impl EventDelivery {
 
 fn validated_identifier(field: &'static str, value: String) -> Result<String, SdkError> {
     if value.is_empty() {
-        return Err(SdkError::invalid_argument(field, "identifier must not be empty"));
+        return Err(SdkError::invalid_argument(
+            field,
+            "identifier must not be empty",
+        ));
     }
     if value.len() > crate::MAX_IDENTIFIER_BYTES {
         return Err(SdkError::invalid_argument(
