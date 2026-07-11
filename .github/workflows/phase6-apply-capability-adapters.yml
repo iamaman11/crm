@@ -26,4 +26,16 @@ jobs:
       - name: Build recovered Git commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/phase6_recovery_publish.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/phase6_recovery_publish.py")
+          source = path.read_text()
+          source = source.replace(
+              '["git", "status", "--porcelain=v1", "-z"]',
+              '["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"]',
+          )
+          path.write_text(source)
+          PY
+          python scripts/phase6_recovery_publish.py
