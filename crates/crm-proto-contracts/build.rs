@@ -28,7 +28,10 @@ fn main() {
 
     let mut proto_files = Vec::new();
     collect_proto_files(&proto_root, &mut proto_files);
-    assert!(!proto_files.is_empty(), "published Protobuf source set is empty");
+    assert!(
+        !proto_files.is_empty(),
+        "published Protobuf source set is empty"
+    );
 
     let protoc = protoc_bin_vendored::protoc_bin_path().expect("vendored protoc must be available");
     let mut configuration = prost_build::Config::new();

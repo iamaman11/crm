@@ -7,8 +7,8 @@ pub const FILE_DESCRIPTOR_SET: &[u8] =
 
 #[cfg(test)]
 mod tests {
-    use super::crm::{activities::v1 as activities, sales::v1 as sales};
     use super::FILE_DESCRIPTOR_SET;
+    use super::crm::{activities::v1 as activities, sales::v1 as sales};
     use prost::Message;
     use std::collections::BTreeSet;
 
@@ -45,8 +45,7 @@ mod tests {
 
     #[test]
     fn descriptor_set_contains_required_domain_packages() {
-        let descriptor_set =
-            prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
+        let descriptor_set = prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
         let packages = descriptor_set
             .file
             .into_iter()
