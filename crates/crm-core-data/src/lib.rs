@@ -10,6 +10,7 @@ mod postgres_query;
 pub use aggregate_executor::*;
 pub use audit::AuditIntent;
 pub use capability_executor::*;
+pub use crm_module_sdk::RecordSnapshot;
 pub use postgres::*;
 pub use postgres_batch::*;
 pub use postgres_query::{
