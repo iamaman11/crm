@@ -22,17 +22,40 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: feature/phase6f-recovery-v1
-          fetch-depth: 0
+          fetch-depth: 1
+          show-progress: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - name: Apply reviewed implementation
+        id: apply
+        continue-on-error: true
         run: |
-          python scripts/phase6_payload_1.py
-          python scripts/phase6_payload_2.py
-          python scripts/phase6_payload_3.py
-          python scripts/phase6_payload_4.py
+          set -o pipefail
+          {
+            for payload in \
+              scripts/phase6_payload_1.py \
+              scripts/phase6_payload_2.py \
+              scripts/phase6_payload_3.py \
+              scripts/phase6_payload_4.py
+            do
+              echo ">>> ${payload}"
+              python "${payload}"
+            done
+          } 2>&1 | tee /tmp/phase6-bootstrap.log
+      - name: Persist bootstrap diagnostics
+        if: steps.apply.outcome == 'failure'
+        run: |
+          git reset --hard HEAD
+          cp /tmp/phase6-bootstrap.log phase6-bootstrap.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add phase6-bootstrap.log
+          git commit -m "ci: capture Phase 6F bootstrap failure"
+          git push origin HEAD:feature/phase6f-recovery-v1
+          exit 1
       - name: Resolve, format and verify
+        if: steps.apply.outcome == 'success'
         run: |
           cargo generate-lockfile
           cargo fmt --all
@@ -40,6 +63,7 @@ jobs:
           cargo test --workspace
           cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Commit implementation and remove temporary payloads
+        if: steps.apply.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
