@@ -113,7 +113,9 @@ pub fn capability_idempotency_scope(definition: &CapabilityDefinition) -> String
     )
 }
 
-fn validate_executor_definition(definition: &CapabilityDefinition) -> Result<(), SdkError> {
+pub(crate) fn validate_executor_definition(
+    definition: &CapabilityDefinition,
+) -> Result<(), SdkError> {
     if !definition.mutation || !definition.requires_idempotency {
         return Err(SdkError::new(
             "CAPABILITY_EXECUTOR_DEFINITION_INVALID",
@@ -125,7 +127,7 @@ fn validate_executor_definition(definition: &CapabilityDefinition) -> Result<(),
     Ok(())
 }
 
-fn validate_execution_plan(
+pub(crate) fn validate_execution_plan(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
     execution_plan: &CapabilityBatchExecutionPlan,
@@ -213,7 +215,7 @@ pub fn capability_batch_error_to_sdk(error: BatchError) -> SdkError {
     }
 }
 
-fn affected_resources(result: &BatchMutationResult) -> Vec<ResourceRef> {
+pub(crate) fn affected_resources(result: &BatchMutationResult) -> Vec<ResourceRef> {
     let mut resources = Vec::with_capacity(
         result.records.len()
             + result.linked_relationships.len()

@@ -1,10 +1,19 @@
+use crate::aggregate_executor::{
+    AggregatePresence, AggregateTarget, TransactionalAggregatePlanner,
+};
 use crate::audit::{
     AuditIntent, AuditMaterializationError, MaterializedAuditRecord, materialize_audit_chain,
 };
+use crate::capability_executor::{
+    CapabilityBatchExecutionPlan, affected_resources, capability_idempotency_scope,
+    validate_execution_plan,
+};
 use crate::postgres::{FaultInjection, IdempotencyEvidence, PostgresDataStore};
+use crm_capability_runtime::{CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest};
 use crm_module_sdk::{
-    DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, PayloadEncoding, RecordRef,
-    RecordSnapshot, RelationshipRef, SdkError, TypedPayload,
+    DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    RecordRef, RecordSnapshot, RelationshipRef, RetentionPolicyId, SchemaId, SchemaVersion,
+    SdkError, TypedPayload,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
