@@ -1,4 +1,4 @@
-name: Phase 6F recovery export materialized sources
+name: Phase 6F recovery build Git commit
 
 on:
   pull_request:
@@ -6,13 +6,13 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  build-commit:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Clone recovery branch
         env:
@@ -21,7 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Materialize valid payload entries
+      - name: Materialize complete recovered source tree
         working-directory: repo
         run: |
           python - <<'PY'
@@ -30,10 +30,7 @@ jobs:
           from pathlib import Path
           import zlib
 
-          skipped = {
-              ".github/workflows/database.yml",
-              "crates/crm-core-data/tests/postgres_advanced/support.rs",
-          }
+          corrupt_path = "crates/crm-core-data/tests/postgres_advanced/support.rs"
           for script_path in [
               "scripts/phase6_payload_1.py",
               "scripts/phase6_payload_2.py",
@@ -47,38 +44,195 @@ jobs:
                   and any(isinstance(target, ast.Name) and target.id == "FILES" for target in node.targets)
               )
               for path, encoded in ast.literal_eval(assignment.value).items():
-                  if path in skipped:
+                  if path == corrupt_path:
                       continue
                   target = Path(path)
                   target.parent.mkdir(parents=True, exist_ok=True)
                   target.write_bytes(zlib.decompress(base64.b64decode(encoded)))
+
+          support = Path(corrupt_path)
+          support.write_text(support.read_text().rstrip() + r'''
+
+struct CreatingAggregatePlanner;
+
+impl TransactionalAggregatePlanner for CreatingAggregatePlanner {
+    fn target(
+        &self,
+        _definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+    ) -> Result<AggregateTarget, SdkError> {
+        let value: serde_json::Value = serde_json::from_slice(&request.input.bytes).map_err(|error| {
+            SdkError::invalid_argument("input", format!("invalid aggregate command: {error}"))
+        })?;
+        let record_id = value
+            .get("record_id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| SdkError::invalid_argument("input.record_id", "record id is required"))?;
+        Ok(AggregateTarget {
+            reference: record(record_id),
+            presence: AggregatePresence::MustBeAbsent,
+        })
+    }
+
+    fn plan(
+        &self,
+        _definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+        current: Option<&crm_module_sdk::RecordSnapshot>,
+    ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+        if current.is_some() {
+            return Err(SdkError::new(
+                "TEST_AGGREGATE_ALREADY_EXISTS",
+                crm_module_sdk::ErrorCategory::Conflict,
+                false,
+                "The test aggregate already exists.",
+            ));
+        }
+        let value: serde_json::Value = serde_json::from_slice(&request.input.bytes).map_err(|error| {
+            SdkError::invalid_argument("input", format!("invalid aggregate command: {error}"))
+        })?;
+        let record_id = value
+            .get("record_id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| SdkError::invalid_argument("input.record_id", "record id is required"))?;
+        let next_value = value
+            .get("value")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .ok_or_else(|| SdkError::invalid_argument("input.value", "value must fit in u8"))?;
+        let reference = record(record_id);
+        let tx = request.context.execution.business_transaction_id.as_str();
+        let output = TypedPayload {
+            owner: ModuleId::try_new("crm.test").unwrap(),
+            schema_id: SchemaId::try_new("test.aggregate.output").unwrap(),
+            schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
+            descriptor_hash: [0xd1; 32],
+            data_class: DataClass::Internal,
+            encoding: PayloadEncoding::Json,
+            maximum_size_bytes: 1024,
+            retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
+            bytes: serde_json::to_vec(&serde_json::json!({
+                "record_id": record_id,
+                "version": 1,
+                "value": next_value,
+            }))
+            .unwrap(),
+        };
+        Ok(CapabilityBatchExecutionPlan {
+            batch: BatchMutationPlan {
+                context: request.context.clone(),
+                records: vec![RecordMutation::Create {
+                    reference: reference.clone(),
+                    payload: payload(next_value, "test.batch_record.v1"),
+                }],
+                relationships: Vec::new(),
+                events: vec![record_event(
+                    &format!("event-{tx}"),
+                    "test.batch_record.created",
+                    reference,
+                    1,
+                    1,
+                    next_value.wrapping_add(1),
+                )],
+                idempotency: IdempotencyEvidence {
+                    scope: "capability:test.record.mutate:1.0.0".to_owned(),
+                    key: request.context.execution.idempotency_key.to_string(),
+                    request_hash: request.input_hash,
+                    expires_at_unix_nanos: 1_800_000_000_000_000_000,
+                },
+                audits: vec![audit(&format!("audit-{tx}"), 501)],
+            },
+            output: Some(output),
+        })
+    }
+}
+
+fn creating_request(
+    transaction_id: &str,
+    idempotency_key: &str,
+    record_id: &str,
+    value: u8,
+) -> CapabilityRequest {
+    let input = TypedPayload {
+        owner: ModuleId::try_new("crm.test").unwrap(),
+        schema_id: SchemaId::try_new("test.aggregate.command").unwrap(),
+        schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
+        descriptor_hash: [0xc1; 32],
+        data_class: DataClass::Internal,
+        encoding: PayloadEncoding::Json,
+        maximum_size_bytes: 1024,
+        retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
+        bytes: serde_json::to_vec(&serde_json::json!({
+            "record_id": record_id,
+            "value": value,
+        }))
+        .unwrap(),
+    };
+    CapabilityRequest {
+        context: context(transaction_id, idempotency_key),
+        input,
+        input_hash: [value.max(1); 32],
+        approval: None,
+    }
+}
+''' + "\n")
           PY
-          cargo generate-lockfile
-          cargo fmt --all
-          git add -A
-          git reset -- \
-            .github/workflows/phase6-apply-capability-adapters.yml \
-            .github/workflows/database.yml \
-            scripts/phase6_payload_1.py \
-            scripts/phase6_payload_2.py \
-            scripts/phase6_payload_3.py \
-            scripts/phase6_payload_4.py
-          git diff --cached --binary > ../phase6-materialized.patch
-          tar --create --gzip --file ../phase6-materialized-tree.tar.gz \
-            --exclude=.git \
-            --exclude=.github/workflows/phase6-apply-capability-adapters.yml \
-            --exclude=.github/workflows/database.yml \
-            --exclude=scripts/phase6_payload_1.py \
-            --exclude=scripts/phase6_payload_2.py \
-            --exclude=scripts/phase6_payload_3.py \
-            --exclude=scripts/phase6_payload_4.py \
-            .
-          test -s ../phase6-materialized.patch
-      - uses: actions/upload-artifact@v4
-        with:
-          name: phase6-materialized-sources
-          path: |
-            phase6-materialized.patch
-            phase6-materialized-tree.tar.gz
-          if-no-files-found: error
-          retention-days: 7
+          cargo generate-lockfile >/tmp/cargo-lock.log 2>&1
+          cargo fmt --all >/tmp/cargo-fmt.log 2>&1
+      - name: Create unattached Git commit
+        working-directory: repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          base_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          base_tree = subprocess.check_output(
+              ["gh", "api", f"repos/{repo}/git/commits/{base_sha}", "--jq", ".tree.sha"],
+              text=True,
+          ).strip()
+          status = subprocess.check_output(
+              ["git", "status", "--porcelain=v1", "-z"],
+          ).decode().split("\0")
+          entries = []
+          for item in status:
+              if not item:
+                  continue
+              path = item[3:]
+              if path == ".github/workflows/phase6-apply-capability-adapters.yml" or path.startswith("scripts/phase6_payload_"):
+                  continue
+              content = Path(path).read_text()
+              blob_payload = json.dumps({"content": content, "encoding": "utf-8"}).encode()
+              blob = subprocess.run(
+                  ["gh", "api", f"repos/{repo}/git/blobs", "--input", "-", "--jq", ".sha"],
+                  input=blob_payload,
+                  stdout=subprocess.PIPE,
+                  check=True,
+              ).stdout.decode().strip()
+              entries.append({"path": path, "mode": "100644", "type": "blob", "sha": blob})
+          tree_payload = json.dumps({"base_tree": base_tree, "tree": entries}).encode()
+          tree_sha = subprocess.run(
+              ["gh", "api", f"repos/{repo}/git/trees", "--input", "-", "--jq", ".sha"],
+              input=tree_payload,
+              stdout=subprocess.PIPE,
+              check=True,
+          ).stdout.decode().strip()
+          commit_payload = json.dumps({
+              "message": "feat: materialize recovered Phase 6F capability implementation",
+              "tree": tree_sha,
+              "parents": [base_sha],
+          }).encode()
+          commit_sha = subprocess.run(
+              ["gh", "api", f"repos/{repo}/git/commits", "--input", "-", "--jq", ".sha"],
+              input=commit_payload,
+              stdout=subprocess.PIPE,
+              check=True,
+          ).stdout.decode().strip()
+          print(f"MATERIALIZED_FILES={len(entries)}")
+          print(f"MATERIALIZED_COMMIT_SHA={commit_sha}")
+          PY
