@@ -232,12 +232,24 @@ Authoritative PR: #40. Issue: #39.
 
 Implementation head `c6c3711ec404d762a094c2836cc25d6a79fe9a1b` passed Rust, Governance and both Database CI jobs. The final merge head must repeat those required gates after roadmap synchronization.
 
+### Completed slice 6H — permission-bound production queries
+
+Authoritative PRs: #42, #43, #44, #45 and #46. Issue: #41.
+
+- Added HMAC-SHA256 opaque cursor tokens bound to tenant, actor, exact query/version, resource type, normalized filters, sort and effective page size.
+- Added FORCE-RLS tenant-scoped PostgreSQL get/list readers with deterministic keyset ordering and no mutation evidence.
+- Added a dedicated read-only `QueryGateway` path with exact-version capability binding and live authorization immediately before authoritative read execution.
+- Added four production query coordinates: `sales.deal.get`, `sales.deal.list`, `activities.task.get` and `activities.task.list`.
+- Added independent resource/field visibility grants, non-disclosing resource denial and field masking before Protobuf serialization.
+- Added authenticated HTTP and gRPC query ingress with query-only execution context; idempotency keys and business-transaction IDs are structurally absent from the query contract.
+- Proved cross-tenant denial, cursor tamper/binding rejection, live authorization revocation between pages, HTTP/gRPC authentication and tenant failures, and zero record/outbox/audit/idempotency/business-transaction evidence delta across reads.
+- Preserved a separate seven-capability mutation catalog so read coordinates cannot enter the transactional mutation gateway.
+
 ### Next implementation sequence
 
-1. **6H — permission-bound queries:** get/list paths with field/resource authorization and stable opaque cursor pagination.
-2. **6I — optional Sales–Activities link module:** source events consumed through governed ports; task creation through `CapabilityClient` only; deterministic delivery deduplication; independent disable and uninstall.
-3. **6J — rebuildable projections:** deal timeline and task-status projections with tenant checkpoints, retries, replay and deletion/rebuild equivalence.
-4. **6K — complete Phase 6 E2E:** cross-tenant denial, stale conflict, duplicate delivery, disabled link, transaction rollback/fault injection and projection rebuild.
+1. **6I — optional Sales–Activities link module:** source events consumed through governed ports; task creation through `CapabilityClient` only; deterministic delivery deduplication; independent disable and uninstall.
+2. **6J — rebuildable projections:** deal timeline and task-status projections with tenant checkpoints, retries, replay and deletion/rebuild equivalence.
+3. **6K — complete Phase 6 E2E:** cross-tenant denial, stale conflict, duplicate delivery, disabled link, transaction rollback/fault injection and projection rebuild.
 
 ### Completion gate
 

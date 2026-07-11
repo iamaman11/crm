@@ -45,6 +45,7 @@
     "crates/crm-capability-ingress": [
       "crm-capability-runtime",
       "crm-module-sdk",
+      "crm-query-runtime",
       "http",
       "sha2",
       "tokio",
