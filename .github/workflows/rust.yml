@@ -5,7 +5,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   quality:
@@ -13,42 +13,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply and publish Phase 6F source lint fixes
-        if: github.event_name == 'push' && github.ref_name == 'feature/phase6f-recovery-v1' && github.actor != 'github-actions[bot]'
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          activities = Path("crates/crm-activities-capability-adapter/src/lib.rs")
-          source = activities.read_text()
-          old = "RecordRef, RecordSnapshot, ResourceRef, SdkError, TenantId, TypedPayload,"
-          new = "RecordRef, RecordSnapshot, SdkError, TenantId, TypedPayload,"
-          if old not in source:
-              raise SystemExit("expected Activities import not found")
-          activities.write_text(source.replace(old, new, 1))
-
-          sales = Path("crates/crm-sales-capability-adapter/src/lib.rs")
-          source = sales.read_text()
-          old = "fn deal_to_wire(deal: &Deal, tenant: &TenantId) -> wire::Deal {"
-          new = "#[allow(deprecated)]\nfn deal_to_wire(deal: &Deal, tenant: &TenantId) -> wire::Deal {"
-          if old not in source:
-              raise SystemExit("expected Sales compatibility function not found")
-          sales.write_text(source.replace(old, new, 1))
-          PY
-          cargo fmt --all
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            crates/crm-activities-capability-adapter/src/lib.rs \
-            crates/crm-sales-capability-adapter/src/lib.rs
-          git diff --cached --check
-          git commit -m "fix: satisfy adapter lint gates"
-          git push origin HEAD:feature/phase6f-recovery-v1
       - run: python scripts/check_architecture.py
       - name: Generate resolved Cargo lockfile
         run: cargo generate-lockfile
