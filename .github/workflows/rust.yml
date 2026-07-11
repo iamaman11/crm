@@ -78,3 +78,70 @@ jobs:
           path: tests.txt
           if-no-files-found: error
           retention-days: 7
+
+  phase6h-visibility-revoke-fix:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/phase6h-production-query-adapter-v1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6h-production-query-adapter-v1
+          fetch-depth: 0
+      - name: Refactor visibility revoke identity
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('crates/crm-capability-adapters/src/query_visibility.rs')
+          text = path.read_text()
+          pattern = re.compile(
+              r'''    pub fn revoke\(\n.*?^        Ok\(removed\)\n    \}\n''',
+              re.MULTILINE | re.DOTALL,
+          )
+          replacement = '''    pub fn revoke(
+              &self,
+              grant: &QueryVisibilityGrant,
+          ) -> Result<bool, QueryVisibilityStoreError> {
+              let mut state = self
+                  .state
+                  .write()
+                  .map_err(|_| QueryVisibilityStoreError::Poisoned)?;
+              let removed = state.grants.remove(&grant.key()).is_some();
+              if removed {
+                  state.revision = state.revision.saturating_add(1);
+              }
+              Ok(removed)
+          }
+'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'revoke implementation replacements: {count}')
+          call_pattern = re.compile(
+              r'''        store\n            \.revoke\(\n.*?            \.unwrap\(\);\n''',
+              re.MULTILINE | re.DOTALL,
+          )
+          call_replacement = '''        let exact_grant = grant(
+              Some("deal-1"),
+              BTreeSet::from(["name".to_owned(), "amount".to_owned()]),
+          );
+          store.revoke(&exact_grant).unwrap();
+'''
+          text, count = call_pattern.subn(call_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'revoke test replacements: {count}')
+          path.write_text(text)
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --all
+      - name: Commit source fix only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-capability-adapters/src/query_visibility.rs
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(query): bind visibility revoke to grant identity"
+          git push origin HEAD:feature/phase6h-production-query-adapter-v1
