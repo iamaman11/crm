@@ -99,16 +99,22 @@ impl EventDelivery {
                 "payload owner must match the source module",
             ));
         }
+        if self.payload.schema_version.as_str() != self.event_version.as_str() {
+            return Err(SdkError::invalid_argument(
+                "event_delivery.payload.schema_version",
+                "payload schema version must match the published event version",
+            ));
+        }
         Ok(())
     }
 
     /// Validates the immutable delivery plus the host-bound module execution
     /// context used to process it.
     ///
-    /// Tenant, consumer module, correlation and trace identities must remain
-    /// bound across delivery. The host may use a service principal as the
-    /// processing actor, so the execution actor is intentionally not required
-    /// to equal the source actor.
+    /// Tenant, consumer module, correlation, causation, trace and delivery
+    /// idempotency identities must remain bound across delivery. The host may
+    /// use a service principal as the processing actor, so the execution actor
+    /// is intentionally not required to equal the source actor.
     pub fn validate_for_consumer(&self, context: &ModuleExecutionContext) -> Result<(), SdkError> {
         self.validate()?;
         context.validate()?;
@@ -130,10 +136,22 @@ impl EventDelivery {
                 "delivery correlation identity must be preserved",
             ));
         }
+        if context.execution.causation_id.as_str() != self.event_id.as_str() {
+            return Err(SdkError::invalid_argument(
+                "event_delivery.event_id",
+                "source event identity must be the processing causation identity",
+            ));
+        }
         if context.execution.trace_id != self.trace_id {
             return Err(SdkError::invalid_argument(
                 "event_delivery.trace_id",
                 "delivery trace identity must be preserved",
+            ));
+        }
+        if context.execution.idempotency_key.as_str() != self.delivery_id.as_str() {
+            return Err(SdkError::invalid_argument(
+                "event_delivery.delivery_id",
+                "delivery identity must be the processing idempotency identity",
             ));
         }
         Ok(())
@@ -243,6 +261,19 @@ mod tests {
     }
 
     #[test]
+    fn rejects_event_version_rebinding() {
+        let mut delivery = delivery();
+        delivery.payload.schema_version = SchemaVersion::try_new("2.0.0").unwrap();
+
+        delivery()
+            .validate()
+            .expect("unchanged fixture must remain valid");
+        delivery
+            .validate()
+            .expect_err("event version rebinding must fail");
+    }
+
+    #[test]
     fn rejects_cross_tenant_consumer_context() {
         let mut context = consumer_context();
         context.execution.tenant_id = TenantId::try_new("tenant-2").unwrap();
@@ -254,6 +285,16 @@ mod tests {
     }
 
     #[test]
+    fn rejects_causation_rebinding() {
+        let mut context = consumer_context();
+        context.execution.causation_id = CausationId::try_new("event-2").unwrap();
+
+        delivery()
+            .validate_for_consumer(&context)
+            .expect_err("causation rebinding must fail");
+    }
+
+    #[test]
     fn rejects_trace_lineage_rebinding() {
         let mut context = consumer_context();
         context.execution.trace_id = TraceId::try_new("trace-2").unwrap();
@@ -261,5 +302,15 @@ mod tests {
         delivery()
             .validate_for_consumer(&context)
             .expect_err("trace rebinding must fail");
+    }
+
+    #[test]
+    fn rejects_delivery_idempotency_rebinding() {
+        let mut context = consumer_context();
+        context.execution.idempotency_key = IdempotencyKey::try_new("delivery-2").unwrap();
+
+        delivery()
+            .validate_for_consumer(&context)
+            .expect_err("delivery idempotency rebinding must fail");
     }
 }
