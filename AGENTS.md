@@ -11,8 +11,9 @@ Before changing code, read these sources in order:
 3. `docs/PROJECT_STATUS.md` — concise current state and next executable steps.
 4. `docs/APPLICATION_ARCHITECTURE.md` — layer model, dependency direction and composition boundaries.
 5. `docs/MODULE_CATALOG.md` — what counts as a module and which business domains exist or are planned.
-6. Relevant accepted ADRs under `docs/adr/`.
-7. The GitHub issue for the active slice.
+6. `docs/MODULE_DEVELOPMENT.md` — golden owner/link module scaffolding and permanent repository commands.
+7. Relevant accepted ADRs under `docs/adr/`.
+8. The GitHub issue for the active slice.
 
 When descriptive documents disagree, the precedence is:
 
@@ -142,4 +143,4 @@ A phase is complete only when its acceptance evidence is green on the exact revi
 
 ## 10. Current next step
 
-See `docs/PROJECT_STATUS.md`. At the time this guide was introduced, Phase 6H was complete and Phase 6I — the optional Sales–Activities link module — was the next implementation slice.
+See `docs/PROJECT_STATUS.md` for the live implementation packet and exact next executable steps. The roadmap/status/issues, not this orientation guide, are the authoritative place for changing phase bookkeeping.
