@@ -94,6 +94,10 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e -- --nocapture 2>&1 | tee database/postgres-gateway-e2e.log
+      - name: Remove ephemeral no-op rollback fixtures
+        run: |
+          psql --set ON_ERROR_STOP=1 --command \
+            "DELETE FROM crm.business_transactions WHERE expected_outbox_events = 0"
       - name: Roll back migrations
         run: |
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
