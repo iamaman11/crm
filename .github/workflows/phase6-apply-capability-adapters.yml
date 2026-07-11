@@ -36,25 +36,16 @@ jobs:
               '["git", "status", "--porcelain=v1", "-z"]',
               '["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"]',
           )
-          marker = "    tree_sha = run_json("
-          prefix = source.split(marker, 1)[0]
-          replacement = '''    manifest = json.dumps({
-              "base_sha": base_sha,
-              "base_tree": base_tree,
-              "entries": entries,
-          }, separators=(",", ":"))
-          body = "Phase 6F recovered blob manifest:\\n\\n```json\\n" + manifest + "\\n```"
-          subprocess.run(
-              ["gh", "pr", "comment", PR_NUMBER, "--repo", REPO, "--body", body],
-              check=True,
+          prefix = source.split("    tree_sha = run_json(", 1)[0]
+          replacement = (
+              '    manifest = json.dumps({"base_sha": base_sha, "base_tree": base_tree, "entries": entries}, separators=(",", ":"))\n'
+              '    body = "Phase 6F recovered blob manifest:\\n\\n```json\\n" + manifest + "\\n```"\n'
+              '    subprocess.run(["gh", "pr", "comment", PR_NUMBER, "--repo", REPO, "--body", body], check=True)\n'
+              '    print(f"MATERIALIZED_FILES={len(entries)}")\n'
+              '    print(manifest)\n'
+              '\n\nif __name__ == "__main__":\n'
+              '    main()\n'
           )
-          print(f"MATERIALIZED_FILES={len(entries)}")
-          print(manifest)
-
-
-          if __name__ == "__main__":
-              main()
-          '''
           path.write_text(prefix + replacement)
           PY
           set +e
