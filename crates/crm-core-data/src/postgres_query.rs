@@ -121,7 +121,7 @@ impl PostgresDataStore {
         .map_err(database_unavailable)?;
         transaction.commit().await.map_err(database_unavailable)?;
 
-        row.map(|row| decode_query_record(&query.tenant_id, &query.record_type, row))
+        row.map(|row| decode_query_record(&query.record_type, row))
             .transpose()
     }
 
@@ -236,7 +236,7 @@ impl PostgresDataStore {
                 let sort_value: String = row
                     .try_get("sort_value")
                     .map_err(|error| stored_value_invalid(error.to_string()))?;
-                let snapshot = decode_query_record(&query.tenant_id, &query.record_type, row)?;
+                let snapshot = decode_query_record(&query.record_type, row)?;
                 Ok((snapshot, sort_value))
             })
             .collect::<Result<Vec<_>, SdkError>>()?;
@@ -275,11 +275,7 @@ async fn bind_read_context(
     Ok(())
 }
 
-fn decode_query_record(
-    tenant_id: &TenantId,
-    record_type: &RecordType,
-    row: PgRow,
-) -> Result<RecordSnapshot, SdkError> {
+fn decode_query_record(record_type: &RecordType, row: PgRow) -> Result<RecordSnapshot, SdkError> {
     let descriptor_hash: Vec<u8> = row
         .try_get("descriptor_hash")
         .map_err(|error| stored_value_invalid(error.to_string()))?;
