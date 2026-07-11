@@ -1,46 +1,80 @@
 # Ultimate CRM Platform
 
-Private implementation repository for the Ultimate CRM architecture.
+Implementation repository for a universal modular, metadata-driven, production-grade CRM platform.
+
+## Start here
+
+For a new contributor or coding agent, read in this order:
+
+1. [`AGENTS.md`](AGENTS.md) — repository operating model and change workflow.
+2. [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_INVARIANTS.md) — absolute architecture rules.
+3. [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) — normative delivery sequence.
+4. [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) — concise current state and next step.
+5. [`docs/APPLICATION_ARCHITECTURE.md`](docs/APPLICATION_ARCHITECTURE.md) — layer and composition skeleton.
+6. [`docs/MODULE_CATALOG.md`](docs/MODULE_CATALOG.md) — business-module counting and planned owner domains.
+
+Accepted ADRs and published contracts take precedence over descriptive prose unless they violate an absolute system invariant.
+
+## Current state
+
+The platform foundation through **Phase 6H** is complete:
+
+- governed module manifests, SDK and lifecycle;
+- PostgreSQL tenant/RLS, transaction, idempotency, outbox and audit foundation;
+- authenticated capability mutation gateway;
+- independent Sales Deal and Activities Task owner-domain slices;
+- production PostgreSQL mutations through HTTP/gRPC ingress;
+- permission-bound Deal/Task get/list queries with opaque cursor pagination;
+- authenticated HTTP/gRPC query ingress with query-only execution context.
+
+The current next slice is **Phase 6I — optional Sales–Activities link module**.
+
+The complete CRM product is not finished. Search/Admin Studio, production application composition, frontend product shell, customer master, commercial lifecycle, expert modules, AI, marketplace and enterprise operational proof remain later roadmap work.
+
+See [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact current state.
+
+## Architectural model
+
+The target is a **modular monolith with independently governed owner and link modules**, not a collection of accidental microservices.
+
+Core invariants include:
+
+- every mutable aggregate has one authoritative owner;
+- actors mutate state only through versioned governed capabilities;
+- business modules do not receive direct database, broker, object-storage, arbitrary HTTP, secret-store or LLM-provider clients;
+- business modules do not import or mutate another business module's internals;
+- cross-domain behavior uses versioned capabilities/events and optional link modules;
+- state mutations atomically persist required idempotency, outbox and audit evidence;
+- queries are permission-bound and structurally separate from mutation semantics;
+- search, analytics, caches, timelines and projections are rebuildable and non-authoritative;
+- live authorization runs immediately before side effects;
+- AI and marketplace extensions have no alternate mutation or data-access path.
+
+The complete normative rules are in [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_INVARIANTS.md).
 
 ## Authoritative specifications
 
-The repository implements the following Google Drive documents, in precedence order:
+The repository implements the following architecture documents, in precedence order:
 
 1. [v2.2 Architecture Closure & Contract Specification](https://docs.google.com/document/d/1xUl7oGh3nrMzJ332mxtoZqRch_0O6wyj_wfUFGYnPrU/edit)
 2. [v2.1 Implementation Readiness Addendum](https://docs.google.com/document/d/1fgCls9uumH_V0hMh0_aUEvvNWCIAsvRQSB0n-M5Ih0U/edit)
 3. [v2.0 Production-Grade Architecture Blueprint](https://docs.google.com/document/d/1UF-VfjP6hpPr3qWh-b0djQErdWN8kkL9IDMCQVcHXmc/edit)
 
-ADR and compilable contracts take precedence over descriptive text unless they violate an absolute architecture invariant.
-
-## Delivery plan
-
-The executable step-by-step delivery plan is [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md). GitHub issue [#2](https://github.com/iamaman11/crm/issues/2) is the parent epic; issues #3–#14 contain phase scope, dependencies and acceptance gates.
-
-## Invariants
-
-- Actors mutate state only through governed capabilities.
-- Business modules do not receive direct DB, NATS, object-storage, secrets, or LLM-provider clients.
-- State mutations atomically write transactional outbox events.
-- Projections and search indexes are rebuildable and never sources of truth.
-- Audit hashing uses a canonical audit envelope, not a re-encoded business event.
-- Workflow and AI actions perform live authorization immediately before execution.
-- Sensitive payloads are minimized, reference-based, encrypted, and deletable by key destruction where required.
-
-The complete normative rules are in [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_INVARIANTS.md). Controlled data formats and canonicalization are governed by [`ADR-024`](docs/adr/ADR-024-controlled-data-formats-and-canonicalization.md).
+Repository invariants, accepted ADRs and compilable published contracts are the executable interpretation of those specifications.
 
 ## Repository layout
 
-- `proto/` — Contract Pack v1.0 source of truth.
-- `crates/` — platform core and governed runtime crates.
-- `modules/` — independently governed domain modules without infrastructure access.
-- `services/` — executable service boundaries.
+- `proto/` — authoritative RPC, command and event contract sources.
+- `crates/` — platform core, governed runtimes and infrastructure adapters.
+- `modules/` — independently governed business owner/link modules without raw infrastructure access.
+- `services/` — deployable composition roots; `services/crm-api` is the target production application process.
+- `database/` — authoritative migrations and PostgreSQL acceptance assets.
 - `schemas/` — strict authoring schemas compiled into typed runtime IR.
 - `docs/adr/` — accepted architecture decisions.
-- `scripts/check_architecture.py` — dependency-boundary enforcement.
-- `scripts/validate_module_manifests.py` — strict YAML, schema and module dependency enforcement.
-- `scripts/compile_module_manifest_ir.py` — normalized JSON IR and digest generation.
-- `.github/workflows/` — contract, governance and Rust CI.
-- `build/` and workflow artifacts — generated descriptors, normalized IR and diagnostics; they are reproducible outputs and are not authoritative source files.
+- `scripts/` — architecture, contract and manifest enforcement.
+- `.github/workflows/` — permanent conformance and acceptance gates.
+
+Generated `build/` content and workflow artifacts are reproducible outputs and are not authoritative source files.
 
 ## Local validation
 
@@ -57,10 +91,15 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
-## Module authoring policy
+Database-affecting changes must also pass the permanent Database CI gates.
 
-A module is authored as `modules/<module>/module.yaml`, but raw YAML is never runtime truth. Governance CI requires a strict JSON-compatible YAML 1.2 subset, validates it against `schemas/module.schema.json`, performs semantic and dependency checks, emits normalized JSON IR and a `crm.cjson/v1` digest, and verifies that the Rust runtime representation derives the same identity.
+## Status synchronization rule
 
-## Current stage
+README is stable orientation, not a second roadmap. Detailed progress belongs in:
 
-Governance Foundation v1 is complete. The executable roadmap and Typed Module Manifest IR are in active implementation under issues #3 and #4. Production readiness remains gated by the later platform, module, security, benchmark and restore-drill phases.
+- `docs/IMPLEMENTATION_ROADMAP.md`;
+- `docs/PROJECT_STATUS.md`;
+- `docs/MODULE_CATALOG.md`;
+- the active GitHub phase issue.
+
+When scope or completion changes, update those sources together.
