@@ -19,7 +19,9 @@ def run(command: list[str]) -> None:
     print("+", " ".join(command), flush=True)
     completed = subprocess.run(command, cwd=ROOT, check=False)
     if completed.returncode != 0:
-        raise CommandError(f"command failed with exit code {completed.returncode}: {' '.join(command)}")
+        raise CommandError(
+            f"command failed with exit code {completed.returncode}: {' '.join(command)}"
+        )
 
 
 def command_architecture(_: argparse.Namespace) -> None:
@@ -28,21 +30,30 @@ def command_architecture(_: argparse.Namespace) -> None:
 
 def command_manifests(_: argparse.Namespace) -> None:
     run([sys.executable, "scripts/validate_module_manifests.py"])
-    run([sys.executable, "scripts/compile_module_manifest_ir.py", "--output-dir", "build/module-ir"])
+    run(
+        [
+            sys.executable,
+            "scripts/compile_module_manifest_ir.py",
+            "--output-dir",
+            "build/module-ir",
+        ]
+    )
     ir_paths = sorted((ROOT / "build/module-ir").glob("*.json"))
     if not ir_paths:
         raise CommandError("manifest IR compiler produced no JSON files")
-    run([
-        "cargo",
-        "run",
-        "--quiet",
-        "-p",
-        "crm-module-manifest",
-        "--bin",
-        "validate-module-manifest",
-        "--",
-        *(str(path.relative_to(ROOT)) for path in ir_paths),
-    ])
+    run(
+        [
+            "cargo",
+            "run",
+            "--quiet",
+            "-p",
+            "crm-module-manifest",
+            "--bin",
+            "validate-module-manifest",
+            "--",
+            *(str(path.relative_to(ROOT)) for path in ir_paths),
+        ]
+    )
 
 
 def command_format(args: argparse.Namespace) -> None:
@@ -60,9 +71,13 @@ def command_test(args: argparse.Namespace) -> None:
     command = ["cargo", "test", "-p", args.package, "--all-features"]
     if args.test_target:
         command.extend(["--test", args.test_target])
-    if args.passthrough:
+
+    passthrough = list(args.passthrough)
+    if passthrough[:1] == ["--"]:
+        passthrough = passthrough[1:]
+    if passthrough:
         command.append("--")
-        command.extend(args.passthrough)
+        command.extend(passthrough)
     run(command)
 
 
@@ -73,37 +88,64 @@ def command_test_all(_: argparse.Namespace) -> None:
 def command_quality(_: argparse.Namespace) -> None:
     command_architecture(argparse.Namespace())
     command_format(argparse.Namespace(check=True))
-    run(["cargo", "clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"])
+    run(
+        [
+            "cargo",
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings",
+        ]
+    )
     command_test_all(argparse.Namespace())
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run stable Ultimate CRM repository commands.")
+    parser = argparse.ArgumentParser(
+        description="Run stable Ultimate CRM repository commands."
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    architecture = subparsers.add_parser("architecture", help="enforce repository dependency/source boundaries")
+    architecture = subparsers.add_parser(
+        "architecture", help="enforce repository dependency/source boundaries"
+    )
     architecture.set_defaults(handler=command_architecture)
 
-    manifests = subparsers.add_parser("manifests", help="validate manifests and Rust normalized-IR parity")
+    manifests = subparsers.add_parser(
+        "manifests", help="validate manifests and Rust normalized-IR parity"
+    )
     manifests.set_defaults(handler=command_manifests)
 
-    fmt = subparsers.add_parser("format", help="format Rust sources or check formatting")
+    fmt = subparsers.add_parser(
+        "format", help="format Rust sources or check formatting"
+    )
     fmt.add_argument("--check", action="store_true")
     fmt.set_defaults(handler=command_format)
 
-    lock = subparsers.add_parser("lock", help="synchronize Cargo.lock from workspace metadata")
+    lock = subparsers.add_parser(
+        "lock", help="synchronize Cargo.lock from workspace metadata"
+    )
     lock.set_defaults(handler=command_lock)
 
-    focused = subparsers.add_parser("test", help="run focused tests for one Cargo package")
+    focused = subparsers.add_parser(
+        "test", help="run focused tests for one Cargo package"
+    )
     focused.add_argument("package")
     focused.add_argument("--test-target")
     focused.add_argument("passthrough", nargs=argparse.REMAINDER)
     focused.set_defaults(handler=command_test)
 
-    full = subparsers.add_parser("test-all", help="run the complete Rust workspace test suite")
+    full = subparsers.add_parser(
+        "test-all", help="run the complete Rust workspace test suite"
+    )
     full.set_defaults(handler=command_test_all)
 
-    quality = subparsers.add_parser("quality", help="run architecture, formatting, Clippy and full Rust tests")
+    quality = subparsers.add_parser(
+        "quality", help="run architecture, formatting, Clippy and full Rust tests"
+    )
     quality.set_defaults(handler=command_quality)
 
     return parser
