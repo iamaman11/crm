@@ -1,0 +1,164 @@
+name: Phase 6G add aggregate fault hook
+
+on:
+  push:
+    branches:
+      - feature/phase6g-authenticated-postgres-mutations-v1
+    paths:
+      - .github/workflows/phase6g-add-aggregate-fault-hook.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6g-authenticated-postgres-mutations-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Add explicit aggregate fault injection test hook
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          aggregate = Path('crates/crm-core-data/src/aggregate_executor.rs')
+          text = aggregate.read_text()
+          old = 'use crate::{CapabilityBatchExecutionPlan, PostgresDataStore, capability_batch_error_to_sdk};'
+          new = 'use crate::{\n    CapabilityBatchExecutionPlan, FaultInjection, PostgresDataStore,\n    capability_batch_error_to_sdk,\n};'
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''pub struct PostgresTransactionalAggregateExecutor {
+    store: PostgresDataStore,
+    planner: Arc<dyn TransactionalAggregatePlanner>,
+}'''
+          new = '''pub struct PostgresTransactionalAggregateExecutor {
+    store: PostgresDataStore,
+    planner: Arc<dyn TransactionalAggregatePlanner>,
+    fault: FaultInjection,
+}'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''    pub fn new(store: PostgresDataStore, planner: Arc<dyn TransactionalAggregatePlanner>) -> Self {
+        Self { store, planner }
+    }
+}'''
+          new = '''    pub fn new(store: PostgresDataStore, planner: Arc<dyn TransactionalAggregatePlanner>) -> Self {
+        Self {
+            store,
+            planner,
+            fault: FaultInjection::None,
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn with_fault_injection(
+        store: PostgresDataStore,
+        planner: Arc<dyn TransactionalAggregatePlanner>,
+        fault: FaultInjection,
+    ) -> Self {
+        Self {
+            store,
+            planner,
+            fault,
+        }
+    }
+}'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''            self.store
+                .execute_transactional_aggregate(definition, request, target, self.planner.as_ref())
+                .await
+                .map_err(capability_batch_error_to_sdk)'''
+          new = '''            self.store
+                .execute_transactional_aggregate_with_fault(
+                    definition,
+                    request,
+                    target,
+                    self.planner.as_ref(),
+                    self.fault,
+                )
+                .await
+                .map_err(capability_batch_error_to_sdk)'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          aggregate.write_text(text)
+
+          executor = Path('crates/crm-core-data/src/postgres_batch/executor.rs')
+          text = executor.read_text()
+          old = '''    pub(crate) async fn execute_transactional_aggregate(
+        &self,
+        definition: &CapabilityDefinition,
+        request: CapabilityRequest,
+        target: AggregateTarget,
+        planner: &dyn TransactionalAggregatePlanner,
+    ) -> Result<CapabilityExecutionResult, BatchError> {'''
+          new = '''    pub(crate) async fn execute_transactional_aggregate_with_fault(
+        &self,
+        definition: &CapabilityDefinition,
+        request: CapabilityRequest,
+        target: AggregateTarget,
+        planner: &dyn TransactionalAggregatePlanner,
+        fault: FaultInjection,
+    ) -> Result<CapabilityExecutionResult, BatchError> {'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''        insert_idempotency_claim(&mut transaction, &request.context, &idempotency).await?;
+        let current = load_record_for_update('''
+          new = '''        if fault != FaultInjection::OmitIdempotency {
+            insert_idempotency_claim(&mut transaction, &request.context, &idempotency).await?;
+        }
+        let current = load_record_for_update('''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''            &execution_plan.batch,
+            FaultInjection::None,
+        )
+        .await?;'''
+          new = '''            &execution_plan.batch,
+            fault,
+        )
+        .await?;'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''        complete_capability_idempotency(
+            &mut transaction,
+            &execution_plan.batch,
+            &result,
+        )
+        .await?;
+        insert_completion_marker(&mut transaction, &execution_plan.batch).await?;'''
+          new = '''        if fault != FaultInjection::OmitIdempotency {
+            complete_capability_idempotency(
+                &mut transaction,
+                &execution_plan.batch,
+                &result,
+            )
+            .await?;
+        }
+        if fault != FaultInjection::OmitCompletionMarker {
+            insert_completion_marker(&mut transaction, &execution_plan.batch).await?;
+        }'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          executor.write_text(text)
+          PY
+          cargo fmt --all
+      - name: Commit core aggregate fault hook
+        run: |
+          git add \
+            crates/crm-core-data/src/aggregate_executor.rs \
+            crates/crm-core-data/src/postgres_batch/executor.rs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add aggregate transaction fault injection test hook"
+          git push origin HEAD:feature/phase6g-authenticated-postgres-mutations-v1
