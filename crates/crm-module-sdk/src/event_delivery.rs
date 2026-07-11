@@ -262,13 +262,13 @@ mod tests {
 
     #[test]
     fn rejects_event_version_rebinding() {
-        let mut delivery = delivery();
-        delivery.payload.schema_version = SchemaVersion::try_new("2.0.0").unwrap();
-
         delivery()
             .validate()
             .expect("unchanged fixture must remain valid");
-        delivery
+
+        let mut rebound = delivery();
+        rebound.payload.schema_version = SchemaVersion::try_new("2.0.0").unwrap();
+        rebound
             .validate()
             .expect_err("event version rebinding must fail");
     }
