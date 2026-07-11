@@ -1,0 +1,47 @@
+name: Phase 6G format new code
+
+on:
+  push:
+    branches:
+      - feature/phase6g-authenticated-postgres-mutations-v1
+    paths:
+      - .github/workflows/phase6g-format-new-code.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6g-authenticated-postgres-mutations-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Remove confirmed unused imports and format new Rust code
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-capability-ingress/tests/postgres_production_mutations.rs')
+          text = path.read_text()
+          text = text.replace(
+              '    ActorId, CapabilityId, CapabilityVersion, Clock, DataClass, ErrorCategory, ModuleId,\n    PayloadEncoding, PortFuture, RetentionPolicyId, SdkError, TenantId, TypedPayload,\n',
+              '    ActorId, Clock, DataClass, ErrorCategory, PayloadEncoding, PortFuture, RetentionPolicyId,\n    SdkError, TenantId, TypedPayload,\n',
+          )
+          path.write_text(text)
+          PY
+          cargo fmt --all
+      - name: Commit only Phase 6G source formatting
+        run: |
+          git add \
+            crates/crm-sales-activities-capability-composition/src/lib.rs \
+            crates/crm-capability-ingress/tests/postgres_production_mutations.rs
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Format Phase 6G composition and acceptance code"
+          git push origin HEAD:feature/phase6g-authenticated-postgres-mutations-v1
