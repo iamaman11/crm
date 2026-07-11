@@ -7,12 +7,14 @@
 //! client. Host services bind these ports to a tenant, actor and execution
 //! context before invoking business-module code.
 
+pub mod event_delivery;
 pub mod ports;
 pub mod testing;
 pub mod types;
 
 use std::sync::Arc;
 
+pub use event_delivery::*;
 pub use ports::*;
 pub use types::*;
 

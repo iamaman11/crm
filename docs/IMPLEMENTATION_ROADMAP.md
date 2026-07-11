@@ -2,7 +2,10 @@
 
 Status: **Normative delivery plan**  
 Parent epic: [#2](https://github.com/iamaman11/crm/issues/2)  
-Governing rules: [`SYSTEM_INVARIANTS.md`](SYSTEM_INVARIANTS.md) and accepted ADRs.
+Governing rules: [`SYSTEM_INVARIANTS.md`](SYSTEM_INVARIANTS.md) and accepted ADRs.  
+Structural guide: [`APPLICATION_ARCHITECTURE.md`](APPLICATION_ARCHITECTURE.md).  
+Current concise state: [`PROJECT_STATUS.md`](PROJECT_STATUS.md).  
+Business-module accounting: [`MODULE_CATALOG.md`](MODULE_CATALOG.md).
 
 ## 1. Purpose
 
@@ -18,7 +21,7 @@ Universal means that Sales is not allowed to become the owner of customer identi
 2. Contract CI, Governance CI and Rust CI must remain green before merge; Database CI is mandatory whenever runtime, SQL, migrations or PostgreSQL behavior changes.
 3. Published contracts, policies, metadata and module versions are immutable.
 4. A phase is complete only when its acceptance gates are automated or supported by a documented operational drill.
-5. New behavior must enter through a versioned capability and produce typed audit evidence.
+5. New state-changing behavior must enter through a versioned capability and produce typed audit evidence.
 6. Business modules may depend only on stable platform contracts and governed SDK ports.
 7. Search, analytics, caches and projections remain rebuildable and non-authoritative.
 8. Security, privacy, tenant isolation, compatibility and rollback are implementation requirements, not later enhancements.
@@ -26,6 +29,9 @@ Universal means that Sales is not allowed to become the owner of customer identi
 10. The roadmap and GitHub issues are updated in the same PR when scope or sequencing changes.
 11. Exact money, time, identity, lifecycle and authorization semantics must be represented by typed contracts rather than convention or free-form strings.
 12. No milestone may claim the complete CRM product is finished while required owner domains or production gates remain open.
+13. `README.md` is stable orientation only. Current phase state is synchronized through this roadmap, `PROJECT_STATUS.md`, `MODULE_CATALOG.md` and the active GitHub phase issue.
+14. A backend phase is not considered application-complete while its production components exist only as libraries or tests and the deployable composition root remains a skeleton.
+15. Frontend is a separate product-plane workstream after the first backend vertical proof, then evolves in parallel with later expert modules rather than waiting for all backend domains to finish.
 
 ## 3. Work states
 
@@ -46,8 +52,8 @@ Universal means that Sales is not allowed to become the owner of customer identi
 | 3 | [#6](https://github.com/iamaman11/crm/issues/6) | Module lifecycle and registry runtime | **Complete** | #4, #5 |
 | 4 | [#7](https://github.com/iamaman11/crm/issues/7) | PostgreSQL tenant, record, outbox and audit foundation | **Complete** | #6 |
 | 5 | [#8](https://github.com/iamaman11/crm/issues/8) | Capability execution gateway | **Complete** | #5, #7 |
-| 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link-module vertical slice | **Gate review / in progress** | #8 |
-| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, projections and Admin Studio foundation | **Planned** | #9 |
+| 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link/projection/application vertical proof | **In progress** | #8 |
+| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, projections, Admin Studio and product-shell foundation | **Planned** | #9 |
 | 8 | [#11](https://github.com/iamaman11/crm/issues/11) | Expert modules and product-quality UX | **Planned** | #5, #9, #10 |
 | 8A | [#28](https://github.com/iamaman11/crm/issues/28) | Canonical customer master, identity resolution and consent | **Planned** | #9, #10 |
 | 8B | [#29](https://github.com/iamaman11/crm/issues/29) | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | #9, #10, #28 |
@@ -155,7 +161,7 @@ request
 - Missing required evidence rolls back state and preserves the audit head.
 - External behavior never depends on parsing error text.
 
-## 11. Phase 6 — First modular proof — Gate review / in progress
+## 11. Phase 6 — First modular proof — In progress
 
 Issue: [#9](https://github.com/iamaman11/crm/issues/9)
 
@@ -208,14 +214,12 @@ Merged in PR #33 and PR #34.
 
 ### Completed slice 6F — audited no-op foundation and Sales/Activities capability adapters
 
-Merged in PR #37 as `0969eb657cd03479c27fe6ee0825c57af8565419`.
+Merged in PR #37.
 
-- Recovered the incomplete PR #35 merge into ordinary reviewable source code and removed all temporary payload/bootstrap artifacts.
+- Recovered the incomplete PR #35 merge into ordinary reviewable source code and removed temporary payload/bootstrap artifacts.
 - Added shared deterministic `crm-capability-plan-support`, audited semantic no-op transactions and migration `0005_audited_noop_transactions`.
 - Added production Sales deal create/update/stage-advance planners and Activities task create/update/complete/reminder planners with exact money, tenant/resource validation and generated Protobuf mapping.
 - Verified mutation, replay, stale conflict, semantic no-op, rollback, migration and evidence behavior.
-
-Exact PR head `94e0735ff5698989d8b1f28dd5d506ebdf413fcc` passed Rust, Governance and both Database CI jobs before merge. The temporary hosted-runner allocation blocker was resolved without bypassing required checks.
 
 ### Completed slice 6G — authenticated production PostgreSQL mutation acceptance
 
@@ -228,9 +232,6 @@ Authoritative PR: #40. Issue: #39.
 - Proved invalid bearer and tenant denial, cross-tenant resource rejection, exact replay, idempotency conflict, stale-version conflict, live permission revocation and audited semantic no-op behavior.
 - Measured exact committed evidence and proved that replay, denied and conflicting requests add no duplicate or partial evidence.
 - Added production evidence-omission rollback acceptance for missing outbox, audit and idempotency evidence, with typed safe failure and zero committed transactional side effects.
-- Fixed the runtime registry fixture to register all seven production mutation coordinates, including `activities.task.update` and `activities.task.schedule_reminder`.
-
-Implementation head `c6c3711ec404d762a094c2836cc25d6a79fe9a1b` passed Rust, Governance and both Database CI jobs. The final merge head must repeat those required gates after roadmap synchronization.
 
 ### Completed slice 6H — permission-bound production queries
 
@@ -247,31 +248,42 @@ Authoritative PRs: #42, #43, #44, #45 and #46. Issue: #41.
 
 ### Next implementation sequence
 
-1. **6I — optional Sales–Activities link module:** source events consumed through governed ports; task creation through `CapabilityClient` only; deterministic delivery deduplication; independent disable and uninstall.
-2. **6J — rebuildable projections:** deal timeline and task-status projections with tenant checkpoints, retries, replay and deletion/rebuild equivalence.
-3. **6K — complete Phase 6 E2E:** cross-tenant denial, stale conflict, duplicate delivery, disabled link, transaction rollback/fault injection and projection rebuild.
+1. **6I — optional Sales–Activities link module:** consume source Sales events through governed delivery contracts; invoke Activities only through `CapabilityClient`; own deterministic delivery deduplication/configuration state; prove duplicate delivery, tenant binding and independent disable/uninstall.
+2. **6J — rebuildable projections:** deliver deal timeline and task-status projections with tenant checkpoints, retries, replay, poison handling and deletion/rebuild equivalence.
+3. **6K — production application composition root:** turn `services/crm-api` from a skeleton into the real deployable process that validates configuration, constructs infrastructure/runtime adapters, composes capability and query catalogs, starts HTTP/gRPC, exposes health/readiness and shuts down gracefully without importing owner-domain internals into transport code.
+4. **6L — complete Phase 6 production E2E:** prove the complete composed path for cross-tenant denial, stale conflict, duplicate delivery, disabled/uninstalled link behavior, transaction rollback/fault injection, projection rebuild and process-level application startup/readiness.
 
 ### Completion gate
 
-Sales and Activities remain independently installable and functional when the link module is disabled. Duplicate source-event delivery produces no duplicate task or projection effect. Every mutation follows the authenticated gateway and commits state only with idempotency, outbox and audit evidence. Query paths are permission-bound, projections are rebuildable, and all required checks are green on one clean merge head.
+Sales and Activities remain independently installable and functional when the link module is disabled. Duplicate source-event delivery produces no duplicate task or projection effect. Every mutation follows the authenticated gateway and commits state only with idempotency, outbox and audit evidence. Query paths are permission-bound, projections are rebuildable, `crm-api` is a real governed production composition root rather than a skeleton, and all required checks are green on one clean merge head.
 
-## 12. Phase 7 — Search, projections and Admin Studio — Planned
+## 12. Phase 7 — Search, projections, Admin Studio and product-shell foundation — Planned
 
-### Deliverables
+Phase 7 begins only after Phase 6 proves the complete backend application composition boundary.
 
-- Idempotent projection workers, checkpoints, retries and rebuild.
+### Platform deliverables
+
+- Generalized idempotent projection workers, checkpoints, retries and rebuild.
 - Tenant- and permission-aware search with reindexing.
 - Object, field, relationship, layout, view, pipeline, permission and workflow builders.
-- Impact reports, immutable versions and rollback UI.
+- Impact reports, immutable versions and rollback behavior.
 - Typed UI extension runtime with safe fallback.
+
+### Product-plane foundation
+
+- Introduce the web product shell and typed generated client boundary.
+- Establish navigation, authentication/session integration and permission-aware routing.
+- Establish design-system primitives, accessibility baseline, localization/time-zone strategy and error/loading conventions.
+- Build the first Admin Studio workflows against governed metadata publication APIs.
+- Keep all business invariants authoritative in owner modules; the frontend orchestrates user interaction but does not become a second domain runtime.
 
 ### Gate
 
-Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Admin changes are validated, audited and reversible.
+Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Admin changes are validated, audited and reversible. UI extension failure cannot break the host shell. The frontend cannot bypass governed mutation/query paths.
 
 ## 13. Phase 8 — Expert modules and product experience — Planned
 
-Parallel workstreams start only after the Module SDK, first vertical slice and search/Admin foundations prove the boundaries.
+After Phase 7, backend and frontend evolve as end-to-end vertical slices rather than as two long disconnected projects.
 
 ### Required owner domains
 
