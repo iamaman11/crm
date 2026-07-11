@@ -41,9 +41,9 @@ const SALES_CREATE: &str = "sales.deal.create";
 
 #[derive(Debug, Clone, Copy)]
 enum EvidenceFault {
-    OutboxMissing,
-    AuditMissing,
-    IdempotencyMissing,
+    Outbox,
+    Audit,
+    Idempotency,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,9 +68,9 @@ impl TransactionalAggregatePlanner for CorruptingPlanner {
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
         let mut plan = SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)?;
         match self.fault {
-            EvidenceFault::OutboxMissing => plan.batch.events.clear(),
-            EvidenceFault::AuditMissing => plan.batch.audits.clear(),
-            EvidenceFault::IdempotencyMissing => plan.batch.idempotency.scope.clear(),
+            EvidenceFault::Outbox => plan.batch.events.clear(),
+            EvidenceFault::Audit => plan.batch.audits.clear(),
+            EvidenceFault::Idempotency => plan.batch.idempotency.scope.clear(),
         }
         Ok(plan)
     }
@@ -124,9 +124,9 @@ async fn omitted_production_evidence_rolls_back_every_transactional_side_effect(
         .expect("connect Phase 6G rollback evidence reader");
 
     for (case, fault) in [
-        ("outbox", EvidenceFault::OutboxMissing),
-        ("audit", EvidenceFault::AuditMissing),
-        ("idempotency", EvidenceFault::IdempotencyMissing),
+        ("outbox", EvidenceFault::Outbox),
+        ("audit", EvidenceFault::Audit),
+        ("idempotency", EvidenceFault::Idempotency),
     ] {
         let before = evidence_counts(&admin).await;
         let definition = definition();
