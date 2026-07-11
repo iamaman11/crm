@@ -144,10 +144,15 @@ async fn omitted_production_evidence_rolls_back_every_transactional_side_effect(
         assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
         let error = match &response.body {
             HttpCapabilityBody::Error(error) => error,
-            HttpCapabilityBody::Success(_) => panic!("corrupted production plan unexpectedly succeeded"),
+            HttpCapabilityBody::Success(_) => {
+                panic!("corrupted production plan unexpectedly succeeded")
+            }
         };
         assert_eq!(error.code, "CAPABILITY_EXECUTION_PLAN_INVALID");
-        assert_eq!(error.safe_message, "The capability execution plan is invalid.");
+        assert_eq!(
+            error.safe_message,
+            "The capability execution plan is invalid."
+        );
         let safe = error.safe_message.to_lowercase();
         assert!(!safe.contains("sql"));
         assert!(!safe.contains("database"));
@@ -173,10 +178,8 @@ fn compose(store: PostgresDataStore, fault: EvidenceFault) -> HttpCapabilityMidd
             expires_at_unix_nanos: Some(NOW + 10_000_000_000_000),
         })
         .expect("valid rollback authorization grant");
-    let executor = PostgresTransactionalAggregateExecutor::new(
-        store,
-        Arc::new(CorruptingPlanner { fault }),
-    );
+    let executor =
+        PostgresTransactionalAggregateExecutor::new(store, Arc::new(CorruptingPlanner { fault }));
     let gateway = Arc::new(CapabilityGateway::new(
         Arc::new(capability_catalog().expect("valid production capability catalog")),
         Arc::new(SemanticHashValidator),
@@ -281,9 +284,21 @@ fn http_request(
     insert_header(&mut headers, TENANT_HEADER, TENANT);
     insert_header(&mut headers, IDEMPOTENCY_KEY_HEADER, idempotency_key);
     insert_header(&mut headers, REQUEST_ID_HEADER, request_identity);
-    insert_header(&mut headers, CORRELATION_ID_HEADER, &format!("corr-{request_identity}"));
-    insert_header(&mut headers, CAUSATION_ID_HEADER, &format!("cause-{request_identity}"));
-    insert_header(&mut headers, TRACE_ID_HEADER, &format!("trace-{request_identity}"));
+    insert_header(
+        &mut headers,
+        CORRELATION_ID_HEADER,
+        &format!("corr-{request_identity}"),
+    );
+    insert_header(
+        &mut headers,
+        CAUSATION_ID_HEADER,
+        &format!("cause-{request_identity}"),
+    );
+    insert_header(
+        &mut headers,
+        TRACE_ID_HEADER,
+        &format!("trace-{request_identity}"),
+    );
     insert_header(
         &mut headers,
         BUSINESS_TRANSACTION_HEADER,
@@ -304,7 +319,10 @@ fn http_request(
 }
 
 fn insert_header(headers: &mut HeaderMap, name: &'static str, value: &str) {
-    headers.insert(name, HeaderValue::from_str(value).expect("valid rollback header"));
+    headers.insert(
+        name,
+        HeaderValue::from_str(value).expect("valid rollback header"),
+    );
 }
 
 async fn evidence_counts(pool: &PgPool) -> EvidenceCounts {
