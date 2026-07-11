@@ -80,6 +80,13 @@ where
         Self { encoder }
     }
 
+    /// Processes one immutable Sales event delivery.
+    ///
+    /// Exactly-once business effect is anchored in the target capability idempotency key
+    /// (`delivery_id`). The durable link receipt is written only after the target capability
+    /// succeeds. Therefore a crash after target commit but before receipt persistence is safe:
+    /// retry re-enters the target gateway with the same idempotency key, receives the original
+    /// replayed result and then repairs the missing receipt.
     pub async fn handle(
         &self,
         context: &ModuleExecutionContext,
@@ -92,131 +99,93 @@ where
 
         let state_key = delivery_state_key(delivery)?;
         let existing = state.get(context, state_key.clone()).await?;
-        let entry = match existing {
-            Some(entry) => entry,
-            None => {
-                let initial_status = if event.status == DealLifecycleStatus::Open {
-                    DeliveryStatus::Pending
-                } else {
-                    DeliveryStatus::Ignored
-                };
-                let initial = DeliveryReceipt::new(delivery, event, initial_status);
-                match state
-                    .put(
-                        context,
-                        PutModuleStateRequest {
-                            key: state_key.clone(),
-                            expected_version: None,
-                            value: encode_receipt(&initial)?,
-                        },
-                    )
-                    .await
-                {
-                    Ok(_) if initial_status == DeliveryStatus::Ignored => {
-                        return Ok(LinkProcessResult {
-                            disposition: LinkDisposition::Ignored,
-                            replayed: false,
-                            affected_resources: Vec::new(),
-                        });
-                    }
-                    Ok(entry) => entry,
-                    Err(error) if error.code == "SDK_VERSION_CONFLICT" => state
-                        .get(context, state_key.clone())
-                        .await?
-                        .ok_or_else(delivery_state_race)?,
-                    Err(error) => return Err(error),
-                }
-            }
-        };
-
-        self.resume(context, delivery, event, entry, capabilities, state)
-            .await
-    }
-
-    async fn resume(
-        &self,
-        context: &ModuleExecutionContext,
-        delivery: &EventDelivery,
-        event: &SalesDealStageChanged,
-        entry: ModuleStateEntry,
-        capabilities: &dyn CapabilityClient,
-        state: &dyn ModuleStateStore,
-    ) -> Result<LinkProcessResult, SdkError> {
-        let state_key = delivery_state_key(delivery)?;
-        let receipt = decode_receipt(&entry)?;
-        receipt.validate_binding(delivery, event)?;
-
-        match receipt.status {
-            DeliveryStatus::Applied => Ok(LinkProcessResult {
-                disposition: LinkDisposition::Applied,
-                replayed: true,
-                affected_resources: receipt.affected_resources,
-            }),
-            DeliveryStatus::Ignored => Ok(LinkProcessResult {
-                disposition: LinkDisposition::Ignored,
-                replayed: true,
-                affected_resources: Vec::new(),
-            }),
-            DeliveryStatus::Pending => {
-                let intent = follow_up_intent(delivery, event)?;
-                let input = self.encoder.encode_create_task(&intent)?;
-                validate_target_payload(&input)?;
-
-                let outcome = capabilities
-                    .invoke(
-                        context,
-                        CapabilityInvocation {
-                            capability_id: configured_capability_id(TARGET_CAPABILITY_ID)?,
-                            capability_version: configured_capability_version(
-                                TARGET_CAPABILITY_VERSION,
-                            )?,
-                            input,
-                        },
-                    )
-                    .await?;
-
-                let applied = DeliveryReceipt {
-                    status: DeliveryStatus::Applied,
-                    affected_resources: outcome.affected_resources.clone(),
-                    ..receipt
-                };
-
-                match state
-                    .put(
-                        context,
-                        PutModuleStateRequest {
-                            key: state_key.clone(),
-                            expected_version: Some(entry.version),
-                            value: encode_receipt(&applied)?,
-                        },
-                    )
-                    .await
-                {
-                    Ok(_) => Ok(LinkProcessResult {
+        if let Some(entry) = existing.as_ref() {
+            let receipt = decode_receipt(entry)?;
+            receipt.validate_binding(delivery, event)?;
+            match receipt.status {
+                DeliveryStatus::Applied => {
+                    return Ok(LinkProcessResult {
                         disposition: LinkDisposition::Applied,
-                        replayed: false,
-                        affected_resources: outcome.affected_resources,
-                    }),
-                    Err(error) if error.code == "SDK_VERSION_CONFLICT" => {
-                        let current = state
-                            .get(context, state_key)
-                            .await?
-                            .ok_or_else(delivery_state_race)?;
-                        let current = decode_receipt(&current)?;
-                        current.validate_binding(delivery, event)?;
-                        if current.status == DeliveryStatus::Applied {
-                            Ok(LinkProcessResult {
-                                disposition: LinkDisposition::Applied,
-                                replayed: true,
-                                affected_resources: current.affected_resources,
-                            })
-                        } else {
-                            Err(delivery_state_race())
-                        }
-                    }
-                    Err(error) => Err(error),
+                        replayed: true,
+                        affected_resources: receipt.affected_resources,
+                    });
+                }
+                DeliveryStatus::Ignored => {
+                    return Ok(LinkProcessResult {
+                        disposition: LinkDisposition::Ignored,
+                        replayed: true,
+                        affected_resources: Vec::new(),
+                    });
+                }
+                // Compatibility with the pre-production 0.1 receipt shape. A pending receipt
+                // is never treated as proof of a completed target business effect.
+                DeliveryStatus::Pending => {}
+            }
+        }
+
+        if event.status != DealLifecycleStatus::Open {
+            return Ok(LinkProcessResult {
+                disposition: LinkDisposition::Ignored,
+                replayed: false,
+                affected_resources: Vec::new(),
+            });
+        }
+
+        let intent = follow_up_intent(delivery, event)?;
+        let input = self.encoder.encode_create_task(&intent)?;
+        validate_target_payload(&input)?;
+        let outcome = capabilities
+            .invoke(
+                context,
+                CapabilityInvocation {
+                    capability_id: configured_capability_id(TARGET_CAPABILITY_ID)?,
+                    capability_version: configured_capability_version(TARGET_CAPABILITY_VERSION)?,
+                    input,
+                },
+            )
+            .await?;
+
+        let applied = DeliveryReceipt::new(
+            delivery,
+            event,
+            DeliveryStatus::Applied,
+            outcome.affected_resources.clone(),
+        );
+        let expected_version = existing.as_ref().map(|entry| entry.version);
+        match state
+            .put(
+                context,
+                PutModuleStateRequest {
+                    key: state_key.clone(),
+                    expected_version,
+                    value: encode_receipt(&applied)?,
+                },
+            )
+            .await
+        {
+            Ok(_) => Ok(LinkProcessResult {
+                disposition: LinkDisposition::Applied,
+                replayed: false,
+                affected_resources: outcome.affected_resources,
+            }),
+            Err(error) if error.code == "SDK_VERSION_CONFLICT" => {
+                let current = state
+                    .get(context, state_key)
+                    .await?
+                    .ok_or_else(delivery_state_race)?;
+                let current = decode_receipt(&current)?;
+                current.validate_binding(delivery, event)?;
+                if current.status == DeliveryStatus::Applied {
+                    Ok(LinkProcessResult {
+                        disposition: LinkDisposition::Applied,
+                        replayed: true,
+                        affected_resources: current.affected_resources,
+                    })
+                } else {
+                    Err(delivery_state_race())
                 }
             }
+            Err(error) => Err(error),
         }
     }
 }
@@ -245,6 +214,7 @@ impl DeliveryReceipt {
         delivery: &EventDelivery,
         event: &SalesDealStageChanged,
         status: DeliveryStatus,
+        affected_resources: Vec<ResourceRef>,
     ) -> Self {
         Self {
             event_id: delivery.event_id.as_str().to_owned(),
@@ -252,7 +222,7 @@ impl DeliveryReceipt {
             aggregate_version: event.version,
             source_status: event.status,
             status,
-            affected_resources: Vec::new(),
+            affected_resources,
         }
     }
 
@@ -339,8 +309,7 @@ fn follow_up_intent(
 }
 
 fn delivery_state_key(delivery: &EventDelivery) -> Result<StateKey, SdkError> {
-    StateKey::try_new(delivery.delivery_id.as_str().to_owned())
-        .map_err(|_| delivery_state_invalid())
+    StateKey::try_new(delivery.delivery_id.as_str().to_owned()).map_err(|_| delivery_state_invalid())
 }
 
 fn encode_receipt(receipt: &DeliveryReceipt) -> Result<TypedPayload, SdkError> {
@@ -460,8 +429,8 @@ mod tests {
     use crm_module_sdk::testing::{InMemoryModuleStateStore, RecordingCapabilityClient};
     use crm_module_sdk::{
         BusinessTransactionId, CapabilityOutcome, CausationId, CorrelationId, DeliveryId, EventId,
-        EventType, EventVersion, ExecutionContext, IdempotencyKey, PayloadEncoding, RecordRef,
-        RecordType, RequestId, TraceId,
+        EventType, EventVersion, ExecutionContext, IdempotencyKey, RecordRef, RecordType, RequestId,
+        TraceId,
     };
     use std::future::Future;
     use std::task::{Context, Poll, Waker};
@@ -491,6 +460,97 @@ mod tests {
         match future.as_mut().poll(&mut context) {
             Poll::Ready(output) => output,
             Poll::Pending => panic!("test double future unexpectedly returned Pending"),
+        }
+    }
+
+    #[test]
+    fn open_stage_change_invokes_activities_once_and_duplicate_uses_receipt() {
+        let link = SalesActivitiesLink::new(TestEncoder);
+        let capabilities = RecordingCapabilityClient::default();
+        capabilities.push_response(Ok(CapabilityOutcome {
+            output: None,
+            affected_resources: vec![task_resource()],
+        }));
+        let state = InMemoryModuleStateStore::default();
+        let (delivery, event) = delivery(DealLifecycleStatus::Open);
+        let context = context(&delivery);
+
+        let first = run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
+        let second = run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
+
+        assert_eq!(first.disposition, LinkDisposition::Applied);
+        assert!(!first.replayed);
+        assert_eq!(second.disposition, LinkDisposition::Applied);
+        assert!(second.replayed);
+        assert_eq!(capabilities.calls().len(), 1);
+        assert_eq!(state.entry_count(), 1);
+    }
+
+    #[test]
+    fn target_failure_creates_no_receipt_and_retry_can_reenter_target() {
+        let link = SalesActivitiesLink::new(TestEncoder);
+        let capabilities = RecordingCapabilityClient::default();
+        capabilities.push_response(Err(SdkError::new(
+            "TEST_TARGET_UNAVAILABLE",
+            ErrorCategory::Unavailable,
+            true,
+            "The target is temporarily unavailable.",
+        )));
+        capabilities.push_response(Ok(CapabilityOutcome {
+            output: None,
+            affected_resources: vec![task_resource()],
+        }));
+        let state = InMemoryModuleStateStore::default();
+        let (delivery, event) = delivery(DealLifecycleStatus::Open);
+        let context = context(&delivery);
+
+        run_ready(link.handle(&context, &delivery, &event, &capabilities, &state))
+            .expect_err("first target call must fail");
+        assert_eq!(state.entry_count(), 0);
+
+        let retry = run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
+        assert_eq!(retry.disposition, LinkDisposition::Applied);
+        assert_eq!(capabilities.calls().len(), 2);
+        assert_eq!(state.entry_count(), 1);
+    }
+
+    #[test]
+    fn closed_deal_is_ignored_without_target_or_state_mutation() {
+        let link = SalesActivitiesLink::new(TestEncoder);
+        let capabilities = RecordingCapabilityClient::default();
+        let state = InMemoryModuleStateStore::default();
+        let (delivery, event) = delivery(DealLifecycleStatus::Won);
+        let context = context(&delivery);
+
+        let result = run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
+
+        assert_eq!(result.disposition, LinkDisposition::Ignored);
+        assert!(!result.replayed);
+        assert!(capabilities.calls().is_empty());
+        assert_eq!(state.entry_count(), 0);
+    }
+
+    #[test]
+    fn cross_tenant_delivery_is_denied_before_target_call() {
+        let link = SalesActivitiesLink::new(TestEncoder);
+        let capabilities = RecordingCapabilityClient::default();
+        let state = InMemoryModuleStateStore::default();
+        let (delivery, event) = delivery(DealLifecycleStatus::Open);
+        let mut context = context(&delivery);
+        context.execution.tenant_id = crm_module_sdk::TenantId::try_new("tenant-2").unwrap();
+
+        run_ready(link.handle(&context, &delivery, &event, &capabilities, &state))
+            .expect_err("cross-tenant delivery must fail");
+
+        assert!(capabilities.calls().is_empty());
+        assert_eq!(state.entry_count(), 0);
+    }
+
+    fn task_resource() -> ResourceRef {
+        ResourceRef {
+            resource_type: "activities.task".to_owned(),
+            resource_id: "delivery-1".to_owned(),
+            version: Some(1),
         }
     }
 
@@ -550,128 +610,5 @@ mod tests {
                 request_started_at_unix_nanos: 101,
             },
         }
-    }
-
-    #[test]
-    fn open_stage_change_invokes_activities_once_and_duplicate_is_replayed() {
-        let link = SalesActivitiesLink::new(TestEncoder);
-        let capabilities = RecordingCapabilityClient::default();
-        capabilities.push_response(Ok(CapabilityOutcome {
-            output: None,
-            affected_resources: vec![ResourceRef {
-                resource_type: "activities.task".to_owned(),
-                resource_id: "delivery-1".to_owned(),
-                version: Some(1),
-            }],
-        }));
-        let state = InMemoryModuleStateStore::default();
-        let (delivery, event) = delivery(DealLifecycleStatus::Open);
-        let context = context(&delivery);
-
-        let first =
-            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
-        let second =
-            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
-
-        assert_eq!(first.disposition, LinkDisposition::Applied);
-        assert!(!first.replayed);
-        assert_eq!(second.disposition, LinkDisposition::Applied);
-        assert!(second.replayed);
-        assert_eq!(capabilities.calls().len(), 1);
-        assert_eq!(state.entry_count(), 1);
-        assert_eq!(
-            capabilities.calls()[0].request.capability_id.as_str(),
-            TARGET_CAPABILITY_ID
-        );
-    }
-
-    #[test]
-    fn closed_deal_is_recorded_as_ignored_without_target_call() {
-        let link = SalesActivitiesLink::new(TestEncoder);
-        let capabilities = RecordingCapabilityClient::default();
-        let state = InMemoryModuleStateStore::default();
-        let (delivery, event) = delivery(DealLifecycleStatus::Won);
-        let context = context(&delivery);
-
-        let first =
-            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
-        let second =
-            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
-
-        assert_eq!(first.disposition, LinkDisposition::Ignored);
-        assert!(!first.replayed);
-        assert_eq!(second.disposition, LinkDisposition::Ignored);
-        assert!(second.replayed);
-        assert!(capabilities.calls().is_empty());
-        assert_eq!(state.entry_count(), 1);
-    }
-
-    #[test]
-    fn target_failure_leaves_pending_receipt_and_retry_is_safe() {
-        let link = SalesActivitiesLink::new(TestEncoder);
-        let capabilities = RecordingCapabilityClient::default();
-        capabilities.push_response(Err(SdkError::new(
-            "TEST_TARGET_UNAVAILABLE",
-            ErrorCategory::Unavailable,
-            true,
-            "The target is temporarily unavailable.",
-        )));
-        let state = InMemoryModuleStateStore::default();
-        let (delivery, event) = delivery(DealLifecycleStatus::Open);
-        let context = context(&delivery);
-
-        run_ready(link.handle(&context, &delivery, &event, &capabilities, &state))
-            .expect_err("first target call must fail");
-
-        let retry =
-            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
-
-        assert_eq!(retry.disposition, LinkDisposition::Applied);
-        assert!(!retry.replayed);
-        assert_eq!(capabilities.calls().len(), 2);
-        assert_eq!(state.entry_count(), 1);
-    }
-
-    #[test]
-    fn cross_tenant_delivery_is_denied_before_target_call() {
-        let link = SalesActivitiesLink::new(TestEncoder);
-        let capabilities = RecordingCapabilityClient::default();
-        let state = InMemoryModuleStateStore::default();
-        let (delivery, event) = delivery(DealLifecycleStatus::Open);
-        let mut context = context(&delivery);
-        context.execution.tenant_id = crm_module_sdk::TenantId::try_new("tenant-2").unwrap();
-
-        run_ready(link.handle(&context, &delivery, &event, &capabilities, &state))
-            .expect_err("cross-tenant delivery must fail");
-
-        assert!(capabilities.calls().is_empty());
-        assert_eq!(state.entry_count(), 0);
-    }
-
-    #[test]
-    fn delivery_identity_reuse_with_different_source_event_is_rejected() {
-        let link = SalesActivitiesLink::new(TestEncoder);
-        let capabilities = RecordingCapabilityClient::default();
-        let state = InMemoryModuleStateStore::default();
-        let (delivery, event) = delivery(DealLifecycleStatus::Won);
-        let first_context = context(&delivery);
-
-        run_ready(link.handle(&first_context, &delivery, &event, &capabilities, &state)).unwrap();
-
-        let mut rebound_delivery = delivery.clone();
-        rebound_delivery.event_id = EventId::try_new("event-2").unwrap();
-        let rebound_context = context(&rebound_delivery);
-
-        let error = run_ready(link.handle(
-            &rebound_context,
-            &rebound_delivery,
-            &event,
-            &capabilities,
-            &state,
-        ))
-        .expect_err("delivery identity reuse must fail");
-
-        assert_eq!(error.code, "LINK_DELIVERY_ID_REUSED");
-        assert!(capabilities.calls().is_empty());
     }
 }

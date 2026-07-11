@@ -6,6 +6,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
       - "crates/crm-module-sdk/**"
       - "crates/crm-capability-runtime/**"
       - "crates/crm-capability-adapters/**"
@@ -13,10 +14,13 @@ on:
       - "crates/crm-sales-capability-adapter/**"
       - "crates/crm-activities-capability-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
+      - "crates/crm-sales-activities-link-contract-adapter/**"
       - "crates/crm-sales-activities-query-adapter/**"
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
+      - "modules/crm-activities/**"
+      - "modules/crm-sales-activities-link/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - "docs/adr/ADR-030-public-gateway-acceptance.md"
@@ -26,6 +30,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
       - "crates/crm-module-sdk/**"
       - "crates/crm-capability-runtime/**"
       - "crates/crm-capability-adapters/**"
@@ -33,10 +38,13 @@ on:
       - "crates/crm-sales-capability-adapter/**"
       - "crates/crm-activities-capability-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
+      - "crates/crm-sales-activities-link-contract-adapter/**"
       - "crates/crm-sales-activities-query-adapter/**"
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
+      - "modules/crm-activities/**"
+      - "modules/crm-sales-activities-link/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - "docs/adr/ADR-030-public-gateway-acceptance.md"
@@ -83,6 +91,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_runtime.up.sql
       - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
       - name: Enable the isolated runtime test role
@@ -115,6 +124,7 @@ jobs:
           cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e -- --nocapture 2>&1 | tee database/postgres-gateway-e2e.log
       - name: Roll back migrations
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_runtime.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
@@ -131,6 +141,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_runtime.up.sql
       - name: Rebuild runtime fixtures after rollback
         run: |
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
@@ -186,9 +197,12 @@ jobs:
           path: |
             database/
             crates/crm-core-data/
+            crates/crm-core-events/
             crates/crm-capability-ingress/
             crates/crm-sales-activities-capability-composition/
+            crates/crm-sales-activities-link-contract-adapter/
             crates/crm-sales-activities-query-adapter/
+            modules/crm-sales-activities-link/
           if-no-files-found: error
           retention-days: 7
 
@@ -221,15 +235,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Verify legacy data upgrade through migrations 0002 and 0003
+      - name: Verify legacy data upgrade through migrations 0002 through 0006
         shell: bash
         run: |
           set -o pipefail
           psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql 2>&1 | tee database/legacy-upgrade.log
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_runtime.up.sql
       - name: Verify upgraded schema can roll back cleanly
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_runtime.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
