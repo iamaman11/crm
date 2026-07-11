@@ -1,9 +1,12 @@
+use crm_core_data::PostgresDataStore;
 use crm_core_events::ProjectionDocumentWrite;
 use crm_module_sdk::{
     DataClass, ErrorCategory, EventDelivery, EventType, ModuleId, PayloadEncoding, SdkError,
+    TenantId,
 };
+pub use crm_projection_runtime::ProjectionBatchResult;
 use crm_projection_runtime::{
-    ProjectionDefinition, ProjectionHandler, ProjectionId, ProjectionRegistry,
+    ProjectionDefinition, ProjectionHandler, ProjectionId, ProjectionRegistry, ProjectionRunner,
 };
 use crm_proto_contracts::{crm::activities::v1 as activities, message_descriptor_hash};
 use prost::Message;
@@ -79,6 +82,53 @@ pub fn phase6_projection_registry() -> Result<ProjectionRegistry, SdkError> {
             Arc::new(TaskStatusProjectionHandler),
         )?,
     ])
+}
+
+/// Compatibility facade for the existing application/process composition.
+///
+/// All batch, resume, poison and rebuild mechanics are delegated to the generic
+/// platform runner. This facade only binds the Phase 6 registry to the current
+/// PostgreSQL adapter and can be removed once application composition adopts a
+/// multi-registry projection worker directly.
+#[derive(Debug, Clone)]
+pub struct Phase6ProjectionWorker {
+    runner: ProjectionRunner,
+}
+
+impl Phase6ProjectionWorker {
+    pub fn new(store: PostgresDataStore) -> Self {
+        Self::try_new(store).expect("static Phase 6 projection registry must be valid")
+    }
+
+    pub fn try_new(store: PostgresDataStore) -> Result<Self, SdkError> {
+        Ok(Self {
+            runner: ProjectionRunner::new(Arc::new(store), phase6_projection_registry()?),
+        })
+    }
+
+    pub async fn run_batch(
+        &self,
+        tenant_id: TenantId,
+        projection_id: &str,
+        page_size: u32,
+    ) -> Result<ProjectionBatchResult, SdkError> {
+        self.runner
+            .run_batch(tenant_id, projection_id, page_size)
+            .await
+    }
+
+    pub async fn rebuild(
+        &self,
+        tenant_id: TenantId,
+        projection_id: &str,
+        page_size: u32,
+    ) -> Result<u64, SdkError> {
+        self.runner.rebuild(tenant_id, projection_id, page_size).await
+    }
+
+    pub fn runner(&self) -> &ProjectionRunner {
+        &self.runner
+    }
 }
 
 fn configured_event_types(values: &[&str]) -> Result<Vec<EventType>, SdkError> {
@@ -301,6 +351,18 @@ mod tests {
                 .event_types()
                 .len(),
             4
+        );
+    }
+
+    #[test]
+    fn compatibility_worker_is_backed_by_the_generic_registry() {
+        let registry = phase6_projection_registry().unwrap();
+        assert_eq!(
+            registry
+                .projection_ids()
+                .map(ProjectionId::as_str)
+                .collect::<Vec<_>>(),
+            vec![DEAL_TIMELINE_PROJECTION_ID, TASK_STATUS_PROJECTION_ID]
         );
     }
 }
