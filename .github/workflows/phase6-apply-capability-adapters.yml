@@ -1,4 +1,4 @@
-name: Phase 6F recovery publish materialized commit
+name: Phase 6F recovery publish blob manifest
 
 on:
   pull_request:
@@ -23,7 +23,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Build recovered Git commit
+      - name: Build recovered blob manifest
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -36,7 +36,26 @@ jobs:
               '["git", "status", "--porcelain=v1", "-z"]',
               '["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"]',
           )
-          path.write_text(source)
+          marker = "    tree_sha = run_json("
+          prefix = source.split(marker, 1)[0]
+          replacement = '''    manifest = json.dumps({
+              "base_sha": base_sha,
+              "base_tree": base_tree,
+              "entries": entries,
+          }, separators=(",", ":"))
+          body = "Phase 6F recovered blob manifest:\\n\\n```json\\n" + manifest + "\\n```"
+          subprocess.run(
+              ["gh", "pr", "comment", PR_NUMBER, "--repo", REPO, "--body", body],
+              check=True,
+          )
+          print(f"MATERIALIZED_FILES={len(entries)}")
+          print(manifest)
+
+
+          if __name__ == "__main__":
+              main()
+          '''
+          path.write_text(prefix + replacement)
           PY
           set +e
           python scripts/phase6_recovery_publish.py > /tmp/phase6-recovery.log 2>&1
@@ -45,7 +64,7 @@ jobs:
           cat /tmp/phase6-recovery.log
           if [ "$status" -ne 0 ]; then
             {
-              echo 'Phase 6F recovery publisher failed:'
+              echo 'Phase 6F blob publisher failed:'
               echo
               echo '```text'
               tail -n 80 /tmp/phase6-recovery.log
