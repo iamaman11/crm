@@ -1,0 +1,38 @@
+name: Phase 6H sync query auth branch
+
+on:
+  push:
+    branches:
+      - feature/phase6h-production-queries-v1
+    paths:
+      - .github/workflows/phase6h-sync-query-auth.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6h-production-queries-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve lockfile and format changed query/auth sources
+        run: |
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit only generated lockfile and formatted query/auth sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock \
+            crates/crm-capability-adapters/src/authorization.rs \
+            crates/crm-query-runtime/src/gateway.rs \
+            crates/crm-query-runtime/src/query_lib.rs
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(query): sync lockfile and formatting"
+          git push origin HEAD:feature/phase6h-production-queries-v1
