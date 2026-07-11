@@ -1,0 +1,25 @@
+name: Phase 6C planner source
+
+on:
+  push:
+    branches:
+      - feature/sales-activities-persistence-planners-v1
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Archive repository source
+        run: |
+          tar --exclude=.git --exclude=target -czf phase6c-planner-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-planner-source
+          path: phase6c-planner-source.tar.gz
+          if-no-files-found: error
+          retention-days: 3
