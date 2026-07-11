@@ -78,3 +78,34 @@ jobs:
           path: tests.txt
           if-no-files-found: error
           retention-days: 7
+
+  phase6h-query-ingress-sync:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/phase6h-query-ingress-v1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6h-query-ingress-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve lockfile and format workspace
+        run: |
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit generated lockfile and formatted query ingress files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock \
+            crates/crm-capability-ingress/src/lib.rs \
+            crates/crm-capability-ingress/src/query_context.rs \
+            crates/crm-capability-ingress/src/query_core.rs \
+            crates/crm-capability-ingress/src/query_grpc.rs \
+            crates/crm-capability-ingress/src/query_http.rs
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(query): sync ingress lockfile and formatting"
+          git push origin HEAD:feature/phase6h-query-ingress-v1
