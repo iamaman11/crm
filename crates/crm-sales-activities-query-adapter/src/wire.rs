@@ -251,20 +251,20 @@ pub(crate) fn task_matches(
 
 fn deal_owner_matches(actual: &DealOwner, expected: &core::ActorOrTeamOwner) -> bool {
     use core::actor_or_team_owner::Owner;
-    matches!(
-        (actual, expected.owner.as_ref()),
-        (DealOwner::Actor(actual), Some(Owner::ActorId(expected))) if actual.as_str() == expected
-            | (DealOwner::Team(actual), Some(Owner::TeamId(expected))) if actual.as_str() == expected
-    )
+    match (actual, expected.owner.as_ref()) {
+        (DealOwner::Actor(actual), Some(Owner::ActorId(expected))) => actual.as_str() == expected,
+        (DealOwner::Team(actual), Some(Owner::TeamId(expected))) => actual.as_str() == expected,
+        _ => false,
+    }
 }
 
 fn task_owner_matches(actual: &TaskOwner, expected: &core::ActorOrTeamOwner) -> bool {
     use core::actor_or_team_owner::Owner;
-    matches!(
-        (actual, expected.owner.as_ref()),
-        (TaskOwner::Actor(actual), Some(Owner::ActorId(expected))) if actual.as_str() == expected
-            | (TaskOwner::Team(actual), Some(Owner::TeamId(expected))) if actual.as_str() == expected
-    )
+    match (actual, expected.owner.as_ref()) {
+        (TaskOwner::Actor(actual), Some(Owner::ActorId(expected))) => actual.as_str() == expected,
+        (TaskOwner::Team(actual), Some(Owner::TeamId(expected))) => actual.as_str() == expected,
+        _ => false,
+    }
 }
 
 fn owner_to_wire(value: &DealOwner) -> core::ActorOrTeamOwner {
