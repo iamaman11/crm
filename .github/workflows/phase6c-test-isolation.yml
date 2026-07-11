@@ -1,0 +1,75 @@
+name: Phase 6C test isolation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/sales-activities-persistence-planners-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Serialize tenant-sharing acceptance scenarios
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("crates/crm-core-data/tests/postgres_advanced/scenario.rs")
+          source = path.read_text(encoding="utf-8")
+          old = '''        8
+              );
+          }
+
+
+          #[tokio::test(flavor = "current_thread")]
+          async fn transaction_aware_executor_locks_authoritative_state_and_replays_original_output() {
+              let Ok(database_url) = std::env::var("DATABASE_URL") else {
+                  eprintln!("skipping PostgreSQL integration scenario because DATABASE_URL is not configured");
+                  return;
+              };
+              let store = PostgresDataStore::connect(&database_url, 4)
+                  .await
+                  .expect("connect to PostgreSQL");
+          '''
+          new = '''        8
+              );
+
+              exercise_transaction_aware_executor(&store).await;
+          }
+
+          async fn exercise_transaction_aware_executor(store: &PostgresDataStore) {
+          '''
+          if old not in source:
+              raise SystemExit("expected parallel test block was not found")
+          source = source.replace(old, new, 1)
+          source = source.replace(
+              "    let executor = PostgresTransactionalAggregateExecutor::new(\n        store.clone(),\n",
+              "    let executor = PostgresTransactionalAggregateExecutor::new(\n        (*store).clone(),\n",
+              1,
+          )
+          path.write_text(source, encoding="utf-8")
+      - name: Verify focused source
+        run: |
+          cargo fmt --all
+          cargo test -p crm-core-data --lib
+          cargo clippy -p crm-core-data --all-targets --all-features -- -D warnings
+      - name: Commit test isolation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-core-data/tests/postgres_advanced/scenario.rs
+          git diff --cached --check
+          git commit -m "test: serialize tenant-sharing PostgreSQL acceptance"
+          git push origin HEAD:feature/sales-activities-persistence-planners-v1
