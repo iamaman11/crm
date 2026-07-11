@@ -13,7 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z][a-z0-9]*)+$")
 NAMESPACED_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z][a-z0-9]*)+$")
 TEAM_RE = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
-DEPENDENCY_RE = re.compile(r"^(?P<module>[a-z][a-z0-9]*(?:[.-][a-z][a-z0-9]*)+)@(?P<range>.+)$")
+DEPENDENCY_RE = re.compile(
+    r"^(?P<module>[a-z][a-z0-9]*(?:[.-][a-z][a-z0-9]*)+)@(?P<range>.+)$"
+)
+VERSION_RANGE_RE = re.compile(r"^[0-9A-Za-z.*<>=~^| ,+-]{1,120}$")
 
 
 class ScaffoldError(ValueError):
@@ -41,19 +44,28 @@ class ModuleSpec:
         return self.module_id.replace(".", "-")
 
     @property
+    def rust_crate_name(self) -> str:
+        return self.crate_name.replace("-", "_")
+
+    @property
     def relative_dir(self) -> Path:
         return Path("modules") / self.crate_name
 
 
 def _quoted(value: str) -> str:
-    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def parse_dependency(value: str) -> Dependency:
     match = DEPENDENCY_RE.fullmatch(value)
     if not match:
         raise argparse.ArgumentTypeError("dependency must be MODULE_ID@VERSION_RANGE")
-    return Dependency(match.group("module"), match.group("range"))
+    version_range = match.group("range")
+    if not VERSION_RANGE_RE.fullmatch(version_range):
+        raise argparse.ArgumentTypeError(
+            "dependency version range contains unsupported characters or exceeds 120 characters"
+        )
+    return Dependency(match.group("module"), version_range)
 
 
 def validate_spec(spec: ModuleSpec) -> None:
@@ -82,12 +94,29 @@ def validate_spec(spec: ModuleSpec) -> None:
         raise ScaffoldError("duplicate required module dependency")
     if spec.module_id in dependency_ids:
         raise ScaffoldError("module cannot depend on itself")
+    for dependency in spec.required_dependencies:
+        if not MODULE_ID_RE.fullmatch(dependency.module_id):
+            raise ScaffoldError(f"invalid dependency module_id: {dependency.module_id}")
+        if not VERSION_RANGE_RE.fullmatch(dependency.version_range):
+            raise ScaffoldError(
+                f"invalid version range for dependency {dependency.module_id}: "
+                f"{dependency.version_range}"
+            )
     if spec.kind == "link" and len(spec.required_dependencies) < 2:
         raise ScaffoldError("link modules require at least two --requires dependencies")
 
 
 def render_cargo_toml(spec: ModuleSpec) -> str:
-    return f'''[package]\nname = "{spec.crate_name}"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n\n[dependencies]\ncrm-core-contracts = {{ path = "../../crates/crm-core-contracts" }}\ncrm-module-sdk = {{ path = "../../crates/crm-module-sdk" }}\n'''
+    return f'''[package]
+name = "{spec.crate_name}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-core-contracts = {{ path = "../../crates/crm-core-contracts" }}
+crm-module-sdk = {{ path = "../../crates/crm-module-sdk" }}
+'''
 
 
 def _render_dependencies(items: tuple[Dependency, ...]) -> str:
@@ -115,16 +144,23 @@ def _render_list(key: str, values: tuple[str, ...], indent: int = 4) -> str:
 
 def render_manifest(spec: ModuleSpec) -> str:
     retained = spec.objects if spec.kind == "owner" else ()
-    uninstall_policy = "retain_business_records" if spec.kind == "owner" else "delete_private_state"
+    uninstall_policy = (
+        "retain_business_records" if spec.kind == "owner" else "delete_private_state"
+    )
+    description = (
+        "Generated owner-module foundation."
+        if spec.kind == "owner"
+        else "Generated optional cross-domain link-module foundation."
+    )
     return f'''schema_version: crm.module/v1
 module_id: {spec.module_id}
 version: "0.1.0"
 display_name: {_quoted(spec.display_name)}
-description: {_quoted("Generated owner-module foundation." if spec.kind == "owner" else "Generated optional cross-domain link-module foundation.")}
+description: {_quoted(description)}
 
 owner:
   team: {spec.team}
-  contact: {spec.contact}
+  contact: {_quoted(spec.contact)}
   codeowners:
     - "@iamaman11"
 
@@ -197,9 +233,36 @@ def render_readme(spec: ModuleSpec) -> str:
 
 Generated **{role} module foundation** for `{spec.module_id}`.
 
-This scaffold is intentionally not a production feature. Before raising readiness beyond `Foundation`, complete the explicit gates in `ACCEPTANCE.md` and deliver the required contracts, domain behavior, adapters, composition and acceptance evidence through governed platform boundaries.
+This scaffold is intentionally not a production feature. Before raising readiness beyond `Foundation`, complete the explicit gates in `ACCEPTANCE.md` and replace the contract, adapter and acceptance-test placeholders with reviewed implementation and evidence.
 
 Direct PostgreSQL, broker, arbitrary HTTP, secret-store, LLM-provider and cross-module internal dependencies are forbidden.
+'''
+
+
+def render_contracts_placeholder(spec: ModuleSpec) -> str:
+    return f'''# Published contract placeholder for `{spec.module_id}`
+
+This directory is an explicit **TODO boundary**, not a published contract.
+
+Before adding behavior that crosses the module boundary:
+
+- define compatible versioned Protobuf commands, queries and/or events under the canonical repository `proto/` source tree;
+- bind every published coordinate to `{spec.module_id}` in the governed contract registry;
+- preserve backward compatibility and run Contract CI;
+- keep public wire schemas independent from private persisted-state schemas.
+
+Do not invent ad-hoc JSON or duplicate generated wire types inside the business module.
+'''
+
+
+def render_adapters_placeholder(spec: ModuleSpec) -> str:
+    return f'''# Adapter placeholder for `{spec.module_id}`
+
+This directory records an explicit **TODO architecture boundary**.
+
+Production capability, query, event-delivery, persistence and external-system adapters must remain outside the pure business-module core and depend on the module through narrow typed contracts. They must enter production only through governed composition/runtime boundaries.
+
+Before raising readiness beyond `Foundation`, replace this placeholder with the appropriate separately owned adapter/composition crates and acceptance evidence. Do not add SQLx, PostgreSQL clients, brokers, arbitrary HTTP clients, secret stores, LLM providers or another business module's internals to this module crate.
 '''
 
 
@@ -220,17 +283,37 @@ Scaffold state: **Foundation only**. These TODO gates are intentionally explicit
 - [ ] Add governed capability/query/event adapters as applicable.
 - [ ] Add tenant, authorization, idempotency/retry and cross-tenant negative coverage.
 - [ ] Add persistence/projection/search behavior only through platform adapters outside the module core.
+- [ ] Replace `tests/acceptance.rs` with production-path acceptance evidence.
 - [ ] Add production composition and end-to-end acceptance through governed gateways.
 - [ ] Prove rollback/disable/uninstall behavior appropriate to the module type.
 - [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status and the owning GitHub issue.
 '''
 
 
+def render_acceptance_test_rs(spec: ModuleSpec) -> str:
+    return f'''use {spec.rust_crate_name}::{{CRATE_NAME, MODULE_ID}};
+
+#[test]
+#[ignore = "scaffold gate: replace with governed production acceptance before raising readiness"]
+fn production_acceptance_todo() {{
+    assert_eq!(CRATE_NAME, "{spec.crate_name}");
+    assert_eq!(MODULE_ID, "{spec.module_id}");
+    panic!("replace scaffold acceptance placeholder with governed production acceptance");
+}}
+'''
+
+
 def render_catalog_entry(spec: ModuleSpec) -> str:
     module_type = "Owner module" if spec.kind == "owner" else "Link module"
-    ownership = ", ".join(spec.objects) if spec.objects else "Optional cross-domain coordination only"
-    return f'''| `{spec.module_id}` | {module_type} | {ownership} | **Foundation** | Generated scaffold only; production path not yet implemented |
-'''
+    ownership = (
+        ", ".join(spec.objects)
+        if spec.objects
+        else "Optional cross-domain coordination only"
+    )
+    return (
+        f"| `{spec.module_id}` | {module_type} | {ownership} | **Foundation** | "
+        "Generated scaffold only; production path not yet implemented |\n"
+    )
 
 
 def build_files(spec: ModuleSpec) -> dict[Path, str]:
@@ -242,6 +325,9 @@ def build_files(spec: ModuleSpec) -> dict[Path, str]:
         base / "README.md": render_readme(spec),
         base / "ACCEPTANCE.md": render_acceptance(spec),
         base / "MODULE_CATALOG_ENTRY.md": render_catalog_entry(spec),
+        base / "contracts" / "README.md": render_contracts_placeholder(spec),
+        base / "adapters" / "README.md": render_adapters_placeholder(spec),
+        base / "tests" / "acceptance.rs": render_acceptance_test_rs(spec),
         base / "migrations" / ".gitkeep": "",
     }
 
@@ -252,10 +338,16 @@ def update_workspace_members(cargo_toml: str, relative_module_dir: str) -> str:
         raise ScaffoldError(f"workspace already contains {relative_module_dir}")
 
     lines = cargo_toml.splitlines()
-    start = next((index for index, line in enumerate(lines) if line.strip() == "members = ["), None)
+    start = next(
+        (index for index, line in enumerate(lines) if line.strip() == "members = ["),
+        None,
+    )
     if start is None:
         raise ScaffoldError("workspace members list not found in Cargo.toml")
-    end = next((index for index in range(start + 1, len(lines)) if lines[index].strip() == "]"), None)
+    end = next(
+        (index for index in range(start + 1, len(lines)) if lines[index].strip() == "]"),
+        None,
+    )
     if end is None:
         raise ScaffoldError("workspace members list is not terminated")
 
@@ -307,7 +399,10 @@ def scaffold(root: Path, spec: ModuleSpec, *, dry_run: bool = False) -> list[Pat
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate a governed CRM business module foundation and register it in the workspace."
+        description=(
+            "Generate a governed CRM business module foundation and register it "
+            "in the workspace."
+        )
     )
     parser.add_argument("kind", choices=("owner", "link"))
     parser.add_argument("--module-id", required=True)
@@ -315,7 +410,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--team", required=True)
     parser.add_argument("--contact", required=True)
     parser.add_argument("--object", dest="objects", action="append", default=[])
-    parser.add_argument("--requires", dest="required_dependencies", action="append", type=parse_dependency, default=[])
+    parser.add_argument(
+        "--requires",
+        dest="required_dependencies",
+        action="append",
+        type=parse_dependency,
+        default=[],
+    )
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--dry-run", action="store_true")
     return parser
@@ -342,7 +443,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{action} {len(planned)} paths for {spec.module_id}:")
     for path in planned:
         print(f"- {path.as_posix()}")
-    print("Next: validate with `python scripts/repo.py architecture` and the applicable focused/full gates.")
+    print(
+        "Next: validate with `python scripts/repo.py architecture` and the "
+        "applicable focused/full gates."
+    )
     return 0
 
 
