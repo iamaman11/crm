@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = []
+postgres-integration = []
+
 [dependencies]
 crm-activities-capability-adapter = { path = "../crm-activities-capability-adapter" }
 crm-capability-adapters = { path = "../crm-capability-adapters" }
@@ -12,3 +16,15 @@ crm-core-data = { path = "../crm-core-data" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-sales-activities-query-adapter = { path = "../crm-sales-activities-query-adapter" }
 crm-sales-capability-adapter = { path = "../crm-sales-capability-adapter" }
+
+[dev-dependencies]
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-query-runtime = { path = "../crm-query-runtime" }
+prost = "0.14"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[[test]]
+name = "postgres_queries"
+path = "tests/postgres_queries.rs"
+required-features = ["postgres-integration"]
