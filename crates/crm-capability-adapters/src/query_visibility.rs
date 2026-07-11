@@ -111,30 +111,13 @@ impl LiveQueryVisibilityStore {
 
     pub fn revoke(
         &self,
-        tenant_id: &TenantId,
-        actor_id: &ActorId,
-        capability_id: &CapabilityId,
-        capability_version: &CapabilityVersion,
-        owner_module_id: &ModuleId,
-        record_type: &RecordType,
-        record_id: Option<&RecordId>,
+        grant: &QueryVisibilityGrant,
     ) -> Result<bool, QueryVisibilityStoreError> {
         let mut state = self
             .state
             .write()
             .map_err(|_| QueryVisibilityStoreError::Poisoned)?;
-        let removed = state
-            .grants
-            .remove(&VisibilityKey {
-                tenant_id: tenant_id.clone(),
-                actor_id: actor_id.clone(),
-                capability_id: capability_id.clone(),
-                capability_version: capability_version.clone(),
-                owner_module_id: owner_module_id.clone(),
-                record_type: record_type.clone(),
-                record_id: record_id.cloned(),
-            })
-            .is_some();
+        let removed = state.grants.remove(&grant.key()).is_some();
         if removed {
             state.revision = state.revision.saturating_add(1);
         }
@@ -245,12 +228,11 @@ mod tests {
         store
             .upsert(grant(None, BTreeSet::from(["name".to_owned()])))
             .unwrap();
-        store
-            .upsert(grant(
-                Some("deal-1"),
-                BTreeSet::from(["name".to_owned(), "amount".to_owned()]),
-            ))
-            .unwrap();
+        let exact_grant = grant(
+            Some("deal-1"),
+            BTreeSet::from(["name".to_owned(), "amount".to_owned()]),
+        );
+        store.upsert(exact_grant.clone()).unwrap();
         let authorizer =
             LiveQueryVisibilityAuthorizer::new(store.clone(), Arc::new(FixedClock::new(100)));
 
@@ -261,17 +243,7 @@ mod tests {
         assert!(exact.resource_visible);
         assert!(exact.allows_field("amount"));
 
-        store
-            .revoke(
-                &request.context.tenant_id,
-                &request.context.actor_id,
-                &request.context.capability_id,
-                &request.context.capability_version,
-                &request.owner_module_id,
-                &resource.record_type,
-                Some(&resource.record_id),
-            )
-            .unwrap();
+        store.revoke(&exact_grant).unwrap();
         let fallback = authorizer
             .authorize_visibility(&request, &resource)
             .await
