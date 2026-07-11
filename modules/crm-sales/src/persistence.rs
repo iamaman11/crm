@@ -28,7 +28,9 @@ pub fn decode_deal_state(bytes: &[u8]) -> Result<Deal, SdkError> {
     validate_size(bytes)?;
     let state: DealStateV1 = serde_json::from_slice(bytes)
         .map_err(|error| persisted_error(format!("deal state JSON is invalid: {error}")))?;
-    Deal::rehydrate(state.try_into()?)
+    let snapshot = state.try_into()?;
+    Deal::rehydrate(snapshot)
+        .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -325,10 +327,11 @@ fn validate_size(bytes: &[u8]) -> Result<(), SdkError> {
 fn persisted_error(message: impl Into<String>) -> SdkError {
     SdkError::new(
         "SALES_DEAL_PERSISTED_STATE_INVALID",
-        ErrorCategory::InvalidArgument,
+        ErrorCategory::Internal,
         false,
-        message,
+        "The persisted deal state is invalid.",
     )
+    .with_internal_reference(message)
 }
 
 #[cfg(test)]
@@ -413,7 +416,7 @@ mod tests {
             decode_deal_state(&serde_json::to_vec(&invalid).unwrap())
                 .unwrap_err()
                 .code,
-            "SALES_CLOSED_DEAL_OUTCOME_REQUIRED"
+            "SALES_DEAL_PERSISTED_STATE_INVALID"
         );
     }
 }

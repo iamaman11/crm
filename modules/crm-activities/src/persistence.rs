@@ -24,7 +24,9 @@ pub fn decode_task_state(bytes: &[u8]) -> Result<Task, SdkError> {
     validate_size(bytes)?;
     let state: TaskStateV1 = serde_json::from_slice(bytes)
         .map_err(|error| persisted_error(format!("task state JSON is invalid: {error}")))?;
-    Task::rehydrate(state.try_into()?)
+    let snapshot = state.try_into()?;
+    Task::rehydrate(snapshot)
+        .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,10 +231,11 @@ fn validate_size(bytes: &[u8]) -> Result<(), SdkError> {
 fn persisted_error(message: impl Into<String>) -> SdkError {
     SdkError::new(
         "ACTIVITIES_TASK_PERSISTED_STATE_INVALID",
-        ErrorCategory::InvalidArgument,
+        ErrorCategory::Internal,
         false,
-        message,
+        "The persisted task state is invalid.",
     )
+    .with_internal_reference(message)
 }
 
 #[cfg(test)]
@@ -298,7 +301,7 @@ mod tests {
             decode_task_state(&serde_json::to_vec(&invalid).unwrap())
                 .unwrap_err()
                 .code,
-            "ACTIVITIES_COMPLETED_TASK_TIME_REQUIRED"
+            "ACTIVITIES_TASK_PERSISTED_STATE_INVALID"
         );
     }
 }
