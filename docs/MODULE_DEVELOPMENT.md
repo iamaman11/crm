@@ -40,6 +40,9 @@ modules/crm-customer/
   Cargo.toml
   module.yaml
   src/lib.rs
+  contracts/README.md
+  adapters/README.md
+  tests/acceptance.rs
   migrations/.gitkeep
   README.md
   ACCEPTANCE.md
@@ -49,6 +52,8 @@ modules/crm-customer/
 and registers the crate in the root Cargo workspace.
 
 Owner generation requires at least one explicit object. This prevents a new owner domain from being created before its authoritative boundary is named.
+
+The generated contract and adapter directories are explicit TODO boundaries, not fake production implementations. Published Protobuf remains in the canonical repository contract tree, and production adapters remain outside the pure module core behind governed composition boundaries.
 
 ## 3. Generate a link module
 
@@ -71,6 +76,8 @@ A generated link module:
 - receives only private state ownership for delivery/coordination state;
 - defaults to `delete_private_state` on uninstall;
 - must later define exact published source events, target capabilities, deterministic delivery identity and disable/uninstall behavior.
+
+Dependency version ranges are validated before any files are written.
 
 ## 4. Preview safely
 
@@ -119,9 +126,17 @@ python scripts/repo.py quality
 
 Specialized Contract, Database, Event Runtime and Application Runtime gates remain mandatory when their scopes are affected. `repo.py quality` does not replace those specialized CI proofs.
 
-## 6. Generated readiness is intentionally limited
+## 6. Generator acceptance and generated readiness
 
-Every generated module starts at **Foundation only**.
+Governance CI validates the generator itself. Its permanent scaffolding suite:
+
+- generates owner and link manifests and checks them against the real manifest schema and semantic validator;
+- proves overwrite protection and dry-run behavior;
+- creates a fresh owner module in a temporary Cargo workspace;
+- runs `cargo check --all-targets` so the generated library and ignored acceptance-test placeholder compile;
+- compares generated dependencies with `architecture-policy.json` and rejects forbidden infrastructure or disallowed internal CRM dependencies.
+
+Every generated module still starts at **Foundation only**.
 
 `ACCEPTANCE.md` contains explicit incomplete gates for:
 
@@ -131,6 +146,7 @@ Every generated module starts at **Foundation only**.
 - governed adapters;
 - tenant, authorization, retry/idempotency and cross-tenant negative tests;
 - platform-owned persistence/projection/search adapters;
+- replacement of the ignored `tests/acceptance.rs` scaffold gate with real production-path evidence;
 - production composition and end-to-end acceptance;
 - rollback/disable/uninstall behavior;
 - roadmap/status/catalog synchronization.
