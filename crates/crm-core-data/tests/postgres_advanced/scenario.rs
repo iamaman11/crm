@@ -145,3 +145,84 @@ async fn batch_executor_is_atomic_idempotent_and_optimistic() {
         8
     );
 }
+
+
+#[tokio::test(flavor = "current_thread")]
+async fn transaction_aware_executor_locks_authoritative_state_and_replays_original_output() {
+    let Ok(database_url) = std::env::var("DATABASE_URL") else {
+        eprintln!("skipping PostgreSQL integration scenario because DATABASE_URL is not configured");
+        return;
+    };
+    let store = PostgresDataStore::connect(&database_url, 4)
+        .await
+        .expect("connect to PostgreSQL");
+
+    let seed = BatchMutationPlan {
+        context: context("tx-aggregate-seed", "idem-aggregate-seed"),
+        records: vec![RecordMutation::Create {
+            reference: record("aggregate-locked"),
+            payload: payload(1, "test.batch_record.v1"),
+        }],
+        relationships: Vec::new(),
+        events: vec![record_event(
+            "event-aggregate-seed",
+            "test.batch_record.created",
+            record("aggregate-locked"),
+            1,
+            1,
+            2,
+        )],
+        idempotency: idempotency("idem-aggregate-seed", [0xb1; 32]),
+        audits: vec![audit("audit-aggregate-seed", 400)],
+    };
+    store.execute_batch(&seed).await.unwrap();
+
+    let executor = PostgresTransactionalAggregateExecutor::new(
+        store.clone(),
+        Arc::new(LockedAggregatePlanner),
+    );
+    let definition = aggregate_definition();
+
+    let first_request = aggregate_request("tx-aggregate-first", "idem-aggregate-first", 1, 11);
+    let first = executor
+        .execute(&definition, first_request.clone())
+        .await
+        .unwrap();
+    assert!(!first.replayed);
+    assert_eq!(first.affected_resources[0].version, Some(2));
+    let first_output = first.output.clone();
+
+    let second = executor
+        .execute(
+            &definition,
+            aggregate_request("tx-aggregate-second", "idem-aggregate-second", 2, 22),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second.affected_resources[0].version, Some(3));
+
+    let replay = executor.execute(&definition, first_request).await.unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.output, first_output);
+    assert_eq!(replay.affected_resources[0].version, Some(2));
+
+    let request_a = aggregate_request("tx-aggregate-race-a", "idem-aggregate-race-a", 3, 31);
+    let request_b = aggregate_request("tx-aggregate-race-b", "idem-aggregate-race-b", 3, 32);
+    let (result_a, result_b) = tokio::join!(
+        executor.execute(&definition, request_a),
+        executor.execute(&definition, request_b),
+    );
+    let results = [&result_a, &result_b];
+    let successes = results.iter().filter(|result| result.is_ok()).count();
+    let conflicts = results
+        .iter()
+        .filter(|result| {
+            matches!(
+                result,
+                Err(error) if error.category == crm_module_sdk::ErrorCategory::Conflict
+            )
+        })
+        .count();
+    assert_eq!(successes, 1);
+    assert_eq!(conflicts, 1);
+}

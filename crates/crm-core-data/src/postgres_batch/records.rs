@@ -1,3 +1,82 @@
+pub(crate) async fn load_record_for_update(
+    transaction: &mut Transaction<'_, Postgres>,
+    context: &ModuleExecutionContext,
+    reference: &RecordRef,
+) -> Result<Option<RecordSnapshot>, BatchError> {
+    let row = sqlx::query(
+        r#"
+        SELECT
+          version,
+          owner_module_id,
+          schema_id,
+          schema_version,
+          descriptor_hash,
+          data_class,
+          payload_encoding,
+          maximum_payload_size,
+          retention_policy_id,
+          payload_bytes
+        FROM crm.records
+        WHERE tenant_id = $1
+          AND record_type = $2
+          AND record_id = $3
+          AND owner_module_id = $4
+          AND deleted_at IS NULL
+        FOR UPDATE
+        "#,
+    )
+    .bind(context.execution.tenant_id.as_str())
+    .bind(reference.record_type.as_str())
+    .bind(reference.record_id.as_str())
+    .bind(context.module_id.as_str())
+    .fetch_optional(&mut **transaction)
+    .await?;
+
+    row.map(|row| decode_locked_record(reference.clone(), row))
+        .transpose()
+}
+
+fn decode_locked_record(
+    reference: RecordRef,
+    row: sqlx::postgres::PgRow,
+) -> Result<RecordSnapshot, BatchError> {
+    let descriptor_hash: Vec<u8> = row.try_get("descriptor_hash")?;
+    let descriptor_hash = descriptor_hash.try_into().map_err(|_| {
+        BatchError::InvalidStoredValue(
+            "record descriptor hash must contain exactly 32 bytes".to_owned(),
+        )
+    })?;
+    let maximum_payload_size: i64 = row.try_get("maximum_payload_size")?;
+    let maximum_size_bytes = u64::try_from(maximum_payload_size).map_err(|_| {
+        BatchError::InvalidStoredValue(
+            "record maximum payload size must be non-negative".to_owned(),
+        )
+    })?;
+    let payload = TypedPayload {
+        owner: ModuleId::try_new(row.try_get::<String, _>("owner_module_id")?)
+            .map_err(|error| BatchError::InvalidStoredValue(error.to_string()))?,
+        schema_id: SchemaId::try_new(row.try_get::<String, _>("schema_id")?)
+            .map_err(|error| BatchError::InvalidStoredValue(error.to_string()))?,
+        schema_version: SchemaVersion::try_new(row.try_get::<String, _>("schema_version")?)
+            .map_err(|error| BatchError::InvalidStoredValue(error.to_string()))?,
+        descriptor_hash,
+        data_class: parse_data_class(row.try_get("data_class")?)?,
+        encoding: parse_payload_encoding(row.try_get("payload_encoding")?)?,
+        maximum_size_bytes,
+        retention_policy_id: RetentionPolicyId::try_new(
+            row.try_get::<String, _>("retention_policy_id")?,
+        )
+        .map_err(|error| BatchError::InvalidStoredValue(error.to_string()))?,
+        bytes: row.try_get("payload_bytes")?,
+    };
+    payload.validate().map_err(BatchError::Sdk)?;
+    Ok(RecordSnapshot {
+        reference,
+        version: row.try_get("version")?,
+        payload,
+    })
+}
+
 async fn apply_record_mutation(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,

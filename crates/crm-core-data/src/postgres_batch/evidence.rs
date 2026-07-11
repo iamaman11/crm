@@ -77,7 +77,7 @@ async fn insert_audit_record(
     Ok(())
 }
 
-async fn complete_idempotency(
+async fn complete_batch_idempotency(
     transaction: &mut Transaction<'_, Postgres>,
     plan: &BatchMutationPlan,
     result: &BatchMutationResult,
@@ -86,6 +86,25 @@ async fn complete_idempotency(
         BatchError::InvalidPlan(format!("batch response serialization failed: {error}"))
     })?;
     let response_descriptor_hash = batch_result_descriptor_hash();
+    complete_idempotency_response(
+        transaction,
+        plan,
+        BATCH_RESULT_SCHEMA_ID,
+        BATCH_RESULT_SCHEMA_VERSION,
+        response_descriptor_hash,
+        response,
+    )
+    .await
+}
+
+async fn complete_idempotency_response(
+    transaction: &mut Transaction<'_, Postgres>,
+    plan: &BatchMutationPlan,
+    schema_id: &str,
+    schema_version: &str,
+    descriptor_hash: [u8; 32],
+    response: Vec<u8>,
+) -> Result<(), BatchError> {
     let update = sqlx::query(
         r#"
         UPDATE crm.idempotency_records
@@ -106,9 +125,9 @@ async fn complete_idempotency(
     .bind(plan.context.execution.tenant_id.as_str())
     .bind(&plan.idempotency.scope)
     .bind(&plan.idempotency.key)
-    .bind(BATCH_RESULT_SCHEMA_ID)
-    .bind(BATCH_RESULT_SCHEMA_VERSION)
-    .bind(response_descriptor_hash.as_slice())
+    .bind(schema_id)
+    .bind(schema_version)
+    .bind(descriptor_hash.as_slice())
     .bind(response)
     .bind(plan.context.execution.business_transaction_id.as_str())
     .execute(&mut **transaction)
@@ -119,6 +138,28 @@ async fn complete_idempotency(
         ));
     }
     Ok(())
+}
+
+async fn complete_capability_idempotency(
+    transaction: &mut Transaction<'_, Postgres>,
+    plan: &BatchMutationPlan,
+    result: &CapabilityExecutionResult,
+) -> Result<(), BatchError> {
+    let response = serde_json::to_vec(result).map_err(|error| {
+        BatchError::InvalidPlan(format!(
+            "capability response serialization failed: {error}"
+        ))
+    })?;
+    let response_descriptor_hash = capability_result_descriptor_hash();
+    complete_idempotency_response(
+        transaction,
+        plan,
+        CAPABILITY_RESULT_SCHEMA_ID,
+        CAPABILITY_RESULT_SCHEMA_VERSION,
+        response_descriptor_hash,
+        response,
+    )
+    .await
 }
 
 async fn insert_completion_marker(

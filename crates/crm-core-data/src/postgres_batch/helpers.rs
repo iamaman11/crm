@@ -89,3 +89,32 @@ pub fn batch_error_to_sdk(error: BatchError) -> SdkError {
         .with_internal_reference(error.to_string()),
     }
 }
+
+fn parse_data_class(value: String) -> Result<DataClass, BatchError> {
+    match value.as_str() {
+        "public" => Ok(DataClass::Public),
+        "internal" => Ok(DataClass::Internal),
+        "confidential" => Ok(DataClass::Confidential),
+        "restricted" => Ok(DataClass::Restricted),
+        "personal" => Ok(DataClass::Personal),
+        "sensitive_personal" => Ok(DataClass::SensitivePersonal),
+        "biometric" => Ok(DataClass::Biometric),
+        "financial" => Ok(DataClass::Financial),
+        "credential" => Ok(DataClass::Credential),
+        _ => Err(BatchError::InvalidStoredValue(format!(
+            "unknown stored data class {value}"
+        ))),
+    }
+}
+
+fn parse_payload_encoding(value: String) -> Result<PayloadEncoding, BatchError> {
+    match value.as_str() {
+        "protobuf" => Ok(PayloadEncoding::Protobuf),
+        "json" => Ok(PayloadEncoding::Json),
+        "utf8_text" => Ok(PayloadEncoding::Utf8Text),
+        "binary" => Ok(PayloadEncoding::Binary),
+        _ => Err(BatchError::InvalidStoredValue(format!(
+            "unknown stored payload encoding {value}"
+        ))),
+    }
+}

@@ -93,3 +93,168 @@ fn idempotency(key: &str, request_hash: [u8; 32]) -> IdempotencyEvidence {
         expires_at_unix_nanos: 1_800_000_000_000_000_000,
     }
 }
+
+
+struct LockedAggregatePlanner;
+
+impl TransactionalAggregatePlanner for LockedAggregatePlanner {
+    fn target(
+        &self,
+        _definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+    ) -> Result<AggregateTarget, SdkError> {
+        let value: serde_json::Value = serde_json::from_slice(&request.input.bytes).map_err(|error| {
+            SdkError::invalid_argument("input", format!("invalid aggregate command: {error}"))
+        })?;
+        let record_id = value
+            .get("record_id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| SdkError::invalid_argument("input.record_id", "record id is required"))?;
+        Ok(AggregateTarget {
+            reference: record(record_id),
+            presence: AggregatePresence::MustExist,
+        })
+    }
+
+    fn plan(
+        &self,
+        _definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+        current: Option<&crm_module_sdk::RecordSnapshot>,
+    ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+        let current = current.ok_or_else(|| {
+            SdkError::new(
+                "TEST_AGGREGATE_NOT_FOUND",
+                crm_module_sdk::ErrorCategory::NotFound,
+                false,
+                "The test aggregate was not found.",
+            )
+        })?;
+        let value: serde_json::Value = serde_json::from_slice(&request.input.bytes).map_err(|error| {
+            SdkError::invalid_argument("input", format!("invalid aggregate command: {error}"))
+        })?;
+        let expected_version = value
+            .get("expected_version")
+            .and_then(serde_json::Value::as_i64)
+            .ok_or_else(|| {
+                SdkError::invalid_argument("input.expected_version", "expected version is required")
+            })?;
+        if current.version != expected_version {
+            return Err(SdkError::new(
+                "TEST_AGGREGATE_VERSION_CONFLICT",
+                crm_module_sdk::ErrorCategory::Conflict,
+                false,
+                "The aggregate version is stale.",
+            ));
+        }
+        let next_value = value
+            .get("value")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .ok_or_else(|| SdkError::invalid_argument("input.value", "value must fit in u8"))?;
+        let next_version = current.version + 1;
+        let tx = request.context.execution.business_transaction_id.as_str();
+        let aggregate_payload = payload(next_value, "test.batch_record.v1");
+        let output = TypedPayload {
+            owner: ModuleId::try_new("crm.test").unwrap(),
+            schema_id: SchemaId::try_new("test.aggregate.output").unwrap(),
+            schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
+            descriptor_hash: [0xd1; 32],
+            data_class: DataClass::Internal,
+            encoding: PayloadEncoding::Json,
+            maximum_size_bytes: 1024,
+            retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
+            bytes: serde_json::to_vec(&serde_json::json!({
+                "record_id": current.reference.record_id.as_str(),
+                "version": next_version,
+                "value": next_value,
+            }))
+            .unwrap(),
+        };
+        Ok(CapabilityBatchExecutionPlan {
+            batch: BatchMutationPlan {
+                context: request.context.clone(),
+                records: vec![RecordMutation::Update {
+                    reference: current.reference.clone(),
+                    expected_version: current.version,
+                    payload: aggregate_payload,
+                }],
+                relationships: Vec::new(),
+                events: vec![record_event(
+                    &format!("event-{tx}"),
+                    "test.batch_record.updated",
+                    current.reference.clone(),
+                    next_version,
+                    next_version,
+                    next_value.wrapping_add(1),
+                )],
+                idempotency: IdempotencyEvidence {
+                    scope: "capability:test.record.mutate:1.0.0".to_owned(),
+                    key: request.context.execution.idempotency_key.to_string(),
+                    request_hash: request.input_hash,
+                    expires_at_unix_nanos: 1_800_000_000_000_000_000,
+                },
+                audits: vec![audit(&format!("audit-{tx}"), next_version + 500)],
+            },
+            output: Some(output),
+        })
+    }
+}
+
+fn aggregate_definition() -> CapabilityDefinition {
+    CapabilityDefinition {
+        capability_id: CapabilityId::try_new(CAPABILITY).unwrap(),
+        capability_version: CapabilityVersion::try_new(CAPABILITY_VERSION).unwrap(),
+        owner_module_id: ModuleId::try_new("crm.test").unwrap(),
+        input_contract: aggregate_contract("test.aggregate.command", [0xc1; 32]),
+        output_contract: Some(aggregate_contract("test.aggregate.output", [0xd1; 32])),
+        risk: CapabilityRisk::Low,
+        mutation: true,
+        requires_idempotency: true,
+        requires_approval: false,
+        authorization_policy_id: "test.record.mutate".to_owned(),
+        rate_limit_policy_id: None,
+    }
+}
+
+fn aggregate_contract(schema_id: &str, descriptor_hash: [u8; 32]) -> PayloadContract {
+    PayloadContract {
+        owner: ModuleId::try_new("crm.test").unwrap(),
+        schema_id: SchemaId::try_new(schema_id).unwrap(),
+        schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
+        descriptor_hash,
+        allowed_data_classes: vec![DataClass::Internal],
+        allowed_encodings: vec![PayloadEncoding::Json],
+        maximum_size_bytes: 1024,
+    }
+}
+
+fn aggregate_request(
+    transaction_id: &str,
+    idempotency_key: &str,
+    expected_version: i64,
+    value: u8,
+) -> CapabilityRequest {
+    let input = TypedPayload {
+        owner: ModuleId::try_new("crm.test").unwrap(),
+        schema_id: SchemaId::try_new("test.aggregate.command").unwrap(),
+        schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
+        descriptor_hash: [0xc1; 32],
+        data_class: DataClass::Internal,
+        encoding: PayloadEncoding::Json,
+        maximum_size_bytes: 1024,
+        retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
+        bytes: serde_json::to_vec(&serde_json::json!({
+            "record_id": "aggregate-locked",
+            "expected_version": expected_version,
+            "value": value,
+        }))
+        .unwrap(),
+    };
+    CapabilityRequest {
+        context: context(transaction_id, idempotency_key),
+        input,
+        input_hash: [value.max(1); 32],
+        approval: None,
+    }
+}
