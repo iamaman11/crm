@@ -46,7 +46,7 @@ Universal means that Sales is not allowed to become the owner of customer identi
 | 3 | [#6](https://github.com/iamaman11/crm/issues/6) | Module lifecycle and registry runtime | **Complete** | #4, #5 |
 | 4 | [#7](https://github.com/iamaman11/crm/issues/7) | PostgreSQL tenant, record, outbox and audit foundation | **Complete** | #6 |
 | 5 | [#8](https://github.com/iamaman11/crm/issues/8) | Capability execution gateway | **Complete** | #5, #7 |
-| 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link-module vertical slice | **In progress** | #8 |
+| 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link-module vertical slice | **Gate review / in progress** | #8 |
 | 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, projections and Admin Studio foundation | **Planned** | #9 |
 | 8 | [#11](https://github.com/iamaman11/crm/issues/11) | Expert modules and product-quality UX | **Planned** | #5, #9, #10 |
 | 8A | [#28](https://github.com/iamaman11/crm/issues/28) | Canonical customer master, identity resolution and consent | **Planned** | #9, #10 |
@@ -155,7 +155,7 @@ request
 - Missing required evidence rolls back state and preserves the audit head.
 - External behavior never depends on parsing error text.
 
-## 11. Phase 6 — First modular proof — In progress
+## 11. Phase 6 — First modular proof — Gate review / in progress
 
 Issue: [#9](https://github.com/iamaman11/crm/issues/9)
 
@@ -179,33 +179,71 @@ Merged in PR #27.
 - Buf build, canonical formatting, STANDARD lint and FILE-level breaking checks.
 - Machine-checked manifest capability/event bindings against an immutable descriptor set.
 
-### Current slice 6C — transactional audit materialization and PostgreSQL capability planners
+### Completed slice 6C — transactional audit materialization
 
-Branch: `feature/transactional-audit-materialization-v1`.
+Merged in PR #30.
 
-Before production domain planners are added, the batch runtime must stop requiring planners to guess tenant audit sequence and previous hash outside the transaction. The runtime will:
+- Planners emit deterministic audit intent rather than guessing sequence numbers or previous hashes.
+- PostgreSQL acquires tenant-scoped audit serialization inside the business transaction.
+- The runtime assigns contiguous sequence numbers, materializes previous hashes and computes canonical chained record hashes atomically.
+- Concurrent commits preserve one linear tenant audit history.
 
-1. accept deterministic audit intent from the planner;
-2. acquire tenant-scoped transactional serialization;
-3. read the current audit head inside the same PostgreSQL transaction;
-4. assign contiguous sequence numbers and previous hashes;
-5. compute chained record hashes from canonical envelopes;
-6. insert audit evidence atomically with records, events and idempotency state;
-7. preserve the invariant that PostgreSQL remains the first awaited operation after live authorization.
+### Completed slice 6D — transaction-aware aggregate execution
 
-After that foundation is green, add Sales and Activities mutation planners and public gateway PostgreSQL acceptance.
+Merged in PR #31.
 
-### Remaining slices
+- The authoritative owner-module record is locked before read-modify-write planning.
+- Full typed capability responses are replayed from idempotency evidence.
+- Stale optimistic versions fail without partial record, outbox or audit effects.
+- PostgreSQL remains the first awaited operation after live authorization.
 
-- **6C:** domain-to-persistence conversion, mutation planners and public create/update/advance/complete/reminder paths.
-- **6D:** permission-bound get/list query paths with stable cursor pagination.
-- **6E:** `crm-sales-activities-link` event consumer using `CapabilityClient` only and deterministic event-delivery idempotency.
-- **6F:** rebuildable deal-timeline and task-status projections with tenant checkpoints and replay.
-- **6G:** complete cross-tenant, disable-link, replay, optimistic-conflict, rollback and projection-rebuild acceptance.
+### Completed slice 6E — persisted codecs and generated contract runtime
+
+Merged in PR #33 and PR #34.
+
+- Validated independent Deal and Task persisted-state codecs with bounded payloads and exact money preservation.
+- Safe persisted-corruption errors without leaking internal bytes.
+- Canonical generated Rust Protobuf types and one descriptor universe for published wire contracts.
+- Public wire schema identity remains independent from owner-module persisted-state identity.
+
+### Current gate-review slice 6F — audited no-op foundation and Sales/Activities capability adapters
+
+Authoritative PR: #37. Branch: `feature/phase6f-recovery-v1`.
+
+PR #35 was merged incompletely: only temporary payload/bootstrap artifacts reached `main`; its claimed crates, migration, ADRs and adapters were not materialized. PR #37 repairs that state from a clean branch and is the only authoritative implementation path for this slice.
+
+Materialized scope:
+
+- shared deterministic `crm-capability-plan-support` conversions, descriptor identity, event evidence, canonical audit intent and idempotency helpers;
+- audited aggregate no-op transactions that preserve an immutable typed response and audit/idempotency evidence without a false state mutation or outbox event;
+- migration `0005_audited_noop_transactions`, including refusal to roll back while zero-outbox transaction history exists;
+- `crm-sales-capability-adapter` planners for create, update and stage advance;
+- `crm-activities-capability-adapter` planners for create, update, complete and schedule-reminder;
+- exact-money base-10 conversion, tenant/resource validation, generated Protobuf input/output/event mapping and independent internal persisted schemas;
+- PostgreSQL mutation, replay, no-op, rollback and evidence tests;
+- ADR-036, ADR-037, CODEOWNERS and system-invariant updates.
+
+Verified on the clean materialized source tree:
+
+- architecture enforcement passes;
+- committed `Cargo.lock` is current;
+- rustfmt passes;
+- Governance CI passes;
+- legacy database-upgrade CI passes.
+
+The first executable Rust gate found only five localized lint findings: one unused import and four intentional writes to deprecated Sales v1 compatibility fields. Exact source fixes are prepared. Later GitHub-hosted Governance, Rust and Database jobs currently fail before runner allocation (`steps: null`), which is an external CI-execution blocker rather than product test evidence. PR #37 remains draft and must not merge until one clean head receives executable and green required checks.
+
+### Next implementation sequence
+
+1. **6G — authenticated public PostgreSQL mutation acceptance:** HTTP/gRPC → capability registry → live authorization → locked aggregate → one record/outbox/audit/idempotency transaction → typed response.
+2. **6H — permission-bound queries:** get/list paths with field/resource authorization and stable opaque cursor pagination.
+3. **6I — optional Sales–Activities link module:** source events consumed through governed ports; task creation through `CapabilityClient` only; deterministic delivery deduplication; independent disable and uninstall.
+4. **6J — rebuildable projections:** deal timeline and task-status projections with tenant checkpoints, retries, replay and deletion/rebuild equivalence.
+5. **6K — complete Phase 6 E2E:** cross-tenant denial, stale conflict, duplicate delivery, disabled link, transaction rollback/fault injection and projection rebuild.
 
 ### Completion gate
 
-Sales and Activities remain independently installable and functional when the link module is disabled. Duplicate source-event delivery produces no duplicate task or projection effect. Every mutation follows the authenticated gateway and commits state only with idempotency, outbox and audit evidence.
+Sales and Activities remain independently installable and functional when the link module is disabled. Duplicate source-event delivery produces no duplicate task or projection effect. Every mutation follows the authenticated gateway and commits state only with idempotency, outbox and audit evidence. Query paths are permission-bound, projections are rebuildable, and all required checks are green on one clean merge head.
 
 ## 12. Phase 7 — Search, projections and Admin Studio — Planned
 
@@ -279,35 +317,6 @@ Untrusted or policy-violating modules cannot install. Marketplace code cannot ac
 
 SSO/OIDC/SAML, SCIM, tenant key hierarchy, field encryption, legal hold, WORM audit export, privacy deletion, crypto-shredding, backup/PITR, tenant restore, tenant mobility, data residency, SBOM/dependency/secret scans, penetration/load/chaos tests, SLOs and runbooks.
 
-### Final gate
+### Gate
 
-A production-readiness review must prove every system invariant using automated evidence or a repeatable operational drill. Restore exercises must meet declared RPO/RTO and preserve audit/event consistency.
-
-## 17. Pull-request sequence from the current point
-
-1. Transactional audit materialization inside the PostgreSQL batch runtime — Phase 6C foundation.
-2. Sales and Activities domain-to-persistence conversion and mutation planners.
-3. Public gateway PostgreSQL acceptance for Sales and Activities mutations.
-4. Permission-bound get/list query paths and stable cursor pagination.
-5. Sales/Activities link-module consumer and deterministic event deduplication.
-6. Rebuildable deal-timeline and task-status projections.
-7. Complete Phase 6 end-to-end acceptance and close #9.
-8. Search and Admin Studio foundation — #10.
-9. Canonical customer master — #28 — and parallel expert modules/UX — #11.
-10. Product catalog, CPQ and quote-to-revenue — #29.
-11. AI-native layer — #12.
-12. Marketplace — #13.
-13. Enterprise production proof — #14.
-
-Each PR must state invariant impact, migration and rollback behavior, test evidence, compatibility impact and the next unblocked issue.
-
-## 18. Current status
-
-- Governance Foundation and Phases 0.1–5: **Complete**.
-- Phase 6 / issue #9: **In progress**.
-- Phase 6A typed Sales and Activities domain contracts: **Complete**, PR #26.
-- Phase 6B versioned Sales and Activities Protobuf contracts: **Complete**, PR #27.
-- Phase 6C transactional audit materialization and PostgreSQL planners: **In progress** on `feature/transactional-audit-materialization-v1`.
-- Issues #28 and #29: **Planned mandatory universal-CRM owner domains**.
-- Phases 7–11: **Planned**, subject to their prerequisite gates.
-- The complete CRM product is **not yet finished**.
+The platform is production-ready only after documented restore, failover, incident-response, key-rotation, privacy-request, marketplace-kill-switch and tenant-mobility drills pass under measured SLOs.

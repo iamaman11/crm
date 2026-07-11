@@ -51,6 +51,8 @@ The keywords **MUST**, **MUST NOT**, **SHOULD** and **MAY** are normative. A com
 30. A logical mutation MUST atomically persist business state, aggregate version, idempotency result, outbox events and audit reference in one database transaction.
 31. A committed business mutation MUST NOT exist without its corresponding durable event and audit evidence.
 
+An explicitly authorized semantic no-op MAY commit no business state or outbox event only when it is decided from the transactionally locked authoritative aggregate and atomically persists a capability/version-bound idempotency result, canonical audit evidence and an exact zero-outbox completion marker. A no-op MUST NOT advance the aggregate version or publish a misleading domain event.
+
 Audit-chain sequence, previous hash and chained record hash MUST be materialized inside the same database transaction under tenant-scoped serialization. Business planners MAY provide canonical audit intent but MUST NOT read, reserve or guess chain position outside the transaction.
 
 32. Event consumers MUST be idempotent.
