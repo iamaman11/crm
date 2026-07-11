@@ -205,28 +205,32 @@ Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI,
 
 Phase 7 is the active roadmap phase.
 
-### Current delivery packet — golden module tooling (#56 / draft PR #64)
+### Golden module tooling — #56 / PR #64
 
-The first active Phase 7 packet establishes repository-supported module creation and validation so later platform/domain work inherits the proven architecture by construction:
+The first Phase 7 packet establishes repository-supported module creation and validation so later platform/domain work inherits the proven architecture by construction:
 
 - separate owner-module and optional link-module scaffolding patterns;
 - explicit owner object declarations before generation;
 - explicit source/target dependencies and no authoritative record ownership for link modules;
-- overwrite-safe and dry-run generation;
-- architecture-safe Rust crate/manifests, explicit acceptance TODO gates and catalog-entry seed;
+- overwrite-safe generation, dependency-range validation and dry-run preview;
+- architecture-safe Rust crate/manifests plus explicit contract, adapter and acceptance-test TODO boundaries;
+- compiling generated acceptance-test placeholder that remains ignored until replaced with real production evidence;
 - permanent cross-platform repository commands for architecture, manifest validation, formatting, lockfile synchronization, focused tests, full tests and the common Rust quality gate;
-- Governance CI coverage for the generator itself.
+- Governance CI that validates generated manifests, compiles a fresh generated module with `cargo check --all-targets` and verifies generated dependencies against `architecture-policy.json`.
 
-This packet remains **In progress** until the exact final PR head is green and #56/documentation are synchronized. Generated scaffolds are Foundation only and do not count as production vertical slices.
+Generated scaffolds are **Foundation only** and do not count as production vertical slices. Merge of PR #64 closes #56.
 
-### Platform deliverables
+### Next executable platform packets
 
-- generalize the proven projection/checkpoint/retry/rebuild runtime for broader read models;
-- tenant- and permission-aware search with deterministic reindexing;
+1. [#65](https://github.com/iamaman11/crm/issues/65) — generalize the Phase 6 projection proof into a reusable projection runtime and rebuild orchestrator while keeping concrete owner-domain handlers outside generic infrastructure.
+2. [#66](https://github.com/iamaman11/crm/issues/66) — build tenant- and permission-aware search with deterministic reindexing on the shared projection runtime.
+
+### Remaining platform deliverables
+
 - object, field, relationship, layout, view, pipeline, permission and workflow builders;
 - impact reports, immutable metadata versions and rollback behavior;
 - typed UI-extension runtime with safe fallback;
-- golden module generator and permanent repository commands so new modules inherit architecture and gates by construction.
+- further golden-module/tooling evolution as new module classes prove additional stable patterns.
 
 ### Product-plane deliverables
 
