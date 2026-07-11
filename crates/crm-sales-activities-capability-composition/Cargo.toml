@@ -1,0 +1,13 @@
+[package]
+name = "crm-sales-activities-capability-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-activities-capability-adapter = { path = "../crm-activities-capability-adapter" }
+crm-capability-adapters = { path = "../crm-capability-adapters" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-core-data = { path = "../crm-core-data" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-sales-capability-adapter = { path = "../crm-sales-capability-adapter" }
