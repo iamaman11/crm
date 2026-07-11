@@ -197,7 +197,10 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-sales-activities-capability-composition",
  "http",
+ "prost",
  "sha2 0.10.9",
  "sqlx",
  "tokio",
@@ -328,6 +331,18 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-sales-activities-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-activities-capability-adapter",
+ "crm-capability-adapters",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-sales-capability-adapter",
 ]
 
 [[package]]

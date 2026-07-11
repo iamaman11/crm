@@ -19,6 +19,7 @@ members = [
   "crates/crm-proto-contracts",
   "crates/crm-capability-plan-support",
   "crates/crm-sales-capability-adapter",
+  "crates/crm-sales-activities-capability-composition",
   "modules/crm-sales",
   "modules/crm-activities",
   "services/crm-api",

@@ -55,9 +55,21 @@ VALUES
     'low', true, true, false, false, false, false, false
   ),
   (
+    'activities.task.update', '1.0.0', 'crm.activities', '0.1.0',
+    'crm.activities.v1.TaskService', 'UpdateTask',
+    decode(repeat('3b', 32), 'hex'), decode(repeat('3c', 32), 'hex'),
+    'low', true, true, false, false, false, false, false
+  ),
+  (
     'activities.task.complete', '1.0.0', 'crm.activities', '0.1.0',
     'crm.activities.v1.TaskService', 'CompleteTask',
     decode(repeat('33', 32), 'hex'), decode(repeat('34', 32), 'hex'),
+    'low', true, true, false, false, false, false, false
+  ),
+  (
+    'activities.task.schedule_reminder', '1.0.0', 'crm.activities', '0.1.0',
+    'crm.activities.v1.TaskService', 'ScheduleReminder',
+    decode(repeat('3d', 32), 'hex'), decode(repeat('3e', 32), 'hex'),
     'low', true, true, false, false, false, false, false
   ),
   (
