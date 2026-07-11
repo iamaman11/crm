@@ -180,9 +180,25 @@ async fn completed_task_noop_commits_audit_and_idempotency_without_outbox() {
 }
 
 async fn count(pool: &PgPool, table: &str, column: &str, transaction_id: &str) -> i64 {
-    let query =
-        format!("SELECT count(*) AS count FROM {table} WHERE tenant_id = $1 AND {column} = $2");
-    sqlx::query(&query)
+    let query = match (table, column) {
+        ("crm.records", "last_business_transaction_id") => {
+            "SELECT count(*) AS count FROM crm.records WHERE tenant_id = $1 AND last_business_transaction_id = $2"
+        }
+        ("crm.outbox_events", "business_transaction_id") => {
+            "SELECT count(*) AS count FROM crm.outbox_events WHERE tenant_id = $1 AND business_transaction_id = $2"
+        }
+        ("crm.audit_records", "business_transaction_id") => {
+            "SELECT count(*) AS count FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2"
+        }
+        ("crm.idempotency_records", "business_transaction_id") => {
+            "SELECT count(*) AS count FROM crm.idempotency_records WHERE tenant_id = $1 AND business_transaction_id = $2"
+        }
+        ("crm.business_transactions", "business_transaction_id") => {
+            "SELECT count(*) AS count FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2"
+        }
+        _ => panic!("unsupported evidence count target: {table}.{column}"),
+    };
+    sqlx::query(query)
         .bind(TENANT)
         .bind(transaction_id)
         .fetch_one(pool)
