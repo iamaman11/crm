@@ -6,6 +6,9 @@ on:
       - feature/sales-activities-capability-adapters-v1
     paths:
       - .github/workflows/phase6-apply-capability-adapters.yml
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
