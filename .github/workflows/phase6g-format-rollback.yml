@@ -1,0 +1,33 @@
+name: Phase 6G format rollback acceptance
+
+on:
+  push:
+    branches:
+      - feature/phase6g-authenticated-postgres-mutations-v1
+    paths:
+      - .github/workflows/phase6g-format-rollback.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6g-authenticated-postgres-mutations-v1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Commit rollback acceptance formatting only
+        run: |
+          git add crates/crm-capability-ingress/tests/postgres_production_evidence_rollback.rs
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Format production evidence rollback acceptance"
+          git push origin HEAD:feature/phase6g-authenticated-postgres-mutations-v1
