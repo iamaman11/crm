@@ -1,0 +1,53 @@
+name: Agent Checkpoint
+
+on:
+  push:
+    branches:
+      - "agent/**"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "crates/**/*.rs"
+      - "modules/**/Cargo.toml"
+      - "modules/**/*.rs"
+      - "services/**/Cargo.toml"
+      - "services/**/*.rs"
+      - ".github/workflows/agent-checkpoint.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-checkpoint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synchronize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Synchronize Rust formatting and resolved lockfile
+        run: |
+          cargo fmt --all
+          cargo generate-lockfile
+      - name: Commit mechanical checkpoint changes
+        shell: bash
+        run: |
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust workspace artifacts are already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates modules services
+          git commit -m "chore: synchronize agent Rust checkpoint"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
