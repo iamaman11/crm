@@ -1,9 +1,7 @@
 use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::{ErrorCategory, SdkError};
-use crm_sales_activities_query_adapter::{
-    PRODUCTION_QUERY_CAPABILITY_IDS, query_capability_definitions as adapter_query_definitions,
-};
+use crm_sales_activities_query_adapter::query_capability_definitions as adapter_query_definitions;
 
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     adapter_query_definitions()
@@ -24,6 +22,7 @@ pub fn query_capability_catalog() -> Result<CapabilityCatalog, SdkError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_sales_activities_query_adapter::PRODUCTION_QUERY_CAPABILITY_IDS;
 
     #[test]
     fn query_catalog_contains_exactly_four_read_only_coordinates() {
