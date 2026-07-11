@@ -1,10 +1,10 @@
 #![cfg(feature = "postgres-integration")]
 
 use crm_capability_adapters::{
-    AccessTokenGrant, AccessTokenStore, ApprovalStore, AuthorizationGrant, BearerTokenAuthenticator,
-    FixedWindowRateLimiter, LiveAuthorizationStore, LiveCapabilityAuthorizer,
-    LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore, QueryVisibilityGrant,
-    RateLimitPolicyStore, StoredApprovalVerifier,
+    AccessTokenGrant, AccessTokenStore, ApprovalStore, AuthorizationGrant,
+    BearerTokenAuthenticator, FixedWindowRateLimiter, LiveAuthorizationStore,
+    LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore,
+    QueryVisibilityGrant, RateLimitPolicyStore, StoredApprovalVerifier,
 };
 use crm_capability_ingress::{
     ERROR_CODE_METADATA, GrpcQueryMessage, GrpcQueryMiddleware, HttpQueryBody, HttpQueryMiddleware,
@@ -77,8 +77,8 @@ async fn authenticated_http_and_grpc_queries_need_no_mutation_identity_and_are_s
         eprintln!("skipping query ingress PostgreSQL acceptance because DATABASE_URL is absent");
         return;
     };
-    let admin_database_url =
-        std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
+    let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
+        .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
 
     let mutation_store = PostgresDataStore::connect(&database_url, 4)
         .await
@@ -198,13 +198,13 @@ async fn authenticated_http_and_grpc_queries_need_no_mutation_identity_and_are_s
                 capability_id: definition.capability_id.clone(),
                 capability_version: definition.capability_version.clone(),
                 owner_module_id: definition.owner_module_id.clone(),
-                record_type: RecordType::try_new(if definition.owner_module_id.as_str()
-                    == "crm.sales"
-                {
-                    SALES_RECORD_TYPE
-                } else {
-                    ACTIVITIES_RECORD_TYPE
-                })
+                record_type: RecordType::try_new(
+                    if definition.owner_module_id.as_str() == "crm.sales" {
+                        SALES_RECORD_TYPE
+                    } else {
+                        ACTIVITIES_RECORD_TYPE
+                    },
+                )
                 .unwrap(),
                 record_id: None,
                 allowed_fields: if definition.owner_module_id.as_str() == "crm.sales" {
@@ -347,10 +347,9 @@ async fn authenticated_http_and_grpc_queries_need_no_mutation_identity_and_are_s
             },
         ),
     });
-    grpc_request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {TOKEN}").parse().unwrap(),
-    );
+    grpc_request
+        .metadata_mut()
+        .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
     grpc_request
         .metadata_mut()
         .insert(TENANT_HEADER, TENANT.parse().unwrap());
@@ -361,10 +360,9 @@ async fn authenticated_http_and_grpc_queries_need_no_mutation_identity_and_are_s
     assert!(grpc_response.metadata().contains_key("x-request-id"));
     assert!(grpc_response.metadata().contains_key("x-correlation-id"));
     assert!(grpc_response.metadata().contains_key("x-trace-id"));
-    let task_response = activities::GetTaskResponse::decode(
-        grpc_response.into_inner().output.bytes.as_slice(),
-    )
-    .expect("decode gRPC Task response");
+    let task_response =
+        activities::GetTaskResponse::decode(grpc_response.into_inner().output.bytes.as_slice())
+            .expect("decode gRPC Task response");
     assert_eq!(
         task_response.task.expect("gRPC Task").subject,
         "Phase 6H transport Task"
@@ -388,10 +386,9 @@ async fn authenticated_http_and_grpc_queries_need_no_mutation_identity_and_are_s
             },
         ),
     });
-    revoked_request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {TOKEN}").parse().unwrap(),
-    );
+    revoked_request
+        .metadata_mut()
+        .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
     revoked_request
         .metadata_mut()
         .insert(TENANT_HEADER, TENANT.parse().unwrap());
@@ -462,8 +459,10 @@ fn mutation_request<M: Message>(
                 trace_id: TraceId::try_new(format!("phase6h-ingress-trace-{identity}")).unwrap(),
                 capability_id: definition.capability_id.clone(),
                 capability_version: definition.capability_version.clone(),
-                idempotency_key: IdempotencyKey::try_new(format!("phase6h-ingress-idem-{identity}"))
-                    .unwrap(),
+                idempotency_key: IdempotencyKey::try_new(format!(
+                    "phase6h-ingress-idem-{identity}"
+                ))
+                .unwrap(),
                 business_transaction_id: BusinessTransactionId::try_new(format!(
                     "phase6h-ingress-tx-{identity}"
                 ))
