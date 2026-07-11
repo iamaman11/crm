@@ -4,7 +4,7 @@ use crm_module_sdk::{
     ErrorCategory, ModuleId, RecordId, RecordRef, RecordSnapshot, RecordType, RetentionPolicyId,
     SchemaId, SchemaVersion, SdkError, TenantId, TypedPayload,
 };
-use sqlx::{Row, postgres::PgRow};
+use sqlx::{Postgres, Row, Transaction, postgres::PgRow};
 
 pub const MAXIMUM_RECORD_QUERY_PAGE_SIZE: u32 = 1_000;
 
@@ -31,7 +31,10 @@ pub struct RecordQueryContinuation {
 
 impl RecordQueryContinuation {
     pub fn validate(&self) -> Result<(), SdkError> {
-        if self.sort_value.is_empty() || self.sort_value.len() > 128 {
+        if self.sort_value.is_empty()
+            || self.sort_value.len() > 32
+            || self.sort_value.parse::<i64>().is_err()
+        {
             return Err(invalid_query(
                 "DATA_QUERY_CONTINUATION_INVALID",
                 "The record query continuation is invalid.",
@@ -85,6 +88,12 @@ impl PostgresDataStore {
         &self,
         query: &RecordGetQuery,
     ) -> Result<Option<RecordSnapshot>, SdkError> {
+        let mut transaction = self
+            .pool()
+            .begin()
+            .await
+            .map_err(database_unavailable)?;
+        bind_read_context(&mut transaction, &query.tenant_id).await?;
         let row = sqlx::query(
             r#"
             SELECT
@@ -111,9 +120,10 @@ impl PostgresDataStore {
         .bind(query.owner_module_id.as_str())
         .bind(query.record_type.as_str())
         .bind(query.record_id.as_str())
-        .fetch_optional(self.pool())
+        .fetch_optional(&mut *transaction)
         .await
         .map_err(database_unavailable)?;
+        transaction.commit().await.map_err(database_unavailable)?;
 
         row.map(|row| decode_query_record(&query.tenant_id, &query.record_type, row))
             .transpose()
@@ -131,6 +141,12 @@ impl PostgresDataStore {
             .as_ref()
             .map(|value| value.record_id.as_str())
             .unwrap_or("");
+        let mut transaction = self
+            .pool()
+            .begin()
+            .await
+            .map_err(database_unavailable)?;
+        bind_read_context(&mut transaction, &query.tenant_id).await?;
 
         let rows = match query.sort {
             RecordQuerySort::CreatedAtAscending => {
@@ -148,7 +164,7 @@ impl PostgresDataStore {
                       maximum_payload_size,
                       retention_policy_id,
                       payload_bytes,
-                      created_at::text AS sort_value
+                      ((EXTRACT(EPOCH FROM created_at) * 1000000)::bigint)::text AS sort_value
                     FROM crm.records
                     WHERE tenant_id = $1
                       AND owner_module_id = $2
@@ -156,8 +172,11 @@ impl PostgresDataStore {
                       AND deleted_at IS NULL
                       AND (
                         $4::text IS NULL
-                        OR created_at > $4::timestamptz
-                        OR (created_at = $4::timestamptz AND record_id > $5)
+                        OR created_at > TIMESTAMPTZ 'epoch' + ($4::bigint * INTERVAL '1 microsecond')
+                        OR (
+                          created_at = TIMESTAMPTZ 'epoch' + ($4::bigint * INTERVAL '1 microsecond')
+                          AND record_id > $5
+                        )
                       )
                     ORDER BY created_at ASC, record_id ASC
                     LIMIT $6
@@ -169,7 +188,7 @@ impl PostgresDataStore {
                 .bind(after_sort)
                 .bind(after_record_id)
                 .bind(fetch_limit)
-                .fetch_all(self.pool())
+                .fetch_all(&mut *transaction)
                 .await
             }
             RecordQuerySort::UpdatedAtDescending => {
@@ -187,7 +206,7 @@ impl PostgresDataStore {
                       maximum_payload_size,
                       retention_policy_id,
                       payload_bytes,
-                      updated_at::text AS sort_value
+                      ((EXTRACT(EPOCH FROM updated_at) * 1000000)::bigint)::text AS sort_value
                     FROM crm.records
                     WHERE tenant_id = $1
                       AND owner_module_id = $2
@@ -195,8 +214,11 @@ impl PostgresDataStore {
                       AND deleted_at IS NULL
                       AND (
                         $4::text IS NULL
-                        OR updated_at < $4::timestamptz
-                        OR (updated_at = $4::timestamptz AND record_id > $5)
+                        OR updated_at < TIMESTAMPTZ 'epoch' + ($4::bigint * INTERVAL '1 microsecond')
+                        OR (
+                          updated_at = TIMESTAMPTZ 'epoch' + ($4::bigint * INTERVAL '1 microsecond')
+                          AND record_id > $5
+                        )
                       )
                     ORDER BY updated_at DESC, record_id ASC
                     LIMIT $6
@@ -208,11 +230,12 @@ impl PostgresDataStore {
                 .bind(after_sort)
                 .bind(after_record_id)
                 .bind(fetch_limit)
-                .fetch_all(self.pool())
+                .fetch_all(&mut *transaction)
                 .await
             }
         }
         .map_err(database_unavailable)?;
+        transaction.commit().await.map_err(database_unavailable)?;
 
         let has_more = rows.len() > query.page_size as usize;
         let mut decoded = rows
@@ -230,10 +253,12 @@ impl PostgresDataStore {
             decoded.pop();
         }
         let next = if has_more {
-            decoded.last().map(|(snapshot, sort_value)| RecordQueryContinuation {
-                sort_value: sort_value.clone(),
-                record_id: snapshot.reference.record_id.clone(),
-            })
+            decoded
+                .last()
+                .map(|(snapshot, sort_value)| RecordQueryContinuation {
+                    sort_value: sort_value.clone(),
+                    record_id: snapshot.reference.record_id.clone(),
+                })
         } else {
             None
         };
@@ -243,6 +268,22 @@ impl PostgresDataStore {
             .collect();
         Ok(RecordQueryPage { records, next })
     }
+}
+
+async fn bind_read_context(
+    transaction: &mut Transaction<'_, Postgres>,
+    tenant_id: &TenantId,
+) -> Result<(), SdkError> {
+    sqlx::query("SET TRANSACTION READ ONLY")
+        .execute(&mut **transaction)
+        .await
+        .map_err(database_unavailable)?;
+    sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
+        .bind(tenant_id.as_str())
+        .execute(&mut **transaction)
+        .await
+        .map_err(database_unavailable)?;
+    Ok(())
 }
 
 fn decode_query_record(
@@ -315,7 +356,6 @@ fn decode_query_record(
     })?;
     Ok(RecordSnapshot {
         reference: RecordRef {
-            tenant_id: tenant_id.clone(),
             record_type: record_type.clone(),
             record_id,
         },
@@ -370,10 +410,33 @@ mod tests {
         };
         let mut invalid = base.clone();
         invalid.page_size = 0;
-        assert_eq!(invalid.validate().unwrap_err().code, "DATA_QUERY_PAGE_SIZE_INVALID");
+        assert_eq!(
+            invalid.validate().unwrap_err().code,
+            "DATA_QUERY_PAGE_SIZE_INVALID"
+        );
         let mut invalid = base;
         invalid.page_size = MAXIMUM_RECORD_QUERY_PAGE_SIZE + 1;
-        assert_eq!(invalid.validate().unwrap_err().code, "DATA_QUERY_PAGE_SIZE_INVALID");
+        assert_eq!(
+            invalid.validate().unwrap_err().code,
+            "DATA_QUERY_PAGE_SIZE_INVALID"
+        );
+    }
+
+    #[test]
+    fn record_query_continuation_requires_canonical_epoch_microseconds() {
+        let valid = RecordQueryContinuation {
+            sort_value: "1700000000000000".to_owned(),
+            record_id: RecordId::try_new("deal-1").unwrap(),
+        };
+        valid.validate().unwrap();
+        let invalid = RecordQueryContinuation {
+            sort_value: "2026-07-11T12:00:00Z".to_owned(),
+            record_id: RecordId::try_new("deal-1").unwrap(),
+        };
+        assert_eq!(
+            invalid.validate().unwrap_err().code,
+            "DATA_QUERY_CONTINUATION_INVALID"
+        );
     }
 
     #[test]
