@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/sales-activities-persistence-planners-v1
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
