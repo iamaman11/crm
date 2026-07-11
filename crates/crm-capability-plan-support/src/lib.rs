@@ -8,18 +8,16 @@ use crm_module_sdk::{
     RecordId, RecordRef, RecordSnapshot, RecordType, ResourceRef, RetentionPolicyId, SchemaId,
     SchemaVersion, SdkError, TenantId, TypedPayload,
 };
-use crm_proto_contracts::{FILE_DESCRIPTOR_SET, crm::core::v1 as core};
+use crm_proto_contracts::crm::core::v1 as core;
+pub use crm_proto_contracts::message_descriptor_hash;
 use prost::Message;
-use prost_types::{DescriptorProto, FileDescriptorProto, FileDescriptorSet};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::OnceLock;
+use std::collections::BTreeMap;
 
 pub const CONTRACT_VERSION: &str = "1.0.0";
 pub const MAX_PROTOBUF_BYTES: u64 = 1_048_576;
 pub const DEFAULT_RETENTION_POLICY_ID: &str = "standard";
 const DEFAULT_IDEMPOTENCY_TTL_NANOS: i64 = 86_400_000_000_000;
-const MESSAGE_DESCRIPTOR_HASH_PROFILE: &[u8] = b"crm.protobuf.message-descriptor.sha256/v1";
 const EVIDENCE_ID_PROFILE: &[u8] = b"crm.persistence.evidence-id.sha256/v1";
 
 #[derive(Debug, Clone, Copy)]
@@ -30,94 +28,6 @@ pub struct PersistedPayloadContract<'a> {
     pub descriptor_hash: [u8; 32],
     pub maximum_size_bytes: u64,
     pub retention_policy_id: &'a str,
-}
-
-static MESSAGE_DESCRIPTOR_HASHES: OnceLock<BTreeMap<String, [u8; 32]>> = OnceLock::new();
-
-pub fn message_descriptor_hash(full_message_name: &str) -> [u8; 32] {
-    *MESSAGE_DESCRIPTOR_HASHES
-        .get_or_init(build_message_descriptor_hashes)
-        .get(full_message_name)
-        .unwrap_or_else(|| panic!("generated descriptor set is missing {full_message_name}"))
-}
-
-fn build_message_descriptor_hashes() -> BTreeMap<String, [u8; 32]> {
-    let descriptor_set = FileDescriptorSet::decode(FILE_DESCRIPTOR_SET)
-        .expect("generated Protobuf descriptor set must be valid");
-    let files = descriptor_set
-        .file
-        .into_iter()
-        .map(|file| {
-            let name = file
-                .name
-                .clone()
-                .expect("generated Protobuf file descriptor must have a name");
-            (name, file)
-        })
-        .collect::<BTreeMap<_, _>>();
-
-    let mut hashes = BTreeMap::new();
-    for (file_name, file) in &files {
-        let package = file.package.as_deref().unwrap_or_default();
-        let mut message_names = Vec::new();
-        collect_message_names(package, &file.message_type, &mut message_names);
-
-        let mut closure = BTreeSet::new();
-        collect_descriptor_closure(file_name, &files, &mut closure);
-        let encoded_closure = closure
-            .iter()
-            .map(|name| {
-                let descriptor = files
-                    .get(name)
-                    .expect("descriptor dependency must exist in the generated set");
-                (name.as_bytes(), descriptor.encode_to_vec())
-            })
-            .collect::<Vec<_>>();
-
-        for full_message_name in message_names {
-            let mut hasher = Sha256::new();
-            append_hash_field(&mut hasher, MESSAGE_DESCRIPTOR_HASH_PROFILE);
-            append_hash_field(&mut hasher, full_message_name.as_bytes());
-            for (dependency_name, encoded_descriptor) in &encoded_closure {
-                append_hash_field(&mut hasher, dependency_name);
-                append_hash_field(&mut hasher, encoded_descriptor);
-            }
-            hashes.insert(full_message_name, hasher.finalize().into());
-        }
-    }
-    hashes
-}
-
-fn collect_message_names(prefix: &str, messages: &[DescriptorProto], output: &mut Vec<String>) {
-    for message in messages {
-        let name = message
-            .name
-            .as_deref()
-            .expect("generated message descriptor must have a name");
-        let full_name = if prefix.is_empty() {
-            name.to_owned()
-        } else {
-            format!("{prefix}.{name}")
-        };
-        output.push(full_name.clone());
-        collect_message_names(&full_name, &message.nested_type, output);
-    }
-}
-
-fn collect_descriptor_closure(
-    file_name: &str,
-    files: &BTreeMap<String, FileDescriptorProto>,
-    output: &mut BTreeSet<String>,
-) {
-    if !output.insert(file_name.to_owned()) {
-        return;
-    }
-    let file = files
-        .get(file_name)
-        .expect("generated descriptor closure must reference an existing file");
-    for dependency in &file.dependency {
-        collect_descriptor_closure(dependency, files, output);
-    }
 }
 
 pub fn protobuf_contract(

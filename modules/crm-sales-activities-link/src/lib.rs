@@ -43,6 +43,7 @@ pub struct SalesDealStageChanged {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateTaskIntent {
     pub task_id: RecordId,
+    pub tenant_id: crm_module_sdk::TenantId,
     pub subject: String,
     pub owner_actor_id: ActorId,
     pub related_deal: ResourceRef,
@@ -326,6 +327,7 @@ fn follow_up_intent(
 
     Ok(CreateTaskIntent {
         task_id,
+        tenant_id: delivery.tenant_id.clone(),
         subject: FOLLOW_UP_SUBJECT.to_owned(),
         owner_actor_id: delivery.source_actor_id.clone(),
         related_deal: ResourceRef {
