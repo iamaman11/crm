@@ -309,7 +309,8 @@ fn follow_up_intent(
 }
 
 fn delivery_state_key(delivery: &EventDelivery) -> Result<StateKey, SdkError> {
-    StateKey::try_new(delivery.delivery_id.as_str().to_owned()).map_err(|_| delivery_state_invalid())
+    StateKey::try_new(delivery.delivery_id.as_str().to_owned())
+        .map_err(|_| delivery_state_invalid())
 }
 
 fn encode_receipt(receipt: &DeliveryReceipt) -> Result<TypedPayload, SdkError> {
@@ -429,8 +430,8 @@ mod tests {
     use crm_module_sdk::testing::{InMemoryModuleStateStore, RecordingCapabilityClient};
     use crm_module_sdk::{
         BusinessTransactionId, CapabilityOutcome, CausationId, CorrelationId, DeliveryId, EventId,
-        EventType, EventVersion, ExecutionContext, IdempotencyKey, RecordRef, RecordType, RequestId,
-        TraceId,
+        EventType, EventVersion, ExecutionContext, IdempotencyKey, RecordRef, RecordType,
+        RequestId, TraceId,
     };
     use std::future::Future;
     use std::task::{Context, Poll, Waker};
@@ -475,8 +476,10 @@ mod tests {
         let (delivery, event) = delivery(DealLifecycleStatus::Open);
         let context = context(&delivery);
 
-        let first = run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
-        let second = run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
+        let first =
+            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
+        let second =
+            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
 
         assert_eq!(first.disposition, LinkDisposition::Applied);
         assert!(!first.replayed);
@@ -508,7 +511,8 @@ mod tests {
             .expect_err("first target call must fail");
         assert_eq!(state.entry_count(), 0);
 
-        let retry = run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
+        let retry =
+            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
         assert_eq!(retry.disposition, LinkDisposition::Applied);
         assert_eq!(capabilities.calls().len(), 2);
         assert_eq!(state.entry_count(), 1);
@@ -522,7 +526,8 @@ mod tests {
         let (delivery, event) = delivery(DealLifecycleStatus::Won);
         let context = context(&delivery);
 
-        let result = run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
+        let result =
+            run_ready(link.handle(&context, &delivery, &event, &capabilities, &state)).unwrap();
 
         assert_eq!(result.disposition, LinkDisposition::Ignored);
         assert!(!result.replayed);
