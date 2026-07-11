@@ -1,0 +1,13 @@
+[package]
+name = "crm-projection-runtime"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-core-events = { path = "../crm-core-events" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+
+[dev-dependencies]
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt"] }
