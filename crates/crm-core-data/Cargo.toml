@@ -40,3 +40,8 @@ required-features = ["postgres-integration"]
 name = "postgres_event_delivery"
 path = "tests/postgres_event_delivery.rs"
 required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_projection_runtime"
+path = "tests/postgres_projection_runtime.rs"
+required-features = ["postgres-integration"]
