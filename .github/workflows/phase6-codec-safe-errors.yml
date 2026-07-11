@@ -1,6 +1,9 @@
 name: Phase 6 codec safe errors
 
 on:
+  push:
+    branches:
+      - feature/sales-activities-domain-planners-v1
   pull_request:
     branches:
       - main
