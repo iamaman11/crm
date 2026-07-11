@@ -72,8 +72,8 @@ async fn production_queries_are_permission_bound_cursor_safe_and_side_effect_fre
         eprintln!("skipping Phase 6H PostgreSQL query acceptance because DATABASE_URL is absent");
         return;
     };
-    let admin_database_url =
-        std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
+    let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
+        .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
 
     let mutation_store = PostgresDataStore::connect(&database_url, 4)
         .await
@@ -367,7 +367,10 @@ async fn production_queries_are_permission_bound_cursor_safe_and_side_effect_fre
         ))
         .await
         .expect_err("live revocation must deny the next page");
-    assert!(matches!(revoked_page, QueryGatewayError::PermissionDenied { .. }));
+    assert!(matches!(
+        revoked_page,
+        QueryGatewayError::PermissionDenied { .. }
+    ));
     authorization_store
         .upsert(list_auth_grant)
         .expect("restore live query capability grant");
@@ -396,7 +399,10 @@ async fn production_queries_are_permission_bound_cursor_safe_and_side_effect_fre
         .map(|deal| deal.deal_id.clone())
         .collect::<BTreeSet<_>>();
     assert!(first_ids.is_disjoint(&second_ids));
-    let all_ids = first_ids.union(&second_ids).cloned().collect::<BTreeSet<_>>();
+    let all_ids = first_ids
+        .union(&second_ids)
+        .cloned()
+        .collect::<BTreeSet<_>>();
     assert_eq!(all_ids, deal_ids.into_iter().map(str::to_owned).collect());
 
     let activities_get_definition = query_definition(ACTIVITIES_GET_CAPABILITY);
@@ -594,12 +600,7 @@ where
 {
     let result = gateway
         .execute(query_request(
-            definition,
-            tenant,
-            actor,
-            identity,
-            hash_byte,
-            message,
+            definition, tenant, actor, identity, hash_byte, message,
         ))
         .await
         .unwrap_or_else(|error| panic!("query {identity} failed: {error}"));

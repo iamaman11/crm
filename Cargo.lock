@@ -355,8 +355,13 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
  "crm-sales-activities-query-adapter",
  "crm-sales-capability-adapter",
+ "prost",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]
