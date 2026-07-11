@@ -1,7 +1,7 @@
 use crate::{
     CORRELATION_ID_HEADER, CapabilityRoute, QueryCallEnvelope, QueryIngress, QueryIngressMetadata,
-    REQUEST_ID_HEADER, RETRY_AFTER_MILLIS_HEADER, SafeTransportError, TENANT_HEADER, TIMEOUT_HEADER,
-    TRACE_ID_HEADER,
+    REQUEST_ID_HEADER, RETRY_AFTER_MILLIS_HEADER, SafeTransportError, TENANT_HEADER,
+    TIMEOUT_HEADER, TRACE_ID_HEADER,
 };
 use ::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use crm_module_sdk::{ErrorCategory, TypedPayload};
@@ -178,7 +178,10 @@ mod tests {
         let metadata = metadata_from_headers(&headers).unwrap();
         assert_eq!(metadata.tenant_id.as_deref(), Some("tenant-1"));
 
-        headers.insert(IDEMPOTENCY_KEY_HEADER, HeaderValue::from_static("ignored-idem"));
+        headers.insert(
+            IDEMPOTENCY_KEY_HEADER,
+            HeaderValue::from_static("ignored-idem"),
+        );
         headers.insert(
             BUSINESS_TRANSACTION_HEADER,
             HeaderValue::from_static("ignored-transaction"),

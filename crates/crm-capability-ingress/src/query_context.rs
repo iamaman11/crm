@@ -3,7 +3,7 @@ use crate::{
     semantic_input_hash,
 };
 use crm_module_sdk::{
-    CorrelationId, Clock, RandomSource, RequestId, TenantId, TraceId, TypedPayload,
+    Clock, CorrelationId, RandomSource, RequestId, TenantId, TraceId, TypedPayload,
 };
 use crm_query_runtime::{QueryExecutionContext, QueryRequest};
 use std::fmt;
@@ -257,7 +257,10 @@ mod tests {
             .unwrap();
         assert_eq!(resolved.request.context.tenant_id.as_str(), "tenant-1");
         assert_eq!(resolved.request.context.actor_id.as_str(), "actor-1");
-        assert_eq!(resolved.request.context.capability_id.as_str(), "sales.deal.get");
+        assert_eq!(
+            resolved.request.context.capability_id.as_str(),
+            "sales.deal.get"
+        );
         assert_eq!(resolved.timeout.duration_millis, 500);
     }
 }

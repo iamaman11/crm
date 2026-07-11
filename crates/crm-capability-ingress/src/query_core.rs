@@ -106,9 +106,7 @@ fn query_context_safe_message(error: &ContextResolutionError) -> &'static str {
         | ContextResolutionError::InvalidServerConfiguration => {
             "The query execution context is temporarily unavailable."
         }
-        ContextResolutionError::IdempotencyKeyRequired => {
-            "The query execution context is invalid."
-        }
+        ContextResolutionError::IdempotencyKeyRequired => "The query execution context is invalid.",
     }
 }
 
