@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 
 pub mod domain;
+pub mod persistence;
 
 pub use domain::*;
+pub use persistence::*;
 
 use crm_module_sdk::{Clock, ModuleExecutionContext, SdkError};
 
