@@ -8,10 +8,10 @@ use crm_capability_adapters::{
 use crm_capability_ingress::{
     AccessTokenGrant, AccessTokenStore, BUSINESS_TRANSACTION_HEADER, BearerTokenAuthenticator,
     CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityIngress, CapabilityRoute,
-    ExecutionContextResolver, GrpcCapabilityMessage, GrpcCapabilityMiddleware, HttpCapabilityBody,
-    HttpCapabilityMiddleware, HttpCapabilityRequest, IDEMPOTENCY_KEY_HEADER, REQUEST_ID_HEADER,
-    TENANT_HEADER, TIMEOUT_HEADER, TRACE_ID_HEADER, TimeoutPolicy, semantic_input_hash,
-    ERROR_CODE_METADATA,
+    ERROR_CODE_METADATA, ExecutionContextResolver, GrpcCapabilityMessage, GrpcCapabilityMiddleware,
+    HttpCapabilityBody, HttpCapabilityMiddleware, HttpCapabilityRequest, IDEMPOTENCY_KEY_HEADER,
+    REQUEST_ID_HEADER, TENANT_HEADER, TIMEOUT_HEADER, TRACE_ID_HEADER, TimeoutPolicy,
+    semantic_input_hash,
 };
 use crm_capability_runtime::{
     AuthorizationDecision, CapabilityAuthorizer, CapabilityDefinition, CapabilityGateway,
@@ -20,10 +20,12 @@ use crm_capability_runtime::{
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
 use crm_module_sdk::testing::{DeterministicRandom, FixedClock};
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, Clock, DataClass, ErrorCategory, ModuleId,
-    PayloadEncoding, PortFuture, RetentionPolicyId, SdkError, TenantId, TypedPayload,
+    ActorId, Clock, DataClass, ErrorCategory, PayloadEncoding, PortFuture, RetentionPolicyId,
+    SdkError, TenantId, TypedPayload,
 };
-use crm_proto_contracts::crm::{activities::v1 as activities, core::v1 as core, sales::v1 as sales};
+use crm_proto_contracts::crm::{
+    activities::v1 as activities, core::v1 as core, sales::v1 as sales,
+};
 use crm_sales_activities_capability_composition::{
     SalesActivitiesCapabilityPlannerRouter, capability_catalog, capability_definitions,
 };
@@ -94,7 +96,10 @@ impl CapabilityAuthorizer for RecordingAuthorizer {
     ) -> PortFuture<'a, Result<AuthorizationDecision, SdkError>> {
         Box::pin(async move {
             let decision = self.inner.authorize(definition, request).await;
-            self.calls.lock().expect("call mutex poisoned").push("authorize");
+            self.calls
+                .lock()
+                .expect("call mutex poisoned")
+                .push("authorize");
             decision
         })
     }
@@ -113,7 +118,10 @@ impl TransactionalCapabilityExecutor for RecordingExecutor {
         request: CapabilityRequest,
     ) -> PortFuture<'a, Result<crm_capability_runtime::CapabilityExecutionResult, SdkError>> {
         Box::pin(async move {
-            self.calls.lock().expect("call mutex poisoned").push("execute");
+            self.calls
+                .lock()
+                .expect("call mutex poisoned")
+                .push("execute");
             self.inner.execute(definition, request).await
         })
     }
@@ -154,12 +162,18 @@ async fn production_sales_and_activities_mutations_use_the_authenticated_public_
             TENANT,
             "phase6g-idem-invalid-auth",
             "phase6g-invalid-auth",
-            payload(&definition(SALES_CREATE), sales_create(deal_id, "Invalid auth")),
+            payload(
+                &definition(SALES_CREATE),
+                sales_create(deal_id, "Invalid auth"),
+            ),
             "Bearer invalid-invalid-invalid-invalid",
         ))
         .await;
     assert_eq!(invalid_auth.status, StatusCode::UNAUTHORIZED);
-    assert_eq!(http_error_code(&invalid_auth.body), "AUTHENTICATION_INVALID");
+    assert_eq!(
+        http_error_code(&invalid_auth.body),
+        "AUTHENTICATION_INVALID"
+    );
     assert_calls(&composition.calls, &[]);
     assert_eq!(evidence_counts(&admin).await, baseline);
 
@@ -171,7 +185,10 @@ async fn production_sales_and_activities_mutations_use_the_authenticated_public_
             OTHER_TENANT,
             "phase6g-idem-tenant-denied",
             "phase6g-tenant-denied",
-            payload(&definition(SALES_CREATE), sales_create(deal_id, "Tenant denied")),
+            payload(
+                &definition(SALES_CREATE),
+                sales_create(deal_id, "Tenant denied"),
+            ),
             &format!("Bearer {TOKEN}"),
         ))
         .await
@@ -230,12 +247,11 @@ async fn production_sales_and_activities_mutations_use_the_authenticated_public_
     assert_calls(&composition.calls, &["authorize", "execute"]);
     let created_result = http_success(&create.body).clone();
     assert!(!created_result.replayed);
-    let created_deal = sales::CreateDealResponse::decode(
-        created_result.output.as_ref().unwrap().bytes.as_slice(),
-    )
-    .unwrap()
-    .deal
-    .unwrap();
+    let created_deal =
+        sales::CreateDealResponse::decode(created_result.output.as_ref().unwrap().bytes.as_slice())
+            .unwrap()
+            .deal
+            .unwrap();
     assert_eq!(created_deal.version, 1);
     let after_sales_create = evidence_counts(&admin).await;
     assert_mutation_delta(after_sales_create, baseline, 1, 1);
@@ -257,7 +273,10 @@ async fn production_sales_and_activities_mutations_use_the_authenticated_public_
     let replay_result = http_success(&replay.body);
     assert!(replay_result.replayed);
     assert_eq!(replay_result.output, created_result.output);
-    assert_eq!(replay_result.affected_resources, created_result.affected_resources);
+    assert_eq!(
+        replay_result.affected_resources,
+        created_result.affected_resources
+    );
     assert_eq!(evidence_counts(&admin).await, after_sales_create);
 
     clear_calls(&composition.calls);
@@ -290,7 +309,10 @@ async fn production_sales_and_activities_mutations_use_the_authenticated_public_
             TENANT,
             "phase6g-idem-sales-update",
             "phase6g-sales-update",
-            payload(&sales_update_definition, sales_update(deal_id, 1, "Enterprise renewal 2027")),
+            payload(
+                &sales_update_definition,
+                sales_update(deal_id, 1, "Enterprise renewal 2027"),
+            ),
             &format!("Bearer {TOKEN}"),
         ))
         .await;
@@ -305,7 +327,10 @@ async fn production_sales_and_activities_mutations_use_the_authenticated_public_
             TENANT,
             "phase6g-idem-sales-stale",
             "phase6g-sales-stale",
-            payload(&sales_update_definition, sales_update(deal_id, 1, "Stale write")),
+            payload(
+                &sales_update_definition,
+                sales_update(deal_id, 1, "Stale write"),
+            ),
             &format!("Bearer {TOKEN}"),
         ))
         .await;
@@ -424,10 +449,9 @@ async fn production_sales_and_activities_mutations_use_the_authenticated_public_
         .await
         .unwrap()
         .into_inner();
-    let noop_output = activities::CompleteTaskResponse::decode(
-        noop.output.as_ref().unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let noop_output =
+        activities::CompleteTaskResponse::decode(noop.output.as_ref().unwrap().bytes.as_slice())
+            .unwrap();
     assert!(!noop_output.changed);
     assert_eq!(noop_output.task.unwrap().version, 4);
     let after_noop = evidence_counts(&admin).await;
@@ -476,7 +500,10 @@ async fn production_sales_and_activities_mutations_use_the_authenticated_public_
         .await
         .unwrap_err();
     assert_eq!(denied_grpc.code(), Code::PermissionDenied);
-    assert_eq!(grpc_error_code(&denied_grpc), "CAPABILITY_PERMISSION_DENIED");
+    assert_eq!(
+        grpc_error_code(&denied_grpc),
+        "CAPABILITY_PERMISSION_DENIED"
+    );
     assert_calls(&composition.calls, &["authorize"]);
     assert_eq!(evidence_counts(&admin).await, after_noop);
 
@@ -509,10 +536,7 @@ fn compose(store: PostgresDataStore) -> Composition {
 
     let calls = Arc::new(Mutex::new(Vec::new()));
     let authorizer = RecordingAuthorizer {
-        inner: LiveCapabilityAuthorizer::new(
-            authorization_store.clone(),
-            Arc::clone(&clock_port),
-        ),
+        inner: LiveCapabilityAuthorizer::new(authorization_store.clone(), Arc::clone(&clock_port)),
         calls: Arc::clone(&calls),
     };
     let executor = RecordingExecutor {
@@ -660,7 +684,11 @@ fn grpc_request(
     });
     insert_metadata(request.metadata_mut(), "authorization", authorization);
     insert_metadata(request.metadata_mut(), TENANT_HEADER, tenant);
-    insert_metadata(request.metadata_mut(), IDEMPOTENCY_KEY_HEADER, idempotency_key);
+    insert_metadata(
+        request.metadata_mut(),
+        IDEMPOTENCY_KEY_HEADER,
+        idempotency_key,
+    );
     insert_metadata(request.metadata_mut(), REQUEST_ID_HEADER, request_identity);
     insert_metadata(
         request.metadata_mut(),
@@ -693,20 +721,14 @@ fn insert_header(headers: &mut HeaderMap, name: &'static str, value: &str) {
     );
 }
 
-fn insert_metadata(
-    metadata: &mut tonic::metadata::MetadataMap,
-    name: &'static str,
-    value: &str,
-) {
+fn insert_metadata(metadata: &mut tonic::metadata::MetadataMap, name: &'static str, value: &str) {
     metadata.insert(
         name,
         MetadataValue::try_from(value).expect("valid Phase 6G gRPC metadata"),
     );
 }
 
-fn http_success(
-    body: &HttpCapabilityBody,
-) -> &crm_capability_runtime::CapabilityExecutionResult {
+fn http_success(body: &HttpCapabilityBody) -> &crm_capability_runtime::CapabilityExecutionResult {
     match body {
         HttpCapabilityBody::Success(result) => result,
         HttpCapabilityBody::Error(error) => panic!("expected success, received {}", error.code),
@@ -734,7 +756,10 @@ fn clear_calls(calls: &Arc<Mutex<Vec<&'static str>>>) {
 }
 
 fn assert_calls(calls: &Arc<Mutex<Vec<&'static str>>>, expected: &[&'static str]) {
-    assert_eq!(calls.lock().expect("call mutex poisoned").as_slice(), expected);
+    assert_eq!(
+        calls.lock().expect("call mutex poisoned").as_slice(),
+        expected
+    );
 }
 
 fn actor_owner() -> core::ActorOrTeamOwner {
@@ -910,8 +935,14 @@ fn assert_mutation_delta(
     assert_eq!(current.records, previous.records + record_delta);
     assert_eq!(current.outbox, previous.outbox + transaction_delta);
     assert_eq!(current.audits, previous.audits + transaction_delta);
-    assert_eq!(current.idempotency, previous.idempotency + transaction_delta);
-    assert_eq!(current.transactions, previous.transactions + transaction_delta);
+    assert_eq!(
+        current.idempotency,
+        previous.idempotency + transaction_delta
+    );
+    assert_eq!(
+        current.transactions,
+        previous.transactions + transaction_delta
+    );
 }
 
 fn assert_noop_delta(current: EvidenceCounts, previous: EvidenceCounts) {

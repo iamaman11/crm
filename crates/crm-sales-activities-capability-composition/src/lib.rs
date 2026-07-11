@@ -16,14 +16,13 @@ use crm_activities_capability_adapter::{
 };
 use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
-use crm_core_data::{
-    AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner,
-};
+use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
 use crm_module_sdk::{ErrorCategory, RecordSnapshot, SdkError};
 use crm_sales_capability_adapter::{
     ADVANCE_CAPABILITY as SALES_ADVANCE_CAPABILITY, CREATE_CAPABILITY as SALES_CREATE_CAPABILITY,
     MODULE_ID as SALES_MODULE_ID, SalesDealCapabilityPlanner,
-    UPDATE_CAPABILITY as SALES_UPDATE_CAPABILITY, capability_definition as sales_capability_definition,
+    UPDATE_CAPABILITY as SALES_UPDATE_CAPABILITY,
+    capability_definition as sales_capability_definition,
 };
 
 pub const PRODUCTION_MUTATION_CAPABILITY_IDS: [&str; 7] = [
@@ -153,10 +152,10 @@ fn configuration_error(code: &'static str, safe_message: &'static str) -> SdkErr
 mod tests {
     use super::*;
     use crm_module_sdk::{
-        ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
-        DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
-        PayloadEncoding, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId,
-        TypedPayload,
+        ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,
+        CorrelationId, DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext,
+        ModuleId, PayloadEncoding, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId,
+        TraceId, TypedPayload,
     };
 
     #[test]
