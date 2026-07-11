@@ -15,7 +15,7 @@ A **business module** is an independently governed runtime unit under `modules/`
 - independent build/test behavior;
 - no direct infrastructure or cross-module storage access.
 
-A **link module** is also a business module, but it owns cross-domain coordination rather than the source or target aggregates.
+A **link module** is also a business module, but it owns optional cross-domain coordination rather than the source or target aggregates.
 
 The following do **not** count as business modules:
 
@@ -27,15 +27,16 @@ The following do **not** count as business modules:
 
 ## 2. Readiness states
 
-- **Planned** — owner domain exists in the roadmap but implementation has not started.
+- **Planned** — owner/link domain exists in the roadmap but implementation has not started.
 - **Foundation** — manifest/contracts/domain skeleton exists but no complete production path.
-- **Vertical slice** — at least one real owner aggregate has production mutation/query acceptance.
+- **Vertical slice** — an owner module has at least one real aggregate with production mutation/query acceptance.
+- **Production integration slice** — a link module has governed source-event delivery, lifecycle gating, target-capability invocation and production acceptance.
 - **Expert expansion** — broader domain surface is actively being delivered.
 - **Product complete** — required domain capabilities, operations and product experience satisfy the module acceptance gates.
 
 A manifest may declare future owned object names. That declaration does not mean those objects are implemented.
 
-## 3. Implemented business modules
+## 3. Implemented owner modules
 
 | Module | Ownership | Current readiness | Implemented production slice | Still required |
 |---|---|---|---|---|
@@ -46,13 +47,15 @@ Current count: **2 implemented owner modules with production vertical slices**.
 
 Current count of product-complete expert modules: **0**.
 
-## 4. Current next module
+## 4. Implemented link module
 
-| Module | Type | State | Purpose |
+| Module | Type | State | Implemented production slice |
 |---|---|---|---|
-| Sales–Activities link module | Link module | **Planned / next** | Consume versioned Sales events and invoke Activities capabilities through governed ports with deterministic delivery deduplication; remain independently disableable/uninstallable |
+| `crm.sales-activities-link` | Link module | **Production integration slice — Gate review in PR #63** | Consumes versioned Sales stage-change events through restart-safe governed delivery, checks tenant installation lifecycle, invokes Activities only through the governed capability gateway, uses durable retry/dead-letter delivery state and target idempotency, and remains independently suspendable/uninstallable |
 
-The exact published `module_id` must be fixed when the 6I manifest is introduced and then treated as immutable identity.
+The published `module_id` is fixed as **`crm.sales-activities-link`** and is treated as immutable module identity.
+
+Current implemented business-module count: **3** — two owner modules plus one optional link module.
 
 ## 5. Mandatory customer-master owner domains
 
@@ -103,7 +106,7 @@ Tracked primarily by Phase 8 / issue #11. Each area must either become an explic
 - Automation runtime and administration.
 - Governed integration adapters.
 
-State: **Planned except the existing Sales and Activities vertical slices**.
+State: **Planned except the existing Sales and Activities vertical slices and the Sales–Activities production link slice**.
 
 ## 8. Platform capabilities that are not business modules
 
@@ -113,7 +116,9 @@ These are major product/platform workstreams but should not inflate the business
 - Capability execution gateway.
 - Query gateway.
 - PostgreSQL authoritative data runtime.
-- Search and rebuildable projections.
+- Event delivery runtime and rebuildable projection runtime.
+- Production application composition root and process host.
+- Search and generalized indexes.
 - Admin Studio metadata publication.
 - Product shell/design system.
 - AI actor/tool layer.
@@ -139,6 +144,6 @@ Do not create a module solely because a directory, screen, table or team exists.
 
 ## 10. Target scale
 
-The final universal CRM will contain substantially more than the current two business modules. The roadmap already implies **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
+The final universal CRM will contain substantially more than the current three implemented business modules. The roadmap already implies **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
 
 The exact count becomes authoritative only as domains receive stable published module identities.

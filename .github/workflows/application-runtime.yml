@@ -1,0 +1,105 @@
+name: Application Runtime CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/gateway/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
+      - "crates/crm-query-runtime/**"
+      - "crates/crm-sales-activities-capability-composition/**"
+      - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-sales-activities-link/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/**"
+      - ".github/workflows/application-runtime.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/gateway/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
+      - "crates/crm-query-runtime/**"
+      - "crates/crm-sales-activities-capability-composition/**"
+      - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-sales-activities-link/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/**"
+      - ".github/workflows/application-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  application-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_application_runtime_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_application_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5435
+      PGDATABASE: crm_application_runtime_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5435/crm_application_runtime_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5435/crm_application_runtime_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply complete Phase 6 schema
+        run: |
+          for migration in database/migrations/000{1,2,3,4,5,6,7,8}_*.up.sql; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done
+      - name: Seed production application fixtures
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify full crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-process.log
+      - name: Upload application runtime diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-runtime-diagnostics
+          path: |
+            database/application-runtime-process.log
+            crates/crm-application-runtime/
+            services/crm-api/
+          if-no-files-found: error
+          retention-days: 7

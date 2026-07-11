@@ -20,6 +20,7 @@ members = [
   "crates/crm-capability-plan-support",
   "crates/crm-query-runtime",
   "crates/crm-sales-capability-adapter",
+  "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
   "crates/crm-sales-activities-link-contract-adapter",
   "crates/crm-sales-activities-query-adapter",

@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package crm.gateway.v1;
+
+// Generic governed application gateway. Domain payload bytes remain encoded by
+// their own published schema_id/schema_version/descriptor identity.
+service ApplicationGatewayService {
+  rpc Mutate(MutateRequest) returns (MutateResponse);
+  rpc Query(QueryRequest) returns (QueryResponse);
+}
+
+message MutateRequest {
+  string owner_module_id = 1;
+  string capability_id = 2;
+  string capability_version = 3;
+  TypedPayload input = 4;
+}
+
+message MutateResponse {
+  optional TypedPayload output = 1;
+  repeated ResourceRef affected_resources = 2;
+  bool replayed = 3;
+}
+
+message QueryRequest {
+  string owner_module_id = 1;
+  string capability_id = 2;
+  string capability_version = 3;
+  TypedPayload input = 4;
+}
+
+message QueryResponse {
+  TypedPayload output = 1;
+}
+
+message TypedPayload {
+  string owner_module_id = 1;
+  string schema_id = 2;
+  string schema_version = 3;
+  bytes descriptor_hash = 4;
+  string data_class = 5;
+  string encoding = 6;
+  uint64 maximum_size_bytes = 7;
+  string retention_policy_id = 8;
+  bytes payload = 9;
+}
+
+message ResourceRef {
+  string resource_type = 1;
+  string resource_id = 2;
+  optional int64 version = 3;
+}
