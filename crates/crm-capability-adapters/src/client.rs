@@ -1,6 +1,4 @@
-use crm_capability_runtime::{
-    CapabilityGateway, CapabilityRequest, gateway_error_to_sdk,
-};
+use crm_capability_runtime::{CapabilityGateway, CapabilityRequest, gateway_error_to_sdk};
 use crm_module_sdk::{
     CapabilityClient, CapabilityInvocation, CapabilityOutcome, ModuleExecutionContext, PortFuture,
     PortResult, TypedPayload,
@@ -84,10 +82,7 @@ fn semantic_input_hash(payload: &TypedPayload) -> [u8; 32] {
     hash_field(&mut hasher, &payload.descriptor_hash);
     hash_field(&mut hasher, &[data_class_tag(payload.data_class)]);
     hash_field(&mut hasher, &[encoding_tag(payload.encoding)]);
-    hash_field(
-        &mut hasher,
-        payload.retention_policy_id.as_str().as_bytes(),
-    );
+    hash_field(&mut hasher, payload.retention_policy_id.as_str().as_bytes());
     hash_field(&mut hasher, &payload.maximum_size_bytes.to_be_bytes());
     hash_field(&mut hasher, &payload.bytes);
     hasher.finalize().into()

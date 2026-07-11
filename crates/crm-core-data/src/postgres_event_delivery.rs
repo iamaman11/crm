@@ -1,9 +1,10 @@
 use crate::PostgresDataStore;
 use crm_core_events::{EventDeliveryLookup, EventDeliveryReader};
 use crm_module_sdk::{
-    ActorId, CorrelationId, DataClass, DeliveryId, ErrorCategory, EventDelivery, EventId, EventType,
-    EventVersion, ModuleId, PayloadEncoding, PortFuture, PortResult, RecordId, RecordRef, RecordType,
-    RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TraceId, TypedPayload,
+    ActorId, CorrelationId, DataClass, DeliveryId, ErrorCategory, EventDelivery, EventId,
+    EventType, EventVersion, ModuleId, PayloadEncoding, PortFuture, PortResult, RecordId,
+    RecordRef, RecordType, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TraceId,
+    TypedPayload,
 };
 use sqlx::Row;
 
@@ -181,14 +182,14 @@ fn decode_delivery(
                     .map_err(event_database_error)?,
             )
             .map_err(|_| event_stored_value_invalid("retention policy id is invalid"))?,
-            bytes: row
-                .try_get("payload_bytes")
-                .map_err(event_database_error)?,
+            bytes: row.try_get("payload_bytes").map_err(event_database_error)?,
         },
     };
     delivery.validate()?;
     if delivery.event_version.as_str() != event_version.as_str() {
-        return Err(event_stored_value_invalid("event version changed during decode"));
+        return Err(event_stored_value_invalid(
+            "event version changed during decode",
+        ));
     }
     Ok(delivery)
 }
@@ -214,7 +215,9 @@ fn parse_payload_encoding(value: String) -> Result<PayloadEncoding, SdkError> {
         "json" => Ok(PayloadEncoding::Json),
         "utf8_text" => Ok(PayloadEncoding::Utf8Text),
         "binary" => Ok(PayloadEncoding::Binary),
-        _ => Err(event_stored_value_invalid("event payload encoding is unknown")),
+        _ => Err(event_stored_value_invalid(
+            "event payload encoding is unknown",
+        )),
     }
 }
 

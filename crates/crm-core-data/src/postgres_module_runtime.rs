@@ -52,7 +52,12 @@ impl ModuleActivationReader for PostgresModuleRuntimeStore {
 
             Ok(match row {
                 None => ModuleActivationState::Missing,
-                Some(row) if row.try_get::<String, _>("status").map_err(state_database_error)? == "active" => {
+                Some(row)
+                    if row
+                        .try_get::<String, _>("status")
+                        .map_err(state_database_error)?
+                        == "active" =>
+                {
                     ModuleActivationState::Active
                 }
                 Some(_) => ModuleActivationState::Inactive,
@@ -103,7 +108,8 @@ impl ModuleStateStore for PostgresModuleRuntimeStore {
             .await
             .map_err(state_database_error)?;
             transaction.commit().await.map_err(state_database_error)?;
-            row.map(|row| decode_state_entry(context, key, row)).transpose()
+            row.map(|row| decode_state_entry(context, key, row))
+                .transpose()
         })
     }
 
@@ -326,7 +332,9 @@ fn decode_state_entry(
     key: StateKey,
     row: sqlx::postgres::PgRow,
 ) -> Result<ModuleStateEntry, SdkError> {
-    let descriptor_hash: Vec<u8> = row.try_get("descriptor_hash").map_err(state_database_error)?;
+    let descriptor_hash: Vec<u8> = row
+        .try_get("descriptor_hash")
+        .map_err(state_database_error)?;
     let descriptor_hash: [u8; 32] = descriptor_hash
         .try_into()
         .map_err(|_| state_corrupt("module state descriptor hash is not 32 bytes"))?;
@@ -337,8 +345,11 @@ fn decode_state_entry(
         .map_err(|_| state_corrupt("module state maximum payload size is negative"))?;
     let payload = TypedPayload {
         owner: context.module_id.clone(),
-        schema_id: SchemaId::try_new(row.try_get::<String, _>("schema_id").map_err(state_database_error)?)
-            .map_err(|_| state_corrupt("module state schema id is invalid"))?,
+        schema_id: SchemaId::try_new(
+            row.try_get::<String, _>("schema_id")
+                .map_err(state_database_error)?,
+        )
+        .map_err(|_| state_corrupt("module state schema id is invalid"))?,
         schema_version: SchemaVersion::try_new(
             row.try_get::<String, _>("schema_version")
                 .map_err(state_database_error)?,

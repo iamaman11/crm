@@ -243,6 +243,7 @@ version = "0.1.0"
 dependencies = [
  "crm-capability-runtime",
  "crm-core-contracts",
+ "crm-core-events",
  "crm-module-sdk",
  "serde",
  "serde_json",
@@ -255,7 +256,7 @@ dependencies = [
 name = "crm-core-events"
 version = "0.1.0"
 dependencies = [
- "crm-core-contracts",
+ "crm-module-sdk",
 ]
 
 [[package]]

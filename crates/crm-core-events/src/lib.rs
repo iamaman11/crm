@@ -274,7 +274,10 @@ mod tests {
 
         let result = run_ready(runtime.deliver(lookup())).unwrap();
 
-        assert_eq!(result.disposition, EventDeliveryDisposition::SkippedInactive);
+        assert_eq!(
+            result.disposition,
+            EventDeliveryDisposition::SkippedInactive
+        );
         assert_eq!(*reader.calls.lock().unwrap(), 0);
         assert_eq!(*handler.calls.lock().unwrap(), 0);
     }
