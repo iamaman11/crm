@@ -78,3 +78,59 @@ jobs:
           path: tests.txt
           if-no-files-found: error
           retention-days: 7
+
+  phase6h-roadmap-sync:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/phase6h-query-ingress-v1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/phase6h-query-ingress-v1
+          fetch-depth: 0
+      - name: Mark Phase 6H complete in normative roadmap
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('docs/IMPLEMENTATION_ROADMAP.md')
+          text = path.read_text()
+          marker = '''### Next implementation sequence
+
+          1. **6H — permission-bound queries:** get/list paths with field/resource authorization and stable opaque cursor pagination.
+          2. **6I — optional Sales–Activities link module:** source events consumed through governed ports; task creation through `CapabilityClient` only; deterministic delivery deduplication; independent disable and uninstall.
+          3. **6J — rebuildable projections:** deal timeline and task-status projections with tenant checkpoints, retries, replay and deletion/rebuild equivalence.
+          4. **6K — complete Phase 6 E2E:** cross-tenant denial, stale conflict, duplicate delivery, disabled link, transaction rollback/fault injection and projection rebuild.
+          '''
+          replacement = '''### Completed slice 6H — permission-bound production queries
+
+          Authoritative PRs: #42, #43, #44, #45 and #46. Issue: #41.
+
+          - Added HMAC-SHA256 opaque cursor tokens bound to tenant, actor, exact query/version, resource type, normalized filters, sort and effective page size.
+          - Added FORCE-RLS tenant-scoped PostgreSQL get/list readers with deterministic keyset ordering and no mutation evidence.
+          - Added a dedicated read-only `QueryGateway` path with exact-version capability binding and live authorization immediately before authoritative read execution.
+          - Added four production query coordinates: `sales.deal.get`, `sales.deal.list`, `activities.task.get` and `activities.task.list`.
+          - Added independent resource/field visibility grants, non-disclosing resource denial and field masking before Protobuf serialization.
+          - Added authenticated HTTP and gRPC query ingress with query-only execution context; idempotency keys and business-transaction IDs are structurally absent from the query contract.
+          - Proved cross-tenant denial, cursor tamper/binding rejection, live authorization revocation between pages, HTTP/gRPC authentication and tenant failures, and zero record/outbox/audit/idempotency/business-transaction evidence delta across reads.
+          - Preserved a separate seven-capability mutation catalog so read coordinates cannot enter the transactional mutation gateway.
+
+          ### Next implementation sequence
+
+          1. **6I — optional Sales–Activities link module:** source events consumed through governed ports; task creation through `CapabilityClient` only; deterministic delivery deduplication; independent disable and uninstall.
+          2. **6J — rebuildable projections:** deal timeline and task-status projections with tenant checkpoints, retries, replay and deletion/rebuild equivalence.
+          3. **6K — complete Phase 6 E2E:** cross-tenant denial, stale conflict, duplicate delivery, disabled link, transaction rollback/fault injection and projection rebuild.
+          '''
+          if marker not in text:
+              raise SystemExit('Phase 6 next-sequence marker not found')
+          path.write_text(text.replace(marker, replacement, 1))
+      - name: Commit roadmap only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/IMPLEMENTATION_ROADMAP.md
+          git diff --cached --quiet && exit 0
+          git commit -m "docs(roadmap): mark Phase 6H permission-bound queries complete"
+          git push origin HEAD:feature/phase6h-query-ingress-v1
