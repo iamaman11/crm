@@ -1,11 +1,13 @@
 import { useMemo, useSyncExternalStore, useState } from "react";
 import {
   GovernedClient,
+  GovernedMetadataClient,
   ProductClientError,
   type SearchHit,
   type SessionState,
 } from "@ultimate-crm/client";
 import { AppShell, FeedbackPanel, PageHeader } from "@ultimate-crm/ui";
+import { AdminStudioPage } from "./AdminStudioPage";
 import { createDevelopmentSessionStore } from "./developmentSession";
 import {
   canNavigateToRoute,
@@ -20,6 +22,10 @@ if (import.meta.env.DEV) {
   window.sessionStore = sessionStore;
 }
 const client = new GovernedClient({
+  baseUrl: window.location.origin,
+  sessionProvider: sessionStore,
+});
+const metadataClient = new GovernedMetadataClient({
   baseUrl: window.location.origin,
   sessionProvider: sessionStore,
 });
@@ -100,15 +106,19 @@ function RouteContent({
     return <SearchPage />;
   }
 
+  if (route.id === "admin-studio") {
+    return <AdminStudioPage client={metadataClient} />;
+  }
+
   return (
     <>
       <PageHeader
-        eyebrow="Phase 7C"
+        eyebrow="Phase 7"
         title="Product shell foundation"
-        description="A typed product-plane boundary for future Admin Studio and expert CRM domain waves. Business invariants, authorization and authoritative state remain on the governed backend path."
+        description="A typed product-plane boundary for Admin Studio and expert CRM domain waves. Business invariants, authorization and authoritative state remain on the governed backend path."
       />
       <FeedbackPanel tone="success" title="Shell composition is active">
-        Session state, permission-aware navigation, design-system primitives and the generated client boundary are now separate product-plane responsibilities.
+        Session state, permission-aware navigation, design-system primitives and governed typed clients are separate product-plane responsibilities.
       </FeedbackPanel>
     </>
   );
@@ -134,8 +144,14 @@ function developmentAccessSnapshot(): NavigationAccessSnapshot {
       .filter(Boolean),
   );
   const capabilities = new Set<KnownProductCapability>();
-  if (configured.has("search.global.query")) {
-    capabilities.add("search.global.query");
+  const knownCapabilities: readonly KnownProductCapability[] = [
+    "search.global.query",
+    "metadata.activation.get",
+  ];
+  for (const capability of knownCapabilities) {
+    if (configured.has(capability)) {
+      capabilities.add(capability);
+    }
   }
   return { capabilities };
 }
@@ -261,4 +277,3 @@ function SearchPage() {
     </div>
   );
 }
-

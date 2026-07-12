@@ -20,6 +20,17 @@ export type {
 } from "./metadata";
 
 export {
+  createObjectMetadataDefinitionInput,
+  MetadataAuthoringError,
+  METADATA_DEFINITION_SCHEMA_VERSION,
+} from "./metadataAuthoring";
+
+export type {
+  MetadataAuthoringField,
+  ObjectMetadataDraft,
+} from "./metadataAuthoring";
+
+export {
   MutableSessionStore,
   SessionUnavailableError,
   requireAuthenticatedSession,

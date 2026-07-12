@@ -139,7 +139,7 @@ echo "Starting Vite dev server..."
 VITE_CRM_GRPC_WEB_TARGET=http://127.0.0.1:9090 \
 VITE_CRM_DEV_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
 VITE_CRM_DEV_TENANT_ID=tenant-a \
-VITE_CRM_DEV_CAPABILITIES=search.global.query \
+VITE_CRM_DEV_CAPABILITIES=search.global.query,metadata.activation.get \
 pnpm --filter @ultimate-crm/web dev --force --host 127.0.0.1 &
 VITE_PID=$!
 
