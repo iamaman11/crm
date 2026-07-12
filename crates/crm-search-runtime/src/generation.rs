@@ -148,7 +148,7 @@ impl SearchReindexCoordinator {
                 .await
                 .map(SearchGenerationAction::CaughtUp);
         }
-        self.reindex(tenant_id, page_size).await
+        self.reindex_with_active(tenant_id, page_size, active).await
     }
 
     pub async fn reindex(
@@ -156,6 +156,25 @@ impl SearchReindexCoordinator {
         tenant_id: TenantId,
         page_size: u32,
     ) -> Result<SearchGenerationAction, SdkError> {
+        let active = self
+            .generations
+            .active_generation(tenant_id.clone(), self.index_id.clone())
+            .await?;
+        self.reindex_with_active(tenant_id, page_size, active).await
+    }
+
+    async fn reindex_with_active(
+        &self,
+        tenant_id: TenantId,
+        page_size: u32,
+        active: Option<SearchIndexGeneration>,
+    ) -> Result<SearchGenerationAction, SdkError> {
+        if active
+            .as_ref()
+            .is_some_and(|generation| generation.generation_id == self.generation_id)
+        {
+            return Err(active_generation_rebuild_conflict());
+        }
         self.generations
             .register_building_generation(SearchIndexGeneration {
                 tenant_id: tenant_id.clone(),
@@ -201,6 +220,15 @@ impl SearchReindexCoordinator {
             }
         }
     }
+}
+
+fn active_generation_rebuild_conflict() -> SdkError {
+    crm_module_sdk::SdkError::new(
+        "SEARCH_REINDEX_ACTIVE_GENERATION_CONFLICT",
+        crm_module_sdk::ErrorCategory::InvalidArgument,
+        false,
+        "A full search rebuild requires a new generation identifier.",
+    )
 }
 
 fn validate_coordinate(value: &str) -> Result<(), SdkError> {
