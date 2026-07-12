@@ -14,15 +14,25 @@ INSERT INTO crm.module_versions (
   published_at,
   publisher_id
 )
-VALUES (
-  'crm.test',
-  '1.0.0',
-  'crm.cjson/v1',
-  decode(repeat('ab', 32), 'hex'),
-  '{}'::jsonb,
-  clock_timestamp(),
-  'platform'
-);
+VALUES
+  (
+    'crm.test',
+    '1.0.0',
+    'crm.cjson/v1',
+    decode(repeat('ab', 32), 'hex'),
+    '{}'::jsonb,
+    clock_timestamp(),
+    'platform'
+  ),
+  (
+    'crm.metadata',
+    '1.0.0',
+    'crm.cjson/v1',
+    decode(repeat('cd', 32), 'hex'),
+    '{"platform":"metadata"}'::jsonb,
+    clock_timestamp(),
+    'platform'
+  );
 
 INSERT INTO crm.capability_registry (
   capability_id,
@@ -42,24 +52,79 @@ INSERT INTO crm.capability_registry (
   bulk_allowed,
   export_allowed
 )
-VALUES (
-  'test.record.mutate',
-  '1.0.0',
-  'crm.test',
-  '1.0.0',
-  'crm.test.v1.TestService',
-  'Mutate',
-  decode(repeat('01', 32), 'hex'),
-  decode(repeat('02', 32), 'hex'),
-  'medium',
-  true,
-  true,
-  false,
-  false,
-  false,
-  false,
-  false
-);
+VALUES
+  (
+    'test.record.mutate',
+    '1.0.0',
+    'crm.test',
+    '1.0.0',
+    'crm.test.v1.TestService',
+    'Mutate',
+    decode(repeat('01', 32), 'hex'),
+    decode(repeat('02', 32), 'hex'),
+    'medium',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false
+  ),
+  (
+    'metadata.bundle.publish',
+    '1.0.0',
+    'crm.metadata',
+    '1.0.0',
+    'crm.metadata.v1.MetadataCapabilityService',
+    'PublishMetadataBundle',
+    decode(repeat('03', 32), 'hex'),
+    decode(repeat('04', 32), 'hex'),
+    'high',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false
+  ),
+  (
+    'metadata.revision.activate',
+    '1.0.0',
+    'crm.metadata',
+    '1.0.0',
+    'crm.metadata.v1.MetadataCapabilityService',
+    'ActivateMetadataRevision',
+    decode(repeat('05', 32), 'hex'),
+    decode(repeat('06', 32), 'hex'),
+    'high',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false
+  ),
+  (
+    'metadata.revision.rollback',
+    '1.0.0',
+    'crm.metadata',
+    '1.0.0',
+    'crm.metadata.v1.MetadataCapabilityService',
+    'RollbackMetadataRevision',
+    decode(repeat('07', 32), 'hex'),
+    decode(repeat('08', 32), 'hex'),
+    'high',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false
+  );
 
 DO $$
 BEGIN
