@@ -1,0 +1,101 @@
+name: Metadata Runtime CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-core-data/**"
+      - "crates/crm-metadata-runtime/**"
+      - "crates/crm-metadata-schema/**"
+      - "database/migrations/0010_metadata_publication_runtime.*.sql"
+      - "database/tests/0001_platform_foundation.sql"
+      - ".github/workflows/metadata-runtime.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-core-data/**"
+      - "crates/crm-metadata-runtime/**"
+      - "crates/crm-metadata-schema/**"
+      - "database/migrations/0010_metadata_publication_runtime.*.sql"
+      - "database/tests/0001_platform_foundation.sql"
+      - ".github/workflows/metadata-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-metadata-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_metadata_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_metadata_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_metadata_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply clean migrations through metadata runtime
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0010_metadata_publication_runtime.up.sql
+      - name: Build tenant fixtures and runtime grants
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify durable tenant-scoped metadata publication runtime
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_metadata_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_metadata_test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-core-data --features postgres-integration --test postgres_metadata -- --nocapture 2>&1 | tee database/postgres-metadata.log
+      - name: Verify metadata migration rollback and reapply
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0010_metadata_publication_runtime.down.sql
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'crm' AND c.relname IN ('metadata_revisions_v2','metadata_revision_documents','metadata_revision_dependencies','metadata_activation_heads','metadata_rollback_stack','metadata_transitions')")"
+          test "${count}" = "0"
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0010_metadata_publication_runtime.up.sql
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'crm' AND c.relname IN ('metadata_revisions_v2','metadata_revision_documents','metadata_revision_dependencies','metadata_activation_heads','metadata_rollback_stack','metadata_transitions')")"
+          test "${count}" = "6"
+      - name: Upload metadata runtime diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metadata-runtime-diagnostics
+          path: |
+            database/
+            crates/crm-core-data/
+            crates/crm-metadata-runtime/
+          if-no-files-found: error
+          retention-days: 7
