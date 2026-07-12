@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+# Platform-only runtime: no PostgreSQL or owner-module implementation dependencies.
 [dependencies]
 crm-core-events = { path = "../crm-core-events" }
 crm-module-sdk = { path = "../crm-module-sdk" }
