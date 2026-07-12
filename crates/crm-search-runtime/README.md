@@ -14,6 +14,8 @@ A candidate is suppressed when the current actor cannot see the resource or when
 
 The candidate store returns the exact fields that matched according to backend query semantics. The permission-aware runtime does not re-interpret the query with a second matcher; it intersects backend match evidence with live field visibility before disclosure.
 
+Backend match evidence is field-local: the full backend query must match at least one individual searchable field. A backend must not manufacture a candidate by combining query terms across different fields and then attribute that match to a field that did not independently satisfy the query.
+
 ## Reindex model
 
 Search documents are stored as generalized projection documents. Each search generation has its own projection identity and therefore reuses the shared projection checkpoint/replay runtime.
