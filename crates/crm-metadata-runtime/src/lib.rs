@@ -347,9 +347,9 @@ impl MetadataImpactReport {
     }
 
     pub fn requires_review(&self) -> bool {
-        self.changes.iter().any(|change| {
-            change.severity >= MetadataImpactSeverity::ReviewRequired
-        })
+        self.changes
+            .iter()
+            .any(|change| change.severity >= MetadataImpactSeverity::ReviewRequired)
     }
 }
 
@@ -598,13 +598,16 @@ impl MetadataCatalog {
                 tenant_id.to_string(),
             )
         })?;
-        let replaced = state.active_revision.replace(previous.clone()).ok_or_else(|| {
-            MetadataError::new(
-                MetadataErrorCode::RollbackUnavailable,
-                "No active metadata revision is available for rollback.",
-                tenant_id.to_string(),
-            )
-        })?;
+        let replaced = state
+            .active_revision
+            .replace(previous.clone())
+            .ok_or_else(|| {
+                MetadataError::new(
+                    MetadataErrorCode::RollbackUnavailable,
+                    "No active metadata revision is available for rollback.",
+                    tenant_id.to_string(),
+                )
+            })?;
         state.generation = next_generation;
         Ok(RollbackResult {
             generation: next_generation,
@@ -639,11 +642,7 @@ pub struct MetadataError {
 }
 
 impl MetadataError {
-    fn new(
-        code: MetadataErrorCode,
-        safe_message: &'static str,
-        detail: impl Into<String>,
-    ) -> Self {
+    fn new(code: MetadataErrorCode, safe_message: &'static str, detail: impl Into<String>) -> Self {
         Self {
             code,
             safe_message,
@@ -654,15 +653,17 @@ impl MetadataError {
 
 impl fmt::Display for MetadataError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{} ({:?}): {}", self.safe_message, self.code, self.detail)
+        write!(
+            formatter,
+            "{} ({:?}): {}",
+            self.safe_message, self.code, self.detail
+        )
     }
 }
 
 impl Error for MetadataError {}
 
-fn metadata_revision_id(
-    documents: &BTreeMap<MetadataKey, MetadataDocument>,
-) -> MetadataRevisionId {
+fn metadata_revision_id(documents: &BTreeMap<MetadataKey, MetadataDocument>) -> MetadataRevisionId {
     let mut hasher = Sha256::new();
     hash_bytes(&mut hasher, METADATA_REVISION_HASH_PROFILE.as_bytes());
     hash_usize(&mut hasher, documents.len());
@@ -819,14 +820,24 @@ mod tests {
         let original = catalog.publish(
             bundle(vec![
                 document(MetadataKind::Object, "crm.sales.deal", "object-v1", vec![]),
-                document(MetadataKind::Field, "crm.sales.deal.name", "field-v1", vec![]),
+                document(
+                    MetadataKind::Field,
+                    "crm.sales.deal.name",
+                    "field-v1",
+                    vec![],
+                ),
             ]),
             100,
         );
         let candidate = catalog.publish(
             bundle(vec![
                 document(MetadataKind::Object, "crm.sales.deal", "object-v2", vec![]),
-                document(MetadataKind::Layout, "crm.sales.deal.default", "layout-v1", vec![]),
+                document(
+                    MetadataKind::Layout,
+                    "crm.sales.deal.default",
+                    "layout-v1",
+                    vec![],
+                ),
             ]),
             200,
         );
@@ -903,7 +914,10 @@ mod tests {
         assert_eq!(rollback.generation, 3);
         assert_eq!(rollback.active_revision, first.revision_id);
         assert_eq!(rollback.replaced_revision, second.revision_id);
-        assert_eq!(catalog.tenant_state(&tenant).active_revision, Some(first.revision_id));
+        assert_eq!(
+            catalog.tenant_state(&tenant).active_revision,
+            Some(first.revision_id)
+        );
         assert!(catalog.revision(&second.revision_id).is_ok());
     }
 
