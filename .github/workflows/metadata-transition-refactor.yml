@@ -105,8 +105,15 @@ jobs:
         )
         .await?;''',
               ),
-              (
-                  '''async fn insert_transition(
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one call-site match, found {count}: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+
+          old_function = '''async fn insert_transition(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     action: MetadataTransitionAction,
@@ -116,8 +123,49 @@ jobs:
     to_revision: &MetadataRevisionId,
     occurred_at_unix_nanos: i64,
 ) -> Result<(), MetadataPersistenceError> {
-    let transition_id = transition_id(context, action, generation, to_revision)?;''',
-                  '''struct MetadataTransitionWrite<'a> {
+    let transition_id = transition_id(context, action, generation, to_revision)?;
+    sqlx::query(
+        r#"
+        INSERT INTO crm.metadata_transitions (
+          tenant_id,
+          transition_id,
+          action,
+          generation,
+          rollback_depth,
+          from_revision_id,
+          to_revision_id,
+          actor_id,
+          request_id,
+          capability_id,
+          capability_version,
+          business_transaction_id,
+          occurred_at
+        )
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+          TIMESTAMPTZ 'epoch' + ($13::bigint / 1000) * INTERVAL '1 microsecond'
+        )
+        "#,
+    )
+    .bind(context.execution.tenant_id.as_str())
+    .bind(transition_id)
+    .bind(action.as_str())
+    .bind(database_i64(generation, "generation")?)
+    .bind(database_i64(rollback_depth, "rollback depth")?)
+    .bind(from_revision.map(|revision| revision.as_bytes().as_slice()))
+    .bind(to_revision.as_bytes().as_slice())
+    .bind(context.execution.actor_id.as_str())
+    .bind(context.execution.request_id.as_str())
+    .bind(context.execution.capability_id.as_str())
+    .bind(context.execution.capability_version.as_str())
+    .bind(context.execution.business_transaction_id.as_str())
+    .bind(occurred_at_unix_nanos)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}'''
+
+          new_function = '''struct MetadataTransitionWrite<'a> {
     action: MetadataTransitionAction,
     generation: u64,
     rollback_depth: usize,
@@ -136,37 +184,59 @@ async fn insert_transition(
         transition.action,
         transition.generation,
         transition.to_revision,
-    )?;''',
-              ),
-              ('.bind(action.as_str())', '.bind(transition.action.as_str())'),
-              (
-                  '.bind(database_i64(generation, "generation")?)',
-                  '.bind(database_i64(transition.generation, "generation")?)',
-              ),
-              (
-                  '.bind(database_i64(rollback_depth, "rollback depth")?)',
-                  '.bind(database_i64(transition.rollback_depth, "rollback depth")?)',
-              ),
-              (
-                  '.bind(from_revision.map(|revision| revision.as_bytes().as_slice()))',
-                  '.bind(transition.from_revision.map(|revision| revision.as_bytes().as_slice()))',
-              ),
-              (
-                  '.bind(to_revision.as_bytes().as_slice())',
-                  '.bind(transition.to_revision.as_bytes().as_slice())',
-              ),
-              ('.bind(occurred_at_unix_nanos)', '.bind(transition.occurred_at_unix_nanos)'),
-          ]
+    )?;
+    sqlx::query(
+        r#"
+        INSERT INTO crm.metadata_transitions (
+          tenant_id,
+          transition_id,
+          action,
+          generation,
+          rollback_depth,
+          from_revision_id,
+          to_revision_id,
+          actor_id,
+          request_id,
+          capability_id,
+          capability_version,
+          business_transaction_id,
+          occurred_at
+        )
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+          TIMESTAMPTZ 'epoch' + ($13::bigint / 1000) * INTERVAL '1 microsecond'
+        )
+        "#,
+    )
+    .bind(context.execution.tenant_id.as_str())
+    .bind(transition_id)
+    .bind(transition.action.as_str())
+    .bind(database_i64(transition.generation, "generation")?)
+    .bind(database_i64(transition.rollback_depth, "rollback depth")?)
+    .bind(
+        transition
+            .from_revision
+            .map(|revision| revision.as_bytes().as_slice()),
+    )
+    .bind(transition.to_revision.as_bytes().as_slice())
+    .bind(context.execution.actor_id.as_str())
+    .bind(context.execution.request_id.as_str())
+    .bind(context.execution.capability_id.as_str())
+    .bind(context.execution.capability_version.as_str())
+    .bind(context.execution.business_transaction_id.as_str())
+    .bind(transition.occurred_at_unix_nanos)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}'''
 
-          for old, new in replacements:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected exactly one match, found {count}: {old[:80]!r}")
-              text = text.replace(old, new, 1)
-
+          count = text.count(old_function)
+          if count != 1:
+              raise SystemExit(f"expected exactly one insert_transition function, found {count}")
+          text = text.replace(old_function, new_function, 1)
           path.write_text(text)
           PY
-          cargo fmt --all -- --check || cargo fmt --all
+          cargo fmt --all
           git diff --check
       - name: Commit refactor
         run: |
