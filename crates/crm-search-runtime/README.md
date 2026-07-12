@@ -27,6 +27,8 @@ register building generation
 
 The previous generation remains queryable while a replacement is building. No second search-specific replay/checkpoint mechanism exists.
 
+A full rebuild must use a new generation identifier. Rebuilding the currently active generation in place is rejected before projection reset, so a repair cannot erase the live search view and expose an empty or partially replayed index. Generation coordinates are immutable once a generation leaves the `building` state.
+
 ## Backend boundary
 
 `SearchCandidateStore` is replaceable. The first adapter uses PostgreSQL full-text search over rebuildable projection documents, while the runtime contract keeps ranking, cursor binding and live permission filtering independent from PostgreSQL implementation details.
