@@ -40,3 +40,19 @@ text = text.replace(
 )
 
 path.write_text(text)
+
+search_path = Path("crates/crm-search-runtime/src/lib.rs")
+search = search_path.read_text()
+redundant = """                let next_after = has_more && !filtered.is_empty().then(|| ());
+                let next_after = if has_more {
+                    filtered.last().map(SearchCandidate::cursor)
+                } else {
+                    None
+                };
+                let _ = next_after;
+"""
+if search.count(redundant) != 1:
+    raise RuntimeError(
+        f"search pagination compile-fix anchor: expected 1, found {search.count(redundant)}"
+    )
+search_path.write_text(search.replace(redundant, "", 1))
