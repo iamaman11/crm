@@ -5,7 +5,10 @@ import {
   type Interceptor,
 } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
-import { ApplicationGatewayService } from "../gen/crm/gateway/v1/gateway_pb";
+import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
+import { ApplicationGatewayService, TypedPayloadSchema } from "../gen/crm/gateway/v1/gateway_pb";
+import { SearchRequestSchema, SearchResponseSchema, type SearchHit } from "../gen/crm/search/v1/search_pb";
+import { CONTRACT_HASHES } from "./contract_hashes";
 import {
   requireAuthenticatedSession,
   type SessionProvider,
@@ -54,31 +57,150 @@ export interface GovernedGatewayClientOptions {
   idFactory?: () => string;
 }
 
-export function createGovernedGatewayClient(options: GovernedGatewayClientOptions) {
-  const idFactory = options.idFactory ?? defaultRequestId;
-  const sessionInterceptor: Interceptor = (next) => async (request) => {
-    const session = requireAuthenticatedSession(options.sessionProvider.getSnapshot());
-    const requestId = idFactory();
+export interface SearchGlobalOptions {
+  text: string;
+  resourceTypes: string[];
+  pageSize: number;
+  cursor: string;
+}
 
-    request.header.set("authorization", `Bearer ${session.bearerToken}`);
-    request.header.set(TENANT_HEADER, session.tenantId);
-    request.header.set(REQUEST_ID_HEADER, requestId);
-    request.header.set(CORRELATION_ID_HEADER, requestId);
-    request.header.set(TRACE_ID_HEADER, requestId);
+export interface SearchGlobalResult {
+  hits: SearchHit[];
+  nextCursor: string;
+}
+
+export class GovernedClient {
+  private readonly gatewayClient: ReturnType<typeof createClient>;
+
+  public constructor(options: GovernedGatewayClientOptions) {
+    const idFactory = options.idFactory ?? defaultRequestId;
+    const sessionInterceptor: Interceptor = (next) => async (request) => {
+      const session = requireAuthenticatedSession(options.sessionProvider.getSnapshot());
+      const requestId = idFactory();
+
+      request.header.set("authorization", `Bearer ${session.bearerToken}`);
+      request.header.set(TENANT_HEADER, session.tenantId);
+      request.header.set(REQUEST_ID_HEADER, requestId);
+      request.header.set(CORRELATION_ID_HEADER, requestId);
+      request.header.set(TRACE_ID_HEADER, requestId);
+
+      try {
+        return await next(request);
+      } catch (error) {
+        throw mapGatewayError(error);
+      }
+    };
+
+    const transport = createGrpcWebTransport({
+      baseUrl: normalizeBaseUrl(options.baseUrl),
+      interceptors: [sessionInterceptor],
+    });
+
+    this.gatewayClient = createClient(ApplicationGatewayService, transport);
+  }
+
+  /**
+   * Internal helper method to perform query calls directly, exposed for unit tests.
+   */
+  public async internalRawQuery(options: {
+    ownerModuleId: string;
+    capabilityId: string;
+    capabilityVersion: string;
+    input: any;
+  }) {
+    return await (this.gatewayClient as any).query(options);
+  }
+
+  public async searchGlobal(options: SearchGlobalOptions): Promise<SearchGlobalResult> {
+    const messageName = "crm.search.v1.SearchRequest";
+    const descriptorHash = CONTRACT_HASHES[messageName];
+    if (!descriptorHash) {
+      throw new ProductClientError({
+        kind: "internal",
+        message: `Missing local contract descriptor hash for ${messageName}`,
+        retryable: false,
+      });
+    }
+
+    // 1. Construct SearchRequest
+    const searchRequest = create(SearchRequestSchema, {
+      text: options.text,
+      resourceTypes: options.resourceTypes,
+      pageSize: options.pageSize,
+      cursor: options.cursor,
+    });
+
+    // 2. Encode to binary payload
+    const payloadBytes = toBinary(SearchRequestSchema, searchRequest);
+
+    // 3. Construct governed gateway QueryRequest input TypedPayload
+    const inputPayload = create(TypedPayloadSchema, {
+      ownerModuleId: "crm.search",
+      schemaId: "crm.search.v1.SearchRequest",
+      schemaVersion: "1.0.0",
+      descriptorHash,
+      dataClass: "confidential",
+      encoding: "protobuf",
+      maximumSizeBytes: 1048576n,
+      retentionPolicyId: "standard",
+      payload: payloadBytes,
+    });
 
     try {
-      return await next(request);
+      // 4. Invoke governed ApplicationGatewayService.query
+      const response = await (this.gatewayClient as any).query({
+        ownerModuleId: "crm.search",
+        capabilityId: "search.global.query",
+        capabilityVersion: "1.0.0",
+        input: inputPayload,
+      });
+
+      if (!response.output) {
+        throw new ProductClientError({
+          kind: "internal",
+          message: "Gateway response did not contain an output payload.",
+          retryable: false,
+        });
+      }
+
+      // Verify returned descriptor hash matches local expected response contract hash to prevent contract drift
+      const expectedResponseName = "crm.search.v1.SearchResponse";
+      const expectedResponseHash = CONTRACT_HASHES[expectedResponseName];
+      if (!expectedResponseHash) {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Missing local contract descriptor hash for ${expectedResponseName}`,
+          retryable: false,
+        });
+      }
+
+      const responseHash = response.output.descriptorHash;
+      if (!equalUint8Arrays(responseHash, expectedResponseHash)) {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract drift detected! Expected ${expectedResponseName} descriptor hash does not match server response.`,
+          retryable: false,
+        });
+      }
+
+      // 5. Decode response
+      const searchResponse = fromBinary(SearchResponseSchema, response.output.payload);
+      return {
+        hits: searchResponse.hits,
+        nextCursor: searchResponse.nextCursor,
+      };
     } catch (error) {
       throw mapGatewayError(error);
     }
-  };
+  }
+}
 
-  const transport = createGrpcWebTransport({
-    baseUrl: normalizeBaseUrl(options.baseUrl),
-    interceptors: [sessionInterceptor],
-  });
-
-  return createClient(ApplicationGatewayService, transport);
+function equalUint8Arrays(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 export function mapGatewayError(error: unknown): ProductClientError {

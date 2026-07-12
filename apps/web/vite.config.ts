@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -17,6 +18,9 @@ export default defineConfig(({ mode }) => {
           changeOrigin: false,
         },
       },
+    },
+    test: {
+      exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
     },
   };
 });

@@ -1,14 +1,9 @@
 import { useMemo, useSyncExternalStore, useState } from "react";
 import {
-  createGovernedGatewayClient,
-  TypedPayloadSchema,
-  SearchRequestSchema,
-  SearchResponseSchema,
-  create,
-  toBinary,
-  fromBinary,
-  type SessionState,
+  GovernedClient,
+  ProductClientError,
   type SearchHit,
+  type SessionState,
 } from "@ultimate-crm/client";
 import { AppShell, FeedbackPanel, PageHeader } from "@ultimate-crm/ui";
 import { createDevelopmentSessionStore } from "./developmentSession";
@@ -21,7 +16,10 @@ import {
 } from "./routes";
 
 const sessionStore = createDevelopmentSessionStore();
-const client = createGovernedGatewayClient({
+if (import.meta.env.DEV) {
+  (window as any).sessionStore = sessionStore;
+}
+const client = new GovernedClient({
   baseUrl: window.location.origin,
   sessionProvider: sessionStore,
 });
@@ -153,45 +151,24 @@ function SearchPage() {
     setLoading(true);
     setError(null);
     try {
-      const searchRequest = create(SearchRequestSchema, {
+      const response = await client.searchGlobal({
         text: queryText,
-        resourceTypes: [],
+        resourceTypes: ["sales.deal", "activities.task"],
         pageSize: 25,
         cursor: "",
       });
-      const searchRequestBytes = toBinary(SearchRequestSchema, searchRequest);
-      const searchRequestDescriptorHash = new Uint8Array([
-        0x6e, 0x09, 0x97, 0x8a, 0xe7, 0x42, 0x43, 0x21, 0x2d, 0xf9, 0xf7, 0xb5, 0x8c, 0xb4, 0x01, 0xfd, 0xef, 0x0e, 0x60, 0x98, 0xad, 0xdd, 0x57, 0xb4, 0xae, 0xc7, 0x0c, 0x96, 0x57, 0xd3, 0x42, 0x61
-      ]);
-
-      const input = create(TypedPayloadSchema, {
-        ownerModuleId: "crm.search",
-        schemaId: "crm.search.v1.SearchRequest",
-        schemaVersion: "1.0.0",
-        descriptorHash: searchRequestDescriptorHash,
-        dataClass: "confidential",
-        encoding: "protobuf",
-        maximumSizeBytes: 1024n,
-        retentionPolicyId: "standard",
-        payload: searchRequestBytes,
-      });
-
-      const response = await client.query({
-        ownerModuleId: "crm.search",
-        capabilityId: "search.global.query",
-        capabilityVersion: "1.0.0",
-        input,
-      });
-
-      if (!response.output) {
-        throw new Error("Missing query output");
-      }
-
-      const searchResponse = fromBinary(SearchResponseSchema, response.output.payload);
-      setResults(searchResponse.hits);
+      setResults(response.hits);
     } catch (err) {
       console.error(err);
-      if (err instanceof Error) {
+      if (err instanceof ProductClientError) {
+        if (err.kind === "unauthenticated") {
+          setError("Your session has expired. Please sign in again.");
+        } else if (err.kind === "permission_denied") {
+          setError("You do not have permission to perform this query.");
+        } else {
+          setError(err.message);
+        }
+      } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("An unexpected error occurred.");

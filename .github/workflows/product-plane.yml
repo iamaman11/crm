@@ -13,6 +13,11 @@ on:
       - "packages/ui/**"
       - ".github/workflows/product-plane.yml"
       - "scripts/run_e2e.sh"
+      - "proto/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-proto-contracts/**"
+      - "services/crm-api/**"
+      - "database/**"
   pull_request:
     paths:
       - "package.json"
@@ -25,6 +30,11 @@ on:
       - "packages/ui/**"
       - ".github/workflows/product-plane.yml"
       - "scripts/run_e2e.sh"
+      - "proto/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-proto-contracts/**"
+      - "services/crm-api/**"
+      - "database/**"
 
 permissions:
   contents: read

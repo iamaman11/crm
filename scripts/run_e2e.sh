@@ -1,41 +1,64 @@
 #!/bin/bash
 set -euo pipefail
 
-# Ensure cleanup on exit
+# Ephemeral unique DB name
+DB_NAME="crm_e2e_$(date +%s)_$RANDOM"
+
+# Configuration fallback
+E2E_DB_HOST="${E2E_DB_HOST:-127.0.0.1}"
+E2E_DB_PORT="${E2E_DB_PORT:-5432}"
+E2E_DB_USER="${E2E_DB_USER:-postgres}"
+E2E_DB_PASSWORD="${E2E_DB_PASSWORD:-postgres}"
+
+echo "Using unique ephemeral E2E database: ${DB_NAME}"
+
+# Ensure cleanup of our unique database on exit
 cleanup() {
   echo "Cleaning up background services..."
   jobs -p | xargs -r kill 2>/dev/null || true
+  sleep 1
+  echo "Dropping ephemeral database ${DB_NAME}..."
+  PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d postgres -c "DROP DATABASE IF EXISTS ${DB_NAME};" || true
 }
 trap cleanup EXIT
 
 echo "Starting local integration E2E prep..."
 
-# 1. Reset database to a clean state
-echo "Resetting database crm_test..."
-PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d postgres -c "DROP DATABASE IF EXISTS crm_test;"
-PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE crm_test;"
+# 1. Create unique database
+PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d postgres -c "CREATE DATABASE ${DB_NAME};"
 
+# 2. Apply migrations and seeds to the new database
 echo "Applying migrations and seeds..."
 for f in database/migrations/*up.sql; do
-  PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d crm_test -f "$f"
+  PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -f "$f"
 done
-PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d crm_test -f database/tests/0001_platform_foundation.sql
-PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d crm_test -f database/tests/0003_sales_activities_adapters.sql
-PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d crm_test -f database/tests/0004_search_runtime_role_grants.sql
-PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d crm_test -c "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'" || true
-PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d crm_test -c "ALTER ROLE postgres PASSWORD 'postgres'" || true
+PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -f database/tests/0001_platform_foundation.sql
+PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -f database/tests/0003_sales_activities_adapters.sql
+PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -f database/tests/0004_search_runtime_role_grants.sql
 
-# 2. Compile backend
+# 3. Create the test role only if it does not exist, without changing any global password settings
+PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -c "
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'crm_app_test') THEN
+    CREATE ROLE crm_app_test WITH LOGIN PASSWORD 'crm_app_test';
+  END IF;
+END
+\$\$;
+"
+
+# 4. Compile backend
 cargo build -p crm-api
 
-# 3. Seed database by running process_e2e once
-DATABASE_URL=postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test \
-ADMIN_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/crm_test \
-cargo test -p crm-api --test process_e2e
+# 5. Seed database by running seed_e2e_fixture once against our unique database
+echo "Seeding unique database via seed_e2e_fixture..."
+DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
+ADMIN_DATABASE_URL="postgres://${E2E_DB_USER}:${E2E_DB_PASSWORD}@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
+cargo test -p crm-api --test seed_e2e_fixture
 
-# 4. Start crm-api in background
+# 6. Start crm-api in background pointing to our unique database
 echo "Starting crm-api service..."
-CRM_DATABASE_URL=postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test \
+CRM_DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
 CRM_API_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
 CRM_API_ACTOR_ID=actor-a \
 CRM_API_TENANTS=tenant-a \
@@ -53,7 +76,7 @@ until curl -s http://127.0.0.1:8080/readyz > /dev/null; do
 done
 echo "crm-api is ready!"
 
-# 5. Start Vite dev server in background
+# 7. Start Vite dev server in background
 echo "Starting Vite dev server..."
 VITE_CRM_GRPC_WEB_TARGET=http://127.0.0.1:9090 \
 VITE_CRM_DEV_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
@@ -68,7 +91,7 @@ until curl -s http://127.0.0.1:5173 > /dev/null; do
 done
 echo "Vite dev server is ready!"
 
-# 6. Run Playwright E2E tests
+# 8. Run Playwright E2E tests
 echo "Running Playwright E2E tests..."
 pnpm exec playwright install chromium
 pnpm --filter @ultimate-crm/web exec playwright test --config=playwright.config.ts

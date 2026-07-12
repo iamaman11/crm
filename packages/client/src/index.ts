@@ -1,5 +1,26 @@
-export * from "./gateway";
-export * from "./session";
-export * from "../gen/crm/gateway/v1/gateway_pb";
-export * from "../gen/crm/search/v1/search_pb";
-export { create, toBinary, fromBinary } from "@bufbuild/protobuf";
+export {
+  GovernedClient,
+  ProductClientError,
+  mapGatewayError,
+} from "./gateway";
+
+export type {
+  GovernedGatewayClientOptions,
+  SearchGlobalOptions,
+  SearchGlobalResult,
+  ProductClientErrorKind,
+} from "./gateway";
+
+export {
+  MutableSessionStore,
+  SessionUnavailableError,
+  requireAuthenticatedSession,
+} from "./session";
+
+export type {
+  SessionState,
+  SessionProvider,
+} from "./session";
+
+export type { SearchHit } from "../gen/crm/search/v1/search_pb";
+export { CONTRACT_HASHES } from "./contract_hashes";
