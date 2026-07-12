@@ -1,0 +1,94 @@
+name: Product Plane CI
+
+on:
+  push:
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "buf.gen.web.yaml"
+      - "apps/web/**"
+      - "packages/client/**"
+      - "packages/ui/**"
+      - ".github/workflows/product-plane.yml"
+      - "scripts/run_e2e.sh"
+  pull_request:
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "buf.gen.web.yaml"
+      - "apps/web/**"
+      - "packages/client/**"
+      - "packages/ui/**"
+      - ".github/workflows/product-plane.yml"
+      - "scripts/run_e2e.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  check-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.18.0"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Web typecheck
+        run: pnpm web:typecheck
+
+      - name: Run Web lint
+        run: pnpm web:lint
+
+      - name: Run Web unit tests
+        run: pnpm web:test
+
+      - name: Run Web build
+        run: pnpm web:build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Run E2E Integration Suite
+        run: ./scripts/run_e2e.sh

@@ -406,6 +406,8 @@ async fn run_grpc_server(
         .set_service_status("", ServingStatus::Serving)
         .await;
     Server::builder()
+        .accept_http1(true)
+        .layer(tonic_web::GrpcWebLayer::new())
         .add_service(health_service)
         .add_service(gateway_service)
         .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async move {

@@ -266,3 +266,87 @@ a:focus-visible,
     flex-direction: column;
   }
 }
+
+.crm-input {
+  min-height: 2.6rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--crm-border);
+  border-radius: 0.55rem;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--crm-text);
+  background: var(--crm-surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+}
+
+.crm-input:focus {
+  border-color: var(--crm-accent);
+  outline: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--crm-accent) 25%, transparent);
+}
+
+.crm-search-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  max-width: 32rem;
+}
+
+.crm-hit-card {
+  margin-top: 1rem;
+  padding: 1.2rem;
+  border: 1px solid var(--crm-border);
+  border-radius: var(--crm-radius);
+  background: var(--crm-surface);
+  box-shadow: var(--crm-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.crm-hit-card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--crm-text);
+}
+
+.crm-hit-card-meta {
+  font-size: 0.82rem;
+  color: var(--crm-text-muted);
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.crm-badge {
+  background: var(--crm-surface-muted);
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+
+.crm-hit-card-fields {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  display: grid;
+  gap: 0.35rem;
+  border-top: 1px solid var(--crm-border);
+  padding-top: 0.6rem;
+}
+
+.crm-hit-field {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.crm-hit-field-name {
+  font-weight: 600;
+  color: var(--crm-text-muted);
+}
+
+.crm-hit-field-value {
+  color: var(--crm-text);
+}
+

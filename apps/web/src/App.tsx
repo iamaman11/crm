@@ -1,5 +1,15 @@
-import { useMemo, useSyncExternalStore } from "react";
-import type { SessionState } from "@ultimate-crm/client";
+import { useMemo, useSyncExternalStore, useState } from "react";
+import {
+  createGovernedGatewayClient,
+  TypedPayloadSchema,
+  SearchRequestSchema,
+  SearchResponseSchema,
+  create,
+  toBinary,
+  fromBinary,
+  type SessionState,
+  type SearchHit,
+} from "@ultimate-crm/client";
 import { AppShell, FeedbackPanel, PageHeader } from "@ultimate-crm/ui";
 import { createDevelopmentSessionStore } from "./developmentSession";
 import {
@@ -11,6 +21,10 @@ import {
 } from "./routes";
 
 const sessionStore = createDevelopmentSessionStore();
+const client = createGovernedGatewayClient({
+  baseUrl: window.location.origin,
+  sessionProvider: sessionStore,
+});
 
 export function App() {
   const session = useSyncExternalStore(
@@ -85,18 +99,7 @@ function RouteContent({
   }
 
   if (route.id === "search") {
-    return (
-      <>
-        <PageHeader
-          eyebrow="Governed read path"
-          title="Global search"
-          description="The generated gRPC-Web client boundary is established in this packet. The first live search workflow is completed in the behavior checkpoint after exact-SHA build verification."
-        />
-        <FeedbackPanel tone="neutral" title="Client boundary ready for integration">
-          No feature component is permitted to bypass the generated governed gateway client with an ad-hoc CRM API call.
-        </FeedbackPanel>
-      </>
-    );
+    return <SearchPage />;
   }
 
   return (
@@ -136,3 +139,137 @@ function developmentAccessSnapshot(): NavigationAccessSnapshot {
   }
   return { capabilities };
 }
+
+function SearchPage() {
+  const [queryText, setQueryText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<SearchHit[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!queryText.trim()) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const searchRequest = create(SearchRequestSchema, {
+        text: queryText,
+        resourceTypes: [],
+        pageSize: 25,
+        cursor: "",
+      });
+      const searchRequestBytes = toBinary(SearchRequestSchema, searchRequest);
+      const searchRequestDescriptorHash = new Uint8Array([
+        0x6e, 0x09, 0x97, 0x8a, 0xe7, 0x42, 0x43, 0x21, 0x2d, 0xf9, 0xf7, 0xb5, 0x8c, 0xb4, 0x01, 0xfd, 0xef, 0x0e, 0x60, 0x98, 0xad, 0xdd, 0x57, 0xb4, 0xae, 0xc7, 0x0c, 0x96, 0x57, 0xd3, 0x42, 0x61
+      ]);
+
+      const input = create(TypedPayloadSchema, {
+        ownerModuleId: "crm.search",
+        schemaId: "crm.search.v1.SearchRequest",
+        schemaVersion: "1.0.0",
+        descriptorHash: searchRequestDescriptorHash,
+        dataClass: "confidential",
+        encoding: "protobuf",
+        maximumSizeBytes: 1024n,
+        retentionPolicyId: "standard",
+        payload: searchRequestBytes,
+      });
+
+      const response = await client.query({
+        ownerModuleId: "crm.search",
+        capabilityId: "search.global.query",
+        capabilityVersion: "1.0.0",
+        input,
+      });
+
+      if (!response.output) {
+        throw new Error("Missing query output");
+      }
+
+      const searchResponse = fromBinary(SearchResponseSchema, response.output.payload);
+      setResults(searchResponse.hits);
+    } catch (err) {
+      console.error(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unexpected error occurred.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Governed read path"
+        title="Global search"
+        description="Search CRM records (Deals and Tasks) using the governed search query capability."
+      />
+
+      <form onSubmit={handleSearch} className="crm-search-form">
+        <input
+          type="text"
+          value={queryText}
+          onChange={(e) => setQueryText(e.target.value)}
+          placeholder="Type deal or task name..."
+          className="crm-input"
+          id="search-input"
+          disabled={loading}
+        />
+        <button
+          type="submit"
+          className="crm-button crm-button-primary"
+          id="search-submit"
+          disabled={loading || !queryText.trim()}
+        >
+          {loading ? "Searching..." : "Search"}
+        </button>
+      </form>
+
+      {error ? (
+        <FeedbackPanel tone="danger" title="Search failed">
+          {error}
+        </FeedbackPanel>
+      ) : null}
+
+      {loading ? (
+        <FeedbackPanel tone="neutral" title="Searching records..." busy={true} />
+      ) : null}
+
+      {!loading && !error && results.length === 0 && queryText.trim() ? (
+        <FeedbackPanel tone="neutral" title="No results found">
+          No records matched your search query.
+        </FeedbackPanel>
+      ) : null}
+
+      <div className="crm-results-list" id="search-results">
+        {results.map((hit, index) => (
+          <div key={`${hit.resourceId}-${index}`} className="crm-hit-card" data-testid="search-hit">
+            <h3 className="crm-hit-card-title">
+              {hit.fields.name || hit.resourceId}
+            </h3>
+            <div className="crm-hit-card-meta">
+              <span className="crm-badge">{hit.resourceType}</span>
+              <span>ID: {hit.resourceId}</span>
+              <span>Module: {hit.ownerModuleId}</span>
+            </div>
+            {Object.keys(hit.fields).length > 0 ? (
+              <div className="crm-hit-card-fields">
+                {Object.entries(hit.fields).map(([name, value]) => (
+                  <div key={name} className="crm-hit-field">
+                    <span className="crm-hit-field-name">{name}:</span>
+                    <span className="crm-hit-field-value">{value}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
