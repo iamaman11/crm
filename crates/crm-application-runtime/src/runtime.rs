@@ -644,6 +644,12 @@ async fn drain_projection(
     }
 }
 
+#[derive(Clone, Copy)]
+struct BootstrapVisibilityResource<'a> {
+    owner_module_id: &'a str,
+    resource_type: &'a str,
+}
+
 fn bootstrap_application_access(
     config: &ApplicationConfig,
     now_unix_nanos: i64,
@@ -675,8 +681,10 @@ fn bootstrap_application_access(
                     config,
                     tenant_id,
                     definition,
-                    "crm.sales",
-                    SALES_RECORD_TYPE,
+                    BootstrapVisibilityResource {
+                        owner_module_id: "crm.sales",
+                        resource_type: SALES_RECORD_TYPE,
+                    },
                     sales_fields(),
                     expires_at,
                 )?,
@@ -685,8 +693,10 @@ fn bootstrap_application_access(
                     config,
                     tenant_id,
                     definition,
-                    "crm.activities",
-                    ACTIVITIES_RECORD_TYPE,
+                    BootstrapVisibilityResource {
+                        owner_module_id: "crm.activities",
+                        resource_type: ACTIVITIES_RECORD_TYPE,
+                    },
                     task_fields(),
                     expires_at,
                 )?,
@@ -696,8 +706,10 @@ fn bootstrap_application_access(
                         config,
                         tenant_id,
                         definition,
-                        "crm.sales",
-                        SALES_RECORD_TYPE,
+                        BootstrapVisibilityResource {
+                            owner_module_id: "crm.sales",
+                            resource_type: SALES_RECORD_TYPE,
+                        },
                         ["name"].into_iter().map(str::to_owned).collect(),
                         expires_at,
                     )?;
@@ -706,8 +718,10 @@ fn bootstrap_application_access(
                         config,
                         tenant_id,
                         definition,
-                        "crm.activities",
-                        ACTIVITIES_RECORD_TYPE,
+                        BootstrapVisibilityResource {
+                            owner_module_id: "crm.activities",
+                            resource_type: ACTIVITIES_RECORD_TYPE,
+                        },
                         ["subject"].into_iter().map(str::to_owned).collect(),
                         expires_at,
                     )?;
@@ -728,8 +742,7 @@ fn upsert_bootstrap_visibility(
     config: &ApplicationConfig,
     tenant_id: &TenantId,
     definition: &CapabilityDefinition,
-    owner_module_id: &str,
-    resource_type: &str,
+    resource: BootstrapVisibilityResource<'_>,
     allowed_fields: BTreeSet<String>,
     expires_at: i64,
 ) -> Result<(), ApplicationRuntimeError> {
@@ -739,9 +752,9 @@ fn upsert_bootstrap_visibility(
             actor_id: config.actor_id.clone(),
             capability_id: definition.capability_id.clone(),
             capability_version: definition.capability_version.clone(),
-            owner_module_id: ModuleId::try_new(owner_module_id)
+            owner_module_id: ModuleId::try_new(resource.owner_module_id)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            record_type: RecordType::try_new(resource_type)
+            record_type: RecordType::try_new(resource.resource_type)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             record_id: None,
             allowed_fields,
