@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   GovernedMetadataClient,
   MetadataAuthoringError,
@@ -22,6 +22,12 @@ type AdminOperation =
   | "activating"
   | "rolling_back";
 
+interface MutationIntentKeys {
+  publish?: string;
+  activate?: string;
+  rollback?: string;
+}
+
 const INITIAL_DRAFT: ObjectMetadataDraft = {
   id: "crm.custom.asset",
   ownerModuleId: "crm.custom",
@@ -41,8 +47,12 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
   const [confirmBreakingChanges, setConfirmBreakingChanges] = useState(false);
   const [operation, setOperation] = useState<AdminOperation>("idle");
   const [error, setError] = useState<string | null>(null);
+  const mutationIntentKeys = useRef<MutationIntentKeys>({});
 
   const busy = operation !== "idle";
+  const candidateIsActive =
+    candidateRevisionId !== null &&
+    activation?.activeRevisionId === candidateRevisionId;
   const tags = useMemo(
     () =>
       tagsText
@@ -78,32 +88,46 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
     };
   }, [client]);
 
+  const resetCandidate = () => {
+    setCandidateRevisionId(null);
+    setCandidateWasNew(null);
+    setImpact(null);
+    setConfirmBreakingChanges(false);
+    delete mutationIntentKeys.current.publish;
+    delete mutationIntentKeys.current.activate;
+  };
+
   const updateDraft = <K extends keyof ObjectMetadataDraft>(
     field: K,
     value: ObjectMetadataDraft[K],
   ) => {
     setDraft((current) => ({ ...current, [field]: value }));
-    setCandidateRevisionId(null);
-    setCandidateWasNew(null);
-    setImpact(null);
-    setConfirmBreakingChanges(false);
+    resetCandidate();
   };
 
   const publishCandidate = async (event: React.FormEvent) => {
     event.preventDefault();
     setOperation("publishing");
     setError(null);
+    const idempotencyKey =
+      mutationIntentKeys.current.publish ?? crypto.randomUUID();
+    mutationIntentKeys.current.publish = idempotencyKey;
     try {
       const definition = createObjectMetadataDefinitionInput({ ...draft, tags });
       const response = await client.publishBundle({
         definitions: [definition],
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
       });
+      delete mutationIntentKeys.current.publish;
+      delete mutationIntentKeys.current.activate;
       setCandidateRevisionId(response.revisionId);
       setCandidateWasNew(response.newlyPublished);
       setImpact(null);
       setConfirmBreakingChanges(false);
     } catch (caught) {
+      if (!isRetryableProductError(caught)) {
+        delete mutationIntentKeys.current.publish;
+      }
       setError(productErrorMessage(caught));
     } finally {
       setOperation("idle");
@@ -118,6 +142,7 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
       const response = await client.getImpact(candidateRevisionId);
       setImpact(response.impact ?? null);
       setConfirmBreakingChanges(false);
+      delete mutationIntentKeys.current.activate;
     } catch (caught) {
       setError(productErrorMessage(caught));
     } finally {
@@ -126,9 +151,12 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
   };
 
   const activateCandidate = async () => {
-    if (!candidateRevisionId || !impact) return;
+    if (!candidateRevisionId || !impact || candidateIsActive) return;
     setOperation("activating");
     setError(null);
+    const idempotencyKey =
+      mutationIntentKeys.current.activate ?? crypto.randomUUID();
+    mutationIntentKeys.current.activate = idempotencyKey;
     try {
       const response = await client.activateRevision({
         revisionId: candidateRevisionId,
@@ -136,11 +164,16 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
         confirmBreakingChanges: impact.hasBreakingChanges
           ? confirmBreakingChanges
           : false,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
       });
+      delete mutationIntentKeys.current.activate;
+      delete mutationIntentKeys.current.rollback;
       setActivation(response.state ?? null);
       setImpact(response.impact ?? impact);
     } catch (caught) {
+      if (!isRetryableProductError(caught)) {
+        delete mutationIntentKeys.current.activate;
+      }
       setError(productErrorMessage(caught));
     } finally {
       setOperation("idle");
@@ -151,17 +184,25 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
     if (!activation || activation.rollbackDepth === 0) return;
     setOperation("rolling_back");
     setError(null);
+    const idempotencyKey =
+      mutationIntentKeys.current.rollback ?? crypto.randomUUID();
+    mutationIntentKeys.current.rollback = idempotencyKey;
     try {
       const response = await client.rollbackRevision({
         expectedGeneration: activation.generation,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
       });
+      delete mutationIntentKeys.current.rollback;
+      delete mutationIntentKeys.current.activate;
       setActivation(response.state ?? null);
       setCandidateRevisionId(null);
       setCandidateWasNew(null);
       setImpact(null);
       setConfirmBreakingChanges(false);
     } catch (caught) {
+      if (!isRetryableProductError(caught)) {
+        delete mutationIntentKeys.current.rollback;
+      }
       setError(productErrorMessage(caught));
     } finally {
       setOperation("idle");
@@ -265,10 +306,7 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
                 value={tagsText}
                 onChange={(event) => {
                   setTagsText(event.target.value);
-                  setCandidateRevisionId(null);
-                  setCandidateWasNew(null);
-                  setImpact(null);
-                  setConfirmBreakingChanges(false);
+                  resetCandidate();
                 }}
                 disabled={busy}
                 placeholder="custom, operations"
@@ -340,8 +378,14 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
                   </p>
                   <ul className="crm-impact-list">
                     {impact.changes.map((change, index) => (
-                      <li key={`${change.kind}-${change.metadataId}-${index}`}>
-                        <strong>{change.changeKind}</strong> · {change.kind} · {change.metadataId}
+                      <li key={`${change.changeType}-${change.key?.id ?? index}`}>
+                        <strong>{metadataChangeTypeLabel(change.changeType)}</strong>
+                        {" · "}
+                        {metadataKindLabel(change.key?.kind)}
+                        {" · "}
+                        {change.key?.id ?? "unknown metadata"}
+                        {" · "}
+                        {metadataImpactSeverityLabel(change.severity)}
                       </li>
                     ))}
                   </ul>
@@ -369,10 +413,15 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
                       onClick={activateCandidate}
                       disabled={
                         busy ||
+                        candidateIsActive ||
                         (impact.hasBreakingChanges && !confirmBreakingChanges)
                       }
                     >
-                      {operation === "activating" ? "Activating…" : "Activate revision"}
+                      {candidateIsActive
+                        ? "Revision is active"
+                        : operation === "activating"
+                          ? "Activating…"
+                          : "Activate revision"}
                     </button>
                   </div>
                 </div>
@@ -421,6 +470,59 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
   );
 }
 
+function metadataKindLabel(value: number | undefined): string {
+  switch (value) {
+    case 1:
+      return "Object";
+    case 2:
+      return "Field";
+    case 3:
+      return "Relationship";
+    case 4:
+      return "Layout";
+    case 5:
+      return "View";
+    case 6:
+      return "Pipeline";
+    case 7:
+      return "Permission";
+    case 8:
+      return "Workflow";
+    default:
+      return "Unknown kind";
+  }
+}
+
+function metadataChangeTypeLabel(value: number): string {
+  switch (value) {
+    case 1:
+      return "Added";
+    case 2:
+      return "Modified";
+    case 3:
+      return "Removed";
+    default:
+      return "Unknown change";
+  }
+}
+
+function metadataImpactSeverityLabel(value: number): string {
+  switch (value) {
+    case 1:
+      return "Informational";
+    case 2:
+      return "Review required";
+    case 3:
+      return "Breaking";
+    default:
+      return "Unspecified";
+  }
+}
+
+function isRetryableProductError(caught: unknown): boolean {
+  return caught instanceof ProductClientError && caught.retryable;
+}
+
 function productErrorMessage(caught: unknown): string {
   if (caught instanceof MetadataAuthoringError) {
     return caught.message;
@@ -447,5 +549,7 @@ function productErrorMessage(caught: unknown): string {
       return "The CRM service is temporarily unavailable. No local state was treated as authoritative.";
     case "internal":
       return "The metadata response failed a governed contract check. The operation was not trusted.";
+    default:
+      return "The governed metadata request failed.";
   }
 }
