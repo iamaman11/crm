@@ -36,19 +36,17 @@ impl PostgresDataStore {
         validate_coordinate(schema_version, 120)?;
         let mut transaction = self.pool().begin().await.map_err(search_storage_error)?;
         bind_search_tenant(&mut transaction, tenant_id).await?;
-        sqlx::query(
+        let registered = sqlx::query(
             r#"
             INSERT INTO crm.search_index_generations (
               tenant_id, index_id, generation_id, projection_id, schema_version, status
             )
             VALUES ($1, $2, $3, $4, $5, 'building')
             ON CONFLICT (tenant_id, index_id, generation_id) DO UPDATE SET
-              projection_id = EXCLUDED.projection_id,
-              schema_version = EXCLUDED.schema_version,
-              status = CASE
-                WHEN crm.search_index_generations.status = 'active' THEN 'active'
-                ELSE 'building'
-              END
+              status = crm.search_index_generations.status
+            WHERE crm.search_index_generations.status = 'building'
+              AND crm.search_index_generations.projection_id = EXCLUDED.projection_id
+              AND crm.search_index_generations.schema_version = EXCLUDED.schema_version
             "#,
         )
         .bind(tenant_id.as_str())
@@ -59,6 +57,9 @@ impl PostgresDataStore {
         .execute(&mut *transaction)
         .await
         .map_err(search_storage_error)?;
+        if registered.rows_affected() != 1 {
+            return Err(search_generation_conflict());
+        }
         transaction.commit().await.map_err(search_storage_error)?;
         Ok(())
     }
@@ -89,7 +90,10 @@ impl PostgresDataStore {
             r#"
             UPDATE crm.search_index_generations
             SET status = 'active', activated_at = clock_timestamp()
-            WHERE tenant_id = $1 AND index_id = $2 AND generation_id = $3
+            WHERE tenant_id = $1
+              AND index_id = $2
+              AND generation_id = $3
+              AND status = 'building'
             "#,
         )
         .bind(tenant_id.as_str())
@@ -100,10 +104,10 @@ impl PostgresDataStore {
         .map_err(search_storage_error)?;
         if activated.rows_affected() != 1 {
             return Err(SdkError::new(
-                "SEARCH_GENERATION_NOT_FOUND",
+                "SEARCH_GENERATION_NOT_BUILDING",
                 ErrorCategory::NotFound,
                 false,
-                "The search index generation was not found.",
+                "The requested building search index generation was not found.",
             ));
         }
         transaction.commit().await.map_err(search_storage_error)?;
@@ -189,6 +193,7 @@ impl PostgresDataStore {
               FROM crm.projection_documents
               WHERE tenant_id = $1
                 AND projection_id = $2
+                AND document ? 'search_text'
                 AND (cardinality($4::text[]) = 0 OR resource_type = ANY($4::text[]))
                 AND to_tsvector('simple', COALESCE(document ->> 'search_text', ''))
                     @@ websearch_to_tsquery('simple', $3)
@@ -333,6 +338,15 @@ fn search_request_invalid(message: &'static str) -> SdkError {
         ErrorCategory::InvalidArgument,
         false,
         message,
+    )
+}
+
+fn search_generation_conflict() -> SdkError {
+    SdkError::new(
+        "SEARCH_GENERATION_COORDINATE_CONFLICT",
+        ErrorCategory::InvalidArgument,
+        false,
+        "The search generation identifier is already bound to immutable coordinates or lifecycle state.",
     )
 }
 
