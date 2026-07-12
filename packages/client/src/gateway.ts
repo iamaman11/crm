@@ -5,7 +5,7 @@ import {
   type Interceptor,
   type Client,
 } from "@connectrpc/connect";
-import { createGrpcWebTransport, type GrpcWebTransportOptions } from "@connectrpc/connect-web";
+import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { ApplicationGatewayService, TypedPayloadSchema } from "../gen/crm/gateway/v1/gateway_pb";
 import { SearchRequestSchema, SearchResponseSchema, type SearchHit } from "../gen/crm/search/v1/search_pb";
@@ -56,8 +56,6 @@ export interface GovernedGatewayClientOptions {
   baseUrl: string;
   sessionProvider: SessionProvider;
   idFactory?: () => string;
-  /** @internal */
-  _testFetch?: GrpcWebTransportOptions["fetch"];
 }
 
 export interface SearchGlobalOptions {
@@ -94,19 +92,13 @@ export class GovernedClient {
       return await next(request);
     };
 
-    const transportOptions: GrpcWebTransportOptions = {
+    const transport = createGrpcWebTransport({
       baseUrl: normalizeBaseUrl(options.baseUrl),
       interceptors: [sessionInterceptor],
-    };
-    if (options._testFetch) {
-      transportOptions.fetch = options._testFetch;
-    }
-
-    const transport = createGrpcWebTransport(transportOptions);
+    });
 
     this.gatewayClient = createClient(ApplicationGatewayService, transport);
   }
-
 
   public async searchGlobal(options: SearchGlobalOptions): Promise<SearchGlobalResult> {
     try {
