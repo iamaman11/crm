@@ -36,7 +36,6 @@ jobs:
           components: rustfmt, clippy
       - name: Apply machine-fixable Rust maintenance
         run: |
-          python scripts/refactor_metadata_transition_write.py
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
