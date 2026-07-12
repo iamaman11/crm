@@ -12,6 +12,7 @@ postgres-integration = []
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-contracts = { path = "../crm-core-contracts" }
 crm-core-events = { path = "../crm-core-events" }
+crm-metadata-api-adapter = { path = "../crm-metadata-api-adapter" }
 crm-metadata-query-adapter = { path = "../crm-metadata-query-adapter" }
 crm-metadata-runtime = { path = "../crm-metadata-runtime" }
 crm-module-sdk = { path = "../crm-module-sdk" }
