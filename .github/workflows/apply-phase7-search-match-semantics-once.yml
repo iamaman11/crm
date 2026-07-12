@@ -1,4 +1,4 @@
-name: Apply Phase 7 search match semantics once
+name: Apply Phase 7 search runtime match semantics once
 
 on:
   pull_request:
@@ -22,20 +22,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Align backend and permission-filtered match semantics
+      - name: Align runtime and permission-filtered match semantics
         run: |
           python scripts/align_phase7_search_match_semantics.py
           rustfmt --edition 2024 \
             crates/crm-search-runtime/src/lib.rs \
-            crates/crm-core-data/src/search_store.rs \
-            crates/crm-search-query-adapter/tests/live_permission_revocation.rs \
-            crates/crm-core-data/tests/postgres_search.rs
+            crates/crm-search-query-adapter/tests/live_permission_revocation.rs
           rm scripts/align_phase7_search_match_semantics.py
           rm .github/workflows/apply-phase7-search-match-semantics-once.yml
-      - name: Commit semantic alignment and helper cleanup
+      - name: Commit runtime semantic alignment and helper cleanup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Align search match evidence with backend semantics"
+          git commit -m "Make search runtime consume backend match evidence"
           git push origin HEAD:develop/phase7-permission-aware-search
