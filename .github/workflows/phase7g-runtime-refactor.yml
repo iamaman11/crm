@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: develop/phase7-governed-metadata-api
+      # The workflow is already present on the branch; this update triggers the one-shot refactor.
       - name: Compose governed metadata through existing application ingress
         shell: python
         run: |
