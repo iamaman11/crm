@@ -524,7 +524,7 @@ async fn bind_execution_context(
     Ok(())
 }
 
-async fn lock_activation(
+pub(crate) async fn lock_activation(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
 ) -> Result<(), MetadataPersistenceError> {
@@ -536,7 +536,7 @@ async fn lock_activation(
     Ok(())
 }
 
-async fn insert_documents(
+pub(crate) async fn insert_documents(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     revision_id: &MetadataRevisionId,
@@ -592,7 +592,7 @@ async fn insert_documents(
     Ok(())
 }
 
-async fn load_bundle(
+pub(crate) async fn load_bundle(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
     revision_id: &MetadataRevisionId,
@@ -698,7 +698,7 @@ async fn load_bundle(
     Ok(Some(draft))
 }
 
-async fn load_state(
+pub(crate) async fn load_state(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
     for_update: bool,
@@ -742,7 +742,7 @@ async fn load_state(
     })
 }
 
-async fn load_impact(
+pub(crate) async fn load_impact(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
     current_revision: Option<&MetadataRevisionId>,
@@ -799,14 +799,17 @@ fn impact_from_runtime(
         .map_err(MetadataPersistenceError::Runtime)
 }
 
-fn require_generation(expected: u64, actual: u64) -> Result<(), MetadataPersistenceError> {
+pub(crate) fn require_generation(
+    expected: u64,
+    actual: u64,
+) -> Result<(), MetadataPersistenceError> {
     if expected != actual {
         return Err(MetadataPersistenceError::GenerationConflict { expected, actual });
     }
     Ok(())
 }
 
-async fn insert_rollback_stack_entry(
+pub(crate) async fn insert_rollback_stack_entry(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     depth: usize,
@@ -835,7 +838,7 @@ async fn insert_rollback_stack_entry(
     Ok(())
 }
 
-async fn load_rollback_target(
+pub(crate) async fn load_rollback_target(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
     depth: usize,
@@ -856,7 +859,7 @@ async fn load_rollback_target(
         .transpose()
 }
 
-async fn delete_rollback_stack_entry(
+pub(crate) async fn delete_rollback_stack_entry(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     depth: usize,
@@ -879,7 +882,7 @@ async fn delete_rollback_stack_entry(
     Ok(())
 }
 
-async fn upsert_activation_head(
+pub(crate) async fn upsert_activation_head(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     generation: u64,
@@ -914,16 +917,16 @@ async fn upsert_activation_head(
     Ok(())
 }
 
-struct MetadataTransitionWrite<'a> {
-    action: MetadataTransitionAction,
-    generation: u64,
-    rollback_depth: usize,
-    from_revision: Option<&'a MetadataRevisionId>,
-    to_revision: &'a MetadataRevisionId,
-    occurred_at_unix_nanos: i64,
+pub(crate) struct MetadataTransitionWrite<'a> {
+    pub(crate) action: MetadataTransitionAction,
+    pub(crate) generation: u64,
+    pub(crate) rollback_depth: usize,
+    pub(crate) from_revision: Option<&'a MetadataRevisionId>,
+    pub(crate) to_revision: &'a MetadataRevisionId,
+    pub(crate) occurred_at_unix_nanos: i64,
 }
 
-async fn insert_transition(
+pub(crate) async fn insert_transition(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     transition: MetadataTransitionWrite<'_>,

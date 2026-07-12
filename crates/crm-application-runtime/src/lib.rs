@@ -9,12 +9,14 @@
 
 mod config;
 mod gateway_grpc;
+mod governed_metadata;
 mod platform;
 mod process;
 mod runtime;
 
 pub use config::*;
 pub use gateway_grpc::*;
+pub use governed_metadata::*;
 pub use platform::*;
 pub use process::*;
 pub use runtime::*;

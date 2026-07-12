@@ -1,14 +1,14 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-12
+Status date: 2026-07-13
 
 This document is the concise human-readable status page. The normative sequence remains `IMPLEMENTATION_ROADMAP.md`; absolute rules remain `SYSTEM_INVARIANTS.md`; implementation grouping follows `DEVELOPMENT_WORKFLOW.md`; multi-agent execution follows `MULTI_AGENT_DEVELOPMENT.md`.
 
 ## Current position
 
-**Phase 6 is complete. Phase 7 is in progress.**
+**Phase 6 is complete. Phase 7 is in progress. The active delivery packet is Phase 7G: governed metadata API and application composition.**
 
-The repository contains a complete first production-composed modular CRM proof and the first production-quality product-plane and Admin Studio metadata foundations:
+The repository now contains a complete first production-composed modular CRM proof plus production-quality search, product-plane and Admin Studio metadata foundations:
 
 - executable repository governance and architecture boundaries;
 - typed Module Manifest IR and immutable module identity;
@@ -20,10 +20,11 @@ The repository contains a complete first production-composed modular CRM proof a
 - governed event delivery and the optional `crm.sales-activities-link` module;
 - rebuildable projections and tenant/permission-aware search;
 - real `crm-application-runtime` composition boundary and deployable `services/crm-api` process host;
-- typed web product shell with a governed generated client boundary and real browser E2E through `search.global.query`;
+- typed web product shell with a governed generated browser-client boundary and real browser E2E;
 - immutable tenant-authorized metadata publication lifecycle;
 - strict typed Admin Studio metadata schemas and canonical validation;
-- durable tenant-scoped metadata revision/activation persistence — current Phase 7F packet.
+- durable tenant-scoped metadata revision/activation persistence;
+- governed public metadata mutation/query contracts, canonical global audit evidence, production composition and typed browser metadata operations in the active Phase 7G packet.
 
 The breadth of end-user CRM functionality is still intentionally smaller than the target universal expert CRM. Customer master, commercial lifecycle, service, marketing, communications, analytics, AI, marketplace and enterprise operational proof remain explicit future owner-domain/platform programs.
 
@@ -44,12 +45,15 @@ PR #63 completed the first full backend vertical proof:
 
 Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract, Governance, Rust, Database, Event Runtime, Application Runtime and Rust Generated Sync before merge.
 
-### Phase 7A — golden module tooling and generalized projections
+### Phase 7A — golden module tooling — Complete
 
-- #56 / merged PR #64 established repository-supported owner/link module scaffolding and permanent repository commands.
-- #65 / merged PR #67 introduced `crm-projection-runtime`, deterministic projection registration/execution, poison/failure handling and rebuild orchestration without moving owner-domain semantics into infrastructure.
+#56 / merged PR #64 established repository-supported owner/link module scaffolding, overwrite-safe generation, dependency validation, architecture-safe crate/manifests, acceptance placeholders and permanent repository commands.
 
-### Phase 7B — permission-aware search
+### Phase 7B — generalized projection runtime — Complete
+
+#65 / merged PR #67 introduced `crm-projection-runtime`, deterministic projection registration/execution, poison/failure handling and rebuild orchestration without moving owner-domain semantics into infrastructure.
+
+### Phase 7C — permission-aware search — Complete
 
 #66 / merged PR #68 completed the production search foundation:
 
@@ -62,7 +66,7 @@ Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract, Go
 
 Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all applicable Contract, Governance, Rust, Database, Projection, Event, Search, Application Runtime and Rust Generated Sync gates.
 
-### Phase 7C — typed web product shell — Complete
+### Phase 7D — typed web product shell — Complete
 
 #71 / merged PR #73 established the first governed product-plane foundation:
 
@@ -75,75 +79,63 @@ Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all applicab
 - permission-aware routing as UX only, with backend authorization remaining authoritative;
 - no public arbitrary raw gateway/query escape hatch;
 - design-system/application-shell primitives and responsive/accessibility foundations;
-- hermetic Playwright E2E against ephemeral PostgreSQL covering the real governed search workflow and negative authentication/authorization paths.
+- hermetic Playwright E2E against ephemeral PostgreSQL.
 
-Final review head `b62dd50225fde6e58aac9a6b4cec307bd2245616` passed all applicable checks before PR #73 was merged and #71 closed.
+Final review head `b62dd50225fde6e58aac9a6b4cec307bd2245616` passed all applicable checks before merge.
 
-### Phase 7D — immutable metadata publication lifecycle — Complete
+### Phase 7E-1 — immutable metadata publication lifecycle — Complete
 
-#77 / merged PR #78 established the backend-neutral lifecycle foundation for Admin Studio metadata:
+#77 / merged PR #78 established `crm-metadata-runtime` with complete immutable metadata-bundle snapshots, deterministic SHA-256 revision identity, idempotent publication, structural impact analysis, explicit breaking-change confirmation, optimistic activation generations and rollback.
 
-- `crm-metadata-runtime` as a pure platform-domain crate with no PostgreSQL, transport, browser or business owner-module dependency;
-- typed metadata kinds for object, field, relationship, layout, view, pipeline, permission and workflow definitions;
-- validated namespaced metadata identifiers;
-- complete metadata-bundle snapshots with explicit intra-bundle dependencies;
-- deterministic content-addressed SHA-256 revision identity under `crm.metadata.bundle.sha256/v1`;
-- immutable and idempotent publication;
-- deterministic structural impact analysis for additions, modifications and removals;
-- explicit confirmation for structurally breaking activation;
-- optimistic activation generations and rollback across immutable revisions.
+Final review head `9595ce934f0ceaf23025676474f340e62bdd960d` passed all applicable gates before PR #78 was squash-merged as `de1ea407790d8c6c74f363b21622d332df85f727`.
 
-Final review head `9595ce934f0ceaf23025676474f340e62bdd960d` passed Governance, Rust, Rust Generated Sync, Database, Event, Projection, Search and Application Runtime CI before PR #78 was squash-merged as `de1ea407790d8c6c74f363b21622d332df85f727`.
+### Phase 7E-2 — tenant-scoped metadata publication authority — Complete
 
-#79 / merged PR #80 then hardened the public composition boundary so metadata publication authority is tenant-scoped by construction:
+#79 / merged PR #80 made metadata publication authority tenant-scoped by construction. Publication, revision lookup, impact analysis, activation and rollback require explicit tenant identity; a revision hash is identity, never authorization; activation generations and rollback histories remain tenant-isolated.
 
-- the deterministic single-scope engine is private;
-- application-facing callers use `TenantMetadataCatalog`;
-- publication, revision lookup, impact analysis, activation and rollback require explicit `TenantId`;
-- knowing a deterministic revision hash does not grant cross-tenant read or activation authority;
-- identical content may retain identical content identity only after independent publication into each tenant authority;
-- activation generations and rollback histories remain isolated.
+Final review head `675d389695e4881e62732bcec17b4eadcaf62917` passed architecture, lockfile, `rustfmt`, Clippy, full workspace tests and Rust Generated Sync before merge.
 
-Final review head `675d389695e4881e62732bcec17b4eadcaf62917` passed architecture, lockfile, `rustfmt`, Clippy, full workspace tests and Rust Generated Sync before PR #80 was squash-merged as `fcf2d8d7ab0d1c94999b8a6feea7b3be9f97db7f`.
+### Phase 7E-3 — typed Admin Studio metadata schemas — Complete
 
-### Phase 7E — typed Admin Studio metadata schemas — Complete
-
-#81 / merged PR #82 replaced opaque metadata authoring payloads with strict typed v1 contracts before persistence, public APIs or UI composition:
-
-- pure `crm-metadata-schema` crate;
-- typed object, field, relationship, layout, saved-view, pipeline, permission-template and workflow definitions;
-- bounded field/configuration semantics, including text length, decimal precision/scale and enum uniqueness;
-- strict duplicate and intra-definition reference validation;
-- deterministic dependency extraction into `MetadataKey` references consumed by bundle-level validation;
-- deterministic canonical UTF-8 JSON under `crm.metadata.definition/v1`;
-- set-like members canonicalized independently of insertion order while meaningful authoring order remains identity-significant;
-- workflow actions restricted to exact SemVer governed capability references, with no raw script, SQL or arbitrary HTTP execution primitive;
-- focused acceptance for all eight metadata kinds, canonicalization, ordered identity, typed validation failures, bundle dependency enforcement and strict unknown-field rejection.
+#81 / merged PR #82 replaced opaque metadata authoring payloads with strict typed v1 contracts for object, field, relationship, layout, saved view, pipeline, permission template and workflow definitions. Canonical JSON, dependency extraction, strict validation and exact governed-capability workflow actions are enforced before persistence or public API use.
 
 Final review head `889a5161233283a1b1460a221df2b406522b588b` passed Governance, Rust, Rust Generated Sync, Database, Event, Projection, Search and Application Runtime CI before PR #82 was squash-merged as `885f479bcfa85ccd52817900359ea397e7a20544`.
 
-## Current executable packet — Phase 7F
+### Phase 7F — durable tenant-scoped metadata persistence — Complete
 
-**#83 / draft PR #84 — durable tenant-scoped metadata persistence and transition evidence.**
-
-The current packet persists the immutable runtime lifecycle without moving metadata semantics into SQL:
+#83 / merged PR #84 added the PostgreSQL persistence boundary for the immutable metadata lifecycle:
 
 - migration `0010_metadata_publication_runtime`;
-- immutable tenant-scoped revision headers, canonical documents and explicit dependency edges;
-- deterministic PostgreSQL reconstruction with revision identity verification;
-- tenant-scoped optimistic activation heads;
-- per-tenant transaction advisory locking plus expected-generation conflicts for concurrent activation;
-- a durable push/pop rollback stack that cannot toggle a rolled-back revision forward;
-- structural impact and breaking-change analysis delegated back to `crm-metadata-runtime`;
-- append-only publish/activate/rollback transition evidence bound to actor, request, capability and business-transaction context;
-- FORCE RLS and transaction-local write-context enforcement on all six metadata tables;
-- immutable UPDATE/DELETE rejection for published revision state and transition evidence;
-- real PostgreSQL acceptance for round-trip identity, idempotence, cross-tenant non-disclosure, concurrency, breaking confirmation, rollback, RLS and immutability;
-- dedicated migration clean-install, rollback and reapply verification.
+- immutable tenant-scoped revision headers, canonical documents and dependency edges;
+- deterministic reconstruction with revision identity verification;
+- optimistic activation heads and expected-generation conflicts;
+- per-tenant transaction advisory locking for concurrent activation;
+- durable push/pop rollback history that cannot toggle a rolled-back revision forward;
+- append-only transition evidence bound to actor, request, capability and business transaction;
+- FORCE RLS, transaction-local write-context enforcement and immutable UPDATE/DELETE rejection;
+- real PostgreSQL acceptance for identity, idempotence, tenant isolation, concurrency, breaking confirmation, rollback, RLS and migration rollback/reapply.
 
-The persistence packet intentionally does not fabricate outbox/idempotency state merely to enter the existing global business-transaction audit chain. The follow-on governed metadata capability/API packet must add canonical `crm.audit_records` evidence through the normal public capability execution contract.
+Final review head `8c8ac7855f8a2e4f0148203c022aa60dadcc1843` passed Governance, Rust, Database, Metadata Runtime, Product Plane, Event, Projection, Search, Application Runtime and Rust Generated Sync before PR #84 merged as `adbb639da69f5d87873b3c603a1388021c8359da`.
 
-Exact-head evidence is recorded in PR #84 and must be refreshed after every source or documentation commit before merge.
+## Current executable packet — Phase 7G
+
+**#85 / draft PR #86 — governed metadata capabilities, queries, global audit, production composition and typed browser operations.**
+
+The active packet adds the public governed boundary over the completed metadata runtime and persistence layers:
+
+- exact versioned metadata mutation/query Protobuf contracts;
+- typed schema-to-bundle conversion rather than opaque document publication;
+- `CapabilityGateway` execution for publish/activate/rollback;
+- `QueryGateway` execution for impact/revision/activation reads;
+- canonical global `crm.audit_records` evidence for public metadata mutations;
+- normal idempotency and business-transaction completion evidence;
+- PostgreSQL-backed metadata mutation/query adapters;
+- production `crm-application-runtime` composition and process-level PostgreSQL acceptance;
+- typed browser operations for publish, impact, activate, revision read, activation read and rollback;
+- fail-closed browser-client tests for missing/expired sessions and blank mutation idempotency keys;
+- no generic raw metadata gateway and no frontend raw capability/query coordinate escape hatch.
+
+During final review, three integration defects were fixed without weakening architecture gates: generated descriptor-hash drift, a stale acceptance-test transition column name and application bootstrap support for the metadata query owner. Exact-head CI must converge again after the final source/documentation commits before the packet can be declared merge-ready.
 
 ## Development system
 
@@ -173,15 +165,16 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 - module lifecycle, governed capability/query execution, tenant/RLS data foundation and append-only audit;
 - rebuildable projections and permission-aware search;
 - production application composition;
-- typed web product shell and governed browser client boundary;
+- typed web product shell and governed browser-client boundary;
 - immutable tenant-scoped metadata publication lifecycle;
 - strict typed metadata schemas and canonical validators;
-- durable tenant-scoped metadata persistence — in progress in #83 / PR #84.
+- durable tenant-scoped metadata persistence;
+- governed metadata public API/application composition in active Phase 7G review.
 
 ### Not yet complete
 
-- governed metadata publication/query APIs and canonical global audit evidence through the public capability transaction contract;
-- first Admin Studio workflows in the product plane;
+- merge/freeze of the active Phase 7G packet on one green exact head;
+- first Admin Studio authoring/review/impact/activate/rollback workflows in the product plane;
 - typed UI-extension runtime with host-shell failure isolation;
 - broad product-quality Sales/Activities UX and mobile experience;
 - canonical customer master, identity resolution and consent — #28;
@@ -193,12 +186,11 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 
 ## Immediate delivery sequence
 
-1. Complete #83 / PR #84: durable tenant-scoped PostgreSQL publication/activation persistence, optimistic concurrency, rollback stack and append-only transition evidence.
-2. Expose governed metadata publish/activate/rollback/query contracts and produce canonical global audit evidence through the normal capability execution boundary.
-3. Compose the first Admin Studio workflows through the product plane against those governed contracts.
-4. Complete the typed UI-extension runtime/failure-isolation foundation required to close Phase 7.
-5. Begin the domain-wave program #57, with customer master/identity/consent (#28) and commercial lifecycle (#29) remaining explicit owner-domain programs rather than being absorbed into Sales.
-6. Continue frontend and expert backend modules as end-to-end vertical slices.
+1. Freeze #85 / PR #86 on one exact head with all applicable Contract, Governance, Rust, Database, Metadata Runtime, Application Runtime, Product Plane and generated-sync gates green.
+2. Build the first Admin Studio workflows through typed governed metadata operations only.
+3. Complete the typed UI-extension runtime/failure-isolation foundation required to close Phase 7.
+4. Begin the Phase 8 domain-wave program, with customer master/identity/consent (#28) and commercial lifecycle (#29) remaining explicit owner-domain programs rather than being absorbed into Sales.
+5. Continue frontend and expert backend modules as end-to-end vertical slices.
 
 ## Development mode
 

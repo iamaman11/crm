@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package crm.metadata.v1;
+
+// Public metadata operations are tenant-scoped by the authenticated execution
+// context. Tenant and actor identity are never accepted from caller payloads.
+
+enum MetadataKind {
+  METADATA_KIND_UNSPECIFIED = 0;
+  METADATA_KIND_OBJECT = 1;
+  METADATA_KIND_FIELD = 2;
+  METADATA_KIND_RELATIONSHIP = 3;
+  METADATA_KIND_LAYOUT = 4;
+  METADATA_KIND_VIEW = 5;
+  METADATA_KIND_PIPELINE = 6;
+  METADATA_KIND_PERMISSION = 7;
+  METADATA_KIND_WORKFLOW = 8;
+}
+
+enum MetadataChangeType {
+  METADATA_CHANGE_TYPE_UNSPECIFIED = 0;
+  METADATA_CHANGE_TYPE_ADDED = 1;
+  METADATA_CHANGE_TYPE_MODIFIED = 2;
+  METADATA_CHANGE_TYPE_REMOVED = 3;
+}
+
+enum MetadataImpactSeverity {
+  METADATA_IMPACT_SEVERITY_UNSPECIFIED = 0;
+  METADATA_IMPACT_SEVERITY_INFORMATIONAL = 1;
+  METADATA_IMPACT_SEVERITY_REVIEW_REQUIRED = 2;
+  METADATA_IMPACT_SEVERITY_BREAKING = 3;
+}
+
+message MetadataKey {
+  MetadataKind kind = 1;
+  string id = 2;
+}
+
+// One authoring definition encoded as strict crm-metadata-schema JSON.
+// The server must deserialize this into MetadataDefinition, validate it, and
+// canonicalize it itself before constructing an immutable MetadataDocument.
+// Callers cannot publish pre-built MetadataDocument values or dependency sets.
+message MetadataDefinitionInput {
+  string schema_version = 1;
+  bytes definition_json = 2;
+}
+
+message MetadataDocument {
+  MetadataKey key = 1;
+  string schema_version = 2;
+  bytes canonical_content_json = 3;
+  repeated MetadataKey dependencies = 4;
+}
+
+message MetadataRevision {
+  string revision_id = 1;
+  repeated MetadataDocument documents = 2;
+}
+
+message MetadataChange {
+  MetadataKey key = 1;
+  MetadataChangeType change_type = 2;
+  MetadataImpactSeverity severity = 3;
+}
+
+message MetadataImpact {
+  string current_revision_id = 1;
+  string candidate_revision_id = 2;
+  repeated MetadataChange changes = 3;
+  bool has_breaking_changes = 4;
+  bool requires_review = 5;
+}
+
+message MetadataActivationState {
+  uint64 generation = 1;
+  string active_revision_id = 2;
+  uint64 rollback_depth = 3;
+}
+
+message PublishMetadataBundleRequest {
+  repeated MetadataDefinitionInput definitions = 1;
+}
+
+message PublishMetadataBundleResponse {
+  string revision_id = 1;
+  bool newly_published = 2;
+}
+
+message ActivateMetadataRevisionRequest {
+  string revision_id = 1;
+  uint64 expected_generation = 2;
+  bool confirm_breaking_changes = 3;
+}
+
+message ActivateMetadataRevisionResponse {
+  MetadataActivationState state = 1;
+  MetadataImpact impact = 2;
+}
+
+message RollbackMetadataRevisionRequest {
+  uint64 expected_generation = 1;
+}
+
+message RollbackMetadataRevisionResponse {
+  MetadataActivationState state = 1;
+}
+
+message GetMetadataImpactRequest {
+  string candidate_revision_id = 1;
+}
+
+message GetMetadataImpactResponse {
+  MetadataImpact impact = 1;
+}
+
+message GetMetadataRevisionRequest {
+  string revision_id = 1;
+}
+
+message GetMetadataRevisionResponse {
+  MetadataRevision revision = 1;
+}
+
+message GetMetadataActivationRequest {}
+
+message GetMetadataActivationResponse {
+  MetadataActivationState state = 1;
+}

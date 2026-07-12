@@ -1,25 +1,17 @@
-import {
-  Code,
-  ConnectError,
-  createClient,
-  type Interceptor,
-  type Client,
-} from "@connectrpc/connect";
-import { createGrpcWebTransport } from "@connectrpc/connect-web";
+import { Code, ConnectError, type Client } from "@connectrpc/connect";
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { ApplicationGatewayService, TypedPayloadSchema } from "../gen/crm/gateway/v1/gateway_pb";
 import { SearchRequestSchema, SearchResponseSchema, type SearchHit } from "../gen/crm/search/v1/search_pb";
 import { CONTRACT_HASHES } from "./contract_hashes";
 import {
   requireAuthenticatedSession,
-  type SessionProvider,
   SessionUnavailableError,
+  type SessionProvider,
 } from "./session";
-
-const TENANT_HEADER = "x-tenant-id";
-const REQUEST_ID_HEADER = "x-request-id";
-const CORRELATION_ID_HEADER = "x-correlation-id";
-const TRACE_ID_HEADER = "x-trace-id";
+import {
+  createApplicationGatewayClient,
+  type ApplicationGatewayClientOptions,
+} from "./transport";
 
 export type ProductClientErrorKind =
   | "unauthenticated"
@@ -52,11 +44,7 @@ export class ProductClientError extends Error {
   }
 }
 
-export interface GovernedGatewayClientOptions {
-  baseUrl: string;
-  sessionProvider: SessionProvider;
-  idFactory?: () => string;
-}
+export type GovernedGatewayClientOptions = ApplicationGatewayClientOptions;
 
 export interface SearchGlobalOptions {
   text: string;
@@ -76,28 +64,7 @@ export class GovernedClient {
 
   public constructor(options: GovernedGatewayClientOptions) {
     this.sessionProvider = options.sessionProvider;
-    const idFactory = options.idFactory ?? defaultRequestId;
-    const sessionInterceptor: Interceptor = (next) => async (request) => {
-      const session = this.sessionProvider.getSnapshot();
-      const requestId = idFactory();
-
-      if (session.status === "authenticated") {
-        request.header.set("authorization", `Bearer ${session.bearerToken}`);
-        request.header.set(TENANT_HEADER, session.tenantId);
-      }
-      request.header.set(REQUEST_ID_HEADER, requestId);
-      request.header.set(CORRELATION_ID_HEADER, requestId);
-      request.header.set(TRACE_ID_HEADER, requestId);
-
-      return await next(request);
-    };
-
-    const transport = createGrpcWebTransport({
-      baseUrl: normalizeBaseUrl(options.baseUrl),
-      interceptors: [sessionInterceptor],
-    });
-
-    this.gatewayClient = createClient(ApplicationGatewayService, transport);
+    this.gatewayClient = createApplicationGatewayClient(options);
   }
 
   public async searchGlobal(options: SearchGlobalOptions): Promise<SearchGlobalResult> {
@@ -359,12 +326,4 @@ function productError(
   return safeCode === undefined
     ? new ProductClientError(options)
     : new ProductClientError({ ...options, safeCode });
-}
-
-function normalizeBaseUrl(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-function defaultRequestId(): string {
-  return globalThis.crypto.randomUUID();
 }

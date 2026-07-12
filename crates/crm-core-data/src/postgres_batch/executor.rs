@@ -113,7 +113,7 @@ impl PostgresDataStore {
     }
 }
 
-fn capability_idempotency(
+pub(crate) fn capability_idempotency(
     request: &CapabilityRequest,
     scope: String,
 ) -> Result<IdempotencyEvidence, BatchError> {
@@ -304,7 +304,7 @@ async fn load_batch_replay(
     Ok(Some(result))
 }
 
-async fn load_capability_replay(
+pub(crate) async fn load_capability_replay(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     idempotency: &IdempotencyEvidence,
@@ -404,7 +404,7 @@ fn validate_response_metadata(
     Ok(())
 }
 
-async fn insert_idempotency_claim(
+pub(crate) async fn insert_idempotency_claim(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     idempotency: &IdempotencyEvidence,

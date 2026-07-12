@@ -225,11 +225,9 @@ Final review head `675d389695e4881e62732bcec17b4eadcaf62917` passed architecture
 
 Final review head `889a5161233283a1b1460a221df2b406522b588b` passed Governance, Rust, Rust Generated Sync, Database, Event, Projection, Search and Application Runtime CI before PR #82 was squash-merged as `885f479bcfa85ccd52817900359ea397e7a20544`.
 
-### Current executable packet — 7F durable metadata persistence
+### 7F — durable tenant-scoped metadata persistence — Complete
 
-[#83](https://github.com/iamaman11/crm/issues/83) / draft PR #84 is **In progress**.
-
-The packet persists the immutable metadata lifecycle without moving metadata semantics into SQL:
+[#83](https://github.com/iamaman11/crm/issues/83) / merged PR #84 established the durable PostgreSQL adapter for the immutable metadata lifecycle without moving metadata semantics into SQL:
 
 - migration `0010_metadata_publication_runtime`;
 - immutable tenant-scoped revision headers, canonical documents and explicit dependency edges;
@@ -244,21 +242,38 @@ The packet persists the immutable metadata lifecycle without moving metadata sem
 - real PostgreSQL acceptance for identity round-trip, idempotence, cross-tenant non-disclosure, concurrent activation, breaking confirmation, rollback, RLS and immutability;
 - dedicated migration clean-install, rollback and reapply verification.
 
-The persistence packet intentionally does not fabricate unrelated outbox/idempotency rows merely to enter the existing global business-transaction audit chain. The follow-on governed metadata capability/API packet must produce canonical `crm.audit_records` evidence through the normal public capability transaction contract.
+Final review head `8c8ac7855f8a2e4f0148203c022aa60dadcc1843` passed Governance, Rust, Database, Metadata Runtime, Product Plane, Event, Projection, Search, Application Runtime and Rust Generated Sync before PR #84 merged as `adbb639da69f5d87873b3c603a1388021c8359da`.
+
+### Current executable packet — 7G governed metadata API and application composition
+
+[#85](https://github.com/iamaman11/crm/issues/85) / draft PR #86 is **In progress** and is the active delivery packet.
+
+The packet closes the public governed boundary over the completed metadata runtime and persistence layers:
+
+- exact versioned Protobuf mutation/query contracts for publish, impact, activate, revision read, activation read and rollback;
+- typed schema-to-bundle conversion through `crm-metadata-schema` rather than opaque document publication;
+- public metadata mutations through the normal `CapabilityGateway` transaction contract;
+- public metadata queries through `QueryGateway`;
+- PostgreSQL-backed mutation/query adapters with exact contract binding;
+- canonical global `crm.audit_records` evidence and normal idempotency/business-transaction completion evidence for metadata mutations;
+- production `crm-application-runtime` composition and real PostgreSQL acceptance;
+- typed browser metadata operations for the follow-on Admin Studio workflow;
+- no public generic raw metadata gateway and no frontend raw capability/query coordinate escape hatch.
+
+Current implementation also carries focused fail-closed browser-client tests for unauthenticated/expired sessions and mutation idempotency-key validation. Exact-head evidence remains provisional until all applicable workflows converge on one frozen SHA after the final source/documentation commit.
 
 ### Remaining Phase 7 platform deliverables
 
-1. Governed metadata publish/activate/rollback/query contracts and application composition.
-2. Canonical global audit evidence for public metadata mutations through the existing capability transaction contract.
-3. First Admin Studio workflows through the product plane.
-4. Typed UI-extension runtime with host-shell and record-page failure isolation.
-5. Further golden-module/tooling evolution only when new stable module classes are proven by real vertical slices.
+1. Freeze and merge 7G after all exact-head gates are green.
+2. Build the first Admin Studio authoring/review/impact/activate/rollback workflows through typed governed browser operations only.
+3. Complete the typed UI-extension runtime with host-shell and record-page failure isolation.
+4. Evolve golden-module/tooling only when new stable module classes are proven by real vertical slices.
 
 ### Phase 7 gate
 
-Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Published metadata is immutable, tenant-authorized, durably reconstructable, strictly validated, impact-analyzed, audited and reversible. UI-extension failure cannot break the host shell or record page. Frontend code cannot bypass governed mutation/query paths.
+Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Published metadata is immutable, tenant-authorized, durably reconstructable, strictly validated, impact-analyzed, globally audited and reversible. UI-extension failure cannot break the host shell or record page. Frontend code cannot bypass governed mutation/query paths.
 
-Phase 7 remains open until the governed Admin Studio publication pipeline and UI-extension foundations satisfy these acceptance gates.
+Phase 7 remains open until the governed Admin Studio publication workflow and UI-extension foundations satisfy these acceptance gates.
 
 ## 8. Phase 8 — expert modules and product experience — Planned
 
@@ -303,12 +318,11 @@ Gate: enterprise claims require automated and operational evidence, not configur
 
 ## 12. Immediate delivery sequence
 
-1. Complete #83 / PR #84 with all applicable exact-head gates green.
-2. Add governed metadata publish/activate/rollback/query capabilities and canonical public audit evidence.
-3. Compose those contracts into `crm-application-runtime` and the deployable process host.
-4. Build the first Admin Studio workflows in the product plane against governed APIs only.
-5. Complete the typed UI-extension runtime and host failure isolation required to close Phase 7.
-6. Begin the Phase 8 domain-wave program with customer master/identity/consent (#28) and commercial lifecycle (#29) as explicit owner domains.
+1. Complete #85 / PR #86 and freeze one exact head with all applicable Contract, Governance, Rust, Database, Metadata Runtime, Application Runtime, Product Plane and generated-sync gates green.
+2. Build the first Admin Studio workflows in the product plane against typed governed metadata operations only.
+3. Complete the typed UI-extension runtime and host failure isolation required to close Phase 7.
+4. Begin the Phase 8 domain-wave program with customer master/identity/consent (#28) and commercial lifecycle (#29) as explicit owner domains.
+5. Continue frontend and expert backend modules as end-to-end vertical slices.
 
 ## 13. Documentation hygiene
 

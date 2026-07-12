@@ -1,6 +1,8 @@
 use crate::{
-    ApplicationConfig, ApplicationGatewayService, ContractBoundMutationSemanticValidator,
-    ProcessIdentitySource, SystemClock,
+    ApplicationCapabilityExecutorRouter, ApplicationConfig, ApplicationGatewayService,
+    ApplicationQueryRouter, ContractBoundMutationSemanticValidator, ProcessIdentitySource,
+    SystemClock, application_capability_catalog, application_mutation_definitions,
+    application_query_capability_catalog, application_query_definitions,
 };
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -19,8 +21,13 @@ use crm_capability_ingress::{
     HttpQueryMiddleware, HttpQueryRequest, QueryContextResolver, QueryIngress, TimeoutPolicy,
 };
 use crm_capability_runtime::{CapabilityDefinition, CapabilityGateway};
-use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
+use crm_core_data::{
+    PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,
+    PostgresTransactionalAggregateExecutor,
+};
 use crm_core_events::EventHistoryRequest;
+use crm_metadata_api_adapter::METADATA_MODULE_ID;
+use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_registry::ModuleRegistry;
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,
@@ -31,8 +38,7 @@ use crm_sales_activities_capability_composition::{
     DEAL_TIMELINE_PROJECTION_ID, GLOBAL_SEARCH_INDEX_ID, Phase6ProjectionWorker,
     Phase7SearchWorker, ProductionQueryRouter, SalesActivitiesCapabilityPlannerRouter,
     SalesActivitiesLinkDeliveryOutcome, SalesActivitiesLinkEventProcessor,
-    SalesActivitiesLinkEventProcessorConfig, TASK_STATUS_PROJECTION_ID, capability_catalog,
-    capability_definitions, query_capability_catalog, query_capability_definitions,
+    SalesActivitiesLinkEventProcessorConfig, TASK_STATUS_PROJECTION_ID,
 };
 use crm_sales_activities_link::MODULE_ID as LINK_MODULE_ID;
 use crm_sales_activities_query_adapter::{
@@ -154,9 +160,9 @@ impl ApplicationRuntime {
 
         let authorization_store = LiveAuthorizationStore::default();
         let visibility_store = LiveQueryVisibilityStore::default();
-        let mutation_definitions = capability_definitions()
+        let mutation_definitions = application_mutation_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let query_definitions = query_capability_definitions()
+        let query_definitions = application_query_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         if config.bootstrap_allow_phase6 {
             bootstrap_application_access(
@@ -173,9 +179,16 @@ impl ApplicationRuntime {
             authorization_store,
             Arc::clone(&clock),
         ));
+        let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(
+            Arc::new(PostgresTransactionalAggregateExecutor::new(
+                store.clone(),
+                Arc::new(SalesActivitiesCapabilityPlannerRouter),
+            )),
+            Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
+        ));
         let mutation_gateway = Arc::new(CapabilityGateway::new(
             Arc::new(
-                capability_catalog()
+                application_capability_catalog()
                     .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             ),
             Arc::new(ContractBoundMutationSemanticValidator),
@@ -185,10 +198,7 @@ impl ApplicationRuntime {
             )),
             Arc::new(StoredApprovalVerifier::new(ApprovalStore::default())),
             authorizer.clone(),
-            Arc::new(PostgresTransactionalAggregateExecutor::new(
-                store.clone(),
-                Arc::new(SalesActivitiesCapabilityPlannerRouter),
-            )),
+            mutation_executor,
             Arc::clone(&clock),
         ));
 
@@ -215,13 +225,17 @@ impl ApplicationRuntime {
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let query_router = Arc::new(ProductionQueryRouter::new(
-            owner_query_adapter,
-            search_query_adapter,
+        let production_query_router =
+            ProductionQueryRouter::new(owner_query_adapter, search_query_adapter);
+        let metadata_query_adapter =
+            MetadataQueryAdapter::new(Arc::new(PostgresMetadataQueryStore::new(store.clone())));
+        let query_router = Arc::new(ApplicationQueryRouter::new(
+            production_query_router,
+            metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
             Arc::new(
-                query_capability_catalog()
+                application_query_capability_catalog()
                     .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             ),
             query_router.clone(),
@@ -702,6 +716,7 @@ fn bootstrap_application_access(
                     task_fields(),
                     expires_at,
                 )?,
+                METADATA_MODULE_ID => {}
                 SEARCH_MODULE_ID => {
                     upsert_bootstrap_visibility(
                         visibility_store,
