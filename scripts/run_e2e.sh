@@ -113,9 +113,20 @@ CRM_HTTP_BIND=127.0.0.1:8080 \
 API_PID=$!
 
 # Wait for backend to be ready
-until curl -s http://127.0.0.1:8080/readyz > /dev/null; do
-  echo "Waiting for crm-api to be ready..."
-  sleep 0.5
+echo "Waiting for crm-api to be ready..."
+TIMEOUT=60
+COUNTER=0
+until curl -fsS http://127.0.0.1:8080/readyz >/dev/null 2>&1; do
+  if [ $COUNTER -ge $TIMEOUT ]; then
+    echo "Timed out after ${TIMEOUT}s waiting for crm-api to be ready."
+    exit 1
+  fi
+  if ! kill -0 "$API_PID" 2>/dev/null; then
+    echo "crm-api exited before becoming ready."
+    exit 1
+  fi
+  sleep 1
+  COUNTER=$((COUNTER + 1))
 done
 echo "crm-api is ready!"
 
@@ -129,13 +140,24 @@ VITE_CRM_GRPC_WEB_TARGET=http://127.0.0.1:9090 \
 VITE_CRM_DEV_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
 VITE_CRM_DEV_TENANT_ID=tenant-a \
 VITE_CRM_DEV_CAPABILITIES=search.global.query \
-pnpm --filter @ultimate-crm/web dev --force &
+pnpm --filter @ultimate-crm/web dev --force --host 127.0.0.1 &
 VITE_PID=$!
 
 # Wait for Vite dev server to be ready
-until curl -s http://127.0.0.1:5173 > /dev/null; do
-  echo "Waiting for Vite to start..."
-  sleep 0.5
+echo "Waiting for Vite to start..."
+TIMEOUT=60
+COUNTER=0
+until curl -fsS http://127.0.0.1:5173 >/dev/null 2>&1; do
+  if [ $COUNTER -ge $TIMEOUT ]; then
+    echo "Timed out after ${TIMEOUT}s waiting for Vite dev server at http://127.0.0.1:5173."
+    exit 1
+  fi
+  if ! kill -0 "$VITE_PID" 2>/dev/null; then
+    echo "Vite dev server exited before becoming ready."
+    exit 1
+  fi
+  sleep 1
+  COUNTER=$((COUNTER + 1))
 done
 echo "Vite dev server is ready!"
 
