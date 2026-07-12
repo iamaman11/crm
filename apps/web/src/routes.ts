@@ -1,7 +1,9 @@
 import type { SessionState } from "@ultimate-crm/client";
 
-export type ProductRouteId = "home" | "search";
-export type KnownProductCapability = "search.global.query";
+export type ProductRouteId = "home" | "search" | "admin-studio";
+export type KnownProductCapability =
+  | "search.global.query"
+  | "metadata.activation.get";
 
 export interface ProductRouteDefinition {
   id: ProductRouteId;
@@ -28,6 +30,13 @@ export const PRODUCT_ROUTES: readonly ProductRouteDefinition[] = [
     label: "Search",
     authentication: "required",
     requiredCapability: "search.global.query",
+  },
+  {
+    id: "admin-studio",
+    path: "/admin/metadata",
+    label: "Admin Studio",
+    authentication: "required",
+    requiredCapability: "metadata.activation.get",
   },
 ] as const;
 
