@@ -10,7 +10,7 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
-    PortFuture, RecordType, SdkError, TypedPayload,
+    PortFuture, RecordType, SdkError,
 };
 use crm_proto_contracts::crm::search::v1 as search_proto;
 use crm_query_runtime::{
