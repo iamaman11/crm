@@ -16,6 +16,7 @@ crm-metadata-api-adapter = { path = "../crm-metadata-api-adapter" }
 crm-metadata-query-adapter = { path = "../crm-metadata-query-adapter" }
 crm-metadata-runtime = { path = "../crm-metadata-runtime" }
 crm-module-sdk = { path = "../crm-module-sdk" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-search-runtime = { path = "../crm-search-runtime" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
