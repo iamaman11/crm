@@ -78,12 +78,7 @@ impl ProjectionHandler for GlobalSearchProjectionHandler {
                 let deal = event
                     .deal
                     .ok_or_else(|| search_event_invalid("Deal created event is missing deal"))?;
-                validate_snapshot(
-                    delivery,
-                    DEAL_RESOURCE_TYPE,
-                    &deal.deal_id,
-                    deal.version,
-                )?;
+                validate_snapshot(delivery, DEAL_RESOURCE_TYPE, &deal.deal_id, deal.version)?;
                 search_document(
                     &self.generation_id,
                     SALES_MODULE_ID,
@@ -100,12 +95,7 @@ impl ProjectionHandler for GlobalSearchProjectionHandler {
                 let deal = event
                     .deal
                     .ok_or_else(|| search_event_invalid("Deal updated event is missing deal"))?;
-                validate_snapshot(
-                    delivery,
-                    DEAL_RESOURCE_TYPE,
-                    &deal.deal_id,
-                    deal.version,
-                )?;
+                validate_snapshot(delivery, DEAL_RESOURCE_TYPE, &deal.deal_id, deal.version)?;
                 search_document(
                     &self.generation_id,
                     SALES_MODULE_ID,
@@ -122,12 +112,7 @@ impl ProjectionHandler for GlobalSearchProjectionHandler {
                 let task = event
                     .task
                     .ok_or_else(|| search_event_invalid("Task created event is missing task"))?;
-                validate_snapshot(
-                    delivery,
-                    TASK_RESOURCE_TYPE,
-                    &task.task_id,
-                    task.version,
-                )?;
+                validate_snapshot(delivery, TASK_RESOURCE_TYPE, &task.task_id, task.version)?;
                 search_document(
                     &self.generation_id,
                     ACTIVITIES_MODULE_ID,
@@ -144,12 +129,7 @@ impl ProjectionHandler for GlobalSearchProjectionHandler {
                 let task = event
                     .task
                     .ok_or_else(|| search_event_invalid("Task updated event is missing task"))?;
-                validate_snapshot(
-                    delivery,
-                    TASK_RESOURCE_TYPE,
-                    &task.task_id,
-                    task.version,
-                )?;
+                validate_snapshot(delivery, TASK_RESOURCE_TYPE, &task.task_id, task.version)?;
                 search_document(
                     &self.generation_id,
                     ACTIVITIES_MODULE_ID,
@@ -261,9 +241,9 @@ fn validate_generation_id(value: &str) -> Result<(), SdkError> {
     if value.is_empty()
         || value.len() > 120
         || value.chars().any(char::is_control)
-        || !value
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_'))
+        || !value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_')
+        })
     {
         return Err(search_configuration_invalid(
             "search generation id is invalid",
@@ -307,14 +287,18 @@ mod tests {
             SEARCH_INDEXER_CONSUMER_MODULE_ID
         );
         assert_eq!(definition.event_types().len(), 4);
-        assert!(!definition
-            .event_types()
-            .iter()
-            .any(|event_type| event_type.as_str() == "sales.deal.stage_changed"));
-        assert!(!definition
-            .event_types()
-            .iter()
-            .any(|event_type| event_type.as_str() == "activities.task.completed"));
+        assert!(
+            !definition
+                .event_types()
+                .iter()
+                .any(|event_type| event_type.as_str() == "sales.deal.stage_changed")
+        );
+        assert!(
+            !definition
+                .event_types()
+                .iter()
+                .any(|event_type| event_type.as_str() == "activities.task.completed")
+        );
     }
 
     #[test]

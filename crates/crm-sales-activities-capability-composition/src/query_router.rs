@@ -15,10 +15,7 @@ pub struct ProductionQueryRouter {
 }
 
 impl ProductionQueryRouter {
-    pub fn new(
-        sales_activities: SalesActivitiesQueryAdapter,
-        search: SearchQueryAdapter,
-    ) -> Self {
+    pub fn new(sales_activities: SalesActivitiesQueryAdapter, search: SearchQueryAdapter) -> Self {
         Self {
             sales_activities,
             search,

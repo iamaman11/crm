@@ -1,7 +1,7 @@
 #![cfg(feature = "postgres-integration")]
 
 use crm_core_data::PostgresDataStore;
-use crm_module_sdk::{RecordId, RecordType, TenantId};
+use crm_module_sdk::{RecordType, TenantId};
 use crm_search_runtime::{
     SearchCandidateCursor, SearchCandidateRequest, SearchCandidateStore, SearchIndexId,
 };

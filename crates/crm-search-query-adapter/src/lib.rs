@@ -158,8 +158,9 @@ fn runtime_request(
         .resource_types
         .into_iter()
         .map(|value| {
-            RecordType::try_new(value)
-                .map_err(|error| SdkError::invalid_argument("search.resource_types", error.to_string()))
+            RecordType::try_new(value).map_err(|error| {
+                SdkError::invalid_argument("search.resource_types", error.to_string())
+            })
         })
         .collect::<Result<BTreeSet<_>, _>>()?;
     Ok(SearchRequest {

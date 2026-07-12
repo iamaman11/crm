@@ -50,10 +50,7 @@ impl ProjectionStore for EmptyProjectionStore {
         })
     }
 
-    fn mark_projection_failed(
-        &self,
-        _failure: ProjectionFailure,
-    ) -> ProjectionStoreFuture<'_, ()> {
+    fn mark_projection_failed(&self, _failure: ProjectionFailure) -> ProjectionStoreFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
 

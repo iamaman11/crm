@@ -1,6 +1,4 @@
-use crate::{
-    GLOBAL_SEARCH_INDEX_ID, GLOBAL_SEARCH_SCHEMA_VERSION, SearchProjectionGeneration,
-};
+use crate::{GLOBAL_SEARCH_INDEX_ID, GLOBAL_SEARCH_SCHEMA_VERSION, SearchProjectionGeneration};
 use crm_core_data::PostgresDataStore;
 use crm_module_sdk::{SdkError, TenantId};
 use crm_projection_runtime::ProjectionRunner;
