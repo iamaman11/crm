@@ -259,12 +259,19 @@ impl PermissionAwareSearch {
     ) -> Result<SearchPage, SdkError> {
         request.validate()?;
         let normalized_text = normalize_search_text(&request.text)?;
-        let page_size = self.page_policy.resolve(request.page_size).map_err(cursor_error)?;
+        let page_size = self
+            .page_policy
+            .resolve(request.page_size)
+            .map_err(cursor_error)?;
         let binding = search_cursor_binding(query_request, &request, page_size)?;
         let mut after = request
             .cursor
             .as_deref()
-            .map(|cursor| self.cursor_codec.decode(cursor, &binding).map_err(cursor_error))
+            .map(|cursor| {
+                self.cursor_codec
+                    .decode(cursor, &binding)
+                    .map_err(cursor_error)
+            })
             .transpose()?
             .map(decode_candidate_cursor)
             .transpose()?;
@@ -393,8 +400,9 @@ fn search_cursor_binding(
         actor_id: Some(query_request.context.actor_id.clone()),
         capability_id: query_request.context.capability_id.clone(),
         capability_version: query_request.context.capability_version.clone(),
-        resource_type: RecordType::try_new(SEARCH_RESULT_CURSOR_RESOURCE_TYPE)
-            .map_err(|error| search_internal("SEARCH_CURSOR_RESOURCE_INVALID", error.to_string()))?,
+        resource_type: RecordType::try_new(SEARCH_RESULT_CURSOR_RESOURCE_TYPE).map_err(
+            |error| search_internal("SEARCH_CURSOR_RESOURCE_INVALID", error.to_string()),
+        )?,
         normalized_filter_hash: search_filter_hash(request)?,
         sort_id: SEARCH_SORT_ID.to_owned(),
         page_size,
@@ -405,7 +413,10 @@ fn search_filter_hash(request: &SearchRequest) -> Result<[u8; 32], SdkError> {
     let mut hasher = Sha256::new();
     hash_field(&mut hasher, b"crm.search-filter/v1");
     hash_field(&mut hasher, request.index_id.as_str().as_bytes());
-    hash_field(&mut hasher, normalize_search_text(&request.text)?.as_bytes());
+    hash_field(
+        &mut hasher,
+        normalize_search_text(&request.text)?.as_bytes(),
+    );
     for resource_type in &request.resource_types {
         hash_field(&mut hasher, resource_type.as_str().as_bytes());
     }
@@ -417,9 +428,7 @@ fn hash_field(hasher: &mut Sha256, value: &[u8]) {
     hasher.update(value);
 }
 
-fn encode_candidate_cursor(
-    cursor: &SearchCandidateCursor,
-) -> Result<CursorContinuation, SdkError> {
+fn encode_candidate_cursor(cursor: &SearchCandidateCursor) -> Result<CursorContinuation, SdkError> {
     let mut sort_key = Vec::with_capacity(8 + cursor.resource_type.as_str().len());
     sort_key.extend_from_slice(&cursor.rank_micros.to_be_bytes());
     sort_key.extend_from_slice(cursor.resource_type.as_str().as_bytes());
@@ -438,11 +447,10 @@ fn decode_candidate_cursor(
             "The search cursor is invalid.",
         ));
     }
-    let rank_micros = i64::from_be_bytes(
-        continuation.sort_key[..8]
-            .try_into()
-            .map_err(|_| search_invalid("SEARCH_CURSOR_INVALID", "The search cursor is invalid."))?,
-    );
+    let rank_micros =
+        i64::from_be_bytes(continuation.sort_key[..8].try_into().map_err(|_| {
+            search_invalid("SEARCH_CURSOR_INVALID", "The search cursor is invalid.")
+        })?);
     if rank_micros <= 0 {
         return Err(search_invalid(
             "SEARCH_CURSOR_INVALID",
@@ -453,8 +461,9 @@ fn decode_candidate_cursor(
         .map_err(|_| search_invalid("SEARCH_CURSOR_INVALID", "The search cursor is invalid."))?;
     Ok(SearchCandidateCursor {
         rank_micros,
-        resource_type: RecordType::try_new(resource_type)
-            .map_err(|_| search_invalid("SEARCH_CURSOR_INVALID", "The search cursor is invalid."))?,
+        resource_type: RecordType::try_new(resource_type).map_err(|_| {
+            search_invalid("SEARCH_CURSOR_INVALID", "The search cursor is invalid.")
+        })?,
         resource_id: continuation.record_id,
     })
 }
@@ -466,7 +475,11 @@ fn normalize_search_text(value: &str) -> Result<String, SdkError> {
             "The search text is too large.",
         ));
     }
-    Ok(value.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase())
+    Ok(value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase())
 }
 
 fn normalized_contains(value: &str, normalized_text: &str) -> bool {
@@ -548,7 +561,9 @@ mod tests {
                     .iter()
                     .filter(|candidate| {
                         request.resource_types.is_empty()
-                            || request.resource_types.contains(&candidate.resource.record_type)
+                            || request
+                                .resource_types
+                                .contains(&candidate.resource.record_type)
                     })
                     .filter(|candidate| {
                         candidate
@@ -642,12 +657,9 @@ mod tests {
             "deal-visible".to_owned(),
             BTreeSet::from(["name".to_owned()]),
         );
-        let runtime = PermissionAwareSearch::new(
-            store,
-            visibility,
-            CursorCodec::new([0x42; 32]).unwrap(),
-        )
-        .unwrap();
+        let runtime =
+            PermissionAwareSearch::new(store, visibility, CursorCodec::new([0x42; 32]).unwrap())
+                .unwrap();
 
         let result = runtime
             .search(
@@ -665,8 +677,16 @@ mod tests {
 
         assert_eq!(result.hits.len(), 1);
         assert_eq!(result.hits[0].resource.record_id.as_str(), "deal-visible");
-        assert_eq!(result.hits[0].matched_fields, BTreeSet::from(["name".to_owned()]));
-        assert!(!result.hits[0].fields.values().any(|value| value.contains("acquisition")));
+        assert_eq!(
+            result.hits[0].matched_fields,
+            BTreeSet::from(["name".to_owned()])
+        );
+        assert!(
+            !result.hits[0]
+                .fields
+                .values()
+                .any(|value| value.contains("acquisition"))
+        );
     }
 
     #[test]

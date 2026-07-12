@@ -364,6 +364,7 @@ dependencies = [
  "crm-core-contracts",
  "crm-core-events",
  "crm-module-sdk",
+ "crm-search-runtime",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -554,6 +555,19 @@ dependencies = [
  "crm-sales",
  "prost",
  "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "crm-search-runtime"
+version = "0.1.0"
+dependencies = [
+ "crm-core-events",
+ "crm-module-sdk",
+ "crm-query-runtime",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
  "tokio",
 ]
 

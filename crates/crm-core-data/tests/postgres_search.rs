@@ -52,13 +52,7 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
 
     let tenant_a = TenantId::try_new(TENANT_A).unwrap();
     store
-        .register_search_generation(
-            &tenant_a,
-            INDEX_ID,
-            GENERATION_ONE,
-            PROJECTION_ONE,
-            "1",
-        )
+        .register_search_generation(&tenant_a, INDEX_ID, GENERATION_ONE, PROJECTION_ONE, "1")
         .await
         .expect("register generation one");
     store
@@ -66,12 +60,9 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
         .await
         .expect("activate generation one");
 
-    let first = SearchCandidateStore::search_candidates(
-        &store,
-        request(TENANT_A, None, 1),
-    )
-    .await
-    .expect("search first candidate page");
+    let first = SearchCandidateStore::search_candidates(&store, request(TENANT_A, None, 1))
+        .await
+        .expect("search first candidate page");
     assert_eq!(first.candidates.len(), 1);
     let first_id = first.candidates[0].resource.record_id.as_str().to_owned();
     let continuation = first
@@ -79,12 +70,10 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
         .clone()
         .expect("first page must expose a continuation");
 
-    let second = SearchCandidateStore::search_candidates(
-        &store,
-        request(TENANT_A, Some(continuation), 1),
-    )
-    .await
-    .expect("search second candidate page");
+    let second =
+        SearchCandidateStore::search_candidates(&store, request(TENANT_A, Some(continuation), 1))
+            .await
+            .expect("search second candidate page");
     assert_eq!(second.candidates.len(), 1);
     assert_ne!(second.candidates[0].resource.record_id.as_str(), first_id);
     assert!(
@@ -93,13 +82,7 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
     );
 
     store
-        .register_search_generation(
-            &tenant_a,
-            INDEX_ID,
-            GENERATION_TWO,
-            PROJECTION_TWO,
-            "1",
-        )
+        .register_search_generation(&tenant_a, INDEX_ID, GENERATION_TWO, PROJECTION_TWO, "1")
         .await
         .expect("register generation two");
     store
@@ -118,22 +101,17 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
 
     let tenant_b = TenantId::try_new(TENANT_B).unwrap();
     store
-        .register_search_generation(
-            &tenant_b,
-            INDEX_ID,
-            "generation-b",
-            PROJECTION_B,
-            "1",
-        )
+        .register_search_generation(&tenant_b, INDEX_ID, "generation-b", PROJECTION_B, "1")
         .await
         .expect("register isolated tenant-b generation");
     store
         .activate_search_generation(&tenant_b, INDEX_ID, "generation-b")
         .await
         .expect("activate isolated tenant-b generation");
-    let tenant_b_page = SearchCandidateStore::search_candidates(&store, request(TENANT_B, None, 10))
-        .await
-        .expect("tenant-b search remains non-disclosing");
+    let tenant_b_page =
+        SearchCandidateStore::search_candidates(&store, request(TENANT_B, None, 10))
+            .await
+            .expect("tenant-b search remains non-disclosing");
     assert!(tenant_b_page.candidates.is_empty());
 }
 

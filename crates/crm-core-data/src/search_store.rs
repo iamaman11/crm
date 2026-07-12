@@ -1,5 +1,7 @@
 use crate::PostgresDataStore;
-use crm_module_sdk::{ErrorCategory, ModuleId, RecordId, RecordRef, RecordType, SdkError, TenantId};
+use crm_module_sdk::{
+    ErrorCategory, ModuleId, RecordId, RecordRef, RecordType, SdkError, TenantId,
+};
 use crm_search_runtime::{
     SearchCandidate, SearchCandidateCursor, SearchCandidatePage, SearchCandidateRequest,
     SearchCandidateStore,
@@ -113,7 +115,9 @@ impl PostgresDataStore {
         request: &SearchCandidateRequest,
     ) -> Result<SearchCandidatePage, SdkError> {
         if request.page_size == 0 || request.page_size > MAXIMUM_SEARCH_CANDIDATE_PAGE_SIZE {
-            return Err(search_request_invalid("search candidate page size is invalid"));
+            return Err(search_request_invalid(
+                "search candidate page size is invalid",
+            ));
         }
         if request.normalized_text.is_empty() {
             return Err(search_request_invalid("search text is empty"));
@@ -256,9 +260,9 @@ fn decode_search_candidate(row: sqlx::postgres::PgRow) -> Result<SearchCandidate
     let document: Value = row
         .try_get("document")
         .map_err(|error| search_stored_value_invalid(error.to_string()))?;
-    let object = document
-        .as_object()
-        .ok_or_else(|| search_stored_value_invalid("search projection document is not an object"))?;
+    let object = document.as_object().ok_or_else(|| {
+        search_stored_value_invalid("search projection document is not an object")
+    })?;
     let owner_module_id = string_field(object, "owner_module_id")?;
     Ok(SearchCandidate {
         owner_module_id: ModuleId::try_new(owner_module_id)
@@ -295,7 +299,9 @@ fn string_map_field(
         .iter()
         .map(|(name, value)| {
             let value = value.as_str().ok_or_else(|| {
-                search_stored_value_invalid(format!("non-string search field value: {field}.{name}"))
+                search_stored_value_invalid(format!(
+                    "non-string search field value: {field}.{name}"
+                ))
             })?;
             Ok((name.clone(), value.to_owned()))
         })
