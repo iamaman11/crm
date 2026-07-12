@@ -35,8 +35,8 @@ async fn seed_e2e_fixture_records() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
         panic!("DATABASE_URL is required for seed_e2e_fixture_records");
     };
-    let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
-        .expect("ADMIN_DATABASE_URL is required");
+    let admin_database_url =
+        std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL is required");
     let admin = PgPool::connect(&admin_database_url)
         .await
         .expect("connect admin database");
@@ -59,8 +59,14 @@ async fn seed_e2e_fixture_records() {
         .env("CRM_API_ACTOR_ID", ACTOR)
         .env("CRM_API_TENANTS", TENANT)
         .env("CRM_BOOTSTRAP_ALLOW_PHASE6", "true")
-        .env("CRM_CURSOR_SIGNING_KEY", "phase6l-process-cursor-signing-key-0123456789abcdef")
-        .env("CRM_APPROVAL_SIGNING_KEY", "phase6l-process-approval-signing-key-0123456789abcdef")
+        .env(
+            "CRM_CURSOR_SIGNING_KEY",
+            "phase6l-process-cursor-signing-key-0123456789abcdef",
+        )
+        .env(
+            "CRM_APPROVAL_SIGNING_KEY",
+            "phase6l-process-approval-signing-key-0123456789abcdef",
+        )
         .spawn()
         .expect("spawn crm-api process");
 
@@ -154,15 +160,17 @@ async fn seed_e2e_fixture_records() {
         capability_version: query_definition.capability_version.as_str().to_owned(),
         input: Some(search_payload.clone()),
     });
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {TOKEN}").parse().unwrap(),
-    );
-    request.metadata_mut().insert(
-        "x-tenant-id",
-        TENANT.parse().unwrap(),
-    );
-    let response = grpc.query(request).await.expect("query search").into_inner();
+    request
+        .metadata_mut()
+        .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
+    request
+        .metadata_mut()
+        .insert("x-tenant-id", TENANT.parse().unwrap());
+    let response = grpc
+        .query(request)
+        .await
+        .expect("query search")
+        .into_inner();
     let output = response.output.expect("output");
     let page = search::SearchResponse::decode(output.payload.as_slice()).expect("decode response");
     assert!(page.hits.iter().any(|hit| hit.resource_id == DEAL_ID));
@@ -192,13 +200,20 @@ async fn authenticated_mutation(
         .status()
 }
 
-async fn wait_until_ready(client: &reqwest::Client, _child: &tokio::process::Child, http_addr: &str) {
+async fn wait_until_ready(
+    client: &reqwest::Client,
+    _child: &tokio::process::Child,
+    http_addr: &str,
+) {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if let Ok(response) = client.get(format!("http://{http_addr}/readyz")).send().await {
-            if response.status() == StatusCode::OK {
-                return;
-            }
+        if let Ok(response) = client
+            .get(format!("http://{http_addr}/readyz"))
+            .send()
+            .await
+            && response.status() == StatusCode::OK
+        {
+            return;
         }
         assert!(Instant::now() < deadline, "readiness timeout");
         sleep(Duration::from_millis(200)).await;
@@ -294,7 +309,11 @@ fn actor_owner() -> core::ActorOrTeamOwner {
 }
 
 fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+    TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
 }
 
 async fn task_count(admin: &PgPool) -> i64 {
