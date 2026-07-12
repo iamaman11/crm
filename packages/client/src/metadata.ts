@@ -1,11 +1,4 @@
-import {
-  Code,
-  ConnectError,
-  createClient,
-  type Client,
-  type Interceptor,
-} from "@connectrpc/connect";
-import { createGrpcWebTransport } from "@connectrpc/connect-web";
+import { type Client } from "@connectrpc/connect";
 import {
   create,
   fromBinary,
@@ -45,16 +38,13 @@ import {
   requireAuthenticatedSession,
   type SessionProvider,
 } from "./session";
+import { createApplicationGatewayClient } from "./transport";
 
 const METADATA_OWNER = "crm.metadata";
 const CONTRACT_VERSION = "1.0.0";
 const MAX_PROTOBUF_BYTES = 1048576n;
 const RETENTION_POLICY_ID = "standard";
 const IDEMPOTENCY_HEADER = "idempotency-key";
-const TENANT_HEADER = "x-tenant-id";
-const REQUEST_ID_HEADER = "x-request-id";
-const CORRELATION_ID_HEADER = "x-correlation-id";
-const TRACE_ID_HEADER = "x-trace-id";
 
 export interface PublishMetadataBundleOptions {
   definitions: MetadataDefinitionInput[];
@@ -161,27 +151,7 @@ export class GovernedMetadataClient {
 
   public constructor(options: GovernedGatewayClientOptions) {
     this.sessionProvider = options.sessionProvider;
-    const idFactory = options.idFactory ?? defaultRequestId;
-    const sessionInterceptor: Interceptor = (next) => async (request) => {
-      const session = this.sessionProvider.getSnapshot();
-      const requestId = idFactory();
-
-      if (session.status === "authenticated") {
-        request.header.set("authorization", `Bearer ${session.bearerToken}`);
-        request.header.set(TENANT_HEADER, session.tenantId);
-      }
-      request.header.set(REQUEST_ID_HEADER, requestId);
-      request.header.set(CORRELATION_ID_HEADER, requestId);
-      request.header.set(TRACE_ID_HEADER, requestId);
-
-      return await next(request);
-    };
-
-    const transport = createGrpcWebTransport({
-      baseUrl: normalizeBaseUrl(options.baseUrl),
-      interceptors: [sessionInterceptor],
-    });
-    this.gatewayClient = createClient(ApplicationGatewayService, transport);
+    this.gatewayClient = createApplicationGatewayClient(options);
   }
 
   public async publishBundle(
@@ -395,24 +365,4 @@ function equalUint8Arrays(left: Uint8Array, right: Uint8Array): boolean {
     if (left[index] !== right[index]) return false;
   }
   return true;
-}
-
-function normalizeBaseUrl(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-function defaultRequestId(): string {
-  return globalThis.crypto.randomUUID();
-}
-
-export function mapMetadataTransportError(error: unknown): ProductClientError {
-  if (error instanceof ConnectError && error.code === Code.Canceled) {
-    return new ProductClientError({
-      kind: "unavailable",
-      message: error.rawMessage || "The metadata request was canceled.",
-      retryable: true,
-      cause: error,
-    });
-  }
-  return mapGatewayError(error);
 }
