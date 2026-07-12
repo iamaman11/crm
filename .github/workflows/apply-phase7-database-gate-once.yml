@@ -1,0 +1,36 @@
+name: Apply Phase 7 database gate once
+
+on:
+  pull_request:
+    paths:
+      - "scripts/apply_phase7_database_gate.py"
+      - ".github/workflows/apply-phase7-database-gate-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'develop/phase7-permission-aware-search'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase7-permission-aware-search
+          fetch-depth: 0
+      - name: Validate patch script
+        run: python -m py_compile scripts/apply_phase7_database_gate.py
+      - name: Apply canonical Database CI update
+        run: |
+          python scripts/apply_phase7_database_gate.py
+          rm scripts/apply_phase7_database_gate.py
+          rm .github/workflows/apply-phase7-database-gate-once.yml
+      - name: Commit canonical Database CI update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/database.yml scripts/apply_phase7_database_gate.py .github/workflows/apply-phase7-database-gate-once.yml
+          git commit -m "Add search migration to canonical database gates"
+          git pull --rebase origin develop/phase7-permission-aware-search
+          git push origin HEAD:develop/phase7-permission-aware-search
