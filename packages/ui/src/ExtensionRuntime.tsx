@@ -9,10 +9,10 @@ import {
   type ReactNode,
 } from "react";
 
-export const UI_EXTENSION_SURFACES = [
+export const UI_EXTENSION_SURFACES = Object.freeze([
   "record.detail.main",
   "record.detail.sidebar",
-] as const;
+] as const);
 
 export type UiExtensionSurface = (typeof UI_EXTENSION_SURFACES)[number];
 
@@ -95,12 +95,13 @@ export class UiExtensionRegistry<Context> {
     this.#definitions = Object.freeze(
       normalized.sort((left, right) => {
         if (left.surface !== right.surface) {
-          return left.surface.localeCompare(right.surface);
+          return compareText(left.surface, right.surface);
         }
         if (left.order !== right.order) {
           return left.order - right.order;
         }
-        return uiExtensionCoordinate(left).localeCompare(
+        return compareText(
+          uiExtensionCoordinate(left),
           uiExtensionCoordinate(right),
         );
       }),
@@ -358,7 +359,7 @@ function validateIdentifier(
   ) {
     throw new UiExtensionRegistrationError(
       code,
-      `${label} must be a lowercase dotted identifier of at most ${MAX_IDENTIFIER_BYTES} UTF-8 bytes.`,
+      `${label} must be a lowercase identifier using dots, underscores or hyphens and at most ${MAX_IDENTIFIER_BYTES} UTF-8 bytes.`,
     );
   }
 }
@@ -370,4 +371,8 @@ function assertSupportedSurface(surface: UiExtensionSurface) {
       `Unsupported UI extension surface: ${String(surface)}`,
     );
   }
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
