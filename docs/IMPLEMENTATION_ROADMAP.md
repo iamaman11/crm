@@ -205,9 +205,9 @@ Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI,
 
 Phase 7 is the active roadmap phase.
 
-### Golden module tooling — #56 / PR #64
+### Golden module tooling — Complete
 
-The first Phase 7 packet establishes repository-supported module creation and validation so later platform/domain work inherits the proven architecture by construction:
+Issue #56 / merged PR #64 established repository-supported module creation and validation so later platform/domain work inherits the proven architecture by construction:
 
 - separate owner-module and optional link-module scaffolding patterns;
 - explicit owner object declarations before generation;
@@ -218,12 +218,25 @@ The first Phase 7 packet establishes repository-supported module creation and va
 - permanent cross-platform repository commands for architecture, manifest validation, formatting, lockfile synchronization, focused tests, full tests and the common Rust quality gate;
 - Governance CI that validates generated manifests, compiles a fresh generated module with `cargo check --all-targets` and verifies generated dependencies against `architecture-policy.json`.
 
-Generated scaffolds are **Foundation only** and do not count as production vertical slices. Merge of PR #64 closes #56.
+Generated scaffolds are **Foundation only** and do not count as production vertical slices. PR #64 was merged as `15bf3ddeac0375325a3c59518e3ac55a3903c20d` and #56 is complete.
 
-### Next executable platform packets
+### Generalized projection runtime — #65 / PR #67 — Gate review
 
-1. [#65](https://github.com/iamaman11/crm/issues/65) — generalize the Phase 6 projection proof into a reusable projection runtime and rebuild orchestrator while keeping concrete owner-domain handlers outside generic infrastructure.
-2. [#66](https://github.com/iamaman11/crm/issues/66) — build tenant- and permission-aware search with deterministic reindexing on the shared projection runtime.
+The second Phase 7 packet generalizes the Phase 6 projection proof without moving owner-domain decoding or business semantics into infrastructure:
+
+- `crm-projection-runtime` owns typed projection identity, registration, checkpoint-based history paging, deterministic handler execution, poison/failure handling and rebuild orchestration;
+- `crm-core-events` exposes the platform `ProjectionStore` port and typed `ProjectionFailure` contract;
+- `crm-core-data` adapts the existing PostgreSQL projection tables/runtime to that port without introducing a new migration;
+- deterministic handler failure marks the projection checkpoint failed without advancing the last successful cursor or applied-event count and blocks further replay until reset or repair;
+- existing Deal timeline and Task status handlers remain concrete composition-layer handlers but execute through the generic registry/runner;
+- `Phase6ProjectionWorker` remains only as a compatibility facade so application/process composition does not regress while orchestration moves to the platform runtime;
+- dedicated `Projection Runtime CI` proves failed-checkpoint persistence/reset and the existing Deal/Task rebuild behavior against real PostgreSQL.
+
+The generic runtime has no Sales, Activities or PostgreSQL implementation dependency. Implementation and production acceptance are complete; merge of PR #67 closes #65 after all required checks are green on one exact review head.
+
+### Next executable platform packet
+
+1. [#66](https://github.com/iamaman11/crm/issues/66) — build tenant- and permission-aware search with deterministic reindexing on the shared projection runtime.
 
 ### Remaining platform deliverables
 

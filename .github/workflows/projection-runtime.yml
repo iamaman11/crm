@@ -1,0 +1,103 @@
+name: Projection Runtime CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-core-events/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-projection-runtime/**"
+      - "crates/crm-sales-activities-capability-composition/**"
+      - "crates/crm-proto-contracts/**"
+      - "modules/crm-sales/**"
+      - "modules/crm-activities/**"
+      - "database/migrations/0001_platform_foundation.up.sql"
+      - "database/migrations/0002_typed_payload_encoding.up.sql"
+      - "database/migrations/0003_relationship_payload_governance.up.sql"
+      - "database/migrations/0004_delete_execution_context.up.sql"
+      - "database/migrations/0005_audited_noop_transactions.up.sql"
+      - "database/migrations/0006_event_delivery_lineage.up.sql"
+      - "database/migrations/0007_consumer_event_delivery_ledger.up.sql"
+      - "database/migrations/0008_rebuildable_projection_runtime.up.sql"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0003_sales_activities_adapters.sql"
+      - ".github/workflows/projection-runtime.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-core-events/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-projection-runtime/**"
+      - "crates/crm-sales-activities-capability-composition/**"
+      - "crates/crm-proto-contracts/**"
+      - "modules/crm-sales/**"
+      - "modules/crm-activities/**"
+      - "database/migrations/0001_platform_foundation.up.sql"
+      - "database/migrations/0002_typed_payload_encoding.up.sql"
+      - "database/migrations/0003_relationship_payload_governance.up.sql"
+      - "database/migrations/0004_delete_execution_context.up.sql"
+      - "database/migrations/0005_audited_noop_transactions.up.sql"
+      - "database/migrations/0006_event_delivery_lineage.up.sql"
+      - "database/migrations/0007_consumer_event_delivery_ledger.up.sql"
+      - "database/migrations/0008_rebuildable_projection_runtime.up.sql"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0003_sales_activities_adapters.sql"
+      - ".github/workflows/projection-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  projection-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_projection_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_projection_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_projection_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_projection_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_projection_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply projection runtime schema
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
+      - name: Seed isolated projection fixtures
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify failed checkpoint persistence and recovery
+        run: cargo test -p crm-core-data --features postgres-integration --test postgres_projection_runtime -- --nocapture
+      - name: Verify generic runtime preserves Deal and Task projection behavior
+        run: cargo test -p crm-sales-activities-capability-composition --features postgres-integration --test postgres_projections -- --nocapture

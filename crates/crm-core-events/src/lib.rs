@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 
-use crm_module_sdk::{EventDelivery, EventId, EventType, ModuleId, TenantId};
+use crm_module_sdk::{EventDelivery, EventId, EventType, ModuleId, SdkError, TenantId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::future::Future;
+use std::pin::Pin;
 
 pub const DEFAULT_EVENT_HISTORY_PAGE_SIZE: u32 = 100;
 pub const MAX_EVENT_HISTORY_PAGE_SIZE: u32 = 500;
@@ -119,6 +121,63 @@ pub struct ProjectionCheckpoint {
     pub projection_id: String,
     pub cursor: EventHistoryCursor,
     pub applied_event_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectionFailure {
+    pub tenant_id: TenantId,
+    pub projection_id: String,
+    pub event_id: EventId,
+    pub occurred_at_unix_nanos: i64,
+    pub failure_code: String,
+}
+
+impl ProjectionFailure {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.projection_id.is_empty() || self.projection_id.len() > 180 {
+            return Err("projection id is invalid");
+        }
+        if self.failure_code.is_empty() || self.failure_code.len() > 180 {
+            return Err("projection failure code is invalid");
+        }
+        if self.occurred_at_unix_nanos < 0 {
+            return Err("projection failure occurrence time must not be negative");
+        }
+        Ok(())
+    }
+}
+
+pub type ProjectionStoreFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, SdkError>> + Send + 'a>>;
+
+/// Durable history/state boundary required by the generic projection runtime.
+///
+/// Implementations may use PostgreSQL or another platform-owned store, but
+/// projection handlers and orchestration depend only on this port.
+pub trait ProjectionStore: Send + Sync {
+    fn projection_checkpoint(
+        &self,
+        tenant_id: TenantId,
+        projection_id: String,
+    ) -> ProjectionStoreFuture<'_, Option<ProjectionCheckpoint>>;
+
+    fn list_event_history(
+        &self,
+        request: EventHistoryRequest,
+    ) -> ProjectionStoreFuture<'_, EventHistoryPage>;
+
+    fn apply_projection_event(
+        &self,
+        application: ProjectionEventApplication,
+    ) -> ProjectionStoreFuture<'_, ProjectionApplyResult>;
+
+    fn mark_projection_failed(&self, failure: ProjectionFailure) -> ProjectionStoreFuture<'_, ()>;
+
+    fn reset_projection(
+        &self,
+        tenant_id: TenantId,
+        projection_id: String,
+    ) -> ProjectionStoreFuture<'_, ()>;
 }
 
 /// Architecture marker for `crm-core-events`.

@@ -1,4 +1,5 @@
 # Public mutation entrypoints are governed by crm-capability-ingress and ADR-030.
+# Tenant-scoped rebuildable projection orchestration is governed by crm-projection-runtime; PostgreSQL remains an adapter.
 [workspace]
 resolver = "2"
 members = [
@@ -19,6 +20,7 @@ members = [
   "crates/crm-proto-contracts",
   "crates/crm-capability-plan-support",
   "crates/crm-query-runtime",
+  "crates/crm-projection-runtime",
   "crates/crm-sales-capability-adapter",
   "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
