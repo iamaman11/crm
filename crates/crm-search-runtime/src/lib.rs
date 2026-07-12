@@ -586,13 +586,6 @@ mod tests {
                 let limit = request.page_size as usize;
                 let has_more = filtered.len() > limit;
                 filtered.truncate(limit);
-                let next_after = has_more && !filtered.is_empty().then(|| ());
-                let next_after = if has_more {
-                    filtered.last().map(SearchCandidate::cursor)
-                } else {
-                    None
-                };
-                let _ = next_after;
                 Ok(SearchCandidatePage {
                     candidates: filtered.clone(),
                     next_after: if has_more {
