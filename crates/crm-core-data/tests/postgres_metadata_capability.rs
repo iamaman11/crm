@@ -253,7 +253,7 @@ async fn governed_metadata_lifecycle_is_atomic_audited_replay_safe_and_pop_only(
         SELECT action
         FROM crm.metadata_transitions
         WHERE tenant_id = 'tenant-a'
-        ORDER BY transition_sequence
+        ORDER BY occurred_at, transition_id
         "#,
     )
     .fetch_all(&admin)
