@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+mod generation;
+
+pub use generation::*;
+
 //! Permission-aware search mechanics over rebuildable projection documents.
 //!
 //! The search store returns tenant-scoped candidates from a rebuildable index.
