@@ -137,9 +137,8 @@ fn catalog_error(error: impl fmt::Display) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crm_sales_activities_capability_composition::{
-        PRODUCTION_MUTATION_CAPABILITY_IDS, PRODUCTION_QUERY_CAPABILITY_IDS,
-    };
+    use crm_sales_activities_capability_composition::PRODUCTION_MUTATION_CAPABILITY_IDS;
+    use crm_sales_activities_query_adapter::PRODUCTION_QUERY_CAPABILITY_IDS;
     use crm_search_query_adapter::SEARCH_QUERY_CAPABILITY;
 
     #[test]
