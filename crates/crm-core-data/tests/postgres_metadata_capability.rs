@@ -259,7 +259,10 @@ async fn governed_metadata_lifecycle_is_atomic_audited_replay_safe_and_pop_only(
     .fetch_all(&admin)
     .await
     .expect("load metadata transition sequence");
-    assert_eq!(actions, ["publish", "activate", "publish", "activate", "rollback"]);
+    assert_eq!(
+        actions,
+        ["publish", "activate", "publish", "activate", "rollback"]
+    );
 }
 
 fn bundle_v1_definitions() -> Vec<wire::MetadataDefinitionInput> {
