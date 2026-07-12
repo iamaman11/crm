@@ -1,4 +1,10 @@
-import { useMemo, useSyncExternalStore, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useMemo,
+  useSyncExternalStore,
+  useState,
+} from "react";
 import {
   GovernedClient,
   GovernedMetadataClient,
@@ -8,7 +14,6 @@ import {
 } from "@ultimate-crm/client";
 import { AppShell, FeedbackPanel, PageHeader } from "@ultimate-crm/ui";
 import { AdminStudioPage } from "./AdminStudioPage";
-import { RecordPage } from "./RecordPage";
 import { createDevelopmentSessionStore } from "./developmentSession";
 import {
   canNavigateToRoute,
@@ -26,6 +31,12 @@ if (import.meta.env.DEV) {
 const productEnvironment: ProductEnvironment = {
   development: import.meta.env.DEV,
 };
+const DevelopmentRecordPage = import.meta.env.DEV
+  ? lazy(async () => {
+      const module = await import("./RecordPage");
+      return { default: module.RecordPage };
+    })
+  : null;
 const client = new GovernedClient({
   baseUrl: window.location.origin,
   sessionProvider: sessionStore,
@@ -115,8 +126,16 @@ function RouteContent({
     return <AdminStudioPage client={metadataClient} />;
   }
 
-  if (route.id === "record-extension-proof") {
-    return <RecordPage />;
+  if (route.id === "record-extension-proof" && DevelopmentRecordPage) {
+    return (
+      <Suspense
+        fallback={
+          <FeedbackPanel tone="neutral" title="Loading record host…" busy />
+        }
+      >
+        <DevelopmentRecordPage />
+      </Suspense>
+    );
   }
 
   return (
