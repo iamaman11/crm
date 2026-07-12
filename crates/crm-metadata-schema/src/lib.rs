@@ -396,14 +396,8 @@ pub struct RelationshipDefinition {
 impl RelationshipDefinition {
     fn validate(&self) -> Result<(), SchemaError> {
         validate_label(&self.label, "relationship.label")?;
-        metadata_id(
-            &self.source_object_id,
-            "relationship.source_object_id",
-        )?;
-        metadata_id(
-            &self.target_object_id,
-            "relationship.target_object_id",
-        )?;
+        metadata_id(&self.source_object_id, "relationship.source_object_id")?;
+        metadata_id(&self.target_object_id, "relationship.target_object_id")?;
         Ok(())
     }
 }
@@ -502,7 +496,10 @@ impl ViewDefinition {
                 return Err(SchemaError::new(
                     SchemaErrorCode::InvalidReference,
                     "view.sorts.field_id",
-                    format!("sort field `{}` is not present in view columns", sort.field_id),
+                    format!(
+                        "sort field `{}` is not present in view columns",
+                        sort.field_id
+                    ),
                 ));
             }
             if !sort_fields.insert(sort.field_id.as_str()) {
@@ -748,11 +745,7 @@ pub struct SchemaError {
 }
 
 impl SchemaError {
-    fn new(
-        code: SchemaErrorCode,
-        path: impl Into<String>,
-        message: impl Into<String>,
-    ) -> Self {
+    fn new(code: SchemaErrorCode, path: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             code,
             path: path.into(),
@@ -763,7 +756,11 @@ impl SchemaError {
 
 impl fmt::Display for SchemaError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {} ({:?})", self.path, self.message, self.code)
+        write!(
+            formatter,
+            "{}: {} ({:?})",
+            self.path, self.message, self.code
+        )
     }
 }
 
@@ -771,11 +768,7 @@ impl Error for SchemaError {}
 
 fn metadata_id(value: &str, path: &str) -> Result<MetadataId, SchemaError> {
     MetadataId::try_new(value.to_owned()).map_err(|error| {
-        SchemaError::new(
-            SchemaErrorCode::InvalidIdentifier,
-            path,
-            error.safe_message,
-        )
+        SchemaError::new(SchemaErrorCode::InvalidIdentifier, path, error.safe_message)
     })
 }
 
@@ -818,9 +811,7 @@ fn validate_local_id(value: &str, path: &str) -> Result<(), SchemaError> {
             .next()
             .is_some_and(|byte| byte.is_ascii_lowercase())
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'_' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         });
     if !valid {
         return Err(SchemaError::new(
@@ -931,7 +922,7 @@ mod tests {
 
     #[test]
     fn all_eight_definition_kinds_produce_documents() {
-        let definitions = vec![
+        let definitions = [
             object(),
             field(),
             MetadataDefinition::Relationship(RelationshipDefinition {
@@ -1027,7 +1018,10 @@ mod tests {
             description: None,
             tags: vec!["commercial".to_owned(), "sales".to_owned()],
         });
-        assert_eq!(first.canonical_bytes().unwrap(), second.canonical_bytes().unwrap());
+        assert_eq!(
+            first.canonical_bytes().unwrap(),
+            second.canonical_bytes().unwrap()
+        );
 
         let first_permission = MetadataDefinition::Permission(PermissionDefinition {
             id: "crm.sales.deal.standard_access".to_owned(),
@@ -1086,7 +1080,10 @@ mod tests {
                 _ => unreachable!(),
             },
         });
-        assert_ne!(first.canonical_bytes().unwrap(), second.canonical_bytes().unwrap());
+        assert_ne!(
+            first.canonical_bytes().unwrap(),
+            second.canonical_bytes().unwrap()
+        );
     }
 
     #[test]
