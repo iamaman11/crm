@@ -15,6 +15,6 @@ node_modules/
 .pnpm-store/
 apps/*/dist/
 packages/*/dist/
-packages/client/src/gen/
+packages/client/gen/
 playwright-report/
 test-results/
