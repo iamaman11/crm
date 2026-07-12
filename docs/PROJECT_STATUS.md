@@ -35,7 +35,9 @@ The generalized projection runtime (#65 / merged PR #67) is complete on `main` a
 
 The tenant- and permission-aware search packet **#66 / merged PR #68** is complete. It delivers the search runtime, PostgreSQL generation/index adapter, governed public query capability, backend-consistent field-local match evidence, live permission re-checking, application-runtime composition and canonical migration gates. Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all required checks and was squash-merged into `main` as `49272918cb4b767eedc2ca34574abba40718eae1`.
 
-The repository development process is being upgraded through **#70** to the exact-SHA two-agent model defined in `MULTI_AGENT_DEVELOPMENT.md`: one Architect / Implementer primary writer, one independent Local Integrator / Verifier operating on immutable checkpoint SHAs, and GitHub CI as the final exact-head merge authority. The system is designed to reduce remote-CI feedback latency without weakening any architecture or correctness gate.
+The exact-SHA two-agent development system **#70 / merged PR #72** is complete on `main` as `ae3bcd7a0ac23f1db0e969488a3085c3d33e0b42`. The active product-plane packet is **#71 / draft PR #73**, currently paused at Checkpoint A for independent local verification of exact SHA `aefe4b88f3556ffb447fc7966982a906cc14f92a`.
+
+Issue **#74** qualifies the proposed ChatGPT Codex local agent for a responsibility level from exact-SHA verifier through full delivery-packet owner. Until that evidence is reviewed, the active #71 handoff remains limited to its already published `MECHANICAL_FIX_ALLOWED` scope.
 
 ## Phase 6 completion
 
@@ -105,17 +107,24 @@ Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed Contract CI,
 
 ## Development system v2
 
-Issue #70 formalizes the repository's two-agent development model:
+Issue #70 / merged PR #72 formalized the repository's exact-SHA multi-agent model:
 
 - the **Architect / Implementer** owns packet scope, architecture, contracts, primary implementation, tests, fixes and checkpoint publication;
 - the **Local Integrator / Verifier** checks an exact immutable SHA in a complete local toolchain and returns reproducible structured evidence;
-- the verifier defaults to `VERIFY_ONLY` and is not a hidden concurrent writer;
 - overlapping code has one primary writer at a time;
 - every verification handoff names branch, exact SHA, mode, scope, environment and required commands;
 - every report names the exact SHA actually tested and explicitly lists anything unverified;
 - a new commit invalidates green evidence for checks not rerun on the new SHA;
 - local checkpoints mirror architecture, behavior and delivery stages;
 - GitHub CI remains the final exact-head merge authority.
+
+Issue #74 adds capability-based qualification for the ChatGPT Codex local agent:
+
+- a qualified local agent should maintain a persistent checkout and report its real absolute path, origin, branch, HEAD and worktree state;
+- responsibility is graded from Level 1 exact-SHA verifier through Level 2 local integrator, Level 3 co-implementer and Level 4 delivery-packet owner;
+- higher capability should receive higher responsibility rather than being artificially limited to passive verification;
+- parallel implementation is allowed only on explicit non-overlapping workstreams or through an explicit writer handoff;
+- the active packet's published authority remains unchanged until qualification evidence is reviewed.
 
 The standard coordination signals are `SECOND_AGENT_NOT_NEEDED`, `CONNECT_SECOND_AGENT`, `SECOND_AGENT_REPORT_NEEDED` and `READY_FOR_EXACT_HEAD_CI`. The committed issue/branch/PR/SHA state remains authoritative over chat-only coordination.
 
@@ -135,7 +144,7 @@ The architecture and backend platform now have a complete first production-compo
 ### Not yet complete
 
 - Admin Studio metadata builders and publication workflows;
-- web/mobile product shell and product-quality frontend;
+- product-quality web/mobile shell and broad CRM frontend experience — foundation in progress in #71 / PR #73;
 - canonical customer master, identity resolution and consent;
 - catalog, pricing, CPQ and quote-to-revenue lifecycle;
 - communications, marketing, support/service and other expert domains;
@@ -145,8 +154,8 @@ The architecture and backend platform now have a complete first production-compo
 
 ## Immediate delivery sequence
 
-1. Complete the #70 development-system documentation packet and adopt exact-SHA two-agent verification for subsequent work.
-2. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
+1. Qualify the ChatGPT Codex local agent through #74, then assign the maximum safe responsibility level for #71 and later packets.
+2. Complete #71 / PR #73: typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
 3. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
 4. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
 5. Continue frontend and expert backend modules as end-to-end vertical slices.
@@ -157,12 +166,13 @@ The architecture and backend platform now have a complete first production-compo
 - incremental commits are allowed during implementation;
 - one primary writer at a time for overlapping multi-agent scope;
 - exact-SHA local handoffs may be used at architecture, behavior and delivery checkpoints;
-- verifier mode defaults to `VERIFY_ONLY`;
+- verifier mode defaults to `VERIFY_ONLY` only until a packet-specific handoff or qualification grants broader authority;
+- qualified agents may own bounded integration fixes, non-overlapping workstreams or full delivery packets according to `CODEX_AGENT_QUALIFICATION.md`;
 - full GitHub CI remains mandatory on the exact final review head;
 - final PR history is reduced to semantic commits where repository tooling permits;
 - architecture, contract, tenant, authorization, audit and rollback gates remain strict.
 
-See `DEVELOPMENT_WORKFLOW.md`, `MULTI_AGENT_DEVELOPMENT.md` and `MODULE_DEVELOPMENT.md`.
+See `DEVELOPMENT_WORKFLOW.md`, `MULTI_AGENT_DEVELOPMENT.md`, `CODEX_AGENT_QUALIFICATION.md` and `MODULE_DEVELOPMENT.md`.
 
 ## Documentation hygiene rule
 

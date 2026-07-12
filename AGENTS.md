@@ -13,9 +13,10 @@ Before changing code, read these sources in order:
 5. `docs/MODULE_CATALOG.md` — what counts as a module and which business domains exist or are planned.
 6. `docs/DEVELOPMENT_WORKFLOW.md` — coherent delivery packets, checkpoints, PR and commit policy.
 7. `docs/MULTI_AGENT_DEVELOPMENT.md` — exact-SHA handoff and independent local verification protocol when more than one agent participates.
-8. `docs/MODULE_DEVELOPMENT.md` — golden owner/link module scaffolding and permanent repository commands.
-9. Relevant accepted ADRs under `docs/adr/`.
-10. The GitHub issue for the active slice.
+8. `docs/CODEX_AGENT_QUALIFICATION.md` — persistent local checkout, responsibility levels and qualification rules for a Codex local agent when applicable.
+9. `docs/MODULE_DEVELOPMENT.md` — golden owner/link module scaffolding and permanent repository commands.
+10. Relevant accepted ADRs under `docs/adr/`.
+11. The GitHub issue for the active slice.
 
 When descriptive documents disagree, the precedence is:
 
@@ -145,7 +146,7 @@ Independent local verification may be required or useful before final CI, but lo
 
 When a second agent participates in the same delivery packet, follow `docs/MULTI_AGENT_DEVELOPMENT.md`.
 
-Default role split:
+The baseline split is:
 
 ```text
 Architect / Implementer
@@ -158,16 +159,19 @@ GitHub CI
   = final exact-head independent gate authority
 ```
 
+This baseline is not a permanent ceiling. A ChatGPT Codex local agent is qualified under `docs/CODEX_AGENT_QUALIFICATION.md` and may be promoted per packet to Local Integrator, Co-Implementer or Delivery Packet Owner when its actual environment and demonstrated behavior support that responsibility.
+
 Rules:
 
 1. One primary writer owns overlapping code at a time.
-2. The verifier defaults to `VERIFY_ONLY`.
+2. The verifier defaults to `VERIFY_ONLY` until a handoff or qualification grants broader authority.
 3. Every verification handoff names an exact SHA, mode, affected scope and required commands.
 4. Every report names the exact SHA actually tested.
 5. A new commit makes older green evidence stale for checks not rerun on the new SHA.
-6. Architecture, contract, domain, authorization, tenant and persistence fixes return to the Architect / Implementer by default.
-7. Mechanical verifier writes require explicit authorization; broader writes require a writer handoff.
-8. Final merge still requires applicable GitHub checks green on one exact review head.
+6. Architecture, contract, domain, authorization, tenant and persistence changes require an identified decision owner.
+7. Mechanical verifier writes require explicit authorization; broader writes require a writer handoff or explicit non-overlapping workstream ownership.
+8. A qualified local agent should keep a persistent checkout and report its real repository path, branch, HEAD and worktree state.
+9. Final merge still requires applicable GitHub checks green on one exact review head.
 
 Useful coordination signals:
 
