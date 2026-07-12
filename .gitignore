@@ -11,3 +11,10 @@ __pycache__/
 coverage/
 *.log
 artifacts/generated/
+node_modules/
+.pnpm-store/
+apps/*/dist/
+packages/*/dist/
+packages/client/src/gen/
+playwright-report/
+test-results/
