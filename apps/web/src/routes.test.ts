@@ -2,6 +2,12 @@ import { describe, it, expect } from "vitest";
 import { canNavigateToRoute, type ProductRouteDefinition } from "./routes";
 import type { SessionState } from "@ultimate-crm/client";
 
+const authenticatedSession: SessionState = {
+  status: "authenticated",
+  bearerToken: "token",
+  tenantId: "tenant",
+};
+
 describe("Route Eligibility", () => {
   const publicRoute: ProductRouteDefinition = {
     id: "home",
@@ -17,12 +23,20 @@ describe("Route Eligibility", () => {
     authentication: "required",
   };
 
-  const capabilityRoute: ProductRouteDefinition = {
+  const searchRoute: ProductRouteDefinition = {
     id: "search",
     path: "/search",
     label: "Search",
     authentication: "required",
     requiredCapability: "search.global.query",
+  };
+
+  const adminStudioRoute: ProductRouteDefinition = {
+    id: "admin-studio",
+    path: "/admin/metadata",
+    label: "Admin Studio",
+    authentication: "required",
+    requiredCapability: "metadata.activation.get",
   };
 
   it("permits public routes to any session", () => {
@@ -38,32 +52,35 @@ describe("Route Eligibility", () => {
   });
 
   it("permits authenticated required routes to authenticated sessions", () => {
-    const authSession: SessionState = {
-      status: "authenticated",
-      bearerToken: "token",
-      tenantId: "tenant",
-    };
     const access = { capabilities: new Set<"search.global.query">() };
-    expect(canNavigateToRoute(authenticatedRoute, authSession, access)).toBe(true);
+    expect(canNavigateToRoute(authenticatedRoute, authenticatedSession, access)).toBe(true);
   });
 
   it("denies capability-required routes when session lacks the capability", () => {
-    const authSession: SessionState = {
-      status: "authenticated",
-      bearerToken: "token",
-      tenantId: "tenant",
-    };
     const accessWithoutCap = { capabilities: new Set<"search.global.query">() };
-    expect(canNavigateToRoute(capabilityRoute, authSession, accessWithoutCap)).toBe(false);
+    expect(canNavigateToRoute(searchRoute, authenticatedSession, accessWithoutCap)).toBe(false);
   });
 
   it("permits capability-required routes when session has the capability", () => {
-    const authSession: SessionState = {
-      status: "authenticated",
-      bearerToken: "token",
-      tenantId: "tenant",
+    const accessWithCap = {
+      capabilities: new Set<"search.global.query">(["search.global.query"]),
     };
-    const accessWithCap = { capabilities: new Set<"search.global.query">(["search.global.query"]) };
-    expect(canNavigateToRoute(capabilityRoute, authSession, accessWithCap)).toBe(true);
+    expect(canNavigateToRoute(searchRoute, authenticatedSession, accessWithCap)).toBe(true);
+  });
+
+  it("keeps Admin Studio hidden until its governed metadata capability is available", () => {
+    const denied = {
+      capabilities: new Set<"search.global.query" | "metadata.activation.get">([
+        "search.global.query",
+      ]),
+    };
+    const allowed = {
+      capabilities: new Set<"search.global.query" | "metadata.activation.get">([
+        "metadata.activation.get",
+      ]),
+    };
+
+    expect(canNavigateToRoute(adminStudioRoute, authenticatedSession, denied)).toBe(false);
+    expect(canNavigateToRoute(adminStudioRoute, authenticatedSession, allowed)).toBe(true);
   });
 });
