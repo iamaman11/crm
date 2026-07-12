@@ -1,0 +1,78 @@
+name: Fix search foundation compile issues
+
+on:
+  pull_request:
+    paths:
+      - "crates/crm-search-runtime/src/lib.rs"
+      - "crates/crm-core-data/tests/postgres_search.rs"
+      - ".github/workflows/fix-search-foundation.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'develop/phase7-permission-aware-search'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase7-permission-aware-search
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Apply known compile cleanups
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          runtime = Path("crates/crm-search-runtime/src/lib.rs")
+          text = runtime.read_text(encoding="utf-8")
+          bad = '''                let next_after = has_more && !filtered.is_empty().then(|| ());
+                let next_after = if has_more {
+                    filtered.last().map(SearchCandidate::cursor)
+                } else {
+                    None
+                };
+                let _ = next_after;
+                Ok(SearchCandidatePage {
+                    candidates: filtered.clone(),
+                    next_after: if has_more {
+                        filtered.last().map(SearchCandidate::cursor)
+                    } else {
+                        None
+                    },
+                })
+'''
+          good = '''                let next_after = if has_more {
+                    filtered.last().map(SearchCandidate::cursor)
+                } else {
+                    None
+                };
+                Ok(SearchCandidatePage {
+                    candidates: filtered,
+                    next_after,
+                })
+'''
+          if bad not in text:
+              raise SystemExit("expected TestStore continuation block not found")
+          runtime.write_text(text.replace(bad, good, 1), encoding="utf-8")
+
+          pg_test = Path("crates/crm-core-data/tests/postgres_search.rs")
+          text = pg_test.read_text(encoding="utf-8")
+          text = text.replace(
+              "use crm_module_sdk::{RecordId, RecordType, TenantId};",
+              "use crm_module_sdk::{RecordType, TenantId};",
+              1,
+          )
+          pg_test.write_text(text, encoding="utf-8")
+
+          Path(".github/workflows/fix-search-foundation.yml").unlink()
+          PY
+          cargo fmt --all
+      - name: Commit clean source state and remove this workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-search-runtime/src/lib.rs crates/crm-core-data/tests/postgres_search.rs .github/workflows/fix-search-foundation.yml
+          git commit -m "fix search foundation compile cleanups"
+          git push origin HEAD:develop/phase7-permission-aware-search
