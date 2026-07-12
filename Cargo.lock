@@ -366,6 +366,7 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-contracts",
  "crm-core-events",
+ "crm-metadata-api-adapter",
  "crm-metadata-query-adapter",
  "crm-metadata-runtime",
  "crm-module-sdk",
