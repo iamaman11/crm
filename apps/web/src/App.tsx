@@ -16,12 +16,16 @@ import {
   routeForPath,
   type KnownProductCapability,
   type NavigationAccessSnapshot,
+  type ProductEnvironment,
 } from "./routes";
 
 const sessionStore = createDevelopmentSessionStore();
 if (import.meta.env.DEV) {
   window.sessionStore = sessionStore;
 }
+const productEnvironment: ProductEnvironment = {
+  development: import.meta.env.DEV,
+};
 const client = new GovernedClient({
   baseUrl: window.location.origin,
   sessionProvider: sessionStore,
@@ -39,7 +43,7 @@ export function App() {
   const access = useMemo(() => developmentAccessSnapshot(), []);
   const currentRoute = routeForPath(window.location.pathname);
   const navigation = PRODUCT_ROUTES.filter((route) =>
-    canNavigateToRoute(route, session, access),
+    canNavigateToRoute(route, session, access, productEnvironment),
   ).map((route) => ({
     id: route.id,
     href: route.path,
@@ -92,7 +96,7 @@ function RouteContent({
     );
   }
 
-  if (!canNavigateToRoute(route, session, access)) {
+  if (!canNavigateToRoute(route, session, access, productEnvironment)) {
     return (
       <>
         <PageHeader eyebrow="Navigation" title="Route unavailable" />
