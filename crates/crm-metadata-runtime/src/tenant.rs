@@ -134,8 +134,16 @@ mod tests {
         let mut catalog = TenantMetadataCatalog::new();
         let published = catalog.publish(tenant_a.clone(), bundle("object-v1"), 100);
 
-        assert!(catalog.revision(&tenant_a, &published.revision_id).is_some());
-        assert!(catalog.revision(&tenant_b, &published.revision_id).is_none());
+        assert!(
+            catalog
+                .revision(&tenant_a, &published.revision_id)
+                .is_some()
+        );
+        assert!(
+            catalog
+                .revision(&tenant_b, &published.revision_id)
+                .is_none()
+        );
         assert_eq!(
             catalog
                 .impact_for(&tenant_b, &published.revision_id)

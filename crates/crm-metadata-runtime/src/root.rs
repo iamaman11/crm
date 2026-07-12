@@ -12,10 +12,10 @@ mod scoped;
 mod tenant;
 
 pub use scoped::{
-    ActivationResult, MAX_METADATA_DOCUMENT_BYTES, MAX_METADATA_ID_BYTES,
-    MAX_SCHEMA_VERSION_BYTES, METADATA_REVISION_HASH_PROFILE, MetadataBundleDraft, MetadataChange,
-    MetadataChangeType, MetadataDocument, MetadataError, MetadataErrorCode, MetadataId,
-    MetadataImpactReport, MetadataImpactSeverity, MetadataKey, MetadataKind, MetadataRevisionId,
-    PublishResult, PublishedMetadataRevision, RollbackResult, TenantMetadataSnapshot,
+    ActivationResult, MAX_METADATA_DOCUMENT_BYTES, MAX_METADATA_ID_BYTES, MAX_SCHEMA_VERSION_BYTES,
+    METADATA_REVISION_HASH_PROFILE, MetadataBundleDraft, MetadataChange, MetadataChangeType,
+    MetadataDocument, MetadataError, MetadataErrorCode, MetadataId, MetadataImpactReport,
+    MetadataImpactSeverity, MetadataKey, MetadataKind, MetadataRevisionId, PublishResult,
+    PublishedMetadataRevision, RollbackResult, TenantMetadataSnapshot,
 };
 pub use tenant::TenantMetadataCatalog;
