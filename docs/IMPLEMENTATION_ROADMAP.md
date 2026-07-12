@@ -242,28 +242,58 @@ The packet delivers candidate-only search, live resource/field visibility re-che
 
 Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed Contract, Governance, Rust, Database, Projection Runtime, Event Runtime, Search Runtime, Application Runtime and Rust Generated Sync simultaneously. PR #68 was squash-merged into `main` as `49272918cb4b767eedc2ca34574abba40718eae1`; #66 is complete.
 
-### Next executable Phase 7 packet
+### Typed web product shell and governed client boundary — Complete
 
-Build the typed web product shell and generated client boundary with authentication/session integration, permission-aware routing and the design-system baseline, then continue Admin Studio metadata publication foundations and the domain-wave program.
+[#71](https://github.com/iamaman11/crm/issues/71) / merged PR #73 is **Complete**.
 
-### Remaining platform deliverables
+The packet established:
 
-- object, field, relationship, layout, view, pipeline, permission and workflow builders;
-- impact reports, immutable metadata versions and rollback behavior;
-- typed UI-extension runtime with safe fallback;
+- a reproducible Node 24 / pnpm 11 / strict TypeScript workspace;
+- `apps/web`, `packages/client` and `packages/ui` product-plane boundaries;
+- mechanically generated Protobuf-ES browser contracts;
+- browser access through the existing governed `ApplicationGatewayService` over gRPC-Web;
+- typed `GovernedClient.searchGlobal` with exact request/output contract identity validation;
+- centralized typed session state and stable product-owned error mapping;
+- permission-aware routing as UX only, with backend authorization remaining authoritative;
+- no public arbitrary raw gateway/query escape hatch;
+- design-system/application-shell, accessibility, responsive, loading/error and localization/time-zone foundations;
+- hermetic Playwright E2E against ephemeral PostgreSQL for the real governed search path and negative authentication/authorization behavior.
+
+Final review head `b62dd50225fde6e58aac9a6b4cec307bd2245616` passed all applicable checks before PR #73 was merged and #71 closed.
+
+### Current executable Phase 7 packet — Admin Studio metadata publication runtime
+
+[#77](https://github.com/iamaman11/crm/issues/77) / draft PR #78 is **In progress**.
+
+The packet establishes the backend-neutral lifecycle rules that later Admin Studio builders and governed publication APIs must consume:
+
+- `crm-metadata-runtime` as a pure platform-domain crate with no PostgreSQL, transport, browser or business owner-module dependency;
+- typed metadata kinds for object, field, relationship, layout, view, pipeline, permission and workflow definitions;
+- validated namespaced metadata identifiers;
+- complete metadata-bundle snapshots with explicit intra-bundle dependencies;
+- deterministic content-addressed SHA-256 revision identity under a versioned canonical profile;
+- immutable/idempotent publication;
+- deterministic structural impact analysis for additions, modifications and removals;
+- explicit breaking-change confirmation before activation;
+- tenant-scoped optimistic activation generations;
+- rollback by moving the active pointer to a previously published immutable revision.
+
+This packet does not yet claim kind-specific metadata schema semantics, durable PostgreSQL persistence, public publication/query contracts or Admin Studio UI. Those follow-on layers must preserve this runtime's lifecycle invariants rather than reimplement weaker alternatives.
+
+### Remaining Phase 7 platform deliverables
+
+- object, field, relationship, layout, view, pipeline, permission and workflow schemas/validators/builders;
+- durable metadata publication/activation persistence with typed audit evidence;
+- governed metadata publication/query contracts and application composition;
+- first Admin Studio workflows through the product plane;
+- typed UI-extension runtime with host-shell failure isolation;
 - further golden-module/tooling evolution as new module classes prove additional stable patterns.
 
-### Product-plane deliverables
+### Phase 7 gate
 
-- web product shell and typed generated client boundary;
-- navigation, authentication/session integration and permission-aware routing;
-- design-system primitives, accessibility baseline and responsive layout system;
-- localization/time-zone strategy and consistent error/loading conventions;
-- first Admin Studio workflows against governed metadata publication APIs.
+Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Published metadata is immutable and activation is validated, impact-analyzed, audited and reversible. UI-extension failure cannot break the host shell or record page. Frontend code cannot bypass governed mutation/query paths.
 
-### Gate
-
-Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Admin changes are validated, audited and reversible. UI-extension failure cannot break the host shell. Frontend code cannot bypass governed mutation/query paths.
+Phase 7 remains open until the Admin Studio publication pipeline and UI-extension foundations satisfy these acceptance gates.
 
 ## 13. Phase 8 — Expert modules and product experience — Planned
 
