@@ -23,6 +23,7 @@ members = [
   "crates/crm-query-runtime",
   "crates/crm-projection-runtime",
   "crates/crm-search-runtime",
+  "crates/crm-search-query-adapter",
   "crates/crm-sales-capability-adapter",
   "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
