@@ -28,7 +28,8 @@ use crm_module_sdk::{
 };
 use crm_query_runtime::{CursorCodec, QueryGateway};
 use crm_sales_activities_capability_composition::{
-    DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, SalesActivitiesCapabilityPlannerRouter,
+    DEAL_TIMELINE_PROJECTION_ID, GLOBAL_SEARCH_INDEX_ID, Phase6ProjectionWorker,
+    Phase7SearchWorker, ProductionQueryRouter, SalesActivitiesCapabilityPlannerRouter,
     SalesActivitiesLinkDeliveryOutcome, SalesActivitiesLinkEventProcessor,
     SalesActivitiesLinkEventProcessorConfig, TASK_STATUS_PROJECTION_ID, capability_catalog,
     capability_definitions, query_capability_catalog, query_capability_definitions,
@@ -37,6 +38,8 @@ use crm_sales_activities_link::MODULE_ID as LINK_MODULE_ID;
 use crm_sales_activities_query_adapter::{
     ACTIVITIES_RECORD_TYPE, SALES_RECORD_TYPE, SalesActivitiesQueryAdapter,
 };
+use crm_search_query_adapter::{SEARCH_MODULE_ID, SearchQueryAdapter};
+use crm_search_runtime::SearchIndexId;
 use semver::Version;
 use serde::Serialize;
 use serde_json::json;
@@ -57,6 +60,7 @@ const BOOTSTRAP_LIFETIME_NANOS: i64 = 365_i64 * 24 * 60 * 60 * 1_000_000_000;
 const BACKGROUND_INTERVAL: Duration = Duration::from_secs(1);
 const LINK_SCAN_PAGE_SIZE: u32 = 200;
 const PROJECTION_PAGE_SIZE: u32 = 200;
+const SEARCH_PAGE_SIZE: u32 = 200;
 
 #[derive(Clone)]
 pub struct ApplicationComponents {
@@ -68,6 +72,7 @@ pub struct ApplicationComponents {
     pub query_grpc: Arc<GrpcQueryMiddleware>,
     pub link_processor: Arc<SalesActivitiesLinkEventProcessor>,
     pub projection_worker: Arc<Phase6ProjectionWorker>,
+    pub search_worker: Arc<Phase7SearchWorker>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -154,7 +159,7 @@ impl ApplicationRuntime {
         let query_definitions = query_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         if config.bootstrap_allow_phase6 {
-            bootstrap_phase6_access(
+            bootstrap_application_access(
                 &config,
                 now,
                 &authorization_store,
@@ -194,23 +199,34 @@ impl ApplicationRuntime {
         let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
             .try_into()
             .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
-        let query_adapter = Arc::new(
-            SalesActivitiesQueryAdapter::new(
-                store.clone(),
-                CursorCodec::new(cursor_key)
-                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-                visibility_authorizer,
-            )
-            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-        );
+        let owner_query_adapter = SalesActivitiesQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let search_query_adapter = SearchQueryAdapter::new(
+            SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            Arc::new(store.clone()),
+            visibility_authorizer,
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let query_router = Arc::new(ProductionQueryRouter::new(
+            owner_query_adapter,
+            search_query_adapter,
+        ));
         let query_gateway = Arc::new(QueryGateway::new(
             Arc::new(
                 query_capability_catalog()
                     .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             ),
-            query_adapter.clone(),
+            query_router.clone(),
             authorizer,
-            query_adapter,
+            query_router,
         ));
 
         let timeout_policy = TimeoutPolicy {
@@ -244,6 +260,10 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
         let projection_worker = Arc::new(Phase6ProjectionWorker::new(store.clone()));
+        let search_worker = Arc::new(
+            Phase7SearchWorker::new(store.clone())
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
         let components = Arc::new(ApplicationComponents {
             store,
             module_registry: Arc::new(ModuleRegistry::new(Version::new(0, 1, 0))),
@@ -253,6 +273,7 @@ impl ApplicationRuntime {
             query_grpc: Arc::new(GrpcQueryMiddleware::new(query_ingress)),
             link_processor,
             projection_worker,
+            search_worker,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
             last_worker_error: Arc::new(Mutex::new(None)),
@@ -554,6 +575,11 @@ async fn run_background_cycle(
             TASK_STATUS_PROJECTION_ID,
         )
         .await?;
+        components
+            .search_worker
+            .ensure_ready(tenant_id.clone(), SEARCH_PAGE_SIZE)
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
     }
     Ok(())
 }
@@ -618,7 +644,13 @@ async fn drain_projection(
     }
 }
 
-fn bootstrap_phase6_access(
+#[derive(Clone, Copy)]
+struct BootstrapVisibilityResource<'a> {
+    owner_module_id: &'a str,
+    resource_type: &'a str,
+}
+
+fn bootstrap_application_access(
     config: &ApplicationConfig,
     now_unix_nanos: i64,
     authorization_store: &LiveAuthorizationStore,
@@ -643,30 +675,94 @@ fn bootstrap_phase6_access(
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         }
         for definition in query_definitions {
-            let (resource_type, field_paths) = if definition.owner_module_id.as_str() == "crm.sales"
-            {
-                (SALES_RECORD_TYPE, sales_fields())
-            } else {
-                (ACTIVITIES_RECORD_TYPE, task_fields())
-            };
-            visibility_store
-                .upsert(QueryVisibilityGrant {
-                    tenant_id: tenant_id.clone(),
-                    actor_id: config.actor_id.clone(),
-                    capability_id: definition.capability_id.clone(),
-                    capability_version: definition.capability_version.clone(),
-                    owner_module_id: definition.owner_module_id.clone(),
-                    record_type: RecordType::try_new(resource_type)
-                        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-                    record_id: None,
-                    allowed_fields: field_paths,
-                    policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
-                    expires_at_unix_nanos: Some(expires_at),
-                })
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+            match definition.owner_module_id.as_str() {
+                "crm.sales" => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: "crm.sales",
+                        resource_type: SALES_RECORD_TYPE,
+                    },
+                    sales_fields(),
+                    expires_at,
+                )?,
+                "crm.activities" => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: "crm.activities",
+                        resource_type: ACTIVITIES_RECORD_TYPE,
+                    },
+                    task_fields(),
+                    expires_at,
+                )?,
+                SEARCH_MODULE_ID => {
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: "crm.sales",
+                            resource_type: SALES_RECORD_TYPE,
+                        },
+                        ["name"].into_iter().map(str::to_owned).collect(),
+                        expires_at,
+                    )?;
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: "crm.activities",
+                            resource_type: ACTIVITIES_RECORD_TYPE,
+                        },
+                        ["subject"].into_iter().map(str::to_owned).collect(),
+                        expires_at,
+                    )?;
+                }
+                _ => {
+                    return Err(ApplicationRuntimeError::Assembly(
+                        "unsupported bootstrap query owner".to_owned(),
+                    ));
+                }
+            }
         }
     }
     Ok(())
+}
+
+fn upsert_bootstrap_visibility(
+    visibility_store: &LiveQueryVisibilityStore,
+    config: &ApplicationConfig,
+    tenant_id: &TenantId,
+    definition: &CapabilityDefinition,
+    resource: BootstrapVisibilityResource<'_>,
+    allowed_fields: BTreeSet<String>,
+    expires_at: i64,
+) -> Result<(), ApplicationRuntimeError> {
+    visibility_store
+        .upsert(QueryVisibilityGrant {
+            tenant_id: tenant_id.clone(),
+            actor_id: config.actor_id.clone(),
+            capability_id: definition.capability_id.clone(),
+            capability_version: definition.capability_version.clone(),
+            owner_module_id: ModuleId::try_new(resource.owner_module_id)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            record_type: RecordType::try_new(resource.resource_type)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            record_id: None,
+            allowed_fields,
+            policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+            expires_at_unix_nanos: Some(expires_at),
+        })
+        .map(|_| ())
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))
 }
 
 fn expiry(now_unix_nanos: i64) -> Result<i64, ApplicationRuntimeError> {

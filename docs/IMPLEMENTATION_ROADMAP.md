@@ -220,7 +220,7 @@ Issue #56 / merged PR #64 established repository-supported module creation and v
 
 Generated scaffolds are **Foundation only** and do not count as production vertical slices. PR #64 was merged as `15bf3ddeac0375325a3c59518e3ac55a3903c20d` and #56 is complete.
 
-### Generalized projection runtime — #65 / PR #67 — Gate review
+### Generalized projection runtime — #65 / merged PR #67 — Complete
 
 The second Phase 7 packet generalizes the Phase 6 projection proof without moving owner-domain decoding or business semantics into infrastructure:
 
@@ -232,11 +232,15 @@ The second Phase 7 packet generalizes the Phase 6 projection proof without movin
 - `Phase6ProjectionWorker` remains only as a compatibility facade so application/process composition does not regress while orchestration moves to the platform runtime;
 - dedicated `Projection Runtime CI` proves failed-checkpoint persistence/reset and the existing Deal/Task rebuild behavior against real PostgreSQL.
 
-The generic runtime has no Sales, Activities or PostgreSQL implementation dependency. Implementation and production acceptance are complete; merge of PR #67 closes #65 after all required checks are green on one exact review head.
+The generic runtime has no Sales, Activities or PostgreSQL implementation dependency. PR #67 was merged as `195448ab3cd70fe051967faf4f8ed87372fb3551`; #65 is complete.
 
-### Next executable platform packet
+### Current executable platform packet
 
-1. [#66](https://github.com/iamaman11/crm/issues/66) — build tenant- and permission-aware search with deterministic reindexing on the shared projection runtime.
+[#66](https://github.com/iamaman11/crm/issues/66) / draft PR #68 is **In progress**: tenant- and permission-aware search with deterministic reindexing on the shared projection runtime.
+
+The packet now includes candidate-only search, live resource/field visibility re-checks, immutable logical index generations, PostgreSQL FTS as a replaceable adapter, governed `search.global.query` ingress, application-runtime composition, immediate permission-revocation acceptance and canonical migration/runtime gates.
+
+The packet remains **In progress** until compile/Clippy/test stabilization is complete and Contract, Governance, Rust, Database, Projection Runtime, Event Runtime, Search Runtime, Application Runtime and generated-source synchronization checks are simultaneously green on one exact review head.
 
 ### Remaining platform deliverables
 

@@ -6,7 +6,7 @@ use crm_application_runtime::gateway_v1::{
 };
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::{DataClass, PayloadEncoding, RetentionPolicyId, TypedPayload};
-use crm_proto_contracts::crm::{core::v1 as core, sales::v1 as sales};
+use crm_proto_contracts::crm::{core::v1 as core, sales::v1 as sales, search::v1 as search};
 use crm_sales_activities_capability_composition::{
     DEAL_TIMELINE_PROJECTION_ID, DEAL_TIMELINE_RESOURCE_TYPE, TASK_STATUS_PROJECTION_ID,
     TASK_STATUS_RESOURCE_TYPE, capability_definitions, query_capability_definitions,
@@ -28,6 +28,7 @@ const DEAL_ID: &str = "phase6l-process-deal";
 const SALES_CREATE: &str = "sales.deal.create";
 const SALES_ADVANCE: &str = "sales.deal.advance_stage";
 const SALES_GET: &str = "sales.deal.get";
+const SEARCH_GLOBAL: &str = "search.global.query";
 const LINK_MODULE_ID: &str = "crm.sales-activities-link";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -196,6 +197,60 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         deal.stage_details.expect("Deal stage details").stage_id,
         "proposal"
     );
+
+    let search_definition = crate::query_definition(SEARCH_GLOBAL);
+    let search_payload = wire_payload(payload(
+        &search_definition,
+        search::SearchRequest {
+            text: "Phase 6L process deal".to_owned(),
+            resource_types: vec!["sales.deal".to_owned()],
+            page_size: 25,
+            cursor: String::new(),
+        },
+    ));
+    let search_deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let mut request = Request::new(GatewayQueryRequest {
+            owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+            capability_id: search_definition.capability_id.as_str().to_owned(),
+            capability_version: search_definition.capability_version.as_str().to_owned(),
+            input: Some(search_payload.clone()),
+        });
+        request.metadata_mut().insert(
+            "authorization",
+            format!("Bearer {TOKEN}")
+                .parse()
+                .expect("valid search authorization metadata"),
+        );
+        request.metadata_mut().insert(
+            "x-tenant-id",
+            TENANT.parse().expect("valid search tenant metadata"),
+        );
+        let response = grpc
+            .query(request)
+            .await
+            .expect("query governed search through production gRPC gateway")
+            .into_inner();
+        let output = response.output.expect("gRPC search output payload");
+        let page = search::SearchResponse::decode(output.payload.as_slice())
+            .expect("decode production search response");
+        if let Some(hit) = page.hits.iter().find(|hit| hit.resource_id == DEAL_ID) {
+            assert_eq!(hit.owner_module_id, "crm.sales");
+            assert_eq!(hit.resource_type, "sales.deal");
+            assert_eq!(hit.fields.len(), 1);
+            assert_eq!(
+                hit.fields.get("name").map(String::as_str),
+                Some("Phase 6L process deal")
+            );
+            assert_eq!(hit.matched_fields, vec!["name"]);
+            break;
+        }
+        assert!(
+            Instant::now() < search_deadline,
+            "production search did not expose the indexed Deal before the acceptance deadline"
+        );
+        sleep(Duration::from_millis(250)).await;
+    }
 
     send_sigint(&child).await;
     let exit = timeout(Duration::from_secs(15), child.wait())

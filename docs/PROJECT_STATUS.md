@@ -29,9 +29,11 @@ The repository now contains a complete first production-composed modular CRM pro
 
 Current phase: **Phase 7 — In progress**.
 
-The golden module foundation (#56 / PR #64) is complete and merged as `15bf3ddeac0375325a3c59518e3ac55a3903c20d`.
+The golden module foundation (#56 / merged PR #64) is complete as `15bf3ddeac0375325a3c59518e3ac55a3903c20d`.
 
-The current Phase 7 packet is **#65 / PR #67 — generalized projection runtime and rebuild orchestration**. Implementation and PostgreSQL/runtime acceptance are complete; the packet is in final exact-head gate review. Its merge closes #65 and makes **#66 — tenant- and permission-aware search with deterministic reindexing** the next executable packet.
+The generalized projection runtime (#65 / merged PR #67) is complete on `main` as `195448ab3cd70fe051967faf4f8ed87372fb3551`.
+
+The current Phase 7 packet is **#66 / draft PR #68 — tenant- and permission-aware search with deterministic reindexing**. The packet now includes the search runtime, PostgreSQL generation/index adapter, governed public query capability, live permission re-checking, application-runtime composition and canonical migration gates. It remains **In progress** until one exact review head passes all required checks and the remaining gate findings are resolved.
 
 ## Phase 6 completion
 
@@ -68,9 +70,9 @@ Issue #56 / merged PR #64 established the repository-supported module creation p
 
 A generated module is **Foundation only** and does not count as a production vertical slice.
 
-### Generalized projection runtime — Gate review
+### Generalized projection runtime — Complete
 
-Issue #65 / PR #67 generalizes the Phase 6 projection proof without moving business-event decoding into infrastructure:
+Issue #65 / merged PR #67 generalized the Phase 6 projection proof without moving business-event decoding into infrastructure:
 
 - `crm-projection-runtime` owns typed projection registration, checkpoint-based history paging, deterministic handler execution, poison/failure handling and rebuild orchestration;
 - `crm-core-events` exposes the platform `ProjectionStore` port and failure contract;
@@ -80,7 +82,24 @@ Issue #65 / PR #67 generalizes the Phase 6 projection proof without moving busin
 - the existing `Phase6ProjectionWorker` remains only as a compatibility facade around the generic runner;
 - dedicated `Projection Runtime CI` proves failed-checkpoint persistence/reset and existing Deal/Task rebuild behavior against real PostgreSQL.
 
-The generic runtime has no Sales, Activities or PostgreSQL implementation dependency.
+The generic runtime has no Sales, Activities or PostgreSQL implementation dependency. PR #67 is merged and #65 is complete.
+
+### Permission-aware search and deterministic reindexing — In progress
+
+Issue #66 / draft PR #68 is the active executable packet:
+
+- the search index is rebuildable and candidate-only, never authoritative for permissions or business state;
+- every candidate is checked against live resource and field visibility before resource identity, fields or match metadata may be disclosed;
+- logical search generations reuse the generalized projection runtime and keep the previous active generation queryable while a replacement is built;
+- rebuilding the currently active generation in place is rejected before projection reset;
+- generation coordinates are immutable after the building lifecycle state;
+- PostgreSQL remains a replaceable search adapter with FORCE-RLS generation metadata and deterministic ordering;
+- `search.global.query` is a versioned read-only capability routed through the governed production `QueryGateway`;
+- the application runtime composes search indexing/catch-up and the production query router;
+- acceptance covers immediate permission revocation, hidden-field non-disclosure, generation switching, deterministic cursor progression and cross-tenant isolation;
+- Search Runtime CI, canonical Database CI and Application Runtime CI include the Phase 7B schema/runtime paths.
+
+Current gate work is compile/Clippy/test stabilization and exact-head evidence. The packet is not complete and must not be merged until the required checks are simultaneously green on one review head.
 
 ## Product readiness summary
 
@@ -97,7 +116,7 @@ The architecture and backend platform now have a complete first production-compo
 
 ### Not yet complete
 
-- tenant- and permission-aware search and deterministic reindexing — #66;
+- Phase 7B search packet gate closure and merge — #66 / PR #68;
 - Admin Studio metadata builders and publication workflows;
 - web/mobile product shell and product-quality frontend;
 - canonical customer master, identity resolution and consent;
@@ -109,12 +128,11 @@ The architecture and backend platform now have a complete first production-compo
 
 ## Immediate delivery sequence
 
-1. Merge the exact-head-green generalized projection runtime packet #65 / PR #67.
-2. Build tenant- and permission-aware search with deterministic reindexing on the shared runtime — #66.
-3. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
-4. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
-5. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
-6. Continue frontend and expert backend modules as end-to-end vertical slices.
+1. Finish exact-head gate stabilization for tenant- and permission-aware search, then merge #66 / PR #68 only after all required checks are green together.
+2. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
+3. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
+4. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
+5. Continue frontend and expert backend modules as end-to-end vertical slices.
 
 ## Development mode
 

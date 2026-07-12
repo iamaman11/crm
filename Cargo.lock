@@ -282,6 +282,8 @@ dependencies = [
  "crm-sales-activities-capability-composition",
  "crm-sales-activities-link",
  "crm-sales-activities-query-adapter",
+ "crm-search-query-adapter",
+ "crm-search-runtime",
  "http",
  "prost",
  "prost-build",
@@ -364,6 +366,7 @@ dependencies = [
  "crm-core-contracts",
  "crm-core-events",
  "crm-module-sdk",
+ "crm-search-runtime",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -499,6 +502,8 @@ dependencies = [
  "crm-sales-activities-link-contract-adapter",
  "crm-sales-activities-query-adapter",
  "crm-sales-capability-adapter",
+ "crm-search-query-adapter",
+ "crm-search-runtime",
  "prost",
  "serde_json",
  "sqlx",
@@ -554,6 +559,35 @@ dependencies = [
  "crm-sales",
  "prost",
  "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "crm-search-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-adapters",
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "crm-search-runtime",
+ "prost",
+ "tokio",
+]
+
+[[package]]
+name = "crm-search-runtime"
+version = "0.1.0"
+dependencies = [
+ "crm-core-events",
+ "crm-module-sdk",
+ "crm-projection-runtime",
+ "crm-query-runtime",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
  "tokio",
 ]
 

@@ -10,6 +10,8 @@ mod postgres_event_delivery_ledger;
 mod postgres_projection;
 mod postgres_query;
 mod projection_store;
+mod search_generation_store;
+mod search_store;
 
 pub use aggregate_executor::*;
 pub use audit::AuditIntent;

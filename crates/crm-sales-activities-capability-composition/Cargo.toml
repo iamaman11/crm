@@ -17,15 +17,17 @@ crm-core-events = { path = "../crm-core-events" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-projection-runtime = { path = "../crm-projection-runtime" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-query-runtime = { path = "../crm-query-runtime" }
 crm-sales-activities-link = { path = "../../modules/crm-sales-activities-link" }
 crm-sales-activities-link-contract-adapter = { path = "../crm-sales-activities-link-contract-adapter" }
 crm-sales-activities-query-adapter = { path = "../crm-sales-activities-query-adapter" }
 crm-sales-capability-adapter = { path = "../crm-sales-capability-adapter" }
+crm-search-query-adapter = { path = "../crm-search-query-adapter" }
+crm-search-runtime = { path = "../crm-search-runtime" }
 prost = "0.14"
 serde_json = "1"
 
 [dev-dependencies]
-crm-query-runtime = { path = "../crm-query-runtime" }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }
 tokio = { version = "1", features = ["macros", "rt"] }
 

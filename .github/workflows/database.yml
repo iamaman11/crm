@@ -15,6 +15,8 @@ on:
       - "crates/crm-activities-capability-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "crates/crm-search-runtime/**"
+      - "crates/crm-search-query-adapter/**"
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
@@ -36,6 +38,8 @@ on:
       - "crates/crm-activities-capability-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "crates/crm-search-runtime/**"
+      - "crates/crm-search-query-adapter/**"
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
@@ -88,6 +92,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
       - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
       - name: Enable the isolated runtime test role
@@ -128,6 +133,7 @@ jobs:
           cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e -- --nocapture 2>&1 | tee database/postgres-gateway-e2e.log
       - name: Roll back migrations
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.down.sql
@@ -150,6 +156,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
       - name: Rebuild runtime fixtures after rollback
         run: |
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
@@ -209,6 +216,8 @@ jobs:
             crates/crm-capability-ingress/
             crates/crm-sales-activities-capability-composition/
             crates/crm-sales-activities-query-adapter/
+            crates/crm-search-runtime/
+            crates/crm-search-query-adapter/
           if-no-files-found: error
           retention-days: 7
 
@@ -251,8 +260,10 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
       - name: Verify upgraded schema can roll back cleanly
         run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.down.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.down.sql

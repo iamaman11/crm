@@ -6,6 +6,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "proto/crm/gateway/**"
+      - "proto/crm/search/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -13,6 +14,8 @@ on:
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
       - "crates/crm-query-runtime/**"
+      - "crates/crm-search-runtime/**"
+      - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
       - "modules/crm-sales-activities-link/**"
@@ -25,6 +28,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "proto/crm/gateway/**"
+      - "proto/crm/search/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -32,6 +36,8 @@ on:
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
       - "crates/crm-query-runtime/**"
+      - "crates/crm-search-runtime/**"
+      - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
       - "modules/crm-sales-activities-link/**"
@@ -76,9 +82,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Apply complete Phase 6 schema
+      - name: Apply complete Phase 7 search schema
         run: |
-          for migration in database/migrations/000{1,2,3,4,5,6,7,8}_*.up.sql; do
+          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
           done
       - name: Seed production application fixtures
@@ -100,6 +106,7 @@ jobs:
           path: |
             database/application-runtime-process.log
             crates/crm-application-runtime/
+            crates/crm-search-query-adapter/
             services/crm-api/
           if-no-files-found: error
           retention-days: 7
