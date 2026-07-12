@@ -21,6 +21,7 @@ crm-sales-activities-link = { path = "../../modules/crm-sales-activities-link" }
 crm-sales-activities-link-contract-adapter = { path = "../crm-sales-activities-link-contract-adapter" }
 crm-sales-activities-query-adapter = { path = "../crm-sales-activities-query-adapter" }
 crm-sales-capability-adapter = { path = "../crm-sales-capability-adapter" }
+crm-search-runtime = { path = "../crm-search-runtime" }
 prost = "0.14"
 serde_json = "1"
 
