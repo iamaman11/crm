@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package crm.search.v1;
+
+// Governed tenant-scoped search request. Tenant/actor identity comes from the
+// authenticated query execution context, never from caller-controlled payload.
+message SearchRequest {
+  string text = 1;
+  repeated string resource_types = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+// One permission-filtered search result. Only fields allowed by the live
+// visibility decision may appear in fields or matched_fields.
+message SearchHit {
+  string owner_module_id = 1;
+  string resource_type = 2;
+  string resource_id = 3;
+  int64 source_version = 4;
+  int64 rank_micros = 5;
+  map<string, string> fields = 6;
+  repeated string matched_fields = 7;
+  string visibility_decision_id = 8;
+  string visibility_policy_version = 9;
+}
+
+message SearchResponse {
+  repeated SearchHit hits = 1;
+  string next_cursor = 2;
+}
