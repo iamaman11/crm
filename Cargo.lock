@@ -372,6 +372,7 @@ dependencies = [
  "crm-metadata-query-adapter",
  "crm-metadata-runtime",
  "crm-module-sdk",
+ "crm-proto-contracts",
  "crm-search-runtime",
  "serde",
  "serde_json",
