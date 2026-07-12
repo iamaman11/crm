@@ -32,7 +32,10 @@ fn metadata_contract_descriptor_identities_cover_request_and_response() {
     let request_hash = message_descriptor_hash(PUBLISH_REQUEST_SCHEMA);
     let response_hash = message_descriptor_hash(PUBLISH_RESPONSE_SCHEMA);
 
-    assert_eq!(request_hash, message_descriptor_hash(PUBLISH_REQUEST_SCHEMA));
+    assert_eq!(
+        request_hash,
+        message_descriptor_hash(PUBLISH_REQUEST_SCHEMA)
+    );
     assert_ne!(request_hash, response_hash);
 }
 
