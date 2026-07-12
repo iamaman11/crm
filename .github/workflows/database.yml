@@ -95,6 +95,8 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
       - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+      - name: Apply search runtime grants
+        run: psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
       - name: Enable the isolated runtime test role
         run: psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify atomic record adapter
@@ -161,6 +163,7 @@ jobs:
         run: |
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify authenticated production Sales and Activities gateway
         env:

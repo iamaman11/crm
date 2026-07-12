@@ -1,0 +1,28 @@
+{
+  "name": "ultimate-crm-product-plane",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=24.18.0 <25",
+    "pnpm": ">=11.12.0 <12"
+  },
+  "scripts": {
+    "web:generate": "buf generate --template buf.gen.web.yaml && cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts",
+    "gen": "pnpm web:generate",
+    "gen:diff": "git diff --exit-code packages/client/src/contract_hashes.ts",
+    "web:typecheck": "pnpm web:generate && pnpm -r --if-present typecheck",
+    "web:lint": "pnpm -r --if-present lint",
+    "web:test": "pnpm -r --if-present test",
+    "web:build": "pnpm web:generate && pnpm --filter @ultimate-crm/web build",
+    "web:check": "pnpm web:typecheck && pnpm web:lint && pnpm web:test && pnpm web:build"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.66.1",
+    "@bufbuild/protoc-gen-es": "2.12.1",
+    "@types/node": "24.13.2",
+    "oxlint": "1.72.0",
+    "typescript": "6.0.2",
+    "vitest": "4.1.9"
+  }
+}
