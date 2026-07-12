@@ -1,14 +1,14 @@
 #![forbid(unsafe_code)]
 
-mod generation;
-
-pub use generation::*;
-
 //! Permission-aware search mechanics over rebuildable projection documents.
 //!
 //! The search store returns tenant-scoped candidates from a rebuildable index.
 //! Every candidate is then checked with the live query visibility authorizer
 //! before any resource identity, field value or match metadata is returned.
+
+mod generation;
+
+pub use generation::*;
 
 use crm_core_events::ProjectionDocumentWrite;
 use crm_module_sdk::{
