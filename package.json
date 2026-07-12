@@ -18,7 +18,9 @@
   "devDependencies": {
     "@bufbuild/buf": "1.66.1",
     "@bufbuild/protoc-gen-es": "2.12.1",
+    "@types/node": "24.13.2",
     "oxlint": "1.72.0",
-    "typescript": "6.0.2"
+    "typescript": "6.0.2",
+    "vitest": "4.1.9"
   }
 }
