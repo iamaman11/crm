@@ -8,6 +8,7 @@ import {
 } from "@ultimate-crm/client";
 import { AppShell, FeedbackPanel, PageHeader } from "@ultimate-crm/ui";
 import { AdminStudioPage } from "./AdminStudioPage";
+import { RecordPage } from "./RecordPage";
 import { createDevelopmentSessionStore } from "./developmentSession";
 import {
   canNavigateToRoute,
@@ -110,15 +111,19 @@ function RouteContent({
     return <AdminStudioPage client={metadataClient} />;
   }
 
+  if (route.id === "record-extension-proof") {
+    return <RecordPage />;
+  }
+
   return (
     <>
       <PageHeader
         eyebrow="Phase 7"
         title="Product shell foundation"
-        description="A typed product-plane boundary for Admin Studio and expert CRM domain waves. Business invariants, authorization and authoritative state remain on the governed backend path."
+        description="A typed product-plane boundary for Admin Studio, isolated UI extensions and expert CRM domain waves. Business invariants, authorization and authoritative state remain on the governed backend path."
       />
       <FeedbackPanel tone="success" title="Shell composition is active">
-        Session state, permission-aware navigation, design-system primitives and governed typed clients are separate product-plane responsibilities.
+        Session state, permission-aware navigation, design-system primitives, governed typed clients and isolated UI-extension hosts are separate product-plane responsibilities.
       </FeedbackPanel>
     </>
   );
