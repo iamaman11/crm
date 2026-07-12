@@ -12,24 +12,30 @@ For a new contributor or coding agent, read in this order:
 4. [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) — concise current state and next step.
 5. [`docs/APPLICATION_ARCHITECTURE.md`](docs/APPLICATION_ARCHITECTURE.md) — layer and composition skeleton.
 6. [`docs/MODULE_CATALOG.md`](docs/MODULE_CATALOG.md) — business-module counting and planned owner domains.
+7. [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — coherent delivery packets and acceptance checkpoints.
+8. [`docs/MULTI_AGENT_DEVELOPMENT.md`](docs/MULTI_AGENT_DEVELOPMENT.md) — exact-SHA two-agent implementation and local verification protocol.
 
 Accepted ADRs and published contracts take precedence over descriptive prose unless they violate an absolute system invariant.
 
 ## Current state
 
-The platform foundation through **Phase 6H** is complete:
+**Phase 6 is complete** and Phase 7 is in progress.
+
+The repository contains a production-composed modular CRM platform proof with:
 
 - governed module manifests, SDK and lifecycle;
-- PostgreSQL tenant/RLS, transaction, idempotency, outbox and audit foundation;
-- authenticated capability mutation gateway;
-- independent Sales Deal and Activities Task owner-domain slices;
-- production PostgreSQL mutations through HTTP/gRPC ingress;
-- permission-bound Deal/Task get/list queries with opaque cursor pagination;
-- authenticated HTTP/gRPC query ingress with query-only execution context.
+- PostgreSQL tenant/RLS, transaction, idempotency, outbox and audit foundations;
+- authenticated capability mutation and permission-bound query gateways;
+- independent Sales Deal and Activities Task production vertical slices;
+- governed event delivery and an independently lifecycle-managed Sales–Activities link module;
+- rebuildable projections and a generalized projection runtime;
+- a real `crm-api` application composition root with HTTP/gRPC ingress, health/readiness, background workers and graceful shutdown;
+- permission-aware tenant-scoped global search with deterministic logical index generations and live visibility re-checking;
+- golden module scaffolding and permanent repository validation commands.
 
-The current next slice is **Phase 6I — optional Sales–Activities link module**.
+The next product-plane packet is the typed web product shell: generated client boundary, authentication/session integration, permission-aware routing and the design-system baseline, followed by Admin Studio foundations and expert domain waves.
 
-The complete CRM product is not finished. Search/Admin Studio, production application composition, frontend product shell, customer master, commercial lifecycle, expert modules, AI, marketplace and enterprise operational proof remain later roadmap work.
+The complete CRM product is not finished. Customer master and identity resolution, consent, catalog/pricing/CPQ/commercial lifecycle, communications, service, marketing, broader expert domains, AI, marketplace and enterprise operational proof remain roadmap work.
 
 See [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact current state.
 
@@ -67,31 +73,31 @@ Repository invariants, accepted ADRs and compilable published contracts are the 
 - `proto/` — authoritative RPC, command and event contract sources.
 - `crates/` — platform core, governed runtimes and infrastructure adapters.
 - `modules/` — independently governed business owner/link modules without raw infrastructure access.
-- `services/` — deployable composition roots; `services/crm-api` is the target production application process.
+- `services/` — deployable composition roots; `services/crm-api` is the production application process.
 - `database/` — authoritative migrations and PostgreSQL acceptance assets.
 - `schemas/` — strict authoring schemas compiled into typed runtime IR.
 - `docs/adr/` — accepted architecture decisions.
 - `scripts/` — architecture, contract and manifest enforcement.
 - `.github/workflows/` — permanent conformance and acceptance gates.
 
+The product plane is introduced only through an explicit Phase 7 delivery packet and remains constrained to governed mutation/query boundaries.
+
 Generated `build/` content and workflow artifacts are reproducible outputs and are not authoritative source files.
 
 ## Local validation
 
+Use the repository command surface where available:
+
 ```bash
-python -m pip install -r requirements-dev.txt
-python scripts/validate_contracts.py
-python scripts/validate_module_manifests.py
-python scripts/compile_module_manifest_ir.py --output-dir build/module-ir
-cargo run --quiet -p crm-module-manifest --bin validate-module-manifest -- build/module-ir/*.json
-python -m unittest tests/test_module_manifest_validation.py
-python scripts/check_architecture.py
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
+python scripts/repo.py architecture
+python scripts/repo.py manifests
+python scripts/repo.py format --check
+python scripts/repo.py quality
 ```
 
-Database-affecting changes must also pass the permanent Database CI gates.
+Underlying focused commands and specialized runtime/database gates remain available and mandatory when their scopes are affected. See [`docs/MODULE_DEVELOPMENT.md`](docs/MODULE_DEVELOPMENT.md) and the active delivery issue.
+
+When an independent local verifier participates, every verification result must be attached to the exact commit SHA actually tested. See [`docs/MULTI_AGENT_DEVELOPMENT.md`](docs/MULTI_AGENT_DEVELOPMENT.md).
 
 ## Status synchronization rule
 
