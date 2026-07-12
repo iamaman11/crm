@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: develop/phase7-governed-metadata-api
+      # Trigger the one-shot fixture update now that this workflow exists on the branch.
       - name: Publish metadata platform registry fixtures
         shell: python
         run: |
