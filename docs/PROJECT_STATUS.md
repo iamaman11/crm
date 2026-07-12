@@ -33,7 +33,7 @@ The golden module foundation (#56 / merged PR #64) is complete as `15bf3ddeac037
 
 The generalized projection runtime (#65 / merged PR #67) is complete on `main` as `195448ab3cd70fe051967faf4f8ed87372fb3551`.
 
-The current Phase 7 packet is **#66 / draft PR #68 — tenant- and permission-aware search with deterministic reindexing**. The packet now includes the search runtime, PostgreSQL generation/index adapter, governed public query capability, live permission re-checking, application-runtime composition and canonical migration gates. It remains **In progress** until one exact review head passes all required checks and the remaining gate findings are resolved.
+The tenant- and permission-aware search packet **#66 / merged PR #68** is complete. It delivers the search runtime, PostgreSQL generation/index adapter, governed public query capability, backend-consistent field-local match evidence, live permission re-checking, application-runtime composition and canonical migration gates. Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all required checks and was squash-merged into `main` as `49272918cb4b767eedc2ca34574abba40718eae1`.
 
 ## Phase 6 completion
 
@@ -84,9 +84,9 @@ Issue #65 / merged PR #67 generalized the Phase 6 projection proof without movin
 
 The generic runtime has no Sales, Activities or PostgreSQL implementation dependency. PR #67 is merged and #65 is complete.
 
-### Permission-aware search and deterministic reindexing — In progress
+### Permission-aware search and deterministic reindexing — Complete
 
-Issue #66 / draft PR #68 is the active executable packet:
+Issue #66 / merged PR #68 completed the production search foundation:
 
 - the search index is rebuildable and candidate-only, never authoritative for permissions or business state;
 - every candidate is checked against live resource and field visibility before resource identity, fields or match metadata may be disclosed;
@@ -99,7 +99,7 @@ Issue #66 / draft PR #68 is the active executable packet:
 - acceptance covers immediate permission revocation, hidden-field non-disclosure, generation switching, deterministic cursor progression and cross-tenant isolation;
 - Search Runtime CI, canonical Database CI and Application Runtime CI include the Phase 7B schema/runtime paths.
 
-Current gate work is compile/Clippy/test stabilization and exact-head evidence. The packet is not complete and must not be merged until the required checks are simultaneously green on one review head.
+Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed Contract CI, Governance CI, Rust CI, Database CI, Projection Runtime CI, Event Runtime CI, Search Runtime CI, Application Runtime CI and Rust Generated Sync simultaneously before squash merge as `49272918cb4b767eedc2ca34574abba40718eae1`.
 
 ## Product readiness summary
 
@@ -116,7 +116,6 @@ The architecture and backend platform now have a complete first production-compo
 
 ### Not yet complete
 
-- Phase 7B search packet gate closure and merge — #66 / PR #68;
 - Admin Studio metadata builders and publication workflows;
 - web/mobile product shell and product-quality frontend;
 - canonical customer master, identity resolution and consent;
@@ -128,11 +127,10 @@ The architecture and backend platform now have a complete first production-compo
 
 ## Immediate delivery sequence
 
-1. Finish exact-head gate stabilization for tenant- and permission-aware search, then merge #66 / PR #68 only after all required checks are green together.
-2. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
-3. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
-4. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
-5. Continue frontend and expert backend modules as end-to-end vertical slices.
+1. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
+2. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
+3. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
+4. Continue frontend and expert backend modules as end-to-end vertical slices.
 
 ## Development mode
 
