@@ -117,12 +117,15 @@ END
 \$\$;
 "
 
-# The integration test references CARGO_BIN_EXE_crm-api, so Cargo builds the crm-api binary
-# as part of this single compilation path. A separate `cargo build -p crm-api` is redundant.
-log "Building crm-api once and seeding the ephemeral database via seed_e2e_fixture..."
+# Keep an explicit production binary build. The integration-test binary path is guaranteed for
+# the test process, but the subsequent browser E2E launches ./target/debug/crm-api directly.
+log "Building crm-api binary..."
+timeout --signal=TERM --kill-after=30s 30m cargo build -p crm-api
+
+log "Seeding the ephemeral database via seed_e2e_fixture..."
 DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
 ADMIN_DATABASE_URL="postgres://${E2E_DB_USER}:${E2E_DB_PASSWORD}@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
-timeout --signal=TERM --kill-after=30s 40m cargo test -p crm-api --test seed_e2e_fixture -- --nocapture
+timeout --signal=TERM --kill-after=30s 20m cargo test -p crm-api --test seed_e2e_fixture -- --nocapture
 
 log "Starting crm-api service..."
 CRM_DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
