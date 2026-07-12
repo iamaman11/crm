@@ -9,9 +9,9 @@
   },
   "scripts": {
     "web:generate": "buf generate --template buf.gen.web.yaml",
-    "web:typecheck": "pnpm web:generate && pnpm --filter './packages/**' --filter './apps/**' typecheck",
-    "web:lint": "pnpm --filter './packages/**' --filter './apps/**' lint",
-    "web:test": "pnpm --filter './packages/**' --filter './apps/**' test",
+    "web:typecheck": "pnpm web:generate && pnpm -r --if-present typecheck",
+    "web:lint": "pnpm -r --if-present lint",
+    "web:test": "pnpm -r --if-present test",
     "web:build": "pnpm web:generate && pnpm --filter @ultimate-crm/web build",
     "web:check": "pnpm web:typecheck && pnpm web:lint && pnpm web:test && pnpm web:build"
   },
