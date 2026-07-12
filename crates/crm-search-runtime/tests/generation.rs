@@ -159,14 +159,7 @@ async fn inactive_generation_rebuilds_before_activation() {
 async fn matching_active_generation_catches_up_without_reset_or_reactivation() {
     let projection_store = Arc::new(EmptyProjectionStore::default());
     let generations = Arc::new(TestGenerationStore::default());
-    generations.state.lock().unwrap().active = Some(SearchIndexGeneration {
-        tenant_id: TenantId::try_new("tenant-a").unwrap(),
-        index_id: SearchIndexId::try_new("crm.global-search").unwrap(),
-        generation_id: "g1".to_owned(),
-        projection_id: "search.global.g1".to_owned(),
-        schema_version: "1".to_owned(),
-        status: SearchGenerationStatus::Active,
-    });
+    generations.state.lock().unwrap().active = Some(active_generation());
     let coordinator = coordinator(projection_store.clone(), generations.clone());
 
     let action = coordinator
@@ -179,6 +172,36 @@ async fn matching_active_generation_catches_up_without_reset_or_reactivation() {
     let state = generations.state.lock().unwrap();
     assert!(state.registered.is_empty());
     assert!(state.activations.is_empty());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn explicit_reindex_rejects_the_active_generation_without_resetting_live_documents() {
+    let projection_store = Arc::new(EmptyProjectionStore::default());
+    let generations = Arc::new(TestGenerationStore::default());
+    generations.state.lock().unwrap().active = Some(active_generation());
+    let coordinator = coordinator(projection_store.clone(), generations.clone());
+
+    let error = coordinator
+        .reindex(TenantId::try_new("tenant-a").unwrap(), 100)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code, "SEARCH_REINDEX_ACTIVE_GENERATION_CONFLICT");
+    assert_eq!(*projection_store.resets.lock().unwrap(), 0);
+    let state = generations.state.lock().unwrap();
+    assert!(state.registered.is_empty());
+    assert!(state.activations.is_empty());
+}
+
+fn active_generation() -> SearchIndexGeneration {
+    SearchIndexGeneration {
+        tenant_id: TenantId::try_new("tenant-a").unwrap(),
+        index_id: SearchIndexId::try_new("crm.global-search").unwrap(),
+        generation_id: "g1".to_owned(),
+        projection_id: "search.global.g1".to_owned(),
+        schema_version: "1".to_owned(),
+        status: SearchGenerationStatus::Active,
+    }
 }
 
 fn coordinator(
