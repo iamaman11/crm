@@ -151,14 +151,13 @@ async fn durable_metadata_publication_is_tenant_isolated_optimistic_and_rollback
         .await
         .expect("activate confirmed breaking revision");
     assert_eq!(activated_breaking.generation, 2);
-    assert_eq!(activated_breaking.previous_revision, Some(first_revision.clone()));
+    assert_eq!(
+        activated_breaking.previous_revision,
+        Some(first_revision.clone())
+    );
 
     let rollback = store
-        .rollback(
-            &context(TENANT_A, "rollback-breaking"),
-            2,
-            9_000_000_000,
-        )
+        .rollback(&context(TENANT_A, "rollback-breaking"), 2, 9_000_000_000)
         .await
         .expect("rollback to first revision");
     assert_eq!(rollback.generation, 3);
@@ -352,7 +351,8 @@ fn context(tenant_id: &str, operation: &str) -> ModuleExecutionContext {
             capability_id: CapabilityId::try_new("metadata.definition.manage").unwrap(),
             capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
             idempotency_key: IdempotencyKey::try_new(format!("idempotency-{suffix}")).unwrap(),
-            business_transaction_id: BusinessTransactionId::try_new(format!("tx-{suffix}")).unwrap(),
+            business_transaction_id: BusinessTransactionId::try_new(format!("tx-{suffix}"))
+                .unwrap(),
             schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
             request_started_at_unix_nanos: 1,
         },
@@ -402,7 +402,10 @@ async fn assert_force_rls(admin: &PgPool) {
     assert_eq!(row.try_get::<i64, _>("protected_count").unwrap(), 6);
 }
 
-async fn assert_immutable_revision(database_url: &str, revision_id: &crm_metadata_runtime::MetadataRevisionId) {
+async fn assert_immutable_revision(
+    database_url: &str,
+    revision_id: &crm_metadata_runtime::MetadataRevisionId,
+) {
     let pool = PgPool::connect(database_url)
         .await
         .expect("connect immutable revision verifier");
@@ -439,6 +442,12 @@ async fn assert_immutable_revision(database_url: &str, revision_id: &crm_metadat
     .bind(revision_id.as_bytes().as_slice())
     .execute(&mut *transaction)
     .await;
-    assert!(result.is_err(), "immutable metadata revision accepted UPDATE");
-    transaction.rollback().await.expect("rollback immutability check");
+    assert!(
+        result.is_err(),
+        "immutable metadata revision accepted UPDATE"
+    );
+    transaction
+        .rollback()
+        .await
+        .expect("rollback immutability check");
 }

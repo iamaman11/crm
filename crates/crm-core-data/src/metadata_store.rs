@@ -83,17 +83,14 @@ impl PostgresMetadataStore {
             )
             .await?;
         } else {
-            let existing = load_bundle(
-                &mut transaction,
-                &context.execution.tenant_id,
-                &revision_id,
-            )
-            .await?
-            .ok_or_else(|| {
-                MetadataPersistenceError::InvalidStoredValue(
-                    "metadata revision header exists without a readable bundle".to_owned(),
-                )
-            })?;
+            let existing =
+                load_bundle(&mut transaction, &context.execution.tenant_id, &revision_id)
+                    .await?
+                    .ok_or_else(|| {
+                        MetadataPersistenceError::InvalidStoredValue(
+                            "metadata revision header exists without a readable bundle".to_owned(),
+                        )
+                    })?;
             if existing.documents() != draft.documents() {
                 return Err(MetadataPersistenceError::RevisionIdentityCollision(
                     revision_id,
@@ -116,12 +113,8 @@ impl PostgresMetadataStore {
         context.validate().map_err(MetadataPersistenceError::Sdk)?;
         let mut transaction = self.store.pool().begin().await?;
         bind_execution_context(&mut transaction, context).await?;
-        let revision = load_bundle(
-            &mut transaction,
-            &context.execution.tenant_id,
-            revision_id,
-        )
-        .await?;
+        let revision =
+            load_bundle(&mut transaction, &context.execution.tenant_id, revision_id).await?;
         transaction.commit().await?;
         Ok(revision)
     }
@@ -193,9 +186,11 @@ impl PostgresMetadataStore {
             });
         }
         if impact.has_breaking_changes() && !allow_breaking_changes {
-            return Err(MetadataPersistenceError::BreakingChangeConfirmationRequired(
-                candidate_revision.clone(),
-            ));
+            return Err(
+                MetadataPersistenceError::BreakingChangeConfirmationRequired(
+                    candidate_revision.clone(),
+                ),
+            );
         }
 
         let next_generation = state.generation.checked_add(1).ok_or_else(|| {
@@ -291,12 +286,7 @@ impl PostgresMetadataStore {
         })?;
         let next_depth = state.rollback_depth - 1;
 
-        delete_rollback_stack_entry(
-            &mut transaction,
-            context,
-            state.rollback_depth,
-        )
-        .await?;
+        delete_rollback_stack_entry(&mut transaction, context, state.rollback_depth).await?;
         upsert_activation_head(
             &mut transaction,
             context,
@@ -422,12 +412,21 @@ pub enum MetadataPersistenceError {
 impl fmt::Display for MetadataPersistenceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Database(error) => write!(formatter, "metadata database operation failed: {error}"),
+            Self::Database(error) => {
+                write!(formatter, "metadata database operation failed: {error}")
+            }
             Self::Sdk(error) => write!(formatter, "metadata execution context is invalid: {error}"),
-            Self::Runtime(error) => write!(formatter, "metadata runtime validation failed: {error}"),
-            Self::InvalidInput(message) => write!(formatter, "invalid metadata persistence input: {message}"),
+            Self::Runtime(error) => {
+                write!(formatter, "metadata runtime validation failed: {error}")
+            }
+            Self::InvalidInput(message) => {
+                write!(formatter, "invalid metadata persistence input: {message}")
+            }
             Self::InvalidStoredValue(message) => {
-                write!(formatter, "invalid metadata value stored in PostgreSQL: {message}")
+                write!(
+                    formatter,
+                    "invalid metadata value stored in PostgreSQL: {message}"
+                )
             }
             Self::RevisionNotFound(revision_id) => {
                 write!(formatter, "metadata revision {revision_id} was not found")
@@ -725,10 +724,7 @@ async fn load_state(
     };
 
     let generation = stored_u64(row.try_get::<i64, _>("generation")?, "generation")?;
-    let rollback_depth = stored_usize(
-        row.try_get::<i64, _>("rollback_depth")?,
-        "rollback depth",
-    )?;
+    let rollback_depth = stored_usize(row.try_get::<i64, _>("rollback_depth")?, "rollback depth")?;
     let active_revision = row
         .try_get::<Option<Vec<u8>>, _>("active_revision_id")?
         .map(revision_id_from_bytes)
@@ -797,10 +793,7 @@ fn impact_from_runtime(
         .map_err(MetadataPersistenceError::Runtime)
 }
 
-fn require_generation(
-    expected: u64,
-    actual: u64,
-) -> Result<(), MetadataPersistenceError> {
+fn require_generation(expected: u64, actual: u64) -> Result<(), MetadataPersistenceError> {
     if expected != actual {
         return Err(MetadataPersistenceError::GenerationConflict { expected, actual });
     }
@@ -993,10 +986,7 @@ fn decode_transition(
         transition_id: row.try_get("transition_id")?,
         action: MetadataTransitionAction::parse(&row.try_get::<String, _>("action")?)?,
         generation: stored_u64(row.try_get::<i64, _>("generation")?, "generation")?,
-        rollback_depth: stored_usize(
-            row.try_get::<i64, _>("rollback_depth")?,
-            "rollback depth",
-        )?,
+        rollback_depth: stored_usize(row.try_get::<i64, _>("rollback_depth")?, "rollback depth")?,
         from_revision: row
             .try_get::<Option<Vec<u8>>, _>("from_revision_id")?
             .map(revision_id_from_bytes)
@@ -1060,9 +1050,7 @@ fn revision_id_from_bytes(bytes: Vec<u8>) -> Result<MetadataRevisionId, Metadata
 
 fn stored_u64(value: i64, field: &str) -> Result<u64, MetadataPersistenceError> {
     u64::try_from(value).map_err(|_| {
-        MetadataPersistenceError::InvalidStoredValue(format!(
-            "metadata {field} is negative"
-        ))
+        MetadataPersistenceError::InvalidStoredValue(format!("metadata {field} is negative"))
     })
 }
 
