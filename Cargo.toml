@@ -16,6 +16,7 @@ members = [
   "crates/crm-module-registry",
   "crates/crm-metadata-runtime",
   "crates/crm-metadata-schema",
+  "crates/crm-metadata-api-adapter",
   "crates/crm-capability-runtime",
   "crates/crm-capability-adapters",
   "crates/crm-activities-capability-adapter",
