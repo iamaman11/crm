@@ -17,7 +17,7 @@ export const UI_EXTENSION_SURFACES = [
 export type UiExtensionSurface = (typeof UI_EXTENSION_SURFACES)[number];
 
 export interface UiExtensionProps<Context> {
-  context: Readonly<Context>;
+  readonly context: Readonly<Context>;
 }
 
 export type UiExtensionComponent<Context> = ComponentType<
@@ -25,15 +25,15 @@ export type UiExtensionComponent<Context> = ComponentType<
 >;
 
 export interface UiExtensionModule<Context> {
-  default: UiExtensionComponent<Context>;
+  readonly default: UiExtensionComponent<Context>;
 }
 
 export interface UiExtensionDefinition<Context> {
-  id: string;
-  ownerModuleId: string;
-  surface: UiExtensionSurface;
-  order?: number;
-  load: () => Promise<UiExtensionModule<Context>>;
+  readonly id: string;
+  readonly ownerModuleId: string;
+  readonly surface: UiExtensionSurface;
+  readonly order?: number;
+  readonly load: () => Promise<UiExtensionModule<Context>>;
 }
 
 export type UiExtensionRegistrationErrorCode =
@@ -56,18 +56,18 @@ export class UiExtensionRegistrationError extends Error {
 export type UiExtensionFailurePhase = "load" | "render";
 
 export interface UiExtensionFailureEvent {
-  code: "UI_EXTENSION_LOAD_FAILED" | "UI_EXTENSION_RENDER_FAILED";
-  coordinate: string;
-  extensionId: string;
-  ownerModuleId: string;
-  surface: UiExtensionSurface;
-  phase: UiExtensionFailurePhase;
-  attempt: number;
+  readonly code: "UI_EXTENSION_LOAD_FAILED" | "UI_EXTENSION_RENDER_FAILED";
+  readonly coordinate: string;
+  readonly extensionId: string;
+  readonly ownerModuleId: string;
+  readonly surface: UiExtensionSurface;
+  readonly phase: UiExtensionFailurePhase;
+  readonly attempt: number;
 }
 
 interface NormalizedUiExtensionDefinition<Context>
   extends UiExtensionDefinition<Context> {
-  order: number;
+  readonly order: number;
 }
 
 const textEncoder = new TextEncoder();
@@ -133,12 +133,12 @@ export function uiExtensionCoordinate<Context>(
 }
 
 export interface UiExtensionSlotProps<Context> {
-  registry: UiExtensionRegistry<Context>;
-  surface: UiExtensionSurface;
-  context: Readonly<Context>;
-  onFailure?: (event: UiExtensionFailureEvent) => void;
-  emptyFallback?: ReactNode;
-  loadingFallback?: ReactNode;
+  readonly registry: UiExtensionRegistry<Context>;
+  readonly surface: UiExtensionSurface;
+  readonly context: Readonly<Context>;
+  readonly onFailure?: (event: UiExtensionFailureEvent) => void;
+  readonly emptyFallback?: ReactNode;
+  readonly loadingFallback?: ReactNode;
 }
 
 export function UiExtensionSlot<Context>({
@@ -170,10 +170,10 @@ export function UiExtensionSlot<Context>({
 }
 
 interface UiExtensionInstanceProps<Context> {
-  definition: UiExtensionDefinition<Context>;
-  context: Readonly<Context>;
-  onFailure: ((event: UiExtensionFailureEvent) => void) | undefined;
-  loadingFallback: ReactNode | undefined;
+  readonly definition: UiExtensionDefinition<Context>;
+  readonly context: Readonly<Context>;
+  readonly onFailure: ((event: UiExtensionFailureEvent) => void) | undefined;
+  readonly loadingFallback: ReactNode | undefined;
 }
 
 function UiExtensionInstance<Context>({
@@ -197,18 +197,25 @@ function UiExtensionInstance<Context>({
   const coordinate = uiExtensionCoordinate(definition);
 
   const reportFailure = (phase: UiExtensionFailurePhase) => {
-    onFailure?.({
-      code:
-        phase === "load"
-          ? "UI_EXTENSION_LOAD_FAILED"
-          : "UI_EXTENSION_RENDER_FAILED",
-      coordinate,
-      extensionId: definition.id,
-      ownerModuleId: definition.ownerModuleId,
-      surface: definition.surface,
-      phase,
-      attempt,
-    });
+    if (!onFailure) {
+      return;
+    }
+    try {
+      onFailure({
+        code:
+          phase === "load"
+            ? "UI_EXTENSION_LOAD_FAILED"
+            : "UI_EXTENSION_RENDER_FAILED",
+        coordinate,
+        extensionId: definition.id,
+        ownerModuleId: definition.ownerModuleId,
+        surface: definition.surface,
+        phase,
+        attempt,
+      });
+    } catch {
+      // Failure reporting is observational only and must never break the host.
+    }
   };
 
   return (
@@ -234,15 +241,15 @@ function UiExtensionInstance<Context>({
 }
 
 interface UiExtensionErrorBoundaryProps {
-  coordinate: string;
-  onFailure: (phase: UiExtensionFailurePhase) => void;
-  onRetry: () => void;
-  children: ReactNode;
+  readonly coordinate: string;
+  readonly onFailure: (phase: UiExtensionFailurePhase) => void;
+  readonly onRetry: () => void;
+  readonly children: ReactNode;
 }
 
 interface UiExtensionErrorBoundaryState {
-  failed: boolean;
-  phase: UiExtensionFailurePhase;
+  readonly failed: boolean;
+  readonly phase: UiExtensionFailurePhase;
 }
 
 class UiExtensionErrorBoundary extends Component<
