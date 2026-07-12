@@ -14,4 +14,5 @@ crm-search-runtime = { path = "../crm-search-runtime" }
 prost = "0.14"
 
 [dev-dependencies]
+crm-capability-adapters = { path = "../crm-capability-adapters" }
 tokio = { version = "1", features = ["macros", "rt"] }
