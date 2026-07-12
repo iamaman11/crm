@@ -23,6 +23,7 @@ on:
       - "database/migrations/0008_rebuildable_projection_runtime.up.sql"
       - "database/migrations/0009_search_index_generations.*.sql"
       - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
       - ".github/workflows/search-runtime.yml"
   pull_request:
     paths:
@@ -46,6 +47,7 @@ on:
       - "database/migrations/0008_rebuildable_projection_runtime.up.sql"
       - "database/migrations/0009_search_index_generations.*.sql"
       - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
       - ".github/workflows/search-runtime.yml"
 
 permissions:
@@ -119,6 +121,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.down.sql
           test "$(psql --tuples-only --no-align --command "SELECT to_regclass('crm.search_index_generations') IS NULL")" = "t"
           psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
       - name: Reverify PostgreSQL search acceptance after reapply
         shell: bash
         run: |
