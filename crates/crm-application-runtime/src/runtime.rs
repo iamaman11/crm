@@ -716,7 +716,7 @@ fn bootstrap_application_access(
                     task_fields(),
                     expires_at,
                 )?,
-                METADATA_MODULE_ID => {},
+                METADATA_MODULE_ID => {}
                 SEARCH_MODULE_ID => {
                     upsert_bootstrap_visibility(
                         visibility_store,
