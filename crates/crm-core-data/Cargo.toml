@@ -12,6 +12,7 @@ postgres-integration = []
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-contracts = { path = "../crm-core-contracts" }
 crm-core-events = { path = "../crm-core-events" }
+crm-metadata-runtime = { path = "../crm-metadata-runtime" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-search-runtime = { path = "../crm-search-runtime" }
 serde = { version = "1", features = ["derive"] }
@@ -50,4 +51,9 @@ required-features = ["postgres-integration"]
 [[test]]
 name = "postgres_search"
 path = "tests/postgres_search.rs"
+required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_metadata"
+path = "tests/postgres_metadata.rs"
 required-features = ["postgres-integration"]
