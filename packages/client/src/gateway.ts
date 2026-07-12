@@ -3,6 +3,8 @@ import {
   ConnectError,
   createClient,
   type Interceptor,
+  type Client,
+  type Transport,
 } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
@@ -55,6 +57,7 @@ export interface GovernedGatewayClientOptions {
   baseUrl: string;
   sessionProvider: SessionProvider;
   idFactory?: () => string;
+  transport?: Transport;
 }
 
 export interface SearchGlobalOptions {
@@ -70,28 +73,28 @@ export interface SearchGlobalResult {
 }
 
 export class GovernedClient {
-  private readonly gatewayClient: ReturnType<typeof createClient>;
+  private readonly gatewayClient: Client<typeof ApplicationGatewayService>;
+  private readonly sessionProvider: SessionProvider;
 
   public constructor(options: GovernedGatewayClientOptions) {
+    this.sessionProvider = options.sessionProvider;
     const idFactory = options.idFactory ?? defaultRequestId;
     const sessionInterceptor: Interceptor = (next) => async (request) => {
-      const session = requireAuthenticatedSession(options.sessionProvider.getSnapshot());
+      const session = this.sessionProvider.getSnapshot();
       const requestId = idFactory();
 
-      request.header.set("authorization", `Bearer ${session.bearerToken}`);
-      request.header.set(TENANT_HEADER, session.tenantId);
+      if (session.status === "authenticated") {
+        request.header.set("authorization", `Bearer ${session.bearerToken}`);
+        request.header.set(TENANT_HEADER, session.tenantId);
+      }
       request.header.set(REQUEST_ID_HEADER, requestId);
       request.header.set(CORRELATION_ID_HEADER, requestId);
       request.header.set(TRACE_ID_HEADER, requestId);
 
-      try {
-        return await next(request);
-      } catch (error) {
-        throw mapGatewayError(error);
-      }
+      return await next(request);
     };
 
-    const transport = createGrpcWebTransport({
+    const transport = options.transport ?? createGrpcWebTransport({
       baseUrl: normalizeBaseUrl(options.baseUrl),
       interceptors: [sessionInterceptor],
     });
@@ -101,6 +104,8 @@ export class GovernedClient {
 
 
   public async searchGlobal(options: SearchGlobalOptions): Promise<SearchGlobalResult> {
+    requireAuthenticatedSession(this.sessionProvider.getSnapshot());
+
     const messageName = "crm.search.v1.SearchRequest";
     const descriptorHash = CONTRACT_HASHES[messageName];
     if (!descriptorHash) {
@@ -137,7 +142,7 @@ export class GovernedClient {
 
     try {
       // 4. Invoke governed ApplicationGatewayService.query
-      const response = await (this.gatewayClient as any).query({
+      const response = await this.gatewayClient.query({
         ownerModuleId: "crm.search",
         capabilityId: "search.global.query",
         capabilityVersion: "1.0.0",
@@ -228,10 +233,10 @@ export class GovernedClient {
       }
 
       // 4. Verify maximum size limit
-      if (output.maximumSizeBytes <= 0n) {
+      if (output.maximumSizeBytes !== 1048576n) {
         throw new ProductClientError({
           kind: "internal",
-          message: `Contract verification failed: expected maximumSizeBytes to be positive, got ${output.maximumSizeBytes}`,
+          message: `Contract verification failed: expected maximumSizeBytes to be 1048576, got ${output.maximumSizeBytes}`,
           retryable: false,
         });
       }
@@ -305,16 +310,37 @@ export function mapGatewayError(error: unknown): ProductClientError {
   }
 
   const safeCode = error.metadata.get("x-error-code") ?? undefined;
-  const messageText = (error.message || "").toLowerCase();
 
-  if (error.code === Code.Unauthenticated || messageText.includes("authentication failed") || messageText.includes("session")) {
-    return productError("unauthenticated", false, safeCode, error);
-  }
-  if (error.code === Code.PermissionDenied || messageText.includes("permitted") || messageText.includes("permission") || messageText.includes("tenant")) {
-    return productError("permission_denied", false, safeCode, error);
+  // 1. Check custom stable error codes from backend
+  if (safeCode) {
+    switch (safeCode) {
+      case "AUTHENTICATION_REQUIRED":
+      case "AUTHENTICATION_INVALID":
+      case "AUTHENTICATION_EXPIRED":
+      case "AUTHENTICATION_REVOKED":
+        return productError("unauthenticated", false, safeCode, error);
+      case "AUTHENTICATION_UNAVAILABLE":
+        return productError("unavailable", true, safeCode, error);
+      case "TENANT_REQUIRED":
+      case "TENANT_INVALID":
+      case "TENANT_FORBIDDEN":
+      case "CAPABILITY_PERMISSION_DENIED":
+      case "QUERY_PERMISSION_DENIED":
+        return productError("permission_denied", false, safeCode, error);
+      case "CAPABILITY_RATE_LIMITED":
+        return productError("rate_limited", true, safeCode, error);
+      case "QUERY_DEADLINE_EXCEEDED":
+      case "CAPABILITY_DEADLINE_EXCEEDED":
+        return productError("unavailable", true, safeCode, error);
+    }
   }
 
+  // 2. Fallback to standard Connect/gRPC codes (fully typed error classification without message parsing)
   switch (error.code) {
+    case Code.Unauthenticated:
+      return productError("unauthenticated", false, safeCode, error);
+    case Code.PermissionDenied:
+      return productError("permission_denied", false, safeCode, error);
     case Code.NotFound:
       return productError("not_found", false, safeCode, error);
     case Code.InvalidArgument:

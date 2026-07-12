@@ -7,7 +7,7 @@ import {
   ProductClientError,
   GovernedClient,
 } from "./index";
-import { ConnectError, Code, createClient, createRouterTransport } from "@connectrpc/connect";
+import { ConnectError, Code, createRouterTransport } from "@connectrpc/connect";
 import { ApplicationGatewayService } from "../gen/crm/gateway/v1/gateway_pb";
 import { SearchResponseSchema } from "../gen/crm/search/v1/search_pb";
 import { create, toBinary } from "@bufbuild/protobuf";
@@ -89,8 +89,23 @@ describe("Gateway Error Mapping", () => {
     expect(mapped.retryable).toBe(true);
   });
 
-  it("maps ConnectError correctly based on code", () => {
-    const unauthConnectErr = new ConnectError("Access token invalid", Code.Unauthenticated);
+  it("maps ConnectError correctly based on custom x-error-code metadata", () => {
+    const err = new ConnectError("Denied", Code.PermissionDenied);
+    err.metadata.set("x-error-code", "TENANT_FORBIDDEN");
+    const mapped = mapGatewayError(err);
+    expect(mapped.kind).toBe("permission_denied");
+    expect(mapped.safeCode).toBe("TENANT_FORBIDDEN");
+    expect(mapped.retryable).toBe(false);
+
+    const expiredErr = new ConnectError("Expired", Code.Unauthenticated);
+    expiredErr.metadata.set("x-error-code", "AUTHENTICATION_EXPIRED");
+    const mappedExpired = mapGatewayError(expiredErr);
+    expect(mappedExpired.kind).toBe("unauthenticated");
+    expect(mappedExpired.safeCode).toBe("AUTHENTICATION_EXPIRED");
+  });
+
+  it("maps ConnectError correctly based on standard Connect Code fallback", () => {
+    const unauthConnectErr = new ConnectError("Unauth", Code.Unauthenticated);
     const mapped = mapGatewayError(unauthConnectErr);
     expect(mapped.kind).toBe("unauthenticated");
     expect(mapped.retryable).toBe(false);
@@ -118,14 +133,14 @@ describe("GovernedClient Governed Search API", () => {
       dataClass: "confidential",
       descriptorHash: responseHash,
       encoding: "protobuf",
-      maximumSizeBytes: 10485760n,
+      maximumSizeBytes: 1048576n,
       retentionPolicyId: "standard",
       payload: new Uint8Array(),
       ...overrides,
     };
   }
 
-  it("emits the exact governed coordinates and parses valid search response", async () => {
+  it("emits the exact governed coordinates and parses valid search response via DI transport", async () => {
     let capturedQueryRequest: any = null;
 
     const mockTransport = createRouterTransport(({ service }) => {
@@ -159,10 +174,8 @@ describe("GovernedClient Governed Search API", () => {
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
+      transport: mockTransport,
     });
-
-    // Inject mock transport
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
 
     const result = await client.searchGlobal({
       text: "query text",
@@ -198,9 +211,8 @@ describe("GovernedClient Governed Search API", () => {
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
+      transport: mockTransport,
     });
-
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
 
     await expect(
       client.searchGlobal({
@@ -223,8 +235,11 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -242,8 +257,11 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -261,8 +279,11 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -280,8 +301,11 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -299,8 +323,11 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -318,15 +345,18 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
     ).rejects.toThrow("missing or invalid contract identity fields");
   });
 
-  it("rejects response with non-positive maximumSizeBytes", async () => {
+  it("rejects response with incorrect maximumSizeBytes", async () => {
     const mockTransport = createRouterTransport(({ service }) => {
       service(ApplicationGatewayService, {
         async query() {
@@ -337,12 +367,15 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
-    ).rejects.toThrow("expected maximumSizeBytes to be positive, got 0");
+    ).rejects.toThrow("expected maximumSizeBytes to be 1048576, got 0");
   });
 
   it("rejects response with oversized payload", async () => {
@@ -351,20 +384,23 @@ describe("GovernedClient Governed Search API", () => {
         async query() {
           return {
             output: createMockOutput({
-              maximumSizeBytes: 2n,
-              payload: new Uint8Array([1, 2, 3, 4]),
+              maximumSizeBytes: 1048576n,
+              payload: new Uint8Array(1048577), // larger than maximumSizeBytes
             }),
           } as any;
         },
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
-    ).rejects.toThrow("payload size 4 exceeds maximumSizeBytes 2");
+    ).rejects.toThrow("payload size 1048577 exceeds maximumSizeBytes 1048576");
   });
 
   it("rejects response with wrong retentionPolicyId", async () => {
@@ -378,8 +414,11 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -397,8 +436,11 @@ describe("GovernedClient Governed Search API", () => {
         async mutate() { return {} as any; }
       });
     });
-    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
-    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+      transport: mockTransport,
+    });
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })

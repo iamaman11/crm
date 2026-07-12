@@ -29,6 +29,18 @@ const SALES_ADVANCE: &str = "sales.deal.advance_stage";
 const SEARCH_GLOBAL: &str = "search.global.query";
 const LINK_MODULE_ID: &str = "crm.sales-activities-link";
 
+struct ChildGuard {
+    child: tokio::process::Child,
+}
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Ok(None) = self.child.try_wait() {
+            let _ = self.child.start_kill();
+        }
+    }
+}
+
 #[tokio::test]
 async fn seed_e2e_fixture_records() {
     let database_url = match std::env::var("DATABASE_URL") {
@@ -59,7 +71,7 @@ async fn seed_e2e_fixture_records() {
     let grpc_addr = format!("127.0.0.1:{grpc_port}");
 
     println!("Starting crm-api for seeding on HTTP={http_addr}, gRPC={grpc_addr}");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_crm-api"))
+    let child = Command::new(env!("CARGO_BIN_EXE_crm-api"))
         .env("CRM_DATABASE_URL", &database_url)
         .env("CRM_HTTP_BIND", &http_addr)
         .env("CRM_GRPC_BIND", &grpc_addr)
@@ -78,8 +90,10 @@ async fn seed_e2e_fixture_records() {
         .spawn()
         .expect("spawn crm-api process");
 
+    let mut child_guard = ChildGuard { child };
+
     let http = reqwest::Client::new();
-    wait_until_ready(&http, &child, &http_addr).await;
+    wait_until_ready(&http, &child_guard.child, &http_addr).await;
 
     // Trigger sales.deal.create mutation
     let create_definition = mutation_definition(SALES_CREATE);
@@ -184,7 +198,7 @@ async fn seed_e2e_fixture_records() {
     assert!(page.hits.iter().any(|hit| hit.resource_id == DEAL_ID));
 
     println!("Stopping crm-api spawned for seeding...");
-    let pid = child.id().expect("running crm-api has a PID");
+    let pid = child_guard.child.id().expect("running crm-api has a PID");
     let kill_status = Command::new("kill")
         .arg("-INT")
         .arg(pid.to_string())
@@ -192,7 +206,7 @@ async fn seed_e2e_fixture_records() {
         .await
         .expect("send SIGINT to crm-api");
     assert!(kill_status.success(), "kill -INT failed");
-    child.wait().await.ok();
+    child_guard.child.wait().await.ok();
 
     println!("Seeding completed successfully!");
 }

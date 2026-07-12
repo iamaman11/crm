@@ -13,15 +13,37 @@ CONTAINER_NAME="crm-postgres-e2e-$(date +%s)"
 echo "Starting ephemeral PostgreSQL container ${CONTAINER_NAME} on port ${E2E_DB_PORT}..."
 docker run --rm --name "${CONTAINER_NAME}" -p "${E2E_DB_PORT}:5432" -e POSTGRES_PASSWORD="${E2E_DB_PASSWORD}" -d postgres:16-alpine
 
+API_PID=""
+VITE_PID=""
+
+# Helper to recursively kill child processes of a target PID safely
+kill_descendants() {
+  local target_pid=$1
+  if [ -z "$target_pid" ]; then
+    return
+  fi
+  # Find child PIDs
+  local children
+  children=$(pgrep -P "$target_pid" 2>/dev/null || true)
+  for child in $children; do
+    kill_descendants "$child"
+  done
+  kill -9 "$target_pid" 2>/dev/null || true
+}
+
 # Ensure cleanup of background services and Docker container on exit
 cleanup() {
   echo "Cleaning up background services..."
   
-  # Terminate processes holding backend and dev server ports to prevent resource leaks/orphans
-  for port in 8080 9090 5173; do
-    echo "Terminating any process holding port ${port}..."
-    lsof -t -i:"${port}" | xargs -r kill -9 2>/dev/null || true
-  done
+  if [ -n "$API_PID" ]; then
+    echo "Stopping crm-api process group recursively (PID: $API_PID)..."
+    kill_descendants "$API_PID"
+  fi
+
+  if [ -n "$VITE_PID" ]; then
+    echo "Stopping Vite process group recursively (PID: $VITE_PID)..."
+    kill_descendants "$VITE_PID"
+  fi
 
   # Terminate any remaining background jobs of this shell session
   jobs -p | xargs -r kill 2>/dev/null || true
@@ -88,6 +110,7 @@ CRM_APPROVAL_SIGNING_KEY=phase6l-approval-signing-key-0123456789abcdef0123456789
 CRM_GRPC_BIND=127.0.0.1:9090 \
 CRM_HTTP_BIND=127.0.0.1:8080 \
 ./target/debug/crm-api &
+API_PID=$!
 
 # Wait for backend to be ready
 until curl -s http://127.0.0.1:8080/readyz > /dev/null; do
@@ -107,6 +130,7 @@ VITE_CRM_DEV_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef012345678
 VITE_CRM_DEV_TENANT_ID=tenant-a \
 VITE_CRM_DEV_CAPABILITIES=search.global.query \
 pnpm --filter @ultimate-crm/web dev --force &
+VITE_PID=$!
 
 # Wait for Vite dev server to be ready
 until curl -s http://127.0.0.1:5173 > /dev/null; do

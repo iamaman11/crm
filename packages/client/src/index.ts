@@ -23,4 +23,3 @@ export type {
 } from "./session";
 
 export type { SearchHit } from "../gen/crm/search/v1/search_pb";
-export { CONTRACT_HASHES } from "./contract_hashes";
