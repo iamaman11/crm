@@ -74,12 +74,14 @@ impl PostgresMetadataStore {
             insert_transition(
                 &mut transaction,
                 context,
-                MetadataTransitionAction::Publish,
-                state.generation,
-                state.rollback_depth,
-                None,
-                &revision_id,
-                occurred_at_unix_nanos,
+                MetadataTransitionWrite {
+                    action: MetadataTransitionAction::Publish,
+                    generation: state.generation,
+                    rollback_depth: state.rollback_depth,
+                    from_revision: None,
+                    to_revision: &revision_id,
+                    occurred_at_unix_nanos,
+                },
             )
             .await?;
         } else {
@@ -228,12 +230,14 @@ impl PostgresMetadataStore {
         insert_transition(
             &mut transaction,
             context,
-            MetadataTransitionAction::Activate,
-            next_generation,
-            next_depth,
-            previous_revision.as_ref(),
-            candidate_revision,
-            occurred_at_unix_nanos,
+            MetadataTransitionWrite {
+                action: MetadataTransitionAction::Activate,
+                generation: next_generation,
+                rollback_depth: next_depth,
+                from_revision: previous_revision.as_ref(),
+                to_revision: candidate_revision,
+                occurred_at_unix_nanos,
+            },
         )
         .await?;
 
@@ -298,12 +302,14 @@ impl PostgresMetadataStore {
         insert_transition(
             &mut transaction,
             context,
-            MetadataTransitionAction::Rollback,
-            next_generation,
-            next_depth,
-            Some(&replaced_revision),
-            &target_revision,
-            occurred_at_unix_nanos,
+            MetadataTransitionWrite {
+                action: MetadataTransitionAction::Rollback,
+                generation: next_generation,
+                rollback_depth: next_depth,
+                from_revision: Some(&replaced_revision),
+                to_revision: &target_revision,
+                occurred_at_unix_nanos,
+            },
         )
         .await?;
 
@@ -908,17 +914,26 @@ async fn upsert_activation_head(
     Ok(())
 }
 
-async fn insert_transition(
-    transaction: &mut Transaction<'_, Postgres>,
-    context: &ModuleExecutionContext,
+struct MetadataTransitionWrite<'a> {
     action: MetadataTransitionAction,
     generation: u64,
     rollback_depth: usize,
-    from_revision: Option<&MetadataRevisionId>,
-    to_revision: &MetadataRevisionId,
+    from_revision: Option<&'a MetadataRevisionId>,
+    to_revision: &'a MetadataRevisionId,
     occurred_at_unix_nanos: i64,
+}
+
+async fn insert_transition(
+    transaction: &mut Transaction<'_, Postgres>,
+    context: &ModuleExecutionContext,
+    transition: MetadataTransitionWrite<'_>,
 ) -> Result<(), MetadataPersistenceError> {
-    let transition_id = transition_id(context, action, generation, to_revision)?;
+    let transition_id = transition_id(
+        context,
+        transition.action,
+        transition.generation,
+        transition.to_revision,
+    )?;
     sqlx::query(
         r#"
         INSERT INTO crm.metadata_transitions (
@@ -944,17 +959,21 @@ async fn insert_transition(
     )
     .bind(context.execution.tenant_id.as_str())
     .bind(transition_id)
-    .bind(action.as_str())
-    .bind(database_i64(generation, "generation")?)
-    .bind(database_i64(rollback_depth, "rollback depth")?)
-    .bind(from_revision.map(|revision| revision.as_bytes().as_slice()))
-    .bind(to_revision.as_bytes().as_slice())
+    .bind(transition.action.as_str())
+    .bind(database_i64(transition.generation, "generation")?)
+    .bind(database_i64(transition.rollback_depth, "rollback depth")?)
+    .bind(
+        transition
+            .from_revision
+            .map(|revision| revision.as_bytes().as_slice()),
+    )
+    .bind(transition.to_revision.as_bytes().as_slice())
     .bind(context.execution.actor_id.as_str())
     .bind(context.execution.request_id.as_str())
     .bind(context.execution.capability_id.as_str())
     .bind(context.execution.capability_version.as_str())
     .bind(context.execution.business_transaction_id.as_str())
-    .bind(occurred_at_unix_nanos)
+    .bind(transition.occurred_at_unix_nanos)
     .execute(&mut **transaction)
     .await?;
     Ok(())
