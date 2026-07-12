@@ -1,14 +1,10 @@
-use crate::audit::{
-    AuditIntent, AuditMaterializationError, materialize_audit_chain,
-};
-use crate::capability_executor::{
-    capability_batch_error_to_sdk, capability_idempotency_scope,
-};
+use crate::audit::{AuditIntent, AuditMaterializationError, materialize_audit_chain};
+use crate::capability_executor::{capability_batch_error_to_sdk, capability_idempotency_scope};
 use crate::metadata_store::{
     MetadataPersistenceError, MetadataTransitionAction, MetadataTransitionWrite,
-    delete_rollback_stack_entry, insert_documents, insert_rollback_stack_entry,
-    insert_transition, load_bundle, load_impact, load_rollback_target, load_state,
-    lock_activation, require_generation, upsert_activation_head,
+    delete_rollback_stack_entry, insert_documents, insert_rollback_stack_entry, insert_transition,
+    load_bundle, load_impact, load_rollback_target, load_state, lock_activation,
+    require_generation, upsert_activation_head,
 };
 use crate::postgres_batch::{
     BatchMutationPlan, bind_execution_context, capability_idempotency,
@@ -31,9 +27,7 @@ use crm_metadata_api_adapter::{
 use crm_metadata_runtime::{
     MetadataBundleDraft, MetadataImpactReport, MetadataRevisionId, TenantMetadataSnapshot,
 };
-use crm_module_sdk::{
-    DataClass, ErrorCategory, PortFuture, ResourceRef, SdkError, TypedPayload,
-};
+use crm_module_sdk::{DataClass, ErrorCategory, PortFuture, ResourceRef, SdkError, TypedPayload};
 use crm_proto_contracts::crm::metadata::v1 as wire;
 use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Transaction};
@@ -60,11 +54,9 @@ impl TransactionalCapabilityExecutor for PostgresMetadataCapabilityExecutor {
     ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
         Box::pin(async move {
             let command = decode_metadata_command(definition, &request)?;
-            let idempotency = capability_idempotency(
-                &request,
-                capability_idempotency_scope(definition),
-            )
-            .map_err(capability_batch_error_to_sdk)?;
+            let idempotency =
+                capability_idempotency(&request, capability_idempotency_scope(definition))
+                    .map_err(capability_batch_error_to_sdk)?;
 
             let mut transaction = self
                 .store
@@ -76,13 +68,10 @@ impl TransactionalCapabilityExecutor for PostgresMetadataCapabilityExecutor {
                 .await
                 .map_err(capability_batch_error_to_sdk)?;
 
-            if let Some(result) = load_capability_replay(
-                &mut transaction,
-                &request.context,
-                &idempotency,
-            )
-            .await
-            .map_err(capability_batch_error_to_sdk)?
+            if let Some(result) =
+                load_capability_replay(&mut transaction, &request.context, &idempotency)
+                    .await
+                    .map_err(capability_batch_error_to_sdk)?
             {
                 transaction
                     .commit()
@@ -108,14 +97,11 @@ impl TransactionalCapabilityExecutor for PostgresMetadataCapabilityExecutor {
                 audits: vec![audit],
             };
 
-            let materialized = materialize_audit_chain(
-                &mut transaction,
-                &plan.context,
-                &plan.audits,
-            )
-            .await
-            .map_err(audit_materialization_to_batch_error)
-            .map_err(capability_batch_error_to_sdk)?;
+            let materialized =
+                materialize_audit_chain(&mut transaction, &plan.context, &plan.audits)
+                    .await
+                    .map_err(audit_materialization_to_batch_error)
+                    .map_err(capability_batch_error_to_sdk)?;
             for audit in &materialized {
                 insert_audit_record(&mut transaction, &plan.context, audit)
                     .await
@@ -327,7 +313,9 @@ async fn apply_publish(
                 )
             })?;
         if existing.documents() != draft.documents() {
-            return Err(MetadataPersistenceError::RevisionIdentityCollision(revision_id));
+            return Err(MetadataPersistenceError::RevisionIdentityCollision(
+                revision_id,
+            ));
         }
     }
 
@@ -375,9 +363,11 @@ async fn apply_activate(
         state
     } else {
         if impact.has_breaking_changes() && !confirm_breaking_changes {
-            return Err(MetadataPersistenceError::BreakingChangeConfirmationRequired(
-                candidate_revision.clone(),
-            ));
+            return Err(
+                MetadataPersistenceError::BreakingChangeConfirmationRequired(
+                    candidate_revision.clone(),
+                ),
+            );
         }
         let previous_revision = state.active_revision.clone();
         let next_generation = state.generation.checked_add(1).ok_or_else(|| {
@@ -391,14 +381,8 @@ async fn apply_activate(
                     "metadata rollback depth overflowed usize".to_owned(),
                 )
             })?;
-            insert_rollback_stack_entry(
-                transaction,
-                context,
-                depth,
-                previous,
-                next_generation,
-            )
-            .await?;
+            insert_rollback_stack_entry(transaction, context, depth, previous, next_generation)
+                .await?;
             depth
         } else {
             state.rollback_depth
@@ -578,10 +562,7 @@ fn metadata_audit_intent(
         request.context.execution.actor_id.as_str().to_owned(),
     );
     envelope.insert("aggregate_id", applied.audit_resource_id.clone());
-    envelope.insert(
-        "aggregate_type",
-        applied.audit_resource_type.to_owned(),
-    );
+    envelope.insert("aggregate_type", applied.audit_resource_type.to_owned());
     envelope.insert("aggregate_version", applied.audit_version.to_string());
     envelope.insert(
         "capability_id",
@@ -796,11 +777,9 @@ mod tests {
             },
         )
         .unwrap();
-        let command = decode_metadata_command(
-            &definition,
-            &request(PUBLISH_BUNDLE_CAPABILITY, input),
-        )
-        .unwrap();
+        let command =
+            decode_metadata_command(&definition, &request(PUBLISH_BUNDLE_CAPABILITY, input))
+                .unwrap();
 
         assert!(matches!(command, MetadataCommand::Publish(_)));
     }
@@ -815,11 +794,9 @@ mod tests {
             &wire::GetMetadataActivationRequest {},
         )
         .unwrap();
-        let error = decode_metadata_command(
-            &definition,
-            &request("metadata.activation.get", input),
-        )
-        .unwrap_err();
+        let error =
+            decode_metadata_command(&definition, &request("metadata.activation.get", input))
+                .unwrap_err();
 
         assert_eq!(error.code, "METADATA_MUTATION_ROUTE_UNSUPPORTED");
     }

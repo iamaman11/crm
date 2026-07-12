@@ -1,8 +1,6 @@
 #![cfg(feature = "postgres-integration")]
 
-use crm_capability_runtime::{
-    CapabilityRequest, TransactionalCapabilityExecutor,
-};
+use crm_capability_runtime::{CapabilityRequest, TransactionalCapabilityExecutor};
 use crm_core_data::{PostgresDataStore, PostgresMetadataCapabilityExecutor};
 use crm_metadata_api_adapter::{
     METADATA_MODULE_ID, PUBLISH_BUNDLE_CAPABILITY, PUBLISH_REQUEST_SCHEMA,
@@ -10,9 +8,9 @@ use crm_metadata_api_adapter::{
 };
 use crm_metadata_schema::METADATA_DEFINITION_SCHEMA_VERSION;
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,
-    CorrelationId, DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
-    RequestId, SchemaVersion, TenantId, TraceId,
+    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
+    DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, RequestId,
+    SchemaVersion, TenantId, TraceId,
 };
 use crm_proto_contracts::crm::metadata::v1 as wire;
 use prost::Message;
@@ -22,7 +20,9 @@ use sqlx::{PgPool, Row};
 #[tokio::test(flavor = "current_thread")]
 async fn governed_metadata_publish_is_atomic_audited_and_replay_safe() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping PostgreSQL metadata capability acceptance because DATABASE_URL is absent");
+        eprintln!(
+            "skipping PostgreSQL metadata capability acceptance because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -54,7 +54,10 @@ async fn governed_metadata_publish_is_atomic_audited_and_replay_safe() {
         first.affected_resources[0].resource_type,
         "metadata.revision"
     );
-    assert_eq!(first.affected_resources[0].resource_id, response.revision_id);
+    assert_eq!(
+        first.affected_resources[0].resource_id,
+        response.revision_id
+    );
 
     assert_eq!(evidence_counts(&admin).await, (1, 1, 1, 1, 0));
     let marker = sqlx::query(
@@ -67,8 +70,14 @@ async fn governed_metadata_publish_is_atomic_audited_and_replay_safe() {
     .fetch_one(&admin)
     .await
     .expect("load metadata business transaction marker");
-    assert_eq!(marker.try_get::<i32, _>("expected_outbox_events").unwrap(), 0);
-    assert_eq!(marker.try_get::<i32, _>("expected_audit_records").unwrap(), 1);
+    assert_eq!(
+        marker.try_get::<i32, _>("expected_outbox_events").unwrap(),
+        0
+    );
+    assert_eq!(
+        marker.try_get::<i32, _>("expected_audit_records").unwrap(),
+        1
+    );
     assert_eq!(
         marker
             .try_get::<i32, _>("expected_idempotency_records")
@@ -92,12 +101,9 @@ async fn governed_metadata_publish_is_atomic_audited_and_replay_safe() {
             .unwrap(),
         "crm.cjson/v1"
     );
-    let envelope: serde_json::Value = serde_json::from_slice(
-        &audit
-            .try_get::<Vec<u8>, _>("canonical_envelope")
-            .unwrap(),
-    )
-    .unwrap();
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&audit.try_get::<Vec<u8>, _>("canonical_envelope").unwrap())
+            .unwrap();
     assert_eq!(envelope["capability_id"], PUBLISH_BUNDLE_CAPABILITY);
     assert_eq!(envelope["aggregate_type"], "metadata.revision");
     assert_eq!(envelope["transaction_id"], "tx-publish-v1");

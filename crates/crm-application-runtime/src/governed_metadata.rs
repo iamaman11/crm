@@ -3,9 +3,7 @@ use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     TransactionalCapabilityExecutor,
 };
-use crm_core_data::{
-    PostgresMetadataCapabilityExecutor, PostgresTransactionalAggregateExecutor,
-};
+use crm_core_data::{PostgresMetadataCapabilityExecutor, PostgresTransactionalAggregateExecutor};
 use crm_metadata_api_adapter::{
     METADATA_MUTATION_CAPABILITY_IDS, METADATA_QUERY_CAPABILITY_IDS,
     metadata_mutation_capability_definitions, metadata_query_capability_definitions,
@@ -152,14 +150,18 @@ mod tests {
             PRODUCTION_MUTATION_CAPABILITY_IDS.len() + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
-            assert!(mutations.iter().any(|definition| {
-                definition.capability_id.as_str() == coordinate
-            }));
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| { definition.capability_id.as_str() == coordinate })
+            );
         }
         for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
-            assert!(mutations.iter().any(|definition| {
-                definition.capability_id.as_str() == coordinate
-            }));
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| { definition.capability_id.as_str() == coordinate })
+            );
         }
 
         let queries = application_query_definitions().unwrap();
@@ -167,13 +169,17 @@ mod tests {
             queries.len(),
             PRODUCTION_QUERY_CAPABILITY_IDS.len() + 1 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
-        assert!(queries.iter().any(|definition| {
-            definition.capability_id.as_str() == SEARCH_QUERY_CAPABILITY
-        }));
+        assert!(
+            queries
+                .iter()
+                .any(|definition| { definition.capability_id.as_str() == SEARCH_QUERY_CAPABILITY })
+        );
         for coordinate in METADATA_QUERY_CAPABILITY_IDS {
-            assert!(queries.iter().any(|definition| {
-                definition.capability_id.as_str() == coordinate
-            }));
+            assert!(
+                queries
+                    .iter()
+                    .any(|definition| { definition.capability_id.as_str() == coordinate })
+            );
         }
     }
 }

@@ -276,6 +276,8 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-core-events",
+ "crm-metadata-api-adapter",
+ "crm-metadata-query-adapter",
  "crm-module-registry",
  "crm-module-sdk",
  "crm-query-runtime",
