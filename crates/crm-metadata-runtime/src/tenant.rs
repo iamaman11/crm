@@ -45,9 +45,10 @@ impl TenantMetadataCatalog {
     }
 
     pub fn tenant_state(&self, tenant_id: &TenantId) -> TenantMetadataSnapshot {
-        self.catalogs
-            .get(tenant_id)
-            .map_or_else(|| empty_catalog().tenant_state(tenant_id), |catalog| catalog.tenant_state(tenant_id))
+        self.catalogs.get(tenant_id).map_or_else(
+            || empty_catalog().tenant_state(tenant_id),
+            |catalog| catalog.tenant_state(tenant_id),
+        )
     }
 
     pub fn impact_for(
@@ -70,7 +71,7 @@ impl TenantMetadataCatalog {
     ) -> Result<ActivationResult, MetadataError> {
         match self.catalogs.get_mut(&tenant_id) {
             Some(catalog) => catalog.activate(
-                tenant_id,
+                tenant_id.clone(),
                 candidate_revision,
                 expected_generation,
                 allow_breaking_changes,
