@@ -1,0 +1,17 @@
+[package]
+name = "crm-search-query-adapter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-query-runtime = { path = "../crm-query-runtime" }
+crm-search-runtime = { path = "../crm-search-runtime" }
+prost = "0.14"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
