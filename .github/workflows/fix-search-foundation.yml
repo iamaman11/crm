@@ -1,4 +1,5 @@
 name: Fix search foundation compile issues
+# One-shot feature-branch cleanup; the job deletes this workflow after applying the patch.
 
 on:
   pull_request:
