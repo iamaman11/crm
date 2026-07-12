@@ -19,6 +19,7 @@ jobs:
         with:
           ref: develop/phase7-governed-metadata-api
       - uses: dtolnay/rust-toolchain@stable
+      # Regenerate from the complete workspace after all current Phase 7G members are present.
       - run: cargo generate-lockfile
       - run: cargo fmt --all
       - name: Commit generated maintenance changes
