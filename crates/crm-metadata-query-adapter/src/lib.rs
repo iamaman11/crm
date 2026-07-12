@@ -7,20 +7,20 @@
 //! `QueryExecutionContext`; they do not invent idempotency keys or business
 //! transaction identifiers merely to read tenant-scoped metadata.
 
-use crm_capability_plan_support as support;
 use crm_capability_runtime::CapabilityDefinition;
 use crm_metadata_api_adapter::{
     ACTIVATION_QUERY_CAPABILITY, ACTIVATION_REQUEST_SCHEMA, ACTIVATION_RESPONSE_SCHEMA,
-    IMPACT_QUERY_CAPABILITY, IMPACT_REQUEST_SCHEMA, IMPACT_RESPONSE_SCHEMA, METADATA_MODULE_ID,
-    METADATA_QUERY_CAPABILITY_IDS, REVISION_QUERY_CAPABILITY, REVISION_REQUEST_SCHEMA,
-    REVISION_RESPONSE_SCHEMA, activation_state_to_wire, impact_to_wire,
-    metadata_capability_definition, parse_revision_id, revision_to_wire,
+    CONTRACT_VERSION, IMPACT_QUERY_CAPABILITY, IMPACT_REQUEST_SCHEMA, IMPACT_RESPONSE_SCHEMA,
+    MAX_PROTOBUF_BYTES, METADATA_MODULE_ID, METADATA_QUERY_CAPABILITY_IDS,
+    REVISION_QUERY_CAPABILITY, REVISION_REQUEST_SCHEMA, REVISION_RESPONSE_SCHEMA,
+    activation_state_to_wire, impact_to_wire, metadata_capability_definition, parse_revision_id,
+    protobuf_payload, revision_to_wire,
 };
 use crm_metadata_runtime::{
     MetadataBundleDraft, MetadataImpactReport, MetadataRevisionId, TenantMetadataSnapshot,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, PortFuture, SdkError, TenantId};
-use crm_proto_contracts::crm::metadata::v1 as wire;
+use crm_proto_contracts::{crm::metadata::v1 as wire, message_descriptor_hash};
 use crm_query_runtime::{
     QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator,
 };
@@ -113,7 +113,7 @@ impl QueryExecutor for MetadataQueryAdapter {
                         "candidate_revision_id",
                     )?;
                     let impact = self.store.impact_for(tenant_id, &revision_id).await?;
-                    support::protobuf_payload(
+                    protobuf_payload(
                         METADATA_MODULE_ID,
                         IMPACT_RESPONSE_SCHEMA,
                         DataClass::Confidential,
@@ -131,7 +131,7 @@ impl QueryExecutor for MetadataQueryAdapter {
                         .revision(tenant_id, &revision_id)
                         .await?
                         .ok_or_else(revision_not_found)?;
-                    support::protobuf_payload(
+                    protobuf_payload(
                         METADATA_MODULE_ID,
                         REVISION_RESPONSE_SCHEMA,
                         DataClass::Confidential,
@@ -144,7 +144,7 @@ impl QueryExecutor for MetadataQueryAdapter {
                     let _: wire::GetMetadataActivationRequest =
                         decode_query_input(&request, ACTIVATION_REQUEST_SCHEMA)?;
                     let state = self.store.tenant_state(tenant_id).await?;
-                    support::protobuf_payload(
+                    protobuf_payload(
                         METADATA_MODULE_ID,
                         ACTIVATION_RESPONSE_SCHEMA,
                         DataClass::Confidential,
@@ -219,11 +219,11 @@ where
 {
     if request.input.owner.as_str() != METADATA_MODULE_ID
         || request.input.schema_id.as_str() != schema_id
-        || request.input.schema_version.as_str() != support::CONTRACT_VERSION
-        || request.input.descriptor_hash != support::message_descriptor_hash(schema_id)
+        || request.input.schema_version.as_str() != CONTRACT_VERSION
+        || request.input.descriptor_hash != message_descriptor_hash(schema_id)
         || request.input.data_class != DataClass::Confidential
         || request.input.encoding != crm_module_sdk::PayloadEncoding::Protobuf
-        || request.input.maximum_size_bytes > support::MAX_PROTOBUF_BYTES
+        || request.input.maximum_size_bytes != MAX_PROTOBUF_BYTES
         || request.input.validate().is_err()
     {
         return Err(SdkError::new(
@@ -354,7 +354,6 @@ mod tests {
     where
         M: Message,
     {
-        let definition = metadata_capability_definition(capability_id).unwrap();
         QueryRequest {
             owner_module_id: ModuleId::try_new(METADATA_MODULE_ID).unwrap(),
             context: QueryExecutionContext {
@@ -364,11 +363,11 @@ mod tests {
                 correlation_id: CorrelationId::try_new("correlation-a").unwrap(),
                 trace_id: TraceId::try_new("trace-a").unwrap(),
                 capability_id: CapabilityId::try_new(capability_id).unwrap(),
-                capability_version: CapabilityVersion::try_new(support::CONTRACT_VERSION).unwrap(),
-                schema_version: SchemaVersion::try_new(support::CONTRACT_VERSION).unwrap(),
+                capability_version: CapabilityVersion::try_new(CONTRACT_VERSION).unwrap(),
+                schema_version: SchemaVersion::try_new(CONTRACT_VERSION).unwrap(),
                 request_started_at_unix_nanos: 1,
             },
-            input: support::protobuf_payload(
+            input: protobuf_payload(
                 METADATA_MODULE_ID,
                 schema_id,
                 DataClass::Confidential,
