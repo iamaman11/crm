@@ -366,6 +366,7 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-contracts",
  "crm-core-events",
+ "crm-metadata-query-adapter",
  "crm-metadata-runtime",
  "crm-module-sdk",
  "crm-search-runtime",
@@ -421,7 +422,6 @@ dependencies = [
 name = "crm-metadata-api-adapter"
 version = "0.1.0"
 dependencies = [
- "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-metadata-runtime",
  "crm-metadata-schema",
@@ -429,6 +429,20 @@ dependencies = [
  "crm-proto-contracts",
  "prost",
  "serde_json",
+]
+
+[[package]]
+name = "crm-metadata-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-metadata-api-adapter",
+ "crm-metadata-runtime",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
+ "tokio",
 ]
 
 [[package]]
