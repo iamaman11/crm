@@ -24,33 +24,15 @@ jobs:
           from pathlib import Path
           path = Path("crates/crm-search-runtime/src/lib.rs")
           text = path.read_text()
-          old = '''#![forbid(unsafe_code)]
-
-mod generation;
-
-pub use generation::*;
-
-//! Permission-aware search mechanics over rebuildable projection documents.
-//!
-//! The search store returns tenant-scoped candidates from a rebuildable index.
-//! Every candidate is then checked with the live query visibility authorizer
-//! before any resource identity, field value or match metadata is returned.
-'''
-          new = '''#![forbid(unsafe_code)]
-
-//! Permission-aware search mechanics over rebuildable projection documents.
-//!
-//! The search store returns tenant-scoped candidates from a rebuildable index.
-//! Every candidate is then checked with the live query visibility authorizer
-//! before any resource identity, field value or match metadata is returned.
-
-mod generation;
-
-pub use generation::*;
-'''
-          if text.count(old) != 1:
+          prefix = "#![forbid(unsafe_code)]\n\nmod generation;\n\npub use generation::*;\n\n"
+          if not text.startswith(prefix):
               raise RuntimeError("unexpected crm-search-runtime crate header")
-          path.write_text(text.replace(old, new, 1))
+          text = "#![forbid(unsafe_code)]\n\n" + text[len(prefix):]
+          anchor = "//! before any resource identity, field value or match metadata is returned.\n"
+          if text.count(anchor) != 1:
+              raise RuntimeError("unexpected crm-search-runtime crate documentation")
+          insertion = anchor + "\nmod generation;\n\npub use generation::*;\n"
+          path.write_text(text.replace(anchor, insertion, 1))
           PY
           rm .github/workflows/fix-search-crate-doc-order-once.yml
       - name: Commit code-only crate header fix
