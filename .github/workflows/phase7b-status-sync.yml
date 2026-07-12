@@ -1,0 +1,94 @@
+name: Phase 7B Status Sync
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase7b-status-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Synchronize Phase 7B closure status
+        shell: python
+        run: |
+          from pathlib import Path
+
+          project_status = Path("docs/PROJECT_STATUS.md")
+          text = project_status.read_text()
+
+          replacements = [
+              (
+                  "The current Phase 7 packet is **#66 / draft PR #68 — tenant- and permission-aware search with deterministic reindexing**. The packet now includes the search runtime, PostgreSQL generation/index adapter, governed public query capability, live permission re-checking, application-runtime composition and canonical migration gates. It remains **In progress** until one exact review head passes all required checks and the remaining gate findings are resolved.",
+                  "The tenant- and permission-aware search packet **#66 / merged PR #68** is complete. It delivers the search runtime, PostgreSQL generation/index adapter, governed public query capability, backend-consistent field-local match evidence, live permission re-checking, application-runtime composition and canonical migration gates. Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all required checks and was squash-merged into `main` as `49272918cb4b767eedc2ca34574abba40718eae1`.",
+              ),
+              (
+                  "### Permission-aware search and deterministic reindexing — In progress",
+                  "### Permission-aware search and deterministic reindexing — Complete",
+              ),
+              (
+                  "Issue #66 / draft PR #68 is the active executable packet:",
+                  "Issue #66 / merged PR #68 completed the production search foundation:",
+              ),
+              (
+                  "Current gate work is compile/Clippy/test stabilization and exact-head evidence. The packet is not complete and must not be merged until the required checks are simultaneously green on one review head.",
+                  "Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed Contract CI, Governance CI, Rust CI, Database CI, Projection Runtime CI, Event Runtime CI, Search Runtime CI, Application Runtime CI and Rust Generated Sync simultaneously before squash merge as `49272918cb4b767eedc2ca34574abba40718eae1`.",
+              ),
+              (
+                  "- Phase 7B search packet gate closure and merge — #66 / PR #68;\n",
+                  "",
+              ),
+              (
+                  "1. Finish exact-head gate stabilization for tenant- and permission-aware search, then merge #66 / PR #68 only after all required checks are green together.\n2. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.\n3. Build Admin Studio metadata publication foundations with validation, auditability and rollback.\n4. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.\n5. Continue frontend and expert backend modules as end-to-end vertical slices.",
+                  "1. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.\n2. Build Admin Studio metadata publication foundations with validation, auditability and rollback.\n3. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.\n4. Continue frontend and expert backend modules as end-to-end vertical slices.",
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"PROJECT_STATUS replacement marker not found: {old[:80]}")
+              text = text.replace(old, new, 1)
+          project_status.write_text(text)
+
+          roadmap = Path("docs/IMPLEMENTATION_ROADMAP.md")
+          text = roadmap.read_text()
+          old = """### Current executable platform packet
+
+          [#66](https://github.com/iamaman11/crm/issues/66) / draft PR #68 is **In progress**: tenant- and permission-aware search with deterministic reindexing on the shared projection runtime.
+
+          The packet now includes candidate-only search, live resource/field visibility re-checks, immutable logical index generations, PostgreSQL FTS as a replaceable adapter, governed `search.global.query` ingress, application-runtime composition, immediate permission-revocation acceptance and canonical migration/runtime gates.
+
+          The packet remains **In progress** until compile/Clippy/test stabilization is complete and Contract, Governance, Rust, Database, Projection Runtime, Event Runtime, Search Runtime, Application Runtime and generated-source synchronization checks are simultaneously green on one exact review head.
+          """
+          new = """### Permission-aware search and deterministic reindexing — Complete
+
+          [#66](https://github.com/iamaman11/crm/issues/66) / merged PR #68 is **Complete**: tenant- and permission-aware search with deterministic reindexing on the shared projection runtime.
+
+          The packet delivers candidate-only search, live resource/field visibility re-checks, backend-consistent field-local match evidence, immutable logical index generations, PostgreSQL FTS as a replaceable adapter, governed `search.global.query` ingress, application-runtime composition, immediate permission-revocation acceptance and canonical migration/runtime gates.
+
+          Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed Contract, Governance, Rust, Database, Projection Runtime, Event Runtime, Search Runtime, Application Runtime and Rust Generated Sync simultaneously. PR #68 was squash-merged into `main` as `49272918cb4b767eedc2ca34574abba40718eae1`; #66 is complete.
+
+          ### Next executable Phase 7 packet
+
+          Build the typed web product shell and generated client boundary with authentication/session integration, permission-aware routing and the design-system baseline, then continue Admin Studio metadata publication foundations and the domain-wave program.
+          """
+          if old not in text:
+              raise SystemExit("IMPLEMENTATION_ROADMAP Phase 7B block not found")
+          roadmap.write_text(text.replace(old, new, 1))
+
+      - name: Commit synchronized status
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/PROJECT_STATUS.md docs/IMPLEMENTATION_ROADMAP.md
+          git diff --cached --quiet || git commit -m "docs: record Phase 7B completion"
+          git push
