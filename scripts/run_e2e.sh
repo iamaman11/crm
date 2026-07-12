@@ -163,7 +163,7 @@ echo "Vite dev server is ready!"
 
 # Run Playwright E2E tests
 echo "Running Playwright E2E tests..."
-pnpm exec playwright install chromium
+pnpm --filter @ultimate-crm/web exec playwright install chromium
 pnpm --filter @ultimate-crm/web exec playwright test --config=playwright.config.ts
 
 echo "E2E tests passed successfully!"
