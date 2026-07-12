@@ -4,9 +4,8 @@ import {
   createClient,
   type Interceptor,
   type Client,
-  type Transport,
 } from "@connectrpc/connect";
-import { createGrpcWebTransport } from "@connectrpc/connect-web";
+import { createGrpcWebTransport, type GrpcWebTransportOptions } from "@connectrpc/connect-web";
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { ApplicationGatewayService, TypedPayloadSchema } from "../gen/crm/gateway/v1/gateway_pb";
 import { SearchRequestSchema, SearchResponseSchema, type SearchHit } from "../gen/crm/search/v1/search_pb";
@@ -42,8 +41,8 @@ export class ProductClientError extends Error {
     kind: ProductClientErrorKind;
     message: string;
     retryable: boolean;
-    safeCode?: string;
     cause?: unknown;
+    safeCode?: string;
   }) {
     super(options.message, { cause: options.cause });
     this.name = "ProductClientError";
@@ -57,7 +56,8 @@ export interface GovernedGatewayClientOptions {
   baseUrl: string;
   sessionProvider: SessionProvider;
   idFactory?: () => string;
-  transport?: Transport;
+  /** @internal */
+  _testFetch?: GrpcWebTransportOptions["fetch"];
 }
 
 export interface SearchGlobalOptions {
@@ -94,53 +94,58 @@ export class GovernedClient {
       return await next(request);
     };
 
-    const transport = options.transport ?? createGrpcWebTransport({
+    const transportOptions: GrpcWebTransportOptions = {
       baseUrl: normalizeBaseUrl(options.baseUrl),
       interceptors: [sessionInterceptor],
-    });
+    };
+    if (options._testFetch) {
+      transportOptions.fetch = options._testFetch;
+    }
+
+    const transport = createGrpcWebTransport(transportOptions);
 
     this.gatewayClient = createClient(ApplicationGatewayService, transport);
   }
 
 
   public async searchGlobal(options: SearchGlobalOptions): Promise<SearchGlobalResult> {
-    requireAuthenticatedSession(this.sessionProvider.getSnapshot());
-
-    const messageName = "crm.search.v1.SearchRequest";
-    const descriptorHash = CONTRACT_HASHES[messageName];
-    if (!descriptorHash) {
-      throw new ProductClientError({
-        kind: "internal",
-        message: `Missing local contract descriptor hash for ${messageName}`,
-        retryable: false,
-      });
-    }
-
-    // 1. Construct SearchRequest
-    const searchRequest = create(SearchRequestSchema, {
-      text: options.text,
-      resourceTypes: options.resourceTypes,
-      pageSize: options.pageSize,
-      cursor: options.cursor,
-    });
-
-    // 2. Encode to binary payload
-    const payloadBytes = toBinary(SearchRequestSchema, searchRequest);
-
-    // 3. Construct governed gateway QueryRequest input TypedPayload
-    const inputPayload = create(TypedPayloadSchema, {
-      ownerModuleId: "crm.search",
-      schemaId: "crm.search.v1.SearchRequest",
-      schemaVersion: "1.0.0",
-      descriptorHash,
-      dataClass: "confidential",
-      encoding: "protobuf",
-      maximumSizeBytes: 1048576n,
-      retentionPolicyId: "standard",
-      payload: payloadBytes,
-    });
-
     try {
+      requireAuthenticatedSession(this.sessionProvider.getSnapshot());
+
+      const messageName = "crm.search.v1.SearchRequest";
+      const descriptorHash = CONTRACT_HASHES[messageName];
+      if (!descriptorHash) {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Missing local contract descriptor hash for ${messageName}`,
+          retryable: false,
+        });
+      }
+
+      // 1. Construct SearchRequest
+      const searchRequest = create(SearchRequestSchema, {
+        text: options.text,
+        resourceTypes: options.resourceTypes,
+        pageSize: options.pageSize,
+        cursor: options.cursor,
+      });
+
+      // 2. Encode to binary payload
+      const payloadBytes = toBinary(SearchRequestSchema, searchRequest);
+
+      // 3. Construct governed gateway QueryRequest input TypedPayload
+      const inputPayload = create(TypedPayloadSchema, {
+        ownerModuleId: "crm.search",
+        schemaId: "crm.search.v1.SearchRequest",
+        schemaVersion: "1.0.0",
+        descriptorHash,
+        dataClass: "confidential",
+        encoding: "protobuf",
+        maximumSizeBytes: 1048576n,
+        retentionPolicyId: "standard",
+        payload: payloadBytes,
+      });
+
       // 4. Invoke governed ApplicationGatewayService.query
       const response = await this.gatewayClient.query({
         ownerModuleId: "crm.search",

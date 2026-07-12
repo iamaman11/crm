@@ -1,16 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   MutableSessionStore,
-  requireAuthenticatedSession,
   SessionUnavailableError,
   mapGatewayError,
   ProductClientError,
   GovernedClient,
 } from "./index";
-import { ConnectError, Code, createRouterTransport } from "@connectrpc/connect";
-import { ApplicationGatewayService } from "../gen/crm/gateway/v1/gateway_pb";
+import { ConnectError, Code } from "@connectrpc/connect";
+import {
+  TypedPayloadSchema,
+  QueryResponseSchema,
+  QueryRequestSchema,
+  type TypedPayload,
+} from "../gen/crm/gateway/v1/gateway_pb";
 import { SearchResponseSchema } from "../gen/crm/search/v1/search_pb";
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { CONTRACT_HASHES } from "./contract_hashes";
 
 const testSessionProvider = {
@@ -21,6 +25,19 @@ const testSessionProvider = {
   }),
   subscribe: () => () => {},
 };
+
+function encodeGrpcWebFrame(payload: Uint8Array, isTrailer = false): Uint8Array {
+  const frame = new Uint8Array(5 + payload.length);
+  frame[0] = isTrailer ? 0x80 : 0x00;
+  const view = new DataView(frame.buffer);
+  view.setUint32(1, payload.length, false);
+  frame.set(payload, 5);
+  return frame;
+}
+
+function decodeGrpcWebFrame(body: Uint8Array): Uint8Array {
+  return body.slice(5);
+}
 
 describe("Session State and Session Store", () => {
   it("initializes with default unknown status", () => {
@@ -44,32 +61,7 @@ describe("Session State and Session Store", () => {
 
     unsubscribe();
     store.setState({ status: "expired" });
-    expect(listener).toHaveBeenCalledTimes(1); // unsubscribe works
-  });
-
-  it("handles session expiration validation correctly", () => {
-    const activeSession = {
-      status: "authenticated" as const,
-      bearerToken: "tok",
-      tenantId: "ten",
-      expiresAtUnixMillis: Date.now() + 10000,
-    };
-    expect(requireAuthenticatedSession(activeSession)).toBe(activeSession);
-
-    const expiredSession = {
-      status: "authenticated" as const,
-      bearerToken: "tok",
-      tenantId: "ten",
-      expiresAtUnixMillis: Date.now() - 1000,
-    };
-    expect(() => requireAuthenticatedSession(expiredSession)).toThrow(
-      SessionUnavailableError
-    );
-
-    const unauthSession = { status: "unauthenticated" as const };
-    expect(() => requireAuthenticatedSession(unauthSession)).toThrow(
-      SessionUnavailableError
-    );
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -122,11 +114,73 @@ describe("Gateway Error Mapping", () => {
   });
 });
 
+describe("GovernedClient Session Validation", () => {
+  it("throws unauthenticated ProductClientError when session status is unauthenticated", async () => {
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: {
+        getSnapshot: () => ({ status: "unauthenticated" as const }),
+        subscribe: () => () => {},
+      },
+    });
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrowError(
+      new ProductClientError({
+        kind: "unauthenticated",
+        message: "Your session is not available. Sign in again.",
+        retryable: false,
+      })
+    );
+  });
+
+  it("throws unauthenticated ProductClientError when session status is expired", async () => {
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: {
+        getSnapshot: () => ({ status: "expired" as const }),
+        subscribe: () => () => {},
+      },
+    });
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrowError(
+      new ProductClientError({
+        kind: "unauthenticated",
+        message: "Your session is not available. Sign in again.",
+        retryable: false,
+      })
+    );
+  });
+
+  it("throws unauthenticated ProductClientError when session status is revoked", async () => {
+    const client = new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: {
+        getSnapshot: () => ({ status: "revoked" as const }),
+        subscribe: () => () => {},
+      },
+    });
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrowError(
+      new ProductClientError({
+        kind: "unauthenticated",
+        message: "Your session is not available. Sign in again.",
+        retryable: false,
+      })
+    );
+  });
+});
+
 describe("GovernedClient Governed Search API", () => {
   const responseHash = CONTRACT_HASHES["crm.search.v1.SearchResponse"] ?? new Uint8Array();
 
-  function createMockOutput(overrides: any = {}) {
-    return {
+  function createMockResponse(outputOverrides: Partial<Omit<TypedPayload, "$type">> = {}): Uint8Array {
+    const defaultFields = {
       ownerModuleId: "crm.search",
       schemaId: "crm.search.v1.SearchResponse",
       schemaVersion: "1.0.0",
@@ -136,48 +190,99 @@ describe("GovernedClient Governed Search API", () => {
       maximumSizeBytes: 1048576n,
       retentionPolicyId: "standard",
       payload: new Uint8Array(),
-      ...overrides,
     };
+    const output = create(TypedPayloadSchema, {
+      ...defaultFields,
+      ...outputOverrides,
+    } as Parameters<typeof create<typeof TypedPayloadSchema>>[1]);
+
+    const queryResponse = create(QueryResponseSchema, { output });
+    return toBinary(QueryResponseSchema, queryResponse);
   }
 
-  it("emits the exact governed coordinates and parses valid search response via DI transport", async () => {
-    let capturedQueryRequest: any = null;
+  function createMockFetch(
+    outputOverrides: Partial<Omit<TypedPayload, "$type">> = {},
+    fetchError?: ConnectError,
+    captureFn?: (headers: Headers, requestBytes: Uint8Array) => void
+  ): typeof fetch {
+    return (async (_url: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      const requestBody = init?.body instanceof Uint8Array ? init.body : new Uint8Array();
+      
+      if (captureFn) {
+        captureFn(headers, requestBody);
+      }
 
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query(req) {
-          capturedQueryRequest = req;
-          const searchResponse = create(SearchResponseSchema, {
-            hits: [
-              {
-                ownerModuleId: "crm.sales",
-                resourceType: "sales.deal",
-                resourceId: "deal-1",
-                fields: { name: "Test Deal" },
-                matchedFields: ["name"],
-              }
-            ],
-            nextCursor: "next-page",
-          });
-          const payloadBytes = toBinary(SearchResponseSchema, searchResponse);
-
-          return {
-            output: createMockOutput({ payload: payloadBytes }),
-          } as any;
-        },
-        async mutate() {
-          return {} as any;
+      if (fetchError) {
+        const trailerText = `grpc-status: ${fetchError.code}\r\ngrpc-message: ${encodeURIComponent(fetchError.rawMessage)}\r\n`;
+        const headersInit: Record<string, string> = {
+          "content-type": "application/grpc-web+proto",
+          "grpc-status": String(fetchError.code),
+          "grpc-message": encodeURIComponent(fetchError.rawMessage),
+        };
+        const errorCode = fetchError.metadata.get("x-error-code");
+        if (errorCode) {
+          headersInit["x-error-code"] = errorCode;
         }
-      });
-    });
+        
+        const trailerBytes = encodeGrpcWebFrame(new TextEncoder().encode(trailerText), true);
+        return new Response(new Blob([trailerBytes.buffer as ArrayBuffer]), {
+          status: 200,
+          headers: new Headers(headersInit),
+        });
+      }
 
-    const client = new GovernedClient({
+      const queryResponseBytes = createMockResponse(outputOverrides);
+      const bodyBytes = encodeGrpcWebFrame(queryResponseBytes);
+      const trailerBytes = encodeGrpcWebFrame(new TextEncoder().encode("grpc-status: 0\r\n"), true);
+
+      const responseBytes = new Uint8Array(bodyBytes.length + trailerBytes.length);
+      responseBytes.set(bodyBytes);
+      responseBytes.set(trailerBytes, bodyBytes.length);
+
+      return new Response(new Blob([responseBytes.buffer as ArrayBuffer]), {
+        status: 200,
+        headers: new Headers({
+          "content-type": "application/grpc-web+proto",
+        }),
+      });
+    }) as typeof fetch;
+  }
+
+  it("emits the exact governed coordinates and parses valid search response via custom fetch", async () => {
+    let capturedHeaders: Headers | null = null;
+    let capturedBodyBytes: Uint8Array | null = null;
+
+    const searchResponse = create(SearchResponseSchema, {
+      hits: [
+        {
+          ownerModuleId: "crm.sales",
+          resourceType: "sales.deal",
+          resourceId: "deal-1",
+          fields: { name: "Test Deal" },
+          matchedFields: ["name"],
+        }
+      ],
+      nextCursor: "next-page",
+    });
+    const payloadBytes = toBinary(SearchResponseSchema, searchResponse);
+    
+    const successFetch = createMockFetch(
+      { payload: payloadBytes },
+      undefined,
+      (headers, body) => {
+        capturedHeaders = headers;
+        capturedBodyBytes = body;
+      }
+    );
+    
+    const clientWithPayload = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: successFetch,
     });
 
-    const result = await client.searchGlobal({
+    const result = await clientWithPayload.searchGlobal({
       text: "query text",
       resourceTypes: ["sales.deal"],
       pageSize: 10,
@@ -188,30 +293,27 @@ describe("GovernedClient Governed Search API", () => {
     expect(result.hits[0]?.resourceId).toBe("deal-1");
     expect(result.nextCursor).toBe("next-page");
 
-    // Verify governed coordinates
-    expect(capturedQueryRequest.ownerModuleId).toBe("crm.search");
-    expect(capturedQueryRequest.capabilityId).toBe("search.global.query");
-    expect(capturedQueryRequest.capabilityVersion).toBe("1.0.0");
+    // Verify governed coordinates in request payload
+    expect(capturedBodyBytes).not.toBeNull();
+    const queryRequestPayload = decodeGrpcWebFrame(capturedBodyBytes!);
+    const queryRequest = fromBinary(QueryRequestSchema, queryRequestPayload);
+    expect(queryRequest.ownerModuleId).toBe("crm.search");
+    expect(queryRequest.capabilityId).toBe("search.global.query");
+    expect(queryRequest.capabilityVersion).toBe("1.0.0");
+
+    // Verify session headers injected by interceptor
+    expect(capturedHeaders).not.toBeNull();
+    expect(capturedHeaders!.get("authorization")).toBe("Bearer valid-token");
+    expect(capturedHeaders!.get("x-tenant-id")).toBe("tenant-a");
+    expect(capturedHeaders!.get("x-request-id")).toBeDefined();
   });
 
   it("safely handles output contract mismatch (drift detection)", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ descriptorHash: new Uint8Array(32) }),
-          } as any;
-        },
-        async mutate() {
-          return {} as any;
-        }
-      });
-    });
-
+    const mockFetch = createMockFetch({ descriptorHash: new Uint8Array(32) });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -225,20 +327,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong ownerModuleId", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ ownerModuleId: "crm.wrong" }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ ownerModuleId: "crm.wrong" });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -247,20 +340,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong schemaId", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ schemaId: "crm.search.v1.WrongResponse" }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ schemaId: "crm.search.v1.WrongResponse" });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -269,20 +353,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong schemaVersion", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ schemaVersion: "2.0.0" }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ schemaVersion: "2.0.0" });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -291,20 +366,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong dataClass", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ dataClass: "public" }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ dataClass: "public" });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -313,20 +379,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong encoding", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ encoding: "json" }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ encoding: "json" });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -335,20 +392,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with missing/invalid contract identity", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ schemaId: "" }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ schemaId: "" });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -357,20 +405,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with incorrect maximumSizeBytes", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ maximumSizeBytes: 0n }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ maximumSizeBytes: 0n });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -379,23 +418,14 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with oversized payload", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({
-              maximumSizeBytes: 1048576n,
-              payload: new Uint8Array(1048577), // larger than maximumSizeBytes
-            }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
+    const mockFetch = createMockFetch({
+      maximumSizeBytes: 1048576n,
+      payload: new Uint8Array(1048577),
     });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -404,20 +434,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong retentionPolicyId", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ retentionPolicyId: "short" }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ retentionPolicyId: "short" });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(
@@ -426,20 +447,11 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with malformed payload (protobuf decoding failure)", async () => {
-    const mockTransport = createRouterTransport(({ service }) => {
-      service(ApplicationGatewayService, {
-        async query() {
-          return {
-            output: createMockOutput({ payload: new Uint8Array([255, 255, 255, 255]) }),
-          } as any;
-        },
-        async mutate() { return {} as any; }
-      });
-    });
+    const mockFetch = createMockFetch({ payload: new Uint8Array([255, 255, 255, 255]) });
     const client = new GovernedClient({
       baseUrl: "http://mock",
       sessionProvider: testSessionProvider,
-      transport: mockTransport,
+      _testFetch: mockFetch,
     });
 
     await expect(

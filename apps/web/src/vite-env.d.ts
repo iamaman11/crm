@@ -12,3 +12,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare global {
+  interface Window {
+    sessionStore: import("@ultimate-crm/client").MutableSessionStore;
+  }
+}
+
+export {};

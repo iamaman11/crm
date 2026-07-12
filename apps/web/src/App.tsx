@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore, useState } from "react";
 import {
   GovernedClient,
+  ProductClientError,
   type SearchHit,
   type SessionState,
 } from "@ultimate-crm/client";
@@ -16,7 +17,7 @@ import {
 
 const sessionStore = createDevelopmentSessionStore();
 if (import.meta.env.DEV) {
-  (window as any).sessionStore = sessionStore;
+  window.sessionStore = sessionStore;
 }
 const client = new GovernedClient({
   baseUrl: window.location.origin,
@@ -124,10 +125,12 @@ function developmentAccessSnapshot(): NavigationAccessSnapshot {
   if (!import.meta.env.DEV) {
     return { capabilities: new Set<KnownProductCapability>() };
   }
+  const rawCapabilities = import.meta.env.VITE_CRM_DEV_CAPABILITIES;
+  const capabilitiesStr = typeof rawCapabilities === "string" ? rawCapabilities : "";
   const configured = new Set(
-    (import.meta.env.VITE_CRM_DEV_CAPABILITIES ?? "")
+    capabilitiesStr
       .split(",")
-      .map((value) => value.trim())
+      .map((value: string) => value.trim())
       .filter(Boolean),
   );
   const capabilities = new Set<KnownProductCapability>();
@@ -159,24 +162,22 @@ function SearchPage() {
       setResults(response.hits);
     } catch (err) {
       console.error(err);
-      const isProductError = err && typeof err === "object" && "kind" in err;
-      if (isProductError) {
-        const productErr = err as any;
-        if (productErr.kind === "unauthenticated") {
+      if (err instanceof ProductClientError) {
+        if (err.kind === "unauthenticated") {
           setError("Your session has expired. Please sign in again.");
-        } else if (productErr.kind === "permission_denied") {
+        } else if (err.kind === "permission_denied") {
           setError("You do not have permission to access the requested resource.");
-        } else if (productErr.kind === "not_found") {
+        } else if (err.kind === "not_found") {
           setError("The requested resource could not be found.");
-        } else if (productErr.kind === "invalid_argument") {
+        } else if (err.kind === "invalid_argument") {
           setError("The search query contains invalid parameters.");
-        } else if (productErr.kind === "conflict") {
+        } else if (err.kind === "conflict") {
           setError("A data conflict occurred. Please reload the page.");
-        } else if (productErr.kind === "rate_limited") {
+        } else if (err.kind === "rate_limited") {
           setError("Too many requests. Please try again later.");
-        } else if (productErr.kind === "unavailable") {
+        } else if (err.kind === "unavailable") {
           setError("The CRM service is temporarily unavailable. Please try again later.");
-        } else if (productErr.kind === "network") {
+        } else if (err.kind === "network") {
           setError("Network connection issue. Please check your internet connection.");
         } else {
           setError("An unexpected server error occurred. Please try again later.");
