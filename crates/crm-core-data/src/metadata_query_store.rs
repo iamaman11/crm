@@ -339,9 +339,7 @@ fn revision_id_from_bytes(
 
 fn stored_u64(value: i64, field: &str) -> Result<u64, MetadataQueryPersistenceError> {
     u64::try_from(value).map_err(|_| {
-        MetadataQueryPersistenceError::InvalidStoredValue(format!(
-            "metadata {field} is negative"
-        ))
+        MetadataQueryPersistenceError::InvalidStoredValue(format!("metadata {field} is negative"))
     })
 }
 
@@ -364,10 +362,19 @@ enum MetadataQueryPersistenceError {
 impl fmt::Display for MetadataQueryPersistenceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Database(error) => write!(formatter, "metadata query database operation failed: {error}"),
-            Self::Runtime(error) => write!(formatter, "metadata query runtime validation failed: {error}"),
+            Self::Database(error) => write!(
+                formatter,
+                "metadata query database operation failed: {error}"
+            ),
+            Self::Runtime(error) => write!(
+                formatter,
+                "metadata query runtime validation failed: {error}"
+            ),
             Self::InvalidStoredValue(message) => {
-                write!(formatter, "invalid metadata value stored in PostgreSQL: {message}")
+                write!(
+                    formatter,
+                    "invalid metadata value stored in PostgreSQL: {message}"
+                )
             }
             Self::RevisionNotFound(revision_id) => {
                 write!(formatter, "metadata revision {revision_id} was not found")

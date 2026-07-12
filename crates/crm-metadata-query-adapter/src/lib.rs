@@ -108,10 +108,8 @@ impl QueryExecutor for MetadataQueryAdapter {
                 MetadataQueryRoute::Impact => {
                     let command: wire::GetMetadataImpactRequest =
                         decode_query_input(&request, IMPACT_REQUEST_SCHEMA)?;
-                    let revision_id = parse_revision_id(
-                        &command.candidate_revision_id,
-                        "candidate_revision_id",
-                    )?;
+                    let revision_id =
+                        parse_revision_id(&command.candidate_revision_id, "candidate_revision_id")?;
                     let impact = self.store.impact_for(tenant_id, &revision_id).await?;
                     protobuf_payload(
                         METADATA_MODULE_ID,
@@ -265,8 +263,8 @@ mod tests {
         MetadataKey, MetadataKind,
     };
     use crm_module_sdk::{
-        ActorId, CapabilityId, CapabilityVersion, CorrelationId, ModuleId, RequestId, SchemaVersion,
-        TraceId,
+        ActorId, CapabilityId, CapabilityVersion, CorrelationId, ModuleId, RequestId,
+        SchemaVersion, TraceId,
     };
     use crm_query_runtime::QueryExecutionContext;
 
@@ -394,8 +392,8 @@ mod tests {
 
         adapter.validate(&definition, &request).await.unwrap();
         let result = adapter.execute(&definition, request).await.unwrap();
-        let response = wire::GetMetadataRevisionResponse::decode(result.output.bytes.as_slice())
-            .unwrap();
+        let response =
+            wire::GetMetadataRevisionResponse::decode(result.output.bytes.as_slice()).unwrap();
 
         assert_eq!(response.revision.unwrap().revision_id, revision_id);
     }
@@ -411,8 +409,8 @@ mod tests {
         );
 
         let result = adapter.execute(&definition, request).await.unwrap();
-        let response = wire::GetMetadataActivationResponse::decode(result.output.bytes.as_slice())
-            .unwrap();
+        let response =
+            wire::GetMetadataActivationResponse::decode(result.output.bytes.as_slice()).unwrap();
         let state = response.state.unwrap();
 
         assert_eq!(state.generation, 3);

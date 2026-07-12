@@ -90,11 +90,7 @@ async fn metadata_query_store_is_tenant_only_non_mutating_and_runtime_impact_dri
     let candidate = bundle("object-v2", None);
     let candidate_revision = candidate.revision_id();
     mutation_store
-        .publish(
-            &context(TENANT_A, "publish-v2"),
-            &candidate,
-            3_000_000_000,
-        )
+        .publish(&context(TENANT_A, "publish-v2"), &candidate, 3_000_000_000)
         .await
         .expect("publish breaking candidate");
 
