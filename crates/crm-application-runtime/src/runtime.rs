@@ -26,6 +26,7 @@ use crm_core_data::{
     PostgresTransactionalAggregateExecutor,
 };
 use crm_core_events::EventHistoryRequest;
+use crm_metadata_api_adapter::METADATA_MODULE_ID;
 use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_registry::ModuleRegistry;
 use crm_module_sdk::{
@@ -715,6 +716,7 @@ fn bootstrap_application_access(
                     task_fields(),
                     expires_at,
                 )?,
+                METADATA_MODULE_ID => {},
                 SEARCH_MODULE_ID => {
                     upsert_bootstrap_visibility(
                         visibility_store,
