@@ -1,0 +1,35 @@
+name: Fix Phase 7 process search shadowing once
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fix-phase7-process-search-shadowing-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'develop/phase7-permission-aware-search'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase7-permission-aware-search
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Fix local helper shadowing
+        run: |
+          python -c 'from pathlib import Path; p=Path("services/crm-api/tests/process_e2e.rs"); t=p.read_text(); old="let search_definition = query_definition(SEARCH_GLOBAL);"; new="let search_definition = crate::query_definition(SEARCH_GLOBAL);"; assert t.count(old)==1, t.count(old); p.write_text(t.replace(old,new,1))'
+          rustfmt --edition 2024 services/crm-api/tests/process_e2e.rs
+          rm .github/workflows/fix-phase7-process-search-shadowing-once.yml
+      - name: Commit code-only acceptance fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix process search acceptance helper shadowing"
+          git push origin HEAD:develop/phase7-permission-aware-search
