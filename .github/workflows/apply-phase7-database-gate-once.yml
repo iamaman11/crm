@@ -21,16 +21,16 @@ jobs:
           fetch-depth: 0
       - name: Validate patch script
         run: python -m py_compile scripts/apply_phase7_database_gate.py
-      - name: Apply canonical Database CI update
+      - name: Apply canonical Database CI and compile fix
         run: |
           python scripts/apply_phase7_database_gate.py
+          rustfmt --edition 2024 crates/crm-search-runtime/src/lib.rs
           rm scripts/apply_phase7_database_gate.py
           rm .github/workflows/apply-phase7-database-gate-once.yml
-      - name: Commit canonical Database CI update
+      - name: Commit and push exact branch update
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Add search migration to canonical database gates"
-          git pull --rebase origin develop/phase7-permission-aware-search
+          git commit -m "Complete search database gate and compile fix"
           git push origin HEAD:develop/phase7-permission-aware-search
