@@ -18,3 +18,5 @@ packages/*/dist/
 packages/client/gen/
 playwright-report/
 test-results/
+*.tsbuildinfo
+

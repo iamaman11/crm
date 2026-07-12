@@ -31,7 +31,7 @@ export type ProductClientErrorKind =
 export class ProductClientError extends Error {
   public readonly kind: ProductClientErrorKind;
   public readonly retryable: boolean;
-  public readonly safeCode?: string;
+  public readonly safeCode: string | undefined;
 
   public constructor(options: {
     kind: ProductClientErrorKind;
