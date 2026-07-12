@@ -19,6 +19,7 @@ jobs:
         with:
           ref: develop/phase7-governed-metadata-api
       - uses: dtolnay/rust-toolchain@stable
+      # Refresh after acceptance-only dev dependencies were added.
       - run: cargo generate-lockfile
       - run: cargo fmt --all
       - name: Commit generated sync
