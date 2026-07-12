@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   MutableSessionStore,
   SessionUnavailableError,
@@ -25,6 +25,10 @@ const testSessionProvider = {
   }),
   subscribe: () => () => {},
 };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function encodeGrpcWebFrame(payload: Uint8Array, isTrailer = false): Uint8Array {
   const frame = new Uint8Array(5 + payload.length);
@@ -205,13 +209,11 @@ describe("GovernedClient Governed Search API", () => {
     fetchError?: ConnectError,
     captureFn?: (headers: Headers, requestBytes: Uint8Array) => void
   ): typeof fetch {
-    return (async (_url: string, init?: RequestInit) => {
+    const mockFetch: typeof fetch = async (_input, init) => {
       const headers = new Headers(init?.headers);
       const requestBody = init?.body instanceof Uint8Array ? init.body : new Uint8Array();
-      
-      if (captureFn) {
-        captureFn(headers, requestBody);
-      }
+
+      captureFn?.(headers, requestBody);
 
       if (fetchError) {
         const trailerText = `grpc-status: ${fetchError.code}\r\ngrpc-message: ${encodeURIComponent(fetchError.rawMessage)}\r\n`;
@@ -224,7 +226,7 @@ describe("GovernedClient Governed Search API", () => {
         if (errorCode) {
           headersInit["x-error-code"] = errorCode;
         }
-        
+
         const trailerBytes = encodeGrpcWebFrame(new TextEncoder().encode(trailerText), true);
         return new Response(new Blob([trailerBytes.buffer as ArrayBuffer]), {
           status: 200,
@@ -246,10 +248,19 @@ describe("GovernedClient Governed Search API", () => {
           "content-type": "application/grpc-web+proto",
         }),
       });
-    }) as typeof fetch;
+    };
+    return mockFetch;
   }
 
-  it("emits the exact governed coordinates and parses valid search response via custom fetch", async () => {
+  function createClientWithMockFetch(mockFetch: typeof fetch): GovernedClient {
+    vi.stubGlobal("fetch", mockFetch);
+    return new GovernedClient({
+      baseUrl: "http://mock",
+      sessionProvider: testSessionProvider,
+    });
+  }
+
+  it("emits the exact governed coordinates and parses valid search response via standard fetch boundary", async () => {
     let capturedHeaders: Headers | null = null;
     let capturedBodyBytes: Uint8Array | null = null;
 
@@ -266,7 +277,7 @@ describe("GovernedClient Governed Search API", () => {
       nextCursor: "next-page",
     });
     const payloadBytes = toBinary(SearchResponseSchema, searchResponse);
-    
+
     const successFetch = createMockFetch(
       { payload: payloadBytes },
       undefined,
@@ -275,12 +286,8 @@ describe("GovernedClient Governed Search API", () => {
         capturedBodyBytes = body;
       }
     );
-    
-    const clientWithPayload = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: successFetch,
-    });
+
+    const clientWithPayload = createClientWithMockFetch(successFetch);
 
     const result = await clientWithPayload.searchGlobal({
       text: "query text",
@@ -309,12 +316,9 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("safely handles output contract mismatch (drift detection)", async () => {
-    const mockFetch = createMockFetch({ descriptorHash: new Uint8Array(32) });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(
+      createMockFetch({ descriptorHash: new Uint8Array(32) })
+    );
 
     await expect(
       client.searchGlobal({
@@ -327,12 +331,7 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong ownerModuleId", async () => {
-    const mockFetch = createMockFetch({ ownerModuleId: "crm.wrong" });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(createMockFetch({ ownerModuleId: "crm.wrong" }));
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -340,12 +339,9 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong schemaId", async () => {
-    const mockFetch = createMockFetch({ schemaId: "crm.search.v1.WrongResponse" });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(
+      createMockFetch({ schemaId: "crm.search.v1.WrongResponse" })
+    );
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -353,12 +349,7 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong schemaVersion", async () => {
-    const mockFetch = createMockFetch({ schemaVersion: "2.0.0" });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(createMockFetch({ schemaVersion: "2.0.0" }));
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -366,12 +357,7 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong dataClass", async () => {
-    const mockFetch = createMockFetch({ dataClass: "public" });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(createMockFetch({ dataClass: "public" }));
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -379,12 +365,7 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong encoding", async () => {
-    const mockFetch = createMockFetch({ encoding: "json" });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(createMockFetch({ encoding: "json" }));
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -392,12 +373,7 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with missing/invalid contract identity", async () => {
-    const mockFetch = createMockFetch({ schemaId: "" });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(createMockFetch({ schemaId: "" }));
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -405,12 +381,7 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with incorrect maximumSizeBytes", async () => {
-    const mockFetch = createMockFetch({ maximumSizeBytes: 0n });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(createMockFetch({ maximumSizeBytes: 0n }));
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -418,15 +389,12 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with oversized payload", async () => {
-    const mockFetch = createMockFetch({
-      maximumSizeBytes: 1048576n,
-      payload: new Uint8Array(1048577),
-    });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(
+      createMockFetch({
+        maximumSizeBytes: 1048576n,
+        payload: new Uint8Array(1048577),
+      })
+    );
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -434,12 +402,7 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with wrong retentionPolicyId", async () => {
-    const mockFetch = createMockFetch({ retentionPolicyId: "short" });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(createMockFetch({ retentionPolicyId: "short" }));
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
@@ -447,12 +410,9 @@ describe("GovernedClient Governed Search API", () => {
   });
 
   it("rejects response with malformed payload (protobuf decoding failure)", async () => {
-    const mockFetch = createMockFetch({ payload: new Uint8Array([255, 255, 255, 255]) });
-    const client = new GovernedClient({
-      baseUrl: "http://mock",
-      sessionProvider: testSessionProvider,
-      _testFetch: mockFetch,
-    });
+    const client = createClientWithMockFetch(
+      createMockFetch({ payload: new Uint8Array([255, 255, 255, 255]) })
+    );
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
