@@ -42,7 +42,7 @@ async fn insert_outbox_event(
     Ok(())
 }
 
-async fn insert_audit_record(
+pub(crate) async fn insert_audit_record(
     transaction: &mut Transaction<'_, Postgres>,
     context: &ModuleExecutionContext,
     audit: &MaterializedAuditRecord,
@@ -140,7 +140,7 @@ async fn complete_idempotency_response(
     Ok(())
 }
 
-async fn complete_capability_idempotency(
+pub(crate) async fn complete_capability_idempotency(
     transaction: &mut Transaction<'_, Postgres>,
     plan: &BatchMutationPlan,
     result: &CapabilityExecutionResult,
@@ -162,7 +162,7 @@ async fn complete_capability_idempotency(
     .await
 }
 
-async fn insert_completion_marker(
+pub(crate) async fn insert_completion_marker(
     transaction: &mut Transaction<'_, Postgres>,
     plan: &BatchMutationPlan,
 ) -> Result<(), BatchError> {
