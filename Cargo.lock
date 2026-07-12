@@ -500,6 +500,7 @@ dependencies = [
  "crm-sales-activities-link-contract-adapter",
  "crm-sales-activities-query-adapter",
  "crm-sales-capability-adapter",
+ "crm-search-runtime",
  "prost",
  "serde_json",
  "sqlx",
