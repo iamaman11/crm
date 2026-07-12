@@ -1,0 +1,72 @@
+name: Phase 7G Internal Refactor
+
+on:
+  push:
+    branches:
+      - develop/phase7-governed-metadata-api
+    paths:
+      - ".github/workflows/phase7g-internal-refactor.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase7-governed-metadata-api
+      - name: Expose crate-internal transaction helpers
+        shell: python
+        run: |
+          from pathlib import Path
+
+          replacements = {
+              "crates/crm-core-data/src/postgres_batch/executor.rs": {
+                  "fn capability_idempotency(": "pub(crate) fn capability_idempotency(",
+                  "async fn load_capability_replay(": "pub(crate) async fn load_capability_replay(",
+                  "async fn insert_idempotency_claim(": "pub(crate) async fn insert_idempotency_claim(",
+              },
+              "crates/crm-core-data/src/postgres_batch/evidence.rs": {
+                  "async fn insert_audit_record(": "pub(crate) async fn insert_audit_record(",
+                  "async fn complete_capability_idempotency(": "pub(crate) async fn complete_capability_idempotency(",
+                  "async fn insert_completion_marker(": "pub(crate) async fn insert_completion_marker(",
+              },
+              "crates/crm-core-data/src/metadata_store.rs": {
+                  "async fn lock_activation(": "pub(crate) async fn lock_activation(",
+                  "async fn insert_documents(": "pub(crate) async fn insert_documents(",
+                  "async fn load_bundle(": "pub(crate) async fn load_bundle(",
+                  "async fn load_state(": "pub(crate) async fn load_state(",
+                  "async fn load_impact(": "pub(crate) async fn load_impact(",
+                  "fn require_generation(": "pub(crate) fn require_generation(",
+                  "async fn insert_rollback_stack_entry(": "pub(crate) async fn insert_rollback_stack_entry(",
+                  "async fn load_rollback_target(": "pub(crate) async fn load_rollback_target(",
+                  "async fn delete_rollback_stack_entry(": "pub(crate) async fn delete_rollback_stack_entry(",
+                  "async fn upsert_activation_head(": "pub(crate) async fn upsert_activation_head(",
+                  "async fn insert_transition(": "pub(crate) async fn insert_transition(",
+                  "struct MetadataTransitionWrite<'a> {\n    action: MetadataTransitionAction,\n    generation: u64,\n    rollback_depth: usize,\n    from_revision: Option<&'a MetadataRevisionId>,\n    to_revision: &'a MetadataRevisionId,\n    occurred_at_unix_nanos: i64,\n}": "pub(crate) struct MetadataTransitionWrite<'a> {\n    pub(crate) action: MetadataTransitionAction,\n    pub(crate) generation: u64,\n    pub(crate) rollback_depth: usize,\n    pub(crate) from_revision: Option<&'a MetadataRevisionId>,\n    pub(crate) to_revision: &'a MetadataRevisionId,\n    pub(crate) occurred_at_unix_nanos: i64,\n}",
+              },
+          }
+
+          for filename, mapping in replacements.items():
+              path = Path(filename)
+              text = path.read_text()
+              for old, new in mapping.items():
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f"expected exactly one occurrence in {filename}: {old!r}; found {count}")
+                  text = text.replace(old, new)
+              path.write_text(text)
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format touched Rust
+        run: cargo fmt --all
+      - name: Commit refactor
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-core-data/src/metadata_store.rs crates/crm-core-data/src/postgres_batch/executor.rs crates/crm-core-data/src/postgres_batch/evidence.rs
+          git commit -m "Phase 7G: expose internal metadata transaction helpers"
+          git push origin HEAD:develop/phase7-governed-metadata-api
