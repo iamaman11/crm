@@ -22,7 +22,8 @@ The repository contains a complete first production-composed modular CRM proof a
 - real `crm-application-runtime` composition boundary and deployable `services/crm-api` process host;
 - typed web product shell with a governed generated client boundary and real browser E2E through `search.global.query`;
 - immutable tenant-authorized metadata publication lifecycle;
-- typed Admin Studio metadata schemas and canonical validation — current Phase 7E packet.
+- strict typed Admin Studio metadata schemas and canonical validation;
+- durable tenant-scoped metadata revision/activation persistence — current Phase 7F packet.
 
 The breadth of end-user CRM functionality is still intentionally smaller than the target universal expert CRM. Customer master, commercial lifecycle, service, marketing, communications, analytics, AI, marketplace and enterprise operational proof remain explicit future owner-domain/platform programs.
 
@@ -105,13 +106,11 @@ Final review head `9595ce934f0ceaf23025676474f340e62bdd960d` passed Governance, 
 
 Final review head `675d389695e4881e62732bcec17b4eadcaf62917` passed architecture, lockfile, `rustfmt`, Clippy, full workspace tests and Rust Generated Sync before PR #80 was squash-merged as `fcf2d8d7ab0d1c94999b8a6feea7b3be9f97db7f`.
 
-## Current executable packet — Phase 7E
+### Phase 7E — typed Admin Studio metadata schemas — Complete
 
-**#81 / draft PR #82 — typed Admin Studio metadata schemas and canonical validators.**
+#81 / merged PR #82 replaced opaque metadata authoring payloads with strict typed v1 contracts before persistence, public APIs or UI composition:
 
-The current packet replaces opaque metadata authoring payloads with strict typed v1 contracts before persistence, public APIs or UI composition:
-
-- new pure `crm-metadata-schema` crate;
+- pure `crm-metadata-schema` crate;
 - typed object, field, relationship, layout, saved-view, pipeline, permission-template and workflow definitions;
 - bounded field/configuration semantics, including text length, decimal precision/scale and enum uniqueness;
 - strict duplicate and intra-definition reference validation;
@@ -119,9 +118,32 @@ The current packet replaces opaque metadata authoring payloads with strict typed
 - deterministic canonical UTF-8 JSON under `crm.metadata.definition/v1`;
 - set-like members canonicalized independently of insertion order while meaningful authoring order remains identity-significant;
 - workflow actions restricted to exact SemVer governed capability references, with no raw script, SQL or arbitrary HTTP execution primitive;
-- focused acceptance tests for all eight metadata kinds, canonicalization, ordered identity, typed validation failures, bundle dependency enforcement and strict unknown-field rejection.
+- focused acceptance for all eight metadata kinds, canonicalization, ordered identity, typed validation failures, bundle dependency enforcement and strict unknown-field rejection.
 
-Exact-head evidence is recorded in PR #82 and must be refreshed after every source or documentation commit before merge.
+Final review head `889a5161233283a1b1460a221df2b406522b588b` passed Governance, Rust, Rust Generated Sync, Database, Event, Projection, Search and Application Runtime CI before PR #82 was squash-merged as `885f479bcfa85ccd52817900359ea397e7a20544`.
+
+## Current executable packet — Phase 7F
+
+**#83 / draft PR #84 — durable tenant-scoped metadata persistence and transition evidence.**
+
+The current packet persists the immutable runtime lifecycle without moving metadata semantics into SQL:
+
+- migration `0010_metadata_publication_runtime`;
+- immutable tenant-scoped revision headers, canonical documents and explicit dependency edges;
+- deterministic PostgreSQL reconstruction with revision identity verification;
+- tenant-scoped optimistic activation heads;
+- per-tenant transaction advisory locking plus expected-generation conflicts for concurrent activation;
+- a durable push/pop rollback stack that cannot toggle a rolled-back revision forward;
+- structural impact and breaking-change analysis delegated back to `crm-metadata-runtime`;
+- append-only publish/activate/rollback transition evidence bound to actor, request, capability and business-transaction context;
+- FORCE RLS and transaction-local write-context enforcement on all six metadata tables;
+- immutable UPDATE/DELETE rejection for published revision state and transition evidence;
+- real PostgreSQL acceptance for round-trip identity, idempotence, cross-tenant non-disclosure, concurrency, breaking confirmation, rollback, RLS and immutability;
+- dedicated migration clean-install, rollback and reapply verification.
+
+The persistence packet intentionally does not fabricate outbox/idempotency state merely to enter the existing global business-transaction audit chain. The follow-on governed metadata capability/API packet must add canonical `crm.audit_records` evidence through the normal public capability execution contract.
+
+Exact-head evidence is recorded in PR #84 and must be refreshed after every source or documentation commit before merge.
 
 ## Development system
 
@@ -153,12 +175,13 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 - production application composition;
 - typed web product shell and governed browser client boundary;
 - immutable tenant-scoped metadata publication lifecycle;
-- typed metadata schemas/canonical validators — in progress in #81 / PR #82.
+- strict typed metadata schemas and canonical validators;
+- durable tenant-scoped metadata persistence — in progress in #83 / PR #84.
 
 ### Not yet complete
 
-- durable metadata publication/activation persistence and typed audit evidence;
-- governed metadata publication/query APIs and first Admin Studio workflows;
+- governed metadata publication/query APIs and canonical global audit evidence through the public capability transaction contract;
+- first Admin Studio workflows in the product plane;
 - typed UI-extension runtime with host-shell failure isolation;
 - broad product-quality Sales/Activities UX and mobile experience;
 - canonical customer master, identity resolution and consent — #28;
@@ -170,9 +193,9 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 
 ## Immediate delivery sequence
 
-1. Complete #81 / PR #82: strict typed metadata definitions, canonical validation and dependency extraction.
-2. Add durable tenant-scoped PostgreSQL publication/activation persistence with typed audit evidence while preserving immutable revisions and optimistic activation semantics.
-3. Expose governed metadata publication/query contracts and compose the first Admin Studio workflows through the product plane.
+1. Complete #83 / PR #84: durable tenant-scoped PostgreSQL publication/activation persistence, optimistic concurrency, rollback stack and append-only transition evidence.
+2. Expose governed metadata publish/activate/rollback/query contracts and produce canonical global audit evidence through the normal capability execution boundary.
+3. Compose the first Admin Studio workflows through the product plane against those governed contracts.
 4. Complete the typed UI-extension runtime/failure-isolation foundation required to close Phase 7.
 5. Begin the domain-wave program #57, with customer master/identity/consent (#28) and commercial lifecycle (#29) remaining explicit owner-domain programs rather than being absorbed into Sales.
 6. Continue frontend and expert backend modules as end-to-end vertical slices.
