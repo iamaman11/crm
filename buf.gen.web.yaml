@@ -5,7 +5,7 @@ inputs:
 
 plugins:
   - local: protoc-gen-es
-    out: packages/client/src/gen
+    out: packages/client/gen
     opt:
       - target=ts
       - import_extension=none
