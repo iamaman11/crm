@@ -64,6 +64,10 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
         .await
         .expect("search first candidate page");
     assert_eq!(first.candidates.len(), 1);
+    assert_eq!(
+        first.candidates[0].matched_fields,
+        BTreeSet::from(["name".to_owned()])
+    );
     let first_id = first.candidates[0].resource.record_id.as_str().to_owned();
     let continuation = first
         .next_after

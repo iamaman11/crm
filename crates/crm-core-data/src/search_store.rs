@@ -8,7 +8,7 @@ use crm_search_runtime::{
 };
 use serde_json::{Map, Value};
 use sqlx::Row;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 const MAXIMUM_SEARCH_CANDIDATE_PAGE_SIZE: u32 = 500;
 
@@ -181,6 +181,14 @@ impl PostgresDataStore {
                 resource_id,
                 source_version,
                 document,
+                ARRAY(
+                  SELECT search_field.field_name
+                  FROM jsonb_each_text(document -> 'searchable_fields')
+                    AS search_field(field_name, field_value)
+                  WHERE to_tsvector('simple', search_field.field_value)
+                    @@ websearch_to_tsquery('simple', $3)
+                  ORDER BY search_field.field_name
+                ) AS matched_fields,
                 GREATEST(
                   1::bigint,
                   ROUND(
@@ -194,11 +202,19 @@ impl PostgresDataStore {
               WHERE tenant_id = $1
                 AND projection_id = $2
                 AND document ? 'search_text'
+                AND document ? 'searchable_fields'
                 AND (cardinality($4::text[]) = 0 OR resource_type = ANY($4::text[]))
                 AND to_tsvector('simple', COALESCE(document ->> 'search_text', ''))
                     @@ websearch_to_tsquery('simple', $3)
+                AND EXISTS (
+                  SELECT 1
+                  FROM jsonb_each_text(document -> 'searchable_fields')
+                    AS search_field(field_name, field_value)
+                  WHERE to_tsvector('simple', search_field.field_value)
+                    @@ websearch_to_tsquery('simple', $3)
+                )
             )
-            SELECT resource_type, resource_id, source_version, document, rank_micros
+            SELECT resource_type, resource_id, source_version, document, matched_fields, rank_micros
             FROM ranked
             WHERE $5::bigint IS NULL
                OR rank_micros < $5
@@ -262,6 +278,9 @@ fn decode_search_candidate(row: sqlx::postgres::PgRow) -> Result<SearchCandidate
     let rank_micros: i64 = row
         .try_get("rank_micros")
         .map_err(|error| search_stored_value_invalid(error.to_string()))?;
+    let matched_fields: Vec<String> = row
+        .try_get("matched_fields")
+        .map_err(|error| search_stored_value_invalid(error.to_string()))?;
     let document: Value = row
         .try_get("document")
         .map_err(|error| search_stored_value_invalid(error.to_string()))?;
@@ -281,6 +300,7 @@ fn decode_search_candidate(row: sqlx::postgres::PgRow) -> Result<SearchCandidate
         source_version,
         rank_micros,
         searchable_fields: string_map_field(object, "searchable_fields")?,
+        matched_fields: matched_fields.into_iter().collect::<BTreeSet<_>>(),
         display_fields: string_map_field(object, "display_fields")?,
     })
 }
