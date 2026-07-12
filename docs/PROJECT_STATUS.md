@@ -2,7 +2,7 @@
 
 Status date: 2026-07-12
 
-This document is the concise human-readable status page. The normative sequence remains `IMPLEMENTATION_ROADMAP.md`; absolute rules remain `SYSTEM_INVARIANTS.md`; implementation grouping follows `DEVELOPMENT_WORKFLOW.md`.
+This document is the concise human-readable status page. The normative sequence remains `IMPLEMENTATION_ROADMAP.md`; absolute rules remain `SYSTEM_INVARIANTS.md`; implementation grouping follows `DEVELOPMENT_WORKFLOW.md`; multi-agent execution follows `MULTI_AGENT_DEVELOPMENT.md`.
 
 ## Current position
 
@@ -34,6 +34,8 @@ The golden module foundation (#56 / merged PR #64) is complete as `15bf3ddeac037
 The generalized projection runtime (#65 / merged PR #67) is complete on `main` as `195448ab3cd70fe051967faf4f8ed87372fb3551`.
 
 The tenant- and permission-aware search packet **#66 / merged PR #68** is complete. It delivers the search runtime, PostgreSQL generation/index adapter, governed public query capability, backend-consistent field-local match evidence, live permission re-checking, application-runtime composition and canonical migration gates. Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all required checks and was squash-merged into `main` as `49272918cb4b767eedc2ca34574abba40718eae1`.
+
+The repository development process is being upgraded through **#70** to the exact-SHA two-agent model defined in `MULTI_AGENT_DEVELOPMENT.md`: one Architect / Implementer primary writer, one independent Local Integrator / Verifier operating on immutable checkpoint SHAs, and GitHub CI as the final exact-head merge authority. The system is designed to reduce remote-CI feedback latency without weakening any architecture or correctness gate.
 
 ## Phase 6 completion
 
@@ -101,6 +103,22 @@ Issue #66 / merged PR #68 completed the production search foundation:
 
 Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed Contract CI, Governance CI, Rust CI, Database CI, Projection Runtime CI, Event Runtime CI, Search Runtime CI, Application Runtime CI and Rust Generated Sync simultaneously before squash merge as `49272918cb4b767eedc2ca34574abba40718eae1`.
 
+## Development system v2
+
+Issue #70 formalizes the repository's two-agent development model:
+
+- the **Architect / Implementer** owns packet scope, architecture, contracts, primary implementation, tests, fixes and checkpoint publication;
+- the **Local Integrator / Verifier** checks an exact immutable SHA in a complete local toolchain and returns reproducible structured evidence;
+- the verifier defaults to `VERIFY_ONLY` and is not a hidden concurrent writer;
+- overlapping code has one primary writer at a time;
+- every verification handoff names branch, exact SHA, mode, scope, environment and required commands;
+- every report names the exact SHA actually tested and explicitly lists anything unverified;
+- a new commit invalidates green evidence for checks not rerun on the new SHA;
+- local checkpoints mirror architecture, behavior and delivery stages;
+- GitHub CI remains the final exact-head merge authority.
+
+The standard coordination signals are `SECOND_AGENT_NOT_NEEDED`, `CONNECT_SECOND_AGENT`, `SECOND_AGENT_REPORT_NEEDED` and `READY_FOR_EXACT_HEAD_CI`. The committed issue/branch/PR/SHA state remains authoritative over chat-only coordination.
+
 ## Product readiness summary
 
 The architecture and backend platform now have a complete first production-composed modular proof. The breadth of end-user CRM functionality is still intentionally much smaller than the target universal expert CRM.
@@ -127,20 +145,24 @@ The architecture and backend platform now have a complete first production-compo
 
 ## Immediate delivery sequence
 
-1. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
-2. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
-3. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
-4. Continue frontend and expert backend modules as end-to-end vertical slices.
+1. Complete the #70 development-system documentation packet and adopt exact-SHA two-agent verification for subsequent work.
+2. Build the typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
+3. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
+4. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
+5. Continue frontend and expert backend modules as end-to-end vertical slices.
 
 ## Development mode
 
 - one branch per coherent delivery packet, not per mechanical edit;
 - incremental commits are allowed during implementation;
-- full CI runs at architecture, behavior and final-delivery checkpoints;
+- one primary writer at a time for overlapping multi-agent scope;
+- exact-SHA local handoffs may be used at architecture, behavior and delivery checkpoints;
+- verifier mode defaults to `VERIFY_ONLY`;
+- full GitHub CI remains mandatory on the exact final review head;
 - final PR history is reduced to semantic commits where repository tooling permits;
 - architecture, contract, tenant, authorization, audit and rollback gates remain strict.
 
-See `DEVELOPMENT_WORKFLOW.md` and `MODULE_DEVELOPMENT.md`.
+See `DEVELOPMENT_WORKFLOW.md`, `MULTI_AGENT_DEVELOPMENT.md` and `MODULE_DEVELOPMENT.md`.
 
 ## Documentation hygiene rule
 
