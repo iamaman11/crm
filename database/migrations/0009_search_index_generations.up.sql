@@ -39,7 +39,7 @@ CREATE POLICY tenant_isolation ON crm.search_index_generations
 
 COMMENT ON TABLE crm.search_index_generations IS
   'Tenant-scoped logical search-index generation registry. Documents remain rebuildable projection state; only an explicitly activated generation is queryable.';
-COMMENT ON INDEX projection_documents_search_fts_idx IS
+COMMENT ON INDEX crm.projection_documents_search_fts_idx IS
   'GIN acceleration for rebuildable search projection documents; never authoritative business state.';
 
 COMMIT;
