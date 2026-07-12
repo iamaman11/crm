@@ -5,7 +5,6 @@ edition = "2024"
 publish = false
 
 [dependencies]
-crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-metadata-runtime = { path = "../crm-metadata-runtime" }
 crm-metadata-schema = { path = "../crm-metadata-schema" }
