@@ -3,6 +3,7 @@
 pub mod aggregate_executor;
 mod audit;
 pub mod capability_executor;
+mod metadata_capability_executor;
 mod metadata_query_store;
 mod metadata_store;
 pub mod postgres;
@@ -19,6 +20,7 @@ pub use aggregate_executor::*;
 pub use audit::AuditIntent;
 pub use capability_executor::*;
 pub use crm_module_sdk::RecordSnapshot;
+pub use metadata_capability_executor::*;
 pub use metadata_query_store::*;
 pub use metadata_store::*;
 pub use postgres::*;
