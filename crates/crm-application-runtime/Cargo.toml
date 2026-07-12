@@ -17,6 +17,8 @@ crm-query-runtime = { path = "../crm-query-runtime" }
 crm-sales-activities-capability-composition = { path = "../crm-sales-activities-capability-composition" }
 crm-sales-activities-link = { path = "../../modules/crm-sales-activities-link" }
 crm-sales-activities-query-adapter = { path = "../crm-sales-activities-query-adapter" }
+crm-search-query-adapter = { path = "../crm-search-query-adapter" }
+crm-search-runtime = { path = "../crm-search-runtime" }
 http = "1"
 prost = "0.14"
 semver = "1"
