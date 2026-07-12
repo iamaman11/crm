@@ -12,6 +12,8 @@ The search index is **candidate-only**. Indexed documents never contain an autho
 
 A candidate is suppressed when the current actor cannot see the resource or when the query matched only fields that are currently hidden.
 
+The candidate store returns the exact fields that matched according to backend query semantics. The permission-aware runtime does not re-interpret the query with a second matcher; it intersects backend match evidence with live field visibility before disclosure.
+
 ## Reindex model
 
 Search documents are stored as generalized projection documents. Each search generation has its own projection identity and therefore reuses the shared projection checkpoint/replay runtime.

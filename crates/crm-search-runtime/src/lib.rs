@@ -158,6 +158,7 @@ pub struct SearchCandidate {
     pub source_version: i64,
     pub rank_micros: i64,
     pub searchable_fields: BTreeMap<String, String>,
+    pub matched_fields: BTreeSet<String>,
     pub display_fields: BTreeMap<String, String>,
 }
 
@@ -178,6 +179,17 @@ impl SearchCandidate {
             ));
         }
         validate_fields(&self.searchable_fields)?;
+        if self.matched_fields.is_empty()
+            || self
+                .matched_fields
+                .iter()
+                .any(|field| !self.searchable_fields.contains_key(field))
+        {
+            return Err(search_internal(
+                "SEARCH_CANDIDATE_MATCH_EVIDENCE_INVALID",
+                "The search service returned invalid match evidence.",
+            ));
+        }
         validate_fields(&self.display_fields)?;
         Ok(())
     }
@@ -321,16 +333,11 @@ impl PermissionAwareSearch {
                     continue;
                 }
 
-                let searchable_fields = candidate
-                    .searchable_fields
+                let matched_fields = candidate
+                    .matched_fields
                     .iter()
-                    .filter(|(field, _)| decision.allows_field(field))
-                    .map(|(field, value)| (field.clone(), value.clone()))
-                    .collect::<BTreeMap<_, _>>();
-                let matched_fields = searchable_fields
-                    .iter()
-                    .filter(|(_, value)| normalized_contains(value, &normalized_text))
-                    .map(|(field, _)| field.clone())
+                    .filter(|field| decision.allows_field(field))
+                    .cloned()
                     .collect::<BTreeSet<_>>();
                 if matched_fields.is_empty() {
                     continue;
@@ -486,10 +493,6 @@ fn normalize_search_text(value: &str) -> Result<String, SdkError> {
         .to_lowercase())
 }
 
-fn normalized_contains(value: &str, normalized_text: &str) -> bool {
-    value.to_lowercase().contains(normalized_text)
-}
-
 fn validate_coordinate(value: &str, maximum: usize, code: &'static str) -> Result<(), SdkError> {
     if value.is_empty() || value.len() > maximum || value.chars().any(char::is_control) {
         return Err(search_invalid(code, "The search coordinate is invalid."));
@@ -573,7 +576,7 @@ mod tests {
                         candidate
                             .searchable_fields
                             .values()
-                            .any(|value| normalized_contains(value, &request.normalized_text))
+                            .any(|value| value.to_lowercase().contains(&request.normalized_text))
                     })
                     .cloned()
                     .collect::<Vec<_>>();
@@ -721,6 +724,7 @@ mod tests {
             source_version: 1,
             rank_micros,
             searchable_fields: BTreeMap::from([("name".to_owned(), name.to_owned())]),
+            matched_fields: BTreeSet::from(["name".to_owned()]),
             display_fields: BTreeMap::from([("amount".to_owned(), "1000".to_owned())]),
         }
     }

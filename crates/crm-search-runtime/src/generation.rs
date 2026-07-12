@@ -50,7 +50,9 @@ pub struct SearchCatchUpResult {
 
 impl SearchCatchUpResult {
     fn add_batch(&mut self, batch: &ProjectionBatchResult) {
-        self.events_seen = self.events_seen.saturating_add(u64::from(batch.events_seen));
+        self.events_seen = self
+            .events_seen
+            .saturating_add(u64::from(batch.events_seen));
         self.events_applied = self
             .events_applied
             .saturating_add(u64::from(batch.events_applied));
@@ -190,11 +192,7 @@ impl SearchReindexCoordinator {
             .rebuild(tenant_id.clone(), &self.projection_id, page_size)
             .await?;
         self.generations
-            .activate_generation(
-                tenant_id,
-                self.index_id.clone(),
-                self.generation_id.clone(),
-            )
+            .activate_generation(tenant_id, self.index_id.clone(), self.generation_id.clone())
             .await?;
         Ok(SearchGenerationAction::RebuiltAndActivated { applied_events })
     }

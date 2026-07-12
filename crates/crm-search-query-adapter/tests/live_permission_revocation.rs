@@ -55,6 +55,7 @@ impl SearchCandidateStore for OneDealSearchStore {
                         "name".to_owned(),
                         "Acme Enterprise".to_owned(),
                     )]),
+                    matched_fields: BTreeSet::from(["name".to_owned()]),
                     display_fields: BTreeMap::from([(
                         "name".to_owned(),
                         "Acme Enterprise".to_owned(),
@@ -72,12 +73,11 @@ async fn live_field_grant_revocation_is_reflected_without_reindexing() {
     let visibility_store = LiveQueryVisibilityStore::default();
     let grant = search_grant(BTreeSet::from(["name".to_owned()]));
     visibility_store.upsert(grant.clone()).unwrap();
-    let visibility: Arc<dyn QueryVisibilityAuthorizer> = Arc::new(
-        LiveQueryVisibilityAuthorizer::new(
+    let visibility: Arc<dyn QueryVisibilityAuthorizer> =
+        Arc::new(LiveQueryVisibilityAuthorizer::new(
             visibility_store.clone(),
             Arc::new(FixedClock::new(100)),
-        ),
-    );
+        ));
     let adapter = SearchQueryAdapter::new(
         SearchIndexId::try_new("crm.global-search").unwrap(),
         Arc::new(OneDealSearchStore),
@@ -93,7 +93,10 @@ async fn live_field_grant_revocation_is_reflected_without_reindexing() {
     let visible = search_proto::SearchResponse::decode(visible.output.bytes.as_slice()).unwrap();
     assert_eq!(visible.hits.len(), 1);
     assert_eq!(visible.hits[0].resource_id, DEAL_ID);
-    assert_eq!(visible.hits[0].fields.get("name").unwrap(), "Acme Enterprise");
+    assert_eq!(
+        visible.hits[0].fields.get("name").unwrap(),
+        "Acme Enterprise"
+    );
     assert_eq!(visible.hits[0].matched_fields, vec!["name"]);
 
     assert!(visibility_store.revoke(&grant).unwrap());
