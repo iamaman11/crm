@@ -6,21 +6,30 @@
 //! from caller-authored strict v1 definitions to immutable metadata runtime
 //! documents. It deliberately does not accept caller-built `MetadataDocument`
 //! values, dependency sets, revision hashes or persistence instructions.
+//!
+//! This crate is intentionally independent from `crm-core-data` so the same
+//! exact contract boundary can be consumed by persistence and query adapters
+//! without creating an infrastructure dependency cycle.
 
-use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilityRisk};
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilityRequest, CapabilityRisk, PayloadContract,
+};
 use crm_metadata_runtime::{
     MetadataBundleDraft, MetadataChangeType, MetadataDocument, MetadataImpactReport,
     MetadataImpactSeverity, MetadataKey, MetadataKind, MetadataRevisionId, TenantMetadataSnapshot,
 };
 use crm_metadata_schema::{METADATA_DEFINITION_SCHEMA_VERSION, MetadataDefinition};
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, SdkError,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
+    RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
 };
-use crm_proto_contracts::crm::metadata::v1 as wire;
+use crm_proto_contracts::{crm::metadata::v1 as wire, message_descriptor_hash};
+use prost::Message;
 
 pub const METADATA_MODULE_ID: &str = "crm.metadata";
-pub const CONTRACT_VERSION: &str = support::CONTRACT_VERSION;
+pub const CONTRACT_VERSION: &str = "1.0.0";
+pub const MAX_PROTOBUF_BYTES: u64 = 1_048_576;
+pub const DEFAULT_RETENTION_POLICY_ID: &str = "standard";
 
 pub const PUBLISH_BUNDLE_CAPABILITY: &str = "metadata.bundle.publish";
 pub const ACTIVATE_REVISION_CAPABILITY: &str = "metadata.revision.activate";
@@ -54,6 +63,84 @@ pub const METADATA_QUERY_CAPABILITY_IDS: [&str; 3] = [
     REVISION_QUERY_CAPABILITY,
     ACTIVATION_QUERY_CAPABILITY,
 ];
+
+pub fn protobuf_contract(
+    owner: &str,
+    schema_id: &str,
+    allowed_data_classes: Vec<DataClass>,
+) -> Result<PayloadContract, SdkError> {
+    Ok(PayloadContract {
+        owner: configured(ModuleId::try_new(owner))?,
+        schema_id: configured(SchemaId::try_new(schema_id))?,
+        schema_version: configured(SchemaVersion::try_new(CONTRACT_VERSION))?,
+        descriptor_hash: message_descriptor_hash(schema_id),
+        allowed_data_classes,
+        allowed_encodings: vec![PayloadEncoding::Protobuf],
+        maximum_size_bytes: MAX_PROTOBUF_BYTES,
+    })
+}
+
+pub fn protobuf_payload<M: Message>(
+    owner: &str,
+    schema_id: &str,
+    data_class: DataClass,
+    message: &M,
+) -> Result<TypedPayload, SdkError> {
+    let bytes = message.encode_to_vec();
+    if bytes.len() as u64 > MAX_PROTOBUF_BYTES {
+        return Err(SdkError::new(
+            "METADATA_PROTOBUF_PAYLOAD_TOO_LARGE",
+            ErrorCategory::InvalidArgument,
+            false,
+            "The encoded metadata payload exceeds the permitted size.",
+        ));
+    }
+    let payload = TypedPayload {
+        owner: configured(ModuleId::try_new(owner))?,
+        schema_id: configured(SchemaId::try_new(schema_id))?,
+        schema_version: configured(SchemaVersion::try_new(CONTRACT_VERSION))?,
+        descriptor_hash: message_descriptor_hash(schema_id),
+        data_class,
+        encoding: PayloadEncoding::Protobuf,
+        maximum_size_bytes: MAX_PROTOBUF_BYTES,
+        retention_policy_id: configured(RetentionPolicyId::try_new(DEFAULT_RETENTION_POLICY_ID))?,
+        bytes,
+    };
+    payload.validate()?;
+    Ok(payload)
+}
+
+pub fn decode_request<M: Message + Default>(
+    request: &CapabilityRequest,
+    owner: &str,
+    schema_id: &str,
+) -> Result<M, SdkError> {
+    let payload = &request.input;
+    if payload.owner.as_str() != owner
+        || payload.schema_id.as_str() != schema_id
+        || payload.schema_version.as_str() != CONTRACT_VERSION
+        || payload.descriptor_hash != message_descriptor_hash(schema_id)
+        || payload.data_class != DataClass::Confidential
+        || payload.encoding != PayloadEncoding::Protobuf
+        || payload.maximum_size_bytes != MAX_PROTOBUF_BYTES
+        || payload.validate().is_err()
+    {
+        return Err(SdkError::new(
+            "METADATA_CAPABILITY_INPUT_CONTRACT_MISMATCH",
+            ErrorCategory::InvalidArgument,
+            false,
+            "The metadata capability input does not match the required contract.",
+        ));
+    }
+    M::decode(payload.bytes.as_slice()).map_err(|_| {
+        SdkError::new(
+            "METADATA_CAPABILITY_INPUT_PROTOBUF_INVALID",
+            ErrorCategory::InvalidArgument,
+            false,
+            "The metadata capability input is not valid Protobuf.",
+        )
+    })
+}
 
 pub fn metadata_capability_definition(
     capability_id: &str,
@@ -102,12 +189,12 @@ pub fn metadata_capability_definition(
         capability_id: configured(CapabilityId::try_new(capability_id))?,
         capability_version: configured(CapabilityVersion::try_new(CONTRACT_VERSION))?,
         owner_module_id: configured(ModuleId::try_new(METADATA_MODULE_ID))?,
-        input_contract: support::protobuf_contract(
+        input_contract: protobuf_contract(
             METADATA_MODULE_ID,
             input_schema,
             vec![DataClass::Confidential],
         )?,
-        output_contract: Some(support::protobuf_contract(
+        output_contract: Some(protobuf_contract(
             METADATA_MODULE_ID,
             output_schema,
             vec![DataClass::Confidential],
@@ -137,7 +224,7 @@ pub fn metadata_query_capability_definitions() -> Result<Vec<CapabilityDefinitio
 
 pub fn decode_publish_bundle(request: &CapabilityRequest) -> Result<MetadataBundleDraft, SdkError> {
     let command: wire::PublishMetadataBundleRequest =
-        support::decode_request(request, METADATA_MODULE_ID, PUBLISH_REQUEST_SCHEMA)?;
+        decode_request(request, METADATA_MODULE_ID, PUBLISH_REQUEST_SCHEMA)?;
     publish_bundle_from_wire(command)
 }
 
