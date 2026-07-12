@@ -24,6 +24,8 @@ sha2 = "0.10"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "json"] }
 
 [dev-dependencies]
+crm-metadata-schema = { path = "../crm-metadata-schema" }
+prost = "0.14"
 tokio = { version = "1", features = ["macros", "rt"] }
 
 [[test]]
