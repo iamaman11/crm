@@ -1,6 +1,10 @@
 import type { SessionState } from "@ultimate-crm/client";
 
-export type ProductRouteId = "home" | "search" | "admin-studio";
+export type ProductRouteId =
+  | "home"
+  | "search"
+  | "admin-studio"
+  | "record-extension-proof";
 export type KnownProductCapability =
   | "search.global.query"
   | "metadata.activation.get";
@@ -37,6 +41,12 @@ export const PRODUCT_ROUTES: readonly ProductRouteDefinition[] = [
     label: "Admin Studio",
     authentication: "required",
     requiredCapability: "metadata.activation.get",
+  },
+  {
+    id: "record-extension-proof",
+    path: "/records/phase7i-demo",
+    label: "Record page",
+    authentication: "required",
   },
 ] as const;
 
