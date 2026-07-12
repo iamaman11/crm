@@ -205,16 +205,18 @@ async fn durable_metadata_publication_is_tenant_isolated_optimistic_and_rollback
 
     let first_concurrent = store.clone();
     let second_concurrent = store.clone();
+    let first_concurrent_context = context(TENANT_A, "activate-v3-concurrent");
+    let second_concurrent_context = context(TENANT_A, "activate-v4-concurrent");
     let (left, right) = tokio::join!(
         first_concurrent.activate(
-            &context(TENANT_A, "activate-v3-concurrent"),
+            &first_concurrent_context,
             &revision_three,
             3,
             false,
             13_000_000_000,
         ),
         second_concurrent.activate(
-            &context(TENANT_A, "activate-v4-concurrent"),
+            &second_concurrent_context,
             &revision_four,
             3,
             false,
