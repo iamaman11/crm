@@ -198,7 +198,7 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         "proposal"
     );
 
-    let search_definition = query_definition(SEARCH_GLOBAL);
+    let search_definition = crate::query_definition(SEARCH_GLOBAL);
     let search_payload = wire_payload(payload(
         &search_definition,
         search::SearchRequest {
