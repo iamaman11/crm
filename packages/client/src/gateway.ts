@@ -5,7 +5,7 @@ import {
   type Interceptor,
 } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
-import { ApplicationGatewayService } from "./gen/crm/gateway/v1/gateway_pb";
+import { ApplicationGatewayService } from "../gen/crm/gateway/v1/gateway_pb";
 import {
   requireAuthenticatedSession,
   type SessionProvider,
@@ -132,13 +132,15 @@ function productError(
   safeCode: string | undefined,
   cause: ConnectError,
 ): ProductClientError {
-  return new ProductClientError({
+  const options = {
     kind,
     message: cause.rawMessage || "The CRM request failed.",
     retryable,
-    safeCode,
     cause,
-  });
+  };
+  return safeCode === undefined
+    ? new ProductClientError(options)
+    : new ProductClientError({ ...options, safeCode });
 }
 
 function normalizeBaseUrl(value: string): string {
