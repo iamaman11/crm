@@ -6,8 +6,11 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "crates/crm-core-data/**"
+      - "crates/crm-metadata-api-adapter/**"
+      - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-metadata-runtime/**"
       - "crates/crm-metadata-schema/**"
+      - "proto/crm/metadata/**"
       - "database/migrations/0010_metadata_publication_runtime.*.sql"
       - "database/tests/0001_platform_foundation.sql"
       - ".github/workflows/metadata-runtime.yml"
@@ -16,8 +19,11 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "crates/crm-core-data/**"
+      - "crates/crm-metadata-api-adapter/**"
+      - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-metadata-runtime/**"
       - "crates/crm-metadata-schema/**"
+      - "proto/crm/metadata/**"
       - "database/migrations/0010_metadata_publication_runtime.*.sql"
       - "database/tests/0001_platform_foundation.sql"
       - ".github/workflows/metadata-runtime.yml"
@@ -80,6 +86,14 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-core-data --features postgres-integration --test postgres_metadata -- --nocapture 2>&1 | tee database/postgres-metadata.log
+      - name: Verify governed tenant-only metadata query store
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_metadata_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_metadata_test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-core-data --features postgres-integration --test postgres_metadata_query -- --nocapture 2>&1 | tee database/postgres-metadata-query.log
       - name: Verify metadata migration rollback and reapply
         run: |
           psql --set ON_ERROR_STOP=1 --file database/migrations/0010_metadata_publication_runtime.down.sql
@@ -97,5 +111,7 @@ jobs:
             database/
             crates/crm-core-data/
             crates/crm-metadata-runtime/
+            crates/crm-metadata-api-adapter/
+            crates/crm-metadata-query-adapter/
           if-no-files-found: error
           retention-days: 7
