@@ -12,14 +12,14 @@ immutable owner-domain events
 → crm-projection-runtime
 → search generation projection documents
 → SearchCandidateStore
-→ ranked tenant-scoped candidates
+→ ranked tenant-scoped candidates + backend match evidence
 → live QueryVisibilityAuthorizer
 → visible search hits
 ```
 
 The search runtime is intentionally split into two responsibilities:
 
-- the index produces only candidate resource identities, rank and indexed field material;
+- the index produces only candidate resource identities, rank, indexed field material and backend-derived match evidence;
 - the live query visibility boundary decides whether the current actor may see each resource and field at request time.
 
 No ACL snapshot in the index is authoritative.
@@ -38,14 +38,21 @@ register building generation
 
 The previously active generation stays queryable while a replacement is building. Search therefore does not need a second replay/checkpoint system and does not require an empty-index cutover during normal reindexing.
 
-## 3. Permission safety
+The currently active generation cannot be rebuilt in place. Reindexing must target a distinct building generation so a reset or partial replay can never erase or expose an incomplete live index. Generation coordinates are immutable once a generation leaves the building lifecycle state.
+
+## 3. Permission and match-evidence safety
 
 For every candidate, search repeats live visibility before disclosure.
 
 A candidate is omitted when:
 
 - the resource is no longer visible;
+- the backend reports no field-local match evidence;
 - the query matched only fields that are currently hidden.
+
+`SearchCandidateStore` is responsible for evaluating query syntax under the backend's own matching semantics and returning the exact indexed fields that matched. The runtime must not reinterpret the query with a second matcher. It only intersects backend-provided `matched_fields` with live field visibility before constructing a response.
+
+Match evidence is field-local: the complete backend query must match at least one individual searchable field. Terms split across different fields cannot be combined into a synthetic match. This keeps candidate selection, matched-field disclosure and permission filtering aligned for multi-term and structured query syntax.
 
 The response contains only currently visible fields and only matched-field metadata for currently visible fields. Permission revocation must therefore take effect at query time without waiting for reindexing.
 
@@ -91,5 +98,6 @@ Partial events such as stage changes, completion and reminder scheduling are not
 - deterministic cursor semantics;
 - rebuildability;
 - generation switching;
+- backend-consistent field-local match evidence;
 - live resource and field visibility before disclosure;
 - non-authoritative ownership.
