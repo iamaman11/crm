@@ -425,6 +425,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-metadata-schema"
+version = "0.1.0"
+dependencies = [
+ "crm-metadata-runtime",
+ "crm-module-sdk",
+ "semver",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "crm-module-manifest"
 version = "0.1.0"
 dependencies = [

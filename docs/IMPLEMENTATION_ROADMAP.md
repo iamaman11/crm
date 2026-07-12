@@ -261,29 +261,60 @@ The packet established:
 
 Final review head `b62dd50225fde6e58aac9a6b4cec307bd2245616` passed all applicable checks before PR #73 was merged and #71 closed.
 
-### Current executable Phase 7 packet — Admin Studio metadata publication runtime
+### Immutable metadata publication lifecycle — Complete
 
-[#77](https://github.com/iamaman11/crm/issues/77) / draft PR #78 is **In progress**.
+[#77](https://github.com/iamaman11/crm/issues/77) / merged PR #78 is **Complete**.
 
-The packet establishes the backend-neutral lifecycle rules that later Admin Studio builders and governed publication APIs must consume:
+The packet established:
 
 - `crm-metadata-runtime` as a pure platform-domain crate with no PostgreSQL, transport, browser or business owner-module dependency;
 - typed metadata kinds for object, field, relationship, layout, view, pipeline, permission and workflow definitions;
 - validated namespaced metadata identifiers;
 - complete metadata-bundle snapshots with explicit intra-bundle dependencies;
-- deterministic content-addressed SHA-256 revision identity under a versioned canonical profile;
-- immutable/idempotent publication;
+- deterministic SHA-256 revision identity under `crm.metadata.bundle.sha256/v1`;
+- immutable/idempotent content-addressed publication;
 - deterministic structural impact analysis for additions, modifications and removals;
 - explicit breaking-change confirmation before activation;
-- tenant-scoped optimistic activation generations;
-- rollback by moving the active pointer to a previously published immutable revision.
+- optimistic activation generations and rollback across immutable revisions.
 
-This packet does not yet claim kind-specific metadata schema semantics, durable PostgreSQL persistence, public publication/query contracts or Admin Studio UI. Those follow-on layers must preserve this runtime's lifecycle invariants rather than reimplement weaker alternatives.
+Final review head `9595ce934f0ceaf23025676474f340e62bdd960d` passed Governance, Rust, Rust Generated Sync, Database, Event, Projection, Search and Application Runtime CI before PR #78 was squash-merged as `de1ea407790d8c6c74f363b21622d332df85f727`.
+
+### Tenant-scoped metadata publication authority — Complete
+
+[#79](https://github.com/iamaman11/crm/issues/79) / merged PR #80 is **Complete**.
+
+The hardening packet makes tenant publication authority explicit at the public composition boundary:
+
+- the deterministic single-scope catalog engine remains private;
+- application-facing callers use `TenantMetadataCatalog`;
+- publication, revision lookup, impact analysis, activation and rollback require an explicit tenant identity;
+- revision hashes are identities, not authorization secrets;
+- Tenant B cannot read, impact-analyze or activate a revision published only by Tenant A;
+- identical content may retain identical deterministic identity after independent publication into each tenant authority;
+- activation generations and rollback histories remain tenant-isolated.
+
+Final review head `675d389695e4881e62732bcec17b4eadcaf62917` passed architecture, lockfile, `rustfmt`, Clippy, full workspace tests and Rust Generated Sync before PR #80 was squash-merged as `fcf2d8d7ab0d1c94999b8a6feea7b3be9f97db7f`.
+
+### Current executable Phase 7 packet — typed Admin Studio metadata schemas
+
+[#81](https://github.com/iamaman11/crm/issues/81) / draft PR #82 is **In progress**.
+
+The packet replaces opaque authoring payloads with strict typed v1 definitions before persistence, public APIs or UI composition:
+
+- `crm-metadata-schema` as a pure typed schema/validation crate;
+- object, field, relationship, layout, saved-view, pipeline, permission-template and workflow definitions;
+- bounded text/decimal/enum and collection semantics;
+- strict duplicate and intra-definition reference validation;
+- deterministic dependency extraction into runtime `MetadataKey` references;
+- deterministic canonical UTF-8 JSON under `crm.metadata.definition/v1`;
+- set-like members canonicalized independently of insertion order while meaningful authoring order remains identity-significant;
+- workflows restricted to exact SemVer governed capability references with no script, raw SQL or arbitrary HTTP execution primitive.
+
+The packet must finish with exact-head evidence for all applicable gates and synchronized roadmap/status state before merge.
 
 ### Remaining Phase 7 platform deliverables
 
-- object, field, relationship, layout, view, pipeline, permission and workflow schemas/validators/builders;
-- durable metadata publication/activation persistence with typed audit evidence;
+- durable tenant-scoped metadata publication/activation persistence with typed audit evidence;
 - governed metadata publication/query contracts and application composition;
 - first Admin Studio workflows through the product plane;
 - typed UI-extension runtime with host-shell failure isolation;
@@ -291,7 +322,7 @@ This packet does not yet claim kind-specific metadata schema semantics, durable 
 
 ### Phase 7 gate
 
-Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Published metadata is immutable and activation is validated, impact-analyzed, audited and reversible. UI-extension failure cannot break the host shell or record page. Frontend code cannot bypass governed mutation/query paths.
+Deleting search or projections cannot destroy authoritative data. Permission changes cannot leak stale results. Published metadata is immutable, tenant-authorized and activated through a validated, impact-analyzed, audited and reversible pipeline. UI-extension failure cannot break the host shell or record page. Frontend code cannot bypass governed mutation/query paths.
 
 Phase 7 remains open until the Admin Studio publication pipeline and UI-extension foundations satisfy these acceptance gates.
 
