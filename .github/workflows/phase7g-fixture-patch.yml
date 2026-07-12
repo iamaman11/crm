@@ -1,0 +1,47 @@
+name: Phase 7G Fixture Patch
+
+on:
+  push:
+    branches:
+      - develop/phase7-governed-metadata-api
+    paths:
+      - ".github/workflows/phase7g-fixture-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase7-governed-metadata-api
+      - name: Publish metadata platform registry fixtures
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("database/tests/0001_platform_foundation.sql")
+          text = path.read_text()
+
+          old_module = """VALUES (\n  'crm.test',\n  '1.0.0',\n  'crm.cjson/v1',\n  decode(repeat('ab', 32), 'hex'),\n  '{}'::jsonb,\n  clock_timestamp(),\n  'platform'\n);"""
+          new_module = """VALUES\n  (\n    'crm.test',\n    '1.0.0',\n    'crm.cjson/v1',\n    decode(repeat('ab', 32), 'hex'),\n    '{}'::jsonb,\n    clock_timestamp(),\n    'platform'\n  ),\n  (\n    'crm.metadata',\n    '1.0.0',\n    'crm.cjson/v1',\n    decode(repeat('cd', 32), 'hex'),\n    '{\"platform\":\"metadata\"}'::jsonb,\n    clock_timestamp(),\n    'platform'\n  );"""
+          if text.count(old_module) != 1:
+              raise SystemExit("module fixture anchor did not match exactly once")
+          text = text.replace(old_module, new_module)
+
+          old_capability = """VALUES (\n  'test.record.mutate',\n  '1.0.0',\n  'crm.test',\n  '1.0.0',\n  'crm.test.v1.TestService',\n  'Mutate',\n  decode(repeat('01', 32), 'hex'),\n  decode(repeat('02', 32), 'hex'),\n  'medium',\n  true,\n  true,\n  false,\n  false,\n  false,\n  false,\n  false\n);"""
+          new_capability = """VALUES\n  (\n    'test.record.mutate',\n    '1.0.0',\n    'crm.test',\n    '1.0.0',\n    'crm.test.v1.TestService',\n    'Mutate',\n    decode(repeat('01', 32), 'hex'),\n    decode(repeat('02', 32), 'hex'),\n    'medium',\n    true,\n    true,\n    false,\n    false,\n    false,\n    false,\n    false\n  ),\n  (\n    'metadata.bundle.publish',\n    '1.0.0',\n    'crm.metadata',\n    '1.0.0',\n    'crm.metadata.v1.MetadataCapabilityService',\n    'PublishMetadataBundle',\n    decode(repeat('03', 32), 'hex'),\n    decode(repeat('04', 32), 'hex'),\n    'high',\n    true,\n    true,\n    false,\n    false,\n    false,\n    false,\n    false\n  ),\n  (\n    'metadata.revision.activate',\n    '1.0.0',\n    'crm.metadata',\n    '1.0.0',\n    'crm.metadata.v1.MetadataCapabilityService',\n    'ActivateMetadataRevision',\n    decode(repeat('05', 32), 'hex'),\n    decode(repeat('06', 32), 'hex'),\n    'high',\n    true,\n    true,\n    false,\n    false,\n    false,\n    false,\n    false\n  ),\n  (\n    'metadata.revision.rollback',\n    '1.0.0',\n    'crm.metadata',\n    '1.0.0',\n    'crm.metadata.v1.MetadataCapabilityService',\n    'RollbackMetadataRevision',\n    decode(repeat('07', 32), 'hex'),\n    decode(repeat('08', 32), 'hex'),\n    'high',\n    true,\n    true,\n    false,\n    false,\n    false,\n    false,\n    false\n  );"""
+          if text.count(old_capability) != 1:
+              raise SystemExit("capability fixture anchor did not match exactly once")
+          path.write_text(text.replace(old_capability, new_capability))
+      - name: Commit fixture patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add database/tests/0001_platform_foundation.sql
+          git commit -m "Phase 7G: publish metadata registry test fixtures"
+          git push origin HEAD:develop/phase7-governed-metadata-api
