@@ -172,8 +172,8 @@ export function UiExtensionSlot<Context>({
 interface UiExtensionInstanceProps<Context> {
   definition: UiExtensionDefinition<Context>;
   context: Readonly<Context>;
-  onFailure?: (event: UiExtensionFailureEvent) => void;
-  loadingFallback?: ReactNode;
+  onFailure: ((event: UiExtensionFailureEvent) => void) | undefined;
+  loadingFallback: ReactNode | undefined;
 }
 
 function UiExtensionInstance<Context>({
@@ -249,7 +249,7 @@ class UiExtensionErrorBoundary extends Component<
   UiExtensionErrorBoundaryProps,
   UiExtensionErrorBoundaryState
 > {
-  public state: UiExtensionErrorBoundaryState = {
+  public override state: UiExtensionErrorBoundaryState = {
     failed: false,
     phase: "render",
   };
@@ -265,14 +265,14 @@ class UiExtensionErrorBoundary extends Component<
     };
   }
 
-  public componentDidCatch(_error: Error, _info: ErrorInfo) {
+  public override componentDidCatch(_error: Error, _info: ErrorInfo) {
     if (!this.#reported) {
       this.#reported = true;
       this.props.onFailure(this.state.phase);
     }
   }
 
-  public render() {
+  public override render() {
     if (this.state.failed) {
       return (
         <section
