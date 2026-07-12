@@ -114,7 +114,6 @@ export class GovernedClient {
         });
       }
 
-      // 1. Construct SearchRequest
       const searchRequest = create(SearchRequestSchema, {
         text: options.text,
         resourceTypes: options.resourceTypes,
@@ -122,10 +121,8 @@ export class GovernedClient {
         cursor: options.cursor,
       });
 
-      // 2. Encode to binary payload
       const payloadBytes = toBinary(SearchRequestSchema, searchRequest);
 
-      // 3. Construct governed gateway QueryRequest input TypedPayload
       const inputPayload = create(TypedPayloadSchema, {
         ownerModuleId: "crm.search",
         schemaId: "crm.search.v1.SearchRequest",
@@ -138,7 +135,6 @@ export class GovernedClient {
         payload: payloadBytes,
       });
 
-      // 4. Invoke governed ApplicationGatewayService.query
       const response = await this.gatewayClient.query({
         ownerModuleId: "crm.search",
         capabilityId: "search.global.query",
@@ -156,7 +152,6 @@ export class GovernedClient {
 
       const output = response.output;
 
-      // 1. Verify contract identity fields presence
       if (
         !output.ownerModuleId ||
         !output.schemaId ||
@@ -174,7 +169,6 @@ export class GovernedClient {
         });
       }
 
-      // 2. Verify coordinates
       if (output.ownerModuleId !== "crm.search") {
         throw new ProductClientError({
           kind: "internal",
@@ -211,7 +205,6 @@ export class GovernedClient {
         });
       }
 
-      // 3. Verify returned descriptor hash matches local expected response contract hash to prevent contract drift
       const expectedResponseName = "crm.search.v1.SearchResponse";
       const expectedResponseHash = CONTRACT_HASHES[expectedResponseName];
       if (!expectedResponseHash) {
@@ -229,7 +222,6 @@ export class GovernedClient {
         });
       }
 
-      // 4. Verify maximum size limit
       if (output.maximumSizeBytes !== 1048576n) {
         throw new ProductClientError({
           kind: "internal",
@@ -245,7 +237,6 @@ export class GovernedClient {
         });
       }
 
-      // 5. Verify retention policy
       if (output.retentionPolicyId !== "standard") {
         throw new ProductClientError({
           kind: "internal",
@@ -254,7 +245,6 @@ export class GovernedClient {
         });
       }
 
-      // 6. Decode response and handle malformed payload
       let searchResponse;
       try {
         searchResponse = fromBinary(SearchResponseSchema, output.payload);
@@ -308,7 +298,6 @@ export function mapGatewayError(error: unknown): ProductClientError {
 
   const safeCode = error.metadata.get("x-error-code") ?? undefined;
 
-  // 1. Check custom stable error codes from backend
   if (safeCode) {
     switch (safeCode) {
       case "AUTHENTICATION_REQUIRED":
@@ -332,7 +321,6 @@ export function mapGatewayError(error: unknown): ProductClientError {
     }
   }
 
-  // 2. Fallback to standard Connect/gRPC codes (fully typed error classification without message parsing)
   switch (error.code) {
     case Code.Unauthenticated:
       return productError("unauthenticated", false, safeCode, error);
