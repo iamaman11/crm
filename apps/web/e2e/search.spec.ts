@@ -74,10 +74,11 @@ test.describe("Global Search E2E Workflow", () => {
     const submitBtn = page.locator("#search-submit");
     await submitBtn.click();
 
-    // Verify server error message
+    // Verify server error message maps to unauthenticated safe copy
     const feedback = page.locator(".crm-feedback");
     await expect(feedback).toBeVisible();
     await expect(feedback.locator("h2")).toHaveText("Search failed");
+    await expect(feedback).toContainText("Your session has expired. Please sign in again.");
   });
 
   test("handles unauthorized/invalid tenant from backend query", async ({ page }) => {
@@ -98,10 +99,10 @@ test.describe("Global Search E2E Workflow", () => {
     const submitBtn = page.locator("#search-submit");
     await submitBtn.click();
 
-    // Verify permission denied message
+    // Verify permission denied message maps to permission denied safe copy
     const feedback = page.locator(".crm-feedback");
     await expect(feedback).toBeVisible();
     await expect(feedback.locator("h2")).toHaveText("Search failed");
-    await expect(feedback).toContainText("You are not permitted to access the requested tenant");
+    await expect(feedback).toContainText("You do not have permission to access the requested resource.");
   });
 });

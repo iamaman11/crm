@@ -99,17 +99,6 @@ export class GovernedClient {
     this.gatewayClient = createClient(ApplicationGatewayService, transport);
   }
 
-  /**
-   * Internal helper method to perform query calls directly, exposed for unit tests.
-   */
-  public async internalRawQuery(options: {
-    ownerModuleId: string;
-    capabilityId: string;
-    capabilityVersion: string;
-    input: any;
-  }) {
-    return await (this.gatewayClient as any).query(options);
-  }
 
   public async searchGlobal(options: SearchGlobalOptions): Promise<SearchGlobalResult> {
     const messageName = "crm.search.v1.SearchRequest";
@@ -163,7 +152,64 @@ export class GovernedClient {
         });
       }
 
-      // Verify returned descriptor hash matches local expected response contract hash to prevent contract drift
+      const output = response.output;
+
+      // 1. Verify contract identity fields presence
+      if (
+        !output.ownerModuleId ||
+        !output.schemaId ||
+        !output.schemaVersion ||
+        !output.descriptorHash ||
+        output.descriptorHash.length === 0 ||
+        !output.dataClass ||
+        !output.encoding ||
+        !output.retentionPolicyId
+      ) {
+        throw new ProductClientError({
+          kind: "internal",
+          message: "Contract verification failed: missing or invalid contract identity fields",
+          retryable: false,
+        });
+      }
+
+      // 2. Verify coordinates
+      if (output.ownerModuleId !== "crm.search") {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract verification failed: expected ownerModuleId "crm.search", got "${output.ownerModuleId}"`,
+          retryable: false,
+        });
+      }
+      if (output.schemaId !== "crm.search.v1.SearchResponse") {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract verification failed: expected schemaId "crm.search.v1.SearchResponse", got "${output.schemaId}"`,
+          retryable: false,
+        });
+      }
+      if (output.schemaVersion !== "1.0.0") {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract verification failed: expected schemaVersion "1.0.0", got "${output.schemaVersion}"`,
+          retryable: false,
+        });
+      }
+      if (output.dataClass !== "confidential") {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract verification failed: expected dataClass "confidential", got "${output.dataClass}"`,
+          retryable: false,
+        });
+      }
+      if (output.encoding !== "protobuf") {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract verification failed: expected encoding "protobuf", got "${output.encoding}"`,
+          retryable: false,
+        });
+      }
+
+      // 3. Verify returned descriptor hash matches local expected response contract hash to prevent contract drift
       const expectedResponseName = "crm.search.v1.SearchResponse";
       const expectedResponseHash = CONTRACT_HASHES[expectedResponseName];
       if (!expectedResponseHash) {
@@ -173,9 +219,7 @@ export class GovernedClient {
           retryable: false,
         });
       }
-
-      const responseHash = response.output.descriptorHash;
-      if (!equalUint8Arrays(responseHash, expectedResponseHash)) {
+      if (!equalUint8Arrays(output.descriptorHash, expectedResponseHash)) {
         throw new ProductClientError({
           kind: "internal",
           message: `Contract drift detected! Expected ${expectedResponseName} descriptor hash does not match server response.`,
@@ -183,8 +227,44 @@ export class GovernedClient {
         });
       }
 
-      // 5. Decode response
-      const searchResponse = fromBinary(SearchResponseSchema, response.output.payload);
+      // 4. Verify maximum size limit
+      if (output.maximumSizeBytes <= 0n) {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract verification failed: expected maximumSizeBytes to be positive, got ${output.maximumSizeBytes}`,
+          retryable: false,
+        });
+      }
+      if (BigInt(output.payload.length) > output.maximumSizeBytes) {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract verification failed: payload size ${output.payload.length} exceeds maximumSizeBytes ${output.maximumSizeBytes}`,
+          retryable: false,
+        });
+      }
+
+      // 5. Verify retention policy
+      if (output.retentionPolicyId !== "standard") {
+        throw new ProductClientError({
+          kind: "internal",
+          message: `Contract verification failed: expected retentionPolicyId "standard", got "${output.retentionPolicyId}"`,
+          retryable: false,
+        });
+      }
+
+      // 6. Decode response and handle malformed payload
+      let searchResponse;
+      try {
+        searchResponse = fromBinary(SearchResponseSchema, output.payload);
+      } catch (err) {
+        throw new ProductClientError({
+          kind: "internal",
+          message: "Contract verification failed: malformed payload - could not decode SearchResponse",
+          retryable: false,
+          cause: err,
+        });
+      }
+
       return {
         hits: searchResponse.hits,
         nextCursor: searchResponse.nextCursor,
@@ -225,11 +305,16 @@ export function mapGatewayError(error: unknown): ProductClientError {
   }
 
   const safeCode = error.metadata.get("x-error-code") ?? undefined;
+  const messageText = (error.message || "").toLowerCase();
+
+  if (error.code === Code.Unauthenticated || messageText.includes("authentication failed") || messageText.includes("session")) {
+    return productError("unauthenticated", false, safeCode, error);
+  }
+  if (error.code === Code.PermissionDenied || messageText.includes("permitted") || messageText.includes("permission") || messageText.includes("tenant")) {
+    return productError("permission_denied", false, safeCode, error);
+  }
+
   switch (error.code) {
-    case Code.Unauthenticated:
-      return productError("unauthenticated", false, safeCode, error);
-    case Code.PermissionDenied:
-      return productError("permission_denied", false, safeCode, error);
     case Code.NotFound:
       return productError("not_found", false, safeCode, error);
     case Code.InvalidArgument:

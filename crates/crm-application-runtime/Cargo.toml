@@ -37,8 +37,3 @@ prost-build = "0.14"
 protoc-bin-vendored = "3"
 tonic-prost-build = "0.14"
 
-[dev-dependencies]
-crm-proto-contracts = { path = "../crm-proto-contracts" }
-prost-types = "0.14"
-
-

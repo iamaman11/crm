@@ -1,7 +1,6 @@
 import { useMemo, useSyncExternalStore, useState } from "react";
 import {
   GovernedClient,
-  ProductClientError,
   type SearchHit,
   type SessionState,
 } from "@ultimate-crm/client";
@@ -160,18 +159,30 @@ function SearchPage() {
       setResults(response.hits);
     } catch (err) {
       console.error(err);
-      if (err instanceof ProductClientError) {
-        if (err.kind === "unauthenticated") {
+      const isProductError = err && typeof err === "object" && "kind" in err;
+      if (isProductError) {
+        const productErr = err as any;
+        if (productErr.kind === "unauthenticated") {
           setError("Your session has expired. Please sign in again.");
-        } else if (err.kind === "permission_denied") {
-          setError("You do not have permission to perform this query.");
+        } else if (productErr.kind === "permission_denied") {
+          setError("You do not have permission to access the requested resource.");
+        } else if (productErr.kind === "not_found") {
+          setError("The requested resource could not be found.");
+        } else if (productErr.kind === "invalid_argument") {
+          setError("The search query contains invalid parameters.");
+        } else if (productErr.kind === "conflict") {
+          setError("A data conflict occurred. Please reload the page.");
+        } else if (productErr.kind === "rate_limited") {
+          setError("Too many requests. Please try again later.");
+        } else if (productErr.kind === "unavailable") {
+          setError("The CRM service is temporarily unavailable. Please try again later.");
+        } else if (productErr.kind === "network") {
+          setError("Network connection issue. Please check your internet connection.");
         } else {
-          setError(err.message);
+          setError("An unexpected server error occurred. Please try again later.");
         }
-      } else if (err instanceof Error) {
-        setError(err.message);
       } else {
-        setError("An unexpected error occurred.");
+        setError("An unexpected error occurred. Please try again later.");
       }
     } finally {
       setLoading(false);

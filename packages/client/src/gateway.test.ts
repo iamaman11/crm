@@ -13,6 +13,15 @@ import { SearchResponseSchema } from "../gen/crm/search/v1/search_pb";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { CONTRACT_HASHES } from "./contract_hashes";
 
+const testSessionProvider = {
+  getSnapshot: () => ({
+    status: "authenticated" as const,
+    bearerToken: "valid-token",
+    tenantId: "tenant-a",
+  }),
+  subscribe: () => () => {},
+};
+
 describe("Session State and Session Store", () => {
   it("initializes with default unknown status", () => {
     const store = new MutableSessionStore();
@@ -99,6 +108,23 @@ describe("Gateway Error Mapping", () => {
 });
 
 describe("GovernedClient Governed Search API", () => {
+  const responseHash = CONTRACT_HASHES["crm.search.v1.SearchResponse"] ?? new Uint8Array();
+
+  function createMockOutput(overrides: any = {}) {
+    return {
+      ownerModuleId: "crm.search",
+      schemaId: "crm.search.v1.SearchResponse",
+      schemaVersion: "1.0.0",
+      dataClass: "confidential",
+      descriptorHash: responseHash,
+      encoding: "protobuf",
+      maximumSizeBytes: 10485760n,
+      retentionPolicyId: "standard",
+      payload: new Uint8Array(),
+      ...overrides,
+    };
+  }
+
   it("emits the exact governed coordinates and parses valid search response", async () => {
     let capturedQueryRequest: any = null;
 
@@ -119,14 +145,9 @@ describe("GovernedClient Governed Search API", () => {
             nextCursor: "next-page",
           });
           const payloadBytes = toBinary(SearchResponseSchema, searchResponse);
-          const responseHash = CONTRACT_HASHES["crm.search.v1.SearchResponse"];
 
           return {
-            output: {
-              descriptorHash: responseHash ?? new Uint8Array(),
-              encoding: "protobuf",
-              payload: payloadBytes,
-            }
+            output: createMockOutput({ payload: payloadBytes }),
           } as any;
         },
         async mutate() {
@@ -135,18 +156,9 @@ describe("GovernedClient Governed Search API", () => {
       });
     });
 
-    const sessionProvider = {
-      getSnapshot: () => ({
-        status: "authenticated" as const,
-        bearerToken: "valid-token",
-        tenantId: "tenant-a",
-      }),
-      subscribe: () => () => {},
-    };
-
     const client = new GovernedClient({
       baseUrl: "http://mock",
-      sessionProvider,
+      sessionProvider: testSessionProvider,
     });
 
     // Inject mock transport
@@ -164,7 +176,6 @@ describe("GovernedClient Governed Search API", () => {
     expect(result.nextCursor).toBe("next-page");
 
     // Verify governed coordinates
-    expect(capturedQueryRequest).not.toBeNull();
     expect(capturedQueryRequest.ownerModuleId).toBe("crm.search");
     expect(capturedQueryRequest.capabilityId).toBe("search.global.query");
     expect(capturedQueryRequest.capabilityVersion).toBe("1.0.0");
@@ -175,31 +186,18 @@ describe("GovernedClient Governed Search API", () => {
       service(ApplicationGatewayService, {
         async query() {
           return {
-            output: {
-              descriptorHash: new Uint8Array(32), // Invalid hash
-              encoding: "protobuf",
-              payload: new Uint8Array(),
-            }
-          };
+            output: createMockOutput({ descriptorHash: new Uint8Array(32) }),
+          } as any;
         },
         async mutate() {
-          return {};
+          return {} as any;
         }
       });
     });
 
-    const sessionProvider = {
-      getSnapshot: () => ({
-        status: "authenticated" as const,
-        bearerToken: "valid-token",
-        tenantId: "tenant-a",
-      }),
-      subscribe: () => () => {},
-    };
-
     const client = new GovernedClient({
       baseUrl: "http://mock",
-      sessionProvider,
+      sessionProvider: testSessionProvider,
     });
 
     (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
@@ -212,5 +210,198 @@ describe("GovernedClient Governed Search API", () => {
         cursor: "",
       })
     ).rejects.toThrow("Contract drift detected");
+  });
+
+  it("rejects response with wrong ownerModuleId", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ ownerModuleId: "crm.wrong" }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow('expected ownerModuleId "crm.search", got "crm.wrong"');
+  });
+
+  it("rejects response with wrong schemaId", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ schemaId: "crm.search.v1.WrongResponse" }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow('expected schemaId "crm.search.v1.SearchResponse", got "crm.search.v1.WrongResponse"');
+  });
+
+  it("rejects response with wrong schemaVersion", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ schemaVersion: "2.0.0" }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow('expected schemaVersion "1.0.0", got "2.0.0"');
+  });
+
+  it("rejects response with wrong dataClass", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ dataClass: "public" }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow('expected dataClass "confidential", got "public"');
+  });
+
+  it("rejects response with wrong encoding", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ encoding: "json" }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow('expected encoding "protobuf", got "json"');
+  });
+
+  it("rejects response with missing/invalid contract identity", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ schemaId: "" }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow("missing or invalid contract identity fields");
+  });
+
+  it("rejects response with non-positive maximumSizeBytes", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ maximumSizeBytes: 0n }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow("expected maximumSizeBytes to be positive, got 0");
+  });
+
+  it("rejects response with oversized payload", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({
+              maximumSizeBytes: 2n,
+              payload: new Uint8Array([1, 2, 3, 4]),
+            }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow("payload size 4 exceeds maximumSizeBytes 2");
+  });
+
+  it("rejects response with wrong retentionPolicyId", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ retentionPolicyId: "short" }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow('expected retentionPolicyId "standard", got "short"');
+  });
+
+  it("rejects response with malformed payload (protobuf decoding failure)", async () => {
+    const mockTransport = createRouterTransport(({ service }) => {
+      service(ApplicationGatewayService, {
+        async query() {
+          return {
+            output: createMockOutput({ payload: new Uint8Array([255, 255, 255, 255]) }),
+          } as any;
+        },
+        async mutate() { return {} as any; }
+      });
+    });
+    const client = new GovernedClient({ baseUrl: "http://mock", sessionProvider: testSessionProvider });
+    (client as any).gatewayClient = createClient(ApplicationGatewayService, mockTransport);
+
+    await expect(
+      client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
+    ).rejects.toThrow("malformed payload - could not decode SearchResponse");
   });
 });

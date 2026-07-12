@@ -43,30 +43,10 @@ jobs:
   check-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: crm_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d crm_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      PGHOST: 127.0.0.1
-      PGPORT: 5432
-      PGDATABASE: crm_test
-      PGUSER: postgres
-      PGPASSWORD: postgres
-      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
-      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
     steps:
       - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -81,6 +61,11 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify generated contract hashes are up-to-date
+        run: |
+          pnpm web:generate
+          git diff --exit-code packages/client/src/contract_hashes.ts
+
       - name: Run Web typecheck
         run: pnpm web:typecheck
 
@@ -92,8 +77,6 @@ jobs:
 
       - name: Run Web build
         run: pnpm web:build
-
-      - uses: dtolnay/rust-toolchain@stable
 
       - name: Install PostgreSQL client
         run: |

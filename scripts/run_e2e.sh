@@ -1,62 +1,82 @@
 #!/bin/bash
 set -euo pipefail
 
-# Ephemeral unique DB name
-DB_NAME="crm_e2e_$(date +%s)_$RANDOM"
-
 # Configuration fallback
-E2E_DB_HOST="${E2E_DB_HOST:-127.0.0.1}"
-E2E_DB_PORT="${E2E_DB_PORT:-5432}"
-E2E_DB_USER="${E2E_DB_USER:-postgres}"
-E2E_DB_PASSWORD="${E2E_DB_PASSWORD:-postgres}"
+E2E_DB_HOST="127.0.0.1"
+E2E_DB_PORT="5433"
+E2E_DB_USER="postgres"
+E2E_DB_PASSWORD="postgres"
+DB_NAME="crm_test"
 
-echo "Using unique ephemeral E2E database: ${DB_NAME}"
+CONTAINER_NAME="crm-postgres-e2e-$(date +%s)"
 
-# Ensure cleanup of our unique database on exit
+echo "Starting ephemeral PostgreSQL container ${CONTAINER_NAME} on port ${E2E_DB_PORT}..."
+docker run --rm --name "${CONTAINER_NAME}" -p "${E2E_DB_PORT}:5432" -e POSTGRES_PASSWORD="${E2E_DB_PASSWORD}" -d postgres:16-alpine
+
+# Ensure cleanup of background services and Docker container on exit
 cleanup() {
   echo "Cleaning up background services..."
+  
+  # Terminate processes holding backend and dev server ports to prevent resource leaks/orphans
+  for port in 8080 9090 5173; do
+    echo "Terminating any process holding port ${port}..."
+    lsof -t -i:"${port}" | xargs -r kill -9 2>/dev/null || true
+  done
+
+  # Terminate any remaining background jobs of this shell session
   jobs -p | xargs -r kill 2>/dev/null || true
   sleep 1
-  echo "Dropping ephemeral database ${DB_NAME}..."
-  PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d postgres -c "DROP DATABASE IF EXISTS ${DB_NAME};" || true
+  
+  # Clean up ephemeral PostgreSQL container if running
+  if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "Stopping ephemeral PostgreSQL container ${CONTAINER_NAME}..."
+    docker stop "${CONTAINER_NAME}"
+  fi
 }
 trap cleanup EXIT
 
-echo "Starting local integration E2E prep..."
+# Wait for database container to be ready
+until docker exec "${CONTAINER_NAME}" pg_isready -U "${E2E_DB_USER}" >/dev/null 2>&1; do
+  echo "Waiting for ephemeral postgres to be ready..."
+  sleep 0.5
+done
+echo "PostgreSQL is ready!"
 
-# 1. Create unique database
-PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d postgres -c "CREATE DATABASE ${DB_NAME};"
+# Create test database
+docker exec -i "${CONTAINER_NAME}" psql -U "${E2E_DB_USER}" -c "CREATE DATABASE ${DB_NAME};"
 
-# 2. Apply migrations and seeds to the new database
 echo "Applying migrations and seeds..."
 for f in database/migrations/*up.sql; do
-  PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -f "$f"
+  docker exec -i "${CONTAINER_NAME}" psql -U "${E2E_DB_USER}" -d "${DB_NAME}" < "$f"
 done
-PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -f database/tests/0001_platform_foundation.sql
-PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -f database/tests/0003_sales_activities_adapters.sql
-PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -f database/tests/0004_search_runtime_role_grants.sql
+docker exec -i "${CONTAINER_NAME}" psql -U "${E2E_DB_USER}" -d "${DB_NAME}" < database/tests/0001_platform_foundation.sql
+docker exec -i "${CONTAINER_NAME}" psql -U "${E2E_DB_USER}" -d "${DB_NAME}" < database/tests/0003_sales_activities_adapters.sql
+docker exec -i "${CONTAINER_NAME}" psql -U "${E2E_DB_USER}" -d "${DB_NAME}" < database/tests/0004_search_runtime_role_grants.sql
 
-# 3. Create the test role only if it does not exist, without changing any global password settings
-PGPASSWORD="${E2E_DB_PASSWORD}" psql -h "${E2E_DB_HOST}" -p "${E2E_DB_PORT}" -U "${E2E_DB_USER}" -d "${DB_NAME}" -c "
+# Alter test role to make sure it has LOGIN capability and the password is set
+echo "Enabling LOGIN and setting password for crm_app_test..."
+docker exec -i "${CONTAINER_NAME}" psql -U "${E2E_DB_USER}" -d "${DB_NAME}" -c "
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'crm_app_test') THEN
     CREATE ROLE crm_app_test WITH LOGIN PASSWORD 'crm_app_test';
+  ELSE
+    ALTER ROLE crm_app_test WITH LOGIN PASSWORD 'crm_app_test';
   END IF;
 END
 \$\$;
 "
 
-# 4. Compile backend
+# Compile backend
 cargo build -p crm-api
 
-# 5. Seed database by running seed_e2e_fixture once against our unique database
-echo "Seeding unique database via seed_e2e_fixture..."
+# Seed database by running seed_e2e_fixture once against our ephemeral postgres
+echo "Seeding ephemeral database via seed_e2e_fixture..."
 DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
 ADMIN_DATABASE_URL="postgres://${E2E_DB_USER}:${E2E_DB_PASSWORD}@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
 cargo test -p crm-api --test seed_e2e_fixture
 
-# 6. Start crm-api in background pointing to our unique database
+# Start crm-api in background pointing to our ephemeral database
 echo "Starting crm-api service..."
 CRM_DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
 CRM_API_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
@@ -76,13 +96,17 @@ until curl -s http://127.0.0.1:8080/readyz > /dev/null; do
 done
 echo "crm-api is ready!"
 
-# 7. Start Vite dev server in background
+# Clear Vite cache to prevent stale bundle caching of packages/client
+echo "Clearing Vite cache..."
+rm -rf apps/web/node_modules/.vite
+
+# Start Vite dev server in background
 echo "Starting Vite dev server..."
 VITE_CRM_GRPC_WEB_TARGET=http://127.0.0.1:9090 \
 VITE_CRM_DEV_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
 VITE_CRM_DEV_TENANT_ID=tenant-a \
 VITE_CRM_DEV_CAPABILITIES=search.global.query \
-pnpm --filter @ultimate-crm/web dev &
+pnpm --filter @ultimate-crm/web dev --force &
 
 # Wait for Vite dev server to be ready
 until curl -s http://127.0.0.1:5173 > /dev/null; do
@@ -91,7 +115,7 @@ until curl -s http://127.0.0.1:5173 > /dev/null; do
 done
 echo "Vite dev server is ready!"
 
-# 8. Run Playwright E2E tests
+# Run Playwright E2E tests
 echo "Running Playwright E2E tests..."
 pnpm exec playwright install chromium
 pnpm --filter @ultimate-crm/web exec playwright test --config=playwright.config.ts

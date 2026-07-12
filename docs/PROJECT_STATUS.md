@@ -35,9 +35,11 @@ The generalized projection runtime (#65 / merged PR #67) is complete on `main` a
 
 The tenant- and permission-aware search packet **#66 / merged PR #68** is complete. It delivers the search runtime, PostgreSQL generation/index adapter, governed public query capability, backend-consistent field-local match evidence, live permission re-checking, application-runtime composition and canonical migration gates. Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all required checks and was squash-merged into `main` as `49272918cb4b767eedc2ca34574abba40718eae1`.
 
-The exact-SHA two-agent development system **#70 / merged PR #72** is complete on `main` as `ae3bcd7a0ac23f1db0e969488a3085c3d33e0b42`. The active product-plane packet is **#71 / draft PR #73**, currently paused at Checkpoint A for independent local verification of exact SHA `aefe4b88f3556ffb447fc7966982a906cc14f92a`.
+The exact-SHA two-agent development system **#70 / merged PR #72** is complete on `main` as `ae3bcd7a0ac23f1db0e969488a3085c3d33e0b42`. The active product-plane packet is **#71 / draft PR #73** (in progress / architecture review candidate preparation).
 
-Issue **#74** qualifies the proposed ChatGPT Codex local agent for a responsibility level from exact-SHA verifier through full delivery-packet owner. Until that evidence is reviewed, the active #71 handoff remains limited to its already published `MECHANICAL_FIX_ALLOWED` scope.
+The qualification is complete. Codex is qualified as:
+* Codex — LEVEL_4_CAPABLE, EFFECTIVE LEVEL_3_CO_IMPLEMENTER
+* Level 4 promotion pending successful end-to-end closure of #71.
 
 ## Phase 6 completion
 
