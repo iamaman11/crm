@@ -748,6 +748,7 @@ fn upsert_bootstrap_visibility(
             policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
             expires_at_unix_nanos: Some(expires_at),
         })
+        .map(|_| ())
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))
 }
 
