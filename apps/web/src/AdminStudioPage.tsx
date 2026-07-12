@@ -181,7 +181,7 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
   };
 
   const rollback = async () => {
-    if (!activation || activation.rollbackDepth === 0) return;
+    if (!activation || activation.rollbackDepth === 0n) return;
     setOperation("rolling_back");
     setError(null);
     const idempotencyKey =
@@ -456,7 +456,7 @@ export function AdminStudioPage({ client }: AdminStudioPageProps) {
                 className="crm-button"
                 type="button"
                 onClick={rollback}
-                disabled={busy || activation.rollbackDepth === 0}
+                disabled={busy || activation.rollbackDepth === 0n}
               >
                 {operation === "rolling_back" ? "Rolling back…" : "Roll back one revision"}
               </button>
