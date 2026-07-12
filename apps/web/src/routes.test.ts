@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { canNavigateToRoute, type ProductRouteDefinition } from "./routes";
+import {
+  canNavigateToRoute,
+  routeForPath,
+  type ProductRouteDefinition,
+} from "./routes";
 import type { SessionState } from "@ultimate-crm/client";
 
 const authenticatedSession: SessionState = {
@@ -82,5 +86,15 @@ describe("Route Eligibility", () => {
 
     expect(canNavigateToRoute(adminStudioRoute, authenticatedSession, denied)).toBe(false);
     expect(canNavigateToRoute(adminStudioRoute, authenticatedSession, allowed)).toBe(true);
+  });
+
+  it("keeps the record extension proof behind authentication without inventing a backend capability gate", () => {
+    const route = routeForPath("/records/phase7i-demo");
+    expect(route?.id).toBe("record-extension-proof");
+
+    const unauthenticatedSession: SessionState = { status: "unauthenticated" };
+    const access = { capabilities: new Set<"search.global.query">() };
+    expect(canNavigateToRoute(route!, unauthenticatedSession, access)).toBe(false);
+    expect(canNavigateToRoute(route!, authenticatedSession, access)).toBe(true);
   });
 });
