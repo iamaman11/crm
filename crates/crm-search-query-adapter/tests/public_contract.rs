@@ -1,6 +1,6 @@
 use crm_proto_contracts::crm::search::v1::{SearchHit, SearchResponse};
 use prost::Message;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[test]
 fn public_search_response_round_trips_only_client_safe_match_data() {
@@ -11,7 +11,7 @@ fn public_search_response_round_trips_only_client_safe_match_data() {
             resource_id: "deal-1".to_owned(),
             source_version: 7,
             rank_micros: 900_000,
-            fields: HashMap::from([("name".to_owned(), "Acme Renewal".to_owned())]),
+            fields: BTreeMap::from([("name".to_owned(), "Acme Renewal".to_owned())]),
             matched_fields: vec!["name".to_owned()],
         }],
         next_cursor: String::new(),
