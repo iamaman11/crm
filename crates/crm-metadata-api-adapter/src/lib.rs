@@ -173,15 +173,16 @@ pub fn definition_input_to_document(
         ));
     }
 
-    let definition: MetadataDefinition = serde_json::from_slice(&input.definition_json).map_err(|error| {
-        SdkError::new(
-            "METADATA_DEFINITION_JSON_INVALID",
-            ErrorCategory::InvalidArgument,
-            false,
-            "The metadata definition is invalid.",
-        )
-        .with_internal_reference(error.to_string())
-    })?;
+    let definition: MetadataDefinition =
+        serde_json::from_slice(&input.definition_json).map_err(|error| {
+            SdkError::new(
+                "METADATA_DEFINITION_JSON_INVALID",
+                ErrorCategory::InvalidArgument,
+                false,
+                "The metadata definition is invalid.",
+            )
+            .with_internal_reference(error.to_string())
+        })?;
 
     definition.to_document().map_err(|error| {
         SdkError::new(
@@ -384,7 +385,10 @@ mod tests {
         let document = bundle.documents().values().next().unwrap();
         let canonical = std::str::from_utf8(document.canonical_content()).unwrap();
         assert!(canonical.contains(r#""tags":["commercial","sales"]"#));
-        assert_eq!(document.schema_version(), METADATA_DEFINITION_SCHEMA_VERSION);
+        assert_eq!(
+            document.schema_version(),
+            METADATA_DEFINITION_SCHEMA_VERSION
+        );
     }
 
     #[test]
@@ -408,16 +412,16 @@ mod tests {
         })
         .unwrap_err();
 
-        assert_eq!(
-            error.code,
-            "METADATA_DEFINITION_SCHEMA_VERSION_UNSUPPORTED"
-        );
+        assert_eq!(error.code, "METADATA_DEFINITION_SCHEMA_VERSION_UNSUPPORTED");
     }
 
     #[test]
     fn revision_identity_parser_requires_exact_lower_or_upper_hex_bytes() {
         let value = "ab".repeat(32);
-        assert_eq!(parse_revision_id(&value, "revision_id").unwrap().to_hex(), value);
+        assert_eq!(
+            parse_revision_id(&value, "revision_id").unwrap().to_hex(),
+            value
+        );
         assert_eq!(
             parse_revision_id("not-a-revision", "revision_id")
                 .unwrap_err()
