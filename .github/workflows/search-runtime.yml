@@ -1,0 +1,106 @@
+name: Search Runtime CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-search-runtime/**"
+      - "crates/crm-query-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
+      - "crates/crm-projection-runtime/**"
+      - "database/migrations/0001_platform_foundation.up.sql"
+      - "database/migrations/0002_typed_payload_encoding.up.sql"
+      - "database/migrations/0003_relationship_payload_governance.up.sql"
+      - "database/migrations/0004_delete_execution_context.up.sql"
+      - "database/migrations/0005_audited_noop_transactions.up.sql"
+      - "database/migrations/0006_event_delivery_lineage.up.sql"
+      - "database/migrations/0007_consumer_event_delivery_ledger.up.sql"
+      - "database/migrations/0008_rebuildable_projection_runtime.up.sql"
+      - "database/migrations/0009_search_index_generations.*.sql"
+      - "database/tests/0001_platform_foundation.sql"
+      - ".github/workflows/search-runtime.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-search-runtime/**"
+      - "crates/crm-query-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
+      - "crates/crm-projection-runtime/**"
+      - "database/migrations/0001_platform_foundation.up.sql"
+      - "database/migrations/0002_typed_payload_encoding.up.sql"
+      - "database/migrations/0003_relationship_payload_governance.up.sql"
+      - "database/migrations/0004_delete_execution_context.up.sql"
+      - "database/migrations/0005_audited_noop_transactions.up.sql"
+      - "database/migrations/0006_event_delivery_lineage.up.sql"
+      - "database/migrations/0007_consumer_event_delivery_ledger.up.sql"
+      - "database/migrations/0008_rebuildable_projection_runtime.up.sql"
+      - "database/migrations/0009_search_index_generations.*.sql"
+      - "database/tests/0001_platform_foundation.sql"
+      - ".github/workflows/search-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  search-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_search_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_search_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_search_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_search_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_search_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply search runtime schema
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
+      - name: Seed isolated tenant fixtures
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify permission-aware search runtime contracts
+        run: cargo test -p crm-search-runtime --all-features -- --nocapture
+      - name: Verify PostgreSQL generation switch cursor order and tenant isolation
+        run: cargo test -p crm-core-data --features postgres-integration --test postgres_search -- --nocapture
+      - name: Verify migration rollback and reapply
+        run: |
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.down.sql
+          test "$(psql --tuples-only --no-align --command "SELECT to_regclass('crm.search_index_generations') IS NULL")" = "t"
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
+      - name: Reverify PostgreSQL search acceptance after reapply
+        run: cargo test -p crm-core-data --features postgres-integration --test postgres_search -- --nocapture
