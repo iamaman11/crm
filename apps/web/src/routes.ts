@@ -15,10 +15,15 @@ export interface ProductRouteDefinition {
   label: string;
   authentication: "public" | "required";
   requiredCapability?: KnownProductCapability;
+  developmentOnly?: boolean;
 }
 
 export interface NavigationAccessSnapshot {
   capabilities: ReadonlySet<KnownProductCapability>;
+}
+
+export interface ProductEnvironment {
+  development: boolean;
 }
 
 export const PRODUCT_ROUTES: readonly ProductRouteDefinition[] = [
@@ -47,6 +52,7 @@ export const PRODUCT_ROUTES: readonly ProductRouteDefinition[] = [
     path: "/records/phase7i-demo",
     label: "Record page",
     authentication: "required",
+    developmentOnly: true,
   },
 ] as const;
 
@@ -58,7 +64,11 @@ export function canNavigateToRoute(
   route: ProductRouteDefinition,
   session: SessionState,
   access: NavigationAccessSnapshot,
+  environment: ProductEnvironment,
 ): boolean {
+  if (route.developmentOnly === true && !environment.development) {
+    return false;
+  }
   if (route.authentication === "required" && session.status !== "authenticated") {
     return false;
   }
