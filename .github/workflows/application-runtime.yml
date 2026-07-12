@@ -7,12 +7,15 @@ on:
       - "Cargo.lock"
       - "proto/crm/gateway/**"
       - "proto/crm/search/**"
+      - "proto/crm/metadata/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
+      - "crates/crm-metadata-api-adapter/**"
+      - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-query-runtime/**"
       - "crates/crm-search-runtime/**"
       - "crates/crm-search-query-adapter/**"
@@ -29,12 +32,15 @@ on:
       - "Cargo.lock"
       - "proto/crm/gateway/**"
       - "proto/crm/search/**"
+      - "proto/crm/metadata/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
+      - "crates/crm-metadata-api-adapter/**"
+      - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-query-runtime/**"
       - "crates/crm-search-runtime/**"
       - "crates/crm-search-query-adapter/**"
@@ -82,9 +88,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Apply complete Phase 7 search schema
+      - name: Apply complete Phase 7 application schema
         run: |
-          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql; do
+          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/0010_*.up.sql; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
           done
       - name: Seed production application fixtures
@@ -107,6 +113,8 @@ jobs:
           path: |
             database/application-runtime-process.log
             crates/crm-application-runtime/
+            crates/crm-metadata-api-adapter/
+            crates/crm-metadata-query-adapter/
             crates/crm-search-query-adapter/
             services/crm-api/
           if-no-files-found: error
