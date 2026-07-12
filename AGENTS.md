@@ -11,13 +11,17 @@ Before changing code, read these sources in order:
 3. `docs/PROJECT_STATUS.md` — concise current state and next executable steps.
 4. `docs/APPLICATION_ARCHITECTURE.md` — layer model, dependency direction and composition boundaries.
 5. `docs/MODULE_CATALOG.md` — what counts as a module and which business domains exist or are planned.
-6. `docs/MODULE_DEVELOPMENT.md` — golden owner/link module scaffolding and permanent repository commands.
-7. Relevant accepted ADRs under `docs/adr/`.
-8. The GitHub issue for the active slice.
+6. `docs/DEVELOPMENT_WORKFLOW.md` — coherent delivery packets, checkpoints, PR and commit policy.
+7. `docs/MULTI_AGENT_DEVELOPMENT.md` — exact-SHA handoff and independent local verification protocol when more than one agent participates.
+8. `docs/MODULE_DEVELOPMENT.md` — golden owner/link module scaffolding and permanent repository commands.
+9. Relevant accepted ADRs under `docs/adr/`.
+10. The GitHub issue for the active slice.
 
 When descriptive documents disagree, the precedence is:
 
 `SYSTEM_INVARIANTS` → accepted ADRs and published contracts → `IMPLEMENTATION_ROADMAP` → `PROJECT_STATUS` → issue text → README.
+
+Process documents govern how work is performed but never override architecture invariants or published contracts.
 
 Do not infer completion from a directory name, manifest declaration or old issue text. Completion requires merged implementation plus the phase acceptance gates.
 
@@ -30,6 +34,8 @@ Do not infer completion from a directory name, manifest declaration or old issue
 - **Capability**: the only supported state-changing business entry point.
 - **Query**: a permission-bound read path that is structurally separate from mutation semantics.
 - **Event**: immutable versioned integration evidence; consumers must be idempotent.
+- **Delivery packet**: one coherent architecture result with explicit ownership, production path, acceptance evidence and rollback/failure behavior.
+- **Verification checkpoint**: an immutable exact commit SHA plus a defined local check set; branch names alone are not verification identities.
 
 ## 3. Non-negotiable dependency direction
 
@@ -126,13 +132,53 @@ Business rules remain outside the service.
 Run the applicable gates, not a hand-picked subset:
 
 - Contract CI for Protobuf/contract changes;
-- Governance CI for manifests, normalized IR or policy changes;
+- Governance CI for manifests, normalized IR, architecture policy or governed process changes;
 - Rust CI for architecture, lockfile, formatting, Clippy and workspace tests;
-- Database CI for SQL, migrations, persistence, production mutation/query/link/projection behavior.
+- Database CI for SQL, migrations, persistence, production mutation/query/link/projection/search behavior;
+- specialized runtime/process/frontend gates when their scopes are affected.
 
-A phase is complete only when its acceptance evidence is green on the exact review head and documentation reflects the merged state.
+A phase or delivery packet is complete only when its acceptance evidence is green on the exact review head and documentation reflects the merged state.
 
-## 9. Change discipline
+Independent local verification may be required or useful before final CI, but local green status never replaces applicable GitHub gates.
+
+## 9. Multi-agent exact-SHA operating rule
+
+When a second agent participates in the same delivery packet, follow `docs/MULTI_AGENT_DEVELOPMENT.md`.
+
+Default role split:
+
+```text
+Architect / Implementer
+  = scope + architecture + primary implementation + fixes
+
+Local Integrator / Verifier
+  = exact-SHA checkout + full local build/test/integration + structured report
+
+GitHub CI
+  = final exact-head independent gate authority
+```
+
+Rules:
+
+1. One primary writer owns overlapping code at a time.
+2. The verifier defaults to `VERIFY_ONLY`.
+3. Every verification handoff names an exact SHA, mode, affected scope and required commands.
+4. Every report names the exact SHA actually tested.
+5. A new commit makes older green evidence stale for checks not rerun on the new SHA.
+6. Architecture, contract, domain, authorization, tenant and persistence fixes return to the Architect / Implementer by default.
+7. Mechanical verifier writes require explicit authorization; broader writes require a writer handoff.
+8. Final merge still requires applicable GitHub checks green on one exact review head.
+
+Useful coordination signals:
+
+- `SECOND_AGENT_NOT_NEEDED` — planning or active primary implementation;
+- `CONNECT_SECOND_AGENT` — a verifier-ready exact-SHA handoff exists;
+- `SECOND_AGENT_REPORT_NEEDED` — implementation is paused for the structured report;
+- `READY_FOR_EXACT_HEAD_CI` — local verification requirements are satisfied for the named head.
+
+Do not rely on chat-only instructions when the same information can be committed or recorded in the active issue/PR.
+
+## 10. Change discipline
 
 - Keep PRs reviewable and phase-scoped.
 - Do not mix unrelated refactors with product behavior.
@@ -140,7 +186,9 @@ A phase is complete only when its acceptance evidence is green on the exact revi
 - Preserve compatibility and rollback semantics explicitly.
 - Treat stale documentation as a defect: update the normative status sources in the same PR.
 - Do not claim the complete CRM is finished while required owner domains or production gates remain open.
+- Do not use a second agent as a hidden concurrent writer on overlapping scope.
+- Do not transfer a green result from one SHA to another without rerunning the required check.
 
-## 10. Current next step
+## 11. Current next step
 
 See `docs/PROJECT_STATUS.md` for the live implementation packet and exact next executable steps. The roadmap/status/issues, not this orientation guide, are the authoritative place for changing phase bookkeeping.
