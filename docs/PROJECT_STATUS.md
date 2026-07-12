@@ -6,133 +6,111 @@ This document is the concise human-readable status page. The normative sequence 
 
 ## Current position
 
-**Phase 6 is complete.** PR #63 was merged into `main` as merge commit `82910fa17f21074b1e091615a4251092cfa8ab2f` after the final one-commit review head passed all required gates.
+**Phase 6 is complete. Phase 7 is in progress.**
 
-The repository now contains a complete first production-composed modular CRM proof:
+The repository contains a complete first production-composed modular CRM proof and the first production-quality product-plane foundation:
 
-- repository governance and executable architecture rules;
+- executable repository governance and architecture boundaries;
 - typed Module Manifest IR and immutable module identity;
 - governed Module SDK and deterministic test harness;
-- module lifecycle and registry runtime;
+- module publication, installation and lifecycle runtime;
 - PostgreSQL tenant/RLS, record, relationship, idempotency, outbox and append-only audit foundation;
 - authenticated mutation and permission-bound query gateways;
 - independent Sales Deal and Activities Task owner-domain vertical slices;
-- governed inbound `EventDelivery` and restart-safe event lineage;
-- independently governed `crm.sales-activities-link` module;
-- durable consumer delivery ledger with lease, retry, recovery and dead-letter behavior;
-- lifecycle-aware Sales-to-Activities processing through the production `CapabilityGateway`;
-- rebuildable Deal timeline and Task status projections with tenant checkpoints and replay;
-- real `crm-application-runtime` composition boundary and thin deployable `services/crm-api` process host;
-- governed HTTP mutation/query endpoints and versioned gRPC application gateway;
-- health, readiness, background workers and graceful shutdown;
-- process-level acceptance covering real `crm-api`, PostgreSQL, HTTP, gRPC, link delivery and projections.
+- governed event delivery and the optional `crm.sales-activities-link` module;
+- rebuildable projections and tenant/permission-aware search;
+- real `crm-application-runtime` composition boundary and deployable `services/crm-api` process host;
+- typed web product shell with a governed generated client boundary and real browser E2E through `search.global.query`.
 
-Current phase: **Phase 7 — In progress**.
+The breadth of end-user CRM functionality is still intentionally smaller than the target universal expert CRM. Customer master, commercial lifecycle, service, marketing, communications, analytics, AI, marketplace and enterprise operational proof remain explicit future owner-domain/platform programs.
 
-The golden module foundation (#56 / merged PR #64) is complete as `15bf3ddeac0375325a3c59518e3ac55a3903c20d`.
+## Completed delivery foundations
 
-The generalized projection runtime (#65 / merged PR #67) is complete on `main` as `195448ab3cd70fe051967faf4f8ed87372fb3551`.
+### Phase 6 — first modular production proof
 
-The tenant- and permission-aware search packet **#66 / merged PR #68** is complete. It delivers the search runtime, PostgreSQL generation/index adapter, governed public query capability, backend-consistent field-local match evidence, live permission re-checking, application-runtime composition and canonical migration gates. Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all required checks and was squash-merged into `main` as `49272918cb4b767eedc2ca34574abba40718eae1`.
+PR #63 completed the first full backend vertical proof:
 
-The exact-SHA two-agent development system **#70 / merged PR #72** is complete on `main` as `ae3bcd7a0ac23f1db0e969488a3085c3d33e0b42`. The active product-plane packet is **#71 / draft PR #73** (in progress / architecture review candidate preparation).
+- typed independent Sales `Deal` and Activities `Task` owner aggregates;
+- publication-compatible Protobuf contracts;
+- authenticated production PostgreSQL mutations and permission-bound queries;
+- durable event delivery with retry/recovery/dead-letter behavior;
+- lifecycle-aware Sales-to-Activities link execution through the production `CapabilityGateway`;
+- rebuildable Deal timeline and Task status projections;
+- real application composition root, HTTP/gRPC ingress, health/readiness and graceful shutdown;
+- process-level acceptance against real PostgreSQL and `crm-api`.
 
-The qualification is complete. Codex is qualified as:
-* Codex — LEVEL_4_CAPABLE, EFFECTIVE LEVEL_3_CO_IMPLEMENTER
-* Level 4 promotion pending successful end-to-end closure of #71.
+Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract, Governance, Rust, Database, Event Runtime, Application Runtime and Rust Generated Sync before merge.
 
-## Phase 6 completion
+### Phase 7A — golden module tooling and generalized projections
 
-| Slice | Result | State |
-|---|---|---|
-| 6A | Typed Sales/Activities domain contracts | Complete |
-| 6B | Publication-compatible Protobuf contracts | Complete |
-| 6C | Transactional audit materialization | Complete |
-| 6D | Transaction-aware aggregate execution | Complete |
-| 6E | Persisted codecs and generated contract runtime | Complete |
-| 6F | Production Sales/Activities capability adapters | Complete |
-| 6G | Authenticated production PostgreSQL mutations | Complete |
-| 6H | Permission-bound production queries | Complete |
-| 6I | Optional Sales–Activities link module and production event delivery | Complete — merged in PR #63 |
-| 6J | Rebuildable Deal timeline and Task status projections | Complete — merged in PR #63 |
-| 6K | Production `crm-api` application composition root | Complete — merged in PR #63 |
-| 6L | Complete Phase 6 process-level production E2E and closure | Complete — merged in PR #63 |
+- #56 / merged PR #64 established repository-supported owner/link module scaffolding and permanent repository commands.
+- #65 / merged PR #67 introduced `crm-projection-runtime`, deterministic projection registration/execution, poison/failure handling and rebuild orchestration without moving owner-domain semantics into infrastructure.
 
-Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract CI, Governance CI, Rust CI, Database CI, Event Runtime CI, Application Runtime CI and generic Rust Generated Sync simultaneously before merge.
+### Phase 7B — permission-aware search
 
-## Phase 7 foundations
+#66 / merged PR #68 completed the production search foundation:
 
-### Golden module foundation — Complete
+- search indexes are candidate-only and rebuildable;
+- live resource and field visibility are re-checked before disclosure;
+- logical search generations support deterministic rebuild/switching;
+- PostgreSQL FTS remains a replaceable adapter;
+- `search.global.query` is routed through the governed production `QueryGateway`;
+- acceptance covers permission revocation, hidden-field non-disclosure, deterministic pagination and tenant isolation.
 
-Issue #56 / merged PR #64 established the repository-supported module creation path:
+Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all applicable Contract, Governance, Rust, Database, Projection, Event, Search, Application Runtime and Rust Generated Sync gates.
 
-- separate governed scaffolding for authoritative owner modules and optional link modules;
-- explicit owner-object and link-dependency decisions before generation;
-- overwrite-safe generation, workspace duplicate protection, dependency-range validation and `--dry-run`;
-- architecture-safe module crate/manifests plus explicit contract, adapter and acceptance-test TODO boundaries;
-- a compiling ignored acceptance-test scaffold gate that must be replaced before module readiness can rise above Foundation;
-- stable cross-platform commands for architecture checks, manifest validation, formatting, lockfile synchronization, focused tests, full tests and the common Rust quality gate;
-- Governance CI that validates generated manifests, compiles a freshly generated module with `cargo check --all-targets`, and verifies generated dependencies against `architecture-policy.json`.
+### Phase 7C — typed web product shell — Complete
 
-A generated module is **Foundation only** and does not count as a production vertical slice.
+#71 / merged PR #73 established the first governed product-plane foundation:
 
-### Generalized projection runtime — Complete
+- reproducible Node 24 / pnpm 11 / strict TypeScript workspace;
+- `apps/web`, `packages/client` and `packages/ui` product-plane boundaries;
+- generated Protobuf-ES browser contracts;
+- browser access through the existing governed `ApplicationGatewayService` over gRPC-Web;
+- typed `GovernedClient.searchGlobal` with exact contract identity validation;
+- centralized typed session state and product-owned safe error mapping;
+- permission-aware routing as UX only, with backend authorization remaining authoritative;
+- no public arbitrary raw gateway/query escape hatch;
+- design-system/application-shell primitives and responsive/accessibility foundations;
+- hermetic Playwright E2E against ephemeral PostgreSQL covering the real governed search workflow and negative authentication/authorization paths.
 
-Issue #65 / merged PR #67 generalized the Phase 6 projection proof without moving business-event decoding into infrastructure:
+Final review head `b62dd50225fde6e58aac9a6b4cec307bd2245616` passed all applicable checks before PR #73 was merged and #71 closed.
 
-- `crm-projection-runtime` owns typed projection registration, checkpoint-based history paging, deterministic handler execution, poison/failure handling and rebuild orchestration;
-- `crm-core-events` exposes the platform `ProjectionStore` port and failure contract;
-- `crm-core-data` adapts the existing PostgreSQL projection tables/runtime to that port without a new migration;
-- a deterministic handler failure marks the projection checkpoint failed without advancing the last successful cursor and blocks further replay until reset or repair;
-- the existing Deal timeline and Task status handlers remain concrete composition-layer handlers but execute through the generic runner;
-- the existing `Phase6ProjectionWorker` remains only as a compatibility facade around the generic runner;
-- dedicated `Projection Runtime CI` proves failed-checkpoint persistence/reset and existing Deal/Task rebuild behavior against real PostgreSQL.
+## Current executable packet — Phase 7D
 
-The generic runtime has no Sales, Activities or PostgreSQL implementation dependency. PR #67 is merged and #65 is complete.
+**#77 / draft PR #78 — immutable Admin Studio metadata publication runtime.**
 
-### Permission-aware search and deterministic reindexing — Complete
+The current packet establishes the backend-neutral lifecycle foundation that later Admin Studio builders and governed publication APIs must consume:
 
-Issue #66 / merged PR #68 completed the production search foundation:
+- `crm-metadata-runtime` as a pure platform-domain crate with no PostgreSQL, transport, browser or business owner-module dependency;
+- typed metadata kinds for object, field, relationship, layout, view, pipeline, permission and workflow definitions;
+- validated namespaced metadata identifiers;
+- complete metadata bundle snapshots with explicit intra-bundle dependencies;
+- deterministic content-addressed SHA-256 revision identity under a versioned canonical profile;
+- immutable and idempotent publication;
+- deterministic structural impact analysis for added, modified and removed definitions;
+- explicit confirmation for structurally breaking activation;
+- tenant-scoped optimistic activation generations;
+- rollback by moving the active pointer to a prior immutable revision;
+- focused tests for deterministic identity, invalid dependencies, impact analysis, concurrency conflicts, rollback and tenant isolation.
 
-- the search index is rebuildable and candidate-only, never authoritative for permissions or business state;
-- every candidate is checked against live resource and field visibility before resource identity, fields or match metadata may be disclosed;
-- logical search generations reuse the generalized projection runtime and keep the previous active generation queryable while a replacement is built;
-- rebuilding the currently active generation in place is rejected before projection reset;
-- generation coordinates are immutable after the building lifecycle state;
-- PostgreSQL remains a replaceable search adapter with FORCE-RLS generation metadata and deterministic ordering;
-- `search.global.query` is a versioned read-only capability routed through the governed production `QueryGateway`;
-- the application runtime composes search indexing/catch-up and the production query router;
-- acceptance covers immediate permission revocation, hidden-field non-disclosure, generation switching, deterministic cursor progression and cross-tenant isolation;
-- Search Runtime CI, canonical Database CI and Application Runtime CI include the Phase 7B schema/runtime paths.
+The packet deliberately does not yet claim kind-specific object/field/layout/workflow schema semantics, PostgreSQL persistence, governed publication APIs or Admin Studio UI. Those are follow-on layers and must not duplicate or weaken the runtime lifecycle invariants.
 
-Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed Contract CI, Governance CI, Rust CI, Database CI, Projection Runtime CI, Event Runtime CI, Search Runtime CI, Application Runtime CI and Rust Generated Sync simultaneously before squash merge as `49272918cb4b767eedc2ca34574abba40718eae1`.
+Current exact-head evidence is recorded in PR #78 and must be refreshed after every source or documentation commit before merge.
 
-## Development system v2
+## Development system
 
-Issue #70 / merged PR #72 formalized the repository's exact-SHA multi-agent model:
+The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 
-- the **Architect / Implementer** owns packet scope, architecture, contracts, primary implementation, tests, fixes and checkpoint publication;
-- the **Local Integrator / Verifier** checks an exact immutable SHA in a complete local toolchain and returns reproducible structured evidence;
-- overlapping code has one primary writer at a time;
-- every verification handoff names branch, exact SHA, mode, scope, environment and required commands;
-- every report names the exact SHA actually tested and explicitly lists anything unverified;
-- a new commit invalidates green evidence for checks not rerun on the new SHA;
-- local checkpoints mirror architecture, behavior and delivery stages;
+- one Architect / Implementer owns overlapping packet scope;
+- a Local Integrator / Verifier may verify an exact immutable SHA or take explicitly delegated non-overlapping work;
+- every verification claim names the exact SHA actually tested;
+- a new commit invalidates prior evidence for checks not rerun;
 - GitHub CI remains the final exact-head merge authority.
 
-Issue #74 adds capability-based qualification for the ChatGPT Codex local agent:
-
-- a qualified local agent should maintain a persistent checkout and report its real absolute path, origin, branch, HEAD and worktree state;
-- responsibility is graded from Level 1 exact-SHA verifier through Level 2 local integrator, Level 3 co-implementer and Level 4 delivery-packet owner;
-- higher capability should receive higher responsibility rather than being artificially limited to passive verification;
-- parallel implementation is allowed only on explicit non-overlapping workstreams or through an explicit writer handoff;
-- the active packet's published authority remains unchanged until qualification evidence is reviewed.
-
-The standard coordination signals are `SECOND_AGENT_NOT_NEEDED`, `CONNECT_SECOND_AGENT`, `SECOND_AGENT_REPORT_NEEDED` and `READY_FOR_EXACT_HEAD_CI`. The committed issue/branch/PR/SHA state remains authoritative over chat-only coordination.
+#74 / merged PR #75 adds capability-based Codex qualification. #76 remains an open process-hardening follow-up to make exact-SHA review freeze explicitly aware of source-changing automation.
 
 ## Product readiness summary
-
-The architecture and backend platform now have a complete first production-composed modular proof. The breadth of end-user CRM functionality is still intentionally much smaller than the target universal expert CRM.
 
 ### Implemented business owner modules
 
@@ -143,24 +121,34 @@ The architecture and backend platform now have a complete first production-compo
 
 - `crm.sales-activities-link` — independently governed optional link module with pure core, published contract adapter, durable event delivery, lifecycle gating and production end-to-end acceptance.
 
+### Implemented platform/product foundations
+
+- module lifecycle, governed capability/query execution, tenant/RLS data foundation and append-only audit;
+- rebuildable projections and permission-aware search;
+- production application composition;
+- typed web product shell and governed browser client boundary;
+- metadata publication lifecycle foundation — in progress in #77 / PR #78.
+
 ### Not yet complete
 
-- Admin Studio metadata builders and publication workflows;
-- product-quality web/mobile shell and broad CRM frontend experience — foundation in progress in #71 / PR #73;
-- canonical customer master, identity resolution and consent;
-- catalog, pricing, CPQ and quote-to-revenue lifecycle;
-- communications, marketing, support/service and other expert domains;
-- AI-native layer;
+- kind-specific Admin Studio metadata builders, durable metadata persistence, governed publication APIs and Admin Studio workflows;
+- typed UI-extension runtime with host-shell failure isolation;
+- broad product-quality Sales/Activities UX and mobile experience;
+- canonical customer master, identity resolution and consent — #28;
+- product catalog, pricing, CPQ and quote-to-revenue lifecycle — #29;
+- communications, marketing, support/service, projects, documents/e-signature and analytics domains;
+- AI-native governed actor/tool layer;
 - signed marketplace/WASM sandbox;
-- enterprise operational proof, restore/failover/security/SLO drills.
+- enterprise restore/failover/security/SLO and operational proof.
 
 ## Immediate delivery sequence
 
-1. Qualify the ChatGPT Codex local agent through #74, then assign the maximum safe responsibility level for #71 and later packets.
-2. Complete #71 / PR #73: typed web product shell, generated client boundary, authentication/session integration, permission-aware routing and design-system baseline.
-3. Build Admin Studio metadata publication foundations with validation, auditability and rollback.
-4. Begin the domain-wave program tracked by #57; keep customer master/identity/consent (#28) and catalog/CPQ/commercial lifecycle (#29) as explicit owner-domain programs rather than absorbing them into Sales.
-5. Continue frontend and expert backend modules as end-to-end vertical slices.
+1. Complete #77 / PR #78: immutable metadata publication, deterministic identity, impact analysis, optimistic activation and rollback.
+2. Add metadata-kind-specific schemas/validators/builders and durable PostgreSQL publication/activation persistence with typed audit evidence.
+3. Expose governed metadata publication/query contracts and compose the first Admin Studio workflows through the product plane.
+4. Complete the typed UI-extension runtime/failure-isolation foundation required to close Phase 7.
+5. Begin the domain-wave program #57, with customer master/identity/consent (#28) and commercial lifecycle (#29) remaining explicit owner-domain programs rather than being absorbed into Sales.
+6. Continue frontend and expert backend modules as end-to-end vertical slices.
 
 ## Development mode
 
@@ -168,10 +156,8 @@ The architecture and backend platform now have a complete first production-compo
 - incremental commits are allowed during implementation;
 - one primary writer at a time for overlapping multi-agent scope;
 - exact-SHA local handoffs may be used at architecture, behavior and delivery checkpoints;
-- verifier mode defaults to `VERIFY_ONLY` only until a packet-specific handoff or qualification grants broader authority;
 - qualified agents may own bounded integration fixes, non-overlapping workstreams or full delivery packets according to `CODEX_AGENT_QUALIFICATION.md`;
 - full GitHub CI remains mandatory on the exact final review head;
-- final PR history is reduced to semantic commits where repository tooling permits;
 - architecture, contract, tenant, authorization, audit and rollback gates remain strict.
 
 See `DEVELOPMENT_WORKFLOW.md`, `MULTI_AGENT_DEVELOPMENT.md`, `CODEX_AGENT_QUALIFICATION.md` and `MODULE_DEVELOPMENT.md`.
