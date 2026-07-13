@@ -479,6 +479,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-360-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-core-data",
+ "crm-core-events",
+ "crm-module-sdk",
+ "crm-projection-runtime",
+ "crm-proto-contracts",
+ "prost",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "crm-customer-accounts"
 version = "0.1.0"
 dependencies = [

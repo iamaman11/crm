@@ -144,7 +144,10 @@ impl Customer360ContributionDocument {
             .into_iter()
             .collect::<Vec<_>>();
         if canonical_roots != self.root_party_ids
-            || self.root_party_ids.iter().any(|party_id| party_id.is_empty())
+            || self
+                .root_party_ids
+                .iter()
+                .any(|party_id| party_id.is_empty())
         {
             return Err(contribution_invalid(
                 "Customer 360 root Party ids are not canonical",
@@ -636,7 +639,9 @@ fn party_relationship_contribution(
         Ok(party_relationships::PartyRelationshipDirectionality::Directional) => "directional",
         Ok(party_relationships::PartyRelationshipDirectionality::Reciprocal) => "reciprocal",
         Ok(party_relationships::PartyRelationshipDirectionality::Unspecified) | Err(_) => {
-            return Err(event_invalid("Party Relationship directionality is invalid"));
+            return Err(event_invalid(
+                "Party Relationship directionality is invalid",
+            ));
         }
     };
     let status = match party_relationships::PartyRelationshipStatus::try_from(relationship.status) {
@@ -654,19 +659,17 @@ fn party_relationship_contribution(
         Customer360ContributionKind::PartyRelationship,
         roots,
         version,
-        Customer360ContributionSnapshot::PartyRelationship(
-            PartyRelationshipContributionSnapshot {
-                from_party_id,
-                to_party_id,
-                relationship_type_code: relationship_type.code,
-                directionality: directionality.to_owned(),
-                from_role: relationship_type.from_role,
-                to_role: relationship_type.to_role,
-                status: status.to_owned(),
-                valid_from_unix_nanos: relationship.valid_from.map(|value| value.unix_nanos),
-                valid_until_unix_nanos: relationship.valid_until.map(|value| value.unix_nanos),
-            },
-        ),
+        Customer360ContributionSnapshot::PartyRelationship(PartyRelationshipContributionSnapshot {
+            from_party_id,
+            to_party_id,
+            relationship_type_code: relationship_type.code,
+            directionality: directionality.to_owned(),
+            from_role: relationship_type.from_role,
+            to_role: relationship_type.to_role,
+            status: status.to_owned(),
+            valid_from_unix_nanos: relationship.valid_from.map(|value| value.unix_nanos),
+            valid_until_unix_nanos: relationship.valid_until.map(|value| value.unix_nanos),
+        }),
     ))
 }
 
@@ -719,7 +722,8 @@ fn validate_snapshot_identity(
     resource_id: &str,
     version: i64,
 ) -> Result<(), SdkError> {
-    if resource_id != delivery.aggregate.record_id.as_str() || version != delivery.aggregate_version {
+    if resource_id != delivery.aggregate.record_id.as_str() || version != delivery.aggregate_version
+    {
         return Err(event_invalid(
             "Customer 360 source snapshot identity/version is inconsistent",
         ));
@@ -767,9 +771,9 @@ fn verification_status(value: i32) -> Result<&'static str, SdkError> {
     match contact_points::ContactPointVerificationStatus::try_from(value) {
         Ok(contact_points::ContactPointVerificationStatus::Unverified) => Ok("unverified"),
         Ok(contact_points::ContactPointVerificationStatus::Verified) => Ok("verified"),
-        Ok(contact_points::ContactPointVerificationStatus::Unspecified) | Err(_) => {
-            Err(event_invalid("Contact Point verification status is invalid"))
-        }
+        Ok(contact_points::ContactPointVerificationStatus::Unspecified) | Err(_) => Err(
+            event_invalid("Contact Point verification status is invalid"),
+        ),
     }
 }
 
@@ -777,8 +781,7 @@ fn decode<M>(delivery: &EventDelivery) -> Result<M, SdkError>
 where
     M: Message + Default,
 {
-    M::decode(delivery.payload.bytes.as_slice())
-        .map_err(|error| event_invalid(error.to_string()))
+    M::decode(delivery.payload.bytes.as_slice()).map_err(|error| event_invalid(error.to_string()))
 }
 
 fn configuration_invalid(internal: impl Into<String>) -> SdkError {
@@ -815,8 +818,8 @@ fn contribution_invalid(internal: impl Into<String>) -> SdkError {
 mod tests {
     use super::*;
     use crm_module_sdk::{
-        ActorId, CorrelationId, DeliveryId, EventId, EventVersion, RecordId, RecordRef,
-        RecordType, RetentionPolicyId, SchemaId, SchemaVersion, TraceId, TypedPayload,
+        ActorId, CorrelationId, DeliveryId, EventId, EventVersion, RecordId, RecordRef, RecordType,
+        RetentionPolicyId, SchemaId, SchemaVersion, TraceId, TypedPayload,
     };
     use crm_proto_contracts::crm::{core::v1 as core, customer::v1 as customer};
 
@@ -850,7 +853,10 @@ mod tests {
                             role: accounts::AccountPartyRole::Primary as i32,
                         },
                     ],
-                    resource_version: Some(customer::CustomerResourceVersion { version: 4 }),
+                    resource_version: Some(customer::CustomerResourceVersion {
+                        version: 4,
+                        ..Default::default()
+                    }),
                 }),
             },
         );
@@ -895,17 +901,26 @@ mod tests {
                         evidence_ref: Some("evidence-1".to_owned()),
                         verified_at: Some(core::UnixTime { unix_nanos: 20 }),
                     }),
-                    resource_version: Some(customer::CustomerResourceVersion { version: 2 }),
+                    resource_version: Some(customer::CustomerResourceVersion {
+                        version: 2,
+                        ..Default::default()
+                    }),
                 }),
             },
         );
-        let write = Customer360ProjectionHandler.project(&delivery).unwrap().remove(0);
+        let write = Customer360ProjectionHandler
+            .project(&delivery)
+            .unwrap()
+            .remove(0);
         let document = Customer360ContributionDocument::from_json(&write.document).unwrap();
         let Customer360ContributionSnapshot::ContactPoint(snapshot) = document.snapshot else {
             panic!("expected Contact Point contribution")
         };
         assert_eq!(snapshot.verification_status, "verified");
-        assert_eq!(snapshot.verification_evidence_ref.as_deref(), Some("evidence-1"));
+        assert_eq!(
+            snapshot.verification_evidence_ref.as_deref(),
+            Some("evidence-1")
+        );
     }
 
     #[test]
@@ -930,18 +945,25 @@ mod tests {
                     }),
                     relationship_type: Some(party_relationships::PartyRelationshipType {
                         code: "household".to_owned(),
-                        directionality: party_relationships::PartyRelationshipDirectionality::Reciprocal as i32,
+                        directionality:
+                            party_relationships::PartyRelationshipDirectionality::Reciprocal as i32,
                         from_role: "household_member".to_owned(),
                         to_role: "household_member".to_owned(),
                     }),
                     status: party_relationships::PartyRelationshipStatus::Active as i32,
                     valid_from: None,
                     valid_until: None,
-                    resource_version: Some(customer::CustomerResourceVersion { version: 1 }),
+                    resource_version: Some(customer::CustomerResourceVersion {
+                        version: 1,
+                        ..Default::default()
+                    }),
                 }),
             },
         );
-        let write = Customer360ProjectionHandler.project(&delivery).unwrap().remove(0);
+        let write = Customer360ProjectionHandler
+            .project(&delivery)
+            .unwrap()
+            .remove(0);
         let document = Customer360ContributionDocument::from_json(&write.document).unwrap();
         assert_eq!(
             document.root_party_ids,
@@ -953,9 +975,9 @@ mod tests {
     fn registry_subscribes_to_all_owner_snapshot_events() {
         let registry = customer_360_projection_registry().unwrap();
         let definition = registry
-            .definition(CUSTOMER_360_PROJECTION_ID)
+            .get(CUSTOMER_360_PROJECTION_ID)
             .expect("Customer 360 projection definition");
-        assert_eq!(definition.event_types.len(), ALL_EVENT_TYPES.len());
+        assert_eq!(definition.event_types().len(), ALL_EVENT_TYPES.len());
     }
 
     fn delivery<M: Message>(
@@ -978,7 +1000,6 @@ mod tests {
             event_type: EventType::try_new(event_type).unwrap(),
             event_version: EventVersion::try_new(CONTRACT_VERSION).unwrap(),
             aggregate: RecordRef {
-                owner_module_id: module_id.clone(),
                 record_type: RecordType::try_new(record_type).unwrap(),
                 record_id: RecordId::try_new(resource_id).unwrap(),
             },
