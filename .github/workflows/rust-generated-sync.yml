@@ -25,38 +25,31 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Provision cross-tenant actor prerequisite in Account acceptance
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("services/crm-api/tests/account_process_e2e.rs")
-          text = path.read_text()
-          anchor = '        .expect("publish Account module/capability registry fixture");'
-          addition = '''
-    admin
-        .execute(sqlx::raw_sql(
-            "INSERT INTO crm.actors (tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id) VALUES ('tenant-b', 'actor-a', 'service', 'active', 'Account acceptance cross-tenant actor', 'account-process-actor-bootstrap') ON CONFLICT (tenant_id, actor_id) DO NOTHING;",
-        ))
-        .await
-        .expect("provision Account acceptance actor in tenant B");'''
-          if anchor not in text:
-              raise SystemExit("Account acceptance fixture anchor not found")
-          path.write_text(text.replace(anchor, anchor + addition, 1))
-          PY
-      - name: Restore canonical workflow and commit prerequisite fix
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/crm-api/tests/account_process_e2e.rs .github/workflows/rust-generated-sync.yml
-          git commit -m "Provision cross-tenant Account acceptance actor"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
