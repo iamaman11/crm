@@ -276,6 +276,7 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-core-events",
+ "crm-global-search-composition",
  "crm-metadata-api-adapter",
  "crm-metadata-query-adapter",
  "crm-module-registry",
@@ -440,6 +441,19 @@ version = "0.1.0"
 dependencies = [
  "crm-core-contracts",
  "crm-module-sdk",
+]
+
+[[package]]
+name = "crm-global-search-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-core-data",
+ "crm-core-events",
+ "crm-module-sdk",
+ "crm-projection-runtime",
+ "crm-proto-contracts",
+ "crm-search-runtime",
+ "prost",
 ]
 
 [[package]]

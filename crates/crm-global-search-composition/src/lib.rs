@@ -200,9 +200,9 @@ impl ProjectionHandler for GlobalSearchProjectionHandler {
                 party_document(
                     &self.generation_id,
                     delivery,
-                    event
-                        .party
-                        .ok_or_else(|| search_event_invalid("Party created event is missing party"))?,
+                    event.party.ok_or_else(|| {
+                        search_event_invalid("Party created event is missing party")
+                    })?,
                 )?
             }
             PARTY_UPDATED => {
@@ -216,9 +216,9 @@ impl ProjectionHandler for GlobalSearchProjectionHandler {
                 party_document(
                     &self.generation_id,
                     delivery,
-                    event
-                        .party
-                        .ok_or_else(|| search_event_invalid("Party updated event is missing party"))?,
+                    event.party.ok_or_else(|| {
+                        search_event_invalid("Party updated event is missing party")
+                    })?,
                 )?
             }
             _ => {
@@ -239,9 +239,9 @@ fn party_document(
     let party_ref = party
         .party_ref
         .ok_or_else(|| search_event_invalid("Party search snapshot is missing party reference"))?;
-    let resource_version = party.resource_version.ok_or_else(|| {
-        search_event_invalid("Party search snapshot is missing resource version")
-    })?;
+    let resource_version = party
+        .resource_version
+        .ok_or_else(|| search_event_invalid("Party search snapshot is missing resource version"))?;
     validate_snapshot(
         delivery,
         PARTY_RESOURCE_TYPE,
