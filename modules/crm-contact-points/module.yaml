@@ -1,0 +1,58 @@
+schema_version: crm.module/v1
+module_id: crm.contact-points
+version: "0.1.0"
+display_name: CRM Contact Points
+description: Canonical owner domain for email, phone, postal and messaging contact endpoints.
+
+owner:
+  team: customer-platform
+  contact: "crm-owner@example.com"
+  codeowners:
+    - "@iamaman11"
+
+runtime:
+  kind: in_process
+  entrypoint: modules/crm-contact-points
+
+platform:
+  minimum_version: "0.1.0"
+
+dependencies:
+  required:
+    - module_id: crm.parties
+      version_range: ">=0.1.0, <1.0.0"
+  optional: []
+  conflicts: []
+
+provides:
+  capabilities: []
+  events: []
+  objects:
+    - contact-points.contact_point
+  ui_extensions: []
+
+consumes:
+  capabilities: []
+  events: []
+
+storage:
+  record_types:
+    - contact-points.contact_point
+  private_state_namespaces:
+    - crm.contact-points
+
+security:
+  data_classes:
+    - internal
+    - confidential
+    - personal
+  network_egress: []
+  secret_handles: []
+
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-contact-points/migrations
+  retained_record_types:
+    - contact-points.contact_point
