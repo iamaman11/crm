@@ -230,6 +230,45 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
         relationship_id_of(&initial.party_relationships[0]),
         relationship_id
     );
+
+    assert_eq!(
+        initial
+            .party
+            .as_ref()
+            .and_then(|section| section.party.as_ref())
+            .expect("Customer 360 Party section")
+            .kind,
+        parties::PartyKind::Unspecified as i32,
+        "Customer 360 Party kind must be field-redacted by the bootstrap policy"
+    );
+    assert!(
+        initial.accounts[0]
+            .account
+            .as_ref()
+            .expect("Customer 360 Account")
+            .party_associations
+            .is_empty(),
+        "Customer 360 Account associations must be field-redacted after root selection"
+    );
+    assert!(
+        initial.contact_points[0]
+            .contact_point
+            .as_ref()
+            .expect("Customer 360 Contact Point")
+            .display_value
+            .is_empty(),
+        "Customer 360 Contact Point display value must be field-redacted"
+    );
+    assert!(
+        initial.party_relationships[0]
+            .party_relationship
+            .as_ref()
+            .expect("Customer 360 Party Relationship")
+            .relationship_type
+            .is_none(),
+        "Customer 360 Party Relationship type must be field-redacted"
+    );
+
     assert!(
         initial
             .freshness

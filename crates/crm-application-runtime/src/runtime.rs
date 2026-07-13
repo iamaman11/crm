@@ -854,7 +854,7 @@ fn bootstrap_application_access(
                             owner_module_id: PARTIES_MODULE_ID,
                             resource_type: PARTY_RECORD_TYPE,
                         },
-                        party_fields(),
+                        customer_360_party_fields(),
                         expires_at,
                     )?;
                     upsert_bootstrap_visibility(
@@ -866,7 +866,7 @@ fn bootstrap_application_access(
                             owner_module_id: ACCOUNTS_MODULE_ID,
                             resource_type: ACCOUNT_RECORD_TYPE,
                         },
-                        account_fields(),
+                        customer_360_account_fields(),
                         expires_at,
                     )?;
                     upsert_bootstrap_visibility(
@@ -878,7 +878,7 @@ fn bootstrap_application_access(
                             owner_module_id: CONTACT_POINTS_MODULE_ID,
                             resource_type: CONTACT_POINT_RECORD_TYPE,
                         },
-                        contact_point_fields(),
+                        customer_360_contact_point_fields(),
                         expires_at,
                     )?;
                     upsert_bootstrap_visibility(
@@ -890,7 +890,7 @@ fn bootstrap_application_access(
                             owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
                             resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
                         },
-                        party_relationship_fields(),
+                        customer_360_party_relationship_fields(),
                         expires_at,
                     )?;
                 }
@@ -995,6 +995,36 @@ fn sales_fields() -> BTreeSet<String> {
     .into_iter()
     .map(str::to_owned)
     .collect()
+}
+
+fn customer_360_party_fields() -> BTreeSet<String> {
+    ["display_name"].into_iter().map(str::to_owned).collect()
+}
+
+fn customer_360_account_fields() -> BTreeSet<String> {
+    ["name", "status"].into_iter().map(str::to_owned).collect()
+}
+
+fn customer_360_contact_point_fields() -> BTreeSet<String> {
+    [
+        "party_ref",
+        "kind",
+        "normalized_value",
+        "status",
+        "preferred",
+        "validity",
+        "verification",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn customer_360_party_relationship_fields() -> BTreeSet<String> {
+    ["from_party_ref", "to_party_ref", "status", "validity"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 fn party_fields() -> BTreeSet<String> {
