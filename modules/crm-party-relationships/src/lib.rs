@@ -7,7 +7,9 @@
 //!
 //! Cross-owner Party-reference integrity is composed by the application layer.
 //! Persisted aggregate state is an internal deterministic versioned contract;
-//! public Protobuf contracts remain an external additive boundary.
+//! public Protobuf contracts remain an external additive boundary. Hierarchy
+//! traversal indexes, trees, caches, and other read models are rebuildable
+//! projections and never become a second authoritative relationship store.
 
 pub mod domain;
 pub mod persistence;
