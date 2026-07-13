@@ -55,11 +55,10 @@ jobs:
           retained[insertion:insertion] = party_block
           path.write_text("\n".join(retained) + "\n")
           PY
-      - name: Commit generated registry and remove one-shot workflow
+      - name: Commit generated registry
         run: |
-          git rm .github/workflows/phase8a2b-product-generated-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/client/src/contract_hashes.ts .github/workflows/phase8a2b-product-generated-sync.yml
+          git add packages/client/src/contract_hashes.ts
           git commit -m "Synchronize generated browser contract hashes"
           git push origin HEAD:develop/phase8a2b-party-update-list
