@@ -1,0 +1,100 @@
+name: Phase 8A.2 Maintenance Sync
+
+on:
+  push:
+    branches:
+      - develop/phase8a2-party-vertical-slice
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase8a2-maintenance-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a2-party-vertical-slice
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Patch permanent Party database gate and source maintenance
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          database = Path('.github/workflows/database.yml')
+          text = database.read_text()
+
+          for old, new, expected in [
+              (
+                  '      - "crates/crm-activities-capability-adapter/**"\n',
+                  '      - "crates/crm-activities-capability-adapter/**"\n      - "crates/crm-parties-capability-adapter/**"\n      - "crates/crm-parties-query-adapter/**"\n',
+                  2,
+              ),
+              (
+                  '      - "modules/crm-sales/**"\n',
+                  '      - "modules/crm-sales/**"\n      - "modules/crm-parties/**"\n',
+                  2,
+              ),
+              (
+                  '      - name: Verify Sales PostgreSQL mutation planner\n',
+                  '      - name: Verify Party audit evidence omission rollback\n        env:\n          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test\n          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test\n        shell: bash\n        run: |\n          set -o pipefail\n          cargo test -p crm-parties-capability-adapter --features postgres-integration --test postgres_evidence_rollback -- --nocapture 2>&1 | tee database/postgres-party-evidence-rollback.log\n      - name: Verify Sales PostgreSQL mutation planner\n',
+                  1,
+              ),
+              (
+                  '            crates/crm-capability-ingress/\n',
+                  '            crates/crm-capability-ingress/\n            crates/crm-parties-capability-adapter/\n            crates/crm-parties-query-adapter/\n',
+                  1,
+              ),
+          ]:
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f'expected {expected} database workflow matches, got {count}: {old!r}')
+              text = text.replace(old, new)
+          database.write_text(text)
+
+          rollback = Path('crates/crm-parties-capability-adapter/tests/postgres_evidence_rollback.rs')
+          text = rollback.read_text()
+          old = '    CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityCallEnvelope, CapabilityIngress,\n'
+          new = '    CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityIngress,\n'
+          if text.count(old) != 1:
+              raise SystemExit('expected exact unused import pattern once')
+          rollback.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Format and synchronize generated Rust artifacts
+        run: |
+          cargo fmt --all
+          cargo generate-lockfile
+
+      - name: Compile new Party acceptance binaries
+        run: |
+          cargo check -p crm-api --test party_process_e2e
+          cargo check -p crm-parties-capability-adapter --features postgres-integration --test postgres_evidence_rollback
+
+      - name: Commit synchronized files only
+        run: |
+          git add \
+            Cargo.lock \
+            .github/workflows/database.yml \
+            crates/crm-application-runtime/src \
+            crates/crm-parties-capability-adapter \
+            crates/crm-parties-query-adapter \
+            modules/crm-parties/src \
+            services/crm-api/tests/party_process_e2e.rs
+          if git diff --cached --quiet; then
+            echo "Phase 8A.2 maintenance is already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Synchronize Party production acceptance artifacts"
+          git push origin HEAD:develop/phase8a2-party-vertical-slice
