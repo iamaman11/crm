@@ -1,0 +1,156 @@
+name: Phase 8A.3c Domain Hardening
+
+on:
+  push:
+    branches:
+      - develop/phase8a3c-party-relationship
+    paths:
+      - ".github/workflows/phase8a3c-domain-hardening.yml"
+      - ".phase8a3c-domain-hardening-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  harden-domain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a3c-party-relationship
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Enforce reserved built-in relationship semantics
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('modules/crm-party-relationships/src/domain.rs')
+          text = path.read_text()
+
+          old = '''            _ => {}
+          }
+
+          Ok(Self {
+'''
+          new = '''            _ => {}
+          }
+
+          validate_reserved_builtin_semantics(
+              &code,
+              directionality,
+              &from_role,
+              &to_role,
+          )?;
+
+          Ok(Self {
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected one RelationshipType construction insertion point')
+          text = text.replace(old, new, 1)
+
+          marker = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PartyRelationshipStatus {
+'''
+          helper = '''fn validate_reserved_builtin_semantics(
+    code: &str,
+    directionality: RelationshipDirectionality,
+    from_role: &str,
+    to_role: &str,
+) -> Result<(), SdkError> {
+    let expected = match code {
+        "employment" => Some((RelationshipDirectionality::Directional, "employer", "employee")),
+        "household" => Some((
+            RelationshipDirectionality::Reciprocal,
+            "household_member",
+            "household_member",
+        )),
+        "parent_subsidiary" => Some((
+            RelationshipDirectionality::Directional,
+            "parent",
+            "subsidiary",
+        )),
+        "partner" => Some((RelationshipDirectionality::Reciprocal, "partner", "partner")),
+        "advisor" => Some((RelationshipDirectionality::Directional, "advisor", "advisee")),
+        "guarantor" => Some((
+            RelationshipDirectionality::Directional,
+            "guarantor",
+            "guaranteed_party",
+        )),
+        _ => None,
+    };
+
+    if let Some((expected_directionality, expected_from_role, expected_to_role)) = expected
+        && (directionality != expected_directionality
+            || from_role != expected_from_role
+            || to_role != expected_to_role)
+    {
+        return Err(invalid(
+            "PARTY_RELATIONSHIPS_RESERVED_TYPE_SEMANTICS_INVALID",
+            "party_relationship.relationship_type",
+            format!(
+                "reserved relationship type '{code}' must use its canonical directionality and endpoint roles"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('expected one PartyRelationshipStatus marker')
+          text = text.replace(marker, helper + marker, 1)
+
+          test_marker = '''    #[test]
+    fn normalizes_bounded_custom_semantics_deterministically() {
+'''
+          test = '''    #[test]
+    fn rejects_redefinition_of_reserved_builtin_semantics() {
+        let wrong_directionality = RelationshipType::try_new(
+            "employment",
+            RelationshipDirectionality::Reciprocal,
+            "employee",
+            "employee",
+        )
+        .unwrap_err();
+        assert_eq!(
+            wrong_directionality.code,
+            "PARTY_RELATIONSHIPS_RESERVED_TYPE_SEMANTICS_INVALID"
+        );
+
+        let wrong_roles = RelationshipType::try_new(
+            "parent_subsidiary",
+            RelationshipDirectionality::Directional,
+            "owner",
+            "owned",
+        )
+        .unwrap_err();
+        assert_eq!(
+            wrong_roles.code,
+            "PARTY_RELATIONSHIPS_RESERVED_TYPE_SEMANTICS_INVALID"
+        );
+
+        assert_eq!(RelationshipType::employment().from_role(), "employer");
+        assert_eq!(RelationshipType::household().to_role(), "household_member");
+    }
+
+'''
+          if text.count(test_marker) != 1:
+              raise SystemExit('expected one custom semantics test marker')
+          text = text.replace(test_marker, test + test_marker, 1)
+          path.write_text(text)
+          PY
+          cargo fmt --all -- --check
+          cargo test -p crm-party-relationships
+          cargo clippy -p crm-party-relationships --all-targets -- -D warnings
+      - name: Commit hardened domain and remove one-shot gate
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/phase8a3c-domain-hardening.yml .phase8a3c-domain-hardening-trigger
+          git add modules/crm-party-relationships/src/domain.rs
+          git commit -m "Harden reserved Party Relationship semantics"
+          git push origin HEAD:develop/phase8a3c-party-relationship
