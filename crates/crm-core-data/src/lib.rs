@@ -12,6 +12,7 @@ mod postgres_event_delivery;
 mod postgres_event_delivery_ledger;
 mod postgres_projection;
 mod postgres_query;
+mod postgres_related_query;
 mod projection_store;
 mod search_generation_store;
 mod search_store;
@@ -32,6 +33,9 @@ pub use postgres_event_delivery_ledger::{
 pub use postgres_query::{
     MAXIMUM_RECORD_QUERY_PAGE_SIZE, RecordGetQuery, RecordListQuery, RecordQueryContinuation,
     RecordQueryPage, RecordQuerySort,
+};
+pub use postgres_related_query::{
+    MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, RelatedRecordListQuery, RelatedRecordQueryPage,
 };
 
 /// Architecture marker for `crm-core-data`.
