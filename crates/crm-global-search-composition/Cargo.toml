@@ -1,0 +1,14 @@
+[package]
+name = "crm-global-search-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-core-data = { path = "../crm-core-data" }
+crm-core-events = { path = "../crm-core-events" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-projection-runtime = { path = "../crm-projection-runtime" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-search-runtime = { path = "../crm-search-runtime" }
+prost = "0.14"
