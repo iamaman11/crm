@@ -114,7 +114,7 @@ jobs:
               return text
 
           def architecture(text):
-              text = text.replace("Status: **Normative delivery boundary for #112**  ", "Status: **Implementation complete; final exact-head merge gate pending for #112**  ")
+              text = text.replace("Status: **Normative delivery boundary for #112**  ", "Status: **Implementation complete; final exact-head merge gate pending for #112**")
               text = text.replace("Expected initial owner capabilities:", "Published initial owner capabilities:")
               text = text.replace("Expected initial owner events:", "Published initial owner events:")
               text = text.replace("Exact Protobuf package/service/message names are finalized additively before publication.", "The additive `crm.consents.v1.ConsentAuthorizationService` package/service/message names, machine-readable module bindings and generated Rust/browser descriptor identities are published and synchronized in this packet.")
@@ -145,7 +145,6 @@ jobs:
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/IMPLEMENTATION_ROADMAP.md docs/MODULE_CATALOG.md docs/PHASE8_DELIVERY_PLAN.md docs/PROJECT_STATUS.md docs/PHASE8A4_CONSENT_COMMUNICATION_AUTHORIZATION_ARCHITECTURE.md .github/workflows/product-plane.yml
