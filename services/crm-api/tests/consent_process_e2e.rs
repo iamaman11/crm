@@ -174,7 +174,12 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
     mutate(
         &mut grpc,
         &contact_point_verify,
-        verify_contact_point_payload(&contact_point_verify, &email_a, 1, "evidence://contact-point/verified"),
+        verify_contact_point_payload(
+            &contact_point_verify,
+            &email_a,
+            1,
+            "evidence://contact-point/verified",
+        ),
         TENANT_A,
         "consent-contact-verify-email-a",
         true,
@@ -812,7 +817,10 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
     )
     .await
     .expect("get authoritative Consent record");
-    assert_eq!(authorization_id(&decode_get_consent(queried)), newsletter_id);
+    assert_eq!(
+        authorization_id(&decode_get_consent(queried)),
+        newsletter_id
+    );
 
     let filtered = query(
         &mut grpc,
@@ -909,7 +917,11 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
     )
     .await
     .expect("tenant B Consent list must not leak tenant A records");
-    assert!(decode_list_consents(cross_tenant_list).authorizations.is_empty());
+    assert!(
+        decode_list_consents(cross_tenant_list)
+            .authorizations
+            .is_empty()
+    );
 
     assert_eq!(
         consent_evidence_counts(&admin, TENANT_A).await,
@@ -1446,8 +1458,14 @@ fn assert_evidence_delta(
     assert_eq!(actual.records, baseline.records + created_records);
     assert_eq!(actual.events, baseline.events + successful_mutations);
     assert_eq!(actual.audits, baseline.audits + successful_mutations);
-    assert_eq!(actual.idempotency, baseline.idempotency + successful_mutations);
-    assert_eq!(actual.transactions, baseline.transactions + successful_mutations);
+    assert_eq!(
+        actual.idempotency,
+        baseline.idempotency + successful_mutations
+    );
+    assert_eq!(
+        actual.transactions,
+        baseline.transactions + successful_mutations
+    );
 }
 
 fn spawn_crm_api(database_url: &str, http_addr: &str, grpc_addr: &str) -> Child {
@@ -1548,8 +1566,7 @@ fn now_nanos() -> i64 {
 }
 
 fn future_nanos(offset: Duration) -> i64 {
-    now_nanos()
-        + i64::try_from(offset.as_nanos()).expect("test time offset nanoseconds fit i64")
+    now_nanos() + i64::try_from(offset.as_nanos()).expect("test time offset nanoseconds fit i64")
 }
 
 async fn sleep_until_after(target_unix_nanos: i64) {
