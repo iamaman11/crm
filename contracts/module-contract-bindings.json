@@ -320,10 +320,10 @@
       ]
     },
     {
-      "module_id": "crm.customer-360",
+      "module_id": "crm.customer360",
       "capabilities": [
         {
-          "id": "customer-360.customer.get",
+          "id": "customer360.customer.get",
           "version": "1.0.0",
           "rpc": "crm.customer_360.v1.Customer360Service.GetCustomer360",
           "request": "crm.customer_360.v1.GetCustomer360Request",

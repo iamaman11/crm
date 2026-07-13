@@ -1,5 +1,5 @@
 schema_version: crm.module/v1
-module_id: crm.customer-360
+module_id: crm.customer360
 version: "0.1.0"
 display_name: CRM Customer 360
 description: Permission-aware rebuildable Party-rooted read composition across authoritative customer-master owners; owns no mutable customer state.
@@ -32,7 +32,7 @@ dependencies:
 
 provides:
   capabilities:
-    - id: customer-360.customer.get
+    - id: customer360.customer.get
       version: "1.0.0"
   events: []
   objects: []

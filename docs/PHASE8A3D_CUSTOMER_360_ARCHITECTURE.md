@@ -145,7 +145,7 @@ The initial public surface is read-only.
 
 Expected first capability:
 
-- `customer-360.customer.get@1.0.0`
+- `customer360.customer.get@1.0.0`
 
 The exact package/service/schema names are finalized additively before publication. There is no Customer 360 mutation capability.
 

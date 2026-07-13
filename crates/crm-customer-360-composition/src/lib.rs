@@ -31,7 +31,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub const CUSTOMER_360_PROJECTION_ID: &str = "customer.customer-360.v1";
-pub const CUSTOMER_360_CONSUMER_MODULE_ID: &str = "crm.customer-360-projection";
+pub const CUSTOMER_360_CONSUMER_MODULE_ID: &str = "crm.customer360-projection";
 pub const CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE: &str = "customer-360.contribution";
 pub const CUSTOMER_360_PROJECTION_SCHEMA_VERSION: &str = "1";
 

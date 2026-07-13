@@ -28,8 +28,8 @@ use sqlx::Row;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-pub const MODULE_ID: &str = "crm.customer-360";
-pub const GET_CAPABILITY: &str = "customer-360.customer.get";
+pub const MODULE_ID: &str = "crm.customer360";
+pub const GET_CAPABILITY: &str = "customer360.customer.get";
 pub const GET_REQUEST_SCHEMA: &str = "crm.customer_360.v1.GetCustomer360Request";
 pub const GET_RESPONSE_SCHEMA: &str = "crm.customer_360.v1.GetCustomer360Response";
 pub const QUERY_CAPABILITY_IDS: [&str; 1] = [GET_CAPABILITY];

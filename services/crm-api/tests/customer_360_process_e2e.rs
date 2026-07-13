@@ -38,7 +38,7 @@ const CONTACT_POINT_UPDATE: &str = "contact-points.contact-point.update";
 const CONTACT_POINT_VERIFY: &str = "contact-points.contact-point.verify";
 const RELATIONSHIP_CREATE: &str = "party-relationships.party-relationship.create";
 const RELATIONSHIP_UPDATE: &str = "party-relationships.party-relationship.update";
-const CUSTOMER_360_GET: &str = "customer-360.customer.get";
+const CUSTOMER_360_GET: &str = "customer360.customer.get";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebuilds_identically() {
