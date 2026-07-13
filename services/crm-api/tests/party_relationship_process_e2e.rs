@@ -10,9 +10,7 @@ use crm_application_runtime::{
 };
 use crm_capability_runtime::CapabilityDefinition;
 use crm_core_data::PostgresDataStore;
-use crm_module_sdk::{
-    DataClass, PayloadEncoding, RetentionPolicyId, TenantId, TypedPayload,
-};
+use crm_module_sdk::{DataClass, PayloadEncoding, RetentionPolicyId, TenantId, TypedPayload};
 use crm_party_relationships_projection::{
     HierarchyAdjacencyDocument, PARTY_RELATIONSHIP_HIERARCHY_PROJECTION_ID,
     PARTY_RELATIONSHIP_HIERARCHY_RESOURCE_TYPE, PartyRelationshipHierarchyProjectionWorker,
@@ -36,8 +34,7 @@ use tonic::{Code, Request, Status};
 const TENANT_A: &str = "tenant-a";
 const TENANT_B: &str = "tenant-b";
 const ACTOR: &str = "actor-a";
-const TOKEN: &str =
-    "party-relationship-process-bearer-token-0123456789abcdef0123456789abcdef";
+const TOKEN: &str = "party-relationship-process-bearer-token-0123456789abcdef0123456789abcdef";
 const PARTY_CREATE: &str = "parties.party.create";
 const RELATIONSHIP_CREATE: &str = "party-relationships.party-relationship.create";
 const RELATIONSHIP_UPDATE: &str = "party-relationships.party-relationship.update";
@@ -59,8 +56,8 @@ async fn crm_api_process_proves_party_relationship_lifecycle_and_hierarchy_rebui
         eprintln!("skipping Party Relationship process acceptance because DATABASE_URL is absent");
         return;
     };
-    let admin_database_url =
-        std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
+    let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
+        .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
     let admin = PgPool::connect(&admin_database_url)
         .await
         .expect("connect Party Relationship process evidence reader");
@@ -186,7 +183,10 @@ async fn crm_api_process_proves_party_relationship_lifecycle_and_hierarchy_rebui
     assert_eq!(missing.code(), Code::InvalidArgument);
     assert_eq!(cross_tenant.code(), Code::InvalidArgument);
     assert_eq!(cross_tenant.message(), missing.message());
-    assert_eq!(relationship_evidence_counts(&admin, TENANT_A).await, baseline);
+    assert_eq!(
+        relationship_evidence_counts(&admin, TENANT_A).await,
+        baseline
+    );
 
     let unauthenticated = mutate(
         &mut grpc,
@@ -205,7 +205,10 @@ async fn crm_api_process_proves_party_relationship_lifecycle_and_hierarchy_rebui
     .await
     .expect_err("unauthenticated Party Relationship mutation must fail");
     assert_eq!(unauthenticated.code(), Code::Unauthenticated);
-    assert_eq!(relationship_evidence_counts(&admin, TENANT_A).await, baseline);
+    assert_eq!(
+        relationship_evidence_counts(&admin, TENANT_A).await,
+        baseline
+    );
 
     let employment_id = unique_id("relationship-employment");
     let employment_payload = create_relationship_payload(
@@ -253,7 +256,10 @@ async fn crm_api_process_proves_party_relationship_lifecycle_and_hierarchy_rebui
     .expect("replay Party Relationship create");
     assert!(replay.replayed);
     assert_eq!(
-        replay.output.expect("Party Relationship replay output").payload,
+        replay
+            .output
+            .expect("Party Relationship replay output")
+            .payload,
         created_output.payload
     );
     assert_eq!(
@@ -370,7 +376,10 @@ async fn crm_api_process_proves_party_relationship_lifecycle_and_hierarchy_rebui
     .expect("filter reciprocal household Party Relationships");
     let filtered = decode_list_relationships(filtered);
     assert_eq!(filtered.party_relationships.len(), 1);
-    assert_eq!(relationship_id(&filtered.party_relationships[0]), household_id);
+    assert_eq!(
+        relationship_id(&filtered.party_relationships[0]),
+        household_id
+    );
 
     let first_page = query(
         &mut grpc,
@@ -393,15 +402,7 @@ async fn crm_api_process_proves_party_relationship_lifecycle_and_hierarchy_rebui
     let tampered = query(
         &mut grpc,
         &list,
-        list_relationships_payload(
-            &list,
-            1,
-            &format!("{page_token}x"),
-            None,
-            None,
-            None,
-            None,
-        ),
+        list_relationships_payload(&list, 1, &format!("{page_token}x"), None, None, None, None),
         TENANT_A,
         true,
     )
@@ -481,7 +482,10 @@ async fn crm_api_process_proves_party_relationship_lifecycle_and_hierarchy_rebui
             .payload,
         updated_output.payload
     );
-    assert_eq!(relationship_evidence_counts(&admin, TENANT_A).await, after_update);
+    assert_eq!(
+        relationship_evidence_counts(&admin, TENANT_A).await,
+        after_update
+    );
 
     let stale = mutate(
         &mut grpc,
@@ -517,7 +521,10 @@ async fn crm_api_process_proves_party_relationship_lifecycle_and_hierarchy_rebui
     .await
     .expect_err("semantic no-op Party Relationship update must fail");
     assert_eq!(no_op.code(), Code::InvalidArgument);
-    assert_eq!(relationship_evidence_counts(&admin, TENANT_A).await, after_update);
+    assert_eq!(
+        relationship_evidence_counts(&admin, TENANT_A).await,
+        after_update
+    );
 
     assert_query_non_disclosure(&mut grpc, &get, &list, &employment_id).await;
     prove_hierarchy_rebuild(
@@ -619,7 +626,10 @@ async fn assert_rejected_reference_has_no_side_effects(
     .await
     .expect_err("unavailable Party endpoint must fail");
     assert_eq!(error.code(), Code::InvalidArgument);
-    assert_eq!(relationship_evidence_counts(admin, TENANT_A).await, baseline);
+    assert_eq!(
+        relationship_evidence_counts(admin, TENANT_A).await,
+        baseline
+    );
 }
 
 async fn assert_query_non_disclosure(
@@ -977,7 +987,10 @@ fn assert_relationship(
     assert_eq!(from_party_id(relationship), expected_from);
     assert_eq!(to_party_id(relationship), expected_to);
     assert_eq!(relationship_type_code(relationship), expected_type);
-    assert_eq!(relationship_directionality(relationship), expected_directionality);
+    assert_eq!(
+        relationship_directionality(relationship),
+        expected_directionality
+    );
     assert_eq!(relationship_status(relationship), expected_status);
     assert_eq!(resource_version(relationship), expected_version);
 }
@@ -1123,13 +1136,12 @@ async fn relationship_evidence_counts(admin: &PgPool, tenant_id: &str) -> Eviden
     .fetch_one(admin)
     .await
     .expect("count Party Relationship outbox events");
-    let audits = sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1",
-    )
-    .bind(tenant_id)
-    .fetch_one(admin)
-    .await
-    .expect("count Party Relationship audit evidence");
+    let audits =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(admin)
+            .await
+            .expect("count Party Relationship audit evidence");
     let idempotency = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1",
     )
