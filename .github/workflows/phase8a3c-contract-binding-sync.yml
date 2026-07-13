@@ -1,0 +1,86 @@
+name: Phase 8A.3c Contract Binding Sync
+
+on:
+  push:
+    branches:
+      - develop/phase8a3c-party-relationship
+    paths:
+      - ".github/workflows/phase8a3c-contract-binding-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a3c-party-relationship
+      - name: Append exact Party Relationship contract binding
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("contracts/module-contract-bindings.json")
+          data = json.loads(path.read_text())
+          module_id = "crm.party-relationships"
+          if any(module["module_id"] == module_id for module in data["modules"]):
+              raise SystemExit(f"{module_id} binding already exists")
+          data["modules"].append({
+              "module_id": module_id,
+              "capabilities": [
+                  {
+                      "id": "party-relationships.party-relationship.create",
+                      "version": "1.0.0",
+                      "rpc": "crm.party_relationships.v1.PartyRelationshipService.CreatePartyRelationship",
+                      "request": "crm.party_relationships.v1.CreatePartyRelationshipRequest",
+                      "response": "crm.party_relationships.v1.CreatePartyRelationshipResponse",
+                  },
+                  {
+                      "id": "party-relationships.party-relationship.update",
+                      "version": "1.0.0",
+                      "rpc": "crm.party_relationships.v1.PartyRelationshipService.UpdatePartyRelationship",
+                      "request": "crm.party_relationships.v1.UpdatePartyRelationshipRequest",
+                      "response": "crm.party_relationships.v1.UpdatePartyRelationshipResponse",
+                  },
+                  {
+                      "id": "party-relationships.party-relationship.get",
+                      "version": "1.0.0",
+                      "rpc": "crm.party_relationships.v1.PartyRelationshipService.GetPartyRelationship",
+                      "request": "crm.party_relationships.v1.GetPartyRelationshipRequest",
+                      "response": "crm.party_relationships.v1.GetPartyRelationshipResponse",
+                  },
+                  {
+                      "id": "party-relationships.party-relationship.list",
+                      "version": "1.0.0",
+                      "rpc": "crm.party_relationships.v1.PartyRelationshipService.ListPartyRelationships",
+                      "request": "crm.party_relationships.v1.ListPartyRelationshipsRequest",
+                      "response": "crm.party_relationships.v1.ListPartyRelationshipsResponse",
+                  },
+              ],
+              "events": [
+                  {
+                      "id": "party-relationships.party-relationship.created",
+                      "version": "1.0.0",
+                      "message": "crm.party_relationships.v1.PartyRelationshipCreatedEvent",
+                  },
+                  {
+                      "id": "party-relationships.party-relationship.updated",
+                      "version": "1.0.0",
+                      "message": "crm.party_relationships.v1.PartyRelationshipUpdatedEvent",
+                  },
+              ],
+          })
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+      - name: Commit binding and remove one-shot workflow
+        run: |
+          rm .github/workflows/phase8a3c-contract-binding-sync.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add contracts/module-contract-bindings.json .github/workflows/phase8a3c-contract-binding-sync.yml
+          git commit -m "Bind Party Relationship v1 contracts"
+          git push origin HEAD:develop/phase8a3c-party-relationship
