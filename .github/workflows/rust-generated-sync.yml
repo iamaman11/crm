@@ -40,23 +40,41 @@ jobs:
           from pathlib import Path
 
           path = Path("modules/crm-contact-points/src/domain.rs")
-          text = path.read_text()
-          initial = '''        validate_initial_transition_shape(
-              snapshot.status,
-              &snapshot.verification,
-              snapshot.created_at_unix_nanos,
-              snapshot.updated_at_unix_nanos,
-              snapshot.version,
-          )?;
-          '''
-          preference = '        validate_preference(snapshot.status, snapshot.preferred)?;\n'
-          if text.count(initial) != 1:
-              raise SystemExit(f"expected one persisted initial-transition block, found {text.count(initial)}")
-          if text.count(preference) != 1:
-              raise SystemExit(f"expected one persisted preference check, found {text.count(preference)}")
-          text = text.replace(initial, '', 1)
-          text = text.replace(preference, initial + preference, 1)
-          path.write_text(text)
+          lines = path.read_text().splitlines(keepends=True)
+          preference_indexes = [
+              index
+              for index, line in enumerate(lines)
+              if line.strip() == "validate_preference(snapshot.status, snapshot.preferred)?;"
+          ]
+          if len(preference_indexes) != 1:
+              raise SystemExit(
+                  f"expected one persisted preference check, found {len(preference_indexes)}"
+              )
+          preference_index = preference_indexes[0]
+          initial_indexes = [
+              index
+              for index, line in enumerate(lines)
+              if index > preference_index and line.strip() == "validate_initial_transition_shape("
+          ]
+          if len(initial_indexes) != 1:
+              raise SystemExit(
+                  f"expected one later initial-transition check, found {len(initial_indexes)}"
+              )
+          initial_start = initial_indexes[0]
+          initial_end = next(
+              index
+              for index in range(initial_start + 1, len(lines))
+              if lines[index].strip() == ")?;"
+          )
+          block = lines[initial_start : initial_end + 1]
+          del lines[initial_start : initial_end + 1]
+          preference_index = next(
+              index
+              for index, line in enumerate(lines)
+              if line.strip() == "validate_preference(snapshot.status, snapshot.preferred)?;"
+          )
+          lines[preference_index:preference_index] = block
+          path.write_text("".join(lines))
           PY
       - name: Apply machine-fixable Rust maintenance
         run: |
