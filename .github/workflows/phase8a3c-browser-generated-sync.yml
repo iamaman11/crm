@@ -35,112 +35,102 @@ jobs:
           runtime = Path('crates/crm-application-runtime/src/runtime.rs')
           text = runtime.read_text()
 
-          import_anchor = 'use crm_parties_query_adapter::PartyQueryAdapter;\n'
-          import_block = '''use crm_parties_query_adapter::PartyQueryAdapter;
-          use crm_party_relationships_capability_adapter::{
-              MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID,
-              RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
-          };
-          use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;
-          '''
           if 'use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;' not in text:
-              if text.count(import_anchor) != 1:
+              anchor = 'use crm_parties_query_adapter::PartyQueryAdapter;\n'
+              insert = (
+                  anchor
+                  + 'use crm_party_relationships_capability_adapter::{\n'
+                  + '    MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID,\n'
+                  + '    RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,\n'
+                  + '};\n'
+                  + 'use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;\n'
+              )
+              if text.count(anchor) != 1:
                   raise SystemExit('expected one PartyQueryAdapter import anchor')
-              text = text.replace(import_anchor, import_block, 1)
+              text = text.replace(anchor, insert, 1)
 
-          search_anchor = '        let search_query_adapter = SearchQueryAdapter::new(\n'
-          adapter_block = '''        let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(
-              store.clone(),
-              CursorCodec::new(cursor_key)
-                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-              visibility_authorizer.clone(),
-          )
-          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-          '''
           if 'let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(' not in text:
-              if text.count(search_anchor) != 1:
+              anchor = '        let search_query_adapter = SearchQueryAdapter::new(\n'
+              insert = (
+                  '        let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(\n'
+                  '            store.clone(),\n'
+                  '            CursorCodec::new(cursor_key)\n'
+                  '                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n'
+                  '            visibility_authorizer.clone(),\n'
+                  '        )\n'
+                  '        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n'
+              )
+              if text.count(anchor) != 1:
                   raise SystemExit('expected one search adapter anchor')
-              text = text.replace(search_anchor, adapter_block + search_anchor, 1)
+              text = text.replace(anchor, insert + anchor, 1)
 
-          router_anchor = '''            contact_point_query_adapter,
-              metadata_query_adapter,
-          '''
-          router_replacement = '''            contact_point_query_adapter,
-              party_relationship_query_adapter,
-              metadata_query_adapter,
-          '''
           if '            party_relationship_query_adapter,\n            metadata_query_adapter,' not in text:
-              if text.count(router_anchor) != 1:
+              anchor = '            contact_point_query_adapter,\n            metadata_query_adapter,\n'
+              replacement = '            contact_point_query_adapter,\n            party_relationship_query_adapter,\n            metadata_query_adapter,\n'
+              if text.count(anchor) != 1:
                   raise SystemExit('expected one query router argument anchor')
-              text = text.replace(router_anchor, router_replacement, 1)
+              text = text.replace(anchor, replacement, 1)
 
-          metadata_anchor = '                METADATA_MODULE_ID => {}\n'
-          visibility_block = '''                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
-              visibility_store,
-              config,
-              tenant_id,
-              definition,
-              BootstrapVisibilityResource {
-                  owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
-                  resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
-              },
-              party_relationship_fields(),
-              expires_at,
-          )?,
-          '''
           if '                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(' not in text:
-              if text.count(metadata_anchor) != 1:
+              anchor = '                METADATA_MODULE_ID => {}\n'
+              insert = (
+                  '                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(\n'
+                  '                    visibility_store,\n'
+                  '                    config,\n'
+                  '                    tenant_id,\n'
+                  '                    definition,\n'
+                  '                    BootstrapVisibilityResource {\n'
+                  '                        owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,\n'
+                  '                        resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,\n'
+                  '                    },\n'
+                  '                    party_relationship_fields(),\n'
+                  '                    expires_at,\n'
+                  '                )?,\n'
+              )
+              if text.count(anchor) != 1:
                   raise SystemExit('expected one metadata visibility anchor')
-              text = text.replace(metadata_anchor, visibility_block + metadata_anchor, 1)
+              text = text.replace(anchor, insert + anchor, 1)
 
-          task_anchor = 'fn task_fields() -> BTreeSet<String> {\n'
-          field_block = '''fn party_relationship_fields() -> BTreeSet<String> {
-              [
-                  "from_party_ref",
-                  "to_party_ref",
-                  "relationship_type",
-                  "status",
-                  "validity",
-              ]
-              .into_iter()
-              .map(str::to_owned)
-              .collect()
-          }
-
-          '''
           if 'fn party_relationship_fields() -> BTreeSet<String> {' not in text:
-              if text.count(task_anchor) != 1:
+              anchor = 'fn task_fields() -> BTreeSet<String> {\n'
+              insert = (
+                  'fn party_relationship_fields() -> BTreeSet<String> {\n'
+                  '    [\n'
+                  '        "from_party_ref",\n'
+                  '        "to_party_ref",\n'
+                  '        "relationship_type",\n'
+                  '        "status",\n'
+                  '        "validity",\n'
+                  '    ]\n'
+                  '    .into_iter()\n'
+                  '    .map(str::to_owned)\n'
+                  '    .collect()\n'
+                  '}\n\n'
+              )
+              if text.count(anchor) != 1:
                   raise SystemExit('expected one task fields anchor')
-              text = text.replace(task_anchor, field_block + task_anchor, 1)
+              text = text.replace(anchor, insert + anchor, 1)
 
-          test_anchor = '''        assert!(contact_point_fields().contains("verification"));
-              assert!(task_fields().contains("subject"));
-          '''
-          test_replacement = '''        assert!(contact_point_fields().contains("verification"));
-              assert!(party_relationship_fields().contains("from_party_ref"));
-              assert!(party_relationship_fields().contains("relationship_type"));
-              assert!(party_relationship_fields().contains("validity"));
-              assert!(task_fields().contains("subject"));
-          '''
           if 'assert!(party_relationship_fields().contains("relationship_type"));' not in text:
-              if text.count(test_anchor) != 1:
+              anchor = '        assert!(contact_point_fields().contains("verification"));\n        assert!(task_fields().contains("subject"));\n'
+              replacement = (
+                  '        assert!(contact_point_fields().contains("verification"));\n'
+                  '        assert!(party_relationship_fields().contains("from_party_ref"));\n'
+                  '        assert!(party_relationship_fields().contains("relationship_type"));\n'
+                  '        assert!(party_relationship_fields().contains("validity"));\n'
+                  '        assert!(task_fields().contains("subject"));\n'
+              )
+              if text.count(anchor) != 1:
                   raise SystemExit('expected one visibility test anchor')
-              text = text.replace(test_anchor, test_replacement, 1)
+              text = text.replace(anchor, replacement, 1)
 
           runtime.write_text(text)
 
           query = Path('crates/crm-party-relationships-query-adapter/src/lib.rs')
           text = query.read_text()
-          old_import = '''use crm_proto_contracts::crm::{
-              core::v1 as core, customer::v1 as customer, party_relationships::v1 as wire,
-          };
-          '''
-          new_import = '''use crm_proto_contracts::crm::{core::v1 as core, party_relationships::v1 as wire};
-          '''
-          if old_import in text:
-              text = text.replace(old_import, new_import, 1)
-          elif 'customer::v1 as customer' in text:
-              raise SystemExit('unexpected customer import formatting')
+          text = text.replace('customer::v1 as customer, ', '')
+          if 'customer::v1 as customer' in text:
+              raise SystemExit('failed to remove unused customer import')
           query.write_text(text)
           PY
       - name: Synchronize Rust and browser generated state
