@@ -34,111 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Wire Customer 360 runtime composition
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def once(text, old, new, label):
-              if new in text:
-                  return text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected one {label} anchor, found {count}")
-              return text.replace(old, new, 1)
-
-          governed = Path('crates/crm-application-runtime/src/governed_metadata.rs')
-          text = governed.read_text()
-          text = once(text,
-              'use crm_metadata_api_adapter::{',
-              'use crm_customer_360_query_adapter::{\n    Customer360QueryAdapter, QUERY_CAPABILITY_IDS as CUSTOMER_360_QUERY_CAPABILITY_IDS,\n    query_capability_definitions as customer_360_query_capability_definitions,\n};\nuse crm_metadata_api_adapter::{',
-              'governed import')
-          text = once(text,
-              '    definitions.extend(metadata_query_capability_definitions()?);',
-              '    definitions.extend(customer_360_query_capability_definitions()?);\n    definitions.extend(metadata_query_capability_definitions()?);',
-              'query definition')
-          text = once(text,
-              '    party_relationships: PartyRelationshipQueryAdapter,\n    metadata: MetadataQueryAdapter,',
-              '    party_relationships: PartyRelationshipQueryAdapter,\n    customer_360: Customer360QueryAdapter,\n    metadata: MetadataQueryAdapter,',
-              'router field')
-          text = once(text,
-              '        party_relationships: PartyRelationshipQueryAdapter,\n        metadata: MetadataQueryAdapter,',
-              '        party_relationships: PartyRelationshipQueryAdapter,\n        customer_360: Customer360QueryAdapter,\n        metadata: MetadataQueryAdapter,',
-              'router constructor argument')
-          text = once(text,
-              '            party_relationships,\n            metadata,',
-              '            party_relationships,\n            customer_360,\n            metadata,',
-              'router constructor field')
-          text = once(text,
-              '            self.party_relationships.validate(definition, request)\n        } else {',
-              '            self.party_relationships.validate(definition, request)\n        } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n            self.customer_360.validate(definition, request)\n        } else {',
-              'validate routing')
-          text = once(text,
-              '            self.party_relationships.execute(definition, request)\n        } else {',
-              '            self.party_relationships.execute(definition, request)\n        } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n            self.customer_360.execute(definition, request)\n        } else {',
-              'execute routing')
-          text = once(text,
-              '                + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()\n                + METADATA_QUERY_CAPABILITY_IDS.len()',
-              '                + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()\n                + CUSTOMER_360_QUERY_CAPABILITY_IDS.len()\n                + METADATA_QUERY_CAPABILITY_IDS.len()',
-              'catalog test count')
-          governed.write_text(text)
-
-          runtime = Path('crates/crm-application-runtime/src/runtime.rs')
-          text = runtime.read_text()
-          text = once(text,
-              'use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};',
-              'use crm_customer_360_composition::Customer360ProjectionWorker;\nuse crm_customer_360_query_adapter::{\n    Customer360QueryAdapter, MODULE_ID as CUSTOMER_360_MODULE_ID,\n};\nuse crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};',
-              'runtime import')
-          text = once(text,
-              '    pub projection_worker: Arc<Phase6ProjectionWorker>,\n    pub search_worker: Arc<GlobalSearchWorker>,',
-              '    pub projection_worker: Arc<Phase6ProjectionWorker>,\n    pub customer_360_worker: Arc<Customer360ProjectionWorker>,\n    pub search_worker: Arc<GlobalSearchWorker>,',
-              'component worker')
-          text = once(text,
-              '        let search_query_adapter = SearchQueryAdapter::new(',
-              '        let customer_360_query_adapter = Customer360QueryAdapter::new(\n            store.clone(),\n            visibility_authorizer.clone(),\n        );\n        let search_query_adapter = SearchQueryAdapter::new(',
-              'query adapter construction')
-          text = once(text,
-              '            party_relationship_query_adapter,\n            metadata_query_adapter,',
-              '            party_relationship_query_adapter,\n            customer_360_query_adapter,\n            metadata_query_adapter,',
-              'query router assembly')
-          text = once(text,
-              '        let projection_worker = Arc::new(Phase6ProjectionWorker::new(store.clone()));\n        let search_worker = Arc::new(',
-              '        let projection_worker = Arc::new(Phase6ProjectionWorker::new(store.clone()));\n        let customer_360_worker = Arc::new(\n            Customer360ProjectionWorker::new(store.clone())\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n        );\n        let search_worker = Arc::new(',
-              'worker construction')
-          text = once(text,
-              '            link_processor,\n            projection_worker,\n            search_worker,',
-              '            link_processor,\n            projection_worker,\n            customer_360_worker,\n            search_worker,',
-              'component initialization')
-          text = once(text,
-              '        .await?;\n        components\n            .search_worker\n            .ensure_ready(tenant_id.clone(), SEARCH_PAGE_SIZE)',
-              '        .await?;\n        drain_customer_360_projection(&components.customer_360_worker, tenant_id.clone()).await?;\n        components\n            .search_worker\n            .ensure_ready(tenant_id.clone(), SEARCH_PAGE_SIZE)',
-              'background cycle')
-          text = once(text,
-              'async fn scan_link_events(',
-              'async fn drain_customer_360_projection(\n    worker: &Customer360ProjectionWorker,\n    tenant_id: TenantId,\n) -> Result<(), ApplicationRuntimeError> {\n    loop {\n        let result = worker\n            .run_batch(tenant_id.clone(), PROJECTION_PAGE_SIZE)\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        if !result.has_more {\n            return Ok(());\n        }\n    }\n}\n\nasync fn scan_link_events(',
-              'drain helper')
-          text = once(text,
-              '                METADATA_MODULE_ID => {}\n                SEARCH_MODULE_ID => {',
-              '                METADATA_MODULE_ID => {}\n                CUSTOMER_360_MODULE_ID => {\n                    upsert_bootstrap_visibility(visibility_store, config, tenant_id, definition, BootstrapVisibilityResource { owner_module_id: PARTIES_MODULE_ID, resource_type: PARTY_RECORD_TYPE }, party_fields(), expires_at)?;\n                    upsert_bootstrap_visibility(visibility_store, config, tenant_id, definition, BootstrapVisibilityResource { owner_module_id: ACCOUNTS_MODULE_ID, resource_type: ACCOUNT_RECORD_TYPE }, account_fields(), expires_at)?;\n                    upsert_bootstrap_visibility(visibility_store, config, tenant_id, definition, BootstrapVisibilityResource { owner_module_id: CONTACT_POINTS_MODULE_ID, resource_type: CONTACT_POINT_RECORD_TYPE }, contact_point_fields(), expires_at)?;\n                    upsert_bootstrap_visibility(visibility_store, config, tenant_id, definition, BootstrapVisibilityResource { owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID, resource_type: PARTY_RELATIONSHIP_RECORD_TYPE }, party_relationship_fields(), expires_at)?;\n                }\n                SEARCH_MODULE_ID => {',
-              'bootstrap visibility')
-          runtime.write_text(text)
-          PY
-      - name: Verify Customer 360 runtime composition
-        run: |
-          cargo fmt --all
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
           cargo generate-lockfile
-          cargo check -p crm-application-runtime --all-targets
-          cargo test -p crm-application-runtime
-      - name: Commit verified runtime composition
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates/crm-application-runtime
-          if git diff --cached --quiet; then
-            echo "Customer 360 runtime composition already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
             exit 0
           fi
-          git commit -m "Wire Customer 360 runtime composition"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
