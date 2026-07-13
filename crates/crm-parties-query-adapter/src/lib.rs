@@ -10,9 +10,7 @@ use crm_module_sdk::{
     PortFuture, RecordId, RecordType, SdkError, TypedPayload,
 };
 use crm_parties::{Party, PartyKind};
-use crm_parties_capability_adapter::{
-    MODULE_ID, RECORD_TYPE, party_from_snapshot, party_to_wire,
-};
+use crm_parties_capability_adapter::{MODULE_ID, RECORD_TYPE, party_from_snapshot, party_to_wire};
 use crm_proto_contracts::crm::{core::v1 as core, parties::v1 as wire};
 use crm_query_runtime::{
     CursorBinding, CursorCodec, CursorContinuation, PageSizePolicy, QueryExecutionResult,
@@ -123,8 +121,7 @@ impl QuerySemanticValidator for PartyQueryAdapter {
         Box::pin(async move {
             match definition.capability_id.as_str() {
                 GET_CAPABILITY => {
-                    let command: wire::GetPartyRequest =
-                        decode_input(request, GET_REQUEST_SCHEMA)?;
+                    let command: wire::GetPartyRequest = decode_input(request, GET_REQUEST_SCHEMA)?;
                     let party_ref = command.party_ref.ok_or_else(|| {
                         SdkError::invalid_argument("party.party_ref", "Party reference is required")
                     })?;
