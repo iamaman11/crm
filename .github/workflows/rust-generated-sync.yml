@@ -41,42 +41,22 @@ jobs:
 
           path = Path("modules/crm-contact-points/src/domain.rs")
           text = path.read_text()
-          before = '''        validate_validity(
-              snapshot.valid_from_unix_nanos,
-              snapshot.valid_until_unix_nanos,
-          )?;
-          validate_preference(snapshot.status, snapshot.preferred)?;
-
-          let (normalized_value, display_value) ='''
-          after = '''        validate_validity(
-              snapshot.valid_from_unix_nanos,
-              snapshot.valid_until_unix_nanos,
-          )?;
-          validate_initial_transition_shape(
+          initial = '''        validate_initial_transition_shape(
               snapshot.status,
               &snapshot.verification,
               snapshot.created_at_unix_nanos,
               snapshot.updated_at_unix_nanos,
               snapshot.version,
           )?;
-          validate_preference(snapshot.status, snapshot.preferred)?;
-
-          let (normalized_value, display_value) ='''
-          if before not in text:
-              raise SystemExit("expected persisted validity/preference block not found")
-          text = text.replace(before, after, 1)
-          duplicate = '''        validate_initial_transition_shape(
-              snapshot.status,
-              &snapshot.verification,
-              snapshot.created_at_unix_nanos,
-              snapshot.updated_at_unix_nanos,
-              snapshot.version,
-          )?;
-
-          Ok(Self {'''
-          if duplicate not in text:
-              raise SystemExit("expected later persisted initial-transition block not found")
-          path.write_text(text.replace(duplicate, "        Ok(Self {", 1))
+          '''
+          preference = '        validate_preference(snapshot.status, snapshot.preferred)?;\n'
+          if text.count(initial) != 1:
+              raise SystemExit(f"expected one persisted initial-transition block, found {text.count(initial)}")
+          if text.count(preference) != 1:
+              raise SystemExit(f"expected one persisted preference check, found {text.count(preference)}")
+          text = text.replace(initial, '', 1)
+          text = text.replace(preference, initial + preference, 1)
+          path.write_text(text)
           PY
       - name: Apply machine-fixable Rust maintenance
         run: |
