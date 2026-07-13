@@ -106,33 +106,41 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Apply complete Phase 7 application schema
+      - name: Prepare isolated application database reset helper
+        shell: bash
         run: |
+          cat > /tmp/reset-application-database.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --command "DROP SCHEMA IF EXISTS crm CASCADE"
           for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/0010_*.up.sql; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
           done
-      - name: Seed production application fixtures
-        run: |
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+          SH
+          chmod +x /tmp/reset-application-database.sh
       - name: Verify full crm-api process lifecycle
         shell: bash
         run: |
           set -o pipefail
+          /tmp/reset-application-database.sh
           cargo test -p crm-api --test process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-process.log
       - name: Verify Party crm-api process lifecycle
         shell: bash
         run: |
           set -o pipefail
+          /tmp/reset-application-database.sh
           cargo test -p crm-api --test party_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-party-process.log
       - name: Verify Account crm-api process lifecycle
         shell: bash
         run: |
           set -o pipefail
+          /tmp/reset-application-database.sh
           cargo test -p crm-api --test account_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-account-process.log
       - name: Upload application runtime diagnostics on failure
