@@ -6,7 +6,8 @@ import "crm/core/v1/common.proto";
 import "crm/customer/v1/reference.proto";
 
 // Relationship directionality is semantic owner state. Reciprocal
-// relationships are endpoint-order independent; directional relationships are not.
+// relationships are endpoint-order independent and are canonically ordered by
+// the owner domain; directional relationships preserve from/to meaning.
 enum PartyRelationshipDirectionality {
   PARTY_RELATIONSHIP_DIRECTIONALITY_UNSPECIFIED = 0;
   PARTY_RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL = 1;
