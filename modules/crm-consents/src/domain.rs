@@ -837,7 +837,7 @@ mod tests {
     fn deny_assertion_cannot_use_grant_withdrawal_transition() {
         let mut value = ConsentAuthorization::create(CreateConsentAuthorization {
             effect: ConsentEffect::Deny,
-            ..grant(None).snapshot().into_create_for_test(101)
+            ..grant(None).snapshot().into_create_for_test(100)
         })
         .unwrap();
         assert_eq!(
@@ -916,7 +916,7 @@ mod tests {
     }
 
     #[test]
-    fn version_overflow_failure_is_atomic() {
+    fn strict_rehydrate_rejects_unreachable_active_overflow_version() {
         let value = ConsentAuthorization::rehydrate(ConsentAuthorizationSnapshot {
             version: i64::MAX,
             status: ConsentAuthorizationStatus::Active,
