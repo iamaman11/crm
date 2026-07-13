@@ -3,7 +3,8 @@
 //! Authoritative owner of Party-associated Contact Point lifecycle and endpoint
 //! verification state. Consent and communication authorization, provider
 //! delivery state, SQL, transport contracts, and direct cross-owner storage
-//! access remain outside this owner module.
+//! access remain outside this owner module. Cross-owner integrity is composed
+//! by the application layer rather than coupled into the owner aggregate.
 
 pub mod domain;
 pub mod persistence;
