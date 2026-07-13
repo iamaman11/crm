@@ -8,9 +8,13 @@ pub struct PartyId(RecordId);
 impl PartyId {
     pub fn try_new(value: impl Into<String>) -> Result<Self, SdkError> {
         let value = value.into();
-        RecordId::try_new(value)
-            .map(Self)
-            .map_err(|error| invalid("PARTIES_PARTY_ID_INVALID", "party.party_id", error.to_string()))
+        RecordId::try_new(value).map(Self).map_err(|error| {
+            invalid(
+                "PARTIES_PARTY_ID_INVALID",
+                "party.party_id",
+                error.to_string(),
+            )
+        })
     }
 
     pub fn as_str(&self) -> &str {
@@ -72,8 +76,14 @@ impl Party {
 
     pub fn rehydrate(snapshot: PartySnapshot) -> Result<Self, SdkError> {
         let display_name = normalize_display_name(&snapshot.display_name)?;
-        validate_timestamp("party.created_at_unix_nanos", snapshot.created_at_unix_nanos)?;
-        validate_timestamp("party.updated_at_unix_nanos", snapshot.updated_at_unix_nanos)?;
+        validate_timestamp(
+            "party.created_at_unix_nanos",
+            snapshot.created_at_unix_nanos,
+        )?;
+        validate_timestamp(
+            "party.updated_at_unix_nanos",
+            snapshot.updated_at_unix_nanos,
+        )?;
         if snapshot.updated_at_unix_nanos < snapshot.created_at_unix_nanos {
             return Err(invalid(
                 "PARTIES_PARTY_PERSISTED_TIME_INVALID",
@@ -213,7 +223,11 @@ mod tests {
 
     #[test]
     fn rejects_empty_control_character_and_oversized_display_names() {
-        for value in ["   ", "Ada\nLovelace", &"x".repeat(MAX_DISPLAY_NAME_BYTES + 1)] {
+        for value in [
+            "   ",
+            "Ada\nLovelace",
+            &"x".repeat(MAX_DISPLAY_NAME_BYTES + 1),
+        ] {
             let error = Party::create(CreateParty {
                 party_id: PartyId::try_new("party-invalid-name").unwrap(),
                 kind: PartyKind::Person,

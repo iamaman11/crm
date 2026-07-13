@@ -4,8 +4,8 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture,
-    RecordId, RecordType, SdkError, TypedPayload,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordType, SdkError, TypedPayload,
 };
 use crm_parties::{Party, decode_party_state};
 use crm_parties_capability_adapter::{MODULE_ID, RECORD_TYPE, party_to_wire, persisted_contract};
@@ -238,7 +238,10 @@ mod tests {
         assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);
-        assert_eq!(definition.input_contract.data_classes, vec![DataClass::Personal]);
+        assert_eq!(
+            definition.input_contract.data_classes,
+            vec![DataClass::Personal]
+        );
     }
 
     #[test]

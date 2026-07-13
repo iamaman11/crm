@@ -64,13 +64,17 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
         ensure_definition(definition, request)?;
         let command: wire::CreatePartyRequest =
             support::decode_request(request, MODULE_ID, CREATE_REQUEST_SCHEMA)?;
-        let party_ref = command
-            .party_ref
-            .ok_or_else(|| SdkError::invalid_argument("party.party_ref", "Party reference is required"))?;
+        let party_ref = command.party_ref.ok_or_else(|| {
+            SdkError::invalid_argument("party.party_ref", "Party reference is required")
+        })?;
         let party_id = PartyId::try_new(party_ref.party_id)?;
 
         Ok(AggregateTarget {
-            reference: support::record_ref(RECORD_TYPE, party_id.as_str(), "party.party_ref.party_id")?,
+            reference: support::record_ref(
+                RECORD_TYPE,
+                party_id.as_str(),
+                "party.party_ref.party_id",
+            )?,
             presence: AggregatePresence::MustBeAbsent,
         })
     }
@@ -88,9 +92,9 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
 
         let command: wire::CreatePartyRequest =
             support::decode_request(request, MODULE_ID, CREATE_REQUEST_SCHEMA)?;
-        let party_ref = command
-            .party_ref
-            .ok_or_else(|| SdkError::invalid_argument("party.party_ref", "Party reference is required"))?;
+        let party_ref = command.party_ref.ok_or_else(|| {
+            SdkError::invalid_argument("party.party_ref", "Party reference is required")
+        })?;
         let party = Party::create(CreateParty {
             party_id: PartyId::try_new(party_ref.party_id)?,
             kind: party_kind_from_wire(command.kind)?,
@@ -240,7 +244,10 @@ mod tests {
         assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
         assert!(definition.mutation);
         assert!(definition.requires_idempotency);
-        assert_eq!(definition.input_contract.data_classes, vec![DataClass::Personal]);
+        assert_eq!(
+            definition.input_contract.data_classes,
+            vec![DataClass::Personal]
+        );
     }
 
     #[test]
@@ -255,7 +262,10 @@ mod tests {
 
         let wire = party_to_wire(&party);
         assert_eq!(wire.party_ref.unwrap().party_id, "party-wire-1");
-        assert_eq!(wire.kind, crm_proto_contracts::crm::parties::v1::PartyKind::Organization as i32);
+        assert_eq!(
+            wire.kind,
+            crm_proto_contracts::crm::parties::v1::PartyKind::Organization as i32
+        );
         assert_eq!(wire.resource_version.unwrap().version, 1);
     }
 }
