@@ -1,4 +1,4 @@
-name: Phase 8A.3c Browser Generated Sync
+name: Phase 8A.3c Runtime and Generated Sync
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -26,20 +26,136 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: "11.12.0"
-      - run: pnpm install --frozen-lockfile
-      - name: Generate canonical browser descriptors
+      - name: Patch Party Relationship runtime composition
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          runtime = Path('crates/crm-application-runtime/src/runtime.rs')
+          text = runtime.read_text()
+
+          import_anchor = 'use crm_parties_query_adapter::PartyQueryAdapter;\n'
+          import_block = '''use crm_parties_query_adapter::PartyQueryAdapter;
+          use crm_party_relationships_capability_adapter::{
+              MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID,
+              RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
+          };
+          use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;
+          '''
+          if 'use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;' not in text:
+              if text.count(import_anchor) != 1:
+                  raise SystemExit('expected one PartyQueryAdapter import anchor')
+              text = text.replace(import_anchor, import_block, 1)
+
+          search_anchor = '        let search_query_adapter = SearchQueryAdapter::new(\n'
+          adapter_block = '''        let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(
+              store.clone(),
+              CursorCodec::new(cursor_key)
+                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+              visibility_authorizer.clone(),
+          )
+          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+          '''
+          if 'let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(' not in text:
+              if text.count(search_anchor) != 1:
+                  raise SystemExit('expected one search adapter anchor')
+              text = text.replace(search_anchor, adapter_block + search_anchor, 1)
+
+          router_anchor = '''            contact_point_query_adapter,
+              metadata_query_adapter,
+          '''
+          router_replacement = '''            contact_point_query_adapter,
+              party_relationship_query_adapter,
+              metadata_query_adapter,
+          '''
+          if '            party_relationship_query_adapter,\n            metadata_query_adapter,' not in text:
+              if text.count(router_anchor) != 1:
+                  raise SystemExit('expected one query router argument anchor')
+              text = text.replace(router_anchor, router_replacement, 1)
+
+          metadata_anchor = '                METADATA_MODULE_ID => {}\n'
+          visibility_block = '''                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
+              visibility_store,
+              config,
+              tenant_id,
+              definition,
+              BootstrapVisibilityResource {
+                  owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
+                  resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
+              },
+              party_relationship_fields(),
+              expires_at,
+          )?,
+          '''
+          if '                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(' not in text:
+              if text.count(metadata_anchor) != 1:
+                  raise SystemExit('expected one metadata visibility anchor')
+              text = text.replace(metadata_anchor, visibility_block + metadata_anchor, 1)
+
+          task_anchor = 'fn task_fields() -> BTreeSet<String> {\n'
+          field_block = '''fn party_relationship_fields() -> BTreeSet<String> {
+              [
+                  "from_party_ref",
+                  "to_party_ref",
+                  "relationship_type",
+                  "status",
+                  "validity",
+              ]
+              .into_iter()
+              .map(str::to_owned)
+              .collect()
+          }
+
+          '''
+          if 'fn party_relationship_fields() -> BTreeSet<String> {' not in text:
+              if text.count(task_anchor) != 1:
+                  raise SystemExit('expected one task fields anchor')
+              text = text.replace(task_anchor, field_block + task_anchor, 1)
+
+          test_anchor = '''        assert!(contact_point_fields().contains("verification"));
+              assert!(task_fields().contains("subject"));
+          '''
+          test_replacement = '''        assert!(contact_point_fields().contains("verification"));
+              assert!(party_relationship_fields().contains("from_party_ref"));
+              assert!(party_relationship_fields().contains("relationship_type"));
+              assert!(party_relationship_fields().contains("validity"));
+              assert!(task_fields().contains("subject"));
+          '''
+          if 'assert!(party_relationship_fields().contains("relationship_type"));' not in text:
+              if text.count(test_anchor) != 1:
+                  raise SystemExit('expected one visibility test anchor')
+              text = text.replace(test_anchor, test_replacement, 1)
+
+          runtime.write_text(text)
+
+          query = Path('crates/crm-party-relationships-query-adapter/src/lib.rs')
+          text = query.read_text()
+          old_import = '''use crm_proto_contracts::crm::{
+              core::v1 as core, customer::v1 as customer, party_relationships::v1 as wire,
+          };
+          '''
+          new_import = '''use crm_proto_contracts::crm::{core::v1 as core, party_relationships::v1 as wire};
+          '''
+          if old_import in text:
+              text = text.replace(old_import, new_import, 1)
+          elif 'customer::v1 as customer' in text:
+              raise SystemExit('unexpected customer import formatting')
+          query.write_text(text)
+          PY
+      - name: Synchronize Rust and browser generated state
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile
+          cargo fmt --all
+          pnpm install --frozen-lockfile
           pnpm web:generate
-          git diff --name-only > /tmp/generated-files
-          printf '%s\n' packages/client/src/contract_hashes.ts > /tmp/expected-files
-          diff -u /tmp/expected-files /tmp/generated-files
-      - name: Commit generated file and remove one-shot gate
+      - name: Commit synchronized product files and remove one-shot gate
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/phase8a3c-browser-generated-sync.yml .phase8a3c-browser-generated-trigger
-          git add packages/client/src/contract_hashes.ts
-          git commit -m "Synchronize Party Relationship browser descriptors"
+          git add Cargo.lock packages/client/src/contract_hashes.ts crates/crm-application-runtime/src/runtime.rs crates/crm-party-relationships-query-adapter/src/lib.rs
+          git commit -m "Complete Party Relationship runtime query composition"
           git push origin HEAD:develop/phase8a3c-party-relationship
