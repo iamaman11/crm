@@ -13,8 +13,8 @@ use crm_core_data::PostgresDataStore;
 use crm_customer_360_composition::Customer360ProjectionWorker;
 use crm_module_sdk::{DataClass, PayloadEncoding, RetentionPolicyId, TenantId, TypedPayload};
 use crm_proto_contracts::crm::{
-    accounts::v1 as accounts, contact_points::v1 as contact_points, customer::v1 as customer,
-    customer_360::v1 as customer_360, parties::v1 as parties,
+    accounts::v1 as accounts, contact_points::v1 as contact_points, core::v1 as core,
+    customer::v1 as customer, customer_360::v1 as customer_360, parties::v1 as parties,
     party_relationships::v1 as relationships,
 };
 use prost::Message;
@@ -35,6 +35,7 @@ const ACCOUNT_CREATE: &str = "accounts.account.create";
 const ACCOUNT_UPDATE: &str = "accounts.account.update";
 const CONTACT_POINT_CREATE: &str = "contact-points.contact-point.create";
 const CONTACT_POINT_UPDATE: &str = "contact-points.contact-point.update";
+const CONTACT_POINT_VERIFY: &str = "contact-points.contact-point.verify";
 const RELATIONSHIP_CREATE: &str = "party-relationships.party-relationship.create";
 const RELATIONSHIP_UPDATE: &str = "party-relationships.party-relationship.update";
 const CUSTOMER_360_GET: &str = "customer-360.customer.get";
@@ -79,6 +80,7 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
     let account_update = mutation_definition(ACCOUNT_UPDATE);
     let contact_point_create = mutation_definition(CONTACT_POINT_CREATE);
     let contact_point_update = mutation_definition(CONTACT_POINT_UPDATE);
+    let contact_point_verify = mutation_definition(CONTACT_POINT_VERIFY);
     let relationship_create = mutation_definition(RELATIONSHIP_CREATE);
     let relationship_update = mutation_definition(RELATIONSHIP_UPDATE);
     let customer_360_get = query_definition(CUSTOMER_360_GET);
@@ -153,6 +155,26 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
 
     mutate(
         &mut grpc,
+        &contact_point_verify,
+        payload(
+            &contact_point_verify,
+            contact_points::VerifyContactPointRequest {
+                contact_point_ref: Some(customer::ContactPointRef {
+                    contact_point_id: contact_point_id.clone(),
+                }),
+                expected_version: 1,
+                evidence_ref: format!("c360-evidence-{run_id}"),
+            },
+        ),
+        TENANT_A,
+        &format!("c360-contact-verify-{run_id}"),
+        true,
+    )
+    .await
+    .expect("verify Contact Point through real crm-api");
+
+    mutate(
+        &mut grpc,
         &relationship_create,
         payload(
             &relationship_create,
@@ -192,6 +214,8 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
         |view| {
             view.accounts.len() == 1
                 && view.contact_points.len() == 1
+                && contact_point_verification_status(&view.contact_points[0])
+                    == contact_points::ContactPointVerificationStatus::Verified as i32
                 && view.party_relationships.len() == 1
         },
     )
@@ -212,7 +236,7 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
             .as_ref()
             .expect("Customer 360 freshness")
             .applied_event_count
-            >= 5
+            >= 6
     );
 
     let unauthenticated = query(
@@ -271,7 +295,7 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
                 contact_point_ref: Some(customer::ContactPointRef {
                     contact_point_id: contact_point_id.clone(),
                 }),
-                expected_version: 1,
+                expected_version: 2,
                 value: "ada.updated@example.com".to_owned(),
                 status: contact_points::ContactPointStatus::Active as i32,
                 preferred: true,
@@ -298,7 +322,9 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
                 expected_version: 1,
                 status: relationships::PartyRelationshipStatus::Inactive as i32,
                 valid_from: None,
-                valid_until: None,
+                valid_until: Some(core::UnixTime {
+                    unix_nanos: now_unix_nanos(),
+                }),
             },
         ),
         TENANT_A,
@@ -318,9 +344,12 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
                 && view.contact_points.len() == 1
                 && contact_point_normalized_value(&view.contact_points[0])
                     == "ada.updated@example.com"
+                && contact_point_verification_status(&view.contact_points[0])
+                    == contact_points::ContactPointVerificationStatus::Unverified as i32
                 && view.party_relationships.len() == 1
                 && relationship_status(&view.party_relationships[0])
                     == relationships::PartyRelationshipStatus::Inactive as i32
+                && relationship_valid_until(&view.party_relationships[0]).is_some()
         },
     )
     .await;
@@ -331,7 +360,7 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
                 .as_ref()
                 .expect("Contact Point source lineage")
         ),
-        2
+        3
     );
     assert_eq!(
         source_version(
@@ -341,6 +370,19 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
                 .expect("Party Relationship source lineage")
         ),
         2
+    );
+    assert_eq!(
+        converged
+            .freshness
+            .as_ref()
+            .expect("converged Customer 360 freshness")
+            .applied_event_count,
+        initial
+            .freshness
+            .as_ref()
+            .expect("initial Customer 360 freshness")
+            .applied_event_count
+            + 3
     );
 
     let peer_view = wait_for_customer_360(
@@ -366,6 +408,7 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
         2
     );
 
+    let authoritative_before_rebuild = authoritative_evidence(&admin, TENANT_A).await;
     stop_crm_api(&mut child).await;
 
     let store = PostgresDataStore::connect(&database_url, 5)
@@ -376,7 +419,12 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
         .rebuild(TenantId::try_new(TENANT_A).expect("valid tenant id"), 200)
         .await
         .expect("rebuild Customer 360 from immutable owner event history");
-    assert!(rebuilt_event_count >= 8);
+    assert!(rebuilt_event_count >= 9);
+    assert_eq!(
+        authoritative_evidence(&admin, TENANT_A).await,
+        authoritative_before_rebuild,
+        "Customer 360 rebuild must not mutate authoritative records, outbox or audit evidence"
+    );
 
     let (mut child, http_addr, grpc_addr) = spawn_crm_api(&database_url);
     wait_until_ready(&http, &mut child, &http_addr).await;
@@ -564,6 +612,17 @@ fn contact_point_id_of(section: &customer_360::Customer360ContactPointSection) -
         .as_str()
 }
 
+fn contact_point_verification_status(
+    section: &customer_360::Customer360ContactPointSection,
+) -> i32 {
+    section
+        .contact_point
+        .as_ref()
+        .and_then(|contact_point| contact_point.verification.as_ref())
+        .expect("Customer 360 Contact Point verification")
+        .status
+}
+
 fn contact_point_normalized_value(section: &customer_360::Customer360ContactPointSection) -> &str {
     section
         .contact_point
@@ -589,6 +648,52 @@ fn relationship_status(section: &customer_360::Customer360PartyRelationshipSecti
         .as_ref()
         .expect("Customer 360 Party Relationship")
         .status
+}
+
+fn relationship_valid_until(
+    section: &customer_360::Customer360PartyRelationshipSection,
+) -> Option<i64> {
+    section
+        .party_relationship
+        .as_ref()
+        .expect("Customer 360 Party Relationship")
+        .valid_until
+        .as_ref()
+        .map(|value| value.unix_nanos)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AuthoritativeEvidence {
+    records: i64,
+    outbox_events: i64,
+    audit_records: i64,
+}
+
+async fn authoritative_evidence(admin: &PgPool, tenant_id: &str) -> AuthoritativeEvidence {
+    let records = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM crm.records WHERE tenant_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(tenant_id)
+    .fetch_one(admin)
+    .await
+    .expect("count authoritative records");
+    let outbox_events =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.outbox_events WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(admin)
+            .await
+            .expect("count authoritative outbox events");
+    let audit_records =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(admin)
+            .await
+            .expect("count authoritative audit records");
+    AuthoritativeEvidence {
+        records,
+        outbox_events,
+        audit_records,
+    }
 }
 
 fn source_version(source: &customer_360::Customer360SourceLineage) -> i64 {
@@ -789,6 +894,16 @@ fn free_port() -> u16 {
         .local_addr()
         .expect("read ephemeral Customer 360 acceptance port")
         .port()
+}
+
+fn now_unix_nanos() -> i64 {
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time after Unix epoch")
+            .as_nanos(),
+    )
+    .expect("current Unix nanoseconds fit i64")
 }
 
 fn unique_id(prefix: &str) -> String {
