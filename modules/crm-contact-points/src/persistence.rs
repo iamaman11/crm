@@ -26,8 +26,9 @@ pub fn encode_contact_point_state(contact_point: &ContactPoint) -> Result<Vec<u8
 
 pub fn decode_contact_point_state(bytes: &[u8]) -> Result<ContactPoint, SdkError> {
     validate_size(bytes)?;
-    let state: ContactPointStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("Contact Point state JSON is invalid: {error}")))?;
+    let state: ContactPointStateV1 = serde_json::from_slice(bytes).map_err(|error| {
+        persisted_error(format!("Contact Point state JSON is invalid: {error}"))
+    })?;
     ContactPoint::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }

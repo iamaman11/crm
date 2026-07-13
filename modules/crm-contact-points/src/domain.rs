@@ -78,10 +78,7 @@ impl VerificationEvidence {
         self.verified_at_unix_nanos
     }
 
-    pub(crate) fn from_persisted(
-        evidence_ref: String,
-        verified_at_unix_nanos: i64,
-    ) -> Self {
+    pub(crate) fn from_persisted(evidence_ref: String, verified_at_unix_nanos: i64) -> Self {
         Self {
             evidence_ref,
             verified_at_unix_nanos,
@@ -280,7 +277,10 @@ impl ContactPoint {
     pub fn apply_update(&mut self, command: UpdateContactPoint) -> Result<(), SdkError> {
         self.require_version(command.expected_version)?;
         self.require_monotonic_time(command.occurred_at_unix_nanos)?;
-        validate_validity(command.valid_from_unix_nanos, command.valid_until_unix_nanos)?;
+        validate_validity(
+            command.valid_from_unix_nanos,
+            command.valid_until_unix_nanos,
+        )?;
         validate_preference(command.status, command.preferred)?;
         let (normalized_value, display_value) = normalize_value(self.kind, &command.value)?;
         let value_changed = normalized_value != self.normalized_value;
@@ -557,10 +557,7 @@ fn validate_validity(
     Ok(())
 }
 
-fn normalize_value(
-    kind: ContactPointKind,
-    value: &str,
-) -> Result<(String, String), SdkError> {
+fn normalize_value(kind: ContactPointKind, value: &str) -> Result<(String, String), SdkError> {
     match kind {
         ContactPointKind::Email => normalize_email(value),
         ContactPointKind::Phone => normalize_phone(value),
@@ -626,7 +623,11 @@ fn normalize_phone(value: &str) -> Result<(String, String), SdkError> {
             '+' if index == 0 => normalized.push(character),
             '0'..='9' => normalized.push(character),
             ' ' | '-' | '(' | ')' | '.' => {}
-            _ => return Err(value_invalid("phone must be an E.164 number with safe separators")),
+            _ => {
+                return Err(value_invalid(
+                    "phone must be an E.164 number with safe separators",
+                ));
+            }
         }
     }
     if !normalized.starts_with('+') {
@@ -655,7 +656,9 @@ fn normalize_web(value: &str) -> Result<(String, String), SdkError> {
         ));
     }
     if !parsed.username().is_empty() || parsed.password().is_some() {
-        return Err(value_invalid("web address must not contain embedded credentials"));
+        return Err(value_invalid(
+            "web address must not contain embedded credentials",
+        ));
     }
     parsed.set_fragment(None);
     let normalized = parsed.to_string();
@@ -673,9 +676,9 @@ fn normalize_messaging(value: &str) -> Result<(String, String), SdkError> {
     let namespace = namespace.to_ascii_lowercase();
     if namespace.is_empty()
         || namespace.len() > MAX_MESSAGING_NAMESPACE_BYTES
-        || !namespace
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_'))
+        || !namespace.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_')
+        })
     {
         return Err(value_invalid("messaging namespace is invalid"));
     }

@@ -36,11 +36,8 @@ pub const UPDATED_EVENT_SCHEMA: &str = "crm.contact_points.v1.ContactPointUpdate
 pub const VERIFIED_EVENT_TYPE: &str = "contact-points.contact-point.verified";
 pub const VERIFIED_EVENT_SCHEMA: &str = "crm.contact_points.v1.ContactPointVerifiedEvent";
 
-pub const MUTATION_CAPABILITY_IDS: [&str; 3] = [
-    CREATE_CAPABILITY,
-    UPDATE_CAPABILITY,
-    VERIFY_CAPABILITY,
-];
+pub const MUTATION_CAPABILITY_IDS: [&str; 3] =
+    [CREATE_CAPABILITY, UPDATE_CAPABILITY, VERIFY_CAPABILITY];
 
 pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     MUTATION_CAPABILITY_IDS

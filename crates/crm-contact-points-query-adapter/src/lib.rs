@@ -2,7 +2,7 @@
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
-use crm_contact_points::{ContactPoint, ContactPointKind, ContactPointStatus, VerificationState};
+use crm_contact_points::{ContactPoint, ContactPointKind, ContactPointStatus};
 use crm_contact_points_capability_adapter::{
     MODULE_ID, RECORD_TYPE, contact_point_from_snapshot, contact_point_to_wire,
 };
@@ -255,12 +255,7 @@ impl ContactPointQueryAdapter {
             if remaining == 0 {
                 let anchor = after.clone();
                 let has_more = self
-                    .has_more_visible_contact_point(
-                        request,
-                        anchor.clone(),
-                        filters,
-                        &mut scanned,
-                    )
+                    .has_more_visible_contact_point(request, anchor.clone(), filters, &mut scanned)
                     .await?;
                 return Ok((output, has_more.then_some(anchor).flatten()));
             }
@@ -391,9 +386,8 @@ fn validate_list(
         }
     }
     match wire::ContactPointSort::try_from(command.sort).ok() {
-        Some(
-            wire::ContactPointSort::Unspecified | wire::ContactPointSort::UpdatedAtDescending,
-        ) => {}
+        Some(wire::ContactPointSort::Unspecified | wire::ContactPointSort::UpdatedAtDescending) => {
+        }
         None => {
             return Err(SdkError::invalid_argument(
                 "contact_point.sort",
@@ -449,15 +443,12 @@ fn contact_point_matches_filters(
         }
     }
     if let Some(verification_status) = filters.verification_status {
-        let expected_verified = match wire::ContactPointVerificationStatus::try_from(
-            verification_status,
-        )
-        .ok()
-        {
-            Some(wire::ContactPointVerificationStatus::Unverified) => false,
-            Some(wire::ContactPointVerificationStatus::Verified) => true,
-            _ => return false,
-        };
+        let expected_verified =
+            match wire::ContactPointVerificationStatus::try_from(verification_status).ok() {
+                Some(wire::ContactPointVerificationStatus::Unverified) => false,
+                Some(wire::ContactPointVerificationStatus::Verified) => true,
+                _ => return false,
+            };
         if contact_point.verification().is_verified() != expected_verified {
             return false;
         }
@@ -566,21 +557,20 @@ fn encode_next(
     binding: &CursorBinding,
     next: Option<&RecordQueryContinuation>,
 ) -> Result<String, SdkError> {
-    next
-        .map(|next| {
-            adapter
-                .cursor_codec
-                .encode(
-                    binding,
-                    &CursorContinuation {
-                        sort_key: next.sort_value.as_bytes().to_vec(),
-                        record_id: next.record_id.clone(),
-                    },
-                )
-                .map_err(cursor_error)
-        })
-        .transpose()
-        .map(|value| value.unwrap_or_default())
+    next.map(|next| {
+        adapter
+            .cursor_codec
+            .encode(
+                binding,
+                &CursorContinuation {
+                    sort_key: next.sort_value.as_bytes().to_vec(),
+                    record_id: next.record_id.clone(),
+                },
+            )
+            .map_err(cursor_error)
+    })
+    .transpose()
+    .map(|value| value.unwrap_or_default())
 }
 
 fn contact_point_filter_hash(command: &wire::ListContactPointsRequest) -> [u8; 32] {

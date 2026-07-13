@@ -686,11 +686,10 @@ async fn drain_projection(
     worker: &Phase6ProjectionWorker,
     tenant_id: TenantId,
     projection_id: &str,
-    page_size: u32,
 ) -> Result<(), ApplicationRuntimeError> {
     loop {
         let result = worker
-            .run_batch(tenant_id.clone(), projection_id, page_size)
+            .run_batch(tenant_id.clone(), projection_id, PROJECTION_PAGE_SIZE)
             .await
             .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
         if !result.has_more {

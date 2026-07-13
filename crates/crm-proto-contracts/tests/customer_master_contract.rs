@@ -23,10 +23,8 @@ const PARTY_CREATED_EVENT_SCHEMA: &str = "crm.parties.v1.PartyCreatedEvent";
 const PARTY_REF_SCHEMA: &str = "crm.customer.v1.PartyRef";
 const CREATE_ACCOUNT_REQUEST_SCHEMA: &str = "crm.accounts.v1.CreateAccountRequest";
 const ACCOUNT_CREATED_EVENT_SCHEMA: &str = "crm.accounts.v1.AccountCreatedEvent";
-const CREATE_CONTACT_POINT_REQUEST_SCHEMA: &str =
-    "crm.contact_points.v1.CreateContactPointRequest";
-const CONTACT_POINT_CREATED_EVENT_SCHEMA: &str =
-    "crm.contact_points.v1.ContactPointCreatedEvent";
+const CREATE_CONTACT_POINT_REQUEST_SCHEMA: &str = "crm.contact_points.v1.CreateContactPointRequest";
+const CONTACT_POINT_CREATED_EVENT_SCHEMA: &str = "crm.contact_points.v1.ContactPointCreatedEvent";
 
 #[test]
 fn canonical_customer_references_are_distinct_typed_contracts() {

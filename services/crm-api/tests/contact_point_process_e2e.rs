@@ -151,7 +151,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     .await
     .expect_err("unauthenticated Contact Point mutation must fail");
     assert_eq!(unauthenticated_mutation.code(), Code::Unauthenticated);
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, baseline);
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        baseline
+    );
 
     let missing_status = mutate(
         &mut grpc,
@@ -171,7 +174,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     .await
     .expect_err("missing Party reference must be rejected");
     assert_eq!(missing_status.code(), Code::InvalidArgument);
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, baseline);
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        baseline
+    );
 
     let cross_tenant_status = mutate(
         &mut grpc,
@@ -192,7 +198,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     .expect_err("tenant A must not reference tenant B Party");
     assert_eq!(cross_tenant_status.code(), Code::InvalidArgument);
     assert_eq!(cross_tenant_status.message(), missing_status.message());
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, baseline);
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        baseline
+    );
 
     let primary_id = unique_id("contact-point-primary-phone");
     let primary_payload = create_contact_point_payload(
@@ -232,7 +241,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
         contact_points::ContactPointStatus::Active as i32
     );
     assert!(created_contact_point.preferred);
-    assert_eq!(verification_status(&created_contact_point), contact_points::ContactPointVerificationStatus::Unverified);
+    assert_eq!(
+        verification_status(&created_contact_point),
+        contact_points::ContactPointVerificationStatus::Unverified
+    );
     assert_eq!(resource_version(&created_contact_point), 1);
 
     let after_create = contact_point_evidence_counts(&admin, TENANT_A).await;
@@ -257,7 +269,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
         replay.output.expect("Contact Point replay output").payload,
         created_output.payload
     );
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, after_create);
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        after_create
+    );
 
     let idempotency_conflict = mutate(
         &mut grpc,
@@ -277,7 +292,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     .await
     .expect_err("same idempotency key with a different request must conflict");
     assert_eq!(idempotency_conflict.code(), Code::Aborted);
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, after_create);
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        after_create
+    );
 
     let queried = query(
         &mut grpc,
@@ -292,12 +310,8 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     assert_eq!(queried_contact_point.normalized_value, "+37061234567");
     assert_eq!(resource_version(&queried_contact_point), 1);
 
-    let verify_payload = verify_contact_point_payload(
-        &verify,
-        &primary_id,
-        1,
-        "verification-evidence-primary",
-    );
+    let verify_payload =
+        verify_contact_point_payload(&verify, &primary_id, 1, "verification-evidence-primary");
     let verified = mutate(
         &mut grpc,
         &verify,
@@ -312,7 +326,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     assert_eq!(verified.affected_resources[0].version, Some(2));
     let verified_output = verified.output.expect("Contact Point verify output");
     let verified_contact_point = decode_verify_contact_point(&verified_output.payload);
-    assert_eq!(verification_status(&verified_contact_point), contact_points::ContactPointVerificationStatus::Verified);
+    assert_eq!(
+        verification_status(&verified_contact_point),
+        contact_points::ContactPointVerificationStatus::Verified
+    );
     assert_eq!(resource_version(&verified_contact_point), 2);
     let verification = verified_contact_point
         .verification
@@ -349,7 +366,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
             .payload,
         verified_output.payload
     );
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, after_verify);
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        after_verify
+    );
 
     let display_only_update = update_contact_point_payload(
         &update,
@@ -375,8 +395,14 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
             .expect("display-only Contact Point update output")
             .payload,
     );
-    assert_eq!(display_updated_contact_point.normalized_value, "+37061234567");
-    assert_eq!(verification_status(&display_updated_contact_point), contact_points::ContactPointVerificationStatus::Verified);
+    assert_eq!(
+        display_updated_contact_point.normalized_value,
+        "+37061234567"
+    );
+    assert_eq!(
+        verification_status(&display_updated_contact_point),
+        contact_points::ContactPointVerificationStatus::Verified
+    );
     assert_eq!(resource_version(&display_updated_contact_point), 3);
 
     let value_change_update = update_contact_point_payload(
@@ -397,17 +423,25 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     )
     .await
     .expect("change Contact Point canonical endpoint value");
-    let value_changed_output = value_changed.output.expect("value-changed Contact Point output");
+    let value_changed_output = value_changed
+        .output
+        .expect("value-changed Contact Point output");
     let value_changed_contact_point = decode_update_contact_point(&value_changed_output.payload);
     assert_eq!(value_changed_contact_point.normalized_value, "+37069999999");
-    assert_eq!(verification_status(&value_changed_contact_point), contact_points::ContactPointVerificationStatus::Unverified);
+    assert_eq!(
+        verification_status(&value_changed_contact_point),
+        contact_points::ContactPointVerificationStatus::Unverified
+    );
     assert_eq!(resource_version(&value_changed_contact_point), 4);
 
     let after_value_change = contact_point_evidence_counts(&admin, TENANT_A).await;
     assert_eq!(after_value_change.events, after_verify.events + 2);
     assert_eq!(after_value_change.audits, after_verify.audits + 2);
     assert_eq!(after_value_change.idempotency, after_verify.idempotency + 2);
-    assert_eq!(after_value_change.transactions, after_verify.transactions + 2);
+    assert_eq!(
+        after_value_change.transactions,
+        after_verify.transactions + 2
+    );
 
     let update_replay = mutate(
         &mut grpc,
@@ -427,7 +461,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
             .payload,
         value_changed_output.payload
     );
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, after_value_change);
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        after_value_change
+    );
 
     let stale = mutate(
         &mut grpc,
@@ -447,7 +484,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     .await
     .expect_err("stale Contact Point version must fail");
     assert_eq!(stale.code(), Code::Aborted);
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, after_value_change);
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        after_value_change
+    );
 
     let second_id = unique_id("contact-point-secondary-email");
     mutate(
@@ -520,7 +560,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     .expect("filter Contact Points by Party/kind/status/verification/preferred");
     let phone_filter = decode_list_contact_points(phone_filter);
     assert_eq!(phone_filter.contact_points.len(), 1);
-    assert_eq!(contact_point_id_of(&phone_filter.contact_points[0]), primary_id);
+    assert_eq!(
+        contact_point_id_of(&phone_filter.contact_points[0]),
+        primary_id
+    );
 
     let verified_filter = query(
         &mut grpc,
@@ -542,7 +585,10 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     .expect("filter verified Contact Points");
     let verified_filter = decode_list_contact_points(verified_filter);
     assert_eq!(verified_filter.contact_points.len(), 1);
-    assert_eq!(contact_point_id_of(&verified_filter.contact_points[0]), third_id);
+    assert_eq!(
+        contact_point_id_of(&verified_filter.contact_points[0]),
+        third_id
+    );
 
     let first_page = query(
         &mut grpc,
@@ -609,10 +655,7 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
         let page = decode_list_contact_points(page);
         assert_eq!(page.contact_points.len(), 1);
         listed_ids.insert(contact_point_id_of(&page.contact_points[0]).to_owned());
-        cursor = page
-            .page
-            .expect("Contact Point page info")
-            .next_page_token;
+        cursor = page.page.expect("Contact Point page info").next_page_token;
     }
     assert_eq!(
         listed_ids,
@@ -650,8 +693,15 @@ async fn crm_api_process_serves_governed_contact_point_lifecycle_and_party_integ
     )
     .await
     .expect("tenant B Contact Point list must not leak tenant A resources");
-    assert!(decode_list_contact_points(cross_tenant_list).contact_points.is_empty());
-    assert_eq!(contact_point_evidence_counts(&admin, TENANT_A).await, after_three);
+    assert!(
+        decode_list_contact_points(cross_tenant_list)
+            .contact_points
+            .is_empty()
+    );
+    assert_eq!(
+        contact_point_evidence_counts(&admin, TENANT_A).await,
+        after_three
+    );
 
     send_sigint(&child).await;
     let exit = timeout(Duration::from_secs(15), child.wait())

@@ -6,7 +6,8 @@ use crm_capability_runtime::{
 use crm_contact_points_capability_adapter::{
     ContactPointCapabilityPlanner,
     MUTATION_CAPABILITY_IDS as CONTACT_POINT_MUTATION_CAPABILITY_IDS,
-    capability_definitions as contact_point_capability_definitions, referenced_party_id_from_create,
+    capability_definitions as contact_point_capability_definitions,
+    referenced_party_id_from_create,
 };
 use crm_contact_points_query_adapter::{
     ContactPointQueryAdapter, QUERY_CAPABILITY_IDS as CONTACT_POINT_QUERY_CAPABILITY_IDS,
@@ -93,8 +94,7 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             PartyCapabilityPlanner.target(definition, request)
         } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             CustomerAccountCapabilityPlanner.target(definition, request)
-        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS
-            .contains(&definition.capability_id.as_str())
+        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         {
             ContactPointCapabilityPlanner.target(definition, request)
         } else {
@@ -112,8 +112,7 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             PartyCapabilityPlanner.plan(definition, request, current)
         } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             CustomerAccountCapabilityPlanner.plan(definition, request, current)
-        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS
-            .contains(&definition.capability_id.as_str())
+        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         {
             ContactPointCapabilityPlanner.plan(definition, request, current)
         } else {
@@ -167,8 +166,7 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
                 validate_account_party_references(&self.store, definition, &request).await?;
                 self.aggregate.execute(definition, request).await
             })
-        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS
-            .contains(&definition.capability_id.as_str())
+        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         {
             Box::pin(async move {
                 validate_contact_point_party_reference(&self.store, definition, &request).await?;

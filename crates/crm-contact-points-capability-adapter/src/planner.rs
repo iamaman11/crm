@@ -9,9 +9,9 @@ use crm_capability_plan_support::{self as support, EventSpec, PersistedPayloadCo
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_contact_points::{
     CONTACT_POINT_STATE_MAXIMUM_BYTES, CONTACT_POINT_STATE_RETENTION_POLICY_ID,
-    CONTACT_POINT_STATE_SCHEMA_ID, CONTACT_POINT_STATE_SCHEMA_VERSION, ContactPoint, ContactPointId,
-    ContactPointKind, ContactPointStatus, CreateContactPoint, PartyReference, UpdateContactPoint,
-    VerificationState, VerifyContactPoint, contact_point_state_descriptor_hash,
+    CONTACT_POINT_STATE_SCHEMA_ID, CONTACT_POINT_STATE_SCHEMA_VERSION, ContactPoint,
+    ContactPointId, ContactPointKind, ContactPointStatus, CreateContactPoint, PartyReference,
+    UpdateContactPoint, VerificationState, VerifyContactPoint, contact_point_state_descriptor_hash,
     decode_contact_point_state, encode_contact_point_state,
 };
 use crm_core_data::{
@@ -195,10 +195,8 @@ fn plan_update(
         UPDATE_REQUEST_SCHEMA,
         DataClass::Personal,
     )?;
-    let requested_id = contact_point_id_from_ref(
-        command.contact_point_ref,
-        "contact_point.contact_point_ref",
-    )?;
+    let requested_id =
+        contact_point_id_from_ref(command.contact_point_ref, "contact_point.contact_point_ref")?;
     if requested_id.as_str() != current.reference.record_id.as_str() {
         return Err(invalid_plan());
     }
@@ -266,10 +264,8 @@ fn plan_verify(
         VERIFY_REQUEST_SCHEMA,
         DataClass::Personal,
     )?;
-    let requested_id = contact_point_id_from_ref(
-        command.contact_point_ref,
-        "contact_point.contact_point_ref",
-    )?;
+    let requested_id =
+        contact_point_id_from_ref(command.contact_point_ref, "contact_point.contact_point_ref")?;
     if requested_id.as_str() != current.reference.record_id.as_str() {
         return Err(invalid_plan());
     }
@@ -457,9 +453,8 @@ fn contact_point_id_from_ref(
     contact_point_ref: Option<customer::ContactPointRef>,
     field: &'static str,
 ) -> Result<ContactPointId, SdkError> {
-    let contact_point_ref = contact_point_ref.ok_or_else(|| {
-        SdkError::invalid_argument(field, "Contact Point reference is required")
-    })?;
+    let contact_point_ref = contact_point_ref
+        .ok_or_else(|| SdkError::invalid_argument(field, "Contact Point reference is required"))?;
     ContactPointId::try_new(contact_point_ref.contact_point_id)
 }
 
@@ -467,8 +462,8 @@ fn party_reference_from_ref(
     party_ref: Option<customer::PartyRef>,
     field: &'static str,
 ) -> Result<PartyReference, SdkError> {
-    let party_ref =
-        party_ref.ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required"))?;
+    let party_ref = party_ref
+        .ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required"))?;
     PartyReference::try_new(party_ref.party_id)
 }
 
