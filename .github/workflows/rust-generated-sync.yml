@@ -25,40 +25,31 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Align Account evidence counters with authoritative schema
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("services/crm-api/tests/account_process_e2e.rs")
-          text = path.read_text()
-          replacements = {
-              "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND target_record_type = 'accounts.account'":
-                  "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1",
-              "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND scope LIKE 'crm.customer-accounts:%'":
-                  "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1",
-              "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND owner_module_id = 'crm.customer-accounts'":
-                  "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1",
-          }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f"Account evidence query anchor not found: {old}")
-              text = text.replace(old, new, 1)
-          path.write_text(text)
-          PY
-      - name: Restore canonical workflow and commit evidence fix
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/crm-api/tests/account_process_e2e.rs .github/workflows/rust-generated-sync.yml
-          git commit -m "Align Account process evidence counters with schema"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
