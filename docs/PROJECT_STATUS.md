@@ -6,9 +6,9 @@ This document is the concise human-readable status page. The normative sequence 
 
 ## Current position
 
-**Phase 6 is complete. Phase 7 is in progress. Phase 7A through Phase 7H are complete. The active delivery packet is Phase 7I: typed UI-extension runtime and host failure isolation (#89 / PR #90).**
+**Phase 6 and Phase 7 are complete. Phase 8A is now the active expert owner-domain program: canonical customer master, identity resolution and consent (#28).**
 
-The repository now contains a complete first production-composed modular CRM proof plus production-quality search, product-plane and governed Admin Studio foundations:
+The repository now contains a complete first production-composed modular CRM proof plus production-quality search, product-plane, governed Admin Studio and trusted-code UI-extension foundations:
 
 - executable repository governance and architecture boundaries;
 - typed Module Manifest IR and immutable module identity;
@@ -26,9 +26,9 @@ The repository now contains a complete first production-composed modular CRM pro
 - durable tenant-scoped metadata revision/activation persistence;
 - governed public metadata mutation/query contracts with canonical global audit evidence;
 - first governed Admin Studio authoring → publish → impact → activate → rollback workflow;
-- active typed UI-extension runtime work proving host-shell and record-page failure isolation.
+- typed trusted-code UI-extension runtime with per-extension load/render failure isolation and browser proof that shell, core record content and healthy siblings survive extension failures.
 
-The breadth of end-user CRM functionality is still intentionally smaller than the target universal expert CRM. Customer master, commercial lifecycle, service, marketing, communications, analytics, AI, marketplace and enterprise operational proof remain explicit future owner-domain/platform programs.
+The breadth of end-user CRM functionality is still intentionally smaller than the target universal expert CRM. Customer master, commercial lifecycle, service, marketing, communications, analytics, AI, marketplace and enterprise operational proof remain explicit owner-domain/platform programs.
 
 ## Completed delivery foundations
 
@@ -148,22 +148,43 @@ Final review head `7989ea1256f01bfd4e8ee2d33f5ad8370d6cc645` passed all 11 appli
 
 Final review head `f78f1c75bf97733ff88eafcd2d2ed2ab6c7615d9` passed Product Plane CI, including real process/browser E2E, and Rust CI. PR #88 merged to `main` as `0f01f22e6c77cd4f138a6b678d75d259f3ac71ff`.
 
-## Current executable packet — Phase 7I
+### Phase 7I — typed UI-extension runtime and host failure isolation — Complete
 
-**#89 / draft PR #90 — typed UI-extension runtime and host failure isolation.**
+#89 / merged PR #90 closed the final Phase 7 product-plane foundation:
 
-The active packet closes the remaining Phase 7 product-plane foundation:
-
-- typed exact extension coordinates and bounded record-page host surfaces;
-- immutable validated registry with deterministic ordering and duplicate rejection;
-- host-owned typed context only, without session/client/gateway objects being injected into extensions;
+- exact typed record-page extension surfaces;
+- immutable validated registry with owner-bound deterministic coordinates and locale-independent ordering;
+- invalid and duplicate registration rejection;
+- readonly host-owned typed context without session/client/raw gateway/infrastructure injection;
 - per-extension lazy loading, `Suspense`, render/load error isolation and bounded retry;
-- safe failure evidence containing identifiers/phase/attempt only, not raw error objects or record payloads;
-- record-page host proof where core host content and healthy sibling extensions survive render and lazy-load failures;
-- real browser acceptance for failure isolation;
-- no remote untrusted JavaScript execution or marketplace sandbox claim in this phase.
+- safe failure evidence containing extension identity, surface, phase and attempt only;
+- failure-observer isolation so telemetry hooks cannot break the host;
+- development-only lazy-loaded record-page proof fixture rather than a fake production record page;
+- real browser acceptance proving host shell, core record content and healthy sibling extensions survive render and lazy-load failures and targeted retry.
 
-Phase 10 remains responsible for signed packages and sandboxed untrusted marketplace execution.
+The new duplicate-coordinate unit test exposed and prevented a real defect where `Set.add()` had been incorrectly treated as a boolean. Final review head `874dde11f5d558bd5e53f2def3e8903ff12f361a` passed Governance CI, Rust CI and Product Plane CI including full PostgreSQL/process/browser E2E. PR #90 merged to `main` as `0fb389c72b148311f590c3fdbae2a4f89fffd915`.
+
+Phase 10 remains responsible for signed packages and sandboxed untrusted marketplace execution. Phase 7I deliberately does not claim arbitrary third-party JavaScript isolation.
+
+## Active executable program — Phase 8A
+
+**#28 — canonical customer master, identity resolution and consent.**
+
+This is now the first active expert owner-domain program. It must establish stable customer identity ownership before Sales, Service, Marketing, Billing, projects or AI expand around incompatible local person/account models.
+
+Required owner-domain work includes:
+
+- Party identities for people and organizations;
+- Account/customer relationships that reference parties rather than own identity;
+- typed contact points and preferences;
+- time-bounded party relationships and hierarchies;
+- purpose/channel/jurisdiction-specific consent and withdrawal evidence;
+- source identifiers, match evidence, survivorship decisions and immutable merge/unmerge lineage;
+- duplicate detection with explainable candidates and approval-aware high-risk decisions;
+- privacy/export/deletion/legal-hold interaction evidence;
+- governed import/export and enrichment with provenance.
+
+The first implementation packet must define exact ownership and contracts before broad CRUD surface is added.
 
 ## Development system
 
@@ -198,13 +219,12 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 - strict typed metadata schemas and durable tenant-scoped persistence;
 - governed metadata public API/application composition;
 - governed Admin Studio publication/impact/activation/rollback workflow;
-- typed UI-extension failure-isolation runtime in active Phase 7I review.
+- typed trusted-code UI-extension runtime with failure isolation and real browser acceptance.
 
 ### Not yet complete
 
-- final merge/freeze of Phase 7I and Phase 7 closure evidence;
+- broad canonical customer master, identity resolution and consent — active #28;
 - broad product-quality Sales/Activities UX and mobile experience;
-- canonical customer master, identity resolution and consent — #28;
 - product catalog, pricing, CPQ and quote-to-revenue lifecycle — #29;
 - communications, marketing, support/service, projects, documents/e-signature and analytics domains;
 - AI-native governed actor/tool layer;
@@ -213,10 +233,10 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 
 ## Immediate delivery sequence
 
-1. Complete #89 / PR #90 and freeze one exact head with all applicable Product Plane, Rust and architecture/governance checks green.
-2. Close Phase 7 once UI-extension failure isolation is merged and the phase acceptance gate is synchronized.
-3. Begin the Phase 8 domain-wave program with customer master/identity/consent (#28) as the first canonical owner-domain packet.
-4. Follow with commercial lifecycle (#29) while continuing frontend and expert backend work as end-to-end vertical slices.
+1. Begin Phase 8A / #28 with explicit Party, Account, Contact Point, Relationship, Consent and Identity Resolution ownership/contracts.
+2. Deliver the customer-master program as end-to-end owner-domain packets with cross-tenant, idempotency, audit, merge/unmerge, consent-withdrawal and privacy evidence.
+3. Follow with Phase 8B / #29 commercial lifecycle without absorbing catalog/pricing/order/contract ownership into Sales.
+4. Continue frontend and expert backend work as end-to-end vertical slices.
 5. Continue continuous enterprise/security/operational hardening without making premature production-completeness claims.
 
 ## Development mode
