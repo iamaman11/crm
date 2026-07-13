@@ -25,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,6 +34,50 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Apply exact Phase 8A.3b persisted-invariant precedence fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("modules/crm-contact-points/src/domain.rs")
+          text = path.read_text()
+          before = '''        validate_validity(
+              snapshot.valid_from_unix_nanos,
+              snapshot.valid_until_unix_nanos,
+          )?;
+          validate_preference(snapshot.status, snapshot.preferred)?;
+
+          let (normalized_value, display_value) ='''
+          after = '''        validate_validity(
+              snapshot.valid_from_unix_nanos,
+              snapshot.valid_until_unix_nanos,
+          )?;
+          validate_initial_transition_shape(
+              snapshot.status,
+              &snapshot.verification,
+              snapshot.created_at_unix_nanos,
+              snapshot.updated_at_unix_nanos,
+              snapshot.version,
+          )?;
+          validate_preference(snapshot.status, snapshot.preferred)?;
+
+          let (normalized_value, display_value) ='''
+          if before not in text:
+              raise SystemExit("expected persisted validity/preference block not found")
+          text = text.replace(before, after, 1)
+          duplicate = '''        validate_initial_transition_shape(
+              snapshot.status,
+              &snapshot.verification,
+              snapshot.created_at_unix_nanos,
+              snapshot.updated_at_unix_nanos,
+              snapshot.version,
+          )?;
+
+          Ok(Self {'''
+          if duplicate not in text:
+              raise SystemExit("expected later persisted initial-transition block not found")
+          path.write_text(text.replace(duplicate, "        Ok(Self {", 1))
+          PY
       - name: Apply machine-fixable Rust maintenance
         run: |
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
@@ -51,5 +95,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git commit -m "Prioritize impossible persisted Contact Point create state"
           git push origin "HEAD:${HEAD_BRANCH}"
