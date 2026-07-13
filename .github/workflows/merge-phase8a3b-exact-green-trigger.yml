@@ -1,0 +1,102 @@
+name: Merge Phase 8A.3b Exact Green Trigger
+
+on:
+  push:
+    branches:
+      - ops/merge-phase8a3b-exact-green
+    paths:
+      - ".github/workflows/merge-phase8a3b-exact-green-trigger.yml"
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: merge-phase8a3b-exact-green-trigger
+  cancel-in-progress: false
+
+jobs:
+  gate-and-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: iamaman11/crm
+      PR_NUMBER: "104"
+      EXPECTED_HEAD_SHA: 0af9ef201fbe96e74e825e648927a7f36ae39e10
+    steps:
+      - name: Require exact-head green workflows and mergeable clean PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_json='["Application Runtime CI","Contract CI","Database CI","Event Runtime CI","Governance CI","Metadata Runtime CI","Product Plane CI","Projection Runtime CI","Rust CI","Rust Generated Sync","Search Runtime CI"]'
+          ready=0
+          for attempt in $(seq 1 60); do
+            gh api "repos/${REPOSITORY}/actions/runs?head_sha=${EXPECTED_HEAD_SHA}&event=pull_request&per_page=100" > /tmp/runs.json
+            if python - "$expected_json" <<'PY'
+          import json
+          import sys
+          expected = set(json.loads(sys.argv[1]))
+          runs = json.load(open('/tmp/runs.json'))['workflow_runs']
+          latest = {}
+          for run in runs:
+              if run['name'] in expected and (run['name'] not in latest or run['run_number'] > latest[run['name']]['run_number']):
+                  latest[run['name']] = run
+          failed = [name for name, run in latest.items() if run['status'] == 'completed' and run['conclusion'] != 'success']
+          pending = [name for name in expected if name not in latest or latest[name]['status'] != 'completed']
+          if failed:
+              raise SystemExit('failed workflows: ' + ', '.join(sorted(failed)))
+          if pending:
+              sys.exit(1)
+          PY
+            then
+              ready=1
+              break
+            fi
+            sleep 15
+          done
+          test "$ready" -eq 1
+
+          gh api graphql \
+            -f owner=iamaman11 \
+            -f name=crm \
+            -F number=${PR_NUMBER} \
+            -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){id isDraft headRefOid mergeable reviewDecision reviewThreads(first:100){nodes{isResolved}}}}}' \
+            > /tmp/pr.json
+          python - <<'PY'
+          import json, os
+          pr = json.load(open('/tmp/pr.json'))['data']['repository']['pullRequest']
+          if pr['headRefOid'] != os.environ['EXPECTED_HEAD_SHA']:
+              raise SystemExit('PR head changed')
+          if not pr['isDraft']:
+              raise SystemExit('PR is no longer draft; refusing duplicate merge gate')
+          if pr['mergeable'] != 'MERGEABLE':
+              raise SystemExit('PR is not mergeable')
+          if pr['reviewDecision'] == 'CHANGES_REQUESTED':
+              raise SystemExit('PR has requested changes')
+          if any(not node['isResolved'] for node in pr['reviewThreads']['nodes']):
+              raise SystemExit('PR has unresolved review threads')
+          PY
+
+          pr_id="$(python - <<'PY'
+          import json
+          print(json.load(open('/tmp/pr.json'))['data']['repository']['pullRequest']['id'])
+          PY
+          )"
+          gh api graphql \
+            -F pullRequestId="$pr_id" \
+            -f query='mutation($pullRequestId:ID!){markPullRequestReadyForReview(input:{pullRequestId:$pullRequestId}){pullRequest{isDraft headRefOid}}}' \
+            > /tmp/ready.json
+          gh api --method PUT "repos/${REPOSITORY}/pulls/${PR_NUMBER}/merge" \
+            -f merge_method=merge \
+            -f sha="${EXPECTED_HEAD_SHA}" \
+            -f commit_title='Phase 8A.3b: authoritative Contact Point lifecycle and verification (#104)' \
+            > /tmp/merge.json
+          python - <<'PY'
+          import json
+          result = json.load(open('/tmp/merge.json'))
+          if not result.get('merged'):
+              raise SystemExit(f"merge failed: {result}")
+          print(result['sha'])
+          PY
