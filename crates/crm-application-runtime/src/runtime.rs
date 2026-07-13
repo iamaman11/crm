@@ -27,6 +27,10 @@ use crm_core_data::{
     PostgresTransactionalAggregateExecutor,
 };
 use crm_core_events::EventHistoryRequest;
+use crm_customer_accounts_capability_adapter::{
+    MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
+};
+use crm_customer_accounts_query_adapter::AccountQueryAdapter;
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_metadata_api_adapter::METADATA_MODULE_ID;
 use crm_metadata_query_adapter::MetadataQueryAdapter;
@@ -185,6 +189,7 @@ impl ApplicationRuntime {
             Arc::clone(&clock),
         ));
         let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(
+            store.clone(),
             Arc::new(PostgresTransactionalAggregateExecutor::new(
                 store.clone(),
                 Arc::new(ApplicationAggregatePlannerRouter),
@@ -228,6 +233,13 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let account_query_adapter = AccountQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -244,6 +256,7 @@ impl ApplicationRuntime {
         let query_router = Arc::new(ApplicationQueryRouter::new(
             production_query_router,
             party_query_adapter,
+            account_query_adapter,
             metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
@@ -741,6 +754,18 @@ fn bootstrap_application_access(
                     party_fields(),
                     expires_at,
                 )?,
+                ACCOUNTS_MODULE_ID => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: ACCOUNTS_MODULE_ID,
+                        resource_type: ACCOUNT_RECORD_TYPE,
+                    },
+                    account_fields(),
+                    expires_at,
+                )?,
                 METADATA_MODULE_ID => {}
                 SEARCH_MODULE_ID => {
                     upsert_bootstrap_visibility(
@@ -852,6 +877,13 @@ fn party_fields() -> BTreeSet<String> {
         .collect()
 }
 
+fn account_fields() -> BTreeSet<String> {
+    ["name", "status", "party_associations"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
 fn task_fields() -> BTreeSet<String> {
     [
         "subject",
@@ -889,6 +921,8 @@ mod tests {
         assert!(sales_fields().contains("amount"));
         assert!(party_fields().contains("kind"));
         assert!(party_fields().contains("display_name"));
+        assert!(account_fields().contains("name"));
+        assert!(account_fields().contains("party_associations"));
         assert!(task_fields().contains("subject"));
         assert!(task_fields().contains("status"));
     }

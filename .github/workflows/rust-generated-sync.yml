@@ -25,67 +25,31 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Apply deterministic Account runtime composition patch
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("crates/crm-application-runtime/src/runtime.rs")
-          original = path.read_text()
-          text = original
-          text = text.replace(
-              'use crm_core_events::EventHistoryRequest;\nuse crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};',
-              'use crm_core_events::EventHistoryRequest;\nuse crm_customer_accounts_capability_adapter::{\n    MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,\n};\nuse crm_customer_accounts_query_adapter::AccountQueryAdapter;\nuse crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};',
-              1,
-          )
-          text = text.replace(
-              '        let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(\n            Arc::new(PostgresTransactionalAggregateExecutor::new(\n                store.clone(),\n                Arc::new(ApplicationAggregatePlannerRouter),\n            )),\n            Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),\n        ));',
-              '        let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(\n            store.clone(),\n            Arc::new(PostgresTransactionalAggregateExecutor::new(\n                store.clone(),\n                Arc::new(ApplicationAggregatePlannerRouter),\n            )),\n            Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),\n        ));',
-              1,
-          )
-          party_adapter = '        let party_query_adapter = PartyQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;'
-          text = text.replace(
-              party_adapter,
-              party_adapter + '\n        let account_query_adapter = AccountQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;',
-              1,
-          )
-          text = text.replace(
-              '        let query_router = Arc::new(ApplicationQueryRouter::new(\n            production_query_router,\n            party_query_adapter,\n            metadata_query_adapter,\n        ));',
-              '        let query_router = Arc::new(ApplicationQueryRouter::new(\n            production_query_router,\n            party_query_adapter,\n            account_query_adapter,\n            metadata_query_adapter,\n        ));',
-              1,
-          )
-          text = text.replace(
-              '                PARTIES_MODULE_ID => upsert_bootstrap_visibility(\n                    visibility_store,\n                    config,\n                    tenant_id,\n                    definition,\n                    BootstrapVisibilityResource {\n                        owner_module_id: PARTIES_MODULE_ID,\n                        resource_type: PARTY_RECORD_TYPE,\n                    },\n                    party_fields(),\n                    expires_at,\n                )?,\n                METADATA_MODULE_ID => {}',
-              '                PARTIES_MODULE_ID => upsert_bootstrap_visibility(\n                    visibility_store,\n                    config,\n                    tenant_id,\n                    definition,\n                    BootstrapVisibilityResource {\n                        owner_module_id: PARTIES_MODULE_ID,\n                        resource_type: PARTY_RECORD_TYPE,\n                    },\n                    party_fields(),\n                    expires_at,\n                )?,\n                ACCOUNTS_MODULE_ID => upsert_bootstrap_visibility(\n                    visibility_store,\n                    config,\n                    tenant_id,\n                    definition,\n                    BootstrapVisibilityResource {\n                        owner_module_id: ACCOUNTS_MODULE_ID,\n                        resource_type: ACCOUNT_RECORD_TYPE,\n                    },\n                    account_fields(),\n                    expires_at,\n                )?,\n                METADATA_MODULE_ID => {}',
-              1,
-          )
-          text = text.replace(
-              'fn party_fields() -> BTreeSet<String> {\n    ["kind", "display_name"]\n        .into_iter()\n        .map(str::to_owned)\n        .collect()\n}\n\nfn task_fields() -> BTreeSet<String> {',
-              'fn party_fields() -> BTreeSet<String> {\n    ["kind", "display_name"]\n        .into_iter()\n        .map(str::to_owned)\n        .collect()\n}\n\nfn account_fields() -> BTreeSet<String> {\n    ["name", "status", "party_associations"]\n        .into_iter()\n        .map(str::to_owned)\n        .collect()\n}\n\nfn task_fields() -> BTreeSet<String> {',
-              1,
-          )
-          text = text.replace(
-              '        assert!(party_fields().contains("kind"));\n        assert!(party_fields().contains("display_name"));\n        assert!(task_fields().contains("subject"));',
-              '        assert!(party_fields().contains("kind"));\n        assert!(party_fields().contains("display_name"));\n        assert!(account_fields().contains("name"));\n        assert!(account_fields().contains("party_associations"));\n        assert!(task_fields().contains("subject"));',
-              1,
-          )
-          if text == original:
-              raise SystemExit("Account runtime composition patch produced no changes")
-          path.write_text(text)
-          PY
-      - name: Restore canonical workflow and commit runtime composition
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-application-runtime/src/runtime.rs .github/workflows/rust-generated-sync.yml
-          git commit -m "Compose Account query and reference-integrity runtime"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
