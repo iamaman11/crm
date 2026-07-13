@@ -20,9 +20,9 @@ use tokio::process::{Child, Command};
 use tokio::time::{sleep, timeout};
 use tonic::{Code, Request, Status};
 
-const TENANT_A: &str = "party-process-a";
-const TENANT_B: &str = "party-process-b";
-const ACTOR: &str = "party-process-actor";
+const TENANT_A: &str = "tenant-a";
+const TENANT_B: &str = "tenant-b";
+const ACTOR: &str = "actor-a";
 const TOKEN: &str = "party-process-bearer-token-0123456789abcdef0123456789abcdef";
 const PARTY_CREATE: &str = "parties.party.create";
 const PARTY_GET: &str = "parties.party.get";

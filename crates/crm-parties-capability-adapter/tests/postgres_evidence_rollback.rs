@@ -29,12 +29,12 @@ use crm_parties_capability_adapter::{
 use crm_proto_contracts::crm::{customer::v1 as customer, parties::v1 as parties};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use prost::Message;
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-const TENANT: &str = "party-evidence-rollback";
-const ACTOR: &str = "party-evidence-actor";
+const TENANT: &str = "tenant-a";
+const ACTOR: &str = "actor-a";
 const TOKEN: &str = "party-evidence-token-0123456789abcdef0123456789abcdef";
 const PARTY_ID: &str = "party-evidence-rollback-record";
 const IDEMPOTENCY_KEY: &str = "party-evidence-rollback-idem";
@@ -111,6 +111,12 @@ async fn missing_party_audit_evidence_rolls_back_every_transactional_side_effect
     let admin = PgPool::connect(&admin_database_url)
         .await
         .expect("connect Party rollback evidence reader");
+    admin
+        .execute(sqlx::raw_sql(include_str!(
+            "../../../database/tests/0005_party_adapter.sql"
+        )))
+        .await
+        .expect("publish Party module/capability registry fixture");
     let before = evidence_counts(&admin).await;
 
     let definition = capability_definition(CREATE_CAPABILITY).unwrap();
