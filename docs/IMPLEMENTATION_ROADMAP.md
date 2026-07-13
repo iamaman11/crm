@@ -228,7 +228,7 @@ Architectural constraints:
 
 Acceptance must cover cross-tenant isolation, deterministic import/replay, merge/unmerge lineage and rollback, immediate consent-withdrawal enforcement, explainable duplicate candidates, privacy export/deletion/legal-hold interactions, contract compatibility, migrations and performance.
 
-Current delivery position: Party create/update/get/list/search is production-proven; the first authoritative Account create/update/get/list slice with typed Party associations and platform-level reference integrity is complete in PR #102 pending merge. The next owner-domain packet is Contact Point lifecycle, followed by Party Relationship and Customer 360 composition. Consent, identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets.
+Current delivery position: Party create/update/get/list/search is production-proven. The first authoritative Account create/update/get/list slice with typed Party associations and platform-level reference integrity is merged and production-proven (#101 / merged PR #102; final verified head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4`; merge commit `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`). Contact Point lifecycle is now active in #103 on `develop/phase8a3b-contact-point-lifecycle`; the branch currently contains the first typed lifecycle/verification domain foundation but not yet the public contracts, adapters, runtime composition or production process proof required for merge. Party Relationship and Customer 360 follow. Consent, identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets.
 
 ### 8B — product catalog, CPQ and quote-to-revenue lifecycle — Planned
 
@@ -270,8 +270,8 @@ Gate: enterprise claims require automated and operational evidence, not configur
 
 ## 12. Immediate delivery sequence
 
-1. Merge Phase 8A.3a / #101 / PR #102 after one exact-head green gate set.
-2. Deliver Phase 8A.3b Contact Point lifecycle, verification and preference, then Party Relationship and Customer 360 composition.
+1. Continue Phase 8A.3b / #103 from `develop/phase8a3b-contact-point-lifecycle`: complete the Contact Point domain, versioned contracts, deterministic persistence, governed mutation/query adapters, application composition, Party-reference integrity and real PostgreSQL/`crm-api` process acceptance.
+2. Deliver Party Relationship lifecycle/hierarchy and permission-aware Customer 360 composition.
 3. Continue Phase 8A with Consent, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
 4. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.
 5. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.
