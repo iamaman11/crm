@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
-mod legacy;
+mod base_adapter;
 
-pub use legacy::{
+pub use base_adapter::{
     AUTHORIZE_CAPABILITY, AUTHORIZE_REQUEST_SCHEMA, AUTHORIZE_RESPONSE_SCHEMA, GET_CAPABILITY,
     GET_REQUEST_SCHEMA, GET_RESPONSE_SCHEMA, LIST_CAPABILITY, LIST_REQUEST_SCHEMA,
     LIST_RESPONSE_SCHEMA, QUERY_CAPABILITY_IDS, query_capability_definition,
@@ -41,7 +41,7 @@ use std::sync::Arc;
 /// an authoritative Party -> Consent relationship access path.
 #[derive(Clone)]
 pub struct ConsentQueryAdapter {
-    legacy: legacy::ConsentQueryAdapter,
+    base_adapter: base_adapter::ConsentQueryAdapter,
     store: PostgresDataStore,
 }
 
@@ -49,7 +49,7 @@ impl fmt::Debug for ConsentQueryAdapter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ConsentQueryAdapter")
-            .field("legacy", &self.legacy)
+            .field("base_adapter", &self.base_adapter)
             .field("store", &self.store)
             .finish()
     }
@@ -61,8 +61,12 @@ impl ConsentQueryAdapter {
         cursor_codec: CursorCodec,
         visibility: Arc<dyn QueryVisibilityAuthorizer>,
     ) -> Result<Self, SdkError> {
-        let legacy = legacy::ConsentQueryAdapter::new(store.clone(), cursor_codec, visibility)?;
-        Ok(Self { legacy, store })
+        let base_adapter =
+            base_adapter::ConsentQueryAdapter::new(store.clone(), cursor_codec, visibility)?;
+        Ok(Self {
+            base_adapter,
+            store,
+        })
     }
 
     async fn execute_authorize(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
@@ -164,7 +168,7 @@ impl QuerySemanticValidator for ConsentQueryAdapter {
         definition: &'a CapabilityDefinition,
         request: &'a QueryRequest,
     ) -> PortFuture<'a, Result<(), SdkError>> {
-        self.legacy.validate(definition, request)
+        self.base_adapter.validate(definition, request)
     }
 }
 
@@ -175,7 +179,7 @@ impl QueryExecutor for ConsentQueryAdapter {
         request: QueryRequest,
     ) -> PortFuture<'a, Result<QueryExecutionResult, SdkError>> {
         if definition.capability_id.as_str() != AUTHORIZE_CAPABILITY {
-            return self.legacy.execute(definition, request);
+            return self.base_adapter.execute(definition, request);
         }
         Box::pin(async move {
             let output = self.execute_authorize(&request).await?;
