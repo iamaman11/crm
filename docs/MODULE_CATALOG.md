@@ -45,11 +45,11 @@ A manifest may declare future owned object names. That declaration does not mean
 | `crm.parties` | Canonical person and organization identity | **Expert expansion** | Production Party create/update/get/list plus permission-aware rebuildable global search discovery | Structured person/organization profiles, provenance, identity resolution, merge/unmerge, import/export and privacy lifecycle work across later Phase 8A packets |
 | `crm.customer-accounts` | Canonical customer/commercial relationship | **Vertical slice** | Governed Account create/update/get/list with typed Party associations, live reference integrity, signed cursor listing and real PostgreSQL/process acceptance | Account hierarchy/advanced commercial semantics where justified, plus Customer 360 composition in later 8A.3 packets |
 | `crm.contact-points` | Canonical email/phone/postal/web/messaging endpoints | **Vertical slice** | Merged governed create/update/verify/get/list with deterministic endpoint normalization, verification/preference lifecycle, Party-reference integrity and real PostgreSQL/process acceptance | Broader communication-channel product UX and consent-aware downstream usage remain separate later packets |
-| `crm.party-relationships` | Authoritative typed Party-to-Party relationships and temporal hierarchy source state | **Vertical slice** | Implementation-complete create/update/get/list lifecycle with directional/reciprocal semantics, same-tenant Party-reference integrity, signed cursor queries, durable evidence and rebuildable hierarchy acceptance in #108 / PR #109 | Post-documentation exact-head merge gate, then downstream Customer 360 composition and any later explicitly governed overlap-policy expansion |
+| `crm.party-relationships` | Authoritative typed Party-to-Party relationships and temporal hierarchy source state | **Vertical slice** | Merged create/update/get/list lifecycle with directional/reciprocal semantics, same-tenant Party-reference integrity, signed cursor queries, durable evidence and rebuildable hierarchy acceptance from #108 / PR #109 | Later explicitly governed overlap-policy expansion where justified |
 
 Current owner-module count: **6**.
 
-Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts and Contact Points**; Party Relationships is implementation-complete with production acceptance and is pending only the 8A.3c post-documentation exact-head merge gate.
+Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points and Party Relationships**.3c post-documentation exact-head merge gate.
 
 Current count of product-complete expert modules: **0**.
 
@@ -70,13 +70,15 @@ Tracked by Phase 8A / issue #28.
 - `crm.parties` — Party owner for person and organization identity — **Expert expansion**; create/update/get/list/search production lifecycle complete.
 - `crm.customer-accounts` — Account owner for customer/commercial relationships — **Merged production vertical slice** from #101 / PR #102.
 - `crm.contact-points` — Contact Point owner for email, phone, postal, web and messaging endpoints — **Merged production vertical slice** from #103 / PR #104.
-- `crm.party-relationships` — Party Relationship owner for employment, household, parent/subsidiary and bounded configurable typed relationships — **Implementation-complete production vertical slice / merge gate** in #108 / PR #109.
+- `crm.party-relationships` — Party Relationship owner for employment, household, parent/subsidiary and bounded configurable typed relationships — **Merged production vertical slice** from #108 / PR #109.
 - Consent and Preferences — purpose/channel/legal-basis consent and suppression — **Planned for 8A.4**.
 - Identity Resolution — source identities, matching, survivorship and merge/unmerge lineage — **Planned for 8A.5–8A.6**.
 
 The shared `crm.customer.v1` Protobuf package contains only cross-owner references and shared public version metadata. It is **not** a business module and owns no mutable behavior or storage.
 
 `crm-global-search-composition` is also **not** a business module. It owns only cross-domain rebuildable projection composition; Party remains the identity owner and search remains non-authoritative.
+
+`crm.customer360` is an independently lifecycle-managed **read-composition module**, not an authoritative owner module. It publishes `customer360.customer.get@1.0.0`, consumes immutable owner events and materializes rebuildable contribution documents, but declares no owned objects, record types, private authoritative state or mutation capability. It is tracked separately from the six authoritative owner modules and the optional link-module count.
 
 ### Account ownership boundary
 
@@ -120,7 +122,11 @@ Merged PR #104 delivers the authoritative 8A.3b Contact Point vertical slice: st
 
 ### Party Relationship ownership boundary
 
-`crm.party-relationships` owns stable Party Relationship identity, immutable canonical Party endpoints, bounded typed directional/reciprocal semantics, lifecycle, validity intervals and optimistic version progression. It does **not** own Party identity attributes, Account membership, Contact Point state, consent/communication authorization, Sales roles, provider state or Customer 360. Application composition validates both Party references without giving the owner SQL or direct Party storage access. The hierarchy read model is rebuildable and non-authoritative. #108 / PR #109 is implementation-complete and passed all 11 applicable workflows together on pre-documentation exact head `a26d0364382c3fa5fb369d8ca1c65941863ff75b`; the documentation commit requires a fresh exact-head rerun before merge.
+`crm.party-relationships` owns stable Party Relationship identity, immutable canonical Party endpoints, bounded typed directional/reciprocal semantics, lifecycle, validity intervals and optimistic version progression. It does **not** own Party identity attributes, Account membership, Contact Point state, consent/communication authorization, Sales roles, provider state or Customer 360. Application composition validates both Party references without giving the owner SQL or direct Party storage access. The hierarchy read model is rebuildable and non-authoritative. #108 / PR #109 merged to `main` as `36c238d51a156e3864e2dad0f53762e95e47680d`.
+
+### Customer 360 read-composition boundary
+
+`crm.customer360` owns only the versioned read-composition contract, deterministic mapping from validated owner events into rebuildable contributions and the permission-aware query assembly policy. It does **not** own Party identity, Account membership, Contact Point lifecycle/verification, Party Relationship state, consent, identity resolution, provider delivery state or any mutable customer master. Source resources are live-authorized and field-redacted before disclosure, and projection rebuild cannot mutate authoritative records, outbox events or audit evidence. #110 / PR #111 passed all 11 applicable workflows together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca` and is awaiting the post-documentation exact-head merge gate.
 
 ## 6. Mandatory commercial lifecycle owner domains
 

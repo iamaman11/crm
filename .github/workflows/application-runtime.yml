@@ -1,78 +1,220 @@
 name: Application Runtime CI
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/gateway/**"
+      - "proto/crm/search/**"
+      - "proto/crm/metadata/**"
+      - "proto/crm/customer/**"
+      - "proto/crm/parties/**"
+      - "proto/crm/accounts/**"
+      - "proto/crm/contact_points/**"
+      - "proto/crm/party_relationships/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-contact-points-capability-adapter/**"
+      - "crates/crm-contact-points-query-adapter/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
+      - "crates/crm-customer-accounts-capability-adapter/**"
+      - "crates/crm-customer-accounts-query-adapter/**"
+      - "crates/crm-metadata-api-adapter/**"
+      - "crates/crm-metadata-query-adapter/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
+      - "crates/crm-party-relationships-capability-adapter/**"
+      - "crates/crm-party-relationships-query-adapter/**"
+      - "crates/crm-party-relationships-projection/**"
+      - "crates/crm-query-runtime/**"
+      - "crates/crm-search-runtime/**"
+      - "crates/crm-search-query-adapter/**"
+      - "crates/crm-sales-activities-capability-composition/**"
+      - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-contact-points/**"
+      - "modules/crm-customer-accounts/**"
+      - "modules/crm-parties/**"
+      - "modules/crm-party-relationships/**"
+      - "modules/crm-sales-activities-link/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/**"
       - ".github/workflows/application-runtime.yml"
-      - ".github/workflows/rust-generated-sync.yml"
-      - "docs/**"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/gateway/**"
+      - "proto/crm/search/**"
+      - "proto/crm/metadata/**"
+      - "proto/crm/customer/**"
+      - "proto/crm/parties/**"
+      - "proto/crm/accounts/**"
+      - "proto/crm/contact_points/**"
+      - "proto/crm/party_relationships/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-contact-points-capability-adapter/**"
+      - "crates/crm-contact-points-query-adapter/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
+      - "crates/crm-customer-accounts-capability-adapter/**"
+      - "crates/crm-customer-accounts-query-adapter/**"
+      - "crates/crm-metadata-api-adapter/**"
+      - "crates/crm-metadata-query-adapter/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
+      - "crates/crm-party-relationships-capability-adapter/**"
+      - "crates/crm-party-relationships-query-adapter/**"
+      - "crates/crm-party-relationships-projection/**"
+      - "crates/crm-query-runtime/**"
+      - "crates/crm-search-runtime/**"
+      - "crates/crm-search-query-adapter/**"
+      - "crates/crm-sales-activities-capability-composition/**"
+      - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-contact-points/**"
+      - "modules/crm-customer-accounts/**"
+      - "modules/crm-parties/**"
+      - "modules/crm-party-relationships/**"
+      - "modules/crm-sales-activities-link/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/**"
+      - ".github/workflows/application-runtime.yml"
 
 permissions:
-  contents: write
-
-concurrency:
-  group: application-runtime-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  contents: read
 
 jobs:
   application-runtime:
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 55
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_application_runtime_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_application_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5435
+      PGDATABASE: crm_application_runtime_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5435/crm_application_runtime_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5435/crm_application_runtime_test
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-      - name: Execute verified Phase 8A.3d normative sync script
-        id: sync
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Prepare isolated application database reset helper
+        shell: bash
+        run: |
+          cat > /tmp/reset-application-database.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --command "DROP SCHEMA IF EXISTS crm CASCADE"
+          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/0010_*.up.sql; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+          SH
+          chmod +x /tmp/reset-application-database.sh
+      - name: Verify full crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-process.log
+      - name: Verify Party crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test party_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-party-process.log
+      - name: Verify Account crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test account_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-account-process.log
+      - name: Verify Contact Point crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test contact_point_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-contact-point-process.log
+      - name: Verify Party Relationship crm-api process lifecycle and hierarchy rebuild
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test party_relationship_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-party-relationship-process.log
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
         shell: bash
         run: |
           set +e
-          python - <<'PY' > /tmp/docs-sync.log 2>&1
-          from pathlib import Path
-          import traceback
-
-          try:
-              workflow = Path('.github/workflows/rust-generated-sync.yml').read_text().splitlines()
-              start = next(i for i, line in enumerate(workflow) if line.strip() == 'from pathlib import Path')
-              end = next(i for i in range(start + 1, len(workflow)) if workflow[i].strip() == 'PY')
-              base_indent = len(workflow[start]) - len(workflow[start].lstrip())
-              prefix = ' ' * base_indent
-              code_lines = [line[base_indent:] if line.startswith(prefix) else line for line in workflow[start:end]]
-              code = '\n'.join(code_lines)
-              exec(compile(code, 'phase8a3d_normative_sync.py', 'exec'), {'__name__': '__main__'})
-          except BaseException:
-              traceback.print_exc()
-              raise
-          PY
-          status=$?
-          cat /tmp/docs-sync.log
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Upload normative sync diagnostics
-        if: steps.sync.outputs.status != '0'
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/application-runtime-postgres.log 2>&1
+          else
+            echo "PostgreSQL service container was not found." > database/application-runtime-postgres.log
+            docker ps -a >> database/application-runtime-postgres.log 2>&1
+          fi
+      - name: Upload application runtime diagnostics on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: phase8a3d-normative-sync-diagnostics
-          path: /tmp/docs-sync.log
+          name: application-runtime-diagnostics
+          path: |
+            database/application-runtime-process.log
+            database/application-runtime-party-process.log
+            database/application-runtime-account-process.log
+            database/application-runtime-contact-point-process.log
+            database/application-runtime-party-relationship-process.log
+            database/application-runtime-postgres.log
+            crates/crm-application-runtime/
+            crates/crm-contact-points-capability-adapter/
+            crates/crm-contact-points-query-adapter/
+            crates/crm-customer-accounts-capability-adapter/
+            crates/crm-customer-accounts-query-adapter/
+            crates/crm-metadata-api-adapter/
+            crates/crm-metadata-query-adapter/
+            crates/crm-parties-capability-adapter/
+            crates/crm-parties-query-adapter/
+            crates/crm-party-relationships-capability-adapter/
+            crates/crm-party-relationships-query-adapter/
+            crates/crm-party-relationships-projection/
+            crates/crm-search-query-adapter/
+            modules/crm-contact-points/
+            modules/crm-customer-accounts/
+            modules/crm-party-relationships/
+            services/crm-api/
           if-no-files-found: error
           retention-days: 7
-      - name: Fail after diagnostics
-        if: steps.sync.outputs.status != '0'
-        run: exit 1
-      - name: Commit normative docs and restore standard workflows
-        if: steps.sync.outputs.status == '0'
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
-        run: |
-          git show origin/main:.github/workflows/application-runtime.yml > .github/workflows/application-runtime.yml
-          git show origin/main:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/application-runtime.yml .github/workflows/rust-generated-sync.yml \
-            docs/IMPLEMENTATION_ROADMAP.md docs/PROJECT_STATUS.md docs/MODULE_CATALOG.md docs/PHASE8_DELIVERY_PLAN.md
-          git diff --cached --exit-code && { echo "Expected normative documentation changes were not produced."; exit 1; } || true
-          git commit -m "Finalize Phase 8A.3d normative merge-gate status"
-          git push origin "HEAD:${HEAD_BRANCH}"
