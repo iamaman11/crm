@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.parties
-version: "0.1.0"
+version: "0.2.0"
 display_name: CRM Parties
 description: Canonical owner domain for person and organization identity.
 
@@ -32,6 +32,7 @@ provides:
     - id: parties.party.created
       version: "1.0.0"
   objects:
+    - parties.party
     - parties.person
     - parties.organization
   ui_extensions: []
@@ -42,8 +43,7 @@ consumes:
 
 storage:
   record_types:
-    - parties.person
-    - parties.organization
+    - parties.party
   private_state_namespaces:
     - crm.parties
 
@@ -61,5 +61,4 @@ lifecycle:
   uninstall_policy: retain_business_records
   migrations_path: modules/crm-parties/migrations
   retained_record_types:
-    - parties.person
-    - parties.organization
+    - parties.party
