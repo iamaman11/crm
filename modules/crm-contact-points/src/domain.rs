@@ -225,6 +225,13 @@ impl ContactPoint {
             snapshot.valid_from_unix_nanos,
             snapshot.valid_until_unix_nanos,
         )?;
+        validate_initial_transition_shape(
+            snapshot.status,
+            &snapshot.verification,
+            snapshot.created_at_unix_nanos,
+            snapshot.updated_at_unix_nanos,
+            snapshot.version,
+        )?;
         validate_preference(snapshot.status, snapshot.preferred)?;
 
         let (normalized_value, display_value) =
@@ -244,13 +251,6 @@ impl ContactPoint {
             ));
         }
         validate_verification(
-            &snapshot.verification,
-            snapshot.created_at_unix_nanos,
-            snapshot.updated_at_unix_nanos,
-            snapshot.version,
-        )?;
-        validate_initial_transition_shape(
-            snapshot.status,
             &snapshot.verification,
             snapshot.created_at_unix_nanos,
             snapshot.updated_at_unix_nanos,
