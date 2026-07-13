@@ -3,7 +3,7 @@ syntax = "proto3";
 package crm.accounts.v1;
 
 import "crm/core/v1/common.proto";
-import "crm/customer/v1/customer.proto";
+import "crm/customer/v1/reference.proto";
 
 // Lifecycle state owned by crm.customer-accounts.
 enum AccountStatus {
@@ -30,7 +30,7 @@ message Account {
   string name = 2;
   AccountStatus status = 3;
   repeated AccountPartyAssociation party_associations = 4;
-  crm.core.v1.ResourceVersion resource_version = 5;
+  crm.customer.v1.CustomerResourceVersion resource_version = 5;
 }
 
 message CreateAccountRequest {
