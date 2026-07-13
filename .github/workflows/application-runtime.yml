@@ -9,6 +9,7 @@ on:
       - "proto/crm/search/**"
       - "proto/crm/metadata/**"
       - "proto/crm/customer/**"
+      - "proto/crm/customer_360/**"
       - "proto/crm/parties/**"
       - "proto/crm/accounts/**"
       - "proto/crm/contact_points/**"
@@ -21,6 +22,8 @@ on:
       - "crates/crm-contact-points-query-adapter/**"
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
+      - "crates/crm-customer-360-composition/**"
+      - "crates/crm-customer-360-query-adapter/**"
       - "crates/crm-customer-accounts-capability-adapter/**"
       - "crates/crm-customer-accounts-query-adapter/**"
       - "crates/crm-metadata-api-adapter/**"
@@ -52,6 +55,7 @@ on:
       - "proto/crm/search/**"
       - "proto/crm/metadata/**"
       - "proto/crm/customer/**"
+      - "proto/crm/customer_360/**"
       - "proto/crm/parties/**"
       - "proto/crm/accounts/**"
       - "proto/crm/contact_points/**"
@@ -64,6 +68,8 @@ on:
       - "crates/crm-contact-points-query-adapter/**"
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
+      - "crates/crm-customer-360-composition/**"
+      - "crates/crm-customer-360-query-adapter/**"
       - "crates/crm-customer-accounts-capability-adapter/**"
       - "crates/crm-customer-accounts-query-adapter/**"
       - "crates/crm-metadata-api-adapter/**"
@@ -94,7 +100,7 @@ permissions:
 jobs:
   application-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 65
     services:
       postgres:
         image: postgres:17-alpine
@@ -131,7 +137,7 @@ jobs:
           #!/usr/bin/env bash
           set -euo pipefail
           psql --set ON_ERROR_STOP=1 --command "DROP SCHEMA IF EXISTS crm CASCADE"
-          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/0010_*.up.sql; do
+          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/001{0,1}_*.up.sql; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
           done
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
@@ -175,6 +181,13 @@ jobs:
           /tmp/reset-application-database.sh
           cargo test -p crm-api --test party_relationship_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-party-relationship-process.log
+      - name: Verify Customer 360 crm-api process convergence and rebuild equivalence
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test customer_360_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-customer-360-process.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -198,10 +211,13 @@ jobs:
             database/application-runtime-account-process.log
             database/application-runtime-contact-point-process.log
             database/application-runtime-party-relationship-process.log
+            database/application-runtime-customer-360-process.log
             database/application-runtime-postgres.log
             crates/crm-application-runtime/
             crates/crm-contact-points-capability-adapter/
             crates/crm-contact-points-query-adapter/
+            crates/crm-customer-360-composition/
+            crates/crm-customer-360-query-adapter/
             crates/crm-customer-accounts-capability-adapter/
             crates/crm-customer-accounts-query-adapter/
             crates/crm-metadata-api-adapter/
