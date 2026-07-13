@@ -43,12 +43,12 @@ A manifest may declare future owned object names. That declaration does not mean
 | `crm.sales` | Sales owner domain | **Vertical slice** | Deal create/update/stage advance/get/list | Leads, qualification, pipelines/admin depth, territories, quotas, forecasts, account plans, revenue intelligence, coaching and other expert Sales scope |
 | `crm.activities` | Activities/productivity owner domain | **Vertical slice** | Task create/update/complete/reminder/get/list | Appointments, recurring work, queues, calendars, synchronization and other expert activity scope |
 | `crm.parties` | Canonical person and organization identity | **Expert expansion** | Production Party create/update/get/list plus permission-aware rebuildable global search discovery | Structured person/organization profiles, provenance, identity resolution, merge/unmerge, import/export and privacy lifecycle work across later Phase 8A packets |
-| `crm.customer-accounts` | Canonical customer/commercial relationship | **Vertical slice in PR #102 pending merge** | Governed Account create/update/get/list with typed Party associations, live reference integrity, signed cursor listing and real PostgreSQL/process acceptance | Account hierarchy/advanced commercial semantics where justified, plus Customer 360 composition in later 8A.3 packets |
-| `crm.contact-points` | Canonical email/phone/postal/messaging endpoints | **Foundation** | Stable module identity and canonical `ContactPointRef` only | Channel lifecycle, verification, validity, preference, public contracts and production vertical slice in 8A.3b |
+| `crm.customer-accounts` | Canonical customer/commercial relationship | **Vertical slice** | Governed Account create/update/get/list with typed Party associations, live reference integrity, signed cursor listing and real PostgreSQL/process acceptance | Account hierarchy/advanced commercial semantics where justified, plus Customer 360 composition in later 8A.3 packets |
+| `crm.contact-points` | Canonical email/phone/postal/web/messaging endpoints | **Foundation / active implementation** | Stable module identity and canonical `ContactPointRef`; active 8A.3b branch contains the first typed lifecycle/verification domain foundation | Public contracts, persistence, governed mutation/query adapters, application composition, Party-reference integrity and production PostgreSQL/process acceptance |
 
 Current owner-module count: **5**.
 
-After PR #102 merges, production owner vertical slices are **Sales, Activities, Parties and Customer Accounts**; Contact Points remains a foundation.
+Production owner vertical slices are **Sales, Activities, Parties and Customer Accounts**; Contact Points remains an active foundation until 8A.3b production gates pass and merge.
 
 Current count of product-complete expert modules: **0**.
 
@@ -67,8 +67,8 @@ Current business-module count: **6** — five owner modules plus one optional li
 Tracked by Phase 8A / issue #28.
 
 - `crm.parties` — Party owner for person and organization identity — **Expert expansion**; create/update/get/list/search production lifecycle complete.
-- `crm.customer-accounts` — Account owner for customer/commercial relationships — **Vertical slice in PR #102 pending merge**.
-- `crm.contact-points` — Contact Point owner for email, phone, postal and messaging endpoints — **Foundation; 8A.3b next**.
+- `crm.customer-accounts` — Account owner for customer/commercial relationships — **Merged production vertical slice** from #101 / PR #102.
+- `crm.contact-points` — Contact Point owner for email, phone, postal, web and messaging endpoints — **Foundation with active 8A.3b implementation** in #103 / `develop/phase8a3b-contact-point-lifecycle`.
 - Party Relationship — employment, household, hierarchy and typed relationships — **Planned for 8A.3c**.
 - Consent and Preferences — purpose/channel/legal-basis consent and suppression — **Planned for 8A.4**.
 - Identity Resolution — source identities, matching, survivorship and merge/unmerge lineage — **Planned for 8A.5–8A.6**.
@@ -95,6 +95,27 @@ It does **not** own:
 - Customer 360 projections.
 
 Party-reference existence and tenant integrity are validated in application/platform composition before Account mutation execution, preserving a pure owner-domain aggregate with no direct Party storage access.
+
+### Contact Point ownership boundary
+
+`crm.contact-points` is being implemented to own:
+
+- Contact Point identity and Party attachment by stable reference;
+- typed endpoint kind and canonical endpoint value;
+- active/inactive lifecycle;
+- validity interval state;
+- preferred-contact-point state;
+- verification state and bounded verification evidence reference;
+- Contact Point optimistic version progression.
+
+It must **not** own:
+
+- mutable Party identity attributes;
+- consent or communication authorization;
+- provider delivery state or omnichannel conversation state;
+- Account hierarchy or Party Relationship state.
+
+The current 8A.3b branch already establishes the first pure domain model and resets verification when the endpoint value changes, but the module remains a foundation until governed public contracts, persistence, application composition and production acceptance are complete.
 
 ## 6. Mandatory commercial lifecycle owner domains
 
