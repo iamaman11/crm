@@ -384,6 +384,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-consents-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-consents",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+]
+
+[[package]]
 name = "crm-contact-points"
 version = "0.1.0"
 dependencies = [

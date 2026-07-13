@@ -25,8 +25,7 @@ pub const WITHDRAW_CAPABILITY: &str = "consents.authorization.withdraw";
 pub const CREATE_REQUEST_SCHEMA: &str = "crm.consents.v1.CreateConsentAuthorizationRequest";
 pub const CREATE_RESPONSE_SCHEMA: &str = "crm.consents.v1.CreateConsentAuthorizationResponse";
 pub const WITHDRAW_REQUEST_SCHEMA: &str = "crm.consents.v1.WithdrawConsentAuthorizationRequest";
-pub const WITHDRAW_RESPONSE_SCHEMA: &str =
-    "crm.consents.v1.WithdrawConsentAuthorizationResponse";
+pub const WITHDRAW_RESPONSE_SCHEMA: &str = "crm.consents.v1.WithdrawConsentAuthorizationResponse";
 
 pub const CREATED_EVENT_TYPE: &str = "consents.authorization.created";
 pub const CREATED_EVENT_SCHEMA: &str = "crm.consents.v1.ConsentAuthorizationCreatedEvent";

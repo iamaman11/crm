@@ -1,17 +1,17 @@
 use crate::{
-    CREATED_EVENT_SCHEMA, CREATED_EVENT_TYPE, CREATE_CAPABILITY, CREATE_REQUEST_SCHEMA,
-    CREATE_RESPONSE_SCHEMA, MODULE_ID, MUTATION_CAPABILITY_IDS, RECORD_TYPE, WITHDRAW_CAPABILITY,
+    CREATE_CAPABILITY, CREATE_REQUEST_SCHEMA, CREATE_RESPONSE_SCHEMA, CREATED_EVENT_SCHEMA,
+    CREATED_EVENT_TYPE, MODULE_ID, MUTATION_CAPABILITY_IDS, RECORD_TYPE, WITHDRAW_CAPABILITY,
     WITHDRAW_REQUEST_SCHEMA, WITHDRAW_RESPONSE_SCHEMA, WITHDRAWN_EVENT_SCHEMA,
     WITHDRAWN_EVENT_TYPE,
 };
 use crm_capability_plan_support::{self as support, EventSpec, PersistedPayloadContract};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_consents::{
+    CONSENT_AUTHORIZATION_STATE_MAXIMUM_BYTES, CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID,
+    CONSENT_AUTHORIZATION_STATE_SCHEMA_ID, CONSENT_AUTHORIZATION_STATE_SCHEMA_VERSION,
     CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId, ConsentEffect,
     ContactPointReference, CreateConsentAuthorization, EvidenceReference, JurisdictionCode,
     LegalBasisCode, PartyReference, PurposeCode, SourceCode, WithdrawConsentAuthorization,
-    CONSENT_AUTHORIZATION_STATE_MAXIMUM_BYTES, CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID,
-    CONSENT_AUTHORIZATION_STATE_SCHEMA_ID, CONSENT_AUTHORIZATION_STATE_SCHEMA_VERSION,
     consent_authorization_state_descriptor_hash, decode_consent_authorization_state,
     encode_consent_authorization_state,
 };
@@ -119,10 +119,7 @@ fn plan_create(
             command.authorization_ref,
             "consent_authorization.authorization_ref",
         )?,
-        party_ref: party_reference_from_ref(
-            command.party_ref,
-            "consent_authorization.party_ref",
-        )?,
+        party_ref: party_reference_from_ref(command.party_ref, "consent_authorization.party_ref")?,
         contact_point_ref: optional_contact_point_reference_from_ref(command.contact_point_ref)?,
         purpose: PurposeCode::try_new(command.purpose)?,
         channel: channel_from_wire(command.channel)?,
@@ -287,10 +284,7 @@ pub fn referenced_scope_from_create(
         DataClass::Personal,
     )?;
     Ok(CreateConsentReferenceScope {
-        party_ref: party_reference_from_ref(
-            command.party_ref,
-            "consent_authorization.party_ref",
-        )?,
+        party_ref: party_reference_from_ref(command.party_ref, "consent_authorization.party_ref")?,
         contact_point_ref: optional_contact_point_reference_from_ref(command.contact_point_ref)?,
         channel: channel_from_wire(command.channel)?,
     })
@@ -401,7 +395,8 @@ fn authorization_id_from_ref(
     value: Option<wire::ConsentAuthorizationRef>,
     field: &'static str,
 ) -> Result<ConsentAuthorizationId, SdkError> {
-    let value = value.ok_or_else(|| SdkError::invalid_argument(field, "authorization ref is required"))?;
+    let value =
+        value.ok_or_else(|| SdkError::invalid_argument(field, "authorization ref is required"))?;
     ConsentAuthorizationId::try_new(value.authorization_id)
 }
 
@@ -512,12 +507,15 @@ mod tests {
             occurred_at_unix_nanos: 100,
         })
         .unwrap();
-        let wire = consent_authorization_to_wire(&authorization);
-        assert_eq!(wire.purpose, "marketing.newsletter");
-        assert_eq!(wire.channel, wire::CommunicationChannel::Email as i32);
-        assert_eq!(wire.effect, wire::ConsentEffect::Grant as i32);
+        let projected = consent_authorization_to_wire(&authorization);
+        assert_eq!(projected.purpose, "marketing.newsletter");
+        assert_eq!(projected.channel, wire::CommunicationChannel::Email as i32);
+        assert_eq!(projected.effect, wire::ConsentEffect::Grant as i32);
         assert_eq!(
-            wire.resource_version.expect("resource version").version,
+            projected
+                .resource_version
+                .expect("resource version")
+                .version,
             1
         );
     }
