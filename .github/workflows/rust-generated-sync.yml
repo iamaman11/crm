@@ -34,6 +34,28 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Repair Customer 360 projection registry test API
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-customer-360-composition/src/lib.rs')
+          text = path.read_text()
+          old = '''        let definition = registry
+              .definition(CUSTOMER_360_PROJECTION_ID)
+              .expect("Customer 360 projection definition");
+          assert_eq!(definition.event_types.len(), ALL_EVENT_TYPES.len());
+          '''
+          new = '''        let definition = registry
+              .get(CUSTOMER_360_PROJECTION_ID)
+              .expect("Customer 360 projection definition");
+          assert_eq!(definition.event_types().len(), ALL_EVENT_TYPES.len());
+          '''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif '.get(CUSTOMER_360_PROJECTION_ID)' not in text or 'definition.event_types().len()' not in text:
+              raise SystemExit('Customer 360 projection registry test repair point not found')
+          path.write_text(text)
+          PY
       - name: Apply machine-fixable Rust maintenance
         run: |
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
@@ -51,5 +73,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git commit -m "Synchronize Customer 360 Rust foundation"
           git push origin "HEAD:${HEAD_BRANCH}"
