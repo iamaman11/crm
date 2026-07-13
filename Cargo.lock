@@ -274,6 +274,8 @@ dependencies = [
  "crm-capability-adapters",
  "crm-capability-ingress",
  "crm-capability-runtime",
+ "crm-contact-points-capability-adapter",
+ "crm-contact-points-query-adapter",
  "crm-core-data",
  "crm-core-events",
  "crm-customer-accounts-capability-adapter",
@@ -368,6 +370,39 @@ version = "0.1.0"
 dependencies = [
  "crm-core-contracts",
  "crm-module-sdk",
+ "idna",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "url",
+]
+
+[[package]]
+name = "crm-contact-points-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-contact-points",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
+]
+
+[[package]]
+name = "crm-contact-points-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-contact-points",
+ "crm-contact-points-capability-adapter",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
 ]
 
 [[package]]
@@ -1451,9 +1486,9 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
 name = "mio"
-version = "1.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02bd0af71c67b473010cbbc60715ee815645a4dc942899111f494b4b737d6fda"
+checksum = "30d65c71f1ce40ab09135ce117d742b9f8a19ff91a41a8b57ed50bc2de59c427"
 dependencies = [
  "libc",
  "wasi",

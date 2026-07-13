@@ -216,6 +216,63 @@
           "message": "crm.accounts.v1.AccountUpdatedEvent"
         }
       ]
+    },
+    {
+      "module_id": "crm.contact-points",
+      "capabilities": [
+        {
+          "id": "contact-points.contact-point.create",
+          "version": "1.0.0",
+          "rpc": "crm.contact_points.v1.ContactPointService.CreateContactPoint",
+          "request": "crm.contact_points.v1.CreateContactPointRequest",
+          "response": "crm.contact_points.v1.CreateContactPointResponse"
+        },
+        {
+          "id": "contact-points.contact-point.update",
+          "version": "1.0.0",
+          "rpc": "crm.contact_points.v1.ContactPointService.UpdateContactPoint",
+          "request": "crm.contact_points.v1.UpdateContactPointRequest",
+          "response": "crm.contact_points.v1.UpdateContactPointResponse"
+        },
+        {
+          "id": "contact-points.contact-point.verify",
+          "version": "1.0.0",
+          "rpc": "crm.contact_points.v1.ContactPointService.VerifyContactPoint",
+          "request": "crm.contact_points.v1.VerifyContactPointRequest",
+          "response": "crm.contact_points.v1.VerifyContactPointResponse"
+        },
+        {
+          "id": "contact-points.contact-point.get",
+          "version": "1.0.0",
+          "rpc": "crm.contact_points.v1.ContactPointService.GetContactPoint",
+          "request": "crm.contact_points.v1.GetContactPointRequest",
+          "response": "crm.contact_points.v1.GetContactPointResponse"
+        },
+        {
+          "id": "contact-points.contact-point.list",
+          "version": "1.0.0",
+          "rpc": "crm.contact_points.v1.ContactPointService.ListContactPoints",
+          "request": "crm.contact_points.v1.ListContactPointsRequest",
+          "response": "crm.contact_points.v1.ListContactPointsResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "contact-points.contact-point.created",
+          "version": "1.0.0",
+          "message": "crm.contact_points.v1.ContactPointCreatedEvent"
+        },
+        {
+          "id": "contact-points.contact-point.updated",
+          "version": "1.0.0",
+          "message": "crm.contact_points.v1.ContactPointUpdatedEvent"
+        },
+        {
+          "id": "contact-points.contact-point.verified",
+          "version": "1.0.0",
+          "message": "crm.contact_points.v1.ContactPointVerifiedEvent"
+        }
+      ]
     }
   ]
 }
