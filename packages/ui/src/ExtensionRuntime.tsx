@@ -83,12 +83,13 @@ export class UiExtensionRegistry<Context> {
     const normalized = definitions.map((definition) => {
       const next = normalizeDefinition(definition);
       const coordinate = uiExtensionCoordinate(next);
-      if (!coordinates.add(coordinate)) {
+      if (coordinates.has(coordinate)) {
         throw new UiExtensionRegistrationError(
           "DUPLICATE_COORDINATE",
           `Duplicate UI extension coordinate: ${coordinate}`,
         );
       }
+      coordinates.add(coordinate);
       return next;
     });
 
