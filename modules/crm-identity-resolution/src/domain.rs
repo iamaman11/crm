@@ -281,9 +281,7 @@ impl MatchEvidenceSnapshot {
             return Err(invalid(
                 "IDENTITY_RESOLUTION_SIGNALS_INVALID",
                 "identity_resolution.evidence.signals",
-                format!(
-                    "evidence must contain between 1 and {MAX_SIGNALS_PER_SNAPSHOT} signals"
-                ),
+                format!("evidence must contain between 1 and {MAX_SIGNALS_PER_SNAPSHOT} signals"),
             ));
         }
 
@@ -504,7 +502,8 @@ impl DuplicateCandidateCase {
                 ),
             ));
         }
-        if snapshot.version > 1 && snapshot.updated_at_unix_nanos <= snapshot.created_at_unix_nanos {
+        if snapshot.version > 1 && snapshot.updated_at_unix_nanos <= snapshot.created_at_unix_nanos
+        {
             return Err(invalid(
                 "IDENTITY_RESOLUTION_PERSISTED_TIME_INVALID",
                 "identity_resolution.updated_at_unix_nanos",
@@ -613,7 +612,10 @@ impl DuplicateCandidateCase {
         Ok(())
     }
 
-    fn require_strictly_increasing_time(&self, occurred_at_unix_nanos: i64) -> Result<(), SdkError> {
+    fn require_strictly_increasing_time(
+        &self,
+        occurred_at_unix_nanos: i64,
+    ) -> Result<(), SdkError> {
         validate_timestamp(
             "identity_resolution.occurred_at_unix_nanos",
             occurred_at_unix_nanos,
@@ -927,7 +929,10 @@ mod tests {
             100,
         )
         .unwrap_err();
-        assert_eq!(duplicate.code, "IDENTITY_RESOLUTION_DUPLICATE_SIGNAL_INVALID");
+        assert_eq!(
+            duplicate.code,
+            "IDENTITY_RESOLUTION_DUPLICATE_SIGNAL_INVALID"
+        );
     }
 
     #[test]
@@ -976,7 +981,10 @@ mod tests {
                 occurred_at_unix_nanos: 200,
             })
             .unwrap();
-        assert_eq!(value.status(), DuplicateCandidateCaseStatus::ConfirmedDuplicate);
+        assert_eq!(
+            value.status(),
+            DuplicateCandidateCaseStatus::ConfirmedDuplicate
+        );
         assert_eq!(value.version(), 2);
         assert_eq!(
             value
@@ -1015,14 +1023,18 @@ mod tests {
         let mut snapshot = value.snapshot();
         snapshot.case_id = DuplicateCandidateCaseId::try_new("wrong-case-id").unwrap();
         assert_eq!(
-            DuplicateCandidateCase::rehydrate(snapshot).unwrap_err().code,
+            DuplicateCandidateCase::rehydrate(snapshot)
+                .unwrap_err()
+                .code,
             "IDENTITY_RESOLUTION_PERSISTED_CASE_ID_INVALID"
         );
 
         let mut snapshot = value.snapshot();
         snapshot.version = 2;
         assert_eq!(
-            DuplicateCandidateCase::rehydrate(snapshot).unwrap_err().code,
+            DuplicateCandidateCase::rehydrate(snapshot)
+                .unwrap_err()
+                .code,
             "IDENTITY_RESOLUTION_PERSISTED_VERSION_INVALID"
         );
     }

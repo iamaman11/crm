@@ -620,6 +620,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-identity-resolution"
+version = "0.1.0"
+dependencies = [
+ "crm-module-sdk",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "crm-metadata-api-adapter"
 version = "0.1.0"
 dependencies = [

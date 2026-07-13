@@ -128,7 +128,8 @@ impl TryFrom<DuplicateCandidateCaseStateV1> for DuplicateCandidateCaseSnapshot {
         }
         let pair = CanonicalPartyPair::try_new(left_party_ref, right_party_ref)
             .map_err(|error| persisted_error(error.to_string()))?;
-        if pair.left().as_str() != value.left_party_id || pair.right().as_str() != value.right_party_id
+        if pair.left().as_str() != value.left_party_id
+            || pair.right().as_str() != value.right_party_id
         {
             return Err(persisted_error(
                 "persisted Party pair is not in canonical order",
@@ -138,7 +139,9 @@ impl TryFrom<DuplicateCandidateCaseStateV1> for DuplicateCandidateCaseSnapshot {
         let case_id = DuplicateCandidateCaseId::try_new(value.case_id.clone())
             .map_err(|error| persisted_error(error.to_string()))?;
         if case_id.as_str() != value.case_id {
-            return Err(persisted_error("persisted case identifier is not canonical"));
+            return Err(persisted_error(
+                "persisted case identifier is not canonical",
+            ));
         }
 
         let decision_reason = value
@@ -273,8 +276,7 @@ impl From<DuplicateCandidateCaseStatusState> for DuplicateCandidateCaseStatus {
 }
 
 fn validate_size(bytes: &[u8]) -> Result<(), SdkError> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX)
-        > DUPLICATE_CANDIDATE_CASE_STATE_MAXIMUM_BYTES
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > DUPLICATE_CANDIDATE_CASE_STATE_MAXIMUM_BYTES
     {
         return Err(persisted_error(format!(
             "Identity Resolution candidate state exceeds the maximum of {DUPLICATE_CANDIDATE_CASE_STATE_MAXIMUM_BYTES} bytes"
@@ -297,7 +299,8 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 mod tests {
     use super::*;
     use crate::domain::{
-        CreateDuplicateCandidateCase, DecideDuplicateCandidateCase, RefreshDuplicateCandidateEvidence,
+        CreateDuplicateCandidateCase, DecideDuplicateCandidateCase,
+        RefreshDuplicateCandidateEvidence,
     };
 
     fn signal(kind: &str, contribution: i16) -> MatchSignal {
@@ -366,7 +369,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(decoded, value);
-        assert_eq!(decoded.status(), DuplicateCandidateCaseStatus::ConfirmedDuplicate);
+        assert_eq!(
+            decoded.status(),
+            DuplicateCandidateCaseStatus::ConfirmedDuplicate
+        );
         assert_eq!(decoded.version(), 3);
     }
 
@@ -383,8 +389,7 @@ mod tests {
         );
 
         let mut value: serde_json::Value = serde_json::from_slice(&canonical).unwrap();
-        value["evidence_history"][0]["matcher_profile"] =
-            serde_json::json!(" Deterministic.V1 ");
+        value["evidence_history"][0]["matcher_profile"] = serde_json::json!(" Deterministic.V1 ");
         assert_eq!(
             decode_duplicate_candidate_case_state(&serde_json::to_vec(&value).unwrap())
                 .unwrap_err()
