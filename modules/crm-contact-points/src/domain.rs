@@ -1,11 +1,12 @@
 use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, RecordId, SdkError};
-use std::cmp::Ordering;
 use url::Url;
 
 const MAX_EMAIL_BYTES: usize = 320;
+const MAX_PHONE_DISPLAY_BYTES: usize = 64;
 const MAX_POSTAL_BYTES: usize = 1_024;
 const MAX_WEB_BYTES: usize = 2_048;
 const MAX_MESSAGING_BYTES: usize = 320;
+const MAX_MESSAGING_NAMESPACE_BYTES: usize = 64;
 const MAX_EVIDENCE_REFERENCE_BYTES: usize = 240;
 const MAX_DISPLAY_VALUE_BYTES: usize = 2_048;
 
@@ -47,7 +48,7 @@ impl PartyReference {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ContactPointKind {
     Email,
     Phone,
@@ -56,7 +57,7 @@ pub enum ContactPointKind {
     Messaging,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ContactPointStatus {
     Active,
     Inactive,
@@ -75,6 +76,16 @@ impl VerificationEvidence {
 
     pub const fn verified_at_unix_nanos(&self) -> i64 {
         self.verified_at_unix_nanos
+    }
+
+    pub(crate) fn from_persisted(
+        evidence_ref: String,
+        verified_at_unix_nanos: i64,
+    ) -> Self {
+        Self {
+            evidence_ref,
+            verified_at_unix_nanos,
+        }
     }
 }
 
@@ -217,8 +228,17 @@ impl ContactPoint {
             snapshot.valid_from_unix_nanos,
             snapshot.valid_until_unix_nanos,
         )?;
+        validate_preference(snapshot.status, snapshot.preferred)?;
+
         let (normalized_value, display_value) =
             normalize_value(snapshot.kind, &snapshot.display_value)?;
+        if display_value != snapshot.display_value {
+            return Err(invalid(
+                "CONTACT_POINTS_PERSISTED_DISPLAY_VALUE_INVALID",
+                "contact_point.display_value",
+                "persisted display value is not canonical",
+            ));
+        }
         if normalized_value != snapshot.normalized_value {
             return Err(invalid(
                 "CONTACT_POINTS_PERSISTED_NORMALIZED_VALUE_INVALID",
@@ -226,12 +246,18 @@ impl ContactPoint {
                 "persisted normalized value does not match the canonical display value",
             ));
         }
-        validate_preference(snapshot.status, snapshot.preferred)?;
         validate_verification(
             &snapshot.verification,
+            snapshot.created_at_unix_nanos,
+            snapshot.updated_at_unix_nanos,
+            snapshot.version,
+        )?;
+        validate_initial_transition_shape(
             snapshot.status,
-            snapshot.valid_from_unix_nanos,
-            snapshot.valid_until_unix_nanos,
+            &snapshot.verification,
+            snapshot.created_at_unix_nanos,
+            snapshot.updated_at_unix_nanos,
+            snapshot.version,
         )?;
 
         Ok(Self {
@@ -279,6 +305,7 @@ impl ContactPoint {
             ));
         }
 
+        let next_version = self.next_version()?;
         self.normalized_value = normalized_value;
         self.display_value = display_value;
         self.status = command.status;
@@ -286,7 +313,9 @@ impl ContactPoint {
         self.valid_from_unix_nanos = command.valid_from_unix_nanos;
         self.valid_until_unix_nanos = command.valid_until_unix_nanos;
         self.verification = next_verification;
-        self.advance_version(command.occurred_at_unix_nanos)
+        self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
+        self.version = next_version;
+        Ok(())
     }
 
     pub fn verify(&mut self, command: VerifyContactPoint) -> Result<(), SdkError> {
@@ -313,11 +342,14 @@ impl ContactPoint {
             ));
         }
         let evidence_ref = normalize_evidence_reference(&command.evidence_ref)?;
+        let next_version = self.next_version()?;
         self.verification = VerificationState::Verified(VerificationEvidence {
             evidence_ref,
             verified_at_unix_nanos: command.occurred_at_unix_nanos,
         });
-        self.advance_version(command.occurred_at_unix_nanos)
+        self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
+        self.version = next_version;
+        Ok(())
     }
 
     pub fn snapshot(&self) -> ContactPointSnapshot {
@@ -391,8 +423,11 @@ impl ContactPoint {
     }
 
     pub fn is_valid_at(&self, unix_nanos: i64) -> bool {
-        self.valid_from_unix_nanos.is_none_or(|value| unix_nanos >= value)
-            && self.valid_until_unix_nanos.is_none_or(|value| unix_nanos < value)
+        self.valid_from_unix_nanos
+            .is_none_or(|value| unix_nanos >= value)
+            && self
+                .valid_until_unix_nanos
+                .is_none_or(|value| unix_nanos < value)
     }
 
     fn require_version(&self, expected_version: i64) -> Result<(), SdkError> {
@@ -423,16 +458,35 @@ impl ContactPoint {
         Ok(())
     }
 
-    fn advance_version(&mut self, occurred_at_unix_nanos: i64) -> Result<(), SdkError> {
-        self.updated_at_unix_nanos = occurred_at_unix_nanos;
-        self.version = self.version.checked_add(1).ok_or_else(|| {
+    fn next_version(&self) -> Result<i64, SdkError> {
+        self.version.checked_add(1).ok_or_else(|| {
             conflict(
                 "CONTACT_POINTS_VERSION_EXHAUSTED",
                 "Contact Point version cannot be advanced further.",
             )
-        })?;
-        Ok(())
+        })
     }
+}
+
+fn validate_initial_transition_shape(
+    status: ContactPointStatus,
+    verification: &VerificationState,
+    created_at_unix_nanos: i64,
+    updated_at_unix_nanos: i64,
+    version: i64,
+) -> Result<(), SdkError> {
+    if version == 1
+        && (status != ContactPointStatus::Active
+            || verification.is_verified()
+            || updated_at_unix_nanos != created_at_unix_nanos)
+    {
+        return Err(invalid(
+            "CONTACT_POINTS_PERSISTED_INITIAL_STATE_INVALID",
+            "contact_point.version",
+            "version-one Contact Point state must match the create transition",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_preference(status: ContactPointStatus, preferred: bool) -> Result<(), SdkError> {
@@ -448,9 +502,9 @@ fn validate_preference(status: ContactPointStatus, preferred: bool) -> Result<()
 
 fn validate_verification(
     verification: &VerificationState,
-    status: ContactPointStatus,
-    valid_from_unix_nanos: Option<i64>,
-    valid_until_unix_nanos: Option<i64>,
+    created_at_unix_nanos: i64,
+    updated_at_unix_nanos: i64,
+    version: i64,
 ) -> Result<(), SdkError> {
     let VerificationState::Verified(evidence) = verification else {
         return Ok(());
@@ -467,20 +521,14 @@ fn validate_verification(
             "persisted verification evidence reference is not canonical",
         ));
     }
-    if status != ContactPointStatus::Active {
-        return Err(invalid(
-            "CONTACT_POINTS_PERSISTED_VERIFICATION_STATUS_INVALID",
-            "contact_point.verification",
-            "a verified Contact Point must be active",
-        ));
-    }
-    if valid_from_unix_nanos.is_some_and(|value| evidence.verified_at_unix_nanos < value)
-        || valid_until_unix_nanos.is_some_and(|value| evidence.verified_at_unix_nanos >= value)
+    if version < 2
+        || evidence.verified_at_unix_nanos < created_at_unix_nanos
+        || evidence.verified_at_unix_nanos > updated_at_unix_nanos
     {
         return Err(invalid(
             "CONTACT_POINTS_PERSISTED_VERIFICATION_TIME_INVALID",
             "contact_point.verification.verified_at_unix_nanos",
-            "verification time must fall inside the validity interval",
+            "verification time must be within the aggregate mutation timeline",
         ));
     }
     Ok(())
@@ -530,20 +578,48 @@ fn normalize_email(value: &str) -> Result<(String, String), SdkError> {
     let mut parts = display.rsplitn(2, '@');
     let domain = parts.next().unwrap_or_default();
     let local = parts.next().unwrap_or_default();
-    if local.is_empty() || domain.is_empty() || local.contains('@') || local.len() > 64 {
+    if local.is_empty()
+        || domain.is_empty()
+        || local.contains('@')
+        || local.len() > 64
+        || local.starts_with('.')
+        || local.ends_with('.')
+        || local.contains("..")
+    {
         return Err(value_invalid("email address is invalid"));
     }
+
     let ascii_domain = idna::domain_to_ascii(domain)
         .map_err(|_| value_invalid("email domain is invalid"))?
         .to_ascii_lowercase();
-    if ascii_domain.is_empty() || ascii_domain.len() > 255 || !ascii_domain.contains('.') {
+    validate_ascii_domain(&ascii_domain)?;
+    let normalized = format!("{local}@{ascii_domain}");
+    if normalized.len() > MAX_EMAIL_BYTES {
+        return Err(value_invalid("normalized email address is too long"));
+    }
+    Ok((normalized, display))
+}
+
+fn validate_ascii_domain(domain: &str) -> Result<(), SdkError> {
+    if domain.is_empty() || domain.len() > 253 || !domain.contains('.') || domain.ends_with('.') {
         return Err(value_invalid("email domain is invalid"));
     }
-    Ok((format!("{local}@{ascii_domain}"), display))
+    if domain.split('.').any(|label| {
+        label.is_empty()
+            || label.len() > 63
+            || label.starts_with('-')
+            || label.ends_with('-')
+            || !label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    }) {
+        return Err(value_invalid("email domain is invalid"));
+    }
+    Ok(())
 }
 
 fn normalize_phone(value: &str) -> Result<(String, String), SdkError> {
-    let display = normalize_display(value, 64, "phone")?;
+    let display = normalize_display(value, MAX_PHONE_DISPLAY_BYTES, "phone")?;
     let mut normalized = String::with_capacity(display.len());
     for (index, character) in display.chars().enumerate() {
         match character {
@@ -554,7 +630,9 @@ fn normalize_phone(value: &str) -> Result<(String, String), SdkError> {
         }
     }
     if !normalized.starts_with('+') {
-        return Err(value_invalid("phone must start with '+' and include a country code"));
+        return Err(value_invalid(
+            "phone must start with '+' and include a country code",
+        ));
     }
     let digit_count = normalized.len().saturating_sub(1);
     if !(8..=15).contains(&digit_count) || normalized.as_bytes().get(1) == Some(&b'0') {
@@ -572,7 +650,12 @@ fn normalize_web(value: &str) -> Result<(String, String), SdkError> {
     let display = normalize_display(value, MAX_WEB_BYTES, "web address")?;
     let mut parsed = Url::parse(&display).map_err(|_| value_invalid("web address is invalid"))?;
     if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
-        return Err(value_invalid("web address must be an absolute HTTP or HTTPS URL"));
+        return Err(value_invalid(
+            "web address must be an absolute HTTP or HTTPS URL",
+        ));
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(value_invalid("web address must not contain embedded credentials"));
     }
     parsed.set_fragment(None);
     let normalized = parsed.to_string();
@@ -589,6 +672,7 @@ fn normalize_messaging(value: &str) -> Result<(String, String), SdkError> {
         .ok_or_else(|| value_invalid("messaging endpoint must use 'namespace:address' form"))?;
     let namespace = namespace.to_ascii_lowercase();
     if namespace.is_empty()
+        || namespace.len() > MAX_MESSAGING_NAMESPACE_BYTES
         || !namespace
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_'))
@@ -603,10 +687,15 @@ fn normalize_messaging(value: &str) -> Result<(String, String), SdkError> {
 
 fn normalize_display(value: &str, maximum_bytes: usize, label: &str) -> Result<String, SdkError> {
     if value.chars().any(char::is_control) {
-        return Err(value_invalid(format!("{label} must not contain control characters")));
+        return Err(value_invalid(format!(
+            "{label} must not contain control characters"
+        )));
     }
     let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if normalized.is_empty() || normalized.len() > maximum_bytes || normalized.len() > MAX_DISPLAY_VALUE_BYTES {
+    if normalized.is_empty()
+        || normalized.len() > maximum_bytes
+        || normalized.len() > MAX_DISPLAY_VALUE_BYTES
+    {
         return Err(value_invalid(format!(
             "{label} must be non-empty and within the supported size limit"
         )));
@@ -677,6 +766,7 @@ fn conflict(code: &'static str, safe_message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cmp::Ordering;
 
     fn create(kind: ContactPointKind, value: &str) -> ContactPoint {
         ContactPoint::create(CreateContactPoint {
@@ -693,14 +783,18 @@ mod tests {
     }
 
     #[test]
-    fn normalizes_channel_values_deterministically() {
-        let email = create(ContactPointKind::Email, "Ada@EXAMPLE.COM");
-        assert_eq!(email.normalized_value(), "Ada@example.com");
+    fn normalizes_all_channel_values_deterministically() {
+        let email = create(ContactPointKind::Email, "Ada@BÜCHER.Example");
+        assert_eq!(email.normalized_value(), "Ada@xn--bcher-kva.example");
+        assert_eq!(email.display_value(), "Ada@BÜCHER.Example");
 
         let phone = create(ContactPointKind::Phone, "+370 (612) 34-567");
         assert_eq!(phone.normalized_value(), "+37061234567");
 
-        let web = create(ContactPointKind::Web, "HTTPS://Example.COM/path#fragment");
+        let web = create(
+            ContactPointKind::Web,
+            "HTTPS://Example.COM:443/a/../path#fragment",
+        );
         assert_eq!(web.normalized_value(), "https://example.com/path");
 
         let messaging = create(ContactPointKind::Messaging, "Telegram:@Ada");
@@ -708,6 +802,48 @@ mod tests {
 
         let postal = create(ContactPointKind::Postal, "  Vilnius   LT  ");
         assert_eq!(postal.normalized_value(), "Vilnius LT");
+    }
+
+    #[test]
+    fn rejects_ambiguous_or_unsafe_channel_values() {
+        for invalid_email in [
+            "ada@example",
+            ".ada@example.com",
+            "ada..lovelace@example.com",
+            "ada@example.com.",
+        ] {
+            assert_eq!(
+                ContactPoint::create(CreateContactPoint {
+                    contact_point_id: ContactPointId::try_new("contact-point-email").unwrap(),
+                    party_ref: PartyReference::try_new("party-1").unwrap(),
+                    kind: ContactPointKind::Email,
+                    value: invalid_email.to_owned(),
+                    preferred: false,
+                    valid_from_unix_nanos: None,
+                    valid_until_unix_nanos: None,
+                    occurred_at_unix_nanos: 1,
+                })
+                .unwrap_err()
+                .code,
+                "CONTACT_POINTS_VALUE_INVALID"
+            );
+        }
+
+        assert_eq!(
+            ContactPoint::create(CreateContactPoint {
+                contact_point_id: ContactPointId::try_new("contact-point-web").unwrap(),
+                party_ref: PartyReference::try_new("party-1").unwrap(),
+                kind: ContactPointKind::Web,
+                value: "https://user:secret@example.com".to_owned(),
+                preferred: false,
+                valid_from_unix_nanos: None,
+                valid_until_unix_nanos: None,
+                occurred_at_unix_nanos: 1,
+            })
+            .unwrap_err()
+            .code,
+            "CONTACT_POINTS_VALUE_INVALID"
+        );
     }
 
     #[test]
@@ -750,7 +886,34 @@ mod tests {
     }
 
     #[test]
-    fn verification_requires_active_current_endpoint_and_evidence() {
+    fn lifecycle_and_validity_only_updates_preserve_historical_verification() {
+        let mut value = create(ContactPointKind::Email, "ada@example.com");
+        value
+            .verify(VerifyContactPoint {
+                expected_version: 1,
+                evidence_ref: "verification-1".to_owned(),
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap();
+        value
+            .apply_update(UpdateContactPoint {
+                expected_version: 2,
+                value: "ada@example.com".to_owned(),
+                status: ContactPointStatus::Inactive,
+                preferred: false,
+                valid_from_unix_nanos: Some(100),
+                valid_until_unix_nanos: Some(2_000),
+                occurred_at_unix_nanos: 30,
+            })
+            .unwrap();
+
+        assert!(value.verification().is_verified());
+        assert_eq!(value.status(), ContactPointStatus::Inactive);
+        assert_eq!(ContactPoint::rehydrate(value.snapshot()).unwrap(), value);
+    }
+
+    #[test]
+    fn verification_requires_active_current_endpoint_and_canonical_evidence() {
         let mut value = create(ContactPointKind::Email, "ada@example.com");
         let outside = value
             .verify(VerifyContactPoint {
@@ -760,6 +923,18 @@ mod tests {
             })
             .unwrap_err();
         assert_eq!(outside.code, "CONTACT_POINTS_VERIFY_OUTSIDE_VALIDITY");
+
+        let invalid_evidence = value
+            .verify(VerifyContactPoint {
+                expected_version: 1,
+                evidence_ref: "   ".to_owned(),
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap_err();
+        assert_eq!(
+            invalid_evidence.code,
+            "CONTACT_POINTS_VERIFICATION_EVIDENCE_INVALID"
+        );
 
         value
             .apply_update(UpdateContactPoint {
@@ -783,7 +958,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_inactive_preferred_invalid_validity_and_stale_version() {
+    fn rejects_inactive_preferred_invalid_validity_stale_version_and_empty_update() {
         let mut value = create(ContactPointKind::Email, "ada@example.com");
         let inactive_preferred = value
             .apply_update(UpdateContactPoint {
@@ -796,7 +971,10 @@ mod tests {
                 occurred_at_unix_nanos: 20,
             })
             .unwrap_err();
-        assert_eq!(inactive_preferred.code, "CONTACT_POINTS_INACTIVE_PREFERRED_INVALID");
+        assert_eq!(
+            inactive_preferred.code,
+            "CONTACT_POINTS_INACTIVE_PREFERRED_INVALID"
+        );
 
         let invalid_validity = ContactPoint::create(CreateContactPoint {
             contact_point_id: ContactPointId::try_new("contact-point-invalid").unwrap(),
@@ -823,6 +1001,80 @@ mod tests {
             })
             .unwrap_err();
         assert_eq!(stale.code, "CONTACT_POINTS_VERSION_CONFLICT");
+
+        let empty = value
+            .apply_update(UpdateContactPoint {
+                expected_version: 1,
+                value: "ada@example.com".to_owned(),
+                status: ContactPointStatus::Active,
+                preferred: true,
+                valid_from_unix_nanos: Some(10),
+                valid_until_unix_nanos: Some(1_000),
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap_err();
+        assert_eq!(empty.code, "CONTACT_POINTS_UPDATE_EMPTY");
+    }
+
+    #[test]
+    fn rejects_time_regression_and_keeps_failed_version_exhaustion_atomic() {
+        let mut value = create(ContactPointKind::Email, "ada@example.com");
+        let regression = value
+            .apply_update(UpdateContactPoint {
+                expected_version: 1,
+                value: "new@example.com".to_owned(),
+                status: ContactPointStatus::Active,
+                preferred: false,
+                valid_from_unix_nanos: Some(10),
+                valid_until_unix_nanos: Some(1_000),
+                occurred_at_unix_nanos: 9,
+            })
+            .unwrap_err();
+        assert_eq!(regression.code, "CONTACT_POINTS_TIME_REGRESSION");
+
+        let mut exhausted_snapshot = value.snapshot();
+        exhausted_snapshot.version = i64::MAX;
+        let mut exhausted = ContactPoint::rehydrate(exhausted_snapshot).unwrap();
+        let before = exhausted.clone();
+        let error = exhausted
+            .apply_update(UpdateContactPoint {
+                expected_version: i64::MAX,
+                value: "new@example.com".to_owned(),
+                status: ContactPointStatus::Active,
+                preferred: false,
+                valid_from_unix_nanos: Some(10),
+                valid_until_unix_nanos: Some(1_000),
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "CONTACT_POINTS_VERSION_EXHAUSTED");
+        assert_eq!(exhausted, before);
+    }
+
+    #[test]
+    fn rehydrate_rejects_noncanonical_and_impossible_persisted_state() {
+        let value = create(ContactPointKind::Email, "ada@example.com");
+
+        let mut display = value.snapshot();
+        display.display_value = "  ada@example.com  ".to_owned();
+        assert_eq!(
+            ContactPoint::rehydrate(display).unwrap_err().code,
+            "CONTACT_POINTS_PERSISTED_DISPLAY_VALUE_INVALID"
+        );
+
+        let mut normalized = value.snapshot();
+        normalized.normalized_value = "ADA@example.com".to_owned();
+        assert_eq!(
+            ContactPoint::rehydrate(normalized).unwrap_err().code,
+            "CONTACT_POINTS_PERSISTED_NORMALIZED_VALUE_INVALID"
+        );
+
+        let mut impossible = value.snapshot();
+        impossible.status = ContactPointStatus::Inactive;
+        assert_eq!(
+            ContactPoint::rehydrate(impossible).unwrap_err().code,
+            "CONTACT_POINTS_PERSISTED_INITIAL_STATE_INVALID"
+        );
     }
 
     #[test]
@@ -848,7 +1100,7 @@ mod tests {
             ContactPointKind::Phone,
             ContactPointKind::Postal,
         ];
-        kinds.sort_by(|left, right| left.cmp(right));
+        kinds.sort();
         assert_eq!(
             kinds,
             vec![
@@ -859,6 +1111,9 @@ mod tests {
                 ContactPointKind::Messaging,
             ]
         );
-        assert_eq!(Ordering::Equal, ContactPointKind::Email.cmp(&ContactPointKind::Email));
+        assert_eq!(
+            Ordering::Equal,
+            ContactPointKind::Email.cmp(&ContactPointKind::Email)
+        );
     }
 }
