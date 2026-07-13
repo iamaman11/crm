@@ -82,6 +82,14 @@ pub fn persisted_json_payload(
     contract: PersistedPayloadContract<'_>,
     bytes: Vec<u8>,
 ) -> Result<TypedPayload, SdkError> {
+    persisted_json_payload_with_data_class(contract, DataClass::Confidential, bytes)
+}
+
+pub fn persisted_json_payload_with_data_class(
+    contract: PersistedPayloadContract<'_>,
+    data_class: DataClass,
+    bytes: Vec<u8>,
+) -> Result<TypedPayload, SdkError> {
     if bytes.len() as u64 > contract.maximum_size_bytes {
         return Err(stored_data_error("PERSISTED_AGGREGATE_TOO_LARGE"));
     }
@@ -90,7 +98,7 @@ pub fn persisted_json_payload(
         schema_id: configured_identifier(SchemaId::try_new(contract.schema_id))?,
         schema_version: configured_identifier(SchemaVersion::try_new(contract.schema_version))?,
         descriptor_hash: contract.descriptor_hash,
-        data_class: DataClass::Confidential,
+        data_class,
         encoding: PayloadEncoding::Json,
         maximum_size_bytes: contract.maximum_size_bytes,
         retention_policy_id: configured_identifier(RetentionPolicyId::try_new(
@@ -106,12 +114,20 @@ pub fn persisted_json_bytes<'a>(
     snapshot: &'a RecordSnapshot,
     contract: PersistedPayloadContract<'_>,
 ) -> Result<&'a [u8], SdkError> {
+    persisted_json_bytes_with_data_class(snapshot, contract, DataClass::Confidential)
+}
+
+pub fn persisted_json_bytes_with_data_class<'a>(
+    snapshot: &'a RecordSnapshot,
+    contract: PersistedPayloadContract<'_>,
+    data_class: DataClass,
+) -> Result<&'a [u8], SdkError> {
     let payload = &snapshot.payload;
     if payload.owner.as_str() != contract.owner
         || payload.schema_id.as_str() != contract.schema_id
         || payload.schema_version.as_str() != contract.schema_version
         || payload.descriptor_hash != contract.descriptor_hash
-        || payload.data_class != DataClass::Confidential
+        || payload.data_class != data_class
         || payload.encoding != PayloadEncoding::Json
         || payload.maximum_size_bytes != contract.maximum_size_bytes
         || payload.retention_policy_id.as_str() != contract.retention_policy_id
@@ -127,12 +143,21 @@ pub fn decode_request<M: Message + Default>(
     owner: &str,
     schema_id: &str,
 ) -> Result<M, SdkError> {
+    decode_request_with_data_class(request, owner, schema_id, DataClass::Confidential)
+}
+
+pub fn decode_request_with_data_class<M: Message + Default>(
+    request: &CapabilityRequest,
+    owner: &str,
+    schema_id: &str,
+    data_class: DataClass,
+) -> Result<M, SdkError> {
     let payload = &request.input;
     if payload.owner.as_str() != owner
         || payload.schema_id.as_str() != schema_id
         || payload.schema_version.as_str() != CONTRACT_VERSION
         || payload.descriptor_hash != message_descriptor_hash(schema_id)
-        || payload.data_class != DataClass::Confidential
+        || payload.data_class != data_class
         || payload.encoding != PayloadEncoding::Protobuf
         || payload.maximum_size_bytes > MAX_PROTOBUF_BYTES
         || payload.validate().is_err()
@@ -204,6 +229,24 @@ pub fn event_evidence<M: Message>(
     spec: EventSpec<'_>,
     message: &M,
 ) -> Result<EventEvidence, SdkError> {
+    event_evidence_with_data_class(
+        request,
+        aggregate,
+        owner,
+        spec,
+        DataClass::Confidential,
+        message,
+    )
+}
+
+pub fn event_evidence_with_data_class<M: Message>(
+    request: &CapabilityRequest,
+    aggregate: RecordRef,
+    owner: &str,
+    spec: EventSpec<'_>,
+    data_class: DataClass,
+    message: &M,
+) -> Result<EventEvidence, SdkError> {
     let event_id = stable_evidence_id("event", request, &aggregate, spec.aggregate_version);
     Ok(EventEvidence {
         event_id: event_id.clone(),
@@ -212,12 +255,7 @@ pub fn event_evidence<M: Message>(
             aggregate,
             expected_aggregate_version: spec.previous_version,
             deduplication_key: event_id,
-            payload: protobuf_payload(
-                owner,
-                spec.event_schema_id,
-                DataClass::Confidential,
-                message,
-            )?,
+            payload: protobuf_payload(owner, spec.event_schema_id, data_class, message)?,
         },
         aggregate_version: spec.aggregate_version,
         event_sequence: spec.aggregate_version,

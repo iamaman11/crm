@@ -119,7 +119,11 @@ impl QueryExecutor for PartyQueryAdapter {
             }
 
             let contract = persisted_contract();
-            let party = decode_party_state(support::persisted_json_bytes(&snapshot, contract)?)?;
+            let party = decode_party_state(support::persisted_json_bytes_with_data_class(
+                &snapshot,
+                contract,
+                DataClass::Personal,
+            )?)?;
             if party.party_id().as_str() != snapshot.reference.record_id.as_str()
                 || party.version() != snapshot.version
             {

@@ -62,8 +62,12 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
         request: &CapabilityRequest,
     ) -> Result<AggregateTarget, SdkError> {
         ensure_definition(definition, request)?;
-        let command: wire::CreatePartyRequest =
-            support::decode_request(request, MODULE_ID, CREATE_REQUEST_SCHEMA)?;
+        let command: wire::CreatePartyRequest = support::decode_request_with_data_class(
+            request,
+            MODULE_ID,
+            CREATE_REQUEST_SCHEMA,
+            DataClass::Personal,
+        )?;
         let party_ref = command.party_ref.ok_or_else(|| {
             SdkError::invalid_argument("party.party_ref", "Party reference is required")
         })?;
@@ -90,8 +94,12 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
             return Err(invalid_plan());
         }
 
-        let command: wire::CreatePartyRequest =
-            support::decode_request(request, MODULE_ID, CREATE_REQUEST_SCHEMA)?;
+        let command: wire::CreatePartyRequest = support::decode_request_with_data_class(
+            request,
+            MODULE_ID,
+            CREATE_REQUEST_SCHEMA,
+            DataClass::Personal,
+        )?;
         let party_ref = command.party_ref.ok_or_else(|| {
             SdkError::invalid_argument("party.party_ref", "Party reference is required")
         })?;
@@ -116,7 +124,7 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
                 party: Some(public_party.clone()),
             },
         )?;
-        let event = support::event_evidence(
+        let event = support::event_evidence_with_data_class(
             request,
             aggregate.clone(),
             MODULE_ID,
@@ -126,6 +134,7 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
                 aggregate_version: party.version(),
                 previous_version: None,
             },
+            DataClass::Personal,
             &wire::PartyCreatedEvent {
                 party: Some(public_party),
             },
@@ -189,7 +198,11 @@ pub fn persisted_contract() -> PersistedPayloadContract<'static> {
 }
 
 pub fn persisted_payload(party: &Party) -> Result<crm_module_sdk::TypedPayload, SdkError> {
-    support::persisted_json_payload(persisted_contract(), encode_party_state(party)?)
+    support::persisted_json_payload_with_data_class(
+        persisted_contract(),
+        DataClass::Personal,
+        encode_party_state(party)?,
+    )
 }
 
 fn party_kind_from_wire(value: i32) -> Result<PartyKind, SdkError> {
