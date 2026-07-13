@@ -253,15 +253,9 @@ async fn crm_api_process_serves_governed_party_create_get_replay_conflict_and_te
     .expect_err("unauthenticated Party query must fail");
     assert_eq!(unauthorized_query.code(), Code::Unauthenticated);
 
-    let cross_tenant = query(
-        &mut grpc,
-        &query_definition,
-        get_payload,
-        TENANT_B,
-        true,
-    )
-    .await
-    .expect_err("tenant B must not discover tenant A Party");
+    let cross_tenant = query(&mut grpc, &query_definition, get_payload, TENANT_B, true)
+        .await
+        .expect_err("tenant B must not discover tenant A Party");
     assert_eq!(cross_tenant.code(), Code::NotFound);
     assert_eq!(evidence_counts(&admin, TENANT_A).await, after_create);
 
@@ -287,14 +281,13 @@ async fn mutate(
         capability_version: definition.capability_version.as_str().to_owned(),
         input: Some(wire_payload(input)),
     });
-    request
-        .metadata_mut()
-        .insert("x-tenant-id", tenant_id.parse().expect("valid tenant metadata"));
+    request.metadata_mut().insert(
+        "x-tenant-id",
+        tenant_id.parse().expect("valid tenant metadata"),
+    );
     request.metadata_mut().insert(
         "idempotency-key",
-        idempotency_key
-            .parse()
-            .expect("valid idempotency metadata"),
+        idempotency_key.parse().expect("valid idempotency metadata"),
     );
     if authenticated {
         request.metadata_mut().insert(
@@ -304,7 +297,10 @@ async fn mutate(
                 .expect("valid authorization metadata"),
         );
     }
-    client.mutate(request).await.map(|response| response.into_inner())
+    client
+        .mutate(request)
+        .await
+        .map(|response| response.into_inner())
 }
 
 async fn query(
@@ -320,9 +316,10 @@ async fn query(
         capability_version: definition.capability_version.as_str().to_owned(),
         input: Some(wire_payload(input)),
     });
-    request
-        .metadata_mut()
-        .insert("x-tenant-id", tenant_id.parse().expect("valid tenant metadata"));
+    request.metadata_mut().insert(
+        "x-tenant-id",
+        tenant_id.parse().expect("valid tenant metadata"),
+    );
     if authenticated {
         request.metadata_mut().insert(
             "authorization",
@@ -331,7 +328,10 @@ async fn query(
                 .expect("valid authorization metadata"),
         );
     }
-    client.query(request).await.map(|response| response.into_inner())
+    client
+        .query(request)
+        .await
+        .map(|response| response.into_inner())
 }
 
 fn mutation_definition(capability_id: &str) -> CapabilityDefinition {
@@ -414,13 +414,12 @@ async fn evidence_counts(admin: &PgPool, tenant_id: &str) -> EvidenceCounts {
     .fetch_one(admin)
     .await
     .expect("count Party outbox events");
-    let audits = sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1",
-    )
-    .bind(tenant_id)
-    .fetch_one(admin)
-    .await
-    .expect("count Party tenant audit evidence");
+    let audits =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(admin)
+            .await
+            .expect("count Party tenant audit evidence");
     let idempotency = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1",
     )
