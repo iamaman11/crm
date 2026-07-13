@@ -221,8 +221,13 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let party_query_adapter =
-            PartyQueryAdapter::new(store.clone(), visibility_authorizer.clone());
+        let party_query_adapter = PartyQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
