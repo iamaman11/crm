@@ -417,8 +417,8 @@ fn hierarchy_document_invalid(internal: impl Into<String>) -> SdkError {
 mod tests {
     use super::*;
     use crm_module_sdk::{
-        EventId, RecordId, RecordRef, RecordType, RetentionPolicyId, SchemaId, SchemaVersion,
-        TypedPayload,
+        ActorId, CorrelationId, DeliveryId, EventId, EventVersion, RecordId, RecordRef, RecordType,
+        RetentionPolicyId, SchemaId, SchemaVersion, TraceId, TypedPayload,
     };
     use crm_proto_contracts::crm::{core::v1 as core, customer::v1 as customer};
 
@@ -541,11 +541,15 @@ mod tests {
             party_relationship: Some(relationship),
         };
         EventDelivery {
+            delivery_id: DeliveryId::try_new("delivery-relationship-created-1").unwrap(),
             tenant_id: TenantId::try_new("tenant-a").unwrap(),
             event_id: EventId::try_new("event-relationship-created-1").unwrap(),
             source_module_id: ModuleId::try_new(PARTY_RELATIONSHIPS_MODULE_ID).unwrap(),
+            consumer_module_id: ModuleId::try_new(PARTY_RELATIONSHIP_HIERARCHY_CONSUMER_MODULE_ID)
+                .unwrap(),
+            source_actor_id: ActorId::try_new("actor-a").unwrap(),
             event_type: EventType::try_new(CREATED_EVENT_TYPE).unwrap(),
-            event_version: SchemaVersion::try_new(CONTRACT_VERSION).unwrap(),
+            event_version: EventVersion::try_new(CONTRACT_VERSION).unwrap(),
             aggregate: RecordRef {
                 record_type: RecordType::try_new(PARTY_RELATIONSHIP_RECORD_TYPE).unwrap(),
                 record_id: RecordId::try_new(relationship_id).unwrap(),
@@ -563,9 +567,8 @@ mod tests {
                 retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
                 bytes: event.encode_to_vec(),
             },
-            transaction_id: None,
-            correlation_id: None,
-            causation_id: None,
+            correlation_id: CorrelationId::try_new("correlation-relationship-created-1").unwrap(),
+            trace_id: TraceId::try_new("trace-relationship-created-1").unwrap(),
         }
     }
 }
