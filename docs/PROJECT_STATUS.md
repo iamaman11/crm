@@ -2,13 +2,21 @@
 
 Status date: 2026-07-13
 
-This document is the concise human-readable status page. The normative sequence remains `IMPLEMENTATION_ROADMAP.md`; absolute rules remain `SYSTEM_INVARIANTS.md`; implementation grouping follows `DEVELOPMENT_WORKFLOW.md`; multi-agent execution follows `MULTI_AGENT_DEVELOPMENT.md`.
+This document is the concise human-readable status page. The normative sequence remains `IMPLEMENTATION_ROADMAP.md`; functional scope completeness is guarded by `CRM_CAPABILITY_COVERAGE.md`; Phase 8 packet sequencing is detailed in `PHASE8_DELIVERY_PLAN.md`; absolute rules remain `SYSTEM_INVARIANTS.md`; implementation grouping follows `DEVELOPMENT_WORKFLOW.md`; multi-agent execution follows `MULTI_AGENT_DEVELOPMENT.md`.
 
 ## Current position
 
-**Phase 6 and Phase 7 are complete. Phase 8A is now the active expert owner-domain program: canonical customer master, identity resolution and consent (#28).**
+**Phases 0.1–7 are complete. Phase 8A is the active expert owner-domain program: canonical customer master, identity, consent and governed customer-data lifecycle (#28).**
 
-The repository now contains a complete first production-composed modular CRM proof plus production-quality search, product-plane, governed Admin Studio and trusted-code UI-extension foundations:
+Current Phase 8A execution state:
+
+- **8A.1 — complete:** canonical Party, Account and Contact Point references plus owner-domain foundations (#92 / merged PR #93);
+- **8A.2a — complete:** production Party create/get through governed mutation/query paths with PostgreSQL, Personal data classification, live authorization, idempotency, outbox and audit evidence (#94 / merged PR #95);
+- **8A.2b — active:** optimistic Party update and permission-aware cursor listing (#96 / draft PR #97);
+- **8A.2c — planned next:** rebuildable permission-aware Party search/customer discovery projection (#98);
+- **8A.3 and later:** Account, Contact Point, Party Relationship, Consent/Preferences, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
+
+The repository now contains a production-composed modular CRM platform foundation plus the first expert customer-master owner-domain expansion:
 
 - executable repository governance and architecture boundaries;
 - typed Module Manifest IR and immutable module identity;
@@ -16,7 +24,8 @@ The repository now contains a complete first production-composed modular CRM pro
 - module publication, installation and lifecycle runtime;
 - PostgreSQL tenant/RLS, record, relationship, idempotency, outbox and append-only audit foundation;
 - authenticated mutation and permission-bound query gateways;
-- independent Sales Deal and Activities Task owner-domain vertical slices;
+- independent Sales Deal and Activities Task production vertical slices;
+- canonical Party identity owner with merged create/get and active update/list expert expansion;
 - governed event delivery and the optional `crm.sales-activities-link` module;
 - generalized rebuildable projections and tenant/permission-aware search;
 - real `crm-application-runtime` composition boundary and deployable `services/crm-api` process host;
@@ -25,14 +34,39 @@ The repository now contains a complete first production-composed modular CRM pro
 - strict typed Admin Studio metadata schemas and canonical validation;
 - durable tenant-scoped metadata revision/activation persistence;
 - governed public metadata mutation/query contracts with canonical global audit evidence;
-- first governed Admin Studio authoring → publish → impact → activate → rollback workflow;
-- typed trusted-code UI-extension runtime with per-extension load/render failure isolation and browser proof that shell, core record content and healthy siblings survive extension failures.
+- governed Admin Studio authoring → publish → impact → activate → rollback workflow;
+- typed trusted-code UI-extension runtime with per-extension load/render failure isolation.
 
-The breadth of end-user CRM functionality is still intentionally smaller than the target universal expert CRM. Customer master, commercial lifecycle, service, marketing, communications, analytics, AI, marketplace and enterprise operational proof remain explicit owner-domain/platform programs.
+The product is **not yet a complete universal CRM**. `CRM_CAPABILITY_COVERAGE.md` now makes the full target explicit so the program cannot become infrastructure-complete but CRM-incomplete.
+
+## Functional scope completeness baseline
+
+The normative capability baseline now explicitly covers:
+
+- Customer 360, Party/Account/Contact Point master data, relationships, consent, identity resolution, data quality and privacy lifecycle;
+- Sales force automation including leads, pipelines, activities, routing, territories, teams, quotas, forecasting, renewals, sequences and mobile/offline workflows;
+- Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions, entitlements and governed billing/ERP/payment/tax boundaries;
+- Communications and omnichannel conversation history;
+- Service/Support, Knowledge and optional Field Service;
+- Marketing automation, segmentation, journeys, attribution and account-based marketing;
+- Customer Success, retention/expansion and optional Partner Relationship Management;
+- Projects/configurable work, documents, files and e-signature;
+- analytics, reporting, performance management and governed warehouse/BI boundaries;
+- workflow/automation, approvals and human tasks;
+- collaboration, productivity, search and knowledge discovery;
+- API/webhooks, bulk import/export, connectors, synchronization and data enrichment;
+- administration, customization and governed low-code metadata;
+- enterprise identity, authorization, privacy, residency, backup/restore, security and operations;
+- AI-native CRM through authenticated audited governed tools;
+- signed marketplace and sandboxed untrusted extensions;
+- responsive/mobile UX, accessibility, localization, offline/retry states and browser E2E;
+- optional vertical packages through the same governed module model.
+
+Capability families are classified as **Production-complete**, **Platform-ready**, **Planned**, **Optional/vertical** or **External integration**. No claim of broad or “ultimate” CRM completeness is valid while a required capability family has neither production implementation nor an explicit owner/boundary classification.
 
 ## Completed delivery foundations
 
-### Phases 0.1–5 — platform control plane
+### Phases 0.1–5 — platform control plane — Complete
 
 Completed foundations include repository hardening, typed deterministic module manifests, the governed Module SDK, module lifecycle/registry, PostgreSQL tenant/RLS and audit foundations, and the capability execution gateway.
 
@@ -76,115 +110,150 @@ Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all applicab
 
 ### Phase 7D — typed web product shell — Complete
 
-#71 / merged PR #73 established the first governed product-plane foundation:
-
-- reproducible Node 24 / pnpm 11 / strict TypeScript workspace;
-- `apps/web`, `packages/client` and `packages/ui` product-plane boundaries;
-- generated Protobuf-ES browser contracts;
-- browser access through governed typed application boundaries;
-- centralized typed session state and product-owned safe error mapping;
-- permission-aware routing as UX only, with backend authorization authoritative;
-- no public arbitrary raw gateway/query escape hatch;
-- responsive/accessibility foundations;
-- hermetic Playwright E2E against ephemeral PostgreSQL.
-
-Final review head `b62dd50225fde6e58aac9a6b4cec307bd2245616` passed all applicable checks before merge.
+#71 / merged PR #73 established the governed product-plane foundation: strict TypeScript, generated Protobuf-ES clients, governed browser boundaries, typed session state, safe error mapping, responsive/accessibility foundations and hermetic Playwright E2E against ephemeral PostgreSQL.
 
 ### Phase 7E — immutable, tenant-authorized typed metadata — Complete
 
-#77/#78, #79/#80 and #81/#82 established:
-
-- complete immutable metadata-bundle snapshots;
-- deterministic SHA-256 revision identity;
-- tenant-scoped publication authority by construction;
-- structural impact analysis and explicit breaking-change confirmation;
-- optimistic activation generations and rollback;
-- strict typed object, field, relationship, layout, saved-view, pipeline, permission-template and workflow definitions;
-- canonical JSON and deterministic dependency extraction;
-- exact governed-capability workflow actions with no raw script, SQL or arbitrary HTTP primitive.
+#77/#78, #79/#80 and #81/#82 established immutable metadata-bundle snapshots, deterministic revision identity, tenant-scoped publication authority, structural impact analysis, optimistic activation/rollback and strict typed definitions for objects, fields, relationships, layouts, saved views, pipelines, permission templates and workflows.
 
 ### Phase 7F — durable tenant-scoped metadata persistence — Complete
 
-#83 / merged PR #84 added the PostgreSQL persistence boundary for the immutable metadata lifecycle:
-
-- immutable tenant-scoped revision headers, canonical documents and dependency edges;
-- deterministic reconstruction with revision identity verification;
-- optimistic activation heads and expected-generation conflicts;
-- per-tenant transaction advisory locking;
-- durable pop-only rollback history;
-- append-only transition evidence bound to actor, request, capability and business transaction;
-- FORCE RLS and immutable published-state enforcement;
-- real PostgreSQL acceptance and migration rollback/reapply coverage.
-
-PR #84 merged as `adbb639da69f5d87873b3c603a1388021c8359da` after all applicable gates were green.
+#83 / merged PR #84 added immutable tenant-scoped revision persistence, deterministic reconstruction, optimistic activation heads, per-tenant locking, durable rollback history, append-only transition evidence, FORCE RLS and PostgreSQL acceptance.
 
 ### Phase 7G — governed metadata API and application composition — Complete
 
-#85 / merged PR #86 closed the public governed boundary over metadata runtime and persistence:
-
-- exact versioned Protobuf mutations and queries for publish, impact, activate, revision read, activation read and rollback;
-- typed schema-to-bundle conversion through `crm-metadata-schema`;
-- metadata mutations through `CapabilityGateway` and reads through `QueryGateway`;
-- PostgreSQL-backed production adapters and application composition;
-- canonical global `crm.audit_records` plus normal idempotency/business-transaction evidence;
-- typed browser metadata operations with a shared governed gRPC-Web transport;
-- no generic raw metadata gateway or frontend capability/query coordinate escape hatch.
+#85 / merged PR #86 closed the public governed boundary over metadata runtime and persistence with exact versioned Protobuf contracts, `CapabilityGateway` mutations, `QueryGateway` reads, PostgreSQL adapters, global audit evidence and typed browser operations.
 
 Final review head `7989ea1256f01bfd4e8ee2d33f5ad8370d6cc645` passed all 11 applicable workflows simultaneously. PR #86 merged to `main` as `970548d14faf26f4b8f6cb47f7d9f168e61d9c28`.
 
 ### Phase 7H — first governed Admin Studio workflow — Complete
 
-#87 / merged PR #88 delivered the first real product-plane metadata workflow:
-
-- permission-aware `/admin/metadata` route;
-- typed object-definition authoring with no raw JSON editor;
-- immutable candidate publication;
-- structural impact review;
-- explicit breaking-change confirmation;
-- optimistic activation and rollback generation handling;
-- mutation idempotency scoped to user intent;
-- safe authentication, authorization, validation, conflict and transport states;
-- real browser E2E against fresh PostgreSQL and `crm-api` proving first activation, a breaking second candidate, confirmation-gated activation and rollback.
-
-Final review head `f78f1c75bf97733ff88eafcd2d2ed2ab6c7615d9` passed Product Plane CI, including real process/browser E2E, and Rust CI. PR #88 merged to `main` as `0f01f22e6c77cd4f138a6b678d75d259f3ac71ff`.
+#87 / merged PR #88 delivered typed object-definition authoring, immutable candidate publication, impact review, breaking-change confirmation, optimistic activation/rollback and real browser E2E against fresh PostgreSQL and `crm-api`.
 
 ### Phase 7I — typed UI-extension runtime and host failure isolation — Complete
 
-#89 / merged PR #90 closed the final Phase 7 product-plane foundation:
+#89 / merged PR #90 delivered exact typed extension surfaces, immutable validated registration, readonly bounded host context, per-extension lazy-load/render isolation, safe failure evidence and browser proof that the shell, core record content and healthy siblings survive extension failures.
 
-- exact typed record-page extension surfaces;
-- immutable validated registry with owner-bound deterministic coordinates and locale-independent ordering;
-- invalid and duplicate registration rejection;
-- readonly host-owned typed context without session/client/raw gateway/infrastructure injection;
-- per-extension lazy loading, `Suspense`, render/load error isolation and bounded retry;
-- safe failure evidence containing extension identity, surface, phase and attempt only;
-- failure-observer isolation so telemetry hooks cannot break the host;
-- development-only lazy-loaded record-page proof fixture rather than a fake production record page;
-- real browser acceptance proving host shell, core record content and healthy sibling extensions survive render and lazy-load failures and targeted retry.
-
-The new duplicate-coordinate unit test exposed and prevented a real defect where `Set.add()` had been incorrectly treated as a boolean. Final review head `874dde11f5d558bd5e53f2def3e8903ff12f361a` passed Governance CI, Rust CI and Product Plane CI including full PostgreSQL/process/browser E2E. PR #90 merged to `main` as `0fb389c72b148311f590c3fdbae2a4f89fffd915`.
+Final review head `874dde11f5d558bd5e53f2def3e8903ff12f361a` passed Governance CI, Rust CI and Product Plane CI including full PostgreSQL/process/browser E2E. PR #90 merged to `main` as `0fb389c72b148311f590c3fdbae2a4f89fffd915`.
 
 Phase 10 remains responsible for signed packages and sandboxed untrusted marketplace execution. Phase 7I deliberately does not claim arbitrary third-party JavaScript isolation.
 
-## Active executable program — Phase 8A
+## Active executable program — Phase 8A customer master
 
-**#28 — canonical customer master, identity resolution and consent.**
+### 8A.1 — identity/reference contracts and owner foundations — Complete
 
-This is now the first active expert owner-domain program. It must establish stable customer identity ownership before Sales, Service, Marketing, Billing, projects or AI expand around incompatible local person/account models.
+#92 / merged PR #93 established canonical typed references and owner-module foundations for:
 
-Required owner-domain work includes:
+- `crm.parties` — Person/Organization identity owner;
+- `crm.customer-accounts` — customer/commercial relationship owner;
+- `crm.contact-points` — email/phone/postal/messaging endpoint owner.
 
-- Party identities for people and organizations;
-- Account/customer relationships that reference parties rather than own identity;
-- typed contact points and preferences;
-- time-bounded party relationships and hierarchies;
-- purpose/channel/jurisdiction-specific consent and withdrawal evidence;
-- source identifiers, match evidence, survivorship decisions and immutable merge/unmerge lineage;
-- duplicate detection with explainable candidates and approval-aware high-risk decisions;
-- privacy/export/deletion/legal-hold interaction evidence;
-- governed import/export and enrichment with provenance.
+The shared `crm.customer.v1` package is reference/version metadata only and does not own mutable customer state.
 
-The first implementation packet must define exact ownership and contracts before broad CRUD surface is added.
+### 8A.2a — authoritative Party create/get — Complete
+
+#94 / merged PR #95 delivered:
+
+- Person and Organization Party aggregate;
+- governed create through `CapabilityGateway`;
+- permission-aware get through `QueryGateway`;
+- Personal data classification;
+- tenant isolation;
+- idempotency, durable outbox event and canonical audit evidence;
+- real PostgreSQL and process-level `crm-api` acceptance.
+
+### 8A.2b — optimistic Party update and permission-aware list — Active
+
+#96 / draft PR #97 is delivering:
+
+- immutable Party identity/kind with optimistic display-name updates;
+- exact expected-version conflict handling and deterministic version progression;
+- governed `parties.party.update@1.0.0` with idempotency, event and audit evidence;
+- deterministic signed cursor listing bound to tenant, actor, capability, filter, sort and page size;
+- optional typed Party-kind filter;
+- live per-resource and per-field visibility enforcement;
+- process-level PostgreSQL acceptance covering create, get, update, replay, conflicting replay, stale version, pagination, kind filtering, unauthenticated access, cross-tenant non-disclosure and exact evidence counts;
+- synchronized generated Rust/browser contract descriptors.
+
+This packet is not considered complete until all applicable CI gates are green together on one exact final head and the PR is merged.
+
+### 8A.2c — Party search and customer discovery — Planned next
+
+#98 will integrate Party into the existing rebuildable generation-based search architecture while preserving these rules:
+
+- Party remains the authoritative identity owner;
+- search is candidate-only and rebuildable;
+- live resource/field authorization is re-checked before disclosure;
+- tenant isolation and deterministic generation switch/rebuild behavior are proven;
+- create/update event replay remains idempotent.
+
+8A.2 is complete only after 8A.2a, 8A.2b and 8A.2c are production-proven.
+
+### 8A.3 and later customer-master sequence
+
+After Party lifecycle/discovery is stable:
+
+1. Account lifecycle and Party relationship semantics;
+2. Contact Point lifecycle, verification and preference state;
+3. Party Relationship types, validity intervals and hierarchy projections;
+4. Customer 360 composition without a second identity owner;
+5. Consent and communication authorization;
+6. deterministic/explainable duplicate candidates and identity resolution;
+7. governed merge/unmerge, provenance and survivorship;
+8. import/export, data quality, enrichment provenance and privacy lifecycle proof.
+
+## Product readiness summary
+
+### Business modules
+
+The repository currently tracks **six business modules**:
+
+- `crm.sales` — production Deal vertical slice; broader expert Sales scope remains planned;
+- `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;
+- `crm.parties` — canonical identity owner in expert expansion; create/get merged, update/list active, search next;
+- `crm.customer-accounts` — owner foundation, production Account lifecycle pending 8A.3;
+- `crm.contact-points` — owner foundation, production Contact Point lifecycle pending 8A.3;
+- `crm.sales-activities-link` — optional independently governed production integration slice.
+
+Current product-complete expert module count: **0**. A production vertical slice is not the same as complete expert-domain functionality.
+
+### Platform-ready foundations
+
+- module lifecycle and governed capability/query execution;
+- tenant/RLS authoritative data foundation and append-only audit;
+- durable event delivery;
+- rebuildable projections and permission-aware search;
+- production application composition and deployable process host;
+- typed web product shell and governed browser-client boundary;
+- immutable typed metadata publication and persistence;
+- governed metadata API and Admin Studio workflow;
+- trusted-code UI-extension runtime with failure isolation.
+
+### Major planned product programs
+
+- remaining Customer Master / Identity / Consent work — active Phase 8A;
+- Product Catalog, Pricing, CPQ and quote-to-revenue — Phase 8B / #29;
+- Sales expert expansion;
+- Communications and Omnichannel;
+- Service, Support, Knowledge and Field Service;
+- Marketing and Growth;
+- Customer Success and optional PRM;
+- Projects/configurable work, Documents and e-signature;
+- Analytics, reporting and performance management;
+- workflow, collaboration and end-user product completeness;
+- AI-native governed actor/tool layer — Phase 9;
+- signed marketplace/WASM sandbox — Phase 10;
+- enterprise identity/privacy/restore/failover/security/SLO proof — Phase 11.
+
+## Immediate delivery sequence
+
+1. Finish Phase 8A.2b / #96 / PR #97 on one exact green head.
+2. Deliver Phase 8A.2c / #98 Party search and customer discovery projection.
+3. Deliver Phase 8A.3 Account, Contact Point, Party Relationship and Customer 360 foundations.
+4. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.
+5. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.
+6. Advance the remaining capability families from `CRM_CAPABILITY_COVERAGE.md` as explicit owner-domain or governed integration packets.
+7. Continue enterprise/security/operational hardening continuously without premature production-completeness claims.
 
 ## Development system
 
@@ -197,47 +266,6 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 - GitHub CI remains the final exact-head merge authority.
 
 #74 / merged PR #75 adds capability-based Codex qualification. #76 remains an open process-hardening follow-up to make exact-SHA review freeze explicitly aware of source-changing automation.
-
-## Product readiness summary
-
-### Implemented business owner modules
-
-- `crm.sales` — production Deal vertical slice; broader Sales expert functionality remains planned.
-- `crm.activities` — production Task vertical slice; broader activity/calendar/productivity functionality remains planned.
-
-### Implemented link module
-
-- `crm.sales-activities-link` — independently governed optional link module with pure core, published contract adapter, durable event delivery, lifecycle gating and production end-to-end acceptance.
-
-### Implemented platform/product foundations
-
-- module lifecycle, governed capability/query execution, tenant/RLS data foundation and append-only audit;
-- rebuildable projections and permission-aware search;
-- production application composition;
-- typed web product shell and governed browser-client boundary;
-- immutable tenant-scoped metadata publication lifecycle;
-- strict typed metadata schemas and durable tenant-scoped persistence;
-- governed metadata public API/application composition;
-- governed Admin Studio publication/impact/activation/rollback workflow;
-- typed trusted-code UI-extension runtime with failure isolation and real browser acceptance.
-
-### Not yet complete
-
-- broad canonical customer master, identity resolution and consent — active #28;
-- broad product-quality Sales/Activities UX and mobile experience;
-- product catalog, pricing, CPQ and quote-to-revenue lifecycle — #29;
-- communications, marketing, support/service, projects, documents/e-signature and analytics domains;
-- AI-native governed actor/tool layer;
-- signed marketplace/WASM sandbox;
-- enterprise restore/failover/security/SLO and operational proof.
-
-## Immediate delivery sequence
-
-1. Begin Phase 8A / #28 with explicit Party, Account, Contact Point, Relationship, Consent and Identity Resolution ownership/contracts.
-2. Deliver the customer-master program as end-to-end owner-domain packets with cross-tenant, idempotency, audit, merge/unmerge, consent-withdrawal and privacy evidence.
-3. Follow with Phase 8B / #29 commercial lifecycle without absorbing catalog/pricing/order/contract ownership into Sales.
-4. Continue frontend and expert backend work as end-to-end vertical slices.
-5. Continue continuous enterprise/security/operational hardening without making premature production-completeness claims.
 
 ## Development mode
 
@@ -258,6 +286,7 @@ When implementation state changes, update together where applicable:
 - `IMPLEMENTATION_ROADMAP.md` — normative phase state and sequence;
 - `PROJECT_STATUS.md` — concise current state;
 - `MODULE_CATALOG.md` — module lifecycle/readiness state;
+- `CRM_CAPABILITY_COVERAGE.md` — functional scope-completeness guardrail;
 - parent/phase GitHub issues;
 - README only for stable orientation, not detailed phase bookkeeping.
 

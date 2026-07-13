@@ -138,11 +138,25 @@
           "response": "crm.parties.v1.CreatePartyResponse"
         },
         {
+          "id": "parties.party.update",
+          "version": "1.0.0",
+          "rpc": "crm.parties.v1.PartyService.UpdateParty",
+          "request": "crm.parties.v1.UpdatePartyRequest",
+          "response": "crm.parties.v1.UpdatePartyResponse"
+        },
+        {
           "id": "parties.party.get",
           "version": "1.0.0",
           "rpc": "crm.parties.v1.PartyService.GetParty",
           "request": "crm.parties.v1.GetPartyRequest",
           "response": "crm.parties.v1.GetPartyResponse"
+        },
+        {
+          "id": "parties.party.list",
+          "version": "1.0.0",
+          "rpc": "crm.parties.v1.PartyService.ListParties",
+          "request": "crm.parties.v1.ListPartiesRequest",
+          "response": "crm.parties.v1.ListPartiesResponse"
         }
       ],
       "events": [
@@ -150,6 +164,11 @@
           "id": "parties.party.created",
           "version": "1.0.0",
           "message": "crm.parties.v1.PartyCreatedEvent"
+        },
+        {
+          "id": "parties.party.updated",
+          "version": "1.0.0",
+          "message": "crm.parties.v1.PartyUpdatedEvent"
         }
       ]
     }

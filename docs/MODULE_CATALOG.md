@@ -42,11 +42,11 @@ A manifest may declare future owned object names. That declaration does not mean
 |---|---|---|---|---|
 | `crm.sales` | Sales owner domain | **Vertical slice** | Deal create/update/stage advance/get/list | Leads, qualification, pipelines/admin depth, territories, quotas, forecasts, account plans, revenue intelligence, coaching and other expert Sales scope |
 | `crm.activities` | Activities/productivity owner domain | **Vertical slice** | Task create/update/complete/reminder/get/list | Appointments, recurring work, queues, calendars, synchronization and other expert activity scope |
-| `crm.parties` | Canonical person and organization identity | **Foundation** | Versioned Party references and create/get/created wire contracts only | Typed Person/Organization aggregates, persistence, governed adapters and production acceptance in Phase 8A.2 |
+| `crm.parties` | Canonical person and organization identity | **Expert expansion** | Production Party create/get is merged; optimistic update and permission-aware list are active in Phase 8A.2b with real PostgreSQL/process acceptance | Party search/discovery projection, structured person/organization profiles, provenance, identity resolution, merge/unmerge, import/export and privacy lifecycle work across later Phase 8A packets |
 | `crm.customer-accounts` | Canonical customer/commercial relationship | **Foundation** | Stable module identity and canonical `AccountRef` only | Account aggregate, Party association semantics, public contracts and production vertical slice in Phase 8A.3 |
 | `crm.contact-points` | Canonical email/phone/postal/messaging endpoints | **Foundation** | Stable module identity and canonical `ContactPointRef` only | Channel, verification, validity, preference, public contracts and production vertical slice in Phase 8A.3 |
 
-Current owner-module count: **5** — two production vertical slices and three customer-master foundations.
+Current owner-module count: **5** — two production vertical slices, one customer-master owner in expert expansion and two customer-master foundations.
 
 Current count of product-complete expert modules: **0**.
 
@@ -60,7 +60,7 @@ The published `module_id` is fixed as **`crm.sales-activities-link`** and is tre
 
 Current business-module count: **6** — five owner modules plus one optional link module.
 
-Current production-integrated business-module count: **3** — two owner vertical slices plus one link integration slice.
+Current production-integrated business-module count: **4** — Sales, Activities and Parties owner production slices plus one link integration slice. This count does not imply any of those owner modules is product-complete.
 
 ## 5. Mandatory customer-master owner domains
 
@@ -68,7 +68,7 @@ Tracked by Phase 8A / issue #28.
 
 Stable identities established in Phase 8A.1:
 
-- `crm.parties` — Party owner for person and organization identity — **Foundation**.
+- `crm.parties` — Party owner for person and organization identity — **Expert expansion**; create/get is merged, update/list is active in 8A.2b and search/discovery is tracked as 8A.2c / #98.
 - `crm.customer-accounts` — Account owner for customer/commercial relationships — **Foundation**.
 - `crm.contact-points` — Contact Point owner for email, phone, postal and messaging endpoints — **Foundation**.
 
@@ -97,7 +97,7 @@ State: **Planned**.
 
 ## 7. Expert CRM product areas
 
-Tracked primarily by Phase 8 / issue #11. Each area must either become an explicit owner module, a set of owner modules, or an explicitly tracked cross-domain product capability.
+Tracked primarily by Phase 8 / issue #11. Each area must either become an explicit owner module, a set of owner modules, or an explicitly tracked cross-domain product capability. The normative completeness guardrail is `CRM_CAPABILITY_COVERAGE.md`.
 
 - Sales expert expansion.
 - Activities/productivity expert expansion.
@@ -114,7 +114,7 @@ Tracked primarily by Phase 8 / issue #11. Each area must either become an explic
 - Automation runtime and administration.
 - Governed integration adapters.
 
-State: **In progress through Phase 8A customer-master foundations; other areas remain planned except the existing Sales and Activities vertical slices and Sales–Activities production link slice**.
+State: **In progress through Phase 8A customer-master delivery; other areas remain planned except the existing Sales and Activities vertical slices and Sales–Activities production link slice**.
 
 ## 8. Platform capabilities that are not business modules
 
@@ -152,6 +152,6 @@ Do not create a module solely because a directory, screen, table or team exists.
 
 ## 10. Target scale
 
-The final universal CRM will contain substantially more than the current six business modules. The roadmap already implies **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
+The final universal CRM will contain substantially more than the current six business modules. The roadmap and `CRM_CAPABILITY_COVERAGE.md` already imply **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
 
 The exact count becomes authoritative only as domains receive stable published module identities.

@@ -56,6 +56,13 @@ pub struct CreateParty {
     pub occurred_at_unix_nanos: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateParty {
+    pub expected_version: i64,
+    pub display_name: String,
+    pub occurred_at_unix_nanos: i64,
+}
+
 impl Party {
     pub fn create(command: CreateParty) -> Result<Self, SdkError> {
         let display_name = normalize_display_name(&command.display_name)?;
@@ -109,6 +116,29 @@ impl Party {
         })
     }
 
+    pub fn apply_update(&mut self, command: UpdateParty) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
+        self.require_monotonic_time(command.occurred_at_unix_nanos)?;
+        let display_name = normalize_display_name(&command.display_name)?;
+        if display_name == self.display_name {
+            return Err(invalid(
+                "PARTIES_PARTY_UPDATE_EMPTY",
+                "party.display_name",
+                "updated display name must differ from the current value",
+            ));
+        }
+
+        self.display_name = display_name;
+        self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
+        self.version = self.version.checked_add(1).ok_or_else(|| {
+            conflict(
+                "PARTIES_PARTY_VERSION_EXHAUSTED",
+                "Party version cannot be advanced further.",
+            )
+        })?;
+        Ok(())
+    }
+
     pub fn snapshot(&self) -> PartySnapshot {
         PartySnapshot {
             party_id: self.party_id.clone(),
@@ -142,6 +172,31 @@ impl Party {
 
     pub const fn version(&self) -> i64 {
         self.version
+    }
+
+    fn require_version(&self, expected_version: i64) -> Result<(), SdkError> {
+        if expected_version != self.version {
+            return Err(conflict(
+                "PARTIES_PARTY_VERSION_CONFLICT",
+                format!(
+                    "expected Party version {expected_version}, found {}",
+                    self.version
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn require_monotonic_time(&self, occurred_at_unix_nanos: i64) -> Result<(), SdkError> {
+        validate_timestamp("party.occurred_at_unix_nanos", occurred_at_unix_nanos)?;
+        if occurred_at_unix_nanos < self.updated_at_unix_nanos {
+            return Err(invalid(
+                "PARTIES_PARTY_TIME_REGRESSION",
+                "party.occurred_at_unix_nanos",
+                "Party mutation time cannot precede the previous mutation",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -195,6 +250,10 @@ fn invalid(code: &'static str, field: &'static str, safe_message: impl Into<Stri
     error
 }
 
+fn conflict(code: &'static str, safe_message: impl Into<String>) -> SdkError {
+    SdkError::new(code, ErrorCategory::Conflict, false, safe_message)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,6 +278,59 @@ mod tests {
         assert_eq!(person.version(), 1);
         assert_eq!(organization.kind(), PartyKind::Organization);
         assert_eq!(organization.version(), 1);
+    }
+
+    #[test]
+    fn applies_normalized_update_without_changing_identity_or_kind() {
+        let mut value = party(PartyKind::Person, "Ada Lovelace");
+        let original_id = value.party_id().as_str().to_owned();
+        value
+            .apply_update(UpdateParty {
+                expected_version: 1,
+                display_name: "  Augusta   Ada   Lovelace  ".to_owned(),
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap();
+
+        assert_eq!(value.party_id().as_str(), original_id);
+        assert_eq!(value.kind(), PartyKind::Person);
+        assert_eq!(value.display_name(), "Augusta Ada Lovelace");
+        assert_eq!(value.created_at_unix_nanos(), 10);
+        assert_eq!(value.updated_at_unix_nanos(), 20);
+        assert_eq!(value.version(), 2);
+    }
+
+    #[test]
+    fn rejects_stale_version_time_regression_and_semantic_no_op() {
+        let mut value = party(PartyKind::Organization, "Northwind");
+
+        let stale = value
+            .apply_update(UpdateParty {
+                expected_version: 2,
+                display_name: "Northwind Holdings".to_owned(),
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap_err();
+        assert_eq!(stale.code, "PARTIES_PARTY_VERSION_CONFLICT");
+
+        let time_regression = value
+            .apply_update(UpdateParty {
+                expected_version: 1,
+                display_name: "Northwind Holdings".to_owned(),
+                occurred_at_unix_nanos: 9,
+            })
+            .unwrap_err();
+        assert_eq!(time_regression.code, "PARTIES_PARTY_TIME_REGRESSION");
+
+        let no_op = value
+            .apply_update(UpdateParty {
+                expected_version: 1,
+                display_name: "  Northwind  ".to_owned(),
+                occurred_at_unix_nanos: 10,
+            })
+            .unwrap_err();
+        assert_eq!(no_op.code, "PARTIES_PARTY_UPDATE_EMPTY");
+        assert_eq!(value.version(), 1);
     }
 
     #[test]
