@@ -76,9 +76,22 @@ jobs:
           cargo generate-lockfile
 
       - name: Compile new Party acceptance binaries
+        shell: bash
         run: |
-          cargo check -p crm-api --test party_process_e2e
-          cargo check -p crm-parties-capability-adapter --features postgres-integration --test postgres_evidence_rollback
+          set -o pipefail
+          cargo check -p crm-api --test party_process_e2e 2>&1 | tee phase8a2-party-process-check.log
+          cargo check -p crm-parties-capability-adapter --features postgres-integration --test postgres_evidence_rollback 2>&1 | tee phase8a2-party-rollback-check.log
+
+      - name: Upload Party maintenance diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase8a2-maintenance-diagnostics
+          path: |
+            phase8a2-party-process-check.log
+            phase8a2-party-rollback-check.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Commit synchronized files only
         run: |
