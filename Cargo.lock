@@ -529,12 +529,15 @@ dependencies = [
 name = "crm-parties-capability-adapter"
 version = "0.1.0"
 dependencies = [
+ "crm-capability-adapters",
+ "crm-capability-ingress",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
  "crm-module-sdk",
  "crm-parties",
  "crm-proto-contracts",
+ "http",
  "prost",
  "sqlx",
  "tokio",

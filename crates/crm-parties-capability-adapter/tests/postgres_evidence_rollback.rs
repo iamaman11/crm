@@ -145,10 +145,7 @@ async fn missing_party_audit_evidence_rolls_back_every_transactional_side_effect
     assert_eq!(party_record_count(&admin).await, 0);
 }
 
-fn compose(
-    store: PostgresDataStore,
-    definition: CapabilityDefinition,
-) -> HttpCapabilityMiddleware {
+fn compose(store: PostgresDataStore, definition: CapabilityDefinition) -> HttpCapabilityMiddleware {
     let clock = Arc::new(FixedClock::new(NOW));
     let clock_port: Arc<dyn Clock> = clock.clone();
     let authorization_store = LiveAuthorizationStore::default();
@@ -164,7 +161,8 @@ fn compose(
             expires_at_unix_nanos: Some(NOW + 10_000_000_000_000),
         })
         .expect("valid Party rollback authorization grant");
-    let executor = PostgresTransactionalAggregateExecutor::new(store, Arc::new(MissingAuditPlanner));
+    let executor =
+        PostgresTransactionalAggregateExecutor::new(store, Arc::new(MissingAuditPlanner));
     let catalog = CapabilityCatalog::new(vec![definition]).expect("valid Party capability catalog");
     let gateway = Arc::new(CapabilityGateway::new(
         Arc::new(catalog),
@@ -245,11 +243,7 @@ fn http_request(definition: &CapabilityDefinition, input: TypedPayload) -> HttpC
         "party-evidence-causation",
     );
     insert_header(&mut headers, TRACE_ID_HEADER, "party-evidence-trace");
-    insert_header(
-        &mut headers,
-        BUSINESS_TRANSACTION_HEADER,
-        TRANSACTION_ID,
-    );
+    insert_header(&mut headers, BUSINESS_TRANSACTION_HEADER, TRANSACTION_ID);
     insert_header(&mut headers, TIMEOUT_HEADER, "5000");
     HttpCapabilityRequest {
         headers,
