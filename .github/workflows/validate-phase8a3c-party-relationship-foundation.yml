@@ -1,0 +1,77 @@
+name: Validate Phase 8A.3c Party Relationship Foundation
+
+on:
+  push:
+    branches:
+      - ops/merge-phase8a3b-exact-green
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-phase8a3c-party-relationship-foundation
+  cancel-in-progress: true
+
+jobs:
+  validate-and-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TARGET_BRANCH: develop/phase8a3c-party-relationship
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Normalize workspace integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          workspace = Path('Cargo.toml')
+          text = workspace.read_text()
+          member = '  "modules/crm-party-relationships",\n'
+          if member not in text:
+              anchor = '  "modules/crm-contact-points",\n'
+              if text.count(anchor) != 1:
+                  raise SystemExit('expected one crm-contact-points workspace member anchor')
+              text = text.replace(anchor, anchor + member, 1)
+          workspace.write_text(text)
+
+          cargo = Path('modules/crm-party-relationships/Cargo.toml')
+          cargo.write_text('''[package]\nname = "crm-party-relationships"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n\n[dev-dependencies]\npretty_assertions = "1"\n''')
+
+          lib = Path('modules/crm-party-relationships/src/lib.rs')
+          text = lib.read_text()
+          if 'pub mod persistence;' not in text:
+              text = text.replace('pub mod domain;\n', 'pub mod domain;\npub mod persistence;\n', 1)
+          if 'pub use persistence::*;' not in text:
+              text = text.replace('pub use domain::*;\n', 'pub use domain::*;\npub use persistence::*;\n', 1)
+          lib.write_text(text)
+          PY
+      - name: Canonical Rust maintenance and owner verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo generate-lockfile
+          cargo clippy -p crm-party-relationships --all-targets --all-features -- -D warnings
+          cargo test -p crm-party-relationships --all-features
+      - name: Commit verified foundation when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Cargo.toml Cargo.lock modules/crm-party-relationships; then
+            echo "Party Relationship foundation is already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock modules/crm-party-relationships
+          git commit -m "Validate Phase 8A.3c Party Relationship owner foundation"
+          git push origin "HEAD:${TARGET_BRANCH}"
