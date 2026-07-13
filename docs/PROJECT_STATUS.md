@@ -14,8 +14,8 @@ Current Phase 8A execution state:
 - **8A.2a — complete:** authoritative Party create/get (#94 / merged PR #95);
 - **8A.2b — complete:** optimistic Party update and permission-aware cursor listing (#96 / merged PR #97);
 - **8A.2c — complete:** rebuildable permission-aware Party search/customer discovery (#98 / merged PR #99);
-- **8A.3a — production implementation complete in PR #102 pending merge:** authoritative Account lifecycle and Party associations (#101 / PR #102);
-- **8A.3b — next:** Contact Point lifecycle, verification and preference;
+- **8A.3a — complete:** authoritative Account lifecycle and Party associations (#101 / merged PR #102);
+- **8A.3b — active:** Contact Point lifecycle, verification and preference (#103; implementation branch `develop/phase8a3b-contact-point-lifecycle`);
 - **8A.3c–8A.3d:** Party Relationship lifecycle/hierarchy and permission-aware Customer 360 composition;
 - **8A.4 and later:** consent/preferences, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
 
@@ -29,7 +29,7 @@ The repository now contains a production-composed modular CRM platform foundatio
 - authenticated mutation and permission-bound query gateways;
 - independent Sales Deal and Activities Task production vertical slices;
 - canonical Party identity owner with production create/update/get/list and permission-aware rebuildable search discovery;
-- canonical Customer Account owner with production create/update/get/list, typed Party associations and cross-owner reference-integrity composition in PR #102;
+- canonical Customer Account owner with production create/update/get/list, typed Party associations and cross-owner reference-integrity composition;
 - governed event delivery and the optional `crm.sales-activities-link` module;
 - generalized rebuildable projections and tenant/permission-aware search;
 - neutral cross-domain global-search composition that owns projection mapping but no authoritative business state;
@@ -119,9 +119,9 @@ The complete first Party lifecycle was deliberately split into three production 
 
 Party remains the authoritative identity owner. Search remains rebuildable and non-authoritative.
 
-### 8A.3a — authoritative Account lifecycle and Party associations — Production implementation complete in PR #102 pending merge
+### 8A.3a — authoritative Account lifecycle and Party associations — Complete
 
-#101 / PR #102 delivers:
+#101 / merged PR #102 delivered:
 
 - immutable typed Account identity owned solely by `crm.customer-accounts`;
 - normalized bounded Account name and explicit Active/Inactive lifecycle;
@@ -136,14 +136,28 @@ Party remains the authoritative identity owner. Search remains rebuildable and n
 - platform-level cross-owner Party-reference integrity validation before Account mutation execution;
 - identical safe rejection for missing and cross-tenant Party references;
 - synchronized Rust/browser contract descriptors;
-- independent fresh-database process acceptance for the existing full application, Party lifecycle and new Account lifecycle;
+- independent fresh-database process acceptance for the existing full application, Party lifecycle and Account lifecycle;
 - Account process proof covering prerequisite governed Party creation, reference-integrity rejection without Account side effects, create/replay/get/update/update replay/stale conflict, pagination, status filter, unauthenticated rejection, cross-tenant non-disclosure and durable evidence deltas.
 
 The Account owner module itself has no SQL dependency and does not read Party storage directly.
 
-### 8A.3b — Contact Point lifecycle, verification and preference — Next
+Final verified review head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4` passed all 11 applicable workflows together. PR #102 merged to `main` as `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`.
 
-Next packet will establish canonical Contact Point ownership for email, phone, postal, web and messaging endpoints with typed channel semantics, verification state/evidence boundaries, validity/preference rules, stable Party/Account references where justified, optimistic mutation/query paths and real PostgreSQL/process acceptance.
+### 8A.3b — Contact Point lifecycle, verification and preference — Active
+
+Issue #103 is active. The implementation branch `develop/phase8a3b-contact-point-lifecycle` is currently two commits ahead of `main` and contains the first owner-domain foundation:
+
+- typed Contact Point identity and stable Party reference;
+- Email, Phone, Postal, Web and Messaging kinds;
+- Active/Inactive lifecycle;
+- preferred flag and validity interval state;
+- explicit Unverified/Verified state with bounded evidence reference and verification time;
+- create/update/verify commands with exact expected-version progression;
+- changing the endpoint value resets verification to Unverified;
+- canonical value normalization and validation foundations;
+- owner-module dependency additions required by that domain code.
+
+This is **not yet a production-complete Contact Point slice**. Public Protobuf contracts, mutation/query adapters, persistence mapping, application composition, Party-reference integrity, generated browser contracts and real PostgreSQL/`crm-api` process acceptance still need to be delivered before 8A.3b can merge.
 
 Consent and communication authorization remain separate owner concerns and will not be hidden inside Contact Point flags.
 
@@ -167,8 +181,8 @@ The repository currently tracks **six business modules**:
 - `crm.sales` — production Deal vertical slice; broader expert Sales scope remains planned;
 - `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;
 - `crm.parties` — canonical identity owner in expert expansion with production create/update/get/list/search;
-- `crm.customer-accounts` — authoritative Account vertical slice in PR #102 pending merge;
-- `crm.contact-points` — owner foundation; production lifecycle next in 8A.3b;
+- `crm.customer-accounts` — merged authoritative Account production vertical slice;
+- `crm.contact-points` — owner foundation with active 8A.3b domain implementation, not yet production-complete;
 - `crm.sales-activities-link` — optional independently governed production integration slice.
 
 Current product-complete expert module count: **0**. A production vertical slice is not the same as complete expert-domain functionality.
@@ -204,13 +218,12 @@ Current product-complete expert module count: **0**. A production vertical slice
 
 ## Immediate delivery sequence
 
-1. Merge Phase 8A.3a / #101 / PR #102 after one final exact-head green gate set.
-2. Deliver Phase 8A.3b Contact Point lifecycle, verification and preference.
-3. Deliver Party Relationship and Customer 360 composition packets.
-4. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.
-5. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.
-6. Advance the remaining capability families from `CRM_CAPABILITY_COVERAGE.md` as explicit owner-domain or governed integration packets.
-7. Continue enterprise/security/operational hardening continuously without premature production-completeness claims.
+1. Continue Phase 8A.3b / #103 from `develop/phase8a3b-contact-point-lifecycle` and complete contracts, persistence, governed mutation/query adapters, application composition and process-level production proof.
+2. Deliver Party Relationship and Customer 360 composition packets.
+3. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.
+4. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.
+5. Advance the remaining capability families from `CRM_CAPABILITY_COVERAGE.md` as explicit owner-domain or governed integration packets.
+6. Continue enterprise/security/operational hardening continuously without premature production-completeness claims.
 
 ## Development system
 
@@ -231,6 +244,8 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 - qualified agents may own bounded integration fixes, non-overlapping workstreams or full delivery packets according to `CODEX_AGENT_QUALIFICATION.md`;
 - full GitHub CI remains mandatory on the exact final review head;
 - architecture, contract, tenant, authorization, audit and rollback gates remain strict.
+
+See `DEVELOPMENT_WORKFLOW.md`, `MULTI_AGENT_DEVELOPMENT.md`, `CODEX_AGENT_QUALIFICATION.md` and `MODULE_DEVELOPMENT.md`.
 
 ## Documentation hygiene rule
 
