@@ -34,47 +34,115 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply exact Phase 8A.3b persisted-invariant precedence fix
+      - name: Synchronize Phase 8A.3b delivery documentation
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          path = Path("modules/crm-contact-points/src/domain.rs")
-          lines = path.read_text().splitlines(keepends=True)
-          preference_indexes = [
-              index
-              for index, line in enumerate(lines)
-              if line.strip() == "validate_preference(snapshot.status, snapshot.preferred)?;"
-          ]
-          if len(preference_indexes) != 1:
-              raise SystemExit(
-                  f"expected one persisted preference check, found {len(preference_indexes)}"
-              )
-          preference_index = preference_indexes[0]
-          initial_indexes = [
-              index
-              for index, line in enumerate(lines)
-              if index > preference_index and line.strip() == "validate_initial_transition_shape("
-          ]
-          if len(initial_indexes) != 1:
-              raise SystemExit(
-                  f"expected one later initial-transition check, found {len(initial_indexes)}"
-              )
-          initial_start = initial_indexes[0]
-          initial_end = next(
-              index
-              for index in range(initial_start + 1, len(lines))
-              if lines[index].strip() == ")?;"
+          phase8 = Path("docs/PHASE8_DELIVERY_PLAN.md")
+          text = phase8.read_text()
+          replacement = '''#### 8A.3b — Contact Point lifecycle, verification and preference — Active / final verification
+
+Tracked by #103 and draft PR #104 on `develop/phase8a3b-contact-point-lifecycle`.
+
+The packet now implements:
+
+- authoritative typed Contact Point identity with a stable Party reference and no copied Party identity attributes;
+- Email, Phone, Postal, Web and Messaging endpoint kinds with deterministic canonical normalization and bounded validation;
+- Active/Inactive lifecycle, preferred state, validity intervals and explicit verification evidence/time;
+- verification preservation for lifecycle/validity/display-only changes and automatic reset only when the canonical endpoint value changes;
+- exact optimistic version progression, monotonic mutation time, semantic no-op rejection and atomic version-exhaustion failure;
+- strict deterministic versioned persisted Contact Point state with canonical rehydration checks;
+- additive `crm.contact_points.v1` create/update/verify/get/list contracts and created/updated/verified events;
+- immutable module manifest evolution, exact contract bindings and synchronized Rust/browser descriptor identities;
+- governed transactional create/update/verify through the production aggregate executor with idempotency, outbox and audit evidence;
+- permission-aware get/list with tenant/actor/filter/sort/page-bound signed cursors, typed filters, bounded visibility scans and live field redaction;
+- application-level Party-reference integrity without SQL or cross-owner storage access in the Contact Point owner module;
+- identical safe rejection for missing and cross-tenant Party references while real database/runtime failures remain distinguishable internally;
+- `crm-application-runtime` composition and field-bounded visibility bootstrap;
+- fresh-PostgreSQL real `crm-api` process acceptance covering Party prerequisites, lifecycle, verification, display-only preservation, verification reset on value change, replay, conflicting replay, stale version, filters, signed cursor pagination/tamper rejection, unauthenticated rejection, tenant non-disclosure and durable evidence counts.
+
+The packet remains **Active** and PR #104 remains draft until all applicable workflows are green together on one exact final SHA. It is not marked complete or merged prematurely.
+
+Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate authoritative ownership and are not hidden inside Contact Point flags.
+
+'''
+          text, count = re.subn(
+              r"#### 8A\.3b — Contact Point lifecycle, verification and preference — Active\n.*?(?=#### 8A\.3c —)",
+              replacement,
+              text,
+              count=1,
+              flags=re.S,
           )
-          block = lines[initial_start : initial_end + 1]
-          del lines[initial_start : initial_end + 1]
-          preference_index = next(
-              index
-              for index, line in enumerate(lines)
-              if line.strip() == "validate_preference(snapshot.status, snapshot.preferred)?;"
+          if count != 1:
+              raise SystemExit(f"expected one PHASE8 8A.3b block, found {count}")
+          phase8.write_text(text)
+
+          status = Path("docs/PROJECT_STATUS.md")
+          text = status.read_text()
+          replacement = '''### 8A.3b — Contact Point lifecycle, verification and preference — Active / final verification
+
+Issue #103 and draft PR #104 now contain the implemented authoritative Contact Point vertical slice:
+
+- typed Contact Point identity and stable Party reference;
+- deterministic Email, Phone, Postal, Web and Messaging normalization/validation;
+- Active/Inactive lifecycle, preferred state, validity intervals and explicit verification evidence/time;
+- verification preservation for non-value changes and reset only when the canonical endpoint value changes;
+- exact optimistic concurrency, monotonic mutation time and deterministic persisted-state validation;
+- additive v1 create/update/verify/get/list contracts plus created/updated/verified events;
+- governed transactional mutations with idempotency, outbox and audit evidence;
+- permission-aware get/list with typed filters, signed cursor binding and live field/resource visibility;
+- application-level Party-reference integrity with the same safe result for missing and cross-tenant Parties and no direct cross-owner storage access from the owner module;
+- immutable manifest/contract bindings and synchronized generated descriptors;
+- application-runtime composition and field-bounded visibility bootstrap;
+- fresh-PostgreSQL real `crm-api` process acceptance for lifecycle, verification/reset, replay/conflict, filters, signed cursor pagination/tamper rejection, unauthenticated rejection, tenant non-disclosure and durable evidence counts.
+
+PR #104 remains draft pending one exact-head all-green applicable CI set. The packet is therefore not yet marked **Complete** or merged.
+
+Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate owner concerns.
+
+'''
+          text, count = re.subn(
+              r"### 8A\.3b — Contact Point lifecycle, verification and preference — Active\n.*?(?=### Remaining 8A sequence)",
+              replacement,
+              text,
+              count=1,
+              flags=re.S,
           )
-          lines[preference_index:preference_index] = block
-          path.write_text("".join(lines))
+          if count != 1:
+              raise SystemExit(f"expected one PROJECT_STATUS 8A.3b block, found {count}")
+          old = "- `crm.contact-points` — owner foundation with active 8A.3b domain implementation, not yet production-complete;"
+          new = "- `crm.contact-points` — implemented authoritative 8A.3b vertical slice in draft PR #104, pending exact-head final verification and merge;"
+          if text.count(old) != 1:
+              raise SystemExit("expected one PROJECT_STATUS Contact Point module summary")
+          text = text.replace(old, new, 1)
+          old = "1. Continue Phase 8A.3b / #103 from `develop/phase8a3b-contact-point-lifecycle` and complete contracts, persistence, governed mutation/query adapters, application composition and process-level production proof."
+          new = "1. Finish exact-head CI verification for Phase 8A.3b / #103, merge draft PR #104 only after the full applicable green set, then begin Party Relationship."
+          if text.count(old) != 1:
+              raise SystemExit("expected one PROJECT_STATUS immediate-delivery item")
+          status.write_text(text.replace(old, new, 1))
+
+          roadmap = Path("docs/IMPLEMENTATION_ROADMAP.md")
+          text = roadmap.read_text()
+          old = "Current delivery position: Party create/update/get/list/search is production-proven. The first authoritative Account create/update/get/list slice with typed Party associations and platform-level reference integrity is merged and production-proven (#101 / merged PR #102; final verified head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4`; merge commit `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`). Contact Point lifecycle is now active in #103 on `develop/phase8a3b-contact-point-lifecycle`; the branch currently contains the first typed lifecycle/verification domain foundation but not yet the public contracts, adapters, runtime composition or production process proof required for merge. Party Relationship and Customer 360 follow. Consent, identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets."
+          new = "Current delivery position: Party create/update/get/list/search is production-proven. The first authoritative Account create/update/get/list slice with typed Party associations and platform-level reference integrity is merged and production-proven (#101 / merged PR #102; final verified head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4`; merge commit `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`). Contact Point lifecycle is implemented in #103 / draft PR #104 on `develop/phase8a3b-contact-point-lifecycle`, including strict persistence, additive v1 contracts/events, governed mutations, permission-aware queries, application-level Party-reference integrity, runtime composition, synchronized descriptors and fresh-PostgreSQL real `crm-api` process proof. It remains Active until one exact final SHA passes the full applicable CI set and the PR is merged. Party Relationship and Customer 360 follow. Consent, identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets."
+          if text.count(old) != 1:
+              raise SystemExit("expected one IMPLEMENTATION_ROADMAP delivery-position paragraph")
+          roadmap.write_text(text.replace(old, new, 1))
+
+          catalog = Path("docs/MODULE_CATALOG.md")
+          text = catalog.read_text()
+          old = "`crm.contact-points` is being implemented to own:"
+          new = "`crm.contact-points` owns:"
+          if text.count(old) != 1:
+              raise SystemExit("expected one MODULE_CATALOG Contact Point ownership heading")
+          text = text.replace(old, new, 1)
+          old = "The current 8A.3b branch already establishes the first pure domain model and resets verification when the endpoint value changes, but the module remains a foundation until governed public contracts, persistence, application composition and production acceptance are complete."
+          new = "Draft PR #104 now implements the authoritative 8A.3b Contact Point vertical slice: strict deterministic persistence, additive v1 contracts/events, governed mutation and permission-aware query adapters, application-level Party-reference integrity, runtime composition, synchronized descriptors and fresh-PostgreSQL real `crm-api` process acceptance. The owner module remains pure: it has no SQL, transport types or direct cross-owner storage access. The packet remains Active until one exact final SHA is fully green and merged."
+          if text.count(old) != 1:
+              raise SystemExit("expected one MODULE_CATALOG stale Contact Point status paragraph")
+          catalog.write_text(text.replace(old, new, 1))
           PY
       - name: Apply machine-fixable Rust maintenance
         run: |
@@ -86,12 +154,12 @@ jobs:
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services docs; then
+            echo "Delivery documentation and Rust maintenance are already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Prioritize impossible persisted Contact Point create state"
+          git add Cargo.lock crates modules services docs
+          git commit -m "Synchronize Phase 8A.3b delivery status"
           git push origin "HEAD:${HEAD_BRANCH}"
