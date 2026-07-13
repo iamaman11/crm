@@ -1,6 +1,11 @@
 name: Phase 8A.2c Source Sync
 
 on:
+  push:
+    branches:
+      - develop/phase8a2c-party-search
+    paths:
+      - ".github/workflows/phase8a2c-source-sync.yml"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
@@ -15,7 +20,7 @@ concurrency:
 
 jobs:
   sync:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
