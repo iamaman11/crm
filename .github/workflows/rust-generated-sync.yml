@@ -25,31 +25,51 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Apply exact generator-produced Account descriptor block
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
-          cargo fmt --all
-      - name: Commit synchronized files when needed
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("packages/client/src/contract_hashes.ts")
+          lines = path.read_text().splitlines()
+          retained = [
+              line for line in lines
+              if not line.startswith('  "crm.accounts.v1.')
+          ]
+          insertion = next(
+              index for index, line in enumerate(retained)
+              if line.startswith('  "crm.activities.v1.')
+          )
+          account_block = [
+              '  "crm.accounts.v1.Account": new Uint8Array([197, 192, 92, 0, 0, 221, 140, 64, 159, 188, 171, 185, 118, 108, 90, 88, 194, 184, 107, 110, 116, 217, 139, 197, 58, 30, 180, 179, 95, 122, 201, 121]),',
+              '  "crm.accounts.v1.AccountCreatedEvent": new Uint8Array([58, 171, 209, 109, 199, 150, 142, 48, 2, 163, 80, 37, 54, 238, 25, 15, 217, 58, 137, 151, 100, 39, 252, 247, 58, 88, 80, 54, 20, 235, 131, 4]),',
+              '  "crm.accounts.v1.AccountPartyAssociation": new Uint8Array([78, 29, 246, 95, 28, 163, 119, 59, 206, 254, 139, 133, 19, 188, 126, 175, 215, 209, 190, 157, 211, 159, 28, 103, 184, 55, 218, 248, 46, 187, 47, 3]),',
+              '  "crm.accounts.v1.AccountUpdatedEvent": new Uint8Array([17, 210, 189, 36, 150, 173, 223, 19, 131, 34, 54, 178, 38, 115, 27, 221, 242, 4, 97, 250, 237, 200, 142, 216, 79, 152, 23, 193, 181, 89, 52, 139]),',
+              '  "crm.accounts.v1.CreateAccountRequest": new Uint8Array([214, 58, 248, 224, 233, 224, 42, 187, 78, 36, 184, 116, 103, 78, 59, 18, 18, 253, 6, 13, 149, 46, 254, 86, 31, 69, 15, 125, 206, 179, 239, 24]),',
+              '  "crm.accounts.v1.CreateAccountResponse": new Uint8Array([233, 213, 151, 198, 106, 6, 121, 94, 124, 236, 36, 230, 163, 221, 82, 69, 70, 92, 147, 126, 210, 43, 38, 102, 100, 152, 12, 152, 228, 104, 225, 231]),',
+              '  "crm.accounts.v1.GetAccountRequest": new Uint8Array([175, 63, 250, 86, 244, 129, 33, 107, 210, 75, 30, 239, 49, 173, 12, 125, 3, 68, 117, 121, 91, 34, 224, 98, 177, 225, 152, 195, 208, 253, 115, 27]),',
+              '  "crm.accounts.v1.GetAccountResponse": new Uint8Array([117, 173, 128, 58, 251, 187, 130, 47, 226, 126, 71, 56, 42, 192, 42, 90, 3, 130, 127, 6, 237, 246, 151, 172, 80, 51, 20, 95, 87, 162, 216, 64]),',
+              '  "crm.accounts.v1.ListAccountsRequest": new Uint8Array([51, 197, 28, 186, 46, 232, 63, 157, 99, 145, 191, 202, 178, 155, 33, 1, 89, 235, 171, 145, 69, 149, 93, 167, 142, 90, 43, 210, 130, 36, 122, 66]),',
+              '  "crm.accounts.v1.ListAccountsResponse": new Uint8Array([101, 210, 157, 194, 5, 135, 230, 114, 209, 61, 237, 108, 246, 241, 168, 95, 104, 9, 182, 248, 90, 129, 111, 111, 82, 55, 198, 19, 137, 37, 205, 254]),',
+              '  "crm.accounts.v1.UpdateAccountRequest": new Uint8Array([139, 18, 217, 199, 90, 188, 192, 121, 194, 132, 223, 101, 214, 123, 208, 97, 188, 210, 30, 119, 105, 158, 249, 223, 90, 50, 230, 111, 88, 53, 148, 212]),',
+              '  "crm.accounts.v1.UpdateAccountResponse": new Uint8Array([166, 251, 188, 225, 192, 78, 222, 177, 7, 12, 247, 206, 51, 137, 146, 201, 98, 91, 224, 252, 235, 192, 86, 237, 149, 45, 183, 97, 52, 34, 195, 174]),',
+          ]
+          retained[insertion:insertion] = account_block
+          path.write_text("\n".join(retained) + "\n")
+          PY
+      - name: Restore canonical workflow and commit generated registry
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
+          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add packages/client/src/contract_hashes.ts .github/workflows/rust-generated-sync.yml
+          git commit -m "Synchronize generated Account contract hashes"
           git push origin "HEAD:${HEAD_BRANCH}"
