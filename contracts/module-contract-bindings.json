@@ -126,6 +126,32 @@
           "message": "crm.activities.v1.TaskReminderScheduledEvent"
         }
       ]
+    },
+    {
+      "module_id": "crm.parties",
+      "capabilities": [
+        {
+          "id": "parties.party.create",
+          "version": "1.0.0",
+          "rpc": "crm.parties.v1.PartyService.CreateParty",
+          "request": "crm.parties.v1.CreatePartyRequest",
+          "response": "crm.parties.v1.CreatePartyResponse"
+        },
+        {
+          "id": "parties.party.get",
+          "version": "1.0.0",
+          "rpc": "crm.parties.v1.PartyService.GetParty",
+          "request": "crm.parties.v1.GetPartyRequest",
+          "response": "crm.parties.v1.GetPartyResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "parties.party.created",
+          "version": "1.0.0",
+          "message": "crm.parties.v1.PartyCreatedEvent"
+        }
+      ]
     }
   ]
 }
