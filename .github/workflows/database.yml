@@ -269,17 +269,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Apply legacy snapshot and upgrade migrations
+      - name: Verify legacy snapshot upgrade through current migrations
         run: |
-          psql --set ON_ERROR_STOP=1 --file database/tests/fixtures/legacy_pre_versioning.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
-      - name: Verify legacy rows were upgraded with defaults
-        run: psql --set ON_ERROR_STOP=1 --file database/tests/0002_platform_upgrade.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0010_metadata_publication_runtime.up.sql
