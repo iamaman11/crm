@@ -9,5 +9,8 @@
 pub mod domain;
 pub mod persistence;
 
+pub use domain::*;
+pub use persistence::*;
+
 pub const MODULE_ID: &str = "crm.consents";
 pub const RECORD_TYPE: &str = "consents.authorization";
