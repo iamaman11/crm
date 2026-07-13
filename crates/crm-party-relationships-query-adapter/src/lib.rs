@@ -10,12 +10,14 @@ use crm_module_sdk::{
     PortFuture, RecordId, RecordType, SdkError, TypedPayload,
 };
 use crm_party_relationships::{
-    PartyRelationship, PartyRelationshipStatus, RelationshipDirectionality, RelationshipType,
+    PartyRelationship, PartyRelationshipStatus, RelationshipDirectionality,
 };
 use crm_party_relationships_capability_adapter::{
     MODULE_ID, RECORD_TYPE, party_relationship_from_snapshot, party_relationship_to_wire,
 };
-use crm_proto_contracts::crm::{core::v1 as core, party_relationships::v1 as wire};
+use crm_proto_contracts::crm::{
+    core::v1 as core, customer::v1 as customer, party_relationships::v1 as wire,
+};
 use crm_query_runtime::{
     CursorBinding, CursorCodec, CursorContinuation, PageSizePolicy, QueryExecutionResult,
     QueryExecutor, QueryRequest, QuerySemanticValidator, QueryVisibilityAuthorizer,
@@ -599,16 +601,20 @@ fn validate_party_id(value: &str) -> Result<RecordId, SdkError> {
 }
 
 fn validate_type_code_filter(value: &str) -> Result<String, SdkError> {
-    let normalized = RelationshipType::try_new(
-        value,
-        RelationshipDirectionality::Directional,
-        "source",
-        "target",
-    )?;
-    if normalized.code() != value {
+    if value.is_empty()
+        || value.len() > 96
+        || value.chars().any(char::is_control)
+        || !value.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric)
+        || !value.as_bytes().last().is_some_and(u8::is_ascii_alphanumeric)
+        || !value.as_bytes().iter().all(|byte| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || matches!(*byte, b'.' | b'-' | b'_')
+        })
+    {
         return Err(SdkError::invalid_argument(
             "party_relationship.relationship_type_code",
-            "Party Relationship type-code filter must use canonical lowercase syntax",
+            "Party Relationship type-code filter must use canonical lowercase ASCII syntax",
         ));
     }
     Ok(value.to_owned())
@@ -738,6 +744,13 @@ mod tests {
             !definition.requires_idempotency
                 && definition.input_contract.allowed_data_classes == vec![DataClass::Personal]
         }));
+    }
+
+    #[test]
+    fn type_code_filter_accepts_reserved_reciprocal_codes_without_fabricating_semantics() {
+        assert_eq!(validate_type_code_filter("household").unwrap(), "household");
+        assert!(validate_type_code_filter(" Household ").is_err());
+        assert!(validate_type_code_filter("bad type!").is_err());
     }
 
     #[test]
