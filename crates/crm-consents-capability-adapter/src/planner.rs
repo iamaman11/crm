@@ -1,9 +1,7 @@
 use crate::{CREATE_CAPABILITY, MODULE_ID};
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
-use crm_consents::{
-    CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID, CommunicationChannel,
-};
+use crm_consents::{CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID, CommunicationChannel};
 use crm_core_data::{
     AggregateTarget, CapabilityBatchExecutionPlan, RelationshipMutation,
     TransactionalAggregatePlanner,
