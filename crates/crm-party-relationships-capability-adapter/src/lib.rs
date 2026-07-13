@@ -21,21 +21,17 @@ pub const RECORD_TYPE: &str = "party-relationships.party_relationship";
 pub const CREATE_CAPABILITY: &str = "party-relationships.party-relationship.create";
 pub const UPDATE_CAPABILITY: &str = "party-relationships.party-relationship.update";
 
-pub const CREATE_REQUEST_SCHEMA: &str =
-    "crm.party_relationships.v1.CreatePartyRelationshipRequest";
+pub const CREATE_REQUEST_SCHEMA: &str = "crm.party_relationships.v1.CreatePartyRelationshipRequest";
 pub const CREATE_RESPONSE_SCHEMA: &str =
     "crm.party_relationships.v1.CreatePartyRelationshipResponse";
-pub const UPDATE_REQUEST_SCHEMA: &str =
-    "crm.party_relationships.v1.UpdatePartyRelationshipRequest";
+pub const UPDATE_REQUEST_SCHEMA: &str = "crm.party_relationships.v1.UpdatePartyRelationshipRequest";
 pub const UPDATE_RESPONSE_SCHEMA: &str =
     "crm.party_relationships.v1.UpdatePartyRelationshipResponse";
 
 pub const CREATED_EVENT_TYPE: &str = "party-relationships.party-relationship.created";
-pub const CREATED_EVENT_SCHEMA: &str =
-    "crm.party_relationships.v1.PartyRelationshipCreatedEvent";
+pub const CREATED_EVENT_SCHEMA: &str = "crm.party_relationships.v1.PartyRelationshipCreatedEvent";
 pub const UPDATED_EVENT_TYPE: &str = "party-relationships.party-relationship.updated";
-pub const UPDATED_EVENT_SCHEMA: &str =
-    "crm.party_relationships.v1.PartyRelationshipUpdatedEvent";
+pub const UPDATED_EVENT_SCHEMA: &str = "crm.party_relationships.v1.PartyRelationshipUpdatedEvent";
 
 pub const MUTATION_CAPABILITY_IDS: [&str; 2] = [CREATE_CAPABILITY, UPDATE_CAPABILITY];
 
@@ -131,8 +127,8 @@ mod tests {
 
     #[test]
     fn rejects_unknown_party_relationship_mutation_coordinate() {
-        let error = capability_definition("party-relationships.party-relationship.delete")
-            .unwrap_err();
+        let error =
+            capability_definition("party-relationships.party-relationship.delete").unwrap_err();
         assert_eq!(error.code, "PARTY_RELATIONSHIPS_CAPABILITY_UNSUPPORTED");
     }
 }

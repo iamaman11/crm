@@ -15,9 +15,7 @@ use crm_party_relationships::{
 use crm_party_relationships_capability_adapter::{
     MODULE_ID, RECORD_TYPE, party_relationship_from_snapshot, party_relationship_to_wire,
 };
-use crm_proto_contracts::crm::{
-    core::v1 as core, customer::v1 as customer, party_relationships::v1 as wire,
-};
+use crm_proto_contracts::crm::{core::v1 as core, party_relationships::v1 as wire};
 use crm_query_runtime::{
     CursorBinding, CursorCodec, CursorContinuation, PageSizePolicy, QueryExecutionResult,
     QueryExecutor, QueryRequest, QuerySemanticValidator, QueryVisibilityAuthorizer,
@@ -246,7 +244,13 @@ impl PartyRelationshipQueryAdapter {
         page_size: u32,
         mut after: Option<RecordQueryContinuation>,
         filters: &RelationshipFilters,
-    ) -> Result<(Vec<wire::PartyRelationship>, Option<RecordQueryContinuation>), SdkError> {
+    ) -> Result<
+        (
+            Vec<wire::PartyRelationship>,
+            Option<RecordQueryContinuation>,
+        ),
+        SdkError,
+    > {
         let mut output = Vec::with_capacity(page_size as usize);
         let mut scanned = 0_usize;
         loop {
@@ -748,10 +752,7 @@ mod tests {
 
         let output = party_relationship_to_wire_with_visibility(&value, &decision);
         assert_eq!(
-            output
-                .party_relationship_ref
-                .unwrap()
-                .party_relationship_id,
+            output.party_relationship_ref.unwrap().party_relationship_id,
             "relationship-visible-1"
         );
         assert!(output.from_party_ref.is_none());

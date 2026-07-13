@@ -102,13 +102,12 @@ fn plan_create(
         return Err(invalid_plan());
     }
 
-    let command: wire::CreatePartyRelationshipRequest =
-        support::decode_request_with_data_class(
-            request,
-            MODULE_ID,
-            CREATE_REQUEST_SCHEMA,
-            DataClass::Personal,
-        )?;
+    let command: wire::CreatePartyRelationshipRequest = support::decode_request_with_data_class(
+        request,
+        MODULE_ID,
+        CREATE_REQUEST_SCHEMA,
+        DataClass::Personal,
+    )?;
     let party_relationship = PartyRelationship::create(CreatePartyRelationship {
         party_relationship_id: party_relationship_id_from_ref(
             command.party_relationship_ref,
@@ -177,13 +176,12 @@ fn plan_update(
     current: Option<&RecordSnapshot>,
 ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
     let current = current.ok_or_else(invalid_plan)?;
-    let command: wire::UpdatePartyRelationshipRequest =
-        support::decode_request_with_data_class(
-            request,
-            MODULE_ID,
-            UPDATE_REQUEST_SCHEMA,
-            DataClass::Personal,
-        )?;
+    let command: wire::UpdatePartyRelationshipRequest = support::decode_request_with_data_class(
+        request,
+        MODULE_ID,
+        UPDATE_REQUEST_SCHEMA,
+        DataClass::Personal,
+    )?;
     let requested_id = party_relationship_id_from_ref(
         command.party_relationship_ref,
         "party_relationship.party_relationship_ref",
@@ -270,10 +268,15 @@ fn mutation_plan(
     })
 }
 
-pub fn party_relationship_to_wire(party_relationship: &PartyRelationship) -> wire::PartyRelationship {
+pub fn party_relationship_to_wire(
+    party_relationship: &PartyRelationship,
+) -> wire::PartyRelationship {
     wire::PartyRelationship {
         party_relationship_ref: Some(customer::PartyRelationshipRef {
-            party_relationship_id: party_relationship.party_relationship_id().as_str().to_owned(),
+            party_relationship_id: party_relationship
+                .party_relationship_id()
+                .as_str()
+                .to_owned(),
         }),
         from_party_ref: Some(customer::PartyRef {
             party_id: party_relationship.from_party_ref().as_str().to_owned(),
@@ -330,13 +333,12 @@ pub fn persisted_payload(
 pub fn party_relationship_from_snapshot(
     snapshot: &RecordSnapshot,
 ) -> Result<PartyRelationship, SdkError> {
-    let party_relationship = decode_party_relationship_state(
-        support::persisted_json_bytes_with_data_class(
+    let party_relationship =
+        decode_party_relationship_state(support::persisted_json_bytes_with_data_class(
             snapshot,
             persisted_contract(),
             DataClass::Personal,
-        )?,
-    )?;
+        )?)?;
     if party_relationship.party_relationship_id().as_str() != snapshot.reference.record_id.as_str()
         || party_relationship.version() != snapshot.version
     {
@@ -350,18 +352,14 @@ pub fn party_relationship_from_snapshot(
 pub fn referenced_party_ids_from_create(
     request: &CapabilityRequest,
 ) -> Result<Vec<PartyReference>, SdkError> {
-    let command: wire::CreatePartyRelationshipRequest =
-        support::decode_request_with_data_class(
-            request,
-            MODULE_ID,
-            CREATE_REQUEST_SCHEMA,
-            DataClass::Personal,
-        )?;
+    let command: wire::CreatePartyRelationshipRequest = support::decode_request_with_data_class(
+        request,
+        MODULE_ID,
+        CREATE_REQUEST_SCHEMA,
+        DataClass::Personal,
+    )?;
     Ok(vec![
-        party_reference_from_ref(
-            command.from_party_ref,
-            "party_relationship.from_party_ref",
-        )?,
+        party_reference_from_ref(command.from_party_ref, "party_relationship.from_party_ref")?,
         party_reference_from_ref(command.to_party_ref, "party_relationship.to_party_ref")?,
     ])
 }
@@ -441,8 +439,8 @@ fn party_reference_from_ref(
     party_ref: Option<customer::PartyRef>,
     field: &'static str,
 ) -> Result<PartyReference, SdkError> {
-    let party_ref =
-        party_ref.ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required"))?;
+    let party_ref = party_ref
+        .ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required"))?;
     PartyReference::try_new(party_ref.party_id)
 }
 
@@ -500,9 +498,7 @@ mod tests {
 
         let wire = party_relationship_to_wire(&value);
         assert_eq!(
-            wire.party_relationship_ref
-                .unwrap()
-                .party_relationship_id,
+            wire.party_relationship_ref.unwrap().party_relationship_id,
             "relationship-wire-1"
         );
         assert_eq!(wire.from_party_ref.unwrap().party_id, "party-acme");
