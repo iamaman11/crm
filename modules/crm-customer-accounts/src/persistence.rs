@@ -17,9 +17,8 @@ pub fn account_state_descriptor_hash() -> [u8; 32] {
 }
 
 pub fn encode_account_state(account: &Account) -> Result<Vec<u8>, SdkError> {
-    let bytes = serde_json::to_vec(&AccountStateV1::from(account.snapshot())).map_err(|error| {
-        persisted_error(format!("Account state serialization failed: {error}"))
-    })?;
+    let bytes = serde_json::to_vec(&AccountStateV1::from(account.snapshot()))
+        .map_err(|error| persisted_error(format!("Account state serialization failed: {error}")))?;
     validate_size(&bytes)?;
     Ok(bytes)
 }

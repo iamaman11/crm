@@ -11,7 +11,9 @@ pub use planner::*;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
-use crm_module_sdk::{CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, SdkError};
+use crm_module_sdk::{
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, SdkError,
+};
 
 pub const MODULE_ID: &str = "crm.customer-accounts";
 pub const RECORD_TYPE: &str = "accounts.account";
