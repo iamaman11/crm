@@ -1,6 +1,6 @@
 # Phase 8A.4 — Consent and Communication Authorization Architecture
 
-Status: **Normative delivery boundary for #112**  
+Status: **Implementation complete; final exact-head merge gate pending for #112**
 Parent program: #28  
 Depends on: merged Customer 360 #110 / PR #111 and stable Party, Account, Contact Point and Party Relationship owner contracts
 
@@ -168,7 +168,7 @@ The owner aggregate exposes deterministic current-state facts but does not scan 
 
 ## 6. Communication authorization decision
 
-Communication authorization is a governed read over authoritative Consent records, not a rebuildable projection and not Contact Point state.
+Communication authorization is a governed read over authoritative Consent records, not a rebuildable projection and not Contact Point state. Each created assertion is atomically linked from its canonical Party through the authoritative `consents.authorization.party` relationship in the same transaction as record, outbox, audit and idempotency evidence. The decision query traverses that Party-scoped relationship and then rehydrates authoritative Consent records, avoiding both eventual-consistency dependence and tenant-wide scanning.
 
 ### 6.1 Request key
 
@@ -286,7 +286,7 @@ Persistence decode always rehydrates through domain invariants.
 
 ## 9. Public contract boundary
 
-Expected initial owner capabilities:
+Published initial owner capabilities:
 
 - `consents.authorization.create@1.0.0`;
 - `consents.authorization.withdraw@1.0.0`;
@@ -294,12 +294,12 @@ Expected initial owner capabilities:
 - `consents.authorization.list@1.0.0`;
 - `consents.communication.authorize@1.0.0`.
 
-Expected initial owner events:
+Published initial owner events:
 
 - `consents.authorization.created@1.0.0`;
 - `consents.authorization.withdrawn@1.0.0`.
 
-Exact Protobuf package/service/message names are finalized additively before publication.
+The additive `crm.consents.v1.ConsentAuthorizationService` package/service/message names, machine-readable module bindings and generated Rust/browser descriptor identities are published and synchronized in this packet.
 
 The decision capability is read-only. It does not create provider sends, mutate Contact Points or write Customer 360 state.
 
@@ -324,16 +324,19 @@ The authorization decision capability may use authoritative storage reads after 
 governed create/withdraw request
 → application-level Party/Contact Point integrity checks
 → pure Consent aggregate planner
-→ transactional authoritative record + audit + outbox + idempotency
+→ transactional authoritative record + Party-to-Consent relationship + audit + outbox + idempotency
 
 communication authorization query
 → governed query gateway
-→ authoritative tenant-scoped Consent candidate read
+→ authoritative Party-to-Consent relationship traversal
+→ authoritative Consent record rehydration
 → deterministic decision precedence
 → explainable allow/deny response
 ```
 
 No Customer 360 or search projection is an authorization oracle.
+
+Implementation evidence before this documentation synchronization: workspace-wide Clippy/format/lock synchronization succeeded for the relation-based design, and the fresh-PostgreSQL real `crm-api` process acceptance was green on code head `70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced `131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. This documentation synchronization intentionally requires a new unchanged exact-head all-workflow gate before merge.
 
 ## 12. Acceptance gate
 

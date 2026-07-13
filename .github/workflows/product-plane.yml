@@ -1,152 +1,109 @@
 name: Product Plane CI
 
 on:
-  pull_request:
-    types: [synchronize]
+  push:
     paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "buf.gen.web.yaml"
+      - "apps/web/**"
+      - "packages/client/**"
+      - "packages/ui/**"
       - ".github/workflows/product-plane.yml"
+      - "scripts/run_e2e.sh"
+      - "proto/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-proto-contracts/**"
+      - "services/crm-api/**"
+      - "database/**"
+  pull_request:
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "buf.gen.web.yaml"
+      - "apps/web/**"
+      - "packages/client/**"
+      - "packages/ui/**"
+      - ".github/workflows/product-plane.yml"
+      - "scripts/run_e2e.sh"
+      - "proto/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-proto-contracts/**"
+      - "services/crm-api/**"
+      - "database/**"
+
+# Only the newest Product Plane validation for a PR/ref is useful. Cancelling stale runs
+# prevents old exact-SHA candidates from consuming hosted runners while the current head waits.
+concurrency:
+  group: product-plane-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  synchronize-phase8a4-docs:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  check-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
+          node-version: "24.18.0"
 
-      - name: Synchronize Phase 8A.4 normative documents
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify generated contract hashes are up-to-date
         run: |
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
+          pnpm web:generate
+          git diff --exit-code packages/client/src/contract_hashes.ts
 
-          changed = []
+      - name: Run Web typecheck
+        run: pnpm web:typecheck
 
-          def edit(path_name, transform):
-              path = Path(path_name)
-              old = path.read_text()
-              new = transform(old)
-              if new != old:
-                  path.write_text(new)
-                  changed.append(path_name)
+      - name: Run Web lint
+        run: pnpm web:lint
 
-          def line(text, pattern, replacement):
-              return re.sub(pattern, replacement, text, count=1, flags=re.MULTILINE)
-
-          def section(text, start, end, replacement):
-              pattern = re.escape(start) + r".*?(?=" + re.escape(end) + r")"
-              return re.sub(pattern, replacement, text, count=1, flags=re.DOTALL)
-
-          def roadmap(text):
-              current = (
-                  "Current delivery position: Party create/update/get/list/search is production-proven. "
-                  "Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship "
-                  "(#108 / merged PR #109) and Customer 360 (#110 / merged PR #111; final verified head "
-                  "`b3bca41c393577e2da5a84bcbe0309996fbdef90`; merge commit "
-                  "`30ce84c57064134202c03c07a943bcd0859e1ea9`) are merged and production-proven. Phase 8A.4 "
-                  "Consent and Communication Authorization is implementation-complete in #112 / draft PR #113: "
-                  "the pure `crm.consents` owner, immutable grant/deny assertions, irreversible withdrawal, exact "
-                  "purpose/channel/legal-basis/jurisdiction/source/evidence semantics, deterministic fail-closed "
-                  "decision precedence, strict persistence, governed create/withdraw/get/list/authorize contracts, "
-                  "cross-owner Party/Contact Point integrity, authoritative Party-to-Consent access-path relationships, "
-                  "permission-aware disclosure, synchronized contract bindings/browser hashes and fresh-PostgreSQL real "
-                  "`crm-api` acceptance are present. The relation-based implementation passed workspace-wide "
-                  "Clippy/format/lock synchronization and real process acceptance on code head "
-                  "`70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced "
-                  "`131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. The final post-documentation unchanged exact-head "
-                  "all-workflow gate remains pending before merge. Identity resolution, merge/unmerge, provenance and "
-                  "privacy lifecycle remain later explicit Phase 8A packets."
-              )
-              text = line(text, r"^Current delivery position:.*$", current)
-              text = re.sub(
-                  r"1\. Complete the post-documentation exact-head merge gate for Phase 8A\.3d.*?5\. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous\.",
-                  "1. Complete the post-documentation exact-head merge gate for Phase 8A.4 / #112 and merge PR #113 without weakening authoritative Consent ownership or allowing Contact Point state to become an authorization oracle.\n2. Continue Phase 8A with identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.\n3. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.\n4. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.\n5. Keep enterprise/security/operational proof continuous and require one unchanged exact final SHA for every merge gate.",
-                  text,
-                  count=1,
-                  flags=re.DOTALL,
-              )
-              return text
-
-          def catalog(text):
-              consent_row = "| `crm.consents` | Authoritative purpose/channel-scoped Consent and Communication Authorization assertions | **Vertical slice** | Immutable grant/deny assertions, governed grant withdrawal, exact authoritative allow/deny decisions, cross-owner Party/Contact Point integrity, authoritative Party access path, signed get/list queries and real PostgreSQL/process acceptance in #112 / PR #113 | Later privacy orchestration and downstream campaign/provider enforcement remain separate governed packets |"
-              if consent_row not in text:
-                  text = re.sub(
-                      r"(^\| `crm\.party-relationships` \|.*$)",
-                      r"\1\n" + consent_row,
-                      text,
-                      count=1,
-                      flags=re.MULTILINE,
-                  )
-              text = text.replace("Current owner-module count: **6**.", "Current owner-module count: **7**.")
-              text = line(text, r"^Production owner vertical slices are .*?$", "Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points, Party Relationships and Consents**. Phase 8A.4 remains at its final exact-head merge gate until PR #113 is verified and merged.")
-              text = line(text, r"^Current business-module count: .*?$", "Current business-module count: **8** — seven owner modules plus one optional link module. The independently governed `crm.customer360` read-composition module remains tracked separately from this owner/link count.")
-              text = line(text, r"^- Consent and Preferences .*?$", "- `crm.consents` — authoritative purpose/channel/legal-basis/jurisdiction/source/evidence assertions and exact communication authorization decisions — **Implemented vertical slice in #112 / PR #113; final exact-head merge gate pending**.")
-              text = text.replace("the six authoritative owner modules", "the seven authoritative owner modules")
-              text = re.sub(r"#110 / PR #111 passed all 11 applicable workflows together.*?merge gate\.", "#110 / PR #111 completed the exact-head gate and merged to `main` as `30ce84c57064134202c03c07a943bcd0859e1ea9`.", text, count=1)
-              boundary = "### Consent and Communication Authorization ownership boundary\n\n`crm.consents` owns immutable Consent Authorization identity and scope, Party/optional Contact Point references, exact purpose/channel, grant-or-deny effect, legal-basis/jurisdiction/source/evidence codes, effective/expiry windows, irreversible grant withdrawal and the deterministic current communication authorization decision. It does **not** own Party attributes, Contact Point endpoint/verification/preference state, provider delivery state, campaigns, journeys, Customer 360 mutation or identity resolution. The pure owner crate has no SQL or cross-owner storage access. Application composition validates same-tenant Party and Contact Point ownership before mutation, while each create transaction atomically writes one authoritative `consents.authorization.party` relationship so `consents.communication.authorize` can read only that Party's authoritative Consent records without relying on a rebuildable projection or tenant-wide scan. #112 / PR #113 is implementation-complete and awaiting the final unchanged exact-head merge gate.\n\n"
-              if "### Consent and Communication Authorization ownership boundary" not in text:
-                  text = text.replace("## 6. Mandatory commercial lifecycle owner domains", boundary + "## 6. Mandatory commercial lifecycle owner domains", 1)
-              return text
-
-          def phase(text):
-              text = text.replace("### 8A.3 — Account, Contact Point, Party Relationship and Customer 360 — In progress", "### 8A.3 — Account, Contact Point, Party Relationship and Customer 360 — Complete")
-              text = text.replace("#### 8A.3d — Customer 360 composition — Complete / merge gate", "#### 8A.3d — Customer 360 composition — Complete")
-              text = text.replace("Tracked by #110 / draft PR #111 on `develop/phase8a3d-customer-360`.", "Delivered by #110 / merged PR #111.")
-              text = re.sub(r"All 11 applicable CI workflows were green together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca`\..*?Customer 360 owns no second customer or identity master and exposes no mutation capability\.", "The final exact-head gate completed with all 11 applicable workflows green on `b3bca41c393577e2da5a84bcbe0309996fbdef90`. PR #111 merged to `main` as `30ce84c57064134202c03c07a943bcd0859e1ea9`. Customer 360 owns no second customer or identity master and exposes no mutation capability.", text, count=1)
-              replacement = "### 8A.4 — Consent and communication authorization — Implementation complete / final gate\n\nTracked by #112 / draft PR #113 on `develop/phase8a4-consent-communication-authorization`.\n\nDelivered in this packet:\n\n- pure authoritative `crm.consents` owner with immutable grant/deny assertions and no SQL or direct cross-owner storage access;\n- exact Party, optional Contact Point, purpose, channel, legal-basis, jurisdiction, source and immutable evidence semantics;\n- effective/expiry windows, exact optimistic concurrency and irreversible withdrawal of active grants;\n- deterministic latest-decision-point precedence: withdrawal/deny ties fail closed, no applicable grant defaults to deny and a later explicit grant may supersede older withdrawal or denial;\n- strict deterministic private persistence with canonical rehydration and corruption rejection;\n- additive `crm.consents.v1` create/withdraw/get/list/authorize contracts and created/withdrawn events with canonical bindings and synchronized Rust/browser hashes;\n- same-tenant Party/Contact Point existence, ownership and channel compatibility checks before mutation, with safe indistinguishable missing/cross-tenant failures and unmasked datastore failures;\n- one transactionally maintained authoritative Party-to-Consent relationship per created assertion, so authorization traverses only that Party's authoritative Consent records without a rebuildable projection or tenant-wide scan;\n- permission-aware get/list with typed filters, signed bound cursors and independent field redaction;\n- production application-runtime routing and fresh-PostgreSQL real `crm-api` process acceptance covering Contact Point non-authorization, reference integrity, replay/conflict behavior, scope/time/expiry/withdrawal/later-grant precedence, get/list, cursor tamper rejection, authentication/tenant isolation and durable evidence.\n\nThe relation-based implementation passed workspace-wide Clippy/format/lock synchronization and real process acceptance on code head `70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced `131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. The post-documentation unchanged exact-head all-workflow gate remains required before merge. Withdrawal decisions read authoritative state and do not wait for projection rebuild.\n\n"
-              return section(text, "### 8A.4 — Consent and communication authorization", "### 8A.5 — Identity resolution and duplicate candidates", replacement)
-
-          def status(text):
-              text = line(text, r"^- \*\*8A\.3d —.*$", "- **8A.3d — complete:** permission-aware rebuildable Customer 360 composition (#110 / merged PR #111; final verified head `b3bca41c393577e2da5a84bcbe0309996fbdef90`; merge commit `30ce84c57064134202c03c07a943bcd0859e1ea9`);")
-              text = line(text, r"^- \*\*8A\.4 —.*$", "- **8A.4 — implementation complete / final gate:** authoritative Consent and Communication Authorization (#112 / draft PR #113);")
-              text = line(text, r"^- \*\*Active delivery:\*\*.*$", "- **Active delivery:** Phase 8A customer master is in progress under #28; Phase 8A.4 Consent and Communication Authorization #112 / draft PR #113 is implementation-complete and at its post-documentation exact-head merge gate.")
-              text = line(text, r"^- \*\*Current integration branch:\*\*.*$", "- **Current integration branch:** `develop/phase8a4-consent-communication-authorization`.")
-              text = line(text, r"^- Consent and communication authorization is the next packet.*$", "- Identity resolution is the next packet after the Consent merge gate, followed by merge/unmerge, provenance and privacy/data operations.")
-              if "| `crm.consents` | Consent and Communication Authorization owner |" not in text:
-                  text = re.sub(r"(^\| `crm\.customer360` \|.*$)", r"\1\n| `crm.consents` | Consent and Communication Authorization owner | **Implementation complete / exact-head merge gate** | immutable grant/deny assertions, irreversible withdrawal, exact authoritative decision precedence, cross-owner Party/Contact Point integrity, authoritative Party relationship access path, governed create/withdraw/get/list/authorize and real `crm-api` acceptance in #112 / PR #113 |", text, count=1, flags=re.MULTILINE)
-              text = re.sub(r"The current 8A position is:.*?privacy lifecycle proof\.", "The current 8A position is: Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship (#108 / merged PR #109) and Customer 360 (#110 / merged PR #111) are merged; Consent and Communication Authorization (#112 / draft PR #113) is implementation-complete and at its post-documentation exact-head merge gate; identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof follow as explicit later packets.", text, count=1)
-              return text
-
-          def architecture(text):
-              text = text.replace("Status: **Normative delivery boundary for #112**  ", "Status: **Implementation complete; final exact-head merge gate pending for #112**")
-              text = text.replace("Expected initial owner capabilities:", "Published initial owner capabilities:")
-              text = text.replace("Expected initial owner events:", "Published initial owner events:")
-              text = text.replace("Exact Protobuf package/service/message names are finalized additively before publication.", "The additive `crm.consents.v1.ConsentAuthorizationService` package/service/message names, machine-readable module bindings and generated Rust/browser descriptor identities are published and synchronized in this packet.")
-              text = text.replace("Communication authorization is a governed read over authoritative Consent records, not a rebuildable projection and not Contact Point state.", "Communication authorization is a governed read over authoritative Consent records, not a rebuildable projection and not Contact Point state. Each created assertion is atomically linked from its canonical Party through the authoritative `consents.authorization.party` relationship in the same transaction as record, outbox, audit and idempotency evidence. The decision query traverses that Party-scoped relationship and then rehydrates authoritative Consent records, avoiding both eventual-consistency dependence and tenant-wide scanning.")
-              text = text.replace("→ transactional authoritative record + audit + outbox + idempotency\n\ncommunication authorization query\n→ governed query gateway\n→ authoritative tenant-scoped Consent candidate read\n→ deterministic decision precedence", "→ transactional authoritative record + Party-to-Consent relationship + audit + outbox + idempotency\n\ncommunication authorization query\n→ governed query gateway\n→ authoritative Party-to-Consent relationship traversal\n→ authoritative Consent record rehydration\n→ deterministic decision precedence")
-              evidence = "Implementation evidence before this documentation synchronization: workspace-wide Clippy/format/lock synchronization succeeded for the relation-based design, and the fresh-PostgreSQL real `crm-api` process acceptance was green on code head `70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced `131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. This documentation synchronization intentionally requires a new unchanged exact-head all-workflow gate before merge."
-              if evidence not in text:
-                  text = text.replace("No Customer 360 or search projection is an authorization oracle.\n\n## 12. Acceptance gate", "No Customer 360 or search projection is an authorization oracle.\n\n" + evidence + "\n\n## 12. Acceptance gate")
-              return text
-
-          edit("docs/IMPLEMENTATION_ROADMAP.md", roadmap)
-          edit("docs/MODULE_CATALOG.md", catalog)
-          edit("docs/PHASE8_DELIVERY_PLAN.md", phase)
-          edit("docs/PROJECT_STATUS.md", status)
-          edit("docs/PHASE8A4_CONSENT_COMMUNICATION_AUTHORIZATION_ARCHITECTURE.md", architecture)
-
-          if not changed:
-              raise SystemExit("Phase 8A.4 normative synchronization produced no document changes")
-          print("changed:", ", ".join(changed))
-          PY
-
-      - name: Restore standard Product Plane workflow
-        if: always()
-        run: git show origin/main:.github/workflows/product-plane.yml > .github/workflows/product-plane.yml
-
-      - name: Commit synchronized normative documents
-        if: success()
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
+      - name: Run Web unit tests
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/IMPLEMENTATION_ROADMAP.md docs/MODULE_CATALOG.md docs/PHASE8_DELIVERY_PLAN.md docs/PROJECT_STATUS.md docs/PHASE8A4_CONSENT_COMMUNICATION_AUTHORIZATION_ARCHITECTURE.md .github/workflows/product-plane.yml
-          git commit -m "Synchronize Phase 8A.4 normative delivery status"
-          git push origin "HEAD:${HEAD_BRANCH}"
+          set -o pipefail
+          pnpm web:test 2>&1 | tee product-plane-unit.log
+
+      - name: Run Web build
+        run: pnpm web:build
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Run E2E Integration Suite
+        run: ./scripts/run_e2e.sh 2>&1 | tee product-plane-e2e.log
+
+      - name: Upload Product Plane diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-plane-diagnostics
+          path: |
+            packages/client/src/contract_hashes.ts
+            product-plane-unit.log
+            product-plane-e2e.log
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
