@@ -2,6 +2,8 @@
 -- The runtime contract catalog remains authoritative for request validation;
 -- these rows satisfy the durable module/capability registry foreign-key and
 -- audit lineage required by transactional PostgreSQL evidence.
+-- The fixture is intentionally idempotent because both CI setup and focused
+-- acceptance tests may apply it before exercising the same production path.
 INSERT INTO crm.module_versions (
   module_id,
   version,
