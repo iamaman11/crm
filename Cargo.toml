@@ -36,6 +36,9 @@ members = [
   "crates/crm-customer-accounts-query-adapter",
   "crates/crm-contact-points-capability-adapter",
   "crates/crm-contact-points-query-adapter",
+  "crates/crm-party-relationships-capability-adapter",
+  "crates/crm-party-relationships-query-adapter",
+  "crates/crm-party-relationships-projection",
   "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
   "crates/crm-sales-activities-link-contract-adapter",
@@ -46,6 +49,7 @@ members = [
   "modules/crm-parties",
   "modules/crm-customer-accounts",
   "modules/crm-contact-points",
+  "modules/crm-party-relationships",
   "services/crm-api",
 ]
 

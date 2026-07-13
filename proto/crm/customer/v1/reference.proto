@@ -20,6 +20,10 @@ message ContactPointRef {
   string contact_point_id = 1;
 }
 
+message PartyRelationshipRef {
+  string party_relationship_id = 1;
+}
+
 // Shared public lifecycle/version metadata for customer-master resources.
 // Domain-private state, provenance and persistence representation are not part
 // of this cross-owner contract.

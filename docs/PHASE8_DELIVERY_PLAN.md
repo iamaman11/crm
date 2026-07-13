@@ -112,7 +112,7 @@ This packet intentionally does **not** absorb Contact Point, Party Relationship,
 
 #### 8A.3b — Contact Point lifecycle, verification and preference — Complete
 
-Tracked by #103 and draft PR #104 on `develop/phase8a3b-contact-point-lifecycle`.
+Delivered by #103 / merged PR #104.
 
 The packet now implements:
 
@@ -131,18 +131,30 @@ The packet now implements:
 - `crm-application-runtime` composition and field-bounded visibility bootstrap;
 - fresh-PostgreSQL real `crm-api` process acceptance covering Party prerequisites, lifecycle, verification, display-only preservation, verification reset on value change, replay, conflicting replay, stale version, filters, signed cursor pagination/tamper rejection, unauthenticated rejection, tenant non-disclosure and durable evidence counts.
 
-The implementation packet is **Complete**. All 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`. PR #104 remains merge-gated until the post-documentation exact head is also fully green, after which Party Relationship is next.
+The implementation packet is **Complete**. All applicable exact-head gates were green before merge, and PR #104 merged to `main` as `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`.
 
 Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate authoritative ownership and are not hidden inside Contact Point flags.
 
-#### 8A.3c — Party Relationship lifecycle and hierarchy foundations
+#### 8A.3c — Party Relationship lifecycle and hierarchy foundations — Complete / merge gate
 
-Deliver:
+Tracked by #108 / draft PR #109 on `develop/phase8a3c-party-relationship`.
 
-- typed Party-to-Party relationships such as employment, household, parent/subsidiary and configurable governed roles;
-- validity intervals and temporal relationship state;
-- hierarchy traversal projections without moving hierarchy ownership into Account or Sales;
-- tenant, authorization, optimistic concurrency and non-disclosure proof.
+The packet now implements:
+
+- a dedicated pure authoritative `crm.party-relationships` owner with stable relationship identity and immutable canonical Party endpoints;
+- bounded typed directional/reciprocal semantics for employment, household, parent/subsidiary and configurable governed roles, including reserved built-in semantic definitions and deterministic reciprocal endpoint ordering;
+- Active/Inactive lifecycle, half-open validity intervals, exact optimistic concurrency, monotonic mutation time, semantic no-op rejection and atomic version-exhaustion safety;
+- strict deterministic versioned persistence and canonical rehydration validation;
+- additive v1 create/update/get/list contracts plus immutable created/updated events and shared canonical Party references;
+- governed transactional create/update with idempotency, outbox and audit evidence;
+- application-level validation of both same-tenant Party references, identical safe missing/cross-tenant rejection and unmasked real datastore failures;
+- permission-aware get/list with typed filters, signed tenant/actor/filter/sort/page-bound cursors, bounded visibility scans and live field/resource redaction;
+- application-runtime catalog/router composition and field-bounded visibility bootstrap;
+- a rebuildable non-authoritative hierarchy adjacency projection with effective-time filtering and deterministic cycle-safe bounded traversal;
+- immutable PostgreSQL registry fixtures and synchronized Rust/browser contract identities;
+- fresh-database real `crm-api` process acceptance for Party prerequisites, zero-side-effect reference rejection, create/replay/conflict/duplicate-id behavior, directional and reciprocal semantics, canonicalization, lifecycle/validity update and replay, stale/no-op rejection, typed filters, cursor pagination/tamper rejection, authentication/tenant non-disclosure, exact durable evidence deltas and projection run/rebuild equivalence.
+
+All 11 applicable CI workflows were green together on pre-documentation exact head `a26d0364382c3fa5fb369d8ca1c65941863ff75b`. The documentation commit intentionally invalidates that evidence until a fresh exact-head rerun is green; PR #109 remains draft until that merge gate is satisfied.
 
 #### 8A.3d — Customer 360 composition
 

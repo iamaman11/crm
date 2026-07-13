@@ -43,6 +43,16 @@ use crm_parties_query_adapter::{
     PARTY_QUERY_CAPABILITY_IDS, PartyQueryAdapter,
     query_capability_definitions as party_query_capability_definitions,
 };
+use crm_party_relationships_capability_adapter::{
+    MUTATION_CAPABILITY_IDS as PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS,
+    PartyRelationshipCapabilityPlanner,
+    capability_definitions as party_relationship_capability_definitions,
+    referenced_party_ids_from_create as referenced_relationship_party_ids_from_create,
+};
+use crm_party_relationships_query_adapter::{
+    PartyRelationshipQueryAdapter, QUERY_CAPABILITY_IDS as PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as party_relationship_query_capability_definitions,
+};
 use crm_query_runtime::{
     QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator,
 };
@@ -60,6 +70,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     definitions.extend(party_capability_definitions()?);
     definitions.extend(account_capability_definitions()?);
     definitions.extend(contact_point_capability_definitions()?);
+    definitions.extend(party_relationship_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
@@ -69,6 +80,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(party_query_capability_definitions()?);
     definitions.extend(account_query_capability_definitions()?);
     definitions.extend(contact_point_query_capability_definitions()?);
+    definitions.extend(party_relationship_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -97,6 +109,10 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
         } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         {
             ContactPointCapabilityPlanner.target(definition, request)
+        } else if PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            PartyRelationshipCapabilityPlanner.target(definition, request)
         } else {
             SalesActivitiesCapabilityPlannerRouter.target(definition, request)
         }
@@ -115,6 +131,10 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
         } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         {
             ContactPointCapabilityPlanner.plan(definition, request, current)
+        } else if PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            PartyRelationshipCapabilityPlanner.plan(definition, request, current)
         } else {
             SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
         }
@@ -170,6 +190,14 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
         {
             Box::pin(async move {
                 validate_contact_point_party_reference(&self.store, definition, &request).await?;
+                self.aggregate.execute(definition, request).await
+            })
+        } else if PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            Box::pin(async move {
+                validate_party_relationship_party_references(&self.store, definition, &request)
+                    .await?;
                 self.aggregate.execute(definition, request).await
             })
         } else {
@@ -230,6 +258,29 @@ async fn validate_contact_point_party_reference(
     }
 }
 
+async fn validate_party_relationship_party_references(
+    store: &PostgresDataStore,
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+) -> Result<(), SdkError> {
+    if definition.capability_id.as_str() != "party-relationships.party-relationship.create" {
+        return Ok(());
+    }
+    let unique_party_ids = referenced_relationship_party_ids_from_create(request)?
+        .into_iter()
+        .map(|reference| reference.as_str().to_owned())
+        .collect::<BTreeSet<_>>();
+    let owner_module_id = ModuleId::try_new(PARTIES_MODULE_ID).map_err(catalog_error)?;
+    let record_type = RecordType::try_new(PARTY_RECORD_TYPE).map_err(catalog_error)?;
+    for party_id in unique_party_ids {
+        if !party_reference_exists(store, request, &owner_module_id, &record_type, party_id).await?
+        {
+            return Err(party_relationship_party_reference_unavailable());
+        }
+    }
+    Ok(())
+}
+
 async fn party_reference_exists(
     store: &PostgresDataStore,
     request: &CapabilityRequest,
@@ -267,6 +318,15 @@ fn contact_point_party_reference_unavailable() -> SdkError {
     )
 }
 
+fn party_relationship_party_reference_unavailable() -> SdkError {
+    SdkError::new(
+        "PARTY_RELATIONSHIPS_PARTY_REFERENCE_UNAVAILABLE",
+        ErrorCategory::InvalidArgument,
+        false,
+        "One or more referenced Parties are unavailable.",
+    )
+}
+
 fn account_reference_configuration_error() -> SdkError {
     SdkError::new(
         "CUSTOMER_ACCOUNTS_REFERENCE_VALIDATION_CONFIGURATION_INVALID",
@@ -282,6 +342,7 @@ pub struct ApplicationQueryRouter {
     parties: PartyQueryAdapter,
     accounts: AccountQueryAdapter,
     contact_points: ContactPointQueryAdapter,
+    party_relationships: PartyRelationshipQueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
@@ -291,6 +352,7 @@ impl ApplicationQueryRouter {
         parties: PartyQueryAdapter,
         accounts: AccountQueryAdapter,
         contact_points: ContactPointQueryAdapter,
+        party_relationships: PartyRelationshipQueryAdapter,
         metadata: MetadataQueryAdapter,
     ) -> Self {
         Self {
@@ -298,6 +360,7 @@ impl ApplicationQueryRouter {
             parties,
             accounts,
             contact_points,
+            party_relationships,
             metadata,
         }
     }
@@ -317,6 +380,10 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
             self.accounts.validate(definition, request)
         } else if CONTACT_POINT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.contact_points.validate(definition, request)
+        } else if PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.party_relationships.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -337,6 +404,10 @@ impl QueryExecutor for ApplicationQueryRouter {
             self.accounts.execute(definition, request)
         } else if CONTACT_POINT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.contact_points.execute(definition, request)
+        } else if PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.party_relationships.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }
@@ -369,6 +440,7 @@ mod tests {
                 + PARTY_MUTATION_CAPABILITY_IDS.len()
                 + ACCOUNT_MUTATION_CAPABILITY_IDS.len()
                 + CONTACT_POINT_MUTATION_CAPABILITY_IDS.len()
+                + PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS.len()
                 + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
@@ -399,6 +471,13 @@ mod tests {
                     .any(|definition| definition.capability_id.as_str() == coordinate)
             );
         }
+        for coordinate in PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS {
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
         for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
             assert!(
                 mutations
@@ -415,6 +494,7 @@ mod tests {
                 + PARTY_QUERY_CAPABILITY_IDS.len()
                 + ACCOUNT_QUERY_CAPABILITY_IDS.len()
                 + CONTACT_POINT_QUERY_CAPABILITY_IDS.len()
+                + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()
                 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(
@@ -437,6 +517,13 @@ mod tests {
             );
         }
         for coordinate in CONTACT_POINT_QUERY_CAPABILITY_IDS {
+            assert!(
+                queries
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
+        for coordinate in PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS {
             assert!(
                 queries
                     .iter()

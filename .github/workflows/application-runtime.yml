@@ -12,6 +12,7 @@ on:
       - "proto/crm/parties/**"
       - "proto/crm/accounts/**"
       - "proto/crm/contact_points/**"
+      - "proto/crm/party_relationships/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -26,6 +27,9 @@ on:
       - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-parties-capability-adapter/**"
       - "crates/crm-parties-query-adapter/**"
+      - "crates/crm-party-relationships-capability-adapter/**"
+      - "crates/crm-party-relationships-query-adapter/**"
+      - "crates/crm-party-relationships-projection/**"
       - "crates/crm-query-runtime/**"
       - "crates/crm-search-runtime/**"
       - "crates/crm-search-query-adapter/**"
@@ -34,6 +38,7 @@ on:
       - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
       - "modules/crm-parties/**"
+      - "modules/crm-party-relationships/**"
       - "modules/crm-sales-activities-link/**"
       - "services/crm-api/**"
       - "database/migrations/**"
@@ -50,6 +55,7 @@ on:
       - "proto/crm/parties/**"
       - "proto/crm/accounts/**"
       - "proto/crm/contact_points/**"
+      - "proto/crm/party_relationships/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -64,6 +70,9 @@ on:
       - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-parties-capability-adapter/**"
       - "crates/crm-parties-query-adapter/**"
+      - "crates/crm-party-relationships-capability-adapter/**"
+      - "crates/crm-party-relationships-query-adapter/**"
+      - "crates/crm-party-relationships-projection/**"
       - "crates/crm-query-runtime/**"
       - "crates/crm-search-runtime/**"
       - "crates/crm-search-query-adapter/**"
@@ -72,6 +81,7 @@ on:
       - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
       - "modules/crm-parties/**"
+      - "modules/crm-party-relationships/**"
       - "modules/crm-sales-activities-link/**"
       - "services/crm-api/**"
       - "database/migrations/**"
@@ -84,7 +94,7 @@ permissions:
 jobs:
   application-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     services:
       postgres:
         image: postgres:17-alpine
@@ -158,6 +168,13 @@ jobs:
           /tmp/reset-application-database.sh
           cargo test -p crm-api --test contact_point_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-contact-point-process.log
+      - name: Verify Party Relationship crm-api process lifecycle and hierarchy rebuild
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test party_relationship_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-party-relationship-process.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -180,6 +197,7 @@ jobs:
             database/application-runtime-party-process.log
             database/application-runtime-account-process.log
             database/application-runtime-contact-point-process.log
+            database/application-runtime-party-relationship-process.log
             database/application-runtime-postgres.log
             crates/crm-application-runtime/
             crates/crm-contact-points-capability-adapter/
@@ -190,9 +208,13 @@ jobs:
             crates/crm-metadata-query-adapter/
             crates/crm-parties-capability-adapter/
             crates/crm-parties-query-adapter/
+            crates/crm-party-relationships-capability-adapter/
+            crates/crm-party-relationships-query-adapter/
+            crates/crm-party-relationships-projection/
             crates/crm-search-query-adapter/
             modules/crm-contact-points/
             modules/crm-customer-accounts/
+            modules/crm-party-relationships/
             services/crm-api/
           if-no-files-found: error
           retention-days: 7

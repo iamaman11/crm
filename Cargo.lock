@@ -256,11 +256,14 @@ version = "0.1.0"
 dependencies = [
  "crm-application-runtime",
  "crm-capability-runtime",
+ "crm-core-data",
  "crm-module-sdk",
+ "crm-party-relationships-projection",
  "crm-proto-contracts",
  "crm-sales-activities-capability-composition",
  "prost",
  "reqwest",
+ "serde_json",
  "sqlx",
  "tokio",
  "tonic",
@@ -287,6 +290,9 @@ dependencies = [
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-parties-query-adapter",
+ "crm-party-relationships-capability-adapter",
+ "crm-party-relationships-projection",
+ "crm-party-relationships-query-adapter",
  "crm-query-runtime",
  "crm-sales-activities-capability-composition",
  "crm-sales-activities-link",
@@ -636,6 +642,58 @@ dependencies = [
  "crm-module-sdk",
  "crm-parties",
  "crm-parties-capability-adapter",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
+]
+
+[[package]]
+name = "crm-party-relationships"
+version = "0.1.0"
+dependencies = [
+ "crm-module-sdk",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-party-relationships-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-party-relationships",
+ "crm-proto-contracts",
+ "prost",
+]
+
+[[package]]
+name = "crm-party-relationships-projection"
+version = "0.1.0"
+dependencies = [
+ "crm-core-data",
+ "crm-core-events",
+ "crm-module-sdk",
+ "crm-projection-runtime",
+ "crm-proto-contracts",
+ "prost",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "crm-party-relationships-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-party-relationships",
+ "crm-party-relationships-capability-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
  "prost",
@@ -1168,9 +1226,9 @@ dependencies = [
 
 [[package]]
 name = "http-body"
-version = "1.0.1"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
+checksum = "ca2a8f2913ee65f60facd6a5905613afaa448497a0230cc41ce022d93290bc2c"
 dependencies = [
  "bytes",
  "http",
@@ -1178,9 +1236,9 @@ dependencies = [
 
 [[package]]
 name = "http-body-util"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b021d93e26becf5dc7e1b75b1bed1fd93124b374ceb73f43d4d4eafec896a64a"
+checksum = "e9f41fd6a08e4d4ec69df65976da761afd5ad5e58a9d4acb46bd1c953a9e3ff2"
 dependencies = [
  "bytes",
  "futures-core",

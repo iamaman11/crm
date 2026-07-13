@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package crm.party_relationships.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+
+// Relationship directionality is semantic owner state. Reciprocal
+// relationships are endpoint-order independent and are canonically ordered by
+// the owner domain; directional relationships preserve from/to meaning.
+enum PartyRelationshipDirectionality {
+  PARTY_RELATIONSHIP_DIRECTIONALITY_UNSPECIFIED = 0;
+  PARTY_RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL = 1;
+  PARTY_RELATIONSHIP_DIRECTIONALITY_RECIPROCAL = 2;
+}
+
+// Authoritative lifecycle state owned by crm.party-relationships.
+enum PartyRelationshipStatus {
+  PARTY_RELATIONSHIP_STATUS_UNSPECIFIED = 0;
+  PARTY_RELATIONSHIP_STATUS_ACTIVE = 1;
+  PARTY_RELATIONSHIP_STATUS_INACTIVE = 2;
+}
+
+// Governed semantic type. Built-in and configurable relationship semantics use
+// the same bounded shape; Party identity attributes are never copied here.
+message PartyRelationshipType {
+  string code = 1;
+  PartyRelationshipDirectionality directionality = 2;
+  string from_role = 3;
+  string to_role = 4;
+}
+
+message PartyRelationship {
+  crm.customer.v1.PartyRelationshipRef party_relationship_ref = 1;
+  crm.customer.v1.PartyRef from_party_ref = 2;
+  crm.customer.v1.PartyRef to_party_ref = 3;
+  PartyRelationshipType relationship_type = 4;
+  PartyRelationshipStatus status = 5;
+  crm.core.v1.UnixTime valid_from = 6;
+  crm.core.v1.UnixTime valid_until = 7;
+  crm.customer.v1.CustomerResourceVersion resource_version = 8;
+}
+
+message CreatePartyRelationshipRequest {
+  crm.customer.v1.PartyRelationshipRef party_relationship_ref = 1;
+  crm.customer.v1.PartyRef from_party_ref = 2;
+  crm.customer.v1.PartyRef to_party_ref = 3;
+  PartyRelationshipType relationship_type = 4;
+  crm.core.v1.UnixTime valid_from = 5;
+  crm.core.v1.UnixTime valid_until = 6;
+}
+
+message CreatePartyRelationshipResponse {
+  PartyRelationship party_relationship = 1;
+}
+
+message UpdatePartyRelationshipRequest {
+  crm.customer.v1.PartyRelationshipRef party_relationship_ref = 1;
+  int64 expected_version = 2;
+  PartyRelationshipStatus status = 3;
+  crm.core.v1.UnixTime valid_from = 4;
+  crm.core.v1.UnixTime valid_until = 5;
+}
+
+message UpdatePartyRelationshipResponse {
+  PartyRelationship party_relationship = 1;
+}
+
+message GetPartyRelationshipRequest {
+  crm.customer.v1.PartyRelationshipRef party_relationship_ref = 1;
+}
+
+message GetPartyRelationshipResponse {
+  PartyRelationship party_relationship = 1;
+}
+
+enum PartyRelationshipSort {
+  PARTY_RELATIONSHIP_SORT_UNSPECIFIED = 0;
+  PARTY_RELATIONSHIP_SORT_UPDATED_AT_DESCENDING = 1;
+}
+
+message ListPartyRelationshipsRequest {
+  crm.core.v1.PageRequest page = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  optional string relationship_type_code = 3;
+  optional PartyRelationshipDirectionality directionality = 4;
+  optional PartyRelationshipStatus status = 5;
+  PartyRelationshipSort sort = 6;
+}
+
+message ListPartyRelationshipsResponse {
+  repeated PartyRelationship party_relationships = 1;
+  crm.core.v1.PageInfo page = 2;
+}
+
+message PartyRelationshipCreatedEvent {
+  PartyRelationship party_relationship = 1;
+}
+
+message PartyRelationshipUpdatedEvent {
+  PartyRelationship party_relationship = 1;
+}
+
+service PartyRelationshipService {
+  rpc CreatePartyRelationship(CreatePartyRelationshipRequest) returns (CreatePartyRelationshipResponse);
+  rpc UpdatePartyRelationship(UpdatePartyRelationshipRequest) returns (UpdatePartyRelationshipResponse);
+  rpc GetPartyRelationship(GetPartyRelationshipRequest) returns (GetPartyRelationshipResponse);
+  rpc ListPartyRelationships(ListPartyRelationshipsRequest) returns (ListPartyRelationshipsResponse);
+}

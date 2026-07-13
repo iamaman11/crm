@@ -47,6 +47,10 @@ use crm_parties_capability_adapter::{
     MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
 };
 use crm_parties_query_adapter::PartyQueryAdapter;
+use crm_party_relationships_capability_adapter::{
+    MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID, RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
+};
+use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;
 use crm_query_runtime::{CursorCodec, QueryGateway};
 use crm_sales_activities_capability_composition::{
     DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, ProductionQueryRouter,
@@ -251,6 +255,13 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -269,6 +280,7 @@ impl ApplicationRuntime {
             party_query_adapter,
             account_query_adapter,
             contact_point_query_adapter,
+            party_relationship_query_adapter,
             metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
@@ -790,6 +802,18 @@ fn bootstrap_application_access(
                     contact_point_fields(),
                     expires_at,
                 )?,
+                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
+                        resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
+                    },
+                    party_relationship_fields(),
+                    expires_at,
+                )?,
                 METADATA_MODULE_ID => {}
                 SEARCH_MODULE_ID => {
                     upsert_bootstrap_visibility(
@@ -924,6 +948,19 @@ fn contact_point_fields() -> BTreeSet<String> {
     .collect()
 }
 
+fn party_relationship_fields() -> BTreeSet<String> {
+    [
+        "from_party_ref",
+        "to_party_ref",
+        "relationship_type",
+        "status",
+        "validity",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
 fn task_fields() -> BTreeSet<String> {
     [
         "subject",
@@ -965,6 +1002,9 @@ mod tests {
         assert!(account_fields().contains("party_associations"));
         assert!(contact_point_fields().contains("party_ref"));
         assert!(contact_point_fields().contains("verification"));
+        assert!(party_relationship_fields().contains("from_party_ref"));
+        assert!(party_relationship_fields().contains("relationship_type"));
+        assert!(party_relationship_fields().contains("validity"));
         assert!(task_fields().contains("subject"));
         assert!(task_fields().contains("status"));
     }

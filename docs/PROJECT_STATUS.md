@@ -15,8 +15,9 @@ Current Phase 8A execution state:
 - **8A.2b — complete:** optimistic Party update and permission-aware cursor listing (#96 / merged PR #97);
 - **8A.2c — complete:** rebuildable permission-aware Party search/customer discovery (#98 / merged PR #99);
 - **8A.3a — complete:** authoritative Account lifecycle and Party associations (#101 / merged PR #102);
-- **8A.3b — active:** Contact Point lifecycle, verification and preference (#103; implementation branch `develop/phase8a3b-contact-point-lifecycle`);
-- **8A.3c–8A.3d:** Party Relationship lifecycle/hierarchy and permission-aware Customer 360 composition;
+- **8A.3b — complete:** authoritative Contact Point lifecycle, verification and preference (#103 / merged PR #104; merge commit `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`);
+- **8A.3c — complete / merge gate:** authoritative Party Relationship lifecycle and rebuildable hierarchy foundations (#108 / draft PR #109); all 11 applicable workflows were green together on pre-documentation head `a26d0364382c3fa5fb369d8ca1c65941863ff75b`;
+- **8A.3d — next:** permission-aware rebuildable Customer 360 composition;
 - **8A.4 and later:** consent/preferences, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
 
 The repository now contains a production-composed modular CRM platform foundation plus the first expert customer-master owner domains:
@@ -30,6 +31,8 @@ The repository now contains a production-composed modular CRM platform foundatio
 - independent Sales Deal and Activities Task production vertical slices;
 - canonical Party identity owner with production create/update/get/list and permission-aware rebuildable search discovery;
 - canonical Customer Account owner with production create/update/get/list, typed Party associations and cross-owner reference-integrity composition;
+- canonical Contact Point owner with typed endpoint normalization, verification/preference lifecycle and production Party-reference integrity;
+- authoritative Party Relationship owner with typed directional/reciprocal semantics, temporal lifecycle and a rebuildable cycle-safe hierarchy projection;
 - governed event delivery and the optional `crm.sales-activities-link` module;
 - generalized rebuildable projections and tenant/permission-aware search;
 - neutral cross-domain global-search composition that owns projection mapping but no authoritative business state;
@@ -143,7 +146,7 @@ The Account owner module itself has no SQL dependency and does not read Party st
 
 Final verified review head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4` passed all 11 applicable workflows together. PR #102 merged to `main` as `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`.
 
-### 8A.3b — Contact Point lifecycle, verification and preference — Complete / merge gate
+### 8A.3b — Contact Point lifecycle, verification and preference — Complete
 
 Issue #103 and draft PR #104 now contain the implemented authoritative Contact Point vertical slice:
 
@@ -160,16 +163,34 @@ Issue #103 and draft PR #104 now contain the implemented authoritative Contact P
 - application-runtime composition and field-bounded visibility bootstrap;
 - fresh-PostgreSQL real `crm-api` process acceptance for lifecycle, verification/reset, replay/conflict, filters, signed cursor pagination/tamper rejection, unauthenticated rejection, tenant non-disclosure and durable evidence counts.
 
-The implementation packet is **Complete**: all 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`. PR #104 remains draft only for the post-documentation exact-head rerun and merge gate.
+The implementation packet is **Complete**: all 11 applicable CI workflows were green together before merge, and PR #104 merged to `main` as `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`.
 
 Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate owner concerns.
 
+### 8A.3c — Party Relationship lifecycle and hierarchy foundations — Complete / merge gate
+
+#108 / draft PR #109 now delivers:
+
+- a dedicated pure `crm.party-relationships` owner with immutable Party Relationship identity and immutable canonical Party endpoints;
+- explicit directional and reciprocal semantics, deterministic reciprocal endpoint ordering and reserved built-in semantic definitions;
+- Active/Inactive lifecycle, half-open validity intervals, exact optimistic versioning, monotonic mutation time, semantic no-op rejection and atomic overflow safety;
+- strict deterministic versioned persisted state and canonical rehydration validation;
+- additive v1 create/update/get/list contracts plus created/updated events and shared canonical Party references;
+- governed transactional create/update with idempotency, outbox and audit evidence;
+- application-level same-tenant validation for both Party references with identical safe missing/cross-tenant rejection while real datastore failures remain distinguishable;
+- permission-aware get/list with typed filters, signed cursor binding, bounded visibility scans and live field/resource authorization;
+- application-runtime catalog/router composition and field-bounded visibility bootstrap;
+- a rebuildable non-authoritative adjacency projection with effective-time filtering and deterministic cycle-safe bounded traversal;
+- immutable PostgreSQL registry fixtures and synchronized Rust/browser descriptor identities;
+- fresh-PostgreSQL real `crm-api` process acceptance covering prerequisite Parties, safe reference rejection with zero relationship side effects, create/replay/conflicting replay, duplicate aggregate-id rejection, directional and reciprocal semantics, reciprocal canonicalization, lifecycle/validity update and replay, stale/no-op rejection, typed filters, signed cursor pagination/tamper rejection, unauthenticated and cross-tenant non-disclosure, exact durable evidence deltas and projection run/rebuild equivalence.
+
+All 11 applicable CI workflows were green together on pre-documentation exact head `a26d0364382c3fa5fb369d8ca1c65941863ff75b`. This documentation commit intentionally invalidates that evidence until the post-documentation exact-head rerun is green. The owner module remains free of SQL, transport types and direct cross-owner storage access.
+
 ### Remaining 8A sequence
 
-After Contact Point:
+After Party Relationship:
 
-1. Party Relationship lifecycle and temporal hierarchy foundations;
-2. permission-aware rebuildable Customer 360 composition without a second customer master;
+1. permission-aware rebuildable Customer 360 composition without a second customer master;
 3. Consent and communication authorization;
 4. deterministic/explainable duplicate candidates and identity resolution;
 5. governed merge/unmerge, provenance and survivorship;
@@ -179,13 +200,14 @@ After Contact Point:
 
 ### Business modules
 
-The repository currently tracks **six business modules**:
+The repository currently tracks **seven business modules**:
 
 - `crm.sales` — production Deal vertical slice; broader expert Sales scope remains planned;
 - `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;
 - `crm.parties` — canonical identity owner in expert expansion with production create/update/get/list/search;
 - `crm.customer-accounts` — merged authoritative Account production vertical slice;
-- `crm.contact-points` — implementation-complete authoritative 8A.3b vertical slice in PR #104, pending only the post-documentation exact-head merge gate;
+- `crm.contact-points` — merged authoritative Contact Point production vertical slice;
+- `crm.party-relationships` — implementation-complete authoritative Party Relationship vertical slice in PR #109, pending the post-documentation exact-head merge gate;
 - `crm.sales-activities-link` — optional independently governed production integration slice.
 
 Current product-complete expert module count: **0**. A production vertical slice is not the same as complete expert-domain functionality.
@@ -221,8 +243,8 @@ Current product-complete expert module count: **0**. A production vertical slice
 
 ## Immediate delivery sequence
 
-1. Confirm the post-documentation exact head of Phase 8A.3b / #103 is fully green, merge PR #104, then begin Party Relationship.
-2. Deliver Party Relationship and Customer 360 composition packets.
+1. Confirm the post-documentation exact head of Phase 8A.3c / #108 is fully green and merge PR #109.
+2. Deliver Phase 8A.3d permission-aware rebuildable Customer 360 composition from merged stable owner contracts.
 3. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.
 4. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.
 5. Advance the remaining capability families from `CRM_CAPABILITY_COVERAGE.md` as explicit owner-domain or governed integration packets.

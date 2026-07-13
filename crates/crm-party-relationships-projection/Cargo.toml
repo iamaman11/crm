@@ -1,0 +1,15 @@
+[package]
+name = "crm-party-relationships-projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-core-data = { path = "../crm-core-data" }
+crm-core-events = { path = "../crm-core-events" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-projection-runtime = { path = "../crm-projection-runtime" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+prost = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
