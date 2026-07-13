@@ -79,7 +79,9 @@ jobs:
         run: pnpm web:lint
 
       - name: Run Web unit tests
-        run: pnpm web:test
+        run: |
+          set -o pipefail
+          pnpm web:test 2>&1 | tee product-plane-unit.log
 
       - name: Run Web build
         run: pnpm web:build
@@ -92,12 +94,13 @@ jobs:
       - name: Run E2E Integration Suite
         run: ./scripts/run_e2e.sh 2>&1 | tee product-plane-e2e.log
 
-      - name: Upload E2E diagnostics on failure
+      - name: Upload Product Plane diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: product-plane-e2e-diagnostics
+          name: product-plane-diagnostics
           path: |
+            product-plane-unit.log
             product-plane-e2e.log
             apps/web/playwright-report
             apps/web/test-results
