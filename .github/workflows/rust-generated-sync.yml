@@ -34,46 +34,56 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Repair Customer 360 projection registry test API
+      - name: Repair known Customer 360 registry API mismatch
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path('crates/crm-customer-360-composition/src/lib.rs')
           text = path.read_text()
-          if '.definition(CUSTOMER_360_PROJECTION_ID)' in text:
-              text = text.replace(
-                  '.definition(CUSTOMER_360_PROJECTION_ID)',
-                  '.get(CUSTOMER_360_PROJECTION_ID)',
-                  1,
-              )
-          if 'definition.event_types.len()' in text:
-              text = text.replace(
-                  'definition.event_types.len()',
-                  'definition.event_types().len()',
-                  1,
-              )
-          if '.get(CUSTOMER_360_PROJECTION_ID)' not in text:
-              raise SystemExit('Customer 360 projection registry get() repair failed')
-          if 'definition.event_types().len()' not in text:
-              raise SystemExit('Customer 360 projection event_types() repair failed')
+          text = text.replace(
+              '.definition(CUSTOMER_360_PROJECTION_ID)',
+              '.get(CUSTOMER_360_PROJECTION_ID)',
+              1,
+          )
+          text = text.replace(
+              'definition.event_types.len()',
+              'definition.event_types().len()',
+              1,
+          )
           path.write_text(text)
           PY
-      - name: Apply machine-fixable Rust maintenance
-        run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
           cargo fmt --all
-      - name: Commit synchronized files when needed
+          cargo generate-lockfile
+      - name: Capture targeted Customer 360 compile diagnostics
+        id: check
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          cargo check -p crm-customer-360-composition --all-targets 2>&1 | tee customer-360-check.log
+          status=${PIPESTATUS[0]}
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload targeted diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-360-foundation-diagnostics
+          path: customer-360-check.log
+          if-no-files-found: error
+          retention-days: 7
+      - name: Fail after diagnostics when targeted check failed
+        if: steps.check.outputs.status != '0'
+        run: exit 1
+      - name: Commit synchronized foundation when targeted check passes
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
+          git add Cargo.lock crates/crm-customer-360-composition/src/lib.rs
+          if git diff --cached --quiet; then
+            echo "Customer 360 foundation is already synchronized."
+            exit 0
+          fi
           git commit -m "Synchronize Customer 360 Rust foundation"
           git push origin "HEAD:${HEAD_BRANCH}"
