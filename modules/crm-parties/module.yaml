@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.parties
-version: "0.2.0"
+version: "0.3.0"
 display_name: CRM Parties
 description: Canonical owner domain for person and organization identity.
 
@@ -26,10 +26,16 @@ provides:
   capabilities:
     - id: parties.party.create
       version: "1.0.0"
+    - id: parties.party.update
+      version: "1.0.0"
     - id: parties.party.get
+      version: "1.0.0"
+    - id: parties.party.list
       version: "1.0.0"
   events:
     - id: parties.party.created
+      version: "1.0.0"
+    - id: parties.party.updated
       version: "1.0.0"
   objects:
     - parties.party
