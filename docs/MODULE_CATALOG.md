@@ -115,7 +115,7 @@ It must **not** own:
 - provider delivery state or omnichannel conversation state;
 - Account hierarchy or Party Relationship state.
 
-Draft PR #104 now implements the authoritative 8A.3b Contact Point vertical slice: strict deterministic persistence, additive v1 contracts/events, governed mutation and permission-aware query adapters, application-level Party-reference integrity, runtime composition, synchronized descriptors and fresh-PostgreSQL real `crm-api` process acceptance. The owner module remains pure: it has no SQL, transport types or direct cross-owner storage access. The packet remains Active until one exact final SHA is fully green and merged.
+Draft PR #104 now implements the authoritative 8A.3b Contact Point vertical slice: strict deterministic persistence, additive v1 contracts/events, governed mutation and permission-aware query adapters, application-level Party-reference integrity, runtime composition, synchronized descriptors and fresh-PostgreSQL real `crm-api` process acceptance. The owner module remains pure: it has no SQL, transport types or direct cross-owner storage access. The implementation packet is complete: all 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`; only the post-documentation exact-head merge gate remains.
 
 ## 6. Mandatory commercial lifecycle owner domains
 

@@ -110,7 +110,7 @@ Final verified review head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4` passed all
 
 This packet intentionally does **not** absorb Contact Point, Party Relationship, hierarchy or Customer 360 projection ownership into Account.
 
-#### 8A.3b — Contact Point lifecycle, verification and preference — Active / final verification
+#### 8A.3b — Contact Point lifecycle, verification and preference — Complete
 
 Tracked by #103 and draft PR #104 on `develop/phase8a3b-contact-point-lifecycle`.
 
@@ -131,7 +131,7 @@ The packet now implements:
 - `crm-application-runtime` composition and field-bounded visibility bootstrap;
 - fresh-PostgreSQL real `crm-api` process acceptance covering Party prerequisites, lifecycle, verification, display-only preservation, verification reset on value change, replay, conflicting replay, stale version, filters, signed cursor pagination/tamper rejection, unauthenticated rejection, tenant non-disclosure and durable evidence counts.
 
-The packet remains **Active** and PR #104 remains draft until all applicable workflows are green together on one exact final SHA. It is not marked complete or merged prematurely.
+The implementation packet is **Complete**. All 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`. PR #104 remains merge-gated until the post-documentation exact head is also fully green, after which Party Relationship is next.
 
 Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate authoritative ownership and are not hidden inside Contact Point flags.
 

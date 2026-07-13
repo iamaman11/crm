@@ -143,7 +143,7 @@ The Account owner module itself has no SQL dependency and does not read Party st
 
 Final verified review head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4` passed all 11 applicable workflows together. PR #102 merged to `main` as `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`.
 
-### 8A.3b — Contact Point lifecycle, verification and preference — Active / final verification
+### 8A.3b — Contact Point lifecycle, verification and preference — Complete / merge gate
 
 Issue #103 and draft PR #104 now contain the implemented authoritative Contact Point vertical slice:
 
@@ -160,7 +160,7 @@ Issue #103 and draft PR #104 now contain the implemented authoritative Contact P
 - application-runtime composition and field-bounded visibility bootstrap;
 - fresh-PostgreSQL real `crm-api` process acceptance for lifecycle, verification/reset, replay/conflict, filters, signed cursor pagination/tamper rejection, unauthenticated rejection, tenant non-disclosure and durable evidence counts.
 
-PR #104 remains draft pending one exact-head all-green applicable CI set. The packet is therefore not yet marked **Complete** or merged.
+The implementation packet is **Complete**: all 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`. PR #104 remains draft only for the post-documentation exact-head rerun and merge gate.
 
 Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate owner concerns.
 
@@ -185,7 +185,7 @@ The repository currently tracks **six business modules**:
 - `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;
 - `crm.parties` — canonical identity owner in expert expansion with production create/update/get/list/search;
 - `crm.customer-accounts` — merged authoritative Account production vertical slice;
-- `crm.contact-points` — implemented authoritative 8A.3b vertical slice in draft PR #104, pending exact-head final verification and merge;
+- `crm.contact-points` — implementation-complete authoritative 8A.3b vertical slice in PR #104, pending only the post-documentation exact-head merge gate;
 - `crm.sales-activities-link` — optional independently governed production integration slice.
 
 Current product-complete expert module count: **0**. A production vertical slice is not the same as complete expert-domain functionality.
@@ -221,7 +221,7 @@ Current product-complete expert module count: **0**. A production vertical slice
 
 ## Immediate delivery sequence
 
-1. Finish exact-head CI verification for Phase 8A.3b / #103, merge draft PR #104 only after the full applicable green set, then begin Party Relationship.
+1. Confirm the post-documentation exact head of Phase 8A.3b / #103 is fully green, merge PR #104, then begin Party Relationship.
 2. Deliver Party Relationship and Customer 360 composition packets.
 3. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.
 4. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.
