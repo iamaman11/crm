@@ -6,6 +6,8 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "proto/**"
+      - "packages/client/src/contract_hashes.ts"
       - "crates/**/Cargo.toml"
       - "crates/**/*.rs"
       - "modules/**/Cargo.toml"
@@ -25,7 +27,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,22 +36,152 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.18.0"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
+      - name: Apply exact Phase 8A.3b source fixups
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          runtime = Path("crates/crm-application-runtime/src/runtime.rs")
+          text = runtime.read_text()
+          old = '''async fn drain_projection(
+              worker: &Phase6ProjectionWorker,
+              tenant_id: TenantId,
+              projection_id: &str,
+              page_size: u32,
+          ) -> Result<(), ApplicationRuntimeError> {
+              loop {
+                  let result = worker
+                      .run_batch(tenant_id.clone(), projection_id, page_size)'''
+          new = '''async fn drain_projection(
+              worker: &Phase6ProjectionWorker,
+              tenant_id: TenantId,
+              projection_id: &str,
+          ) -> Result<(), ApplicationRuntimeError> {
+              loop {
+                  let result = worker
+                      .run_batch(tenant_id.clone(), projection_id, PROJECTION_PAGE_SIZE)'''
+          if old in text:
+              runtime.write_text(text.replace(old, new))
+
+          governed = Path("crates/crm-application-runtime/src/governed_metadata.rs")
+          text = governed.read_text()
+          old = '''    for party_id in unique_party_ids {
+              ensure_party_reference_available(store, request, &owner_module_id, &record_type, party_id)
+                  .await
+                  .map_err(|_| account_party_reference_unavailable())?;
+          }
+          Ok(())
+          }'''
+          new = '''    for party_id in unique_party_ids {
+              if !party_reference_exists(store, request, &owner_module_id, &record_type, party_id)
+                  .await?
+              {
+                  return Err(account_party_reference_unavailable());
+              }
+          }
+          Ok(())
+          }'''
+          text = text.replace(old, new)
+          old = '''    ensure_party_reference_available(
+              store,
+              request,
+              &owner_module_id,
+              &record_type,
+              reference.as_str().to_owned(),
+          )
+          .await
+          .map_err(|_| contact_point_party_reference_unavailable())
+          }
+
+          async fn ensure_party_reference_available(
+              store: &PostgresDataStore,
+              request: &CapabilityRequest,
+              owner_module_id: &ModuleId,
+              record_type: &RecordType,
+              party_id: String,
+          ) -> Result<(), SdkError> {
+              let record_id = RecordId::try_new(party_id).map_err(catalog_error)?;
+              let exists = store
+                  .get_record_for_query(&RecordGetQuery {
+                      tenant_id: request.context.execution.tenant_id.clone(),
+                      owner_module_id: owner_module_id.clone(),
+                      record_type: record_type.clone(),
+                      record_id,
+                  })
+                  .await?
+                  .is_some();
+              if exists {
+                  Ok(())
+              } else {
+                  Err(SdkError::new(
+                      "APPLICATION_PARTY_REFERENCE_UNAVAILABLE",
+                      ErrorCategory::InvalidArgument,
+                      false,
+                      "The referenced Party is unavailable.",
+                  ))
+              }
+          }'''
+          new = '''    if party_reference_exists(
+              store,
+              request,
+              &owner_module_id,
+              &record_type,
+              reference.as_str().to_owned(),
+          )
+          .await?
+          {
+              Ok(())
+          } else {
+              Err(contact_point_party_reference_unavailable())
+          }
+          }
+
+          async fn party_reference_exists(
+              store: &PostgresDataStore,
+              request: &CapabilityRequest,
+              owner_module_id: &ModuleId,
+              record_type: &RecordType,
+              party_id: String,
+          ) -> Result<bool, SdkError> {
+              let record_id = RecordId::try_new(party_id).map_err(catalog_error)?;
+              Ok(store
+                  .get_record_for_query(&RecordGetQuery {
+                      tenant_id: request.context.execution.tenant_id.clone(),
+                      owner_module_id: owner_module_id.clone(),
+                      record_type: record_type.clone(),
+                      record_id,
+                  })
+                  .await?
+                  .is_some())
+          }'''
+          governed.write_text(text.replace(old, new))
+          PY
       - name: Apply machine-fixable Rust maintenance
         run: |
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
+      - name: Generate canonical browser contract hashes
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm web:generate
       - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts; then
+            echo "Maintenance files are already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts
+          git commit -m "Synchronize Phase 8A.3b generated and Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
