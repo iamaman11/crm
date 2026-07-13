@@ -36,7 +36,8 @@ const PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
 ///
 /// Cross-owner existence, tenant ownership, Contact Point ownership and channel
 /// compatibility are still validated by application composition before this
-/// plan reaches the transactional executor. The relationship does not own
+/// plan reaches the transactional executor. Contact Point-scoped Push is rejected
+/// until a dedicated Push endpoint kind exists. The relationship does not own
 /// Consent semantics; it only prevents authorization reads from requiring a
 /// tenant-wide scan or an eventually consistent projection.
 #[derive(Debug, Default, Clone, Copy)]
