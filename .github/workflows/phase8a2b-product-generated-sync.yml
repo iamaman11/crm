@@ -6,6 +6,10 @@ on:
       - develop/phase8a2b-party-update-list
     paths:
       - ".github/workflows/phase8a2b-product-generated-sync.yml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/phase8a2b-product-generated-sync.yml"
 
 permissions:
   contents: write
@@ -16,7 +20,7 @@ concurrency:
 
 jobs:
   sync:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
