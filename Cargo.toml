@@ -41,6 +41,7 @@ members = [
   "crates/crm-party-relationships-capability-adapter",
   "crates/crm-party-relationships-query-adapter",
   "crates/crm-party-relationships-projection",
+  "crates/crm-consents-capability-adapter",
   "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
   "crates/crm-sales-activities-link-contract-adapter",
