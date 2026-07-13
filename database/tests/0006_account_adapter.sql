@@ -2,6 +2,27 @@
 -- Runtime contracts remain authoritative; these durable registry rows satisfy
 -- module/capability foreign keys and audit lineage for real PostgreSQL process
 -- acceptance. Publication is immutable and therefore idempotent via DO NOTHING.
+-- The Account process acceptance also exercises a tenant-B Party through the
+-- same service actor used by crm-api, so provision that actor explicitly here
+-- rather than weakening the global platform fixture's tenant-isolation proof.
+INSERT INTO crm.actors (
+  tenant_id,
+  actor_id,
+  actor_type,
+  status,
+  display_name,
+  last_business_transaction_id
+)
+VALUES (
+  'tenant-b',
+  'actor-a',
+  'service',
+  'active',
+  'Account acceptance cross-tenant actor',
+  'account-process-actor-bootstrap'
+)
+ON CONFLICT (tenant_id, actor_id) DO NOTHING;
+
 INSERT INTO crm.module_versions (
   module_id,
   version,
