@@ -25,31 +25,46 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Synchronize normative Phase 8A roadmap position
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
-          cargo fmt --all
-      - name: Commit synchronized files when needed
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/IMPLEMENTATION_ROADMAP.md")
+          text = path.read_text()
+          old = '''The first Phase 8A packet must define exact ownership, identifiers, typed domain primitives and contract boundaries before broad CRUD behavior is added.'''
+          new = '''Current delivery position: Party create/update/get/list/search is production-proven; the first authoritative Account create/update/get/list slice with typed Party associations and platform-level reference integrity is complete in PR #102 pending merge. The next owner-domain packet is Contact Point lifecycle, followed by Party Relationship and Customer 360 composition. Consent, identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets.'''
+          if old not in text:
+              raise SystemExit("Phase 8A position anchor not found")
+          text = text.replace(old, new, 1)
+
+          old_sequence = '''1. Start Phase 8A / #28 with a dedicated first packet for Party/Account/Contact Point/Relationship/Consent/Identity Resolution ownership, typed identifiers and versioned contracts.
+          2. Build customer-master behavior as end-to-end owner-domain packets with real tenant, idempotency, audit, merge/unmerge, consent-withdrawal and privacy evidence.
+          3. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.
+          4. Continue frontend and expert backend modules as end-to-end vertical slices.
+          5. Continue enterprise/security/operational hardening continuously without premature production-completeness claims.'''
+          new_sequence = '''1. Merge Phase 8A.3a / #101 / PR #102 after one exact-head green gate set.
+          2. Deliver Phase 8A.3b Contact Point lifecycle, verification and preference, then Party Relationship and Customer 360 composition.
+          3. Continue Phase 8A with Consent, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
+          4. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.
+          5. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.'''
+          if old_sequence not in text:
+              raise SystemExit("Immediate delivery sequence anchor not found")
+          path.write_text(text.replace(old_sequence, new_sequence, 1))
+          PY
+      - name: Restore canonical workflow and commit roadmap update
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
+          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add docs/IMPLEMENTATION_ROADMAP.md .github/workflows/rust-generated-sync.yml
+          git commit -m "Synchronize Phase 8A normative roadmap position"
           git push origin "HEAD:${HEAD_BRANCH}"
