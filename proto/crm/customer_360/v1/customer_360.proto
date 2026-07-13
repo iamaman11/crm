@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package crm.customer_360.v1;
+
+import "crm/accounts/v1/accounts.proto";
+import "crm/contact_points/v1/contact_points.proto";
+import "crm/customer/v1/reference.proto";
+import "crm/parties/v1/party.proto";
+import "crm/party_relationships/v1/party_relationships.proto";
+
+service Customer360Service {
+  rpc GetCustomer360(GetCustomer360Request) returns (GetCustomer360Response);
+}
+
+message Customer360SourceLineage {
+  string owner_module_id = 1;
+  string resource_type = 2;
+  string resource_id = 3;
+  int64 source_version = 4;
+  string source_event_id = 5;
+}
+
+message Customer360ProjectionFreshness {
+  string projection_id = 1;
+  uint64 applied_event_count = 2;
+  string last_event_id = 3;
+  int64 last_event_occurred_at_unix_nanos = 4;
+}
+
+message Customer360PartySection {
+  crm.parties.v1.Party party = 1;
+  Customer360SourceLineage source = 2;
+}
+
+message Customer360AccountSection {
+  crm.accounts.v1.Account account = 1;
+  Customer360SourceLineage source = 2;
+}
+
+message Customer360ContactPointSection {
+  crm.contact_points.v1.ContactPoint contact_point = 1;
+  Customer360SourceLineage source = 2;
+}
+
+message Customer360PartyRelationshipSection {
+  crm.party_relationships.v1.PartyRelationship party_relationship = 1;
+  Customer360SourceLineage source = 2;
+}
+
+message Customer360 {
+  crm.customer.v1.PartyRef root_party_ref = 1;
+  Customer360PartySection party = 2;
+  repeated Customer360AccountSection accounts = 3;
+  repeated Customer360ContactPointSection contact_points = 4;
+  repeated Customer360PartyRelationshipSection party_relationships = 5;
+  Customer360ProjectionFreshness freshness = 6;
+}
+
+message GetCustomer360Request {
+  crm.customer.v1.PartyRef party_ref = 1;
+}
+
+message GetCustomer360Response {
+  Customer360 customer_360 = 1;
+}
