@@ -143,25 +143,26 @@ The Account owner module itself has no SQL dependency and does not read Party st
 
 Final verified review head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4` passed all 11 applicable workflows together. PR #102 merged to `main` as `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`.
 
-### 8A.3b — Contact Point lifecycle, verification and preference — Active
+### 8A.3b — Contact Point lifecycle, verification and preference — Complete / merge gate
 
-Issue #103 is active. The implementation branch `develop/phase8a3b-contact-point-lifecycle` currently contains the first two Contact Point product-code commits: owner-module dependency updates and the new domain foundation.
-
-That foundation includes:
+Issue #103 and draft PR #104 now contain the implemented authoritative Contact Point vertical slice:
 
 - typed Contact Point identity and stable Party reference;
-- Email, Phone, Postal, Web and Messaging kinds;
-- Active/Inactive lifecycle;
-- preferred flag and validity interval state;
-- explicit Unverified/Verified state with bounded evidence reference and verification time;
-- create/update/verify commands with exact expected-version progression;
-- changing the endpoint value resets verification to Unverified;
-- canonical value normalization and validation foundations;
-- owner-module dependency additions required by that domain code.
+- deterministic Email, Phone, Postal, Web and Messaging normalization/validation;
+- Active/Inactive lifecycle, preferred state, validity intervals and explicit verification evidence/time;
+- verification preservation for non-value changes and reset only when the canonical endpoint value changes;
+- exact optimistic concurrency, monotonic mutation time and deterministic persisted-state validation;
+- additive v1 create/update/verify/get/list contracts plus created/updated/verified events;
+- governed transactional mutations with idempotency, outbox and audit evidence;
+- permission-aware get/list with typed filters, signed cursor binding and live field/resource visibility;
+- application-level Party-reference integrity with the same safe result for missing and cross-tenant Parties and no direct cross-owner storage access from the owner module;
+- immutable manifest/contract bindings and synchronized generated descriptors;
+- application-runtime composition and field-bounded visibility bootstrap;
+- fresh-PostgreSQL real `crm-api` process acceptance for lifecycle, verification/reset, replay/conflict, filters, signed cursor pagination/tamper rejection, unauthenticated rejection, tenant non-disclosure and durable evidence counts.
 
-This is **not yet a production-complete Contact Point slice**. Public Protobuf contracts, mutation/query adapters, persistence mapping, application composition, Party-reference integrity, generated browser contracts and real PostgreSQL/`crm-api` process acceptance still need to be delivered before 8A.3b can merge.
+The implementation packet is **Complete**: all 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`. PR #104 remains draft only for the post-documentation exact-head rerun and merge gate.
 
-Consent and communication authorization remain separate owner concerns and will not be hidden inside Contact Point flags.
+Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate owner concerns.
 
 ### Remaining 8A sequence
 
@@ -184,7 +185,7 @@ The repository currently tracks **six business modules**:
 - `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;
 - `crm.parties` — canonical identity owner in expert expansion with production create/update/get/list/search;
 - `crm.customer-accounts` — merged authoritative Account production vertical slice;
-- `crm.contact-points` — owner foundation with active 8A.3b domain implementation, not yet production-complete;
+- `crm.contact-points` — implementation-complete authoritative 8A.3b vertical slice in PR #104, pending only the post-documentation exact-head merge gate;
 - `crm.sales-activities-link` — optional independently governed production integration slice.
 
 Current product-complete expert module count: **0**. A production vertical slice is not the same as complete expert-domain functionality.
@@ -220,7 +221,7 @@ Current product-complete expert module count: **0**. A production vertical slice
 
 ## Immediate delivery sequence
 
-1. Continue Phase 8A.3b / #103 from `develop/phase8a3b-contact-point-lifecycle` and complete contracts, persistence, governed mutation/query adapters, application composition and process-level production proof.
+1. Confirm the post-documentation exact head of Phase 8A.3b / #103 is fully green, merge PR #104, then begin Party Relationship.
 2. Deliver Party Relationship and Customer 360 composition packets.
 3. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.
 4. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.

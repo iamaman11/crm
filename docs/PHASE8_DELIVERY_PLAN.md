@@ -110,37 +110,30 @@ Final verified review head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4` passed all
 
 This packet intentionally does **not** absorb Contact Point, Party Relationship, hierarchy or Customer 360 projection ownership into Account.
 
-#### 8A.3b — Contact Point lifecycle, verification and preference — Active
+#### 8A.3b — Contact Point lifecycle, verification and preference — Complete
 
-Tracked by #103. Implementation branch: `develop/phase8a3b-contact-point-lifecycle`.
+Tracked by #103 and draft PR #104 on `develop/phase8a3b-contact-point-lifecycle`.
 
-The branch currently contains the first two Contact Point product-code commits: owner-module dependency updates and the new domain foundation. That foundation includes:
+The packet now implements:
 
-- typed Contact Point identity and stable Party reference;
-- Email, Phone, Postal, Web and Messaging kinds;
-- Active/Inactive lifecycle;
-- preferred flag and validity interval state;
-- explicit Unverified/Verified state with verification evidence reference and verification time;
-- create/update/verify commands with exact expected-version progression;
-- automatic verification reset when the endpoint value changes;
-- canonical channel-value normalization/validation foundations;
-- domain dependencies required for URL/IDNA and deterministic persisted-state work.
+- authoritative typed Contact Point identity with a stable Party reference and no copied Party identity attributes;
+- Email, Phone, Postal, Web and Messaging endpoint kinds with deterministic canonical normalization and bounded validation;
+- Active/Inactive lifecycle, preferred state, validity intervals and explicit verification evidence/time;
+- verification preservation for lifecycle/validity/display-only changes and automatic reset only when the canonical endpoint value changes;
+- exact optimistic version progression, monotonic mutation time, semantic no-op rejection and atomic version-exhaustion failure;
+- strict deterministic versioned persisted Contact Point state with canonical rehydration checks;
+- additive `crm.contact_points.v1` create/update/verify/get/list contracts and created/updated/verified events;
+- immutable module manifest evolution, exact contract bindings and synchronized Rust/browser descriptor identities;
+- governed transactional create/update/verify through the production aggregate executor with idempotency, outbox and audit evidence;
+- permission-aware get/list with tenant/actor/filter/sort/page-bound signed cursors, typed filters, bounded visibility scans and live field redaction;
+- application-level Party-reference integrity without SQL or cross-owner storage access in the Contact Point owner module;
+- identical safe rejection for missing and cross-tenant Party references while real database/runtime failures remain distinguishable internally;
+- `crm-application-runtime` composition and field-bounded visibility bootstrap;
+- fresh-PostgreSQL real `crm-api` process acceptance covering Party prerequisites, lifecycle, verification, display-only preservation, verification reset on value change, replay, conflicting replay, stale version, filters, signed cursor pagination/tamper rejection, unauthenticated rejection, tenant non-disclosure and durable evidence counts.
 
-The packet is **not yet production-complete**.
+The implementation packet is **Complete**. All 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`. PR #104 remains merge-gated until the post-documentation exact head is also fully green, after which Party Relationship is next.
 
-Remaining packet scope:
-
-- complete domain review and tests for all channel normalization/validity/preference invariants;
-- strict deterministic persisted Contact Point state contract;
-- versioned public Protobuf create/update/verify/get/list and event contracts;
-- governed mutation and permission-aware query adapters;
-- Party-reference integrity in application/platform composition without direct cross-owner storage access from the owner module;
-- immutable manifest/contract bindings and generated Rust/browser descriptors;
-- application-runtime composition and field-bounded visibility bootstrap;
-- real PostgreSQL + real `crm-api` process acceptance for lifecycle, verification reset, replay/conflict, filtering, cursor pagination and tenant non-disclosure;
-- one exact-head green applicable CI set before merge.
-
-Consent and communication authorization remain separate authoritative ownership rather than hidden Contact Point flags.
+Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate authoritative ownership and are not hidden inside Contact Point flags.
 
 #### 8A.3c — Party Relationship lifecycle and hierarchy foundations
 

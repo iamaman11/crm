@@ -98,7 +98,7 @@ Party-reference existence and tenant integrity are validated in application/plat
 
 ### Contact Point ownership boundary
 
-`crm.contact-points` is being implemented to own:
+`crm.contact-points` owns:
 
 - Contact Point identity and Party attachment by stable reference;
 - typed endpoint kind and canonical endpoint value;
@@ -115,7 +115,7 @@ It must **not** own:
 - provider delivery state or omnichannel conversation state;
 - Account hierarchy or Party Relationship state.
 
-The current 8A.3b branch already establishes the first pure domain model and resets verification when the endpoint value changes, but the module remains a foundation until governed public contracts, persistence, application composition and production acceptance are complete.
+Draft PR #104 now implements the authoritative 8A.3b Contact Point vertical slice: strict deterministic persistence, additive v1 contracts/events, governed mutation and permission-aware query adapters, application-level Party-reference integrity, runtime composition, synchronized descriptors and fresh-PostgreSQL real `crm-api` process acceptance. The owner module remains pure: it has no SQL, transport types or direct cross-owner storage access. The implementation packet is complete: all 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`; only the post-documentation exact-head merge gate remains.
 
 ## 6. Mandatory commercial lifecycle owner domains
 

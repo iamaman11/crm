@@ -3,6 +3,16 @@ use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     TransactionalCapabilityExecutor,
 };
+use crm_contact_points_capability_adapter::{
+    ContactPointCapabilityPlanner,
+    MUTATION_CAPABILITY_IDS as CONTACT_POINT_MUTATION_CAPABILITY_IDS,
+    capability_definitions as contact_point_capability_definitions,
+    referenced_party_id_from_create,
+};
+use crm_contact_points_query_adapter::{
+    ContactPointQueryAdapter, QUERY_CAPABILITY_IDS as CONTACT_POINT_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as contact_point_query_capability_definitions,
+};
 use crm_core_data::{
     AggregateTarget, CapabilityBatchExecutionPlan, PostgresDataStore,
     PostgresMetadataCapabilityExecutor, PostgresTransactionalAggregateExecutor, RecordGetQuery,
@@ -49,6 +59,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     let mut definitions = sales_activities_capability_definitions()?;
     definitions.extend(party_capability_definitions()?);
     definitions.extend(account_capability_definitions()?);
+    definitions.extend(contact_point_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
@@ -57,6 +68,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     let mut definitions = production_query_capability_definitions()?;
     definitions.extend(party_query_capability_definitions()?);
     definitions.extend(account_query_capability_definitions()?);
+    definitions.extend(contact_point_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -82,6 +94,9 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             PartyCapabilityPlanner.target(definition, request)
         } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             CustomerAccountCapabilityPlanner.target(definition, request)
+        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
+        {
+            ContactPointCapabilityPlanner.target(definition, request)
         } else {
             SalesActivitiesCapabilityPlannerRouter.target(definition, request)
         }
@@ -97,6 +112,9 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             PartyCapabilityPlanner.plan(definition, request, current)
         } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             CustomerAccountCapabilityPlanner.plan(definition, request, current)
+        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
+        {
+            ContactPointCapabilityPlanner.plan(definition, request, current)
         } else {
             SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
         }
@@ -148,6 +166,12 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
                 validate_account_party_references(&self.store, definition, &request).await?;
                 self.aggregate.execute(definition, request).await
             })
+        } else if CONTACT_POINT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
+        {
+            Box::pin(async move {
+                validate_contact_point_party_reference(&self.store, definition, &request).await?;
+                self.aggregate.execute(definition, request).await
+            })
         } else {
             self.aggregate.execute(definition, request)
         }
@@ -172,26 +196,75 @@ async fn validate_account_party_references(
     let record_type = RecordType::try_new(PARTY_RECORD_TYPE).map_err(catalog_error)?;
 
     for party_id in unique_party_ids {
-        let record_id = RecordId::try_new(party_id).map_err(catalog_error)?;
-        let exists = store
-            .get_record_for_query(&RecordGetQuery {
-                tenant_id: request.context.execution.tenant_id.clone(),
-                owner_module_id: owner_module_id.clone(),
-                record_type: record_type.clone(),
-                record_id,
-            })
-            .await?
-            .is_some();
-        if !exists {
-            return Err(SdkError::new(
-                "CUSTOMER_ACCOUNTS_PARTY_REFERENCE_UNAVAILABLE",
-                ErrorCategory::InvalidArgument,
-                false,
-                "One or more referenced Parties are unavailable.",
-            ));
+        if !party_reference_exists(store, request, &owner_module_id, &record_type, party_id).await?
+        {
+            return Err(account_party_reference_unavailable());
         }
     }
     Ok(())
+}
+
+async fn validate_contact_point_party_reference(
+    store: &PostgresDataStore,
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+) -> Result<(), SdkError> {
+    if definition.capability_id.as_str() != "contact-points.contact-point.create" {
+        return Ok(());
+    }
+    let reference = referenced_party_id_from_create(request)?;
+    let owner_module_id = ModuleId::try_new(PARTIES_MODULE_ID).map_err(catalog_error)?;
+    let record_type = RecordType::try_new(PARTY_RECORD_TYPE).map_err(catalog_error)?;
+    if party_reference_exists(
+        store,
+        request,
+        &owner_module_id,
+        &record_type,
+        reference.as_str().to_owned(),
+    )
+    .await?
+    {
+        Ok(())
+    } else {
+        Err(contact_point_party_reference_unavailable())
+    }
+}
+
+async fn party_reference_exists(
+    store: &PostgresDataStore,
+    request: &CapabilityRequest,
+    owner_module_id: &ModuleId,
+    record_type: &RecordType,
+    party_id: String,
+) -> Result<bool, SdkError> {
+    let record_id = RecordId::try_new(party_id).map_err(catalog_error)?;
+    Ok(store
+        .get_record_for_query(&RecordGetQuery {
+            tenant_id: request.context.execution.tenant_id.clone(),
+            owner_module_id: owner_module_id.clone(),
+            record_type: record_type.clone(),
+            record_id,
+        })
+        .await?
+        .is_some())
+}
+
+fn account_party_reference_unavailable() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ACCOUNTS_PARTY_REFERENCE_UNAVAILABLE",
+        ErrorCategory::InvalidArgument,
+        false,
+        "One or more referenced Parties are unavailable.",
+    )
+}
+
+fn contact_point_party_reference_unavailable() -> SdkError {
+    SdkError::new(
+        "CONTACT_POINTS_PARTY_REFERENCE_UNAVAILABLE",
+        ErrorCategory::InvalidArgument,
+        false,
+        "The referenced Party is unavailable.",
+    )
 }
 
 fn account_reference_configuration_error() -> SdkError {
@@ -208,6 +281,7 @@ pub struct ApplicationQueryRouter {
     production: ProductionQueryRouter,
     parties: PartyQueryAdapter,
     accounts: AccountQueryAdapter,
+    contact_points: ContactPointQueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
@@ -216,12 +290,14 @@ impl ApplicationQueryRouter {
         production: ProductionQueryRouter,
         parties: PartyQueryAdapter,
         accounts: AccountQueryAdapter,
+        contact_points: ContactPointQueryAdapter,
         metadata: MetadataQueryAdapter,
     ) -> Self {
         Self {
             production,
             parties,
             accounts,
+            contact_points,
             metadata,
         }
     }
@@ -239,6 +315,8 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
             self.parties.validate(definition, request)
         } else if ACCOUNT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.accounts.validate(definition, request)
+        } else if CONTACT_POINT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.contact_points.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -257,6 +335,8 @@ impl QueryExecutor for ApplicationQueryRouter {
             self.parties.execute(definition, request)
         } else if ACCOUNT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.accounts.execute(definition, request)
+        } else if CONTACT_POINT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.contact_points.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }
@@ -288,6 +368,7 @@ mod tests {
             PRODUCTION_MUTATION_CAPABILITY_IDS.len()
                 + PARTY_MUTATION_CAPABILITY_IDS.len()
                 + ACCOUNT_MUTATION_CAPABILITY_IDS.len()
+                + CONTACT_POINT_MUTATION_CAPABILITY_IDS.len()
                 + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
@@ -311,6 +392,13 @@ mod tests {
                     .any(|definition| definition.capability_id.as_str() == coordinate)
             );
         }
+        for coordinate in CONTACT_POINT_MUTATION_CAPABILITY_IDS {
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
         for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
             assert!(
                 mutations
@@ -326,6 +414,7 @@ mod tests {
                 + 1
                 + PARTY_QUERY_CAPABILITY_IDS.len()
                 + ACCOUNT_QUERY_CAPABILITY_IDS.len()
+                + CONTACT_POINT_QUERY_CAPABILITY_IDS.len()
                 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(
@@ -341,6 +430,13 @@ mod tests {
             );
         }
         for coordinate in ACCOUNT_QUERY_CAPABILITY_IDS {
+            assert!(
+                queries
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
+        for coordinate in CONTACT_POINT_QUERY_CAPABILITY_IDS {
             assert!(
                 queries
                     .iter()
