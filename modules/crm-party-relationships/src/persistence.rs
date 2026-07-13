@@ -36,9 +36,7 @@ pub fn encode_party_relationship_state(
 pub fn decode_party_relationship_state(bytes: &[u8]) -> Result<PartyRelationship, SdkError> {
     validate_size(bytes)?;
     let state: PartyRelationshipStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!(
-            "Party Relationship state JSON is invalid: {error}"
-        ))
+        persisted_error(format!("Party Relationship state JSON is invalid: {error}"))
     })?;
     PartyRelationship::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))

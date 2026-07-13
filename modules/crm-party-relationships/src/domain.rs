@@ -782,7 +782,10 @@ mod tests {
             occurred_at_unix_nanos: 1,
         })
         .unwrap_err();
-        assert_eq!(invalid_validity.code, "PARTY_RELATIONSHIPS_VALIDITY_INVALID");
+        assert_eq!(
+            invalid_validity.code,
+            "PARTY_RELATIONSHIPS_VALIDITY_INVALID"
+        );
 
         let mut value = relationship();
         let original = value.clone();

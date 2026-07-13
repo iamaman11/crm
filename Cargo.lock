@@ -642,6 +642,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-party-relationships"
+version = "0.1.0"
+dependencies = [
+ "crm-module-sdk",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "crm-projection-runtime"
 version = "0.1.0"
 dependencies = [
