@@ -34,74 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - uses: bufbuild/buf-action@v1.4.0
-        with:
-          version: 1.50.1
-          setup_only: true
-      - name: Install manifest validation dependencies
-        run: python -m pip install --requirement requirements-dev.txt
-      - name: Normalize Customer 360 public coordinates
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          allowed = [
-              Path('contracts/module-contract-bindings.json'),
-              Path('crates/crm-customer-360-composition/src/lib.rs'),
-              Path('crates/crm-customer-360-query-adapter/src/lib.rs'),
-              Path('docs/PHASE8A3D_CUSTOMER_360_ARCHITECTURE.md'),
-              Path('modules/crm-customer-360/module.yaml'),
-              Path('services/crm-api/tests/customer_360_process_e2e.rs'),
-          ]
-          for path in allowed:
-              if not path.exists():
-                  continue
-              text = path.read_text()
-              text = text.replace('crm.customer-360-projection', 'crm.customer360-projection')
-              text = text.replace('crm.customer-360', 'crm.customer360')
-              text = text.replace('customer-360.customer.get', 'customer360.customer.get')
-              path.write_text(text)
-
-          leftovers = []
-          workflow = Path('.github/workflows/rust-generated-sync.yml')
-          for path in Path('.').rglob('*'):
-              if not path.is_file() or '.git' in path.parts or path == workflow:
-                  continue
-              try:
-                  text = path.read_text()
-              except (UnicodeDecodeError, OSError):
-                  continue
-              if 'crm.customer-360' in text or 'customer-360.customer.get' in text:
-                  leftovers.append(str(path))
-          if leftovers:
-              raise SystemExit(f'legacy invalid Customer 360 public coordinates remain: {leftovers}')
-          PY
-      - name: Verify normalized manifests and contracts
-        run: |
-          python scripts/validate_module_manifests.py
-          buf build proto --output /tmp/crm-schema.binpb
-          python scripts/validate_contract_bindings.py --descriptor-set /tmp/crm-schema.binpb
-      - name: Verify normalized Rust composition
-        run: |
-          cargo fmt --all
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
           cargo generate-lockfile
-          cargo check -p crm-customer-360-composition --all-targets
-          cargo check -p crm-customer-360-query-adapter --all-targets
-          cargo check -p crm-application-runtime --all-targets
-          cargo check -p crm-api --test customer_360_process_e2e
-      - name: Commit verified Customer 360 coordinate normalization
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock contracts/module-contract-bindings.json crates/crm-customer-360-composition crates/crm-customer-360-query-adapter docs/PHASE8A3D_CUSTOMER_360_ARCHITECTURE.md modules/crm-customer-360 services/crm-api/tests/customer_360_process_e2e.rs
-          if git diff --cached --quiet; then
-            echo "Customer 360 public coordinates are already canonical."
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
             exit 0
           fi
-          git commit -m "Normalize Customer 360 public contract coordinates"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
