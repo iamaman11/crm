@@ -2,108 +2,205 @@ name: Product Plane CI
 
 on:
   push:
+    branches:
+      - develop/phase8a4-consent-communication-authorization
     paths:
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "tsconfig.base.json"
-      - "buf.gen.web.yaml"
-      - "apps/web/**"
-      - "packages/client/**"
-      - "packages/ui/**"
       - ".github/workflows/product-plane.yml"
-      - "scripts/run_e2e.sh"
-      - "proto/**"
-      - "crates/crm-application-runtime/**"
-      - "crates/crm-proto-contracts/**"
-      - "services/crm-api/**"
-      - "database/**"
-  pull_request:
-    paths:
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "tsconfig.base.json"
-      - "buf.gen.web.yaml"
-      - "apps/web/**"
-      - "packages/client/**"
-      - "packages/ui/**"
-      - ".github/workflows/product-plane.yml"
-      - "scripts/run_e2e.sh"
-      - "proto/**"
-      - "crates/crm-application-runtime/**"
-      - "crates/crm-proto-contracts/**"
-      - "services/crm-api/**"
-      - "database/**"
-
-# Only the newest Product Plane validation for a PR/ref is useful. Cancelling stale runs
-# prevents old exact-SHA candidates from consuming hosted runners while the current head waits.
-concurrency:
-  group: product-plane-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  check-and-test:
+  synchronize-phase8a4-docs:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: "24.18.0"
+          ref: develop/phase8a4-consent-communication-authorization
+          fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: "11.12.0"
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify generated contract hashes are up-to-date
+      - name: Apply exact-anchor Phase 8A.4 documentation synchronization
         run: |
-          pnpm web:generate
-          git diff --exit-code packages/client/src/contract_hashes.ts
+          python3 - <<'PY'
+          from pathlib import Path
 
-      - name: Run Web typecheck
-        run: pnpm web:typecheck
+          def patch(path_name: str, replacements: list[tuple[str, str]]) -> None:
+              path = Path(path_name)
+              text = path.read_text()
+              for old, new in replacements:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(
+                          f"documentation anchor count must be 1, got {count} in {path_name}: {old[:140]!r}"
+                      )
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
 
-      - name: Run Web lint
-        run: pnpm web:lint
+          patch(
+              "docs/IMPLEMENTATION_ROADMAP.md",
+              [
+                  (
+                      "Current delivery position: Party create/update/get/list/search is production-proven. The authoritative Account vertical slice is merged and production-proven (#101 / merged PR #102; final verified head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4`; merge commit `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`). Contact Point is merged and production-proven (#103 / merged PR #104; merge commit `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`). Party Relationship lifecycle and rebuildable hierarchy foundations are merged and production-proven (#108 / merged PR #109; merge commit `36c238d51a156e3864e2dad0f53762e95e47680d`). Customer 360 composition is implementation-complete in #110 / draft PR #111 on `develop/phase8a3d-customer-360`: the independently governed read-only `crm.customer360` composition module, additive `crm.customer_360.v1` query contract, strict multi-owner event validation, deterministic per-source contributions, indexed Party-root lookup, live source-resource authorization, least-privilege field redaction, runtime projection worker, freshness metadata, canonical generated descriptors and fresh-PostgreSQL real `crm-api` convergence/rebuild acceptance are present. All 11 applicable CI workflows were green together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca`; this documentation commit intentionally invalidates that evidence until the post-documentation exact-head rerun completes. Consent and communication authorization follows as 8A.4; identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets.",
+                      "Current delivery position: Party create/update/get/list/search is production-proven. The authoritative Account vertical slice is merged and production-proven (#101 / merged PR #102; final verified head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4`; merge commit `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`). Contact Point is merged and production-proven (#103 / merged PR #104; merge commit `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`). Party Relationship lifecycle and rebuildable hierarchy foundations are merged and production-proven (#108 / merged PR #109; merge commit `36c238d51a156e3864e2dad0f53762e95e47680d`). Customer 360 composition is merged and production-proven (#110 / merged PR #111; final verified head `b3bca41c393577e2da5a84bcbe0309996fbdef90`; merge commit `30ce84c57064134202c03c07a943bcd0859e1ea9`). Phase 8A.4 Consent and Communication Authorization is implementation-complete in #112 / draft PR #113: the pure `crm.consents` owner, immutable grant/deny assertions, irreversible withdrawal, exact purpose/channel/legal-basis/jurisdiction/source/evidence semantics, deterministic fail-closed decision precedence, strict persistence, governed create/withdraw/get/list/authorize contracts, cross-owner Party/Contact Point integrity, authoritative Party-to-Consent access-path relationships, permission-aware disclosure, synchronized contract bindings/browser hashes and fresh-PostgreSQL real `crm-api` acceptance are present. The relation-based implementation passed workspace-wide Clippy/format/lock synchronization and the real process acceptance on pre-documentation code head `70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced `131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. The final post-documentation exact-head all-workflow gate remains pending before merge. Identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets."
+                  ),
+                  (
+                      "1. Complete the post-documentation exact-head merge gate for Phase 8A.3d / #110 and merge PR #111 without creating a second customer or identity master.\n2. Begin Phase 8A.4 Consent and communication authorization against stable merged Party, Account, Contact Point, Party Relationship and Customer 360 contracts.\n3. Continue Phase 8A with identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.\n4. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.\n5. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.",
+                      "1. Complete the post-documentation exact-head merge gate for Phase 8A.4 / #112 and merge PR #113 without weakening authoritative Consent ownership or allowing Contact Point state to become an authorization oracle.\n2. Continue Phase 8A with identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.\n3. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.\n4. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.\n5. Keep enterprise/security/operational proof continuous and require one unchanged exact final SHA for every merge gate."
+                  ),
+              ],
+          )
 
-      - name: Run Web unit tests
+          patch(
+              "docs/MODULE_CATALOG.md",
+              [
+                  (
+                      "| `crm.party-relationships` | Authoritative typed Party-to-Party relationships and temporal hierarchy source state | **Vertical slice** | Merged create/update/get/list lifecycle with directional/reciprocal semantics, same-tenant Party-reference integrity, signed cursor queries, durable evidence and rebuildable hierarchy acceptance from #108 / PR #109 | Later explicitly governed overlap-policy expansion where justified |\n",
+                      "| `crm.party-relationships` | Authoritative typed Party-to-Party relationships and temporal hierarchy source state | **Vertical slice** | Merged create/update/get/list lifecycle with directional/reciprocal semantics, same-tenant Party-reference integrity, signed cursor queries, durable evidence and rebuildable hierarchy acceptance from #108 / PR #109 | Later explicitly governed overlap-policy expansion where justified |\n| `crm.consents` | Authoritative purpose/channel-scoped Consent and Communication Authorization assertions | **Vertical slice** | Immutable grant/deny assertions, governed grant withdrawal, exact authoritative allow/deny decisions, cross-owner Party/Contact Point integrity, signed get/list queries and real PostgreSQL/process acceptance in #112 / PR #113 | Later privacy orchestration and downstream campaign/provider enforcement remain separate governed packets |\n"
+                  ),
+                  (
+                      "Current owner-module count: **6**.\n\nProduction owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points and Party Relationships**.3c post-documentation exact-head merge gate.",
+                      "Current owner-module count: **7**.\n\nProduction owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points, Party Relationships and Consents**. Phase 8A.4 remains at its final exact-head merge gate until PR #113 is verified and merged."
+                  ),
+                  (
+                      "Current business-module count: **7** — six owner modules plus one optional link module.",
+                      "Current business-module count: **8** — seven owner modules plus one optional link module. The independently governed `crm.customer360` read-composition module remains tracked separately from this owner/link count."
+                  ),
+                  (
+                      "- Consent and Preferences — purpose/channel/legal-basis consent and suppression — **Planned for 8A.4**.",
+                      "- `crm.consents` — authoritative purpose/channel/legal-basis/jurisdiction/source/evidence assertions and exact communication authorization decisions — **Implemented vertical slice in #112 / PR #113; final exact-head merge gate pending**."
+                  ),
+                  (
+                      "`crm.customer360` is an independently lifecycle-managed **read-composition module**, not an authoritative owner module. It publishes `customer360.customer.get@1.0.0`, consumes immutable owner events and materializes rebuildable contribution documents, but declares no owned objects, record types, private authoritative state or mutation capability. It is tracked separately from the six authoritative owner modules and the optional link-module count.",
+                      "`crm.customer360` is an independently lifecycle-managed **read-composition module**, not an authoritative owner module. It publishes `customer360.customer.get@1.0.0`, consumes immutable owner events and materializes rebuildable contribution documents, but declares no owned objects, record types, private authoritative state or mutation capability. It is tracked separately from the seven authoritative owner modules and the optional link-module count."
+                  ),
+                  (
+                      "`crm.customer360` owns only the versioned read-composition contract, deterministic mapping from validated owner events into rebuildable contributions and the permission-aware query assembly policy. It does **not** own Party identity, Account membership, Contact Point lifecycle/verification, Party Relationship state, consent, identity resolution, provider delivery state or any mutable customer master. Source resources are live-authorized and field-redacted before disclosure, and projection rebuild cannot mutate authoritative records, outbox events or audit evidence. #110 / PR #111 passed all 11 applicable workflows together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca` and is awaiting the post-documentation exact-head merge gate.",
+                      "`crm.customer360` owns only the versioned read-composition contract, deterministic mapping from validated owner events into rebuildable contributions and the permission-aware query assembly policy. It does **not** own Party identity, Account membership, Contact Point lifecycle/verification, Party Relationship state, consent, identity resolution, provider delivery state or any mutable customer master. Source resources are live-authorized and field-redacted before disclosure, and projection rebuild cannot mutate authoritative records, outbox events or audit evidence. #110 / PR #111 completed the exact-head gate and merged to `main` as `30ce84c57064134202c03c07a943bcd0859e1ea9`."
+                  ),
+                  (
+                      "## 6. Mandatory commercial lifecycle owner domains",
+                      "### Consent and Communication Authorization ownership boundary\n\n`crm.consents` owns immutable Consent Authorization identity and scope, Party/optional Contact Point references, exact purpose/channel, grant-or-deny effect, legal-basis/jurisdiction/source/evidence codes, effective/expiry windows, irreversible grant withdrawal and the deterministic current communication authorization decision. It does **not** own Party attributes, Contact Point endpoint/verification/preference state, provider delivery state, campaigns, journeys, Customer 360 mutation or identity resolution. The pure owner crate has no SQL or cross-owner storage access. Application composition validates same-tenant Party and Contact Point ownership before mutation, while each create transaction atomically writes one authoritative `consents.authorization.party` relationship so `consents.communication.authorize` can read only that Party's authoritative Consent records without relying on a rebuildable projection or tenant-wide scan. #112 / PR #113 is implementation-complete and awaiting the final unchanged exact-head merge gate.\n\n## 6. Mandatory commercial lifecycle owner domains"
+                  ),
+              ],
+          )
+
+          patch(
+              "docs/PHASE8_DELIVERY_PLAN.md",
+              [
+                  (
+                      "### 8A.3 — Account, Contact Point, Party Relationship and Customer 360 — In progress",
+                      "### 8A.3 — Account, Contact Point, Party Relationship and Customer 360 — Complete"
+                  ),
+                  (
+                      "#### 8A.3d — Customer 360 composition — Complete / merge gate\n\nTracked by #110 / draft PR #111 on `develop/phase8a3d-customer-360`.",
+                      "#### 8A.3d — Customer 360 composition — Complete\n\nDelivered by #110 / merged PR #111."
+                  ),
+                  (
+                      "All 11 applicable CI workflows were green together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca`. This documentation commit intentionally invalidates that evidence until the post-documentation exact-head rerun is green. Customer 360 owns no second customer or identity master and exposes no mutation capability.",
+                      "The final exact-head gate completed with all 11 applicable workflows green on `b3bca41c393577e2da5a84bcbe0309996fbdef90`. PR #111 merged to `main` as `30ce84c57064134202c03c07a943bcd0859e1ea9`. Customer 360 owns no second customer or identity master and exposes no mutation capability."
+                  ),
+                  (
+                      "### 8A.4 — Consent and communication authorization\n\nDeliver purpose/channel/jurisdiction/legal-basis/source/proof/effective/expiry/withdrawal semantics and an exact authorization decision boundary that downstream communication and marketing modules must use.\n\nWithdrawal must take effect without waiting for a projection rebuild. Historical evidence remains immutable while current authorization decisions reflect live consent state.",
+                      "### 8A.4 — Consent and communication authorization — Implementation complete / final gate\n\nTracked by #112 / draft PR #113 on `develop/phase8a4-consent-communication-authorization`.\n\nThe packet now implements:\n\n- a pure authoritative `crm.consents` owner with immutable grant/deny assertions and no SQL or direct cross-owner storage access;\n- exact Party, optional Contact Point, purpose, channel, legal-basis, jurisdiction, source and immutable evidence semantics;\n- effective/expiry windows, exact optimistic concurrency and irreversible withdrawal of active grants;\n- deterministic latest-decision-point precedence where withdrawal/deny ties fail closed, no applicable grant defaults to deny and a later explicit grant may supersede older withdrawal or denial;\n- strict deterministic private persistence with canonical rehydration and corruption rejection;\n- additive `crm.consents.v1` create/withdraw/get/list/authorize contracts plus created/withdrawn events, canonical module bindings and synchronized Rust/browser descriptor hashes;\n- cross-owner same-tenant Party/Contact Point existence, ownership and channel-compatibility validation before mutation, with safe indistinguishable missing/cross-tenant failures and unmasked real datastore failures;\n- one transactionally maintained authoritative Party-to-Consent relationship per created assertion, allowing authorization reads to traverse only that Party's authoritative Consent records without a rebuildable projection or tenant-wide scan;\n- permission-aware get/list with typed filters, signed tenant/actor/capability/filter/sort/page-bound cursors and independent field redaction;\n- production application-runtime routing and governed create/withdraw/query execution;\n- fresh-PostgreSQL real `crm-api` process acceptance for Contact Point non-authorization, reference integrity, replay/conflict behavior, grant/deny/scope/time/expiry/withdrawal/later-grant precedence, get/list, signed cursor tamper rejection, authentication/tenant isolation and durable evidence.\n\nThe relation-based implementation passed workspace-wide Clippy/format/lock synchronization and the real process acceptance on pre-documentation code head `70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced `131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. The post-documentation unchanged exact-head all-workflow gate remains required before merge. Withdrawal decisions read authoritative state and therefore do not wait for projection rebuild."
+                  ),
+              ],
+          )
+
+          patch(
+              "docs/PROJECT_STATUS.md",
+              [
+                  (
+                      "- **Active delivery:** Phase 8A customer master is in progress under #28, with Customer 360 composition #110 / draft PR #111 now at its exact-head merge gate.",
+                      "- **Active delivery:** Phase 8A customer master is in progress under #28; Phase 8A.4 Consent and Communication Authorization #112 / draft PR #113 is implementation-complete and at its post-documentation exact-head merge gate."
+                  ),
+                  (
+                      "- **Current integration branch:** `develop/phase8a3d-customer-360`.",
+                      "- **Current integration branch:** `develop/phase8a4-consent-communication-authorization`."
+                  ),
+                  (
+                      "- **Baseline used for Phase 8A.3d:** latest fresh remote `main` before the branch point; `main` has since advanced independently while the PR remains open, so final merge readiness depends on the exact PR head plus GitHub mergeability/required checks, not on a stale local branch-base assumption.",
+                      "- **Current `main` baseline:** Customer 360 merge commit `30ce84c57064134202c03c07a943bcd0859e1ea9`; Phase 8A.4 was branched strictly from that merged baseline."
+                  ),
+                  (
+                      "- Phase 8A customer master is active: Party lifecycle/search is complete, Account is merged, Contact Point is merged, Party Relationship lifecycle/hierarchy foundations are merged and Customer 360 composition is implementation-complete in PR #111 at its final merge gate.",
+                      "- Phase 8A customer master is active: Party lifecycle/search, Account, Contact Point, Party Relationship lifecycle/hierarchy foundations and Customer 360 are merged; Consent and Communication Authorization is implementation-complete in PR #113 at its final exact-head gate."
+                  ),
+                  (
+                      "- Current customer-master implementation spans Party, Account, Contact Point, Party Relationship and Customer 360 boundaries, with remaining 8A work covering consent, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.",
+                      "- Current customer-master implementation spans Party, Account, Contact Point, Party Relationship, Customer 360 and authoritative Consent/Communication Authorization boundaries, with remaining 8A work covering identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof."
+                  ),
+                  (
+                      "- Consent and communication authorization is the next packet after the Customer 360 merge gate, followed by identity resolution, merge/unmerge, provenance and privacy/data operations.",
+                      "- Identity resolution is the next packet after the Consent merge gate, followed by merge/unmerge, provenance and privacy/data operations."
+                  ),
+                  (
+                      "- **Current location:** Phase 8A customer master is in progress. Party lifecycle/discovery, Account, Contact Point, Party Relationship lifecycle/hierarchy foundations and the Customer 360 implementation are complete; Customer 360 is now at its exact-head merge gate, after which Consent and communication authorization is next.",
+                      "- **Current location:** Phase 8A customer master is in progress. Party lifecycle/discovery, Account, Contact Point, Party Relationship lifecycle/hierarchy foundations and Customer 360 are merged; Consent and Communication Authorization is implementation-complete and at its post-documentation exact-head merge gate."
+                  ),
+                  (
+                      "| `crm.customer360` | Read-composition module; no authoritative customer master | **Complete / exact-head merge gate** | independently governed read-only query coordinate, strict owner-event validation, deterministic per-source contributions, indexed Party-root lookup, live source-resource authorization, least-privilege redaction, runtime projection worker, freshness metadata and fresh-PostgreSQL convergence/rebuild process acceptance |
+",
+                      "| `crm.customer360` | Read-composition module; no authoritative customer master | **Merged** | independently governed read-only query coordinate, strict owner-event validation, deterministic per-source contributions, indexed Party-root lookup, live source-resource authorization, least-privilege redaction, runtime projection worker, freshness metadata and fresh-PostgreSQL convergence/rebuild process acceptance; PR #111 merged as `30ce84c57064134202c03c07a943bcd0859e1ea9` |\n| `crm.consents` | Consent and Communication Authorization owner | **Implementation complete / exact-head merge gate** | immutable grant/deny assertions, irreversible withdrawal, exact authoritative decision precedence, cross-owner Party/Contact Point integrity, authoritative Party relationship access path, governed create/withdraw/get/list/authorize and real `crm-api` acceptance in #112 / PR #113 |\n"
+                  ),
+                  (
+                      "Customer 360 remains a rebuildable permission-aware read composition. It cannot mutate or replace any of those owner domains. PR #111 has all 11 applicable checks green together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca`; the current documentation commit intentionally makes that evidence stale until the final exact-head rerun is green.",
+                      "Customer 360 remains a rebuildable permission-aware read composition. It cannot mutate or replace any authoritative owner domain. PR #111 completed its exact-head gate on `b3bca41c393577e2da5a84bcbe0309996fbdef90` and merged as `30ce84c57064134202c03c07a943bcd0859e1ea9`. Consent decisions likewise do not use Customer 360 or search projections as authorization oracles."
+                  ),
+                  (
+                      "The current 8A position is: Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104) and Party Relationship (#108 / merged PR #109) are merged; Customer 360 (#110 / draft PR #111) is implementation-complete and at its exact-head merge gate; Consent and communication authorization follows next, then identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.",
+                      "The current 8A position is: Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship (#108 / merged PR #109) and Customer 360 (#110 / merged PR #111) are merged; Consent and Communication Authorization (#112 / draft PR #113) is implementation-complete and at its post-documentation exact-head merge gate; identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof follow as explicit later packets."
+                  ),
+                  (
+                      "1. Complete Customer 360 exact-head merge gate and merge #110 / PR #111 when all applicable checks are green on the unchanged final SHA.\n2. Begin Phase 8A.4 Consent and communication authorization against the stable merged customer-master owner contracts.\n3. Continue Phase 8A with identity resolution, merge/unmerge, provenance and privacy/data operations.\n4. Begin Phase 8B Product Catalog / CPQ / quote-to-revenue against stable customer identity contracts.\n5. Continue frontend and expert backend modules as end-to-end vertical slices while platform/security/operational hardening remains continuous.",
+                      "1. Complete the Phase 8A.4 post-documentation exact-head gate and merge #112 / PR #113 only when all applicable checks are green on one unchanged final SHA.\n2. Continue Phase 8A with identity resolution, merge/unmerge, provenance and privacy/data operations.\n3. Begin Phase 8B Product Catalog / CPQ / quote-to-revenue against stable customer identity and Consent contracts.\n4. Continue frontend and expert backend modules as end-to-end vertical slices.\n5. Keep platform/security/operational hardening continuous and evidence-backed."
+                  ),
+              ],
+          )
+
+          patch(
+              "docs/PHASE8A4_CONSENT_COMMUNICATION_AUTHORIZATION_ARCHITECTURE.md",
+              [
+                  (
+                      "Status: **Normative delivery boundary for #112**  ",
+                      "Status: **Implementation complete; final exact-head merge gate pending for #112**  "
+                  ),
+                  (
+                      "Communication authorization is a governed read over authoritative Consent records, not a rebuildable projection and not Contact Point state.",
+                      "Communication authorization is a governed read over authoritative Consent records, not a rebuildable projection and not Contact Point state. Each created assertion is atomically linked from its canonical Party through the authoritative `consents.authorization.party` relationship in the same transaction as record, outbox, audit and idempotency evidence. The decision query traverses that Party-scoped relationship and then rehydrates authoritative Consent records, avoiding both eventual-consistency dependence and tenant-wide scanning."
+                  ),
+                  (
+                      "Expected initial owner capabilities:",
+                      "Published initial owner capabilities:"
+                  ),
+                  (
+                      "Expected initial owner events:",
+                      "Published initial owner events:"
+                  ),
+                  (
+                      "Exact Protobuf package/service/message names are finalized additively before publication.",
+                      "The additive `crm.consents.v1.ConsentAuthorizationService` package/service/message names, machine-readable module bindings and generated Rust/browser descriptor identities are published and synchronized in this packet."
+                  ),
+                  (
+                      "→ transactional authoritative record + audit + outbox + idempotency\n\ncommunication authorization query\n→ governed query gateway\n→ authoritative tenant-scoped Consent candidate read\n→ deterministic decision precedence",
+                      "→ transactional authoritative record + Party-to-Consent relationship + audit + outbox + idempotency\n\ncommunication authorization query\n→ governed query gateway\n→ authoritative Party-to-Consent relationship traversal\n→ authoritative Consent record rehydration\n→ deterministic decision precedence"
+                  ),
+                  (
+                      "No Customer 360 or search projection is an authorization oracle.\n\n## 12. Acceptance gate",
+                      "No Customer 360 or search projection is an authorization oracle.\n\nImplementation evidence before the documentation synchronization: workspace-wide Clippy/format/lock synchronization succeeded for the relation-based design, and the fresh-PostgreSQL real `crm-api` process acceptance was green on code head `70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced `131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. The documentation synchronization intentionally requires a new unchanged exact-head all-workflow gate before merge.\n\n## 12. Acceptance gate"
+                  ),
+              ],
+          )
+          PY
+
+      - name: Restore standard Product Plane workflow
+        run: git show origin/main:.github/workflows/product-plane.yml > .github/workflows/product-plane.yml
+
+      - name: Commit synchronized normative documents
         run: |
-          set -o pipefail
-          pnpm web:test 2>&1 | tee product-plane-unit.log
-
-      - name: Run Web build
-        run: pnpm web:build
-
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes postgresql-client
-
-      - name: Run E2E Integration Suite
-        run: ./scripts/run_e2e.sh 2>&1 | tee product-plane-e2e.log
-
-      - name: Upload Product Plane diagnostics on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: product-plane-diagnostics
-          path: |
-            packages/client/src/contract_hashes.ts
-            product-plane-unit.log
-            product-plane-e2e.log
-            apps/web/playwright-report
-            apps/web/test-results
-          if-no-files-found: ignore
-          retention-days: 7
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/IMPLEMENTATION_ROADMAP.md docs/MODULE_CATALOG.md docs/PHASE8_DELIVERY_PLAN.md docs/PROJECT_STATUS.md docs/PHASE8A4_CONSENT_COMMUNICATION_AUTHORIZATION_ARCHITECTURE.md .github/workflows/product-plane.yml
+          git commit -m "Synchronize Phase 8A.4 normative delivery status"
+          git push origin HEAD:develop/phase8a4-consent-communication-authorization
