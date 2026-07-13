@@ -44,9 +44,7 @@ provides:
   ui_extensions: []
 
 consumes:
-  capabilities:
-    - id: parties.party.get
-      version_range: ">=1.0.0, <2.0.0"
+  capabilities: []
   events: []
 
 storage:
