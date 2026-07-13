@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt
       - uses: actions/setup-node@v4
         with:
           node-version: "24.18.0"
@@ -153,10 +153,8 @@ jobs:
               raise SystemExit("expected Contact Point Party-reference helper block not found")
           governed.write_text(text.replace(old, new))
           PY
-      - name: Apply canonical Rust maintenance
+      - name: Generate canonical Rust synchronized outputs
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
       - name: Generate canonical browser contract hashes
