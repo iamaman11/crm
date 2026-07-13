@@ -143,6 +143,18 @@ jobs:
           /tmp/reset-application-database.sh
           cargo test -p crm-api --test account_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-account-process.log
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/application-runtime-postgres.log 2>&1
+          else
+            echo "PostgreSQL service container was not found." > database/application-runtime-postgres.log
+            docker ps -a >> database/application-runtime-postgres.log 2>&1
+          fi
       - name: Upload application runtime diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -152,6 +164,7 @@ jobs:
             database/application-runtime-process.log
             database/application-runtime-party-process.log
             database/application-runtime-account-process.log
+            database/application-runtime-postgres.log
             crates/crm-application-runtime/
             crates/crm-customer-accounts-capability-adapter/
             crates/crm-customer-accounts-query-adapter/
