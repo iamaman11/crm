@@ -239,7 +239,7 @@ mod tests {
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);
         assert_eq!(
-            definition.input_contract.data_classes,
+            definition.input_contract.allowed_data_classes,
             vec![DataClass::Personal]
         );
     }
