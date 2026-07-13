@@ -10,6 +10,7 @@ on:
       - "buf.gen.web.yaml"
       - "apps/web/**"
       - "packages/client/**"
+      - "packages/ui/**"
       - ".github/workflows/product-plane.yml"
       - "scripts/run_e2e.sh"
       - "proto/**"
@@ -17,7 +18,6 @@ on:
       - "crates/crm-proto-contracts/**"
       - "services/crm-api/**"
       - "database/**"
-      - "contracts/module-contract-bindings.json"
   pull_request:
     paths:
       - "package.json"
@@ -27,6 +27,7 @@ on:
       - "buf.gen.web.yaml"
       - "apps/web/**"
       - "packages/client/**"
+      - "packages/ui/**"
       - ".github/workflows/product-plane.yml"
       - "scripts/run_e2e.sh"
       - "proto/**"
@@ -34,95 +35,24 @@ on:
       - "crates/crm-proto-contracts/**"
       - "services/crm-api/**"
       - "database/**"
-      - "contracts/module-contract-bindings.json"
 
+# Only the newest Product Plane validation for a PR/ref is useful. Cancelling stale runs
+# prevents old exact-SHA candidates from consuming hosted runners while the current head waits.
 concurrency:
   group: product-plane-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   check-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
 
-      - name: Publish crm.consents bindings
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          path = Path("contracts/module-contract-bindings.json")
-          data = json.loads(path.read_text())
-          modules = data["modules"]
-          if any(module["module_id"] == "crm.consents" for module in modules):
-              raise SystemExit("crm.consents binding already exists; one-shot sync must not duplicate it")
-          consent = {
-              "module_id": "crm.consents",
-              "capabilities": [
-                  {
-                      "id": "consents.authorization.create",
-                      "version": "1.0.0",
-                      "rpc": "crm.consents.v1.ConsentAuthorizationService.CreateConsentAuthorization",
-                      "request": "crm.consents.v1.CreateConsentAuthorizationRequest",
-                      "response": "crm.consents.v1.CreateConsentAuthorizationResponse"
-                  },
-                  {
-                      "id": "consents.authorization.withdraw",
-                      "version": "1.0.0",
-                      "rpc": "crm.consents.v1.ConsentAuthorizationService.WithdrawConsentAuthorization",
-                      "request": "crm.consents.v1.WithdrawConsentAuthorizationRequest",
-                      "response": "crm.consents.v1.WithdrawConsentAuthorizationResponse"
-                  },
-                  {
-                      "id": "consents.authorization.get",
-                      "version": "1.0.0",
-                      "rpc": "crm.consents.v1.ConsentAuthorizationService.GetConsentAuthorization",
-                      "request": "crm.consents.v1.GetConsentAuthorizationRequest",
-                      "response": "crm.consents.v1.GetConsentAuthorizationResponse"
-                  },
-                  {
-                      "id": "consents.authorization.list",
-                      "version": "1.0.0",
-                      "rpc": "crm.consents.v1.ConsentAuthorizationService.ListConsentAuthorizations",
-                      "request": "crm.consents.v1.ListConsentAuthorizationsRequest",
-                      "response": "crm.consents.v1.ListConsentAuthorizationsResponse"
-                  },
-                  {
-                      "id": "consents.communication.authorize",
-                      "version": "1.0.0",
-                      "rpc": "crm.consents.v1.ConsentAuthorizationService.AuthorizeCommunication",
-                      "request": "crm.consents.v1.AuthorizeCommunicationRequest",
-                      "response": "crm.consents.v1.AuthorizeCommunicationResponse"
-                  }
-              ],
-              "events": [
-                  {
-                      "id": "consents.authorization.created",
-                      "version": "1.0.0",
-                      "message": "crm.consents.v1.ConsentAuthorizationCreatedEvent"
-                  },
-                  {
-                      "id": "consents.authorization.withdrawn",
-                      "version": "1.0.0",
-                      "message": "crm.consents.v1.ConsentAuthorizationWithdrawnEvent"
-                  }
-              ]
-          }
-          insertion = next(
-              (index for index, module in enumerate(modules) if module["module_id"] == "crm.customer360"),
-              len(modules),
-          )
-          modules.insert(insertion, consent)
-          path.write_text(json.dumps(data, indent=2) + "\n")
-          PY
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -137,19 +67,43 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate canonical browser contract hashes
-        run: pnpm web:generate
-
-      - name: Restore standard Product Plane workflow
-        run: git show origin/main:.github/workflows/product-plane.yml > .github/workflows/product-plane.yml
-
-      - name: Commit synchronized publication artifacts
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
+      - name: Verify generated contract hashes are up-to-date
         run: |
-          git diff --check
-          git config user.name "github-actions[bot]"
-          git config user.email "4189824+github-actions[bot]@users.noreply.github.com"
-          git add contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts .github/workflows/product-plane.yml
-          git commit -m "Publish Consent contract bindings and browser hashes"
-          git push origin "HEAD:${HEAD_BRANCH}"
+          pnpm web:generate
+          git diff --exit-code packages/client/src/contract_hashes.ts
+
+      - name: Run Web typecheck
+        run: pnpm web:typecheck
+
+      - name: Run Web lint
+        run: pnpm web:lint
+
+      - name: Run Web unit tests
+        run: |
+          set -o pipefail
+          pnpm web:test 2>&1 | tee product-plane-unit.log
+
+      - name: Run Web build
+        run: pnpm web:build
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Run E2E Integration Suite
+        run: ./scripts/run_e2e.sh 2>&1 | tee product-plane-e2e.log
+
+      - name: Upload Product Plane diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-plane-diagnostics
+          path: |
+            packages/client/src/contract_hashes.ts
+            product-plane-unit.log
+            product-plane-e2e.log
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7

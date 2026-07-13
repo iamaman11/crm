@@ -320,6 +320,58 @@
       ]
     },
     {
+      "module_id": "crm.consents",
+      "capabilities": [
+        {
+          "id": "consents.authorization.create",
+          "version": "1.0.0",
+          "rpc": "crm.consents.v1.ConsentAuthorizationService.CreateConsentAuthorization",
+          "request": "crm.consents.v1.CreateConsentAuthorizationRequest",
+          "response": "crm.consents.v1.CreateConsentAuthorizationResponse"
+        },
+        {
+          "id": "consents.authorization.withdraw",
+          "version": "1.0.0",
+          "rpc": "crm.consents.v1.ConsentAuthorizationService.WithdrawConsentAuthorization",
+          "request": "crm.consents.v1.WithdrawConsentAuthorizationRequest",
+          "response": "crm.consents.v1.WithdrawConsentAuthorizationResponse"
+        },
+        {
+          "id": "consents.authorization.get",
+          "version": "1.0.0",
+          "rpc": "crm.consents.v1.ConsentAuthorizationService.GetConsentAuthorization",
+          "request": "crm.consents.v1.GetConsentAuthorizationRequest",
+          "response": "crm.consents.v1.GetConsentAuthorizationResponse"
+        },
+        {
+          "id": "consents.authorization.list",
+          "version": "1.0.0",
+          "rpc": "crm.consents.v1.ConsentAuthorizationService.ListConsentAuthorizations",
+          "request": "crm.consents.v1.ListConsentAuthorizationsRequest",
+          "response": "crm.consents.v1.ListConsentAuthorizationsResponse"
+        },
+        {
+          "id": "consents.communication.authorize",
+          "version": "1.0.0",
+          "rpc": "crm.consents.v1.ConsentAuthorizationService.AuthorizeCommunication",
+          "request": "crm.consents.v1.AuthorizeCommunicationRequest",
+          "response": "crm.consents.v1.AuthorizeCommunicationResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "consents.authorization.created",
+          "version": "1.0.0",
+          "message": "crm.consents.v1.ConsentAuthorizationCreatedEvent"
+        },
+        {
+          "id": "consents.authorization.withdrawn",
+          "version": "1.0.0",
+          "message": "crm.consents.v1.ConsentAuthorizationWithdrawnEvent"
+        }
+      ]
+    },
+    {
       "module_id": "crm.customer360",
       "capabilities": [
         {
