@@ -6,10 +6,10 @@ use crm_capability_adapters::{
 };
 use crm_capability_ingress::{
     AccessTokenGrant, AccessTokenStore, BUSINESS_TRANSACTION_HEADER, BearerTokenAuthenticator,
-    CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityCallEnvelope, CapabilityIngress,
-    CapabilityRoute, ExecutionContextResolver, HttpCapabilityBody, HttpCapabilityMiddleware,
-    HttpCapabilityRequest, IDEMPOTENCY_KEY_HEADER, REQUEST_ID_HEADER, TENANT_HEADER,
-    TIMEOUT_HEADER, TRACE_ID_HEADER, TimeoutPolicy, semantic_input_hash,
+    CAUSATION_ID_HEADER, CORRELATION_ID_HEADER, CapabilityIngress, CapabilityRoute,
+    ExecutionContextResolver, HttpCapabilityBody, HttpCapabilityMiddleware, HttpCapabilityRequest,
+    IDEMPOTENCY_KEY_HEADER, REQUEST_ID_HEADER, TENANT_HEADER, TIMEOUT_HEADER, TRACE_ID_HEADER,
+    TimeoutPolicy, semantic_input_hash,
 };
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityGateway, CapabilityRequest, CapabilitySemanticValidator,
