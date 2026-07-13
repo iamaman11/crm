@@ -216,3 +216,7 @@ This packet does not deliver:
 - marketing segmentation or service-domain ownership.
 
 Those remain explicit later owner/composition packets.
+
+## 11. Final verification rule
+
+After any implementation or normative documentation change, merge eligibility requires all applicable CI workflows to pass together on the unchanged exact head SHA. Evidence from an earlier head is non-transferable.
