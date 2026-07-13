@@ -34,60 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Repair Party Relationship projection EventDelivery fixture
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('crates/crm-party-relationships-projection/src/lib.rs')
-          text = path.read_text()
-
-          old = '        EventId, RecordId, RecordRef, RecordType, RetentionPolicyId, SchemaId, SchemaVersion,\n        TypedPayload,\n'
-          new = '        ActorId, CorrelationId, DeliveryId, EventId, EventVersion, RecordId, RecordRef,\n        RecordType, RetentionPolicyId, SchemaId, SchemaVersion, TraceId, TypedPayload,\n'
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'DeliveryId, EventId, EventVersion' not in text:
-              raise SystemExit('projection test import replacement point not found')
-
-          old = '        EventDelivery {\n            tenant_id: TenantId::try_new("tenant-a").unwrap(),\n'
-          new = '        EventDelivery {\n            delivery_id: DeliveryId::try_new("delivery-relationship-created-1").unwrap(),\n            tenant_id: TenantId::try_new("tenant-a").unwrap(),\n'
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'delivery_id: DeliveryId::try_new("delivery-relationship-created-1")' not in text:
-              raise SystemExit('delivery id insertion point not found')
-
-          old = '            source_module_id: ModuleId::try_new(PARTY_RELATIONSHIPS_MODULE_ID).unwrap(),\n            event_type: EventType::try_new(CREATED_EVENT_TYPE).unwrap(),\n            event_version: SchemaVersion::try_new(CONTRACT_VERSION).unwrap(),\n'
-          new = '            source_module_id: ModuleId::try_new(PARTY_RELATIONSHIPS_MODULE_ID).unwrap(),\n            consumer_module_id: ModuleId::try_new(PARTY_RELATIONSHIP_HIERARCHY_CONSUMER_MODULE_ID).unwrap(),\n            source_actor_id: ActorId::try_new("actor-a").unwrap(),\n            event_type: EventType::try_new(CREATED_EVENT_TYPE).unwrap(),\n            event_version: EventVersion::try_new(CONTRACT_VERSION).unwrap(),\n'
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'consumer_module_id: ModuleId::try_new(PARTY_RELATIONSHIP_HIERARCHY_CONSUMER_MODULE_ID)' not in text:
-              raise SystemExit('consumer/source actor insertion point not found')
-
-          old = '            transaction_id: None,\n            correlation_id: None,\n            causation_id: None,\n'
-          new = '            correlation_id: CorrelationId::try_new("correlation-relationship-created-1").unwrap(),\n            trace_id: TraceId::try_new("trace-relationship-created-1").unwrap(),\n'
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'trace_id: TraceId::try_new("trace-relationship-created-1")' not in text:
-              raise SystemExit('EventDelivery lineage tail replacement point not found')
-
-          path.write_text(text)
-          PY
-          cargo fmt --all
-      - name: Commit targeted projection fixture repair
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
-        run: |
-          if git diff --quiet -- crates/crm-party-relationships-projection/src/lib.rs; then
-            echo "Party Relationship projection fixture is already current."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add crates/crm-party-relationships-projection/src/lib.rs
-            git commit -m "Update Party Relationship projection delivery fixture"
-            git push origin "HEAD:${HEAD_BRANCH}"
-          fi
-      - name: Verify remaining machine-fixable Rust maintenance
+      - name: Apply machine-fixable Rust maintenance
         run: |
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
+      - name: Commit synchronized files when needed
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git push origin "HEAD:${HEAD_BRANCH}"
