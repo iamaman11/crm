@@ -566,7 +566,7 @@ fn contact_point_to_wire(
         }),
         party_ref: visibility
             .allows_field("party_ref")
-            .then(|| customer::PartyRef {
+            .then_some(customer::PartyRef {
                 party_id: snapshot.party_id,
             }),
         kind: if visibility.allows_field("kind") {
@@ -646,15 +646,15 @@ fn party_relationship_to_wire(
         }),
         from_party_ref: visibility
             .allows_field("from_party_ref")
-            .then(|| customer::PartyRef {
+            .then_some(customer::PartyRef {
                 party_id: snapshot.from_party_id,
             }),
         to_party_ref: visibility
             .allows_field("to_party_ref")
-            .then(|| customer::PartyRef {
+            .then_some(customer::PartyRef {
                 party_id: snapshot.to_party_id,
             }),
-        relationship_type: visibility.allows_field("relationship_type").then(|| {
+        relationship_type: visibility.allows_field("relationship_type").then_some({
             party_relationships::PartyRelationshipType {
                 code: snapshot.relationship_type_code,
                 directionality: directionality as i32,
