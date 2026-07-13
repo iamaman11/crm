@@ -34,152 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply Customer 360 least-privilege bootstrap visibility
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          from textwrap import dedent
-
-          runtime = Path('crates/crm-application-runtime/src/runtime.rs')
-          text = runtime.read_text()
-          start_marker = 'CUSTOMER_360_MODULE_ID => {'
-          end_marker = 'SEARCH_MODULE_ID => {'
-          start = text.index(start_marker)
-          end = text.index(end_marker, start)
-          segment = text[start:end]
-          replacements = [
-              ('party_fields()', 'customer_360_party_fields()'),
-              ('account_fields()', 'customer_360_account_fields()'),
-              ('contact_point_fields()', 'customer_360_contact_point_fields()'),
-              ('party_relationship_fields()', 'customer_360_party_relationship_fields()'),
-          ]
-          for old, new in replacements:
-              if new not in segment:
-                  if old not in segment:
-                      raise SystemExit(f'missing Customer 360 bootstrap field anchor: {old}')
-                  segment = segment.replace(old, new, 1)
-          text = text[:start] + segment + text[end:]
-          for _, new in replacements:
-              if new not in text[start:text.index(end_marker, start)]:
-                  raise SystemExit(f'Customer 360 bootstrap replacement missing: {new}')
-
-          if 'fn customer_360_party_fields()' not in text:
-              marker = '\nfn party_fields() -> BTreeSet<String> {'
-              if marker not in text:
-                  raise SystemExit('missing Customer 360 helper insertion point')
-              helpers = dedent('''
-
-              fn customer_360_party_fields() -> BTreeSet<String> {
-                  ["display_name"].into_iter().map(str::to_owned).collect()
-              }
-
-              fn customer_360_account_fields() -> BTreeSet<String> {
-                  ["name", "status"]
-                      .into_iter()
-                      .map(str::to_owned)
-                      .collect()
-              }
-
-              fn customer_360_contact_point_fields() -> BTreeSet<String> {
-                  [
-                      "party_ref",
-                      "kind",
-                      "normalized_value",
-                      "status",
-                      "preferred",
-                      "validity",
-                      "verification",
-                  ]
-                  .into_iter()
-                  .map(str::to_owned)
-                  .collect()
-              }
-
-              fn customer_360_party_relationship_fields() -> BTreeSet<String> {
-                  ["from_party_ref", "to_party_ref", "status", "validity"]
-                      .into_iter()
-                      .map(str::to_owned)
-                      .collect()
-              }
-              ''')
-              text = text.replace(marker, helpers + marker, 1)
-          runtime.write_text(text)
-
-          test = Path('services/crm-api/tests/customer_360_process_e2e.rs')
-          text = test.read_text()
-          redaction_marker = 'Customer 360 Party kind must be field-redacted by the bootstrap policy'
-          if redaction_marker not in text:
-              insertion_point = '    assert!(\n        initial\n            .freshness'
-              if insertion_point not in text:
-                  raise SystemExit('missing stable Customer 360 freshness insertion point')
-              assertions = dedent('''
-                  assert_eq!(
-                      initial
-                          .party
-                          .as_ref()
-                          .and_then(|section| section.party.as_ref())
-                          .expect("Customer 360 Party section")
-                          .kind,
-                      parties::PartyKind::Unspecified as i32,
-                      "Customer 360 Party kind must be field-redacted by the bootstrap policy"
-                  );
-                  assert!(
-                      initial.accounts[0]
-                          .account
-                          .as_ref()
-                          .expect("Customer 360 Account")
-                          .party_associations
-                          .is_empty(),
-                      "Customer 360 Account associations must be field-redacted after root selection"
-                  );
-                  assert!(
-                      initial.contact_points[0]
-                          .contact_point
-                          .as_ref()
-                          .expect("Customer 360 Contact Point")
-                          .display_value
-                          .is_empty(),
-                      "Customer 360 Contact Point display value must be field-redacted"
-                  );
-                  assert!(
-                      initial.party_relationships[0]
-                          .party_relationship
-                          .as_ref()
-                          .expect("Customer 360 Party Relationship")
-                          .relationship_type
-                          .is_none(),
-                      "Customer 360 Party Relationship type must be field-redacted"
-                  );
-
-              ''')
-              text = text.replace(insertion_point, assertions + insertion_point, 1)
-          required = [
-              redaction_marker,
-              'Customer 360 Account associations must be field-redacted after root selection',
-              'Customer 360 Contact Point display value must be field-redacted',
-              'Customer 360 Party Relationship type must be field-redacted',
-          ]
-          missing = [value for value in required if value not in text]
-          if missing:
-              raise SystemExit(f'missing Customer 360 redaction assertions: {missing}')
-          test.write_text(text)
-          PY
-      - name: Verify Customer 360 redaction composition compiles
-        run: |
-          cargo fmt --all
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
           cargo generate-lockfile
-          cargo check -p crm-application-runtime --all-targets
-          cargo check -p crm-api --test customer_360_process_e2e
-      - name: Commit verified Customer 360 field redaction acceptance
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates/crm-application-runtime/src/runtime.rs services/crm-api/tests/customer_360_process_e2e.rs
-          if git diff --cached --quiet; then
-            echo "Customer 360 field redaction acceptance already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
             exit 0
           fi
-          git commit -m "Prove Customer 360 field redaction with least-privilege bootstrap grants"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
