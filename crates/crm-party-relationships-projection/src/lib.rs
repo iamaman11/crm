@@ -230,8 +230,13 @@ fn hierarchy_writes(delivery: &EventDelivery) -> Result<Vec<ProjectionDocumentWr
         .to_party_ref
         .as_ref()
         .ok_or_else(|| projection_event_invalid("to Party reference is missing"))?;
-    if from_party.party_id.is_empty() || to_party.party_id.is_empty() || from_party.party_id == to_party.party_id {
-        return Err(projection_event_invalid("relationship Party endpoints are invalid"));
+    if from_party.party_id.is_empty()
+        || to_party.party_id.is_empty()
+        || from_party.party_id == to_party.party_id
+    {
+        return Err(projection_event_invalid(
+            "relationship Party endpoints are invalid",
+        ));
     }
     let relationship_type = relationship
         .relationship_type
@@ -349,9 +354,9 @@ fn directionality_name(value: i32) -> Result<&'static str, SdkError> {
     match wire::PartyRelationshipDirectionality::try_from(value) {
         Ok(wire::PartyRelationshipDirectionality::Directional) => Ok("directional"),
         Ok(wire::PartyRelationshipDirectionality::Reciprocal) => Ok("reciprocal"),
-        Ok(wire::PartyRelationshipDirectionality::Unspecified) | Err(_) => {
-            Err(projection_event_invalid("relationship directionality is invalid"))
-        }
+        Ok(wire::PartyRelationshipDirectionality::Unspecified) | Err(_) => Err(
+            projection_event_invalid("relationship directionality is invalid"),
+        ),
     }
 }
 

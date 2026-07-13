@@ -215,11 +215,7 @@ fn validate_reserved_builtin_semantics(
             "parent",
             "subsidiary",
         )),
-        "partner" => Some((
-            RelationshipDirectionality::Reciprocal,
-            "partner",
-            "partner",
-        )),
+        "partner" => Some((RelationshipDirectionality::Reciprocal, "partner", "partner")),
         "advisor" => Some((
             RelationshipDirectionality::Directional,
             "advisor",
@@ -866,7 +862,10 @@ mod tests {
             occurred_at_unix_nanos: 1,
         })
         .unwrap_err();
-        assert_eq!(invalid_validity.code, "PARTY_RELATIONSHIPS_VALIDITY_INVALID");
+        assert_eq!(
+            invalid_validity.code,
+            "PARTY_RELATIONSHIPS_VALIDITY_INVALID"
+        );
 
         let mut value = relationship();
         let original = value.clone();

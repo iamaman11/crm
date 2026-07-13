@@ -50,8 +50,7 @@ use crm_party_relationships_capability_adapter::{
     referenced_party_ids_from_create as referenced_relationship_party_ids_from_create,
 };
 use crm_party_relationships_query_adapter::{
-    PartyRelationshipQueryAdapter,
-    QUERY_CAPABILITY_IDS as PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS,
+    PartyRelationshipQueryAdapter, QUERY_CAPABILITY_IDS as PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS,
     query_capability_definitions as party_relationship_query_capability_definitions,
 };
 use crm_query_runtime::{
