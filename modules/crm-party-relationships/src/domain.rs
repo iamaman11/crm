@@ -102,6 +102,8 @@ impl RelationshipType {
             _ => {}
         }
 
+        validate_reserved_builtin_semantics(&code, directionality, &from_role, &to_role)?;
+
         Ok(Self {
             code,
             directionality,
@@ -189,6 +191,61 @@ impl RelationshipType {
         Self::try_new(code, directionality, from_role, to_role)
             .expect("static Party Relationship semantics must be valid")
     }
+}
+
+fn validate_reserved_builtin_semantics(
+    code: &str,
+    directionality: RelationshipDirectionality,
+    from_role: &str,
+    to_role: &str,
+) -> Result<(), SdkError> {
+    let expected = match code {
+        "employment" => Some((
+            RelationshipDirectionality::Directional,
+            "employer",
+            "employee",
+        )),
+        "household" => Some((
+            RelationshipDirectionality::Reciprocal,
+            "household_member",
+            "household_member",
+        )),
+        "parent_subsidiary" => Some((
+            RelationshipDirectionality::Directional,
+            "parent",
+            "subsidiary",
+        )),
+        "partner" => Some((
+            RelationshipDirectionality::Reciprocal,
+            "partner",
+            "partner",
+        )),
+        "advisor" => Some((
+            RelationshipDirectionality::Directional,
+            "advisor",
+            "advisee",
+        )),
+        "guarantor" => Some((
+            RelationshipDirectionality::Directional,
+            "guarantor",
+            "guaranteed_party",
+        )),
+        _ => None,
+    };
+    if let Some((expected_directionality, expected_from_role, expected_to_role)) = expected
+        && (directionality != expected_directionality
+            || from_role != expected_from_role
+            || to_role != expected_to_role)
+    {
+        return Err(invalid(
+            "PARTY_RELATIONSHIPS_RESERVED_TYPE_SEMANTICS_INVALID",
+            "party_relationship.relationship_type",
+            format!(
+                "reserved relationship type '{code}' must use its canonical directionality and endpoint roles"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -719,6 +776,33 @@ mod tests {
     }
 
     #[test]
+    fn rejects_redefinition_of_reserved_builtin_semantics() {
+        let wrong_directionality = RelationshipType::try_new(
+            "employment",
+            RelationshipDirectionality::Reciprocal,
+            "employee",
+            "employee",
+        )
+        .unwrap_err();
+        assert_eq!(
+            wrong_directionality.code,
+            "PARTY_RELATIONSHIPS_RESERVED_TYPE_SEMANTICS_INVALID"
+        );
+
+        let wrong_roles = RelationshipType::try_new(
+            "parent_subsidiary",
+            RelationshipDirectionality::Directional,
+            "owner",
+            "owned",
+        )
+        .unwrap_err();
+        assert_eq!(
+            wrong_roles.code,
+            "PARTY_RELATIONSHIPS_RESERVED_TYPE_SEMANTICS_INVALID"
+        );
+    }
+
+    #[test]
     fn normalizes_bounded_custom_semantics_deterministically() {
         let relationship_type = RelationshipType::try_new(
             "  Strategic_Partner  ",
@@ -782,10 +866,7 @@ mod tests {
             occurred_at_unix_nanos: 1,
         })
         .unwrap_err();
-        assert_eq!(
-            invalid_validity.code,
-            "PARTY_RELATIONSHIPS_VALIDITY_INVALID"
-        );
+        assert_eq!(invalid_validity.code, "PARTY_RELATIONSHIPS_VALIDITY_INVALID");
 
         let mut value = relationship();
         let original = value.clone();
