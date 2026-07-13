@@ -25,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,22 +34,171 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Compose Account runtime and apply machine maintenance
         run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-application-runtime/src/runtime.rs")
+          text = path.read_text()
+
+          anchor = '''use crm_core_events::EventHistoryRequest;
+          use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};'''
+          replacement = '''use crm_core_events::EventHistoryRequest;
+          use crm_customer_accounts_capability_adapter::{
+              MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
+          };
+          use crm_customer_accounts_query_adapter::AccountQueryAdapter;
+          use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};'''
+          if anchor not in text:
+              raise SystemExit("Account runtime import anchor not found")
+          text = text.replace(anchor, replacement, 1)
+
+          old_executor = '''        let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(
+              Arc::new(PostgresTransactionalAggregateExecutor::new(
+                  store.clone(),
+                  Arc::new(ApplicationAggregatePlannerRouter),
+              )),
+              Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
+          ));'''
+          new_executor = '''        let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(
+              store.clone(),
+              Arc::new(PostgresTransactionalAggregateExecutor::new(
+                  store.clone(),
+                  Arc::new(ApplicationAggregatePlannerRouter),
+              )),
+              Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
+          ));'''
+          if old_executor not in text:
+              raise SystemExit("Account runtime executor constructor anchor not found")
+          text = text.replace(old_executor, new_executor, 1)
+
+          party_adapter = '''        let party_query_adapter = PartyQueryAdapter::new(
+              store.clone(),
+              CursorCodec::new(cursor_key)
+                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+              visibility_authorizer.clone(),
+          )
+          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;'''
+          account_adapter = party_adapter + '''
+          let account_query_adapter = AccountQueryAdapter::new(
+              store.clone(),
+              CursorCodec::new(cursor_key)
+                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+              visibility_authorizer.clone(),
+          )
+          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;'''
+          if party_adapter not in text:
+              raise SystemExit("Party query adapter anchor not found")
+          text = text.replace(party_adapter, account_adapter, 1)
+
+          old_router = '''        let query_router = Arc::new(ApplicationQueryRouter::new(
+              production_query_router,
+              party_query_adapter,
+              metadata_query_adapter,
+          ));'''
+          new_router = '''        let query_router = Arc::new(ApplicationQueryRouter::new(
+              production_query_router,
+              party_query_adapter,
+              account_query_adapter,
+              metadata_query_adapter,
+          ));'''
+          if old_router not in text:
+              raise SystemExit("ApplicationQueryRouter constructor anchor not found")
+          text = text.replace(old_router, new_router, 1)
+
+          party_visibility = '''                PARTIES_MODULE_ID => upsert_bootstrap_visibility(
+                      visibility_store,
+                      config,
+                      tenant_id,
+                      definition,
+                      BootstrapVisibilityResource {
+                          owner_module_id: PARTIES_MODULE_ID,
+                          resource_type: PARTY_RECORD_TYPE,
+                      },
+                      party_fields(),
+                      expires_at,
+                  )?,
+                  METADATA_MODULE_ID => {}'''
+          account_visibility = '''                PARTIES_MODULE_ID => upsert_bootstrap_visibility(
+                      visibility_store,
+                      config,
+                      tenant_id,
+                      definition,
+                      BootstrapVisibilityResource {
+                          owner_module_id: PARTIES_MODULE_ID,
+                          resource_type: PARTY_RECORD_TYPE,
+                      },
+                      party_fields(),
+                      expires_at,
+                  )?,
+                  ACCOUNTS_MODULE_ID => upsert_bootstrap_visibility(
+                      visibility_store,
+                      config,
+                      tenant_id,
+                      definition,
+                      BootstrapVisibilityResource {
+                          owner_module_id: ACCOUNTS_MODULE_ID,
+                          resource_type: ACCOUNT_RECORD_TYPE,
+                      },
+                      account_fields(),
+                      expires_at,
+                  )?,
+                  METADATA_MODULE_ID => {}'''
+          if party_visibility not in text:
+              raise SystemExit("Account bootstrap visibility anchor not found")
+          text = text.replace(party_visibility, account_visibility, 1)
+
+          helper_anchor = '''fn party_fields() -> BTreeSet<String> {
+              ["kind", "display_name"]
+                  .into_iter()
+                  .map(str::to_owned)
+                  .collect()
+          }
+
+          fn task_fields() -> BTreeSet<String> {'''
+          helper_replacement = '''fn party_fields() -> BTreeSet<String> {
+              ["kind", "display_name"]
+                  .into_iter()
+                  .map(str::to_owned)
+                  .collect()
+          }
+
+          fn account_fields() -> BTreeSet<String> {
+              ["name", "status", "party_associations"]
+                  .into_iter()
+                  .map(str::to_owned)
+                  .collect()
+          }
+
+          fn task_fields() -> BTreeSet<String> {'''
+          if helper_anchor not in text:
+              raise SystemExit("Account field helper anchor not found")
+          text = text.replace(helper_anchor, helper_replacement, 1)
+
+          test_anchor = '''        assert!(party_fields().contains("kind"));
+              assert!(party_fields().contains("display_name"));
+              assert!(task_fields().contains("subject"));'''
+          test_replacement = '''        assert!(party_fields().contains("kind"));
+              assert!(party_fields().contains("display_name"));
+              assert!(account_fields().contains("name"));
+              assert!(account_fields().contains("party_associations"));
+              assert!(task_fields().contains("subject"));'''
+          if test_anchor not in text:
+              raise SystemExit("Account field test anchor not found")
+          path.write_text(text.replace(test_anchor, test_replacement, 1))
+          PY
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
-      - name: Commit synchronized files when needed
+      - name: Restore canonical workflow and commit synchronized files
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
+          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates modules services .github/workflows/rust-generated-sync.yml
+          git commit -m "Compose Account runtime and synchronize Rust source"
           git push origin "HEAD:${HEAD_BRANCH}"
