@@ -34,10 +34,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Repair known Customer 360 registry API mismatch
+      - name: Repair Customer 360 foundation fixtures
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path('crates/crm-customer-360-composition/src/lib.rs')
           text = path.read_text()
           text = text.replace(
@@ -50,31 +52,25 @@ jobs:
               'definition.event_types().len()',
               1,
           )
+          text, replacements = re.subn(
+              r'customer::CustomerResourceVersion \{ version: (\d+) \}',
+              r'customer::CustomerResourceVersion { version: \1, ..Default::default() }',
+              text,
+          )
+          if replacements != 3 and '..Default::default()' not in text:
+              raise SystemExit(f'expected three CustomerResourceVersion fixture replacements, found {replacements}')
+          text = text.replace('                owner_module_id: module_id.clone(),\n', '', 1)
+          if '.get(CUSTOMER_360_PROJECTION_ID)' not in text:
+              raise SystemExit('projection registry fixture repair failed')
+          if 'owner_module_id: module_id.clone()' in text:
+              raise SystemExit('stale RecordRef owner_module_id fixture field remains')
           path.write_text(text)
           PY
           cargo fmt --all
           cargo generate-lockfile
-      - name: Capture targeted Customer 360 compile diagnostics
-        id: check
-        shell: bash
-        run: |
-          set +e
-          set -o pipefail
-          cargo check -p crm-customer-360-composition --all-targets 2>&1 | tee customer-360-check.log
-          status=${PIPESTATUS[0]}
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Upload targeted diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: customer-360-foundation-diagnostics
-          path: customer-360-check.log
-          if-no-files-found: error
-          retention-days: 7
-      - name: Fail after diagnostics when targeted check failed
-        if: steps.check.outputs.status != '0'
-        run: exit 1
-      - name: Commit synchronized foundation when targeted check passes
+      - name: Verify targeted Customer 360 foundation
+        run: cargo check -p crm-customer-360-composition --all-targets
+      - name: Commit synchronized foundation
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
