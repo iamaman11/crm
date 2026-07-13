@@ -1,0 +1,126 @@
+name: Phase 8A.3c Projection Runtime Wiring
+
+on:
+  push:
+    branches:
+      - develop/phase8a3c-party-relationship
+    paths:
+      - ".phase8a3c-projection-runtime-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a3c-party-relationship
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Wire hierarchy projection into production background cycle
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/crm-application-runtime/src/runtime.rs')
+          text = path.read_text()
+
+          query_import = 'use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;\n'
+          projection_import = (
+              query_import
+              + 'use crm_party_relationships_projection::{\n'
+              + '    PARTY_RELATIONSHIP_HIERARCHY_PROJECTION_ID, PartyRelationshipHierarchyProjectionWorker,\n'
+              + '};\n'
+          )
+          if 'PartyRelationshipHierarchyProjectionWorker' not in text:
+              if text.count(query_import) != 1:
+                  raise SystemExit('expected one Party Relationship query import anchor')
+              text = text.replace(query_import, projection_import, 1)
+
+          field_anchor = '    pub projection_worker: Arc<Phase6ProjectionWorker>,\n'
+          field_insert = field_anchor + '    pub party_relationship_projection_worker: Arc<PartyRelationshipHierarchyProjectionWorker>,\n'
+          if 'pub party_relationship_projection_worker:' not in text:
+              if text.count(field_anchor) != 1:
+                  raise SystemExit('expected one projection worker field anchor')
+              text = text.replace(field_anchor, field_insert, 1)
+
+          init_anchor = '        let projection_worker = Arc::new(Phase6ProjectionWorker::new(store.clone()));\n'
+          init_insert = (
+              init_anchor
+              + '        let party_relationship_projection_worker = Arc::new(\n'
+              + '            PartyRelationshipHierarchyProjectionWorker::new(store.clone())\n'
+              + '                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n'
+              + '        );\n'
+          )
+          if 'let party_relationship_projection_worker = Arc::new(' not in text:
+              if text.count(init_anchor) != 1:
+                  raise SystemExit('expected one projection worker initialization anchor')
+              text = text.replace(init_anchor, init_insert, 1)
+
+          component_anchor = '            projection_worker,\n            search_worker,\n'
+          component_insert = '            projection_worker,\n            party_relationship_projection_worker,\n            search_worker,\n'
+          if '            party_relationship_projection_worker,\n            search_worker,' not in text:
+              if text.count(component_anchor) != 1:
+                  raise SystemExit('expected one component projection anchor')
+              text = text.replace(component_anchor, component_insert, 1)
+
+          cycle_anchor = '''        drain_projection(
+            &components.projection_worker,
+            tenant_id.clone(),
+            TASK_STATUS_PROJECTION_ID,
+        )
+        .await?;
+'''
+          cycle_insert = cycle_anchor + '''        drain_party_relationship_projection(
+            &components.party_relationship_projection_worker,
+            tenant_id.clone(),
+        )
+        .await?;
+'''
+          if 'drain_party_relationship_projection(' not in text:
+              if text.count(cycle_anchor) != 1:
+                  raise SystemExit('expected one task projection cycle anchor')
+              text = text.replace(cycle_anchor, cycle_insert, 1)
+
+          helper_anchor = 'async fn scan_link_events(\n'
+          helper = '''async fn drain_party_relationship_projection(
+    worker: &PartyRelationshipHierarchyProjectionWorker,
+    tenant_id: TenantId,
+) -> Result<(), ApplicationRuntimeError> {
+    loop {
+        let result = worker
+            .run_batch(tenant_id.clone(), PROJECTION_PAGE_SIZE)
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+        if !result.has_more {
+            return Ok(());
+        }
+    }
+}
+
+'''
+          if 'async fn drain_party_relationship_projection(' not in text:
+              if text.count(helper_anchor) != 1:
+                  raise SystemExit('expected one scan link helper anchor')
+              text = text.replace(helper_anchor, helper + helper_anchor, 1)
+
+          if 'PARTY_RELATIONSHIP_HIERARCHY_PROJECTION_ID' not in text:
+              raise SystemExit('projection id import was not retained')
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          cargo check -p crm-application-runtime
+          cargo test -p crm-application-runtime field_bootstrap_sets_are_nonempty_and_stable
+      - name: Commit validated runtime wiring and remove one-shot gate
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/phase8a3c-projection-runtime-wiring.yml .phase8a3c-projection-runtime-trigger
+          git add crates/crm-application-runtime/src/runtime.rs
+          git commit -m "Run Party Relationship hierarchy projection in crm-api"
+          git push origin HEAD:develop/phase8a3c-party-relationship
