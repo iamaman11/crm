@@ -84,20 +84,4 @@ VALUES
     false,
     ARRAY['personal']::text[]
   )
-ON CONFLICT (capability_id, capability_version)
-DO UPDATE SET
-  owner_module_id = EXCLUDED.owner_module_id,
-  owner_module_version = EXCLUDED.owner_module_version,
-  service_name = EXCLUDED.service_name,
-  method_name = EXCLUDED.method_name,
-  input_descriptor_hash = EXCLUDED.input_descriptor_hash,
-  output_descriptor_hash = EXCLUDED.output_descriptor_hash,
-  risk_level = EXCLUDED.risk_level,
-  idempotency_required = EXCLUDED.idempotency_required,
-  audit_required = EXCLUDED.audit_required,
-  approval_required = EXCLUDED.approval_required,
-  ai_callable = EXCLUDED.ai_callable,
-  marketplace_callable = EXCLUDED.marketplace_callable,
-  bulk_allowed = EXCLUDED.bulk_allowed,
-  export_allowed = EXCLUDED.export_allowed,
-  data_classes_touched = EXCLUDED.data_classes_touched;
+ON CONFLICT (capability_id, capability_version) DO NOTHING;
