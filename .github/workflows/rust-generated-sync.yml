@@ -38,22 +38,17 @@ jobs:
 
           path = Path("services/crm-api/tests/account_process_e2e.rs")
           text = path.read_text()
-          anchor = '''    admin
-              .execute(sqlx::raw_sql(include_str!(
-                  "../../../database/tests/0006_account_adapter.sql"
-              )))
-              .await
-              .expect("publish Account module/capability registry fixture");'''
-          replacement = anchor + '''
-              admin
-              .execute(sqlx::raw_sql(
-                  "INSERT INTO crm.actors (tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id) VALUES ('tenant-b', 'actor-a', 'service', 'active', 'Account acceptance cross-tenant actor', 'account-process-actor-bootstrap') ON CONFLICT (tenant_id, actor_id) DO NOTHING;",
-              ))
-              .await
-              .expect("provision Account acceptance actor in tenant B");'''
+          anchor = '        .expect("publish Account module/capability registry fixture");'
+          addition = '''
+    admin
+        .execute(sqlx::raw_sql(
+            "INSERT INTO crm.actors (tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id) VALUES ('tenant-b', 'actor-a', 'service', 'active', 'Account acceptance cross-tenant actor', 'account-process-actor-bootstrap') ON CONFLICT (tenant_id, actor_id) DO NOTHING;",
+        ))
+        .await
+        .expect("provision Account acceptance actor in tenant B");'''
           if anchor not in text:
               raise SystemExit("Account acceptance fixture anchor not found")
-          path.write_text(text.replace(anchor, replacement, 1))
+          path.write_text(text.replace(anchor, anchor + addition, 1))
           PY
       - name: Restore canonical workflow and commit prerequisite fix
         env:
