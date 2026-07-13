@@ -1,0 +1,57 @@
+name: Phase 8A.2 Party Fixture Sync
+
+on:
+  push:
+    branches:
+      - develop/phase8a2-party-vertical-slice
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase8a2-party-fixture-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a2-party-vertical-slice
+          fetch-depth: 0
+
+      - name: Add Party registry fixture to permanent CI setup paths
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          for filename in [
+              '.github/workflows/application-runtime.yml',
+              '.github/workflows/database.yml',
+          ]:
+              path = Path(filename)
+              text = path.read_text()
+              fixture = '          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql\n'
+              if fixture in text:
+                  continue
+              anchor = '          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql\n'
+              count = text.count(anchor)
+              if count != 1:
+                  raise SystemExit(f'expected one fixture anchor in {filename}, got {count}')
+              path.write_text(text.replace(anchor, anchor + fixture, 1))
+          PY
+
+      - name: Commit permanent CI fixture wiring
+        run: |
+          git add .github/workflows/application-runtime.yml .github/workflows/database.yml
+          if git diff --cached --quiet; then
+            echo "Party fixture is already wired into permanent CI."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Seed Party capability registry in production acceptance CI"
+          git push origin HEAD:develop/phase8a2-party-vertical-slice
