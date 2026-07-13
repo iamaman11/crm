@@ -87,11 +87,9 @@ Search remains candidate-only and rebuildable. It does not own Party identity.
 
 ### 8A.3 — Account, Contact Point, Party Relationship and Customer 360 — In progress
 
-#### 8A.3a — authoritative Account lifecycle and Party associations — Complete in PR #102 pending merge
+#### 8A.3a — authoritative Account lifecycle and Party associations — Complete
 
-Tracked by #101 / PR #102 under #100.
-
-Delivered in the packet:
+Delivered by #101 / merged PR #102 under #100:
 
 - immutable typed Account identity owned solely by `crm.customer-accounts`;
 - normalized bounded Account name and explicit Active/Inactive lifecycle;
@@ -108,19 +106,41 @@ Delivered in the packet:
 - real PostgreSQL + real `crm-api` acceptance covering prerequisite Party creation, reference integrity, create, replay, get, update, update replay, stale version, cursor pagination, status filtering, unauthenticated rejection, cross-tenant non-disclosure and durable evidence counts;
 - independent fresh-database process acceptance for full application, Party and Account scenarios.
 
+Final verified review head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4` passed all 11 applicable workflows together. PR #102 merged to `main` as `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`.
+
 This packet intentionally does **not** absorb Contact Point, Party Relationship, hierarchy or Customer 360 projection ownership into Account.
 
-#### 8A.3b — Contact Point lifecycle, verification and preference — Next
+#### 8A.3b — Contact Point lifecycle, verification and preference — Active
 
-Deliver:
+Tracked by #103. Implementation branch: `develop/phase8a3b-contact-point-lifecycle`.
 
-- canonical email, phone, postal, web and messaging endpoint ownership under `crm.contact-points`;
-- normalized typed channel values without leaking provider-specific transport models into the domain;
-- verified/unverified state with explicit verification evidence boundaries;
-- active/inactive/validity semantics and preferred contact-point rules;
-- Party and, where justified, Account attachment through stable references;
-- optimistic lifecycle mutations, permission-aware reads/lists and process-level PostgreSQL acceptance;
-- consent/preferences remain separate authoritative ownership rather than hidden Contact Point flags.
+Current branch foundation already contains:
+
+- typed Contact Point identity and stable Party reference;
+- Email, Phone, Postal, Web and Messaging kinds;
+- Active/Inactive lifecycle;
+- preferred flag and validity interval state;
+- explicit Unverified/Verified state with verification evidence reference and verification time;
+- create/update/verify commands with exact expected-version progression;
+- automatic verification reset when the endpoint value changes;
+- canonical channel-value normalization/validation foundations;
+- domain dependencies required for URL/IDNA and deterministic persisted-state work.
+
+The branch is currently two commits ahead of `main` and is **not yet production-complete**.
+
+Remaining packet scope:
+
+- complete domain review and tests for all channel normalization/validity/preference invariants;
+- strict deterministic persisted Contact Point state contract;
+- versioned public Protobuf create/update/verify/get/list and event contracts;
+- governed mutation and permission-aware query adapters;
+- Party-reference integrity in application/platform composition without direct cross-owner storage access from the owner module;
+- immutable manifest/contract bindings and generated Rust/browser descriptors;
+- application-runtime composition and field-bounded visibility bootstrap;
+- real PostgreSQL + real `crm-api` process acceptance for lifecycle, verification reset, replay/conflict, filtering, cursor pagination and tenant non-disclosure;
+- one exact-head green applicable CI set before merge.
+
+Consent and communication authorization remain separate authoritative ownership rather than hidden Contact Point flags.
 
 #### 8A.3c — Party Relationship lifecycle and hierarchy foundations
 
@@ -233,4 +253,4 @@ Deliver SSO/OIDC/SAML, SCIM, tenant key hierarchy, field/data-class encryption w
 
 A packet is merged when its natural architecture boundary is complete and all applicable exact-head gates are green. Later packets build from merged stable contracts rather than from a single accumulating Phase 8 mega-branch.
 
-No phase or module is considered product-complete merely because schemas or crates exist. Readiness classification follows `CRM_CAPABILITY_COVERAGE.md` and distinguishes production-complete, platform-ready, planned, optional/vertical and external-integration capabilities.
+No phase or module is considered product-complete merely because schemas or crates exist. Readiness classification must follow `CRM_CAPABILITY_COVERAGE.md` and distinguish production-complete, platform-ready, planned, optional/vertical and external-integration capabilities.
