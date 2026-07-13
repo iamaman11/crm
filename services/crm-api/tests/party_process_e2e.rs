@@ -347,7 +347,7 @@ fn query_definition(capability_id: &str) -> CapabilityDefinition {
 fn payload<M: Message>(definition: &CapabilityDefinition, message: M) -> TypedPayload {
     let data_class = *definition
         .input_contract
-        .data_classes
+        .allowed_data_classes
         .first()
         .expect("governed input contract must declare a data class");
     let payload = TypedPayload {
