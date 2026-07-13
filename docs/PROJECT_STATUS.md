@@ -145,7 +145,9 @@ Final verified review head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4` passed all
 
 ### 8A.3b — Contact Point lifecycle, verification and preference — Active
 
-Issue #103 is active. The implementation branch `develop/phase8a3b-contact-point-lifecycle` is currently two commits ahead of `main` and contains the first owner-domain foundation:
+Issue #103 is active. The implementation branch `develop/phase8a3b-contact-point-lifecycle` currently contains the first two Contact Point product-code commits: owner-module dependency updates and the new domain foundation.
+
+That foundation includes:
 
 - typed Contact Point identity and stable Party reference;
 - Email, Phone, Postal, Web and Messaging kinds;
