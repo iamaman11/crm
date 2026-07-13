@@ -1,0 +1,63 @@
+name: Phase 8A.3c Process Test Hardening
+
+on:
+  push:
+    branches:
+      - develop/phase8a3c-party-relationship
+    paths:
+      - ".phase8a3c-process-test-hardening-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a3c-party-relationship
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Correct traversal assertion and synchronize targeted Rust maintenance
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('services/crm-api/tests/party_relationship_process_e2e.rs')
+          text = path.read_text()
+          old = '''    let inactive_traversal =
+        traverse_projected_hierarchy(&projected_before_rebuild, &employer_id, 1, now_unix_nanos());
+    assert_eq!(
+        inactive_traversal,
+        BTreeMap::from([(employer_id.clone(), 0)])
+    );
+'''
+          new = '''    let inactive_traversal =
+        traverse_projected_hierarchy(&projected_before_rebuild, &employee_id, 1, now_unix_nanos());
+    assert_eq!(
+        inactive_traversal,
+        BTreeMap::from([(employee_id.clone(), 0)])
+    );
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one inactive traversal assertion, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          cargo clippy --fix -p crm-api --test party_relationship_process_e2e --allow-dirty --allow-staged -- -W clippy::all
+          cargo generate-lockfile
+          cargo fmt --all
+          cargo clippy -p crm-api --test party_relationship_process_e2e -- -D warnings
+          cargo test -p crm-party-relationships-projection
+      - name: Commit validated acceptance maintenance and remove one-shot gate
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/phase8a3c-process-test-hardening.yml .phase8a3c-process-test-hardening-trigger
+          git add Cargo.lock services/crm-api/tests/party_relationship_process_e2e.rs
+          git commit -m "Harden Party Relationship process acceptance"
+          git push origin HEAD:develop/phase8a3c-party-relationship
