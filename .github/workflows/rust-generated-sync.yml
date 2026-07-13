@@ -34,52 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Repair Customer 360 foundation fixtures
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path('crates/crm-customer-360-composition/src/lib.rs')
-          text = path.read_text()
-          text = text.replace(
-              '.definition(CUSTOMER_360_PROJECTION_ID)',
-              '.get(CUSTOMER_360_PROJECTION_ID)',
-              1,
-          )
-          text = text.replace(
-              'definition.event_types.len()',
-              'definition.event_types().len()',
-              1,
-          )
-          text, replacements = re.subn(
-              r'customer::CustomerResourceVersion \{ version: (\d+) \}',
-              r'customer::CustomerResourceVersion { version: \1, ..Default::default() }',
-              text,
-          )
-          if replacements != 3 and '..Default::default()' not in text:
-              raise SystemExit(f'expected three CustomerResourceVersion fixture replacements, found {replacements}')
-          text = text.replace('                owner_module_id: module_id.clone(),\n', '', 1)
-          if '.get(CUSTOMER_360_PROJECTION_ID)' not in text:
-              raise SystemExit('projection registry fixture repair failed')
-          if 'owner_module_id: module_id.clone()' in text:
-              raise SystemExit('stale RecordRef owner_module_id fixture field remains')
-          path.write_text(text)
-          PY
-          cargo fmt --all
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
           cargo generate-lockfile
-      - name: Verify targeted Customer 360 foundation
-        run: cargo check -p crm-customer-360-composition --all-targets
-      - name: Commit synchronized foundation
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates/crm-customer-360-composition/src/lib.rs
-          if git diff --cached --quiet; then
-            echo "Customer 360 foundation is already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
             exit 0
           fi
-          git commit -m "Synchronize Customer 360 Rust foundation"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
