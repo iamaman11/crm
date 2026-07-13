@@ -4,12 +4,23 @@ on:
   push:
     branches:
       - develop/phase8a2-party-vertical-slice
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
+      - "services/crm-api/tests/party_process_e2e.rs"
+      - ".github/workflows/database.yml"
+      - ".github/workflows/phase8a2-maintenance-sync.yml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: phase8a2-maintenance-sync
+  group: phase8a2-maintenance-sync-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -105,6 +116,7 @@ jobs:
           retention-days: 7
 
       - name: Commit synchronized files only
+        if: github.event_name == 'push'
         run: |
           git add \
             Cargo.lock \
