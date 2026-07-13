@@ -1,4 +1,10 @@
-import { useMemo, useSyncExternalStore, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useMemo,
+  useSyncExternalStore,
+  useState,
+} from "react";
 import {
   GovernedClient,
   GovernedMetadataClient,
@@ -15,12 +21,22 @@ import {
   routeForPath,
   type KnownProductCapability,
   type NavigationAccessSnapshot,
+  type ProductEnvironment,
 } from "./routes";
 
 const sessionStore = createDevelopmentSessionStore();
 if (import.meta.env.DEV) {
   window.sessionStore = sessionStore;
 }
+const productEnvironment: ProductEnvironment = {
+  development: import.meta.env.DEV,
+};
+const DevelopmentRecordPage = import.meta.env.DEV
+  ? lazy(async () => {
+      const module = await import("./RecordPage");
+      return { default: module.RecordPage };
+    })
+  : null;
 const client = new GovernedClient({
   baseUrl: window.location.origin,
   sessionProvider: sessionStore,
@@ -38,7 +54,7 @@ export function App() {
   const access = useMemo(() => developmentAccessSnapshot(), []);
   const currentRoute = routeForPath(window.location.pathname);
   const navigation = PRODUCT_ROUTES.filter((route) =>
-    canNavigateToRoute(route, session, access),
+    canNavigateToRoute(route, session, access, productEnvironment),
   ).map((route) => ({
     id: route.id,
     href: route.path,
@@ -91,7 +107,7 @@ function RouteContent({
     );
   }
 
-  if (!canNavigateToRoute(route, session, access)) {
+  if (!canNavigateToRoute(route, session, access, productEnvironment)) {
     return (
       <>
         <PageHeader eyebrow="Navigation" title="Route unavailable" />
@@ -110,15 +126,27 @@ function RouteContent({
     return <AdminStudioPage client={metadataClient} />;
   }
 
+  if (route.id === "record-extension-proof" && DevelopmentRecordPage) {
+    return (
+      <Suspense
+        fallback={
+          <FeedbackPanel tone="neutral" title="Loading record host…" busy />
+        }
+      >
+        <DevelopmentRecordPage />
+      </Suspense>
+    );
+  }
+
   return (
     <>
       <PageHeader
         eyebrow="Phase 7"
         title="Product shell foundation"
-        description="A typed product-plane boundary for Admin Studio and expert CRM domain waves. Business invariants, authorization and authoritative state remain on the governed backend path."
+        description="A typed product-plane boundary for Admin Studio, isolated UI extensions and expert CRM domain waves. Business invariants, authorization and authoritative state remain on the governed backend path."
       />
       <FeedbackPanel tone="success" title="Shell composition is active">
-        Session state, permission-aware navigation, design-system primitives and governed typed clients are separate product-plane responsibilities.
+        Session state, permission-aware navigation, design-system primitives, governed typed clients and isolated UI-extension hosts are separate product-plane responsibilities.
       </FeedbackPanel>
     </>
   );

@@ -1,6 +1,10 @@
 import type { SessionState } from "@ultimate-crm/client";
 
-export type ProductRouteId = "home" | "search" | "admin-studio";
+export type ProductRouteId =
+  | "home"
+  | "search"
+  | "admin-studio"
+  | "record-extension-proof";
 export type KnownProductCapability =
   | "search.global.query"
   | "metadata.activation.get";
@@ -11,10 +15,15 @@ export interface ProductRouteDefinition {
   label: string;
   authentication: "public" | "required";
   requiredCapability?: KnownProductCapability;
+  developmentOnly?: boolean;
 }
 
 export interface NavigationAccessSnapshot {
   capabilities: ReadonlySet<KnownProductCapability>;
+}
+
+export interface ProductEnvironment {
+  development: boolean;
 }
 
 export const PRODUCT_ROUTES: readonly ProductRouteDefinition[] = [
@@ -38,6 +47,13 @@ export const PRODUCT_ROUTES: readonly ProductRouteDefinition[] = [
     authentication: "required",
     requiredCapability: "metadata.activation.get",
   },
+  {
+    id: "record-extension-proof",
+    path: "/records/phase7i-demo",
+    label: "Record page",
+    authentication: "required",
+    developmentOnly: true,
+  },
 ] as const;
 
 export function routeForPath(pathname: string): ProductRouteDefinition | undefined {
@@ -48,7 +64,11 @@ export function canNavigateToRoute(
   route: ProductRouteDefinition,
   session: SessionState,
   access: NavigationAccessSnapshot,
+  environment: ProductEnvironment,
 ): boolean {
+  if (route.developmentOnly === true && !environment.development) {
+    return false;
+  }
   if (route.authentication === "required" && session.status !== "authenticated") {
     return false;
   }
