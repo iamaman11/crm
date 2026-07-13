@@ -173,4 +173,5 @@ jobs:
             exit 0
           fi
           git commit -m "Synchronize Phase 8A.3b maintenance outputs"
+          git pull --rebase origin develop/phase8a3b-contact-point-lifecycle
           git push origin HEAD:develop/phase8a3b-contact-point-lifecycle
