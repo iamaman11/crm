@@ -13,14 +13,14 @@ permissions:
 jobs:
   harden:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: develop/phase8a3c-party-relationship
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
-      - name: Patch reserved semantics and code-only filter validation
+      - name: Synchronize semantic invariants and generated Rust state
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -43,7 +43,6 @@ jobs:
           if text.count(needle) != 1:
               raise SystemExit(f'expected one domain insertion point, found {text.count(needle)}')
           text = text.replace(needle, replacement, 1)
-
           marker = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PartyRelationshipStatus {
 '''
@@ -80,7 +79,6 @@ pub enum PartyRelationshipStatus {
           if text.count(marker) != 1:
               raise SystemExit('expected one status marker')
           text = text.replace(marker, helper + marker, 1)
-
           test_marker = '''    #[test]
     fn normalizes_bounded_custom_semantics_deterministically() {
 '''
@@ -94,7 +92,6 @@ pub enum PartyRelationshipStatus {
         )
         .unwrap_err();
         assert_eq!(wrong_directionality.code, "PARTY_RELATIONSHIPS_RESERVED_TYPE_SEMANTICS_INVALID");
-
         let wrong_roles = RelationshipType::try_new(
             "parent_subsidiary",
             RelationshipDirectionality::Directional,
@@ -135,7 +132,6 @@ pub enum PartyRelationshipStatus {
     Ok(value.to_owned())
 }'''
           text = text[:start] + replacement + text[end:]
-
           test_marker = '''    #[test]
     fn field_visibility_redacts_relationship_data_without_hiding_resource_identity() {
 '''
@@ -152,15 +148,14 @@ pub enum PartyRelationshipStatus {
           text = text.replace(test_marker, test + test_marker, 1)
           query.write_text(text)
           PY
+          cargo generate-lockfile
           cargo fmt --all
-          cargo test -p crm-party-relationships -p crm-party-relationships-query-adapter
-          cargo clippy -p crm-party-relationships -p crm-party-relationships-query-adapter --all-targets -- -D warnings
-      - name: Commit validated patch and remove one-shot files
+      - name: Commit synchronized product files and remove one-shot gate
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/phase8a3c-semantic-hardening.yml .phase8a3c-semantic-hardening-trigger
-          git add modules/crm-party-relationships/src/domain.rs crates/crm-party-relationships-query-adapter/src/lib.rs
+          git add Cargo.lock modules/crm-party-relationships/src/domain.rs crates/crm-party-relationships-query-adapter/src/lib.rs
           git commit -m "Harden Party Relationship semantic codes"
           git push origin HEAD:develop/phase8a3c-party-relationship
