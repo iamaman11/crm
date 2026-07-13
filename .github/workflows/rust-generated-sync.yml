@@ -34,22 +34,342 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Wire Customer 360 runtime composition
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  if new in text:
+                      return text
+                  raise SystemExit(f"missing runtime patch anchor: {label}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"non-unique runtime patch anchor: {label}")
+              return text.replace(old, new, 1)
+
+          governed = Path('crates/crm-application-runtime/src/governed_metadata.rs')
+          text = governed.read_text()
+          text = replace_once(
+              text,
+              '''use crm_customer_accounts_query_adapter::{
+              AccountQueryAdapter, QUERY_CAPABILITY_IDS as ACCOUNT_QUERY_CAPABILITY_IDS,
+              query_capability_definitions as account_query_capability_definitions,
+          };
+          ''',
+              '''use crm_customer_accounts_query_adapter::{
+              AccountQueryAdapter, QUERY_CAPABILITY_IDS as ACCOUNT_QUERY_CAPABILITY_IDS,
+              query_capability_definitions as account_query_capability_definitions,
+          };
+          use crm_customer_360_query_adapter::{
+              Customer360QueryAdapter, QUERY_CAPABILITY_IDS as CUSTOMER_360_QUERY_CAPABILITY_IDS,
+              query_capability_definitions as customer_360_query_capability_definitions,
+          };
+          ''',
+              'governed imports',
+          )
+          text = replace_once(
+              text,
+              '''    definitions.extend(party_relationship_query_capability_definitions()?);
+              definitions.extend(metadata_query_capability_definitions()?);
+          ''',
+              '''    definitions.extend(party_relationship_query_capability_definitions()?);
+              definitions.extend(customer_360_query_capability_definitions()?);
+              definitions.extend(metadata_query_capability_definitions()?);
+          ''',
+              'query definitions',
+          )
+          text = replace_once(
+              text,
+              '''    party_relationships: PartyRelationshipQueryAdapter,
+              metadata: MetadataQueryAdapter,
+          ''',
+              '''    party_relationships: PartyRelationshipQueryAdapter,
+              customer_360: Customer360QueryAdapter,
+              metadata: MetadataQueryAdapter,
+          ''',
+              'router fields',
+          )
+          text = replace_once(
+              text,
+              '''        party_relationships: PartyRelationshipQueryAdapter,
+              metadata: MetadataQueryAdapter,
+          ''',
+              '''        party_relationships: PartyRelationshipQueryAdapter,
+              customer_360: Customer360QueryAdapter,
+              metadata: MetadataQueryAdapter,
+          ''',
+              'router constructor args',
+          )
+          text = replace_once(
+              text,
+              '''            party_relationships,
+              metadata,
+          ''',
+              '''            party_relationships,
+              customer_360,
+              metadata,
+          ''',
+              'router constructor fields',
+          )
+          text = replace_once(
+              text,
+              '''        } else if PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS
+              .contains(&definition.capability_id.as_str())
+          {
+              self.party_relationships.validate(definition, request)
+          } else {
+              self.production.validate(definition, request)
+          }
+          ''',
+              '''        } else if PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS
+              .contains(&definition.capability_id.as_str())
+          {
+              self.party_relationships.validate(definition, request)
+          } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+              self.customer_360.validate(definition, request)
+          } else {
+              self.production.validate(definition, request)
+          }
+          ''',
+              'router validate',
+          )
+          text = replace_once(
+              text,
+              '''        } else if PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS
+              .contains(&definition.capability_id.as_str())
+          {
+              self.party_relationships.execute(definition, request)
+          } else {
+              self.production.execute(definition, request)
+          }
+          ''',
+              '''        } else if PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS
+              .contains(&definition.capability_id.as_str())
+          {
+              self.party_relationships.execute(definition, request)
+          } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+              self.customer_360.execute(definition, request)
+          } else {
+              self.production.execute(definition, request)
+          }
+          ''',
+              'router execute',
+          )
+          text = replace_once(
+              text,
+              '''                + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()
+                  + METADATA_QUERY_CAPABILITY_IDS.len()
+          ''',
+              '''                + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()
+                  + CUSTOMER_360_QUERY_CAPABILITY_IDS.len()
+                  + METADATA_QUERY_CAPABILITY_IDS.len()
+          ''',
+              'catalog test count',
+          )
+          governed.write_text(text)
+
+          runtime = Path('crates/crm-application-runtime/src/runtime.rs')
+          text = runtime.read_text()
+          text = replace_once(
+              text,
+              '''use crm_customer_accounts_query_adapter::AccountQueryAdapter;
+          use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
+          ''',
+              '''use crm_customer_accounts_query_adapter::AccountQueryAdapter;
+          use crm_customer_360_composition::Customer360ProjectionWorker;
+          use crm_customer_360_query_adapter::{
+              Customer360QueryAdapter, MODULE_ID as CUSTOMER_360_MODULE_ID,
+          };
+          use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
+          ''',
+              'runtime imports',
+          )
+          text = replace_once(
+              text,
+              '''    pub projection_worker: Arc<Phase6ProjectionWorker>,
+              pub search_worker: Arc<GlobalSearchWorker>,
+          ''',
+              '''    pub projection_worker: Arc<Phase6ProjectionWorker>,
+              pub customer_360_worker: Arc<Customer360ProjectionWorker>,
+              pub search_worker: Arc<GlobalSearchWorker>,
+          ''',
+              'component worker field',
+          )
+          text = replace_once(
+              text,
+              '''        let search_query_adapter = SearchQueryAdapter::new(
+          ''',
+              '''        let customer_360_query_adapter = Customer360QueryAdapter::new(
+              store.clone(),
+              visibility_authorizer.clone(),
+          );
+          let search_query_adapter = SearchQueryAdapter::new(
+          ''',
+              'query adapter construction',
+          )
+          text = replace_once(
+              text,
+              '''            contact_point_query_adapter,
+              party_relationship_query_adapter,
+              metadata_query_adapter,
+          ''',
+              '''            contact_point_query_adapter,
+              party_relationship_query_adapter,
+              customer_360_query_adapter,
+              metadata_query_adapter,
+          ''',
+              'query router construction',
+          )
+          text = replace_once(
+              text,
+              '''        let projection_worker = Arc::new(Phase6ProjectionWorker::new(store.clone()));
+              let search_worker = Arc::new(
+          ''',
+              '''        let projection_worker = Arc::new(Phase6ProjectionWorker::new(store.clone()));
+              let customer_360_worker = Arc::new(
+                  Customer360ProjectionWorker::new(store.clone())
+                      .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+              );
+              let search_worker = Arc::new(
+          ''',
+              'worker construction',
+          )
+          text = replace_once(
+              text,
+              '''            link_processor,
+              projection_worker,
+              search_worker,
+          ''',
+              '''            link_processor,
+              projection_worker,
+              customer_360_worker,
+              search_worker,
+          ''',
+              'component worker initialization',
+          )
+          text = replace_once(
+              text,
+              '''        drain_projection(
+              &components.projection_worker,
+              tenant_id.clone(),
+              TASK_STATUS_PROJECTION_ID,
+          )
+          .await?;
+              components
+          ''',
+              '''        drain_projection(
+              &components.projection_worker,
+              tenant_id.clone(),
+              TASK_STATUS_PROJECTION_ID,
+          )
+          .await?;
+              drain_customer_360_projection(&components.customer_360_worker, tenant_id.clone()).await?;
+              components
+          ''',
+              'background cycle',
+          )
+          text = replace_once(
+              text,
+              '''async fn scan_link_events(
+          ''',
+              '''async fn drain_customer_360_projection(
+              worker: &Customer360ProjectionWorker,
+              tenant_id: TenantId,
+          ) -> Result<(), ApplicationRuntimeError> {
+              loop {
+                  let result = worker
+                      .run_batch(tenant_id.clone(), PROJECTION_PAGE_SIZE)
+                      .await
+                      .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+                  if !result.has_more {
+                      return Ok(());
+                  }
+              }
+          }
+
+          async fn scan_link_events(
+          ''',
+              'customer 360 drain helper',
+          )
+          text = replace_once(
+              text,
+              '''                METADATA_MODULE_ID => {}
+                  SEARCH_MODULE_ID => {
+          ''',
+              '''                METADATA_MODULE_ID => {}
+                  CUSTOMER_360_MODULE_ID => {
+                      upsert_bootstrap_visibility(
+                          visibility_store,
+                          config,
+                          tenant_id,
+                          definition,
+                          BootstrapVisibilityResource {
+                              owner_module_id: PARTIES_MODULE_ID,
+                              resource_type: PARTY_RECORD_TYPE,
+                          },
+                          party_fields(),
+                          expires_at,
+                      )?;
+                      upsert_bootstrap_visibility(
+                          visibility_store,
+                          config,
+                          tenant_id,
+                          definition,
+                          BootstrapVisibilityResource {
+                              owner_module_id: ACCOUNTS_MODULE_ID,
+                              resource_type: ACCOUNT_RECORD_TYPE,
+                          },
+                          account_fields(),
+                          expires_at,
+                      )?;
+                      upsert_bootstrap_visibility(
+                          visibility_store,
+                          config,
+                          tenant_id,
+                          definition,
+                          BootstrapVisibilityResource {
+                              owner_module_id: CONTACT_POINTS_MODULE_ID,
+                              resource_type: CONTACT_POINT_RECORD_TYPE,
+                          },
+                          contact_point_fields(),
+                          expires_at,
+                      )?;
+                      upsert_bootstrap_visibility(
+                          visibility_store,
+                          config,
+                          tenant_id,
+                          definition,
+                          BootstrapVisibilityResource {
+                              owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
+                              resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
+                          },
+                          party_relationship_fields(),
+                          expires_at,
+                      )?;
+                  }
+                  SEARCH_MODULE_ID => {
+          ''',
+              'bootstrap customer 360 visibility',
+          )
+          runtime.write_text(text)
+          PY
+      - name: Verify Customer 360 runtime composition
+        run: |
           cargo fmt --all
-      - name: Commit synchronized files when needed
+          cargo generate-lockfile
+          cargo check -p crm-application-runtime --all-targets
+          cargo test -p crm-application-runtime
+      - name: Commit verified runtime composition
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates/crm-application-runtime
+          if git diff --cached --quiet; then
+            echo "Customer 360 runtime composition already synchronized."
+            exit 0
+          fi
+          git commit -m "Wire Customer 360 runtime composition"
           git push origin "HEAD:${HEAD_BRANCH}"
