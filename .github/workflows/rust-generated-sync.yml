@@ -34,22 +34,39 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Apply Phase 8A.2b composition patch and machine formatting
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-application-runtime/src/runtime.rs")
+          text = path.read_text()
+          old = '''        let party_query_adapter =
+              PartyQueryAdapter::new(store.clone(), visibility_authorizer.clone());'''
+          new = '''        let party_query_adapter = PartyQueryAdapter::new(
+              store.clone(),
+              CursorCodec::new(cursor_key)
+                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+              visibility_authorizer.clone(),
+          )
+          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;'''
+          if old not in text:
+              raise SystemExit("expected PartyQueryAdapter constructor block was not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
           cargo generate-lockfile
           cargo fmt --all
-      - name: Commit synchronized files when needed
+      - name: Restore canonical workflow and commit synchronized files
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
+          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
+          if git diff --quiet; then
+            echo "Phase 8A.2b source is already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates modules services .github/workflows/rust-generated-sync.yml
+          git commit -m "Synchronize Phase 8A.2b runtime composition and formatting"
           git push origin "HEAD:${HEAD_BRANCH}"
