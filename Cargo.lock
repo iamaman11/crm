@@ -257,6 +257,7 @@ dependencies = [
  "crm-application-runtime",
  "crm-capability-runtime",
  "crm-core-data",
+ "crm-customer-360-composition",
  "crm-module-sdk",
  "crm-party-relationships-projection",
  "crm-proto-contracts",
