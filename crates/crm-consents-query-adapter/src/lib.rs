@@ -68,7 +68,10 @@ impl ConsentQueryAdapter {
     async fn execute_authorize(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
         let command = decode_authorize_input(request)?;
         let evaluation = evaluate_command(request, command)?;
-        let decision = match self.load_authorization_candidates(request, &evaluation).await {
+        let decision = match self
+            .load_authorization_candidates(request, &evaluation)
+            .await
+        {
             Ok(authorizations) => {
                 evaluate_communication_authorization(&evaluation, authorizations.iter())?
             }

@@ -402,7 +402,6 @@ dependencies = [
 name = "crm-consents-capability-composition"
 version = "0.1.0"
 dependencies = [
- "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-consents",
  "crm-consents-capability-adapter",
@@ -411,7 +410,6 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
- "sha2 0.10.9",
  "tokio",
 ]
 
@@ -423,7 +421,6 @@ dependencies = [
  "crm-capability-runtime",
  "crm-consents",
  "crm-consents-capability-adapter",
- "crm-consents-capability-composition",
  "crm-core-data",
  "crm-module-sdk",
  "crm-proto-contracts",

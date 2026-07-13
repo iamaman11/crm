@@ -15,8 +15,9 @@ use crm_module_sdk::{
 mod owner_planner;
 
 pub use owner_planner::{
-    CreateConsentReferenceScope, consent_authorization_from_snapshot, consent_authorization_to_wire,
-    persisted_contract, persisted_payload, referenced_scope_from_create,
+    CreateConsentReferenceScope, consent_authorization_from_snapshot,
+    consent_authorization_to_wire, persisted_contract, persisted_payload,
+    referenced_scope_from_create,
 };
 
 pub const PARTY_AUTHORIZATION_RELATIONSHIP_TYPE: &str = "consents.authorization.party";
@@ -26,8 +27,8 @@ const PARTY_LINK_SCHEMA_ID: &str = "crm.consents.authorization.party-link";
 const PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
 const PARTY_LINK_MAXIMUM_BYTES: u64 = 1_024;
 const PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
-    16, 148, 140, 202, 69, 17, 65, 34, 240, 245, 72, 186, 248, 226, 88, 171, 222, 205, 83,
-    102, 214, 200, 170, 146, 101, 39, 122, 153, 77, 84, 18, 59,
+    16, 148, 140, 202, 69, 17, 65, 34, 240, 245, 72, 186, 248, 226, 88, 171, 222, 205, 83, 102,
+    214, 200, 170, 146, 101, 39, 122, 153, 77, 84, 18, 59,
 ];
 
 /// Governed Consent planner that preserves the pure owner plan and atomically
@@ -56,7 +57,8 @@ impl TransactionalAggregatePlanner for ConsentCapabilityPlanner {
         request: &CapabilityRequest,
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        let mut plan = owner_planner::ConsentCapabilityPlanner.plan(definition, request, current)?;
+        let mut plan =
+            owner_planner::ConsentCapabilityPlanner.plan(definition, request, current)?;
         if definition.capability_id.as_str() == CREATE_CAPABILITY {
             let scope = referenced_scope_from_create(request)?;
             let target = owner_planner::ConsentCapabilityPlanner
@@ -69,7 +71,8 @@ impl TransactionalAggregatePlanner for ConsentCapabilityPlanner {
                         record_type: configured_record_type(
                             PARTY_AUTHORIZATION_SOURCE_RECORD_TYPE,
                         )?,
-                        record_id: RecordId::try_new(scope.party_ref.as_str()).map_err(config_error)?,
+                        record_id: RecordId::try_new(scope.party_ref.as_str())
+                            .map_err(config_error)?,
                     },
                     target,
                 },
