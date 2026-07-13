@@ -34,37 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Repair Party Relationship test-only contract import
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('crates/crm-party-relationships-query-adapter/src/lib.rs')
-          text = path.read_text()
-          import_line = 'use crm_proto_contracts::crm::{core::v1 as core, party_relationships::v1 as wire};\n'
-          test_import = '#[cfg(test)]\nuse crm_proto_contracts::crm::customer::v1 as customer;\n'
-          if test_import not in text:
-              if text.count(import_line) != 1:
-                  raise SystemExit('expected one Party Relationship contract import anchor')
-              text = text.replace(import_line, import_line + test_import, 1)
-          path.write_text(text)
-          PY
-          cargo fmt --all
-      - name: Commit targeted import repair
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
-        run: |
-          if git diff --quiet -- crates/crm-party-relationships-query-adapter/src/lib.rs; then
-            echo "Party Relationship test import is already repaired."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add crates/crm-party-relationships-query-adapter/src/lib.rs
-            git commit -m "Restore Party Relationship test contract import"
-            git push origin "HEAD:${HEAD_BRANCH}"
-          fi
-      - name: Verify remaining machine-fixable Rust maintenance
+      - name: Apply machine-fixable Rust maintenance
         run: |
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
+      - name: Commit synchronized files when needed
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "4189822+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git push origin "HEAD:${HEAD_BRANCH}"
