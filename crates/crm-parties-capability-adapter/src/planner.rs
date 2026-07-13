@@ -9,48 +9,63 @@ use crm_module_sdk::{
 };
 use crm_parties::{
     CreateParty, PARTY_STATE_MAXIMUM_BYTES, PARTY_STATE_RETENTION_POLICY_ID, PARTY_STATE_SCHEMA_ID,
-    PARTY_STATE_SCHEMA_VERSION, Party, PartyId, PartyKind, encode_party_state,
-    party_state_descriptor_hash,
+    PARTY_STATE_SCHEMA_VERSION, Party, PartyId, PartyKind, UpdateParty, decode_party_state,
+    encode_party_state, party_state_descriptor_hash,
 };
 use crm_proto_contracts::crm::{core::v1 as core, customer::v1 as customer, parties::v1 as wire};
 
 pub const MODULE_ID: &str = "crm.parties";
 pub const RECORD_TYPE: &str = "parties.party";
 pub const CREATE_CAPABILITY: &str = "parties.party.create";
+pub const UPDATE_CAPABILITY: &str = "parties.party.update";
 
 pub const CREATE_REQUEST_SCHEMA: &str = "crm.parties.v1.CreatePartyRequest";
 pub const CREATE_RESPONSE_SCHEMA: &str = "crm.parties.v1.CreatePartyResponse";
+pub const UPDATE_REQUEST_SCHEMA: &str = "crm.parties.v1.UpdatePartyRequest";
+pub const UPDATE_RESPONSE_SCHEMA: &str = "crm.parties.v1.UpdatePartyResponse";
 pub const CREATED_EVENT_SCHEMA: &str = "crm.parties.v1.PartyCreatedEvent";
+pub const UPDATED_EVENT_SCHEMA: &str = "crm.parties.v1.PartyUpdatedEvent";
+
+pub const PARTY_MUTATION_CAPABILITY_IDS: [&str; 2] = [CREATE_CAPABILITY, UPDATE_CAPABILITY];
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PartyCapabilityPlanner;
 
+pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    PARTY_MUTATION_CAPABILITY_IDS
+        .iter()
+        .map(|capability_id| capability_definition(capability_id))
+        .collect()
+}
+
 pub fn capability_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkError> {
-    if capability_id != CREATE_CAPABILITY {
-        return Err(unsupported_capability());
-    }
+    let (input_schema, output_schema) = match capability_id {
+        CREATE_CAPABILITY => (CREATE_REQUEST_SCHEMA, CREATE_RESPONSE_SCHEMA),
+        UPDATE_CAPABILITY => (UPDATE_REQUEST_SCHEMA, UPDATE_RESPONSE_SCHEMA),
+        _ => return Err(unsupported_capability()),
+    };
 
     Ok(CapabilityDefinition {
-        capability_id: support::configured_identifier(CapabilityId::try_new(CREATE_CAPABILITY))?,
+        capability_id: support::configured_identifier(CapabilityId::try_new(capability_id))?,
         capability_version: support::configured_identifier(CapabilityVersion::try_new(
             support::CONTRACT_VERSION,
         ))?,
         owner_module_id: support::configured_identifier(ModuleId::try_new(MODULE_ID))?,
         input_contract: support::protobuf_contract(
             MODULE_ID,
-            CREATE_REQUEST_SCHEMA,
+            input_schema,
             vec![DataClass::Personal],
         )?,
         output_contract: Some(support::protobuf_contract(
             MODULE_ID,
-            CREATE_RESPONSE_SCHEMA,
+            output_schema,
             vec![DataClass::Personal],
         )?),
         risk: CapabilityRisk::Medium,
         mutation: true,
         requires_idempotency: true,
         requires_approval: false,
-        authorization_policy_id: CREATE_CAPABILITY.to_owned(),
+        authorization_policy_id: capability_id.to_owned(),
         rate_limit_policy_id: None,
     })
 }
@@ -62,16 +77,33 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
         request: &CapabilityRequest,
     ) -> Result<AggregateTarget, SdkError> {
         ensure_definition(definition, request)?;
-        let command: wire::CreatePartyRequest = support::decode_request_with_data_class(
-            request,
-            MODULE_ID,
-            CREATE_REQUEST_SCHEMA,
-            DataClass::Personal,
-        )?;
-        let party_ref = command.party_ref.ok_or_else(|| {
-            SdkError::invalid_argument("party.party_ref", "Party reference is required")
-        })?;
-        let party_id = PartyId::try_new(party_ref.party_id)?;
+        let (party_id, presence) = match definition.capability_id.as_str() {
+            CREATE_CAPABILITY => {
+                let command: wire::CreatePartyRequest = support::decode_request_with_data_class(
+                    request,
+                    MODULE_ID,
+                    CREATE_REQUEST_SCHEMA,
+                    DataClass::Personal,
+                )?;
+                (
+                    party_id_from_ref(command.party_ref, "party.party_ref")?,
+                    AggregatePresence::MustBeAbsent,
+                )
+            }
+            UPDATE_CAPABILITY => {
+                let command: wire::UpdatePartyRequest = support::decode_request_with_data_class(
+                    request,
+                    MODULE_ID,
+                    UPDATE_REQUEST_SCHEMA,
+                    DataClass::Personal,
+                )?;
+                (
+                    party_id_from_ref(command.party_ref, "party.party_ref")?,
+                    AggregatePresence::MustExist,
+                )
+            }
+            _ => return Err(unsupported_capability()),
+        };
 
         Ok(AggregateTarget {
             reference: support::record_ref(
@@ -79,7 +111,7 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
                 party_id.as_str(),
                 "party.party_ref.party_id",
             )?,
-            presence: AggregatePresence::MustBeAbsent,
+            presence,
         })
     }
 
@@ -90,78 +122,171 @@ impl TransactionalAggregatePlanner for PartyCapabilityPlanner {
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
         ensure_definition(definition, request)?;
-        if current.is_some() {
-            return Err(invalid_plan());
+        match definition.capability_id.as_str() {
+            CREATE_CAPABILITY => plan_create(definition, request, current),
+            UPDATE_CAPABILITY => plan_update(definition, request, current),
+            _ => Err(unsupported_capability()),
         }
-
-        let command: wire::CreatePartyRequest = support::decode_request_with_data_class(
-            request,
-            MODULE_ID,
-            CREATE_REQUEST_SCHEMA,
-            DataClass::Personal,
-        )?;
-        let party_ref = command.party_ref.ok_or_else(|| {
-            SdkError::invalid_argument("party.party_ref", "Party reference is required")
-        })?;
-        let party = Party::create(CreateParty {
-            party_id: PartyId::try_new(party_ref.party_id)?,
-            kind: party_kind_from_wire(command.kind)?,
-            display_name: command.display_name,
-            occurred_at_unix_nanos: request.context.execution.request_started_at_unix_nanos,
-        })?;
-
-        let aggregate = support::record_ref(
-            RECORD_TYPE,
-            party.party_id().as_str(),
-            "party.party_ref.party_id",
-        )?;
-        let public_party = party_to_wire(&party);
-        let output = support::protobuf_payload(
-            MODULE_ID,
-            CREATE_RESPONSE_SCHEMA,
-            DataClass::Personal,
-            &wire::CreatePartyResponse {
-                party: Some(public_party.clone()),
-            },
-        )?;
-        let event = support::event_evidence_with_data_class(
-            request,
-            aggregate.clone(),
-            MODULE_ID,
-            EventSpec {
-                event_type: "parties.party.created",
-                event_schema_id: CREATED_EVENT_SCHEMA,
-                aggregate_version: party.version(),
-                previous_version: None,
-            },
-            DataClass::Personal,
-            &wire::PartyCreatedEvent {
-                party: Some(public_party),
-            },
-        )?;
-        let audit = support::audit_intent(
-            request,
-            &aggregate,
-            party.version(),
-            definition.capability_id.as_str(),
-            &output.bytes,
-        )?;
-
-        Ok(CapabilityBatchExecutionPlan {
-            batch: BatchMutationPlan {
-                context: request.context.clone(),
-                records: vec![RecordMutation::Create {
-                    reference: aggregate,
-                    payload: persisted_payload(&party)?,
-                }],
-                relationships: Vec::new(),
-                events: vec![event],
-                idempotency: support::capability_idempotency(definition, request)?,
-                audits: vec![audit],
-            },
-            output: Some(output),
-        })
     }
+}
+
+fn plan_create(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    current: Option<&RecordSnapshot>,
+) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+    if current.is_some() {
+        return Err(invalid_plan());
+    }
+
+    let command: wire::CreatePartyRequest = support::decode_request_with_data_class(
+        request,
+        MODULE_ID,
+        CREATE_REQUEST_SCHEMA,
+        DataClass::Personal,
+    )?;
+    let party = Party::create(CreateParty {
+        party_id: party_id_from_ref(command.party_ref, "party.party_ref")?,
+        kind: party_kind_from_wire(command.kind)?,
+        display_name: command.display_name,
+        occurred_at_unix_nanos: request.context.execution.request_started_at_unix_nanos,
+    })?;
+
+    let aggregate = support::record_ref(
+        RECORD_TYPE,
+        party.party_id().as_str(),
+        "party.party_ref.party_id",
+    )?;
+    let public_party = party_to_wire(&party);
+    let output = support::protobuf_payload(
+        MODULE_ID,
+        CREATE_RESPONSE_SCHEMA,
+        DataClass::Personal,
+        &wire::CreatePartyResponse {
+            party: Some(public_party.clone()),
+        },
+    )?;
+    let event = support::event_evidence_with_data_class(
+        request,
+        aggregate.clone(),
+        MODULE_ID,
+        EventSpec {
+            event_type: "parties.party.created",
+            event_schema_id: CREATED_EVENT_SCHEMA,
+            aggregate_version: party.version(),
+            previous_version: None,
+        },
+        DataClass::Personal,
+        &wire::PartyCreatedEvent {
+            party: Some(public_party),
+        },
+    )?;
+
+    mutation_plan(
+        definition,
+        request,
+        aggregate.clone(),
+        RecordMutation::Create {
+            reference: aggregate,
+            payload: persisted_payload(&party)?,
+        },
+        event,
+        output,
+    )
+}
+
+fn plan_update(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    current: Option<&RecordSnapshot>,
+) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+    let current = current.ok_or_else(invalid_plan)?;
+    let command: wire::UpdatePartyRequest = support::decode_request_with_data_class(
+        request,
+        MODULE_ID,
+        UPDATE_REQUEST_SCHEMA,
+        DataClass::Personal,
+    )?;
+    let requested_party_id = party_id_from_ref(command.party_ref, "party.party_ref")?;
+    if requested_party_id.as_str() != current.reference.record_id.as_str() {
+        return Err(invalid_plan());
+    }
+
+    let mut party = party_from_snapshot(current)?;
+    party.apply_update(UpdateParty {
+        expected_version: command.expected_version,
+        display_name: command.display_name,
+        occurred_at_unix_nanos: request.context.execution.request_started_at_unix_nanos,
+    })?;
+
+    let aggregate = current.reference.clone();
+    let public_party = party_to_wire(&party);
+    let output = support::protobuf_payload(
+        MODULE_ID,
+        UPDATE_RESPONSE_SCHEMA,
+        DataClass::Personal,
+        &wire::UpdatePartyResponse {
+            party: Some(public_party.clone()),
+        },
+    )?;
+    let event = support::event_evidence_with_data_class(
+        request,
+        aggregate.clone(),
+        MODULE_ID,
+        EventSpec {
+            event_type: "parties.party.updated",
+            event_schema_id: UPDATED_EVENT_SCHEMA,
+            aggregate_version: party.version(),
+            previous_version: Some(current.version),
+        },
+        DataClass::Personal,
+        &wire::PartyUpdatedEvent {
+            party: Some(public_party),
+            changed_fields: vec!["display_name".to_owned()],
+        },
+    )?;
+
+    mutation_plan(
+        definition,
+        request,
+        aggregate.clone(),
+        RecordMutation::Update {
+            reference: aggregate,
+            expected_version: current.version,
+            payload: persisted_payload(&party)?,
+        },
+        event,
+        output,
+    )
+}
+
+fn mutation_plan(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    aggregate: crm_module_sdk::RecordRef,
+    mutation: RecordMutation,
+    event: crm_core_data::EventEvidence,
+    output: crm_module_sdk::TypedPayload,
+) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+    let audit = support::audit_intent(
+        request,
+        &aggregate,
+        event.aggregate_version,
+        definition.capability_id.as_str(),
+        &output.bytes,
+    )?;
+
+    Ok(CapabilityBatchExecutionPlan {
+        batch: BatchMutationPlan {
+            context: request.context.clone(),
+            records: vec![mutation],
+            relationships: Vec::new(),
+            events: vec![event],
+            idempotency: support::capability_idempotency(definition, request)?,
+            audits: vec![audit],
+        },
+        output: Some(output),
+    })
 }
 
 pub fn party_to_wire(party: &Party) -> wire::Party {
@@ -205,6 +330,31 @@ pub fn persisted_payload(party: &Party) -> Result<crm_module_sdk::TypedPayload, 
     )
 }
 
+pub fn party_from_snapshot(snapshot: &RecordSnapshot) -> Result<Party, SdkError> {
+    let party = decode_party_state(support::persisted_json_bytes_with_data_class(
+        snapshot,
+        persisted_contract(),
+        DataClass::Personal,
+    )?)?;
+    if party.party_id().as_str() != snapshot.reference.record_id.as_str()
+        || party.version() != snapshot.version
+    {
+        return Err(support::stored_data_error(
+            "PARTIES_PERSISTED_PARTY_IDENTITY_INVALID",
+        ));
+    }
+    Ok(party)
+}
+
+fn party_id_from_ref(
+    party_ref: Option<customer::PartyRef>,
+    field: &'static str,
+) -> Result<PartyId, SdkError> {
+    let party_ref = party_ref
+        .ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required"))?;
+    PartyId::try_new(party_ref.party_id)
+}
+
 fn party_kind_from_wire(value: i32) -> Result<PartyKind, SdkError> {
     match wire::PartyKind::try_from(value) {
         Ok(wire::PartyKind::Person) => Ok(PartyKind::Person),
@@ -220,9 +370,9 @@ fn ensure_definition(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
 ) -> Result<(), SdkError> {
-    if definition.capability_id.as_str() != CREATE_CAPABILITY
+    if !PARTY_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         || definition.owner_module_id.as_str() != MODULE_ID
-        || request.context.execution.capability_id.as_str() != CREATE_CAPABILITY
+        || definition.capability_id.as_str() != request.context.execution.capability_id.as_str()
     {
         return Err(invalid_plan());
     }
@@ -252,15 +402,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn create_capability_is_personal_mutation_with_idempotency() {
-        let definition = capability_definition(CREATE_CAPABILITY).unwrap();
-        assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-        assert!(definition.mutation);
-        assert!(definition.requires_idempotency);
+    fn publishes_create_and_update_as_personal_idempotent_mutations() {
+        let definitions = capability_definitions().unwrap();
+        assert_eq!(definitions.len(), 2);
         assert_eq!(
-            definition.input_contract.allowed_data_classes,
-            vec![DataClass::Personal]
+            definitions
+                .iter()
+                .map(|definition| definition.capability_id.as_str())
+                .collect::<Vec<_>>(),
+            PARTY_MUTATION_CAPABILITY_IDS
         );
+        assert!(definitions.iter().all(|definition| definition.mutation));
+        assert!(
+            definitions
+                .iter()
+                .all(|definition| definition.requires_idempotency)
+        );
+        assert!(definitions.iter().all(|definition| {
+            definition.input_contract.allowed_data_classes == vec![DataClass::Personal]
+        }));
     }
 
     #[test]
