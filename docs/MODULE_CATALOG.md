@@ -44,11 +44,12 @@ A manifest may declare future owned object names. That declaration does not mean
 | `crm.activities` | Activities/productivity owner domain | **Vertical slice** | Task create/update/complete/reminder/get/list | Appointments, recurring work, queues, calendars, synchronization and other expert activity scope |
 | `crm.parties` | Canonical person and organization identity | **Expert expansion** | Production Party create/update/get/list plus permission-aware rebuildable global search discovery | Structured person/organization profiles, provenance, identity resolution, merge/unmerge, import/export and privacy lifecycle work across later Phase 8A packets |
 | `crm.customer-accounts` | Canonical customer/commercial relationship | **Vertical slice** | Governed Account create/update/get/list with typed Party associations, live reference integrity, signed cursor listing and real PostgreSQL/process acceptance | Account hierarchy/advanced commercial semantics where justified, plus Customer 360 composition in later 8A.3 packets |
-| `crm.contact-points` | Canonical email/phone/postal/web/messaging endpoints | **Foundation / active implementation** | Stable module identity and canonical `ContactPointRef`; active 8A.3b branch contains the first typed lifecycle/verification domain foundation | Public contracts, persistence, governed mutation/query adapters, application composition, Party-reference integrity and production PostgreSQL/process acceptance |
+| `crm.contact-points` | Canonical email/phone/postal/web/messaging endpoints | **Vertical slice** | Merged governed create/update/verify/get/list with deterministic endpoint normalization, verification/preference lifecycle, Party-reference integrity and real PostgreSQL/process acceptance | Broader communication-channel product UX and consent-aware downstream usage remain separate later packets |
+| `crm.party-relationships` | Authoritative typed Party-to-Party relationships and temporal hierarchy source state | **Vertical slice** | Implementation-complete create/update/get/list lifecycle with directional/reciprocal semantics, same-tenant Party-reference integrity, signed cursor queries, durable evidence and rebuildable hierarchy acceptance in #108 / PR #109 | Post-documentation exact-head merge gate, then downstream Customer 360 composition and any later explicitly governed overlap-policy expansion |
 
-Current owner-module count: **5**.
+Current owner-module count: **6**.
 
-Production owner vertical slices are **Sales, Activities, Parties and Customer Accounts**; Contact Points remains an active foundation until 8A.3b production gates pass and merge.
+Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts and Contact Points**; Party Relationships is implementation-complete with production acceptance and is pending only the 8A.3c post-documentation exact-head merge gate.
 
 Current count of product-complete expert modules: **0**.
 
@@ -60,7 +61,7 @@ Current count of product-complete expert modules: **0**.
 
 The published `module_id` is fixed as **`crm.sales-activities-link`** and is treated as immutable module identity.
 
-Current business-module count: **6** — five owner modules plus one optional link module.
+Current business-module count: **7** — six owner modules plus one optional link module.
 
 ## 5. Mandatory customer-master owner domains
 
@@ -68,8 +69,8 @@ Tracked by Phase 8A / issue #28.
 
 - `crm.parties` — Party owner for person and organization identity — **Expert expansion**; create/update/get/list/search production lifecycle complete.
 - `crm.customer-accounts` — Account owner for customer/commercial relationships — **Merged production vertical slice** from #101 / PR #102.
-- `crm.contact-points` — Contact Point owner for email, phone, postal, web and messaging endpoints — **Foundation with active 8A.3b implementation** in #103 / `develop/phase8a3b-contact-point-lifecycle`.
-- Party Relationship — employment, household, hierarchy and typed relationships — **Planned for 8A.3c**.
+- `crm.contact-points` — Contact Point owner for email, phone, postal, web and messaging endpoints — **Merged production vertical slice** from #103 / PR #104.
+- `crm.party-relationships` — Party Relationship owner for employment, household, parent/subsidiary and bounded configurable typed relationships — **Implementation-complete production vertical slice / merge gate** in #108 / PR #109.
 - Consent and Preferences — purpose/channel/legal-basis consent and suppression — **Planned for 8A.4**.
 - Identity Resolution — source identities, matching, survivorship and merge/unmerge lineage — **Planned for 8A.5–8A.6**.
 
@@ -115,7 +116,11 @@ It must **not** own:
 - provider delivery state or omnichannel conversation state;
 - Account hierarchy or Party Relationship state.
 
-Draft PR #104 now implements the authoritative 8A.3b Contact Point vertical slice: strict deterministic persistence, additive v1 contracts/events, governed mutation and permission-aware query adapters, application-level Party-reference integrity, runtime composition, synchronized descriptors and fresh-PostgreSQL real `crm-api` process acceptance. The owner module remains pure: it has no SQL, transport types or direct cross-owner storage access. The implementation packet is complete: all 11 applicable CI workflows were green together on exact head `242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db`; only the post-documentation exact-head merge gate remains.
+Merged PR #104 delivers the authoritative 8A.3b Contact Point vertical slice: strict deterministic persistence, additive v1 contracts/events, governed mutation and permission-aware query adapters, application-level Party-reference integrity, runtime composition, synchronized descriptors and fresh-PostgreSQL real `crm-api` process acceptance. The owner module remains pure: it has no SQL, transport types or direct cross-owner storage access. PR #104 merged to `main` as `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`.
+
+### Party Relationship ownership boundary
+
+`crm.party-relationships` owns stable Party Relationship identity, immutable canonical Party endpoints, bounded typed directional/reciprocal semantics, lifecycle, validity intervals and optimistic version progression. It does **not** own Party identity attributes, Account membership, Contact Point state, consent/communication authorization, Sales roles, provider state or Customer 360. Application composition validates both Party references without giving the owner SQL or direct Party storage access. The hierarchy read model is rebuildable and non-authoritative. #108 / PR #109 is implementation-complete and passed all 11 applicable workflows together on pre-documentation exact head `a26d0364382c3fa5fb369d8ca1c65941863ff75b`; the documentation commit requires a fresh exact-head rerun before merge.
 
 ## 6. Mandatory commercial lifecycle owner domains
 
@@ -189,6 +194,6 @@ Do not create a module solely because a directory, screen, table or team exists.
 
 ## 10. Target scale
 
-The final universal CRM will contain substantially more than the current six business modules. The roadmap and `CRM_CAPABILITY_COVERAGE.md` already imply **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
+The final universal CRM will contain substantially more than the current seven business modules. The roadmap and `CRM_CAPABILITY_COVERAGE.md` already imply **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
 
 The exact count becomes authoritative only as domains receive stable published module identities.
