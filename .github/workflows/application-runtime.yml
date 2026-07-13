@@ -26,18 +26,42 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
       - name: Execute verified Phase 8A.3d normative sync script
+        id: sync
+        shell: bash
         run: |
-          python - <<'PY'
+          set +e
+          python - <<'PY' > /tmp/docs-sync.log 2>&1
           from pathlib import Path
           import textwrap
+          import traceback
 
-          workflow = Path('.github/workflows/rust-generated-sync.yml').read_text().splitlines()
-          start = next(i for i, line in enumerate(workflow) if line.strip() == 'from pathlib import Path')
-          end = next(i for i in range(start + 1, len(workflow)) if workflow[i].strip() == 'PY')
-          code = textwrap.dedent('\n'.join(workflow[start:end]))
-          exec(compile(code, 'phase8a3d_normative_sync.py', 'exec'), {'__name__': '__main__'})
+          try:
+              workflow = Path('.github/workflows/rust-generated-sync.yml').read_text().splitlines()
+              start = next(i for i, line in enumerate(workflow) if line.strip() == 'from pathlib import Path')
+              end = next(i for i in range(start + 1, len(workflow)) if workflow[i].strip() == 'PY')
+              code = textwrap.dedent('\n'.join(workflow[start:end]))
+              exec(compile(code, 'phase8a3d_normative_sync.py', 'exec'), {'__name__': '__main__'})
+          except BaseException:
+              traceback.print_exc()
+              raise
           PY
+          status=$?
+          cat /tmp/docs-sync.log
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload normative sync diagnostics
+        if: steps.sync.outputs.status != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase8a3d-normative-sync-diagnostics
+          path: /tmp/docs-sync.log
+          if-no-files-found: error
+          retention-days: 7
+      - name: Fail after diagnostics
+        if: steps.sync.outputs.status != '0'
+        run: exit 1
       - name: Commit normative docs and restore standard workflows
+        if: steps.sync.outputs.status == '0'
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
