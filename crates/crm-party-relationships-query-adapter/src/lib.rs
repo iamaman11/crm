@@ -15,9 +15,7 @@ use crm_party_relationships::{
 use crm_party_relationships_capability_adapter::{
     MODULE_ID, RECORD_TYPE, party_relationship_from_snapshot, party_relationship_to_wire,
 };
-use crm_proto_contracts::crm::{
-    core::v1 as core, customer::v1 as customer, party_relationships::v1 as wire,
-};
+use crm_proto_contracts::crm::{core::v1 as core, party_relationships::v1 as wire};
 use crm_query_runtime::{
     CursorBinding, CursorCodec, CursorContinuation, PageSizePolicy, QueryExecutionResult,
     QueryExecutor, QueryRequest, QuerySemanticValidator, QueryVisibilityAuthorizer,
@@ -604,8 +602,14 @@ fn validate_type_code_filter(value: &str) -> Result<String, SdkError> {
     if value.is_empty()
         || value.len() > 96
         || value.chars().any(char::is_control)
-        || !value.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric)
-        || !value.as_bytes().last().is_some_and(u8::is_ascii_alphanumeric)
+        || !value
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphanumeric)
+        || !value
+            .as_bytes()
+            .last()
+            .is_some_and(u8::is_ascii_alphanumeric)
         || !value.as_bytes().iter().all(|byte| {
             byte.is_ascii_lowercase()
                 || byte.is_ascii_digit()

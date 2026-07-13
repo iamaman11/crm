@@ -287,6 +287,9 @@ dependencies = [
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-parties-query-adapter",
+ "crm-party-relationships-capability-adapter",
+ "crm-party-relationships-projection",
+ "crm-party-relationships-query-adapter",
  "crm-query-runtime",
  "crm-sales-activities-capability-composition",
  "crm-sales-activities-link",
@@ -662,6 +665,20 @@ dependencies = [
  "crm-party-relationships",
  "crm-proto-contracts",
  "prost",
+]
+
+[[package]]
+name = "crm-party-relationships-projection"
+version = "0.1.0"
+dependencies = [
+ "crm-core-data",
+ "crm-core-events",
+ "crm-module-sdk",
+ "crm-projection-runtime",
+ "crm-proto-contracts",
+ "prost",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
