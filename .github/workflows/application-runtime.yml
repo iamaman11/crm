@@ -32,14 +32,16 @@ jobs:
           set +e
           python - <<'PY' > /tmp/docs-sync.log 2>&1
           from pathlib import Path
-          import textwrap
           import traceback
 
           try:
               workflow = Path('.github/workflows/rust-generated-sync.yml').read_text().splitlines()
               start = next(i for i, line in enumerate(workflow) if line.strip() == 'from pathlib import Path')
               end = next(i for i in range(start + 1, len(workflow)) if workflow[i].strip() == 'PY')
-              code = textwrap.dedent('\n'.join(workflow[start:end]))
+              base_indent = len(workflow[start]) - len(workflow[start].lstrip())
+              prefix = ' ' * base_indent
+              code_lines = [line[base_indent:] if line.startswith(prefix) else line for line in workflow[start:end]]
+              code = '\n'.join(code_lines)
               exec(compile(code, 'phase8a3d_normative_sync.py', 'exec'), {'__name__': '__main__'})
           except BaseException:
               traceback.print_exc()
