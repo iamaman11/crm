@@ -1,7 +1,9 @@
 use crate::{CREATE_CAPABILITY, MODULE_ID};
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
-use crm_consents::CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID;
+use crm_consents::{
+    CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID, CommunicationChannel,
+};
 use crm_core_data::{
     AggregateTarget, CapabilityBatchExecutionPlan, RelationshipMutation,
     TransactionalAggregatePlanner,
@@ -61,6 +63,7 @@ impl TransactionalAggregatePlanner for ConsentCapabilityPlanner {
             owner_planner::ConsentCapabilityPlanner.plan(definition, request, current)?;
         if definition.capability_id.as_str() == CREATE_CAPABILITY {
             let scope = referenced_scope_from_create(request)?;
+            ensure_supported_contact_point_scope(&scope)?;
             let target = owner_planner::ConsentCapabilityPlanner
                 .target(definition, request)?
                 .reference;
@@ -81,6 +84,20 @@ impl TransactionalAggregatePlanner for ConsentCapabilityPlanner {
         }
         Ok(plan)
     }
+}
+
+fn ensure_supported_contact_point_scope(
+    scope: &CreateConsentReferenceScope,
+) -> Result<(), SdkError> {
+    if scope.channel == CommunicationChannel::Push && scope.contact_point_ref.is_some() {
+        return Err(SdkError::new(
+            "CONSENTS_REFERENCE_UNAVAILABLE",
+            crm_module_sdk::ErrorCategory::InvalidArgument,
+            false,
+            "One or more referenced Consent resources are unavailable.",
+        ));
+    }
+    Ok(())
 }
 
 fn party_link_payload() -> Result<crm_module_sdk::TypedPayload, SdkError> {
@@ -119,6 +136,7 @@ fn config_error(error: crm_module_sdk::IdentifierError) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_consents::{ContactPointReference, PartyReference};
 
     #[test]
     fn party_link_contract_is_personal_json_and_stably_hashed() {
@@ -143,5 +161,24 @@ mod tests {
                 .as_str(),
             PARTY_AUTHORIZATION_SOURCE_RECORD_TYPE
         );
+    }
+
+    #[test]
+    fn scoped_push_fails_closed_until_a_push_endpoint_kind_exists() {
+        let party_ref = PartyReference::try_new("party-1").unwrap();
+        let scoped_push = CreateConsentReferenceScope {
+            party_ref: party_ref.clone(),
+            contact_point_ref: Some(ContactPointReference::try_new("contact-point-1").unwrap()),
+            channel: CommunicationChannel::Push,
+        };
+        let error = ensure_supported_contact_point_scope(&scoped_push).unwrap_err();
+        assert_eq!(error.code, "CONSENTS_REFERENCE_UNAVAILABLE");
+
+        let party_wide_push = CreateConsentReferenceScope {
+            party_ref,
+            contact_point_ref: None,
+            channel: CommunicationChannel::Push,
+        };
+        ensure_supported_contact_point_scope(&party_wide_push).unwrap();
     }
 }
