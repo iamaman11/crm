@@ -3,7 +3,7 @@
 Status: **Active execution — Phase 8A customer master**
 
 Parent program: #11  
-First owner-domain program: #28  
+Customer-master program: #28  
 Commercial follow-on: #29  
 Functional scope guardrail: [`CRM_CAPABILITY_COVERAGE.md`](CRM_CAPABILITY_COVERAGE.md)
 
@@ -17,8 +17,6 @@ The capability coverage baseline is normative for scope completeness: Phase 8 an
 
 Phase 8 is one coherent architecture program delivered as multiple mergeable packets. Each packet must establish a stable boundary that downstream work can safely consume.
 
-Do not defer all Phase 8 merging until the end. A giant branch would make exact-SHA evidence, rollback, bisectability, code review and ownership discipline materially weaker.
-
 Every packet must state:
 
 - authoritative owner domain and stable references;
@@ -30,9 +28,11 @@ Every packet must state:
 - import/migration/compatibility consequences;
 - exact acceptance and operational gates.
 
+A packet is merged only when its natural architecture boundary is complete and all applicable checks are green on one exact final SHA.
+
 ## Wave 8A — canonical customer master, identity and consent
 
-### 8A.1 — identity/reference contracts and owner skeletons — Complete
+### 8A.1 — identity/reference contracts and owner foundations — Complete
 
 Delivered by #92 / merged PR #93:
 
@@ -41,11 +41,11 @@ Delivered by #92 / merged PR #93:
 - explicit prohibition on Sales/Service/Marketing/Billing defining competing customer identity owners;
 - generated Rust/browser contract synchronization and compatibility gates.
 
-### 8A.2 — Party lifecycle and discovery — In progress
+### 8A.2 — Party lifecycle and discovery — Complete
 
-The Party slice is intentionally split into mergeable production packets rather than claiming completion from a create/get proof alone.
+Party remains the canonical person/organization identity owner. The complete first production lifecycle was deliberately split into three independently mergeable packets.
 
-#### 8A.2a — authoritative Party create/get production slice — Complete
+#### 8A.2a — authoritative Party create/get — Complete
 
 Delivered by #94 / merged PR #95:
 
@@ -53,50 +53,93 @@ Delivered by #94 / merged PR #95:
 - governed create through `CapabilityGateway`;
 - permission-aware get through `QueryGateway`;
 - tenant isolation, Personal data classification, idempotency, outbox and audit evidence;
-- production PostgreSQL and process-level acceptance.
+- real PostgreSQL and process-level `crm-api` acceptance.
 
-#### 8A.2b — optimistic Party update and permission-aware list — Active
+#### 8A.2b — optimistic Party update and permission-aware list — Complete
 
-Tracked by #96 / draft PR #97.
-
-Deliver:
+Delivered by #96 / merged PR #97:
 
 - immutable Party identity/kind with optimistic display-name update;
 - exact expected-version conflicts and deterministic version progression;
 - governed `parties.party.update@1.0.0` with idempotency, event and audit evidence;
-- deterministic tenant/actor/filter/sort/page-bound cursor listing;
+- deterministic tenant/actor/filter/sort/page-bound signed cursor listing;
 - optional typed Party-kind filter;
 - live per-resource and per-field visibility enforcement;
-- process-level PostgreSQL acceptance for update/list/replay/conflict/non-disclosure.
+- process-level PostgreSQL acceptance for replay, conflicting replay, stale version, pagination and non-disclosure.
 
-#### 8A.2c — Party search and customer discovery projection
+Final verified review head `4c4f19a19fab1764d6ba49c0210ca65a7f2456ad` passed all applicable Contract, Governance, Rust, Rust Generated Sync, Database, Event Runtime, Application Runtime and Product Plane workflows before merge.
 
-Deliver after 8A.2b is stable:
+#### 8A.2c — Party search and permission-aware customer discovery — Complete
 
-- Party indexing through the rebuildable search/projection architecture;
-- permission-aware disclosure through live authorization;
-- deterministic rebuild/switch behavior;
-- propagation of Party update and privacy effects;
-- no authoritative identity state stored in the search index.
+Delivered by #98 / merged PR #99:
 
-8A.2 is complete only when 8A.2a–8A.2c are complete and the combined create/update/get/list/search behavior has exact-head production evidence.
+- neutral `crm-global-search-composition` cross-domain projection boundary;
+- Party create/update indexing from immutable authoritative owner events;
+- exact Party event contract, Personal data-class, aggregate identity and version validation;
+- searchable Party `display_name` plus typed `kind` display metadata;
+- live resource/field authorization before every search disclosure;
+- conservative Personal classification for governed global search payloads;
+- deterministic migration from search generation `g1` to `g2` so historical Party events could not be skipped by an old checkpoint;
+- rebuild/validate/activate/retire through the existing `SearchReindexCoordinator`;
+- process-level proof of update → worker convergence → governed search, superseded-name removal and cross-tenant non-disclosure.
 
-### 8A.3 — Account, Contact Point and Party Relationship
+Search remains candidate-only and rebuildable. It does not own Party identity.
 
-Deliver customer/commercial relationship ownership, verified/preferred contact points, time-bounded typed relationships and hierarchy foundations.
+### 8A.3 — Account, Contact Point, Party Relationship and Customer 360 — In progress
 
-Required sub-packets should separate at least:
+#### 8A.3a — authoritative Account lifecycle and Party associations — Complete in PR #102 pending merge
 
-1. Account lifecycle and Party membership/reference semantics;
-2. Contact Point lifecycle, verification state and channel preference;
-3. Party Relationship types, validity intervals and hierarchy traversal projections;
-4. Customer 360 projection composition without creating a second identity owner.
+Tracked by #101 / PR #102 under #100.
+
+Delivered in the packet:
+
+- immutable typed Account identity owned solely by `crm.customer-accounts`;
+- normalized bounded Account name and explicit Active/Inactive lifecycle;
+- stable Party references and typed Primary/Member roles without copying Party identity attributes;
+- exactly one primary Party association and deterministic duplicate-free association normalization;
+- optimistic exact-version updates, monotonic governed mutation time and semantic no-op rejection;
+- strict deterministic persisted Account state contract;
+- additive v1 create/update/get/list and created/updated event contracts;
+- immutable module manifest and exact contract bindings;
+- governed transactional create/update through the production aggregate executor with idempotency, outbox and audit evidence;
+- permission-aware get/list with signed tenant/actor/filter/sort/page-bound cursors and field redaction;
+- cross-owner Party-reference integrity validation in the application/platform composition layer rather than inside the pure Account module;
+- identical safe rejection for missing and cross-tenant Party references;
+- real PostgreSQL + real `crm-api` acceptance covering prerequisite Party creation, reference integrity, create, replay, get, update, update replay, stale version, cursor pagination, status filtering, unauthenticated rejection, cross-tenant non-disclosure and durable evidence counts;
+- independent fresh-database process acceptance for full application, Party and Account scenarios.
+
+This packet intentionally does **not** absorb Contact Point, Party Relationship, hierarchy or Customer 360 projection ownership into Account.
+
+#### 8A.3b — Contact Point lifecycle, verification and preference — Next
+
+Deliver:
+
+- canonical email, phone, postal, web and messaging endpoint ownership under `crm.contact-points`;
+- normalized typed channel values without leaking provider-specific transport models into the domain;
+- verified/unverified state with explicit verification evidence boundaries;
+- active/inactive/validity semantics and preferred contact-point rules;
+- Party and, where justified, Account attachment through stable references;
+- optimistic lifecycle mutations, permission-aware reads/lists and process-level PostgreSQL acceptance;
+- consent/preferences remain separate authoritative ownership rather than hidden Contact Point flags.
+
+#### 8A.3c — Party Relationship lifecycle and hierarchy foundations
+
+Deliver:
+
+- typed Party-to-Party relationships such as employment, household, parent/subsidiary and configurable governed roles;
+- validity intervals and temporal relationship state;
+- hierarchy traversal projections without moving hierarchy ownership into Account or Sales;
+- tenant, authorization, optimistic concurrency and non-disclosure proof.
+
+#### 8A.3d — Customer 360 composition
+
+Deliver a permission-aware rebuildable Customer 360 composition over Party, Account, Contact Point and Party Relationship owner contracts without creating a second identity master.
 
 ### 8A.4 — Consent and communication authorization
 
 Deliver purpose/channel/jurisdiction/legal-basis/source/proof/effective/expiry/withdrawal semantics and an exact authorization decision boundary that downstream communication and marketing modules must use.
 
-Withdrawal must take effect without waiting for a projection rebuild. Historical evidence remains immutable while current authorization decisions reflect the live consent state.
+Withdrawal must take effect without waiting for a projection rebuild. Historical evidence remains immutable while current authorization decisions reflect live consent state.
 
 ### 8A.5 — identity resolution and duplicate candidates
 
@@ -112,7 +155,7 @@ Deliver versioned mapping, dry-run validation, resumable idempotent imports, rec
 
 ## Wave 8B — product catalog and quote-to-revenue
 
-Begin only against stable merged customer reference contracts.
+Begin against stable merged customer reference contracts.
 
 Planned packets:
 
@@ -129,115 +172,37 @@ Catalog, Pricing, Quote, Order, Contract, Subscription and Billing/ERP integrati
 
 ## Wave 8C — Sales and productivity expert expansion
 
-Deliver:
-
-- leads/prospects and qualification;
-- richer pipeline and opportunity relationship roles;
-- activity/calendar synchronization and scheduling boundaries;
-- routing, assignment, queues and workload distribution;
-- territory, team/overlay and quota/target management;
-- forecast categories, rollups and scenarios;
-- renewals/expansion/cross-sell workflows;
-- playbooks, sequences and guided next actions;
-- product-quality lists, Kanban, timelines, saved views and bulk actions;
-- responsive/mobile and offline-capable field workflows where the product tier requires them.
+Deliver leads/prospects, qualification, richer opportunity roles, calendar synchronization, routing, territories, teams, quotas, forecasting, renewals/expansion, playbooks/sequences and product-quality list/Kanban/mobile/offline workflows.
 
 ## Wave 8D — Communications and omnichannel
 
-Deliver:
-
-- email, telephony, SMS/messaging, chat and optional social adapters;
-- unified conversation/thread and participant resolution;
-- agent inboxes, queues and assignment;
-- templates, attachments and provider delivery status;
-- consent-aware sending, quiet hours and frequency policies;
-- searchable interaction history with live authorization;
-- verified webhooks, replay safety and provider reconciliation.
+Deliver email, telephony, SMS/messaging, chat and optional social adapters; unified conversations; agent inboxes and queues; consent-aware sending; delivery state; searchable interaction history; verified webhooks and provider reconciliation.
 
 ## Wave 8E — Service, support, knowledge and field service
 
-Deliver:
-
-- cases/tickets, queues, routing and configurable lifecycle;
-- SLAs, business calendars, milestones and escalation;
-- entitlements, warranties and service-contract references;
-- major incident, parent/child and duplicate case relationships;
-- macros, guided resolution and service automation;
-- knowledge authoring/review/publication/localization/feedback;
-- self-service portal/API boundaries and service feedback;
-- optional field-service work orders, dispatch, appointments and technician mobile/offline flows with inventory/ERP integration boundaries.
+Deliver cases/tickets, queues/routing, SLAs, entitlements, incidents, service automation, knowledge lifecycle, self-service boundaries and optional field-service work orders, dispatch and technician mobile/offline workflows.
 
 ## Wave 8F — Marketing and growth
 
-Deliver:
-
-- campaigns, campaign members and acquisition source history;
-- dynamic segmentation, lists and suppression;
-- forms/event ingestion boundaries;
-- scoring and qualification models;
-- consent-aware journeys, waits, branches, triggers and goals;
-- experiments where applicable;
-- attribution and touchpoint lineage;
-- account-based marketing and buying-group support;
-- optional event/webinar, loyalty and referral modules through governed boundaries.
+Deliver campaigns, dynamic segmentation, suppression, forms/event ingestion, scoring, consent-aware journeys, experiments, attribution, account-based marketing and optional event/loyalty/referral modules.
 
 ## Wave 8G — Customer success, retention and partner/channel CRM
 
-Deliver customer-success capabilities:
-
-- onboarding and success plans;
-- objectives/milestones and explainable health scores;
-- adoption/usage signal integration;
-- risks, alerts, playbooks and business reviews;
-- renewal/expansion coordination and churn analytics.
-
-Deliver optional PRM capabilities:
-
-- partner organizations/contacts, programs, tiers and certifications;
-- deal registration and conflict rules;
-- lead/opportunity distribution;
-- partner-sourced/influenced attribution;
-- portal/delegated-access and partner performance boundaries.
+Deliver onboarding/success plans, health scores, adoption signals, risks/playbooks, renewal/expansion coordination and churn analytics; plus optional PRM for partner programs, deal registration, distribution, attribution and delegated portal access.
 
 ## Wave 8H — Projects, configurable work, documents and e-signature
 
-Deliver:
-
-- projects, workstreams, milestones, dependencies and templates;
-- configurable operational business cases distinct from support cases;
-- portfolio/delivery projections;
-- secure file/document ownership and versioning;
-- document generation through governed templates;
-- e-signature envelope/status integration and immutable signed-document evidence;
-- retention/legal-hold/privacy interaction.
+Deliver projects/workstreams/milestones, configurable operational cases, secure document ownership/versioning, governed template generation, e-signature evidence and retention/legal-hold interaction.
 
 ## Wave 8I — Analytics, reporting and performance management
 
-Deliver:
-
-- permission-aware semantic reporting and operational dashboards;
-- funnels, cohorts, retention and lifecycle analytics;
-- pipeline/forecast, service/SLA, marketing attribution and customer-success analytics;
-- territory/quota/performance scorecards;
-- scheduled report delivery with live authorization checks;
-- metric lineage, freshness and reproducibility;
-- warehouse/lakehouse/BI integration boundaries.
+Deliver permission-aware semantic reporting, dashboards, funnels/cohorts, sales/service/marketing/customer-success analytics, territory/quota scorecards, scheduled delivery, metric lineage and warehouse/BI boundaries.
 
 ## Wave 8J — Workflow, collaboration and product completeness
 
-Deliver expert product surfaces across the implemented domains:
+Deliver governed workflow triggers/conditions/branches/waits/timers, approvals and human tasks, notifications and collaboration, global productivity surfaces, onboarding/import guidance, responsive/mobile behavior, accessibility, localization, offline/retry states and critical browser E2E.
 
-- governed trigger/condition/branch/wait/timer/schedule workflow semantics;
-- approvals, human tasks, retries and recovery/compensation strategies;
-- notifications, mentions, collaboration threads and team work lists;
-- global navigation, command palette, favorites and recent items;
-- product-quality tables, filters, saved views, bulk actions and timelines;
-- onboarding, import guidance and administrative diagnostics;
-- responsive/mobile behavior, accessibility, localization and locale-aware formatting;
-- offline/retry states where required;
-- critical browser E2E against real governed application paths.
-
-## Cross-cutting Phase 8 data and integration obligations
+## Cross-cutting Phase 8 obligations
 
 Every relevant domain wave must include:
 
@@ -268,4 +233,4 @@ Deliver SSO/OIDC/SAML, SCIM, tenant key hierarchy, field/data-class encryption w
 
 A packet is merged when its natural architecture boundary is complete and all applicable exact-head gates are green. Later packets build from merged stable contracts rather than from a single accumulating Phase 8 mega-branch.
 
-No phase or module is considered product-complete merely because schemas or crates exist. Readiness classification must follow `CRM_CAPABILITY_COVERAGE.md` and distinguish production-complete, platform-ready, planned, optional/vertical and external-integration capabilities.
+No phase or module is considered product-complete merely because schemas or crates exist. Readiness classification follows `CRM_CAPABILITY_COVERAGE.md` and distinguishes production-complete, platform-ready, planned, optional/vertical and external-integration capabilities.
