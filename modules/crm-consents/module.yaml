@@ -50,5 +50,5 @@ security:
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported
-  uninstall_policy: retain_records
+  uninstall_policy: delete_private_state
   retained_record_types: []
