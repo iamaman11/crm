@@ -1,0 +1,151 @@
+name: Finalize Phase 8A.3b And Open 8A.3c
+
+on:
+  push:
+    branches:
+      - ops/merge-phase8a3b-exact-green
+    paths:
+      - ".github/workflows/finalize-phase8a3b-and-open-8a3c.yml"
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+  issues: read
+
+concurrency:
+  group: finalize-phase8a3b-and-open-8a3c
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: iamaman11/crm
+      PR_NUMBER: "104"
+      EXPECTED_HEAD_SHA: 0af9ef201fbe96e74e825e648927a7f36ae39e10
+      NEXT_BRANCH: develop/phase8a3c-party-relationship
+    steps:
+      - name: Wait for exact-head 11-workflow green set
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_json='["Application Runtime CI","Contract CI","Database CI","Event Runtime CI","Governance CI","Metadata Runtime CI","Product Plane CI","Projection Runtime CI","Rust CI","Rust Generated Sync","Search Runtime CI"]'
+          for attempt in $(seq 1 80); do
+            gh api "repos/${REPOSITORY}/actions/runs?head_sha=${EXPECTED_HEAD_SHA}&event=pull_request&per_page=100" > /tmp/runs.json
+            set +e
+            python - "$expected_json" <<'PY'
+          import json, sys
+          expected = set(json.loads(sys.argv[1]))
+          runs = json.load(open('/tmp/runs.json'))['workflow_runs']
+          latest = {}
+          for run in runs:
+              name = run['name']
+              if name in expected and (name not in latest or run['run_number'] > latest[name]['run_number']):
+                  latest[name] = run
+          failed = sorted(name for name, run in latest.items() if run['status'] == 'completed' and run['conclusion'] != 'success')
+          pending = sorted(name for name in expected if name not in latest or latest[name]['status'] != 'completed')
+          if failed:
+              print('FAILED=' + ','.join(failed))
+              sys.exit(2)
+          if pending:
+              print('PENDING=' + ','.join(pending))
+              sys.exit(1)
+          print('GREEN=' + ','.join(sorted(expected)))
+          PY
+            status=$?
+            set -e
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            if [ "$status" -eq 2 ]; then
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for exact-head green workflows."
+          exit 1
+
+      - name: Merge PR 104 if not already merged
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api graphql \
+            -f owner=iamaman11 \
+            -f name=crm \
+            -F number=${PR_NUMBER} \
+            -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){id isDraft merged headRefOid mergeable reviewDecision reviewThreads(first:100){nodes{isResolved}}}}}' \
+            > /tmp/pr.json
+          python - <<'PY'
+          import json, os
+          pr = json.load(open('/tmp/pr.json'))['data']['repository']['pullRequest']
+          if pr['merged']:
+              raise SystemExit(0)
+          if pr['headRefOid'] != os.environ['EXPECTED_HEAD_SHA']:
+              raise SystemExit('PR head changed from exact verified SHA')
+          if pr['mergeable'] != 'MERGEABLE':
+              raise SystemExit('PR is not mergeable')
+          if pr['reviewDecision'] == 'CHANGES_REQUESTED':
+              raise SystemExit('PR has requested changes')
+          if any(not node['isResolved'] for node in pr['reviewThreads']['nodes']):
+              raise SystemExit('PR has unresolved review threads')
+          PY
+
+          merged="$(python - <<'PY'
+          import json
+          print(str(json.load(open('/tmp/pr.json'))['data']['repository']['pullRequest']['merged']).lower())
+          PY
+          )"
+          if [ "$merged" = "true" ]; then
+            exit 0
+          fi
+
+          is_draft="$(python - <<'PY'
+          import json
+          print(str(json.load(open('/tmp/pr.json'))['data']['repository']['pullRequest']['isDraft']).lower())
+          PY
+          )"
+          pr_id="$(python - <<'PY'
+          import json
+          print(json.load(open('/tmp/pr.json'))['data']['repository']['pullRequest']['id'])
+          PY
+          )"
+          if [ "$is_draft" = "true" ]; then
+            gh api graphql \
+              -F pullRequestId="$pr_id" \
+              -f query='mutation($pullRequestId:ID!){markPullRequestReadyForReview(input:{pullRequestId:$pullRequestId}){pullRequest{isDraft headRefOid}}}' \
+              > /tmp/ready.json
+          fi
+
+          gh api --method PUT "repos/${REPOSITORY}/pulls/${PR_NUMBER}/merge" \
+            -f merge_method=merge \
+            -f sha="${EXPECTED_HEAD_SHA}" \
+            -f commit_title='Phase 8A.3b: authoritative Contact Point lifecycle and verification (#104)' \
+            > /tmp/merge.json
+          python - <<'PY'
+          import json
+          result = json.load(open('/tmp/merge.json'))
+          if not result.get('merged'):
+              raise SystemExit(f"merge failed: {result}")
+          print(result['sha'])
+          PY
+
+      - name: Require merged PR and create Phase 8A.3c branch from new main
+        shell: bash
+        run: |
+          set -euo pipefail
+          merged="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq '.merged')"
+          test "$merged" = "true"
+          main_sha="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          if gh api "repos/${REPOSITORY}/git/ref/heads/${NEXT_BRANCH}" >/tmp/existing-ref.json 2>/dev/null; then
+            existing_sha="$(jq -r '.object.sha' /tmp/existing-ref.json)"
+            test "$existing_sha" = "$main_sha"
+          else
+            gh api --method POST "repos/${REPOSITORY}/git/refs" \
+              -f ref="refs/heads/${NEXT_BRANCH}" \
+              -f sha="$main_sha" \
+              > /tmp/new-ref.json
+          fi
+          printf '%s\n' "$main_sha" > /tmp/phase8a3c-base-sha
