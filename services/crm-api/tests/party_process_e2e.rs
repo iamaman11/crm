@@ -11,7 +11,7 @@ use crm_application_runtime::{
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::{DataClass, PayloadEncoding, RetentionPolicyId, TypedPayload};
 use crm_proto_contracts::crm::{
-    core::v1 as core, customer::v1 as customer, parties::v1 as parties,
+    core::v1 as core, customer::v1 as customer, parties::v1 as parties, search::v1 as search,
 };
 use prost::Message;
 use sqlx::{Executor, PgPool};
@@ -31,6 +31,7 @@ const PARTY_CREATE: &str = "parties.party.create";
 const PARTY_UPDATE: &str = "parties.party.update";
 const PARTY_GET: &str = "parties.party.get";
 const PARTY_LIST: &str = "parties.party.list";
+const GLOBAL_SEARCH: &str = "search.global.query";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct EvidenceCounts {
@@ -42,8 +43,7 @@ struct EvidenceCounts {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict_and_tenant_isolation()
- {
+async fn crm_api_process_serves_governed_party_lifecycle_listing_search_and_tenant_isolation() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
         eprintln!("skipping Party process acceptance because DATABASE_URL is absent");
         return;
@@ -97,6 +97,9 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
     let baseline = evidence_counts(&admin, TENANT_A).await;
     let person_id = unique_party_id("person");
     let organization_id = unique_party_id("organization");
+    let initial_person_name = unique_display_name("Legacy Party Search Name");
+    let updated_person_name = unique_display_name("Current Party Search Name");
+    let organization_name = unique_display_name("Organization Search Name");
     let create_definition = mutation_definition(PARTY_CREATE);
     let create_person_payload = payload(
         &create_definition,
@@ -105,7 +108,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
                 party_id: person_id.clone(),
             }),
             kind: parties::PartyKind::Person as i32,
-            display_name: "  Ada   Lovelace  ".to_owned(),
+            display_name: initial_person_name.clone(),
         },
     );
 
@@ -151,7 +154,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
         person_id
     );
     assert_eq!(created_party.kind, parties::PartyKind::Person as i32);
-    assert_eq!(created_party.display_name, "Ada Lovelace");
+    assert_eq!(created_party.display_name, initial_person_name);
     assert_eq!(resource_version(&created_party), 1);
 
     let after_create = evidence_counts(&admin, TENANT_A).await;
@@ -185,7 +188,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
                 party_id: person_id.clone(),
             }),
             kind: parties::PartyKind::Person as i32,
-            display_name: "Augusta Ada King".to_owned(),
+            display_name: unique_display_name("Conflicting Party Name"),
         },
     );
     let conflict = mutate(
@@ -215,7 +218,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
     let queried_party = decode_get_party(queried);
     assert_eq!(party_id(&queried_party), person_id);
     assert_eq!(queried_party.kind, parties::PartyKind::Person as i32);
-    assert_eq!(queried_party.display_name, "Ada Lovelace");
+    assert_eq!(queried_party.display_name, initial_person_name);
     assert_eq!(resource_version(&queried_party), 1);
     assert_eq!(evidence_counts(&admin, TENANT_A).await, after_create);
 
@@ -227,7 +230,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
                 party_id: person_id.clone(),
             }),
             expected_version: 1,
-            display_name: "  Augusta   Ada   Lovelace  ".to_owned(),
+            display_name: updated_person_name.clone(),
         },
     );
     let updated = mutate(
@@ -251,7 +254,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
         .expect("updated Party exists");
     assert_eq!(party_id(&updated_party), person_id);
     assert_eq!(updated_party.kind, parties::PartyKind::Person as i32);
-    assert_eq!(updated_party.display_name, "Augusta Ada Lovelace");
+    assert_eq!(updated_party.display_name, updated_person_name);
     assert_eq!(resource_version(&updated_party), 2);
 
     let after_update = evidence_counts(&admin, TENANT_A).await;
@@ -288,7 +291,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
                     party_id: person_id.clone(),
                 }),
                 expected_version: 1,
-                display_name: "Ada King".to_owned(),
+                display_name: unique_display_name("Stale Party Name"),
             },
         ),
         TENANT_A,
@@ -310,7 +313,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
     .await
     .expect("query updated Party through production gRPC gateway");
     let queried_after_update = decode_get_party(queried_after_update);
-    assert_eq!(queried_after_update.display_name, "Augusta Ada Lovelace");
+    assert_eq!(queried_after_update.display_name, updated_person_name);
     assert_eq!(resource_version(&queried_after_update), 2);
 
     let create_organization = mutate(
@@ -323,7 +326,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
                     party_id: organization_id.clone(),
                 }),
                 kind: parties::PartyKind::Organization as i32,
-                display_name: "Analytical Engine Society".to_owned(),
+                display_name: organization_name.clone(),
             },
         ),
         TENANT_A,
@@ -340,10 +343,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
     assert_eq!(after_organization.events, after_update.events + 1);
     assert_eq!(after_organization.audits, after_update.audits + 1);
     assert_eq!(after_organization.idempotency, after_update.idempotency + 1);
-    assert_eq!(
-        after_organization.transactions,
-        after_update.transactions + 1
-    );
+    assert_eq!(after_organization.transactions, after_update.transactions + 1);
 
     let list_definition = query_definition(PARTY_LIST);
     let first_page = query(
@@ -395,7 +395,12 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
     let people = query(
         &mut grpc,
         &list_definition,
-        party_list_payload(&list_definition, 10, "", Some(parties::PartyKind::Person)),
+        party_list_payload(
+            &list_definition,
+            10,
+            "",
+            Some(parties::PartyKind::Person),
+        ),
         TENANT_A,
         true,
     )
@@ -405,8 +410,72 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
     assert_eq!(people.parties.len(), 1);
     assert_eq!(party_id(&people.parties[0]), person_id);
     assert_eq!(people.parties[0].kind, parties::PartyKind::Person as i32);
-    assert_eq!(people.parties[0].display_name, "Augusta Ada Lovelace");
+    assert_eq!(people.parties[0].display_name, updated_person_name);
     assert_eq!(resource_version(&people.parties[0]), 2);
+
+    let search_definition = query_definition(GLOBAL_SEARCH);
+    let search_response = wait_for_party_search_hit(
+        &mut grpc,
+        &search_definition,
+        &updated_person_name,
+        TENANT_A,
+        &person_id,
+        2,
+    )
+    .await;
+    let search_hit = search_response
+        .hits
+        .iter()
+        .find(|hit| hit.resource_id == person_id)
+        .expect("updated Party search hit");
+    assert_eq!(search_hit.owner_module_id, "crm.parties");
+    assert_eq!(search_hit.resource_type, "parties.party");
+    assert_eq!(search_hit.source_version, 2);
+    assert_eq!(
+        search_hit.fields.get("display_name").map(String::as_str),
+        Some(updated_person_name.as_str())
+    );
+    assert_eq!(
+        search_hit.fields.get("kind").map(String::as_str),
+        Some("person")
+    );
+    assert_eq!(search_hit.matched_fields, vec!["display_name"]);
+
+    let old_name_search = query(
+        &mut grpc,
+        &search_definition,
+        party_search_payload(&search_definition, &initial_person_name),
+        TENANT_A,
+        true,
+    )
+    .await
+    .expect("search old Party display name after update");
+    assert!(
+        decode_search(old_name_search)
+            .hits
+            .iter()
+            .all(|hit| hit.resource_id != person_id),
+        "active search generation must not retain the superseded Party display name"
+    );
+
+    let organization_search = wait_for_party_search_hit(
+        &mut grpc,
+        &search_definition,
+        &organization_name,
+        TENANT_A,
+        &organization_id,
+        1,
+    )
+    .await;
+    let organization_hit = organization_search
+        .hits
+        .iter()
+        .find(|hit| hit.resource_id == organization_id)
+        .expect("Organization Party search hit");
+    assert_eq!(
+        organization_hit.fields.get("kind").map(String::as_str),
+        Some("organization")
+    );
 
     let unauthorized_query = query(
         &mut grpc,
@@ -440,6 +509,17 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_replay_conflict
     .await
     .expect("tenant B Party list must succeed without leaking tenant A resources");
     assert!(decode_list_parties(cross_tenant_list).parties.is_empty());
+
+    let cross_tenant_search = query(
+        &mut grpc,
+        &search_definition,
+        party_search_payload(&search_definition, &updated_person_name),
+        TENANT_B,
+        true,
+    )
+    .await
+    .expect("tenant B Party search must succeed without leaking tenant A resources");
+    assert!(decode_search(cross_tenant_search).hits.is_empty());
     assert_eq!(evidence_counts(&admin, TENANT_A).await, after_organization);
 
     send_sigint(&child).await;
@@ -563,6 +643,18 @@ fn party_list_payload(
     )
 }
 
+fn party_search_payload(definition: &CapabilityDefinition, text: &str) -> TypedPayload {
+    payload(
+        definition,
+        search::SearchRequest {
+            text: text.to_owned(),
+            resource_types: vec!["parties.party".to_owned()],
+            page_size: 25,
+            cursor: String::new(),
+        },
+    )
+}
+
 fn decode_get_party(
     response: crm_application_runtime::gateway_v1::QueryResponse,
 ) -> parties::Party {
@@ -589,6 +681,55 @@ fn decode_list_parties(
             .as_slice(),
     )
     .expect("decode Party list response")
+}
+
+fn decode_search(
+    response: crm_application_runtime::gateway_v1::QueryResponse,
+) -> search::SearchResponse {
+    search::SearchResponse::decode(
+        response
+            .output
+            .expect("search query output")
+            .payload
+            .as_slice(),
+    )
+    .expect("decode search response")
+}
+
+async fn wait_for_party_search_hit(
+    client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
+    definition: &CapabilityDefinition,
+    text: &str,
+    tenant_id: &str,
+    expected_resource_id: &str,
+    expected_version: i64,
+) -> search::SearchResponse {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let response = query(
+            client,
+            definition,
+            party_search_payload(definition, text),
+            tenant_id,
+            true,
+        )
+        .await
+        .expect("query Party through governed global search");
+        let response = decode_search(response);
+        if response.hits.iter().any(|hit| {
+            hit.owner_module_id == "crm.parties"
+                && hit.resource_type == "parties.party"
+                && hit.resource_id == expected_resource_id
+                && hit.source_version == expected_version
+        }) {
+            return response;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Party search projection did not converge before the acceptance deadline"
+        );
+        sleep(Duration::from_millis(200)).await;
+    }
 }
 
 fn party_id(party: &parties::Party) -> &str {
@@ -766,4 +907,12 @@ fn unique_party_id(kind: &str) -> String {
         .expect("system time after Unix epoch")
         .as_nanos();
     format!("party-{kind}-{}-{nanos}", std::process::id())
+}
+
+fn unique_display_name(prefix: &str) -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time after Unix epoch")
+        .as_nanos();
+    format!("{prefix} {} {nanos}", std::process::id())
 }
