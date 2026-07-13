@@ -278,6 +278,9 @@ dependencies = [
  "crm-capability-adapters",
  "crm-capability-ingress",
  "crm-capability-runtime",
+ "crm-consents-capability-adapter",
+ "crm-consents-capability-composition",
+ "crm-consents-query-adapter",
  "crm-contact-points-capability-adapter",
  "crm-contact-points-query-adapter",
  "crm-core-data",
@@ -393,6 +396,21 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-proto-contracts",
+]
+
+[[package]]
+name = "crm-consents-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-consents",
+ "crm-consents-capability-adapter",
+ "crm-contact-points",
+ "crm-contact-points-capability-adapter",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-parties-capability-adapter",
+ "tokio",
 ]
 
 [[package]]

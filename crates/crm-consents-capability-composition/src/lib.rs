@@ -8,11 +8,12 @@
 //! Consent records, audit entries, outbox events or idempotency evidence.
 
 use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest, TransactionalCapabilityExecutor,
+    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
+    TransactionalCapabilityExecutor,
 };
 use crm_consents::{CommunicationChannel, PartyReference};
 use crm_consents_capability_adapter::{
-    CREATE_CAPABILITY, MUTATION_CAPABILITY_IDS, CreateConsentReferenceScope,
+    CREATE_CAPABILITY, CreateConsentReferenceScope, MUTATION_CAPABILITY_IDS,
     referenced_scope_from_create,
 };
 use crm_contact_points::ContactPointKind;
@@ -191,10 +192,7 @@ pub async fn validate_reference_scope(
     Ok(())
 }
 
-pub const fn channel_is_compatible(
-    channel: CommunicationChannel,
-    kind: ContactPointKind,
-) -> bool {
+pub const fn channel_is_compatible(channel: CommunicationChannel, kind: ContactPointKind) -> bool {
     match channel {
         CommunicationChannel::Email => matches!(kind, ContactPointKind::Email),
         CommunicationChannel::Phone | CommunicationChannel::Sms => {
@@ -325,9 +323,13 @@ mod tests {
     #[tokio::test]
     async fn party_wide_scope_requires_only_same_tenant_party_existence() {
         let reader = FakeReader::available(None);
-        validate_reference_scope(&reader, &tenant(), &scope(CommunicationChannel::Email, None))
-            .await
-            .unwrap();
+        validate_reference_scope(
+            &reader,
+            &tenant(),
+            &scope(CommunicationChannel::Email, None),
+        )
+        .await
+        .unwrap();
         assert_eq!(reader.seen_tenants.lock().unwrap().as_slice(), ["tenant-1"]);
     }
 
@@ -381,19 +383,12 @@ mod tests {
     async fn deterministic_channel_mapping_accepts_sms_on_phone_and_messaging_on_messaging() {
         for (channel, kind) in [
             (CommunicationChannel::Sms, ContactPointKind::Phone),
-            (
-                CommunicationChannel::Messaging,
-                ContactPointKind::Messaging,
-            ),
+            (CommunicationChannel::Messaging, ContactPointKind::Messaging),
         ] {
             let reader = FakeReader::available(Some(facts("party-1", kind)));
-            validate_reference_scope(
-                &reader,
-                &tenant(),
-                &scope(channel, Some("contact-point-1")),
-            )
-            .await
-            .unwrap();
+            validate_reference_scope(&reader, &tenant(), &scope(channel, Some("contact-point-1")))
+                .await
+                .unwrap();
         }
     }
 

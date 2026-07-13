@@ -31,137 +31,25 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Apply guarded Phase 8A.4 runtime wiring
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("crates/crm-application-runtime/src/runtime.rs")
-          text = path.read_text()
-
-          def replace_once(old: str, new: str) -> None:
-              global text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"runtime patch anchor count must be 1, got {count}: {old[:80]!r}")
-              text = text.replace(old, new, 1)
-
-          replace_once(
-              "use crm_capability_runtime::{CapabilityDefinition, CapabilityGateway};\n",
-              "use crm_capability_runtime::{CapabilityDefinition, CapabilityGateway};\n"
-              "use crm_consents_capability_adapter::{\n"
-              "    MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,\n"
-              "};\n"
-              "use crm_consents_query_adapter::ConsentQueryAdapter;\n",
-          )
-
-          replace_once(
-              "        let customer_360_query_adapter =\n"
-              "            Customer360QueryAdapter::new(store.clone(), visibility_authorizer.clone());\n"
-              "        let search_query_adapter = SearchQueryAdapter::new(\n",
-              "        let customer_360_query_adapter =\n"
-              "            Customer360QueryAdapter::new(store.clone(), visibility_authorizer.clone());\n"
-              "        let consent_query_adapter = ConsentQueryAdapter::new(\n"
-              "            store.clone(),\n"
-              "            CursorCodec::new(cursor_key)\n"
-              "                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n"
-              "            visibility_authorizer.clone(),\n"
-              "        )\n"
-              "        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n"
-              "        let search_query_adapter = SearchQueryAdapter::new(\n",
-          )
-
-          replace_once(
-              "            party_relationship_query_adapter,\n"
-              "            customer_360_query_adapter,\n"
-              "            metadata_query_adapter,\n",
-              "            party_relationship_query_adapter,\n"
-              "            customer_360_query_adapter,\n"
-              "            consent_query_adapter,\n"
-              "            metadata_query_adapter,\n",
-          )
-
-          replace_once(
-              "                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(\n",
-              "                CONSENTS_MODULE_ID => upsert_bootstrap_visibility(\n"
-              "                    visibility_store,\n"
-              "                    config,\n"
-              "                    tenant_id,\n"
-              "                    definition,\n"
-              "                    BootstrapVisibilityResource {\n"
-              "                        owner_module_id: CONSENTS_MODULE_ID,\n"
-              "                        resource_type: CONSENT_RECORD_TYPE,\n"
-              "                    },\n"
-              "                    consent_fields(),\n"
-              "                    expires_at,\n"
-              "                )?,\n"
-              "                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(\n",
-          )
-
-          replace_once(
-              "fn party_relationship_fields() -> BTreeSet<String> {\n",
-              "fn consent_fields() -> BTreeSet<String> {\n"
-              "    [\n"
-              "        \"party_ref\",\n"
-              "        \"contact_point_ref\",\n"
-              "        \"purpose\",\n"
-              "        \"channel\",\n"
-              "        \"effect\",\n"
-              "        \"legal_basis\",\n"
-              "        \"jurisdiction\",\n"
-              "        \"source\",\n"
-              "        \"evidence_ref\",\n"
-              "        \"validity\",\n"
-              "        \"status\",\n"
-              "        \"resource_version\",\n"
-              "    ]\n"
-              "    .into_iter()\n"
-              "    .map(str::to_owned)\n"
-              "    .collect()\n"
-              "}\n\n"
-              "fn party_relationship_fields() -> BTreeSet<String> {\n",
-          )
-
-          replace_once(
-              "        assert!(contact_point_fields().contains(\"verification\"));\n"
-              "        assert!(party_relationship_fields().contains(\"from_party_ref\"));\n",
-              "        assert!(contact_point_fields().contains(\"verification\"));\n"
-              "        assert!(consent_fields().contains(\"purpose\"));\n"
-              "        assert!(consent_fields().contains(\"evidence_ref\"));\n"
-              "        assert!(party_relationship_fields().contains(\"from_party_ref\"));\n",
-          )
-
-          path.write_text(text)
-          PY
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Validate and synchronize Phase 8A.4 runtime wiring
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          set -o pipefail
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code 2>&1 | tee /tmp/phase8a4-runtime-sync.log
+            -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
-      - name: Restore standard sync workflow
-        run: git show origin/main:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
       - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet; then
-            echo "Phase 8A.4 runtime files are already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock Cargo.toml crates modules services .github/workflows/rust-generated-sync.yml
-          git commit -m "Wire Consent production runtime"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
-      - name: Upload runtime wiring diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: phase8a4-runtime-wiring-diagnostics
-          path: /tmp/phase8a4-runtime-sync.log
-          if-no-files-found: ignore
