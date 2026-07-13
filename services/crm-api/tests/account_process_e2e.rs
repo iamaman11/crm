@@ -11,8 +11,7 @@ use crm_application_runtime::{
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::{DataClass, PayloadEncoding, RetentionPolicyId, TypedPayload};
 use crm_proto_contracts::crm::{
-    accounts::v1 as accounts, core::v1 as core, customer::v1 as customer,
-    parties::v1 as parties,
+    accounts::v1 as accounts, core::v1 as core, customer::v1 as customer, parties::v1 as parties,
 };
 use prost::Message;
 use sqlx::{Executor, PgPool};
@@ -207,14 +206,20 @@ async fn crm_api_process_serves_governed_account_lifecycle_and_party_reference_i
     .expect("create Account through production gateway");
     assert!(!created.replayed);
     assert_eq!(created.affected_resources.len(), 1);
-    assert_eq!(created.affected_resources[0].resource_type, "accounts.account");
+    assert_eq!(
+        created.affected_resources[0].resource_type,
+        "accounts.account"
+    );
     assert_eq!(created.affected_resources[0].resource_id, account_id);
     assert_eq!(created.affected_resources[0].version, Some(1));
     let created_output = created.output.expect("Account create output");
     let created_account = decode_create_account(&created_output.payload);
     assert_eq!(account_id_of(&created_account), account_id);
     assert_eq!(created_account.name, "Northwind Customer Group");
-    assert_eq!(created_account.status, accounts::AccountStatus::Active as i32);
+    assert_eq!(
+        created_account.status,
+        accounts::AccountStatus::Active as i32
+    );
     assert_eq!(created_account.party_associations.len(), 2);
     assert_eq!(resource_version(&created_account), 1);
     assert_primary_party(&created_account, &primary_party_id);
@@ -241,7 +246,10 @@ async fn crm_api_process_serves_governed_account_lifecycle_and_party_reference_i
         replay.output.expect("Account replay output").payload,
         created_output.payload
     );
-    assert_eq!(account_evidence_counts(&admin, TENANT_A).await, after_create);
+    assert_eq!(
+        account_evidence_counts(&admin, TENANT_A).await,
+        after_create
+    );
 
     let queried = query(
         &mut grpc,
@@ -313,10 +321,16 @@ async fn crm_api_process_serves_governed_account_lifecycle_and_party_reference_i
     .expect("replay Account update through production gateway");
     assert!(update_replay.replayed);
     assert_eq!(
-        update_replay.output.expect("Account update replay output").payload,
+        update_replay
+            .output
+            .expect("Account update replay output")
+            .payload,
         updated_output.payload
     );
-    assert_eq!(account_evidence_counts(&admin, TENANT_A).await, after_update);
+    assert_eq!(
+        account_evidence_counts(&admin, TENANT_A).await,
+        after_update
+    );
 
     let stale = mutate(
         &mut grpc,
@@ -343,7 +357,10 @@ async fn crm_api_process_serves_governed_account_lifecycle_and_party_reference_i
     .await
     .expect_err("stale Account version must fail");
     assert_eq!(stale.code(), Code::Aborted);
-    assert_eq!(account_evidence_counts(&admin, TENANT_A).await, after_update);
+    assert_eq!(
+        account_evidence_counts(&admin, TENANT_A).await,
+        after_update
+    );
 
     let second_created = mutate(
         &mut grpc,
@@ -369,8 +386,14 @@ async fn crm_api_process_serves_governed_account_lifecycle_and_party_reference_i
     assert_eq!(after_second_create.records, after_update.records + 1);
     assert_eq!(after_second_create.events, after_update.events + 1);
     assert_eq!(after_second_create.audits, after_update.audits + 1);
-    assert_eq!(after_second_create.idempotency, after_update.idempotency + 1);
-    assert_eq!(after_second_create.transactions, after_update.transactions + 1);
+    assert_eq!(
+        after_second_create.idempotency,
+        after_update.idempotency + 1
+    );
+    assert_eq!(
+        after_second_create.transactions,
+        after_update.transactions + 1
+    );
 
     let first_page = query(
         &mut grpc,
@@ -594,7 +617,10 @@ fn query_definition(capability_id: &str) -> CapabilityDefinition {
         .unwrap_or_else(|| panic!("missing application query definition: {capability_id}"))
 }
 
-fn association(party_id: &str, role: accounts::AccountPartyRole) -> accounts::AccountPartyAssociation {
+fn association(
+    party_id: &str,
+    role: accounts::AccountPartyRole,
+) -> accounts::AccountPartyAssociation {
     accounts::AccountPartyAssociation {
         party_ref: Some(customer::PartyRef {
             party_id: party_id.to_owned(),

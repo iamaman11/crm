@@ -9,7 +9,7 @@ use crm_core_data::{
     TransactionalAggregatePlanner,
 };
 use crm_customer_accounts_capability_adapter::{
-    MUTATION_CAPABILITY_IDS as ACCOUNT_MUTATION_CAPABILITY_IDS, CustomerAccountCapabilityPlanner,
+    CustomerAccountCapabilityPlanner, MUTATION_CAPABILITY_IDS as ACCOUNT_MUTATION_CAPABILITY_IDS,
     capability_definitions as account_capability_definitions, referenced_party_ids_from_create,
     referenced_party_ids_from_update,
 };
@@ -26,9 +26,8 @@ use crm_module_sdk::{
     ErrorCategory, ModuleId, PortFuture, RecordId, RecordSnapshot, RecordType, SdkError,
 };
 use crm_parties_capability_adapter::{
-    MODULE_ID as PARTIES_MODULE_ID, PARTY_MUTATION_CAPABILITY_IDS,
-    RECORD_TYPE as PARTY_RECORD_TYPE, PartyCapabilityPlanner,
-    capability_definitions as party_capability_definitions,
+    MODULE_ID as PARTIES_MODULE_ID, PARTY_MUTATION_CAPABILITY_IDS, PartyCapabilityPlanner,
+    RECORD_TYPE as PARTY_RECORD_TYPE, capability_definitions as party_capability_definitions,
 };
 use crm_parties_query_adapter::{
     PARTY_QUERY_CAPABILITY_IDS, PartyQueryAdapter,
