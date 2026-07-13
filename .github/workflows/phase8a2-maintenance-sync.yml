@@ -68,6 +68,17 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit('expected exact unused import pattern once')
           rollback.write_text(text.replace(old, new, 1))
+
+          for source in [
+              Path('crates/crm-parties-capability-adapter/src/planner.rs'),
+              Path('crates/crm-parties-query-adapter/src/lib.rs'),
+              Path('services/crm-api/tests/party_process_e2e.rs'),
+          ]:
+              text = source.read_text()
+              old = '.input_contract.data_classes'
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected one data-class field repair in {source}, got {text.count(old)}')
+              source.write_text(text.replace(old, '.input_contract.allowed_data_classes', 1))
           PY
 
       - name: Format and synchronize generated Rust artifacts
