@@ -48,7 +48,8 @@ pub fn evaluate_communication_authorization<'a>(
         if !scope_matches(command, authorization) {
             continue;
         }
-        let Some(point) = authorization.decision_point_at(command.evaluation_time_unix_nanos) else {
+        let Some(point) = authorization.decision_point_at(command.evaluation_time_unix_nanos)
+        else {
             continue;
         };
 
@@ -115,10 +116,14 @@ fn scope_matches(
 
     match authorization.contact_point_ref() {
         None => true,
-        Some(assertion_contact_point) => command
-            .contact_point_ref
-            .as_ref()
-            .is_some_and(|requested_contact_point| requested_contact_point == assertion_contact_point),
+        Some(assertion_contact_point) => {
+            command
+                .contact_point_ref
+                .as_ref()
+                .is_some_and(|requested_contact_point| {
+                    requested_contact_point == assertion_contact_point
+                })
+        }
     }
 }
 
@@ -188,8 +193,14 @@ mod tests {
         let decision =
             evaluate_communication_authorization(&request(300, None), [&deny, &grant]).unwrap();
         assert!(decision.allowed);
-        assert_eq!(decision.reason, CommunicationAuthorizationReason::ActiveGrant);
-        assert_eq!(decision.determining_authorization_ids, vec![grant.authorization_id().clone()]);
+        assert_eq!(
+            decision.reason,
+            CommunicationAuthorizationReason::ActiveGrant
+        );
+        assert_eq!(
+            decision.determining_authorization_ids,
+            vec![grant.authorization_id().clone()]
+        );
     }
 
     #[test]
@@ -203,17 +214,19 @@ mod tests {
             .unwrap();
         let later_grant = assertion("grant-new", ConsentEffect::Grant, 300, None);
 
-        let denied = evaluate_communication_authorization(&request(250, None), [&withdrawn]).unwrap();
+        let denied =
+            evaluate_communication_authorization(&request(250, None), [&withdrawn]).unwrap();
         assert!(!denied.allowed);
         assert_eq!(denied.reason, CommunicationAuthorizationReason::Withdrawn);
 
-        let allowed = evaluate_communication_authorization(
-            &request(300, None),
-            [&withdrawn, &later_grant],
-        )
-        .unwrap();
+        let allowed =
+            evaluate_communication_authorization(&request(300, None), [&withdrawn, &later_grant])
+                .unwrap();
         assert!(allowed.allowed);
-        assert_eq!(allowed.reason, CommunicationAuthorizationReason::ActiveGrant);
+        assert_eq!(
+            allowed.reason,
+            CommunicationAuthorizationReason::ActiveGrant
+        );
     }
 
     #[test]
@@ -223,7 +236,10 @@ mod tests {
         let decision =
             evaluate_communication_authorization(&request(200, None), [&grant, &deny]).unwrap();
         assert!(!decision.allowed);
-        assert_eq!(decision.reason, CommunicationAuthorizationReason::ActiveDeny);
+        assert_eq!(
+            decision.reason,
+            CommunicationAuthorizationReason::ActiveDeny
+        );
         assert_eq!(
             decision
                 .determining_authorization_ids
@@ -242,20 +258,15 @@ mod tests {
             100,
             Some("contact-point-1"),
         );
+        let denied = evaluate_communication_authorization(&request(100, None), [&scoped]).unwrap();
+        assert!(!denied.allowed);
         let denied =
-            evaluate_communication_authorization(&request(100, None), [&scoped]).unwrap();
+            evaluate_communication_authorization(&request(100, Some("contact-point-2")), [&scoped])
+                .unwrap();
         assert!(!denied.allowed);
-        let denied = evaluate_communication_authorization(
-            &request(100, Some("contact-point-2")),
-            [&scoped],
-        )
-        .unwrap();
-        assert!(!denied.allowed);
-        let allowed = evaluate_communication_authorization(
-            &request(100, Some("contact-point-1")),
-            [&scoped],
-        )
-        .unwrap();
+        let allowed =
+            evaluate_communication_authorization(&request(100, Some("contact-point-1")), [&scoped])
+                .unwrap();
         assert!(allowed.allowed);
     }
 }

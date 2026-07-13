@@ -15,8 +15,8 @@ use crm_core_data::{
     PostgresDataStore, RecordGetQuery, RecordListQuery, RecordQueryContinuation, RecordQuerySort,
 };
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture,
-    RecordId, RecordType, SdkError, TypedPayload,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordType, SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::{consents::v1 as wire, core::v1 as core, customer::v1 as customer};
 use crm_query_runtime::{
@@ -184,7 +184,8 @@ impl QueryExecutor for ConsentQueryAdapter {
 
 impl ConsentQueryAdapter {
     async fn execute_get(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
-        let command: wire::GetConsentAuthorizationRequest = decode_input(request, GET_REQUEST_SCHEMA)?;
+        let command: wire::GetConsentAuthorizationRequest =
+            decode_input(request, GET_REQUEST_SCHEMA)?;
         let authorization_ref = command.authorization_ref.ok_or_else(|| {
             SdkError::invalid_argument(
                 "consent_authorization.authorization_ref",
@@ -263,7 +264,10 @@ impl ConsentQueryAdapter {
         let command: wire::AuthorizeCommunicationRequest =
             decode_input(request, AUTHORIZE_REQUEST_SCHEMA)?;
         let evaluation = evaluate_command(request, command)?;
-        let decision = match self.load_authorization_candidates(request, &evaluation).await {
+        let decision = match self
+            .load_authorization_candidates(request, &evaluation)
+            .await
+        {
             Ok(authorizations) => {
                 evaluate_communication_authorization(&evaluation, authorizations.iter())?
             }
@@ -312,7 +316,13 @@ impl ConsentQueryAdapter {
         page_size: u32,
         mut after: Option<RecordQueryContinuation>,
         filters: &ListFilters,
-    ) -> Result<(Vec<wire::ConsentAuthorization>, Option<RecordQueryContinuation>), SdkError> {
+    ) -> Result<
+        (
+            Vec<wire::ConsentAuthorization>,
+            Option<RecordQueryContinuation>,
+        ),
+        SdkError,
+    > {
         let mut output = Vec::with_capacity(page_size as usize);
         let mut scanned = 0_usize;
         loop {
@@ -320,12 +330,7 @@ impl ConsentQueryAdapter {
             if remaining == 0 {
                 let anchor = after.clone();
                 let has_more = self
-                    .has_more_visible_authorization(
-                        request,
-                        anchor.clone(),
-                        filters,
-                        &mut scanned,
-                    )
+                    .has_more_visible_authorization(request, anchor.clone(), filters, &mut scanned)
                     .await?;
                 return Ok((output, has_more.then_some(anchor).flatten()));
             }
@@ -336,7 +341,8 @@ impl ConsentQueryAdapter {
                     tenant_id: request.context.tenant_id.clone(),
                     owner_module_id: consent_module_id()?,
                     record_type: consent_record_type()?,
-                    page_size: u32::try_from(remaining).map_err(|_| visibility_scan_limit_error())?,
+                    page_size: u32::try_from(remaining)
+                        .map_err(|_| visibility_scan_limit_error())?,
                     sort: RecordQuerySort::UpdatedAtDescending,
                     after: after.clone(),
                 })
@@ -502,10 +508,16 @@ impl ListFilters {
         {
             return false;
         }
-        if self.effect.is_some_and(|value| value != authorization.effect()) {
+        if self
+            .effect
+            .is_some_and(|value| value != authorization.effect())
+        {
             return false;
         }
-        if self.status.is_some_and(|value| value != authorization.status()) {
+        if self
+            .status
+            .is_some_and(|value| value != authorization.status())
+        {
             return false;
         }
         true
@@ -522,11 +534,7 @@ impl ListFilters {
             .as_ref()
             .map(ContactPointReference::as_str)
             .unwrap_or("");
-        let purpose = self
-            .purpose
-            .as_ref()
-            .map(PurposeCode::as_str)
-            .unwrap_or("");
+        let purpose = self.purpose.as_ref().map(PurposeCode::as_str).unwrap_or("");
         let channel = self
             .channel
             .map(channel_wire_value)
@@ -608,10 +616,14 @@ fn static_scope_matches(
     }
     match authorization.contact_point_ref() {
         None => true,
-        Some(assertion_contact_point) => evaluation
-            .contact_point_ref
-            .as_ref()
-            .is_some_and(|requested_contact_point| requested_contact_point == assertion_contact_point),
+        Some(assertion_contact_point) => {
+            evaluation
+                .contact_point_ref
+                .as_ref()
+                .is_some_and(|requested_contact_point| {
+                    requested_contact_point == assertion_contact_point
+                })
+        }
     }
 }
 
@@ -964,7 +976,7 @@ mod tests {
     use super::*;
     use crm_consents::{
         ConsentAuthorizationId, CreateConsentAuthorization, EvidenceReference, JurisdictionCode,
-        LegalBasisCode, SourceCode,
+        SourceCode,
     };
     use std::collections::BTreeSet;
 
