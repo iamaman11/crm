@@ -40,20 +40,22 @@ jobs:
           from pathlib import Path
           path = Path('crates/crm-customer-360-composition/src/lib.rs')
           text = path.read_text()
-          old = '''        let definition = registry
-              .definition(CUSTOMER_360_PROJECTION_ID)
-              .expect("Customer 360 projection definition");
-          assert_eq!(definition.event_types.len(), ALL_EVENT_TYPES.len());
-          '''
-          new = '''        let definition = registry
-              .get(CUSTOMER_360_PROJECTION_ID)
-              .expect("Customer 360 projection definition");
-          assert_eq!(definition.event_types().len(), ALL_EVENT_TYPES.len());
-          '''
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif '.get(CUSTOMER_360_PROJECTION_ID)' not in text or 'definition.event_types().len()' not in text:
-              raise SystemExit('Customer 360 projection registry test repair point not found')
+          if '.definition(CUSTOMER_360_PROJECTION_ID)' in text:
+              text = text.replace(
+                  '.definition(CUSTOMER_360_PROJECTION_ID)',
+                  '.get(CUSTOMER_360_PROJECTION_ID)',
+                  1,
+              )
+          if 'definition.event_types.len()' in text:
+              text = text.replace(
+                  'definition.event_types.len()',
+                  'definition.event_types().len()',
+                  1,
+              )
+          if '.get(CUSTOMER_360_PROJECTION_ID)' not in text:
+              raise SystemExit('Customer 360 projection registry get() repair failed')
+          if 'definition.event_types().len()' not in text:
+              raise SystemExit('Customer 360 projection event_types() repair failed')
           path.write_text(text)
           PY
       - name: Apply machine-fixable Rust maintenance
