@@ -228,7 +228,7 @@ Architectural constraints:
 
 Acceptance must cover cross-tenant isolation, deterministic import/replay, merge/unmerge lineage and rollback, immediate consent-withdrawal enforcement, explainable duplicate candidates, privacy export/deletion/legal-hold interactions, contract compatibility, migrations and performance.
 
-The first Phase 8A packet must define exact ownership, identifiers, typed domain primitives and contract boundaries before broad CRUD behavior is added.
+Current delivery position: Party create/update/get/list/search is production-proven; the first authoritative Account create/update/get/list slice with typed Party associations and platform-level reference integrity is complete in PR #102 pending merge. The next owner-domain packet is Contact Point lifecycle, followed by Party Relationship and Customer 360 composition. Consent, identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets.
 
 ### 8B — product catalog, CPQ and quote-to-revenue lifecycle — Planned
 
@@ -270,11 +270,11 @@ Gate: enterprise claims require automated and operational evidence, not configur
 
 ## 12. Immediate delivery sequence
 
-1. Start Phase 8A / #28 with a dedicated first packet for Party/Account/Contact Point/Relationship/Consent/Identity Resolution ownership, typed identifiers and versioned contracts.
-2. Build customer-master behavior as end-to-end owner-domain packets with real tenant, idempotency, audit, merge/unmerge, consent-withdrawal and privacy evidence.
-3. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.
-4. Continue frontend and expert backend modules as end-to-end vertical slices.
-5. Continue enterprise/security/operational hardening continuously without premature production-completeness claims.
+1. Merge Phase 8A.3a / #101 / PR #102 after one exact-head green gate set.
+2. Deliver Phase 8A.3b Contact Point lifecycle, verification and preference, then Party Relationship and Customer 360 composition.
+3. Continue Phase 8A with Consent, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
+4. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.
+5. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.
 
 ## 13. Documentation hygiene
 

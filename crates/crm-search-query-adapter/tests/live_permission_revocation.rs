@@ -3,9 +3,8 @@ use crm_capability_adapters::{
 };
 use crm_module_sdk::testing::FixedClock;
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, PortFuture,
-    RecordId, RecordRef, RecordType, RetentionPolicyId, SchemaVersion, TenantId, TraceId,
-    TypedPayload,
+    ActorId, CapabilityId, CapabilityVersion, ModuleId, PayloadEncoding, PortFuture, RecordId,
+    RecordRef, RecordType, RetentionPolicyId, SchemaVersion, TenantId, TraceId, TypedPayload,
 };
 use crm_proto_contracts::crm::search::v1 as search_proto;
 use crm_query_runtime::{
@@ -157,12 +156,17 @@ fn query_request(definition: &crm_capability_runtime::CapabilityDefinition) -> Q
         page_size: 25,
         cursor: String::new(),
     };
+    let data_class = *definition
+        .input_contract
+        .allowed_data_classes
+        .first()
+        .expect("search input contract must declare a data class");
     let payload = TypedPayload {
         owner: definition.input_contract.owner.clone(),
         schema_id: definition.input_contract.schema_id.clone(),
         schema_version: definition.input_contract.schema_version.clone(),
         descriptor_hash: definition.input_contract.descriptor_hash,
-        data_class: DataClass::Confidential,
+        data_class,
         encoding: PayloadEncoding::Protobuf,
         maximum_size_bytes: definition.input_contract.maximum_size_bytes,
         retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),

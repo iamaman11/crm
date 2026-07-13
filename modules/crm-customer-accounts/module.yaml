@@ -1,8 +1,8 @@
 schema_version: crm.module/v1
 module_id: crm.customer-accounts
-version: "0.1.0"
+version: "0.2.0"
 display_name: CRM Customer Accounts
-description: Canonical owner domain for the customer and commercial relationship anchored to Parties.
+description: Canonical owner domain for customer and commercial relationships anchored to Parties.
 
 owner:
   team: customer-platform
@@ -20,15 +20,27 @@ platform:
 dependencies:
   required:
     - module_id: crm.parties
-      version_range: ">=0.1.0, <1.0.0"
+      version_range: ">=0.3.0, <1.0.0"
   optional: []
   conflicts: []
 
 provides:
-  capabilities: []
-  events: []
+  capabilities:
+    - id: accounts.account.create
+      version: "1.0.0"
+    - id: accounts.account.update
+      version: "1.0.0"
+    - id: accounts.account.get
+      version: "1.0.0"
+    - id: accounts.account.list
+      version: "1.0.0"
+  events:
+    - id: accounts.account.created
+      version: "1.0.0"
+    - id: accounts.account.updated
+      version: "1.0.0"
   objects:
-    - customer-accounts.account
+    - accounts.account
   ui_extensions: []
 
 consumes:
@@ -37,7 +49,7 @@ consumes:
 
 storage:
   record_types:
-    - customer-accounts.account
+    - accounts.account
   private_state_namespaces:
     - crm.customer-accounts
 
@@ -55,4 +67,4 @@ lifecycle:
   uninstall_policy: retain_business_records
   migrations_path: modules/crm-customer-accounts/migrations
   retained_record_types:
-    - customer-accounts.account
+    - accounts.account

@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package crm.accounts.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+
+// Lifecycle state owned by crm.customer-accounts.
+enum AccountStatus {
+  ACCOUNT_STATUS_UNSPECIFIED = 0;
+  ACCOUNT_STATUS_ACTIVE = 1;
+  ACCOUNT_STATUS_INACTIVE = 2;
+}
+
+// Initial explicit Party roles inside the Account commercial relationship.
+// Additional roles may be added compatibly; Party identity remains owned by crm.parties.
+enum AccountPartyRole {
+  ACCOUNT_PARTY_ROLE_UNSPECIFIED = 0;
+  ACCOUNT_PARTY_ROLE_PRIMARY = 1;
+  ACCOUNT_PARTY_ROLE_MEMBER = 2;
+}
+
+message AccountPartyAssociation {
+  crm.customer.v1.PartyRef party_ref = 1;
+  AccountPartyRole role = 2;
+}
+
+message Account {
+  crm.customer.v1.AccountRef account_ref = 1;
+  string name = 2;
+  AccountStatus status = 3;
+  repeated AccountPartyAssociation party_associations = 4;
+  crm.customer.v1.CustomerResourceVersion resource_version = 5;
+}
+
+message CreateAccountRequest {
+  crm.customer.v1.AccountRef account_ref = 1;
+  string name = 2;
+  repeated AccountPartyAssociation party_associations = 3;
+}
+
+message CreateAccountResponse {
+  Account account = 1;
+}
+
+message UpdateAccountRequest {
+  crm.customer.v1.AccountRef account_ref = 1;
+  int64 expected_version = 2;
+  string name = 3;
+  AccountStatus status = 4;
+  repeated AccountPartyAssociation party_associations = 5;
+}
+
+message UpdateAccountResponse {
+  Account account = 1;
+}
+
+message GetAccountRequest {
+  crm.customer.v1.AccountRef account_ref = 1;
+}
+
+message GetAccountResponse {
+  Account account = 1;
+}
+
+enum AccountSort {
+  ACCOUNT_SORT_UNSPECIFIED = 0;
+  ACCOUNT_SORT_UPDATED_AT_DESCENDING = 1;
+}
+
+message ListAccountsRequest {
+  crm.core.v1.PageRequest page = 1;
+  optional AccountStatus status = 2;
+  AccountSort sort = 3;
+}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+  crm.core.v1.PageInfo page = 2;
+}
+
+message AccountCreatedEvent {
+  Account account = 1;
+}
+
+message AccountUpdatedEvent {
+  Account account = 1;
+}
+
+service AccountService {
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  rpc UpdateAccount(UpdateAccountRequest) returns (UpdateAccountResponse);
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+}

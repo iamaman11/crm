@@ -15,11 +15,11 @@ A **business module** is an independently governed runtime unit under `modules/`
 - independent build/test behavior;
 - no direct infrastructure or cross-module storage access.
 
-A **link module** is also a business module, but it owns optional cross-domain coordination rather than the source or target aggregates.
+A **link module** is also a business module, but it owns optional cross-domain coordination rather than source or target aggregates.
 
 The following do **not** count as business modules:
 
-- platform/runtime crates under `crates/`;
+- platform/runtime/composition crates under `crates/`;
 - deployable process shells under `services/`;
 - Protobuf packages;
 - SQL migrations;
@@ -42,11 +42,13 @@ A manifest may declare future owned object names. That declaration does not mean
 |---|---|---|---|---|
 | `crm.sales` | Sales owner domain | **Vertical slice** | Deal create/update/stage advance/get/list | Leads, qualification, pipelines/admin depth, territories, quotas, forecasts, account plans, revenue intelligence, coaching and other expert Sales scope |
 | `crm.activities` | Activities/productivity owner domain | **Vertical slice** | Task create/update/complete/reminder/get/list | Appointments, recurring work, queues, calendars, synchronization and other expert activity scope |
-| `crm.parties` | Canonical person and organization identity | **Expert expansion** | Production Party create/get is merged; optimistic update and permission-aware list are active in Phase 8A.2b with real PostgreSQL/process acceptance | Party search/discovery projection, structured person/organization profiles, provenance, identity resolution, merge/unmerge, import/export and privacy lifecycle work across later Phase 8A packets |
-| `crm.customer-accounts` | Canonical customer/commercial relationship | **Foundation** | Stable module identity and canonical `AccountRef` only | Account aggregate, Party association semantics, public contracts and production vertical slice in Phase 8A.3 |
-| `crm.contact-points` | Canonical email/phone/postal/messaging endpoints | **Foundation** | Stable module identity and canonical `ContactPointRef` only | Channel, verification, validity, preference, public contracts and production vertical slice in Phase 8A.3 |
+| `crm.parties` | Canonical person and organization identity | **Expert expansion** | Production Party create/update/get/list plus permission-aware rebuildable global search discovery | Structured person/organization profiles, provenance, identity resolution, merge/unmerge, import/export and privacy lifecycle work across later Phase 8A packets |
+| `crm.customer-accounts` | Canonical customer/commercial relationship | **Vertical slice in PR #102 pending merge** | Governed Account create/update/get/list with typed Party associations, live reference integrity, signed cursor listing and real PostgreSQL/process acceptance | Account hierarchy/advanced commercial semantics where justified, plus Customer 360 composition in later 8A.3 packets |
+| `crm.contact-points` | Canonical email/phone/postal/messaging endpoints | **Foundation** | Stable module identity and canonical `ContactPointRef` only | Channel lifecycle, verification, validity, preference, public contracts and production vertical slice in 8A.3b |
 
-Current owner-module count: **5** — two production vertical slices, one customer-master owner in expert expansion and two customer-master foundations.
+Current owner-module count: **5**.
+
+After PR #102 merges, production owner vertical slices are **Sales, Activities, Parties and Customer Accounts**; Contact Points remains a foundation.
 
 Current count of product-complete expert modules: **0**.
 
@@ -60,25 +62,39 @@ The published `module_id` is fixed as **`crm.sales-activities-link`** and is tre
 
 Current business-module count: **6** — five owner modules plus one optional link module.
 
-Current production-integrated business-module count: **4** — Sales, Activities and Parties owner production slices plus one link integration slice. This count does not imply any of those owner modules is product-complete.
-
 ## 5. Mandatory customer-master owner domains
 
 Tracked by Phase 8A / issue #28.
 
-Stable identities established in Phase 8A.1:
-
-- `crm.parties` — Party owner for person and organization identity — **Expert expansion**; create/get is merged, update/list is active in 8A.2b and search/discovery is tracked as 8A.2c / #98.
-- `crm.customer-accounts` — Account owner for customer/commercial relationships — **Foundation**.
-- `crm.contact-points` — Contact Point owner for email, phone, postal and messaging endpoints — **Foundation**.
-
-Remaining independently governed owner domains:
-
-- Party Relationship — employment, household, hierarchy and typed relationships — **Planned**.
-- Consent and Preferences — purpose/channel/legal-basis consent and suppression — **Planned**.
-- Identity Resolution — source identities, matching, survivorship and merge/unmerge lineage — **Planned**.
+- `crm.parties` — Party owner for person and organization identity — **Expert expansion**; create/update/get/list/search production lifecycle complete.
+- `crm.customer-accounts` — Account owner for customer/commercial relationships — **Vertical slice in PR #102 pending merge**.
+- `crm.contact-points` — Contact Point owner for email, phone, postal and messaging endpoints — **Foundation; 8A.3b next**.
+- Party Relationship — employment, household, hierarchy and typed relationships — **Planned for 8A.3c**.
+- Consent and Preferences — purpose/channel/legal-basis consent and suppression — **Planned for 8A.4**.
+- Identity Resolution — source identities, matching, survivorship and merge/unmerge lineage — **Planned for 8A.5–8A.6**.
 
 The shared `crm.customer.v1` Protobuf package contains only cross-owner references and shared public version metadata. It is **not** a business module and owns no mutable behavior or storage.
+
+`crm-global-search-composition` is also **not** a business module. It owns only cross-domain rebuildable projection composition; Party remains the identity owner and search remains non-authoritative.
+
+### Account ownership boundary
+
+`crm.customer-accounts` owns:
+
+- Account identity and lifecycle;
+- Account name/status;
+- typed Party association roles;
+- Account optimistic version progression.
+
+It does **not** own:
+
+- mutable Party identity attributes;
+- Contact Point lifecycle;
+- Party Relationship hierarchy;
+- consent or communication authorization;
+- Customer 360 projections.
+
+Party-reference existence and tenant integrity are validated in application/platform composition before Account mutation execution, preserving a pure owner-domain aggregate with no direct Party storage access.
 
 ## 6. Mandatory commercial lifecycle owner domains
 
@@ -126,7 +142,7 @@ These are major product/platform workstreams but should not inflate the business
 - PostgreSQL authoritative data runtime.
 - Event delivery runtime and rebuildable projection runtime.
 - Production application composition root and process host.
-- Search and generalized indexes.
+- Permission-aware search runtime and neutral cross-domain search composition.
 - Admin Studio metadata publication.
 - Product shell/design system and typed UI-extension runtime.
 - AI actor/tool layer.

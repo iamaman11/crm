@@ -171,6 +171,51 @@
           "message": "crm.parties.v1.PartyUpdatedEvent"
         }
       ]
+    },
+    {
+      "module_id": "crm.customer-accounts",
+      "capabilities": [
+        {
+          "id": "accounts.account.create",
+          "version": "1.0.0",
+          "rpc": "crm.accounts.v1.AccountService.CreateAccount",
+          "request": "crm.accounts.v1.CreateAccountRequest",
+          "response": "crm.accounts.v1.CreateAccountResponse"
+        },
+        {
+          "id": "accounts.account.update",
+          "version": "1.0.0",
+          "rpc": "crm.accounts.v1.AccountService.UpdateAccount",
+          "request": "crm.accounts.v1.UpdateAccountRequest",
+          "response": "crm.accounts.v1.UpdateAccountResponse"
+        },
+        {
+          "id": "accounts.account.get",
+          "version": "1.0.0",
+          "rpc": "crm.accounts.v1.AccountService.GetAccount",
+          "request": "crm.accounts.v1.GetAccountRequest",
+          "response": "crm.accounts.v1.GetAccountResponse"
+        },
+        {
+          "id": "accounts.account.list",
+          "version": "1.0.0",
+          "rpc": "crm.accounts.v1.AccountService.ListAccounts",
+          "request": "crm.accounts.v1.ListAccountsRequest",
+          "response": "crm.accounts.v1.ListAccountsResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "accounts.account.created",
+          "version": "1.0.0",
+          "message": "crm.accounts.v1.AccountCreatedEvent"
+        },
+        {
+          "id": "accounts.account.updated",
+          "version": "1.0.0",
+          "message": "crm.accounts.v1.AccountUpdatedEvent"
+        }
+      ]
     }
   ]
 }

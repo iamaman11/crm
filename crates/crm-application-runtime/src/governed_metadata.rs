@@ -4,18 +4,30 @@ use crm_capability_runtime::{
     TransactionalCapabilityExecutor,
 };
 use crm_core_data::{
-    AggregateTarget, CapabilityBatchExecutionPlan, PostgresMetadataCapabilityExecutor,
-    PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner,
+    AggregateTarget, CapabilityBatchExecutionPlan, PostgresDataStore,
+    PostgresMetadataCapabilityExecutor, PostgresTransactionalAggregateExecutor, RecordGetQuery,
+    TransactionalAggregatePlanner,
+};
+use crm_customer_accounts_capability_adapter::{
+    CustomerAccountCapabilityPlanner, MUTATION_CAPABILITY_IDS as ACCOUNT_MUTATION_CAPABILITY_IDS,
+    capability_definitions as account_capability_definitions, referenced_party_ids_from_create,
+    referenced_party_ids_from_update,
+};
+use crm_customer_accounts_query_adapter::{
+    AccountQueryAdapter, QUERY_CAPABILITY_IDS as ACCOUNT_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as account_query_capability_definitions,
 };
 use crm_metadata_api_adapter::{
     METADATA_MUTATION_CAPABILITY_IDS, METADATA_QUERY_CAPABILITY_IDS,
     metadata_mutation_capability_definitions, metadata_query_capability_definitions,
 };
 use crm_metadata_query_adapter::MetadataQueryAdapter;
-use crm_module_sdk::{ErrorCategory, PortFuture, RecordSnapshot, SdkError};
+use crm_module_sdk::{
+    ErrorCategory, ModuleId, PortFuture, RecordId, RecordSnapshot, RecordType, SdkError,
+};
 use crm_parties_capability_adapter::{
-    PARTY_MUTATION_CAPABILITY_IDS, PartyCapabilityPlanner,
-    capability_definitions as party_capability_definitions,
+    MODULE_ID as PARTIES_MODULE_ID, PARTY_MUTATION_CAPABILITY_IDS, PartyCapabilityPlanner,
+    RECORD_TYPE as PARTY_RECORD_TYPE, capability_definitions as party_capability_definitions,
 };
 use crm_parties_query_adapter::{
     PARTY_QUERY_CAPABILITY_IDS, PartyQueryAdapter,
@@ -29,12 +41,14 @@ use crm_sales_activities_capability_composition::{
     capability_definitions as sales_activities_capability_definitions,
     query_capability_definitions as production_query_capability_definitions,
 };
+use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
 
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = sales_activities_capability_definitions()?;
     definitions.extend(party_capability_definitions()?);
+    definitions.extend(account_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
@@ -42,6 +56,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
 pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = production_query_capability_definitions()?;
     definitions.extend(party_query_capability_definitions()?);
+    definitions.extend(account_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -65,6 +80,8 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
     ) -> Result<AggregateTarget, SdkError> {
         if PARTY_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             PartyCapabilityPlanner.target(definition, request)
+        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            CustomerAccountCapabilityPlanner.target(definition, request)
         } else {
             SalesActivitiesCapabilityPlannerRouter.target(definition, request)
         }
@@ -78,6 +95,8 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
         if PARTY_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             PartyCapabilityPlanner.plan(definition, request, current)
+        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            CustomerAccountCapabilityPlanner.plan(definition, request, current)
         } else {
             SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
         }
@@ -86,16 +105,19 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
 
 #[derive(Clone)]
 pub struct ApplicationCapabilityExecutorRouter {
+    store: PostgresDataStore,
     aggregate: Arc<PostgresTransactionalAggregateExecutor>,
     metadata: Arc<PostgresMetadataCapabilityExecutor>,
 }
 
 impl ApplicationCapabilityExecutorRouter {
     pub fn new(
+        store: PostgresDataStore,
         aggregate: Arc<PostgresTransactionalAggregateExecutor>,
         metadata: Arc<PostgresMetadataCapabilityExecutor>,
     ) -> Self {
         Self {
+            store,
             aggregate,
             metadata,
         }
@@ -106,6 +128,7 @@ impl fmt::Debug for ApplicationCapabilityExecutorRouter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ApplicationCapabilityExecutorRouter")
+            .field("store", &self.store)
             .field("aggregate", &"PostgresTransactionalAggregateExecutor")
             .field("metadata", &"PostgresMetadataCapabilityExecutor")
             .finish()
@@ -120,16 +143,71 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
     ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
         if METADATA_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.metadata.execute(definition, request)
+        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            Box::pin(async move {
+                validate_account_party_references(&self.store, definition, &request).await?;
+                self.aggregate.execute(definition, request).await
+            })
         } else {
             self.aggregate.execute(definition, request)
         }
     }
 }
 
+async fn validate_account_party_references(
+    store: &PostgresDataStore,
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+) -> Result<(), SdkError> {
+    let references = match definition.capability_id.as_str() {
+        "accounts.account.create" => referenced_party_ids_from_create(request)?,
+        "accounts.account.update" => referenced_party_ids_from_update(request)?,
+        _ => return Err(account_reference_configuration_error()),
+    };
+    let unique_party_ids = references
+        .into_iter()
+        .map(|reference| reference.as_str().to_owned())
+        .collect::<BTreeSet<_>>();
+    let owner_module_id = ModuleId::try_new(PARTIES_MODULE_ID).map_err(catalog_error)?;
+    let record_type = RecordType::try_new(PARTY_RECORD_TYPE).map_err(catalog_error)?;
+
+    for party_id in unique_party_ids {
+        let record_id = RecordId::try_new(party_id).map_err(catalog_error)?;
+        let exists = store
+            .get_record_for_query(&RecordGetQuery {
+                tenant_id: request.context.execution.tenant_id.clone(),
+                owner_module_id: owner_module_id.clone(),
+                record_type: record_type.clone(),
+                record_id,
+            })
+            .await?
+            .is_some();
+        if !exists {
+            return Err(SdkError::new(
+                "CUSTOMER_ACCOUNTS_PARTY_REFERENCE_UNAVAILABLE",
+                ErrorCategory::InvalidArgument,
+                false,
+                "One or more referenced Parties are unavailable.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn account_reference_configuration_error() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ACCOUNTS_REFERENCE_VALIDATION_CONFIGURATION_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The Account reference validation configuration is invalid.",
+    )
+}
+
 #[derive(Debug, Clone)]
 pub struct ApplicationQueryRouter {
     production: ProductionQueryRouter,
     parties: PartyQueryAdapter,
+    accounts: AccountQueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
@@ -137,11 +215,13 @@ impl ApplicationQueryRouter {
     pub fn new(
         production: ProductionQueryRouter,
         parties: PartyQueryAdapter,
+        accounts: AccountQueryAdapter,
         metadata: MetadataQueryAdapter,
     ) -> Self {
         Self {
             production,
             parties,
+            accounts,
             metadata,
         }
     }
@@ -157,6 +237,8 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
             self.metadata.validate(definition, request)
         } else if PARTY_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.parties.validate(definition, request)
+        } else if ACCOUNT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.accounts.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -173,6 +255,8 @@ impl QueryExecutor for ApplicationQueryRouter {
             self.metadata.execute(definition, request)
         } else if PARTY_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.parties.execute(definition, request)
+        } else if ACCOUNT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.accounts.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }
@@ -203,6 +287,7 @@ mod tests {
             mutations.len(),
             PRODUCTION_MUTATION_CAPABILITY_IDS.len()
                 + PARTY_MUTATION_CAPABILITY_IDS.len()
+                + ACCOUNT_MUTATION_CAPABILITY_IDS.len()
                 + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
@@ -213,6 +298,13 @@ mod tests {
             );
         }
         for coordinate in PARTY_MUTATION_CAPABILITY_IDS {
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
+        for coordinate in ACCOUNT_MUTATION_CAPABILITY_IDS {
             assert!(
                 mutations
                     .iter()
@@ -233,6 +325,7 @@ mod tests {
             PRODUCTION_QUERY_CAPABILITY_IDS.len()
                 + 1
                 + PARTY_QUERY_CAPABILITY_IDS.len()
+                + ACCOUNT_QUERY_CAPABILITY_IDS.len()
                 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(
@@ -241,6 +334,13 @@ mod tests {
                 .any(|definition| { definition.capability_id.as_str() == SEARCH_QUERY_CAPABILITY })
         );
         for coordinate in PARTY_QUERY_CAPABILITY_IDS {
+            assert!(
+                queries
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
+        for coordinate in ACCOUNT_QUERY_CAPABILITY_IDS {
             assert!(
                 queries
                     .iter()

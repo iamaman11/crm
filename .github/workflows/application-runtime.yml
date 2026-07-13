@@ -10,12 +10,15 @@ on:
       - "proto/crm/metadata/**"
       - "proto/crm/customer/**"
       - "proto/crm/parties/**"
+      - "proto/crm/accounts/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
+      - "crates/crm-customer-accounts-capability-adapter/**"
+      - "crates/crm-customer-accounts-query-adapter/**"
       - "crates/crm-metadata-api-adapter/**"
       - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-parties-capability-adapter/**"
@@ -25,6 +28,7 @@ on:
       - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-customer-accounts/**"
       - "modules/crm-parties/**"
       - "modules/crm-sales-activities-link/**"
       - "services/crm-api/**"
@@ -40,12 +44,15 @@ on:
       - "proto/crm/metadata/**"
       - "proto/crm/customer/**"
       - "proto/crm/parties/**"
+      - "proto/crm/accounts/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
+      - "crates/crm-customer-accounts-capability-adapter/**"
+      - "crates/crm-customer-accounts-query-adapter/**"
       - "crates/crm-metadata-api-adapter/**"
       - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-parties-capability-adapter/**"
@@ -55,6 +62,7 @@ on:
       - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-customer-accounts/**"
       - "modules/crm-parties/**"
       - "modules/crm-sales-activities-link/**"
       - "services/crm-api/**"
@@ -68,7 +76,7 @@ permissions:
 jobs:
   application-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17-alpine
@@ -98,29 +106,55 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Apply complete Phase 7 application schema
+      - name: Prepare isolated application database reset helper
+        shell: bash
         run: |
+          cat > /tmp/reset-application-database.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --command "DROP SCHEMA IF EXISTS crm CASCADE"
           for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/0010_*.up.sql; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
           done
-      - name: Seed production application fixtures
-        run: |
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+          SH
+          chmod +x /tmp/reset-application-database.sh
       - name: Verify full crm-api process lifecycle
         shell: bash
         run: |
           set -o pipefail
+          /tmp/reset-application-database.sh
           cargo test -p crm-api --test process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-process.log
       - name: Verify Party crm-api process lifecycle
         shell: bash
         run: |
           set -o pipefail
+          /tmp/reset-application-database.sh
           cargo test -p crm-api --test party_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-party-process.log
+      - name: Verify Account crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test account_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-account-process.log
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/application-runtime-postgres.log 2>&1
+          else
+            echo "PostgreSQL service container was not found." > database/application-runtime-postgres.log
+            docker ps -a >> database/application-runtime-postgres.log 2>&1
+          fi
       - name: Upload application runtime diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -129,12 +163,17 @@ jobs:
           path: |
             database/application-runtime-process.log
             database/application-runtime-party-process.log
+            database/application-runtime-account-process.log
+            database/application-runtime-postgres.log
             crates/crm-application-runtime/
+            crates/crm-customer-accounts-capability-adapter/
+            crates/crm-customer-accounts-query-adapter/
             crates/crm-metadata-api-adapter/
             crates/crm-metadata-query-adapter/
             crates/crm-parties-capability-adapter/
             crates/crm-parties-query-adapter/
             crates/crm-search-query-adapter/
+            modules/crm-customer-accounts/
             services/crm-api/
           if-no-files-found: error
           retention-days: 7

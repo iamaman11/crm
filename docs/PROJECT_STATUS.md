@@ -11,12 +11,15 @@ This document is the concise human-readable status page. The normative sequence 
 Current Phase 8A execution state:
 
 - **8A.1 — complete:** canonical Party, Account and Contact Point references plus owner-domain foundations (#92 / merged PR #93);
-- **8A.2a — complete:** production Party create/get through governed mutation/query paths with PostgreSQL, Personal data classification, live authorization, idempotency, outbox and audit evidence (#94 / merged PR #95);
-- **8A.2b — active:** optimistic Party update and permission-aware cursor listing (#96 / draft PR #97);
-- **8A.2c — planned next:** rebuildable permission-aware Party search/customer discovery projection (#98);
-- **8A.3 and later:** Account, Contact Point, Party Relationship, Consent/Preferences, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
+- **8A.2a — complete:** authoritative Party create/get (#94 / merged PR #95);
+- **8A.2b — complete:** optimistic Party update and permission-aware cursor listing (#96 / merged PR #97);
+- **8A.2c — complete:** rebuildable permission-aware Party search/customer discovery (#98 / merged PR #99);
+- **8A.3a — production implementation complete in PR #102 pending merge:** authoritative Account lifecycle and Party associations (#101 / PR #102);
+- **8A.3b — next:** Contact Point lifecycle, verification and preference;
+- **8A.3c–8A.3d:** Party Relationship lifecycle/hierarchy and permission-aware Customer 360 composition;
+- **8A.4 and later:** consent/preferences, identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
 
-The repository now contains a production-composed modular CRM platform foundation plus the first expert customer-master owner-domain expansion:
+The repository now contains a production-composed modular CRM platform foundation plus the first expert customer-master owner domains:
 
 - executable repository governance and architecture boundaries;
 - typed Module Manifest IR and immutable module identity;
@@ -25,9 +28,11 @@ The repository now contains a production-composed modular CRM platform foundatio
 - PostgreSQL tenant/RLS, record, relationship, idempotency, outbox and append-only audit foundation;
 - authenticated mutation and permission-bound query gateways;
 - independent Sales Deal and Activities Task production vertical slices;
-- canonical Party identity owner with merged create/get and active update/list expert expansion;
+- canonical Party identity owner with production create/update/get/list and permission-aware rebuildable search discovery;
+- canonical Customer Account owner with production create/update/get/list, typed Party associations and cross-owner reference-integrity composition in PR #102;
 - governed event delivery and the optional `crm.sales-activities-link` module;
 - generalized rebuildable projections and tenant/permission-aware search;
+- neutral cross-domain global-search composition that owns projection mapping but no authoritative business state;
 - real `crm-application-runtime` composition boundary and deployable `services/crm-api` process host;
 - typed web product shell with governed generated browser clients and real browser E2E;
 - immutable tenant-authorized metadata publication lifecycle;
@@ -37,11 +42,11 @@ The repository now contains a production-composed modular CRM platform foundatio
 - governed Admin Studio authoring → publish → impact → activate → rollback workflow;
 - typed trusted-code UI-extension runtime with per-extension load/render failure isolation.
 
-The product is **not yet a complete universal CRM**. `CRM_CAPABILITY_COVERAGE.md` now makes the full target explicit so the program cannot become infrastructure-complete but CRM-incomplete.
+The product is **not yet a complete universal CRM**. `CRM_CAPABILITY_COVERAGE.md` makes the full target explicit so the program cannot become infrastructure-complete but CRM-incomplete.
 
 ## Functional scope completeness baseline
 
-The normative capability baseline now explicitly covers:
+The normative capability baseline explicitly covers:
 
 - Customer 360, Party/Account/Contact Point master data, relationships, consent, identity resolution, data quality and privacy lifecycle;
 - Sales force automation including leads, pipelines, activities, routing, territories, teams, quotas, forecasting, renewals, sequences and mobile/offline workflows;
@@ -74,69 +79,23 @@ Public state-changing behavior enters through authenticated, tenant- and actor-b
 
 ### Phase 6 — first modular production proof — Complete
 
-PR #63 completed the first full backend vertical proof:
+PR #63 established independent typed Sales `Deal` and Activities `Task` owner aggregates, publication-compatible Protobuf contracts, production PostgreSQL mutations and permission-bound queries, authenticated HTTP/gRPC ingress, durable event delivery, the optional Sales–Activities link module, rebuildable projections, a real application composition root and deployable `crm-api` process with process-level acceptance.
 
-- typed independent Sales `Deal` and Activities `Task` owner aggregates;
-- publication-compatible Protobuf contracts;
-- authenticated production PostgreSQL mutations and permission-bound queries;
-- durable event delivery with retry/recovery/dead-letter behavior;
-- lifecycle-aware Sales-to-Activities link execution through the production `CapabilityGateway`;
-- rebuildable Deal timeline and Task status projections;
-- real application composition root, HTTP/gRPC ingress, health/readiness and graceful shutdown;
-- process-level acceptance against real PostgreSQL and `crm-api`.
+### Phase 7 — search, metadata, Admin Studio and product plane — Complete
 
-Final review head `25793548e46bdbd57312a513b4e9ffbceb33a2c1` passed Contract, Governance, Rust, Database, Event Runtime, Application Runtime and Rust Generated Sync before merge.
+Phase 7 delivered:
 
-### Phase 7A — golden module tooling — Complete
+- golden module tooling;
+- generalized projection runtime;
+- permission-aware candidate-only search with logical generations;
+- typed web product shell and governed browser-client boundary;
+- immutable tenant-authorized typed metadata;
+- durable metadata persistence and optimistic activation/rollback;
+- governed metadata API and application composition;
+- the first governed Admin Studio publish/impact/activate/rollback workflow;
+- typed trusted-code UI-extension runtime with per-extension load/render failure isolation.
 
-#56 / merged PR #64 established repository-supported owner/link module scaffolding, overwrite-safe generation, dependency validation, architecture-safe crate/manifests, acceptance placeholders and permanent repository commands.
-
-### Phase 7B — generalized projection runtime — Complete
-
-#65 / merged PR #67 introduced `crm-projection-runtime`, deterministic projection registration/execution, poison/failure handling and rebuild orchestration without moving owner-domain semantics into infrastructure.
-
-### Phase 7C — permission-aware search — Complete
-
-#66 / merged PR #68 completed the production search foundation:
-
-- search indexes are candidate-only and rebuildable;
-- live resource and field visibility are re-checked before disclosure;
-- logical search generations support deterministic rebuild/switching;
-- PostgreSQL FTS remains a replaceable adapter;
-- `search.global.query` is routed through the governed production `QueryGateway`;
-- acceptance covers permission revocation, hidden-field non-disclosure, deterministic pagination and tenant isolation.
-
-Final review head `90d8ad4afc15ba31bc27297e4a9c7081e64ac4e7` passed all applicable Contract, Governance, Rust, Database, Projection, Event, Search, Application Runtime and Rust Generated Sync gates.
-
-### Phase 7D — typed web product shell — Complete
-
-#71 / merged PR #73 established the governed product-plane foundation: strict TypeScript, generated Protobuf-ES clients, governed browser boundaries, typed session state, safe error mapping, responsive/accessibility foundations and hermetic Playwright E2E against ephemeral PostgreSQL.
-
-### Phase 7E — immutable, tenant-authorized typed metadata — Complete
-
-#77/#78, #79/#80 and #81/#82 established immutable metadata-bundle snapshots, deterministic revision identity, tenant-scoped publication authority, structural impact analysis, optimistic activation/rollback and strict typed definitions for objects, fields, relationships, layouts, saved views, pipelines, permission templates and workflows.
-
-### Phase 7F — durable tenant-scoped metadata persistence — Complete
-
-#83 / merged PR #84 added immutable tenant-scoped revision persistence, deterministic reconstruction, optimistic activation heads, per-tenant locking, durable rollback history, append-only transition evidence, FORCE RLS and PostgreSQL acceptance.
-
-### Phase 7G — governed metadata API and application composition — Complete
-
-#85 / merged PR #86 closed the public governed boundary over metadata runtime and persistence with exact versioned Protobuf contracts, `CapabilityGateway` mutations, `QueryGateway` reads, PostgreSQL adapters, global audit evidence and typed browser operations.
-
-Final review head `7989ea1256f01bfd4e8ee2d33f5ad8370d6cc645` passed all 11 applicable workflows simultaneously. PR #86 merged to `main` as `970548d14faf26f4b8f6cb47f7d9f168e61d9c28`.
-
-### Phase 7H — first governed Admin Studio workflow — Complete
-
-#87 / merged PR #88 delivered typed object-definition authoring, immutable candidate publication, impact review, breaking-change confirmation, optimistic activation/rollback and real browser E2E against fresh PostgreSQL and `crm-api`.
-
-### Phase 7I — typed UI-extension runtime and host failure isolation — Complete
-
-#89 / merged PR #90 delivered exact typed extension surfaces, immutable validated registration, readonly bounded host context, per-extension lazy-load/render isolation, safe failure evidence and browser proof that the shell, core record content and healthy siblings survive extension failures.
-
-Final review head `874dde11f5d558bd5e53f2def3e8903ff12f361a` passed Governance CI, Rust CI and Product Plane CI including full PostgreSQL/process/browser E2E. PR #90 merged to `main` as `0fb389c72b148311f590c3fdbae2a4f89fffd915`.
-
-Phase 10 remains responsible for signed packages and sandboxed untrusted marketplace execution. Phase 7I deliberately does not claim arbitrary third-party JavaScript isolation.
+Untrusted marketplace execution remains Phase 10 and is not confused with same-realm trusted UI extensions.
 
 ## Active executable program — Phase 8A customer master
 
@@ -148,59 +107,56 @@ Phase 10 remains responsible for signed packages and sandboxed untrusted marketp
 - `crm.customer-accounts` — customer/commercial relationship owner;
 - `crm.contact-points` — email/phone/postal/messaging endpoint owner.
 
-The shared `crm.customer.v1` package is reference/version metadata only and does not own mutable customer state.
+The shared `crm.customer.v1` package is reference/version metadata only and owns no mutable customer state.
 
-### 8A.2a — authoritative Party create/get — Complete
+### 8A.2 — complete Party lifecycle and discovery — Complete
 
-#94 / merged PR #95 delivered:
+The complete first Party lifecycle was deliberately split into three production packets:
 
-- Person and Organization Party aggregate;
-- governed create through `CapabilityGateway`;
-- permission-aware get through `QueryGateway`;
-- Personal data classification;
-- tenant isolation;
-- idempotency, durable outbox event and canonical audit evidence;
-- real PostgreSQL and process-level `crm-api` acceptance.
+- **8A.2a / #94 / PR #95:** governed create/get, Personal data classification, tenant isolation, idempotency, outbox and audit evidence;
+- **8A.2b / #96 / PR #97:** optimistic update, signed cursor listing, live per-resource/per-field visibility and replay/conflict/non-disclosure proof;
+- **8A.2c / #98 / PR #99:** neutral cross-domain search composition, Party create/update indexing from immutable owner events, generation migration to `g2`, live search authorization and process-level search convergence/non-disclosure proof.
 
-### 8A.2b — optimistic Party update and permission-aware list — Active
+Party remains the authoritative identity owner. Search remains rebuildable and non-authoritative.
 
-#96 / draft PR #97 is delivering:
+### 8A.3a — authoritative Account lifecycle and Party associations — Production implementation complete in PR #102 pending merge
 
-- immutable Party identity/kind with optimistic display-name updates;
-- exact expected-version conflict handling and deterministic version progression;
-- governed `parties.party.update@1.0.0` with idempotency, event and audit evidence;
-- deterministic signed cursor listing bound to tenant, actor, capability, filter, sort and page size;
-- optional typed Party-kind filter;
-- live per-resource and per-field visibility enforcement;
-- process-level PostgreSQL acceptance covering create, get, update, replay, conflicting replay, stale version, pagination, kind filtering, unauthenticated access, cross-tenant non-disclosure and exact evidence counts;
-- synchronized generated Rust/browser contract descriptors.
+#101 / PR #102 delivers:
 
-This packet is not considered complete until all applicable CI gates are green together on one exact final head and the PR is merged.
+- immutable typed Account identity owned solely by `crm.customer-accounts`;
+- normalized bounded Account name and explicit Active/Inactive lifecycle;
+- stable Party references and typed Primary/Member roles without copying mutable Party identity data;
+- exactly one primary Party association and deterministic duplicate-free association normalization;
+- optimistic exact-version updates, monotonic governed mutation time and semantic no-op rejection;
+- strict deterministic persisted Account state contract;
+- additive v1 create/update/get/list and created/updated event contracts;
+- immutable module manifest and exact contract bindings;
+- governed transactional create/update with idempotency, optimistic persistence, outbox and audit evidence;
+- permission-aware get/list with signed tenant/actor/filter/sort/page-bound cursors and field redaction;
+- platform-level cross-owner Party-reference integrity validation before Account mutation execution;
+- identical safe rejection for missing and cross-tenant Party references;
+- synchronized Rust/browser contract descriptors;
+- independent fresh-database process acceptance for the existing full application, Party lifecycle and new Account lifecycle;
+- Account process proof covering prerequisite governed Party creation, reference-integrity rejection without Account side effects, create/replay/get/update/update replay/stale conflict, pagination, status filter, unauthenticated rejection, cross-tenant non-disclosure and durable evidence deltas.
 
-### 8A.2c — Party search and customer discovery — Planned next
+The Account owner module itself has no SQL dependency and does not read Party storage directly.
 
-#98 will integrate Party into the existing rebuildable generation-based search architecture while preserving these rules:
+### 8A.3b — Contact Point lifecycle, verification and preference — Next
 
-- Party remains the authoritative identity owner;
-- search is candidate-only and rebuildable;
-- live resource/field authorization is re-checked before disclosure;
-- tenant isolation and deterministic generation switch/rebuild behavior are proven;
-- create/update event replay remains idempotent.
+Next packet will establish canonical Contact Point ownership for email, phone, postal, web and messaging endpoints with typed channel semantics, verification state/evidence boundaries, validity/preference rules, stable Party/Account references where justified, optimistic mutation/query paths and real PostgreSQL/process acceptance.
 
-8A.2 is complete only after 8A.2a, 8A.2b and 8A.2c are production-proven.
+Consent and communication authorization remain separate owner concerns and will not be hidden inside Contact Point flags.
 
-### 8A.3 and later customer-master sequence
+### Remaining 8A sequence
 
-After Party lifecycle/discovery is stable:
+After Contact Point:
 
-1. Account lifecycle and Party relationship semantics;
-2. Contact Point lifecycle, verification and preference state;
-3. Party Relationship types, validity intervals and hierarchy projections;
-4. Customer 360 composition without a second identity owner;
-5. Consent and communication authorization;
-6. deterministic/explainable duplicate candidates and identity resolution;
-7. governed merge/unmerge, provenance and survivorship;
-8. import/export, data quality, enrichment provenance and privacy lifecycle proof.
+1. Party Relationship lifecycle and temporal hierarchy foundations;
+2. permission-aware rebuildable Customer 360 composition without a second customer master;
+3. Consent and communication authorization;
+4. deterministic/explainable duplicate candidates and identity resolution;
+5. governed merge/unmerge, provenance and survivorship;
+6. import/export, data quality, enrichment provenance and privacy lifecycle proof.
 
 ## Product readiness summary
 
@@ -210,9 +166,9 @@ The repository currently tracks **six business modules**:
 
 - `crm.sales` — production Deal vertical slice; broader expert Sales scope remains planned;
 - `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;
-- `crm.parties` — canonical identity owner in expert expansion; create/get merged, update/list active, search next;
-- `crm.customer-accounts` — owner foundation, production Account lifecycle pending 8A.3;
-- `crm.contact-points` — owner foundation, production Contact Point lifecycle pending 8A.3;
+- `crm.parties` — canonical identity owner in expert expansion with production create/update/get/list/search;
+- `crm.customer-accounts` — authoritative Account vertical slice in PR #102 pending merge;
+- `crm.contact-points` — owner foundation; production lifecycle next in 8A.3b;
 - `crm.sales-activities-link` — optional independently governed production integration slice.
 
 Current product-complete expert module count: **0**. A production vertical slice is not the same as complete expert-domain functionality.
@@ -223,6 +179,7 @@ Current product-complete expert module count: **0**. A production vertical slice
 - tenant/RLS authoritative data foundation and append-only audit;
 - durable event delivery;
 - rebuildable projections and permission-aware search;
+- neutral cross-domain search composition over generic generation infrastructure;
 - production application composition and deployable process host;
 - typed web product shell and governed browser-client boundary;
 - immutable typed metadata publication and persistence;
@@ -247,9 +204,9 @@ Current product-complete expert module count: **0**. A production vertical slice
 
 ## Immediate delivery sequence
 
-1. Finish Phase 8A.2b / #96 / PR #97 on one exact green head.
-2. Deliver Phase 8A.2c / #98 Party search and customer discovery projection.
-3. Deliver Phase 8A.3 Account, Contact Point, Party Relationship and Customer 360 foundations.
+1. Merge Phase 8A.3a / #101 / PR #102 after one final exact-head green gate set.
+2. Deliver Phase 8A.3b Contact Point lifecycle, verification and preference.
+3. Deliver Party Relationship and Customer 360 composition packets.
 4. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.
 5. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.
 6. Advance the remaining capability families from `CRM_CAPABILITY_COVERAGE.md` as explicit owner-domain or governed integration packets.
@@ -265,8 +222,6 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 - a new commit invalidates prior evidence for checks not rerun;
 - GitHub CI remains the final exact-head merge authority.
 
-#74 / merged PR #75 adds capability-based Codex qualification. #76 remains an open process-hardening follow-up to make exact-SHA review freeze explicitly aware of source-changing automation.
-
 ## Development mode
 
 - one branch per coherent delivery packet, not per mechanical edit;
@@ -276,8 +231,6 @@ The repository uses the exact-SHA multi-agent model from #70 / merged PR #72:
 - qualified agents may own bounded integration fixes, non-overlapping workstreams or full delivery packets according to `CODEX_AGENT_QUALIFICATION.md`;
 - full GitHub CI remains mandatory on the exact final review head;
 - architecture, contract, tenant, authorization, audit and rollback gates remain strict.
-
-See `DEVELOPMENT_WORKFLOW.md`, `MULTI_AGENT_DEVELOPMENT.md`, `CODEX_AGENT_QUALIFICATION.md` and `MODULE_DEVELOPMENT.md`.
 
 ## Documentation hygiene rule
 
