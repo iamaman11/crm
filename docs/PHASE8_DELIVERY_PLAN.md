@@ -114,7 +114,7 @@ This packet intentionally does **not** absorb Contact Point, Party Relationship,
 
 Tracked by #103. Implementation branch: `develop/phase8a3b-contact-point-lifecycle`.
 
-Current branch foundation already contains:
+The branch currently contains the first two Contact Point product-code commits: owner-module dependency updates and the new domain foundation. That foundation includes:
 
 - typed Contact Point identity and stable Party reference;
 - Email, Phone, Postal, Web and Messaging kinds;
@@ -126,7 +126,7 @@ Current branch foundation already contains:
 - canonical channel-value normalization/validation foundations;
 - domain dependencies required for URL/IDNA and deterministic persisted-state work.
 
-The branch is currently two commits ahead of `main` and is **not yet production-complete**.
+The packet is **not yet production-complete**.
 
 Remaining packet scope:
 
