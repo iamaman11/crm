@@ -7,6 +7,10 @@ on:
     paths:
       - ".github/workflows/phase8a3c-contract-binding-sync.yml"
 
+concurrency:
+  group: phase8a3c-contract-binding-sync
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
