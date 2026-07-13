@@ -13,10 +13,14 @@ on:
       - "proto/crm/accounts/**"
       - "proto/crm/contact_points/**"
       - "proto/crm/party_relationships/**"
+      - "proto/crm/consents/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
+      - "crates/crm-consents-capability-adapter/**"
+      - "crates/crm-consents-capability-composition/**"
+      - "crates/crm-consents-query-adapter/**"
       - "crates/crm-contact-points-capability-adapter/**"
       - "crates/crm-contact-points-query-adapter/**"
       - "crates/crm-core-data/**"
@@ -35,6 +39,7 @@ on:
       - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-consents/**"
       - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
       - "modules/crm-parties/**"
@@ -56,10 +61,14 @@ on:
       - "proto/crm/accounts/**"
       - "proto/crm/contact_points/**"
       - "proto/crm/party_relationships/**"
+      - "proto/crm/consents/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
+      - "crates/crm-consents-capability-adapter/**"
+      - "crates/crm-consents-capability-composition/**"
+      - "crates/crm-consents-query-adapter/**"
       - "crates/crm-contact-points-capability-adapter/**"
       - "crates/crm-contact-points-query-adapter/**"
       - "crates/crm-core-data/**"
@@ -78,6 +87,7 @@ on:
       - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-consents/**"
       - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
       - "modules/crm-parties/**"
@@ -94,7 +104,7 @@ permissions:
 jobs:
   application-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:17-alpine
@@ -175,6 +185,13 @@ jobs:
           /tmp/reset-application-database.sh
           cargo test -p crm-api --test party_relationship_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-party-relationship-process.log
+      - name: Verify Consent and communication authorization crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test consent_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-consent-process.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -198,8 +215,12 @@ jobs:
             database/application-runtime-account-process.log
             database/application-runtime-contact-point-process.log
             database/application-runtime-party-relationship-process.log
+            database/application-runtime-consent-process.log
             database/application-runtime-postgres.log
             crates/crm-application-runtime/
+            crates/crm-consents-capability-adapter/
+            crates/crm-consents-capability-composition/
+            crates/crm-consents-query-adapter/
             crates/crm-contact-points-capability-adapter/
             crates/crm-contact-points-query-adapter/
             crates/crm-customer-accounts-capability-adapter/
@@ -212,6 +233,7 @@ jobs:
             crates/crm-party-relationships-query-adapter/
             crates/crm-party-relationships-projection/
             crates/crm-search-query-adapter/
+            modules/crm-consents/
             modules/crm-contact-points/
             modules/crm-customer-accounts/
             modules/crm-party-relationships/
