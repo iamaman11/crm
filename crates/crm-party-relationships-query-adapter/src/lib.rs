@@ -15,6 +15,8 @@ use crm_party_relationships::{
 use crm_party_relationships_capability_adapter::{
     MODULE_ID, RECORD_TYPE, party_relationship_from_snapshot, party_relationship_to_wire,
 };
+#[cfg(test)]
+use crm_proto_contracts::crm::customer::v1 as customer;
 use crm_proto_contracts::crm::{core::v1 as core, party_relationships::v1 as wire};
 use crm_query_runtime::{
     CursorBinding, CursorCodec, CursorContinuation, PageSizePolicy, QueryExecutionResult,
