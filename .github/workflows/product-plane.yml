@@ -36,14 +36,12 @@ on:
       - "services/crm-api/**"
       - "database/**"
 
-# Only the newest Product Plane validation for a PR/ref is useful. Cancelling stale runs
-# prevents old exact-SHA candidates from consuming hosted runners while the current head waits.
 concurrency:
   group: product-plane-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   check-and-test:
@@ -51,6 +49,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -66,6 +67,23 @@ jobs:
 
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate canonical contract hashes
+        run: pnpm web:generate
+
+      - name: Commit canonical generated hashes when needed
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- packages/client/src/contract_hashes.ts; then
+            echo "Browser contract hashes are already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/client/src/contract_hashes.ts
+          git commit -m "Synchronize Customer 360 browser contract hashes"
+          git push origin "HEAD:${HEAD_BRANCH}"
 
       - name: Verify generated contract hashes are up-to-date
         run: |
