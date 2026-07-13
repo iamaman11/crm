@@ -10,6 +10,7 @@ crm-application-runtime = { path = "../../crates/crm-application-runtime" }
 [dev-dependencies]
 crm-capability-runtime = { path = "../../crates/crm-capability-runtime" }
 crm-core-data = { path = "../../crates/crm-core-data" }
+crm-customer-360-composition = { path = "../../crates/crm-customer-360-composition" }
 crm-module-sdk = { path = "../../crates/crm-module-sdk" }
 crm-party-relationships-projection = { path = "../../crates/crm-party-relationships-projection" }
 crm-proto-contracts = { path = "../../crates/crm-proto-contracts" }
