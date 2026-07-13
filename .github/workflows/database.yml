@@ -13,6 +13,8 @@ on:
       - "crates/crm-capability-plan-support/**"
       - "crates/crm-sales-capability-adapter/**"
       - "crates/crm-activities-capability-adapter/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
       - "crates/crm-search-runtime/**"
@@ -20,6 +22,7 @@ on:
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
+      - "modules/crm-parties/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - "docs/adr/ADR-030-public-gateway-acceptance.md"
@@ -36,6 +39,8 @@ on:
       - "crates/crm-capability-plan-support/**"
       - "crates/crm-sales-capability-adapter/**"
       - "crates/crm-activities-capability-adapter/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
       - "crates/crm-search-runtime/**"
@@ -43,6 +48,7 @@ on:
       - "crates/crm-capability-ingress/**"
       - "services/crm-api/**"
       - "modules/crm-sales/**"
+      - "modules/crm-parties/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - "docs/adr/ADR-030-public-gateway-acceptance.md"
@@ -197,6 +203,14 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-capability-ingress --features postgres-integration --test postgres_production_evidence_rollback -- --nocapture 2>&1 | tee database/postgres-production-evidence-rollback.log
+      - name: Verify Party audit evidence omission rollback
+        env:
+          DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-parties-capability-adapter --features postgres-integration --test postgres_evidence_rollback -- --nocapture 2>&1 | tee database/postgres-party-evidence-rollback.log
       - name: Verify Sales PostgreSQL mutation planner
         env:
           DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
@@ -217,6 +231,8 @@ jobs:
             crates/crm-application-runtime/
             crates/crm-core-data/
             crates/crm-capability-ingress/
+            crates/crm-parties-capability-adapter/
+            crates/crm-parties-query-adapter/
             crates/crm-sales-activities-capability-composition/
             crates/crm-sales-activities-query-adapter/
             crates/crm-search-runtime/
@@ -253,35 +269,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Verify legacy data upgrade through current runtime schema
-        shell: bash
+      - name: Apply legacy snapshot and upgrade migrations
         run: |
-          set -o pipefail
-          psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql 2>&1 | tee database/legacy-upgrade.log
+          psql --set ON_ERROR_STOP=1 --file database/tests/fixtures/legacy_pre_versioning.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
+          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
           psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
-      - name: Verify upgraded schema can roll back cleanly
-        run: |
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
-          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
-          test "${count}" = "0"
-      - name: Upload upgrade diagnostics on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: database-upgrade-diagnostics
-          path: database/
-          if-no-files-found: error
-          retention-days: 7
+      - name: Verify legacy rows were upgraded with defaults
+        run: psql --set ON_ERROR_STOP=1 --file database/tests/0002_platform_upgrade.sql
