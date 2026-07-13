@@ -142,14 +142,9 @@ message ConsentAuthorizationWithdrawnEvent {
 }
 
 service ConsentAuthorizationService {
-  rpc CreateConsentAuthorization(CreateConsentAuthorizationRequest)
-      returns (CreateConsentAuthorizationResponse);
-  rpc WithdrawConsentAuthorization(WithdrawConsentAuthorizationRequest)
-      returns (WithdrawConsentAuthorizationResponse);
-  rpc GetConsentAuthorization(GetConsentAuthorizationRequest)
-      returns (GetConsentAuthorizationResponse);
-  rpc ListConsentAuthorizations(ListConsentAuthorizationsRequest)
-      returns (ListConsentAuthorizationsResponse);
-  rpc AuthorizeCommunication(AuthorizeCommunicationRequest)
-      returns (AuthorizeCommunicationResponse);
+  rpc CreateConsentAuthorization(CreateConsentAuthorizationRequest) returns (CreateConsentAuthorizationResponse);
+  rpc WithdrawConsentAuthorization(WithdrawConsentAuthorizationRequest) returns (WithdrawConsentAuthorizationResponse);
+  rpc GetConsentAuthorization(GetConsentAuthorizationRequest) returns (GetConsentAuthorizationResponse);
+  rpc ListConsentAuthorizations(ListConsentAuthorizationsRequest) returns (ListConsentAuthorizationsResponse);
+  rpc AuthorizeCommunication(AuthorizeCommunicationRequest) returns (AuthorizeCommunicationResponse);
 }
