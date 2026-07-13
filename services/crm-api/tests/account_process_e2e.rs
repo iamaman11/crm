@@ -816,13 +816,12 @@ async fn account_evidence_counts(admin: &PgPool, tenant_id: &str) -> EvidenceCou
     .fetch_one(admin)
     .await
     .expect("count Account outbox events");
-    let audits = sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1",
-    )
-    .bind(tenant_id)
-    .fetch_one(admin)
-    .await
-    .expect("count Account audit evidence");
+    let audits =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(admin)
+            .await
+            .expect("count Account audit evidence");
     let idempotency = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1",
     )
