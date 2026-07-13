@@ -273,6 +273,51 @@
           "message": "crm.contact_points.v1.ContactPointVerifiedEvent"
         }
       ]
+    },
+    {
+      "module_id": "crm.party-relationships",
+      "capabilities": [
+        {
+          "id": "party-relationships.party-relationship.create",
+          "version": "1.0.0",
+          "rpc": "crm.party_relationships.v1.PartyRelationshipService.CreatePartyRelationship",
+          "request": "crm.party_relationships.v1.CreatePartyRelationshipRequest",
+          "response": "crm.party_relationships.v1.CreatePartyRelationshipResponse"
+        },
+        {
+          "id": "party-relationships.party-relationship.update",
+          "version": "1.0.0",
+          "rpc": "crm.party_relationships.v1.PartyRelationshipService.UpdatePartyRelationship",
+          "request": "crm.party_relationships.v1.UpdatePartyRelationshipRequest",
+          "response": "crm.party_relationships.v1.UpdatePartyRelationshipResponse"
+        },
+        {
+          "id": "party-relationships.party-relationship.get",
+          "version": "1.0.0",
+          "rpc": "crm.party_relationships.v1.PartyRelationshipService.GetPartyRelationship",
+          "request": "crm.party_relationships.v1.GetPartyRelationshipRequest",
+          "response": "crm.party_relationships.v1.GetPartyRelationshipResponse"
+        },
+        {
+          "id": "party-relationships.party-relationship.list",
+          "version": "1.0.0",
+          "rpc": "crm.party_relationships.v1.PartyRelationshipService.ListPartyRelationships",
+          "request": "crm.party_relationships.v1.ListPartyRelationshipsRequest",
+          "response": "crm.party_relationships.v1.ListPartyRelationshipsResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "party-relationships.party-relationship.created",
+          "version": "1.0.0",
+          "message": "crm.party_relationships.v1.PartyRelationshipCreatedEvent"
+        },
+        {
+          "id": "party-relationships.party-relationship.updated",
+          "version": "1.0.0",
+          "message": "crm.party_relationships.v1.PartyRelationshipUpdatedEvent"
+        }
+      ]
     }
   ]
 }
