@@ -343,7 +343,10 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_search_and_tena
     assert_eq!(after_organization.events, after_update.events + 1);
     assert_eq!(after_organization.audits, after_update.audits + 1);
     assert_eq!(after_organization.idempotency, after_update.idempotency + 1);
-    assert_eq!(after_organization.transactions, after_update.transactions + 1);
+    assert_eq!(
+        after_organization.transactions,
+        after_update.transactions + 1
+    );
 
     let list_definition = query_definition(PARTY_LIST);
     let first_page = query(
@@ -395,12 +398,7 @@ async fn crm_api_process_serves_governed_party_lifecycle_listing_search_and_tena
     let people = query(
         &mut grpc,
         &list_definition,
-        party_list_payload(
-            &list_definition,
-            10,
-            "",
-            Some(parties::PartyKind::Person),
-        ),
+        party_list_payload(&list_definition, 10, "", Some(parties::PartyKind::Person)),
         TENANT_A,
         true,
     )
