@@ -34,22 +34,40 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Synchronize generated Rust state for diagnostics
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
-      - name: Commit synchronized files when needed
+      - name: Capture targeted Customer 360 query adapter diagnostics
+        id: check
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          cargo check -p crm-customer-360-query-adapter --all-targets 2>&1 | tee customer-360-query-check.log
+          status=${PIPESTATUS[0]}
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload targeted diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-360-query-adapter-diagnostics
+          path: customer-360-query-check.log
+          if-no-files-found: error
+          retention-days: 7
+      - name: Fail after diagnostics when targeted check failed
+        if: steps.check.outputs.status != '0'
+        run: exit 1
+      - name: Commit canonical generated state when targeted check passes
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          if git diff --cached --quiet; then
+            echo "Customer 360 query adapter is already synchronized."
+            exit 0
+          fi
+          git commit -m "Synchronize Customer 360 query adapter foundation"
           git push origin "HEAD:${HEAD_BRANCH}"
