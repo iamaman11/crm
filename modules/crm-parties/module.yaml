@@ -1,0 +1,65 @@
+schema_version: crm.module/v1
+module_id: crm.parties
+version: "0.1.0"
+display_name: CRM Parties
+description: Canonical owner domain for person and organization identity.
+
+owner:
+  team: customer-platform
+  contact: "crm-owner@example.com"
+  codeowners:
+    - "@iamaman11"
+
+runtime:
+  kind: in_process
+  entrypoint: modules/crm-parties
+
+platform:
+  minimum_version: "0.1.0"
+
+dependencies:
+  required: []
+  optional: []
+  conflicts: []
+
+provides:
+  capabilities:
+    - id: parties.party.create
+      version: "1.0.0"
+    - id: parties.party.get
+      version: "1.0.0"
+  events:
+    - id: parties.party.created
+      version: "1.0.0"
+  objects:
+    - parties.person
+    - parties.organization
+  ui_extensions: []
+
+consumes:
+  capabilities: []
+  events: []
+
+storage:
+  record_types:
+    - parties.person
+    - parties.organization
+  private_state_namespaces:
+    - crm.parties
+
+security:
+  data_classes:
+    - internal
+    - confidential
+    - personal
+  network_egress: []
+  secret_handles: []
+
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-parties/migrations
+  retained_record_types:
+    - parties.person
+    - parties.organization

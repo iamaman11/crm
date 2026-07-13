@@ -42,8 +42,11 @@ A manifest may declare future owned object names. That declaration does not mean
 |---|---|---|---|---|
 | `crm.sales` | Sales owner domain | **Vertical slice** | Deal create/update/stage advance/get/list | Leads, qualification, pipelines/admin depth, territories, quotas, forecasts, account plans, revenue intelligence, coaching and other expert Sales scope |
 | `crm.activities` | Activities/productivity owner domain | **Vertical slice** | Task create/update/complete/reminder/get/list | Appointments, recurring work, queues, calendars, synchronization and other expert activity scope |
+| `crm.parties` | Canonical person and organization identity | **Foundation** | Versioned Party references and create/get/created wire contracts only | Typed Person/Organization aggregates, persistence, governed adapters and production acceptance in Phase 8A.2 |
+| `crm.customer-accounts` | Canonical customer/commercial relationship | **Foundation** | Stable module identity and canonical `AccountRef` only | Account aggregate, Party association semantics, public contracts and production vertical slice in Phase 8A.3 |
+| `crm.contact-points` | Canonical email/phone/postal/messaging endpoints | **Foundation** | Stable module identity and canonical `ContactPointRef` only | Channel, verification, validity, preference, public contracts and production vertical slice in Phase 8A.3 |
 
-Current count: **2 implemented owner modules with production vertical slices**.
+Current owner-module count: **5** — two production vertical slices and three customer-master foundations.
 
 Current count of product-complete expert modules: **0**.
 
@@ -55,22 +58,27 @@ Current count of product-complete expert modules: **0**.
 
 The published `module_id` is fixed as **`crm.sales-activities-link`** and is treated as immutable module identity.
 
-Current implemented business-module count: **3** — two owner modules plus one optional link module.
+Current business-module count: **6** — five owner modules plus one optional link module.
+
+Current production-integrated business-module count: **3** — two owner vertical slices plus one link integration slice.
 
 ## 5. Mandatory customer-master owner domains
 
 Tracked by Phase 8A / issue #28.
 
-These are independent authoritative domains; final packaging may use one or more installable modules only if ownership remains explicit and non-overlapping.
+Stable identities established in Phase 8A.1:
 
-- Party — person and organization identity.
-- Account — customer/commercial relationship.
-- Contact Point — email, phone, postal and messaging endpoints.
-- Party Relationship — employment, household, hierarchy and typed relationships.
-- Consent and Preferences — purpose/channel/legal-basis consent and suppression.
-- Identity Resolution — source identities, matching, survivorship, merge/unmerge lineage.
+- `crm.parties` — Party owner for person and organization identity — **Foundation**.
+- `crm.customer-accounts` — Account owner for customer/commercial relationships — **Foundation**.
+- `crm.contact-points` — Contact Point owner for email, phone, postal and messaging endpoints — **Foundation**.
 
-State: **Planned**.
+Remaining independently governed owner domains:
+
+- Party Relationship — employment, household, hierarchy and typed relationships — **Planned**.
+- Consent and Preferences — purpose/channel/legal-basis consent and suppression — **Planned**.
+- Identity Resolution — source identities, matching, survivorship and merge/unmerge lineage — **Planned**.
+
+The shared `crm.customer.v1` Protobuf package contains only cross-owner references and shared public version metadata. It is **not** a business module and owns no mutable behavior or storage.
 
 ## 6. Mandatory commercial lifecycle owner domains
 
@@ -106,7 +114,7 @@ Tracked primarily by Phase 8 / issue #11. Each area must either become an explic
 - Automation runtime and administration.
 - Governed integration adapters.
 
-State: **Planned except the existing Sales and Activities vertical slices and the Sales–Activities production link slice**.
+State: **In progress through Phase 8A customer-master foundations; other areas remain planned except the existing Sales and Activities vertical slices and Sales–Activities production link slice**.
 
 ## 8. Platform capabilities that are not business modules
 
@@ -120,7 +128,7 @@ These are major product/platform workstreams but should not inflate the business
 - Production application composition root and process host.
 - Search and generalized indexes.
 - Admin Studio metadata publication.
-- Product shell/design system.
+- Product shell/design system and typed UI-extension runtime.
 - AI actor/tool layer.
 - Signed marketplace/WASM sandbox.
 - Enterprise security and operational proof.
@@ -144,6 +152,6 @@ Do not create a module solely because a directory, screen, table or team exists.
 
 ## 10. Target scale
 
-The final universal CRM will contain substantially more than the current three implemented business modules. The roadmap already implies **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
+The final universal CRM will contain substantially more than the current six business modules. The roadmap already implies **more than twenty owner/link bounded contexts or major independently governed domain areas**, but the final count is intentionally driven by authoritative ownership rather than an arbitrary module target.
 
 The exact count becomes authoritative only as domains receive stable published module identities.

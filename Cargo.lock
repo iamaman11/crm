@@ -358,6 +358,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-contact-points"
+version = "0.1.0"
+dependencies = [
+ "crm-core-contracts",
+ "crm-module-sdk",
+]
+
+[[package]]
 name = "crm-core-contracts"
 version = "0.1.0"
 
@@ -422,6 +430,14 @@ version = "0.1.0"
 dependencies = [
  "crm-core-contracts",
  "crm-core-permissions",
+]
+
+[[package]]
+name = "crm-customer-accounts"
+version = "0.1.0"
+dependencies = [
+ "crm-core-contracts",
+ "crm-module-sdk",
 ]
 
 [[package]]
@@ -494,6 +510,14 @@ name = "crm-module-sdk"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "crm-parties"
+version = "0.1.0"
+dependencies = [
+ "crm-core-contracts",
+ "crm-module-sdk",
 ]
 
 [[package]]

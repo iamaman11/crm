@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package crm.parties.v1;
+
+import "crm/customer/v1/reference.proto";
+
+// Explicit sentinel plus additive numeric values preserve safe evolution. An
+// unknown future numeric value can survive Protobuf round-trip even when an
+// older consumer does not yet understand its business meaning.
+enum PartyKind {
+  PARTY_KIND_UNSPECIFIED = 0;
+  PARTY_KIND_PERSON = 1;
+  PARTY_KIND_ORGANIZATION = 2;
+}
+
+// Public Party state is intentionally minimal in the contract foundation.
+// Structured person/organization profiles, provenance and matching evidence
+// remain additive follow-on contracts rather than leaking private aggregate
+// persistence into the first wire schema.
+message Party {
+  crm.customer.v1.PartyRef party_ref = 1;
+  PartyKind kind = 2;
+  string display_name = 3;
+  crm.customer.v1.CustomerResourceVersion resource_version = 4;
+}
+
+message CreatePartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  PartyKind kind = 2;
+  string display_name = 3;
+}
+
+message CreatePartyResponse {
+  Party party = 1;
+}
+
+message GetPartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+}
+
+message GetPartyResponse {
+  Party party = 1;
+}
+
+message PartyCreatedEvent {
+  Party party = 1;
+}
+
+service PartyService {
+  rpc CreateParty(CreatePartyRequest) returns (CreatePartyResponse);
+  rpc GetParty(GetPartyRequest) returns (GetPartyResponse);
+}
