@@ -34,22 +34,75 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Repair known Consent adapter test shadowing
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-consents-capability-adapter/src/planner.rs')
+          text = path.read_text()
+          old = '''        let wire = consent_authorization_to_wire(&authorization);
+                  assert_eq!(wire.purpose, "marketing.newsletter");
+                  assert_eq!(wire.channel, wire::CommunicationChannel::Email as i32);
+                  assert_eq!(wire.effect, wire::ConsentEffect::Grant as i32);
+                  assert_eq!(
+                      wire.resource_version.expect("resource version").version,
+                      1
+                  );'''
+          new = '''        let projected = consent_authorization_to_wire(&authorization);
+                  assert_eq!(projected.purpose, "marketing.newsletter");
+                  assert_eq!(
+                      projected.channel,
+                      wire::CommunicationChannel::Email as i32
+                  );
+                  assert_eq!(projected.effect, wire::ConsentEffect::Grant as i32);
+                  assert_eq!(
+                      projected
+                          .resource_version
+                          .expect("resource version")
+                          .version,
+                      1
+                  );'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif 'let projected = consent_authorization_to_wire(&authorization);' not in text:
+              raise SystemExit('Consent adapter shadowing repair anchor not found')
+          path.write_text(text)
+          PY
+      - name: Capture targeted Consent adapter diagnostics
+        id: check
+        shell: bash
+        run: |
           cargo fmt --all
-      - name: Commit synchronized files when needed
+          cargo generate-lockfile
+          set +e
+          set -o pipefail
+          cargo check -p crm-consents-capability-adapter --all-targets 2>&1 | tee /tmp/consent-adapter-check.log
+          status=${PIPESTATUS[0]}
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload targeted diagnostics
+        if: steps.check.outputs.status != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: consent-adapter-diagnostics
+          path: /tmp/consent-adapter-check.log
+          if-no-files-found: error
+          retention-days: 7
+      - name: Fail after diagnostics
+        if: steps.check.outputs.status != '0'
+        run: exit 1
+      - name: Commit verified Consent adapter and restore standard workflow
+        if: steps.check.outputs.status == '0'
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
+          git show origin/main:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add .github/workflows/rust-generated-sync.yml Cargo.lock crates/crm-consents-capability-adapter modules/crm-consents
+          if git diff --cached --quiet; then
+            echo "Consent adapter is already synchronized."
+            exit 0
+          fi
+          git commit -m "Synchronize Consent mutation adapter foundation"
           git push origin "HEAD:${HEAD_BRANCH}"
