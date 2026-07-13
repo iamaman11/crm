@@ -50,16 +50,12 @@ jobs:
           text = roadmap.read_text()
           current = (
               "Current delivery position: Party create/update/get/list/search is production-proven. "
-              "The authoritative Account vertical slice is merged and production-proven (#101 / merged PR #102; final verified head "
-              "`0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4`; merge commit `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`). "
+              "The authoritative Account vertical slice is merged and production-proven (#101 / merged PR #102; final verified head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4`; merge commit `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`). "
               "Contact Point is merged and production-proven (#103 / merged PR #104; merge commit `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`). "
               f"Party Relationship lifecycle and rebuildable hierarchy foundations are merged and production-proven (#108 / merged PR #109; merge commit `{REL_MERGE}`). "
-              "Customer 360 composition is implementation-complete in #110 / draft PR #111 on `develop/phase8a3d-customer-360`: the independently governed read-only "
-              "`crm.customer360` composition module, additive `crm.customer_360.v1` query contract, strict multi-owner event validation, deterministic per-source contributions, "
-              "indexed Party-root lookup, live source-resource authorization, least-privilege field redaction, runtime projection worker, freshness metadata, canonical generated descriptors "
-              f"and fresh-PostgreSQL real `crm-api` convergence/rebuild acceptance are present. All 11 applicable CI workflows were green together on pre-documentation exact head `{PRE_DOC_SHA}`; "
-              "this documentation commit intentionally invalidates that evidence until the post-documentation exact-head rerun completes. Consent and communication authorization follows as 8A.4; "
-              "identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets."
+              "Customer 360 composition is implementation-complete in #110 / draft PR #111 on `develop/phase8a3d-customer-360`: the independently governed read-only `crm.customer360` composition module, additive `crm.customer_360.v1` query contract, strict multi-owner event validation, deterministic per-source contributions, indexed Party-root lookup, live source-resource authorization, least-privilege field redaction, runtime projection worker, freshness metadata, canonical generated descriptors and fresh-PostgreSQL real `crm-api` convergence/rebuild acceptance are present. "
+              f"All 11 applicable CI workflows were green together on pre-documentation exact head `{PRE_DOC_SHA}`; this documentation commit intentionally invalidates that evidence until the post-documentation exact-head rerun completes. "
+              "Consent and communication authorization follows as 8A.4; identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets."
           )
           text = sub_once(text, r"Current delivery position:.*?(?=\n\n### 8B)", current, "roadmap current position", re.S)
           sequence = """## 12. Immediate delivery sequence
@@ -86,8 +82,7 @@ jobs:
           if "independently governed read-only `crm.customer360` composition" not in text:
               text = text.replace(
                   "- authoritative Party Relationship owner with typed directional/reciprocal semantics, temporal lifecycle and a rebuildable cycle-safe hierarchy projection;",
-                  "- authoritative Party Relationship owner with typed directional/reciprocal semantics, temporal lifecycle and a rebuildable cycle-safe hierarchy projection;\n"
-                  "- independently governed read-only `crm.customer360` composition with deterministic multi-owner contributions, live source authorization/redaction, indexed Party-root lookup and rebuildable freshness-aware views;",
+                  "- authoritative Party Relationship owner with typed directional/reciprocal semantics, temporal lifecycle and a rebuildable cycle-safe hierarchy projection;\n- independently governed read-only `crm.customer360` composition with deterministic multi-owner contributions, live source authorization/redaction, indexed Party-root lookup and rebuildable freshness-aware views;",
                   1,
               )
           text = text.replace("### 8A.3c — Party Relationship lifecycle and hierarchy foundations — Complete / merge gate", "### 8A.3c — Party Relationship lifecycle and hierarchy foundations — Complete", 1)
@@ -126,42 +121,20 @@ All 11 applicable CI workflows were green together on pre-documentation exact he
               "project remaining sequence",
               re.S,
           )
-          text = text.replace(
-              "- `crm.party-relationships` — implementation-complete authoritative Party Relationship vertical slice in PR #109, pending the post-documentation exact-head merge gate;",
-              "- `crm.party-relationships` — merged authoritative Party Relationship production vertical slice;",
-              1,
-          )
+          text = text.replace("- `crm.party-relationships` — implementation-complete authoritative Party Relationship vertical slice in PR #109, pending the post-documentation exact-head merge gate;", "- `crm.party-relationships` — merged authoritative Party Relationship production vertical slice;", 1)
           if "The repository also contains the independently governed read-only composition module `crm.customer360`." not in text:
               text = text.replace(
                   "- `crm.sales-activities-link` — optional independently governed production integration slice.",
-                  "- `crm.sales-activities-link` — optional independently governed production integration slice.\n\n"
-                  "The repository also contains the independently governed read-only composition module `crm.customer360`. It is not counted as an authoritative owner module because it owns no customer aggregate or mutable source state; it provides a rebuildable permission-aware Customer 360 query surface over owner contracts.",
+                  "- `crm.sales-activities-link` — optional independently governed production integration slice.\n\nThe repository also contains the independently governed read-only composition module `crm.customer360`. It is not counted as an authoritative owner module because it owns no customer aggregate or mutable source state; it provides a rebuildable permission-aware Customer 360 query surface over owner contracts.",
                   1,
               )
           status.write_text(text)
 
           catalog = Path("docs/MODULE_CATALOG.md")
           text = catalog.read_text()
-          text = re.sub(
-              r"\| `crm\.party-relationships` \| Authoritative typed Party-to-Party relationships.*?\|$",
-              "| `crm.party-relationships` | Authoritative typed Party-to-Party relationships and temporal hierarchy source state | **Vertical slice** | Merged create/update/get/list lifecycle with directional/reciprocal semantics, same-tenant Party-reference integrity, signed cursor queries, durable evidence and rebuildable hierarchy acceptance from #108 / PR #109 | Later explicitly governed overlap-policy expansion where justified |",
-              text,
-              count=1,
-              flags=re.M,
-          )
-          text = re.sub(
-              r"Production owner vertical slices are .*?\.",
-              "Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points and Party Relationships**.",
-              text,
-              count=1,
-          )
-          text = re.sub(
-              r"- `crm\.party-relationships` — Party Relationship owner.*?$",
-              "- `crm.party-relationships` — Party Relationship owner for employment, household, parent/subsidiary and bounded configurable typed relationships — **Merged production vertical slice** from #108 / PR #109.",
-              text,
-              count=1,
-              flags=re.M,
-          )
+          text = re.sub(r"\| `crm\.party-relationships` \| Authoritative typed Party-to-Party relationships.*?\|$", "| `crm.party-relationships` | Authoritative typed Party-to-Party relationships and temporal hierarchy source state | **Vertical slice** | Merged create/update/get/list lifecycle with directional/reciprocal semantics, same-tenant Party-reference integrity, signed cursor queries, durable evidence and rebuildable hierarchy acceptance from #108 / PR #109 | Later explicitly governed overlap-policy expansion where justified |", text, count=1, flags=re.M)
+          text = re.sub(r"Production owner vertical slices are .*?\.", "Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points and Party Relationships**.", text, count=1)
+          text = re.sub(r"- `crm\.party-relationships` — Party Relationship owner.*?$", "- `crm.party-relationships` — Party Relationship owner for employment, household, parent/subsidiary and bounded configurable typed relationships — **Merged production vertical slice** from #108 / PR #109.", text, count=1, flags=re.M)
           if "`crm.customer360` is an independently lifecycle-managed **read-composition module**" not in text:
               anchor = "`crm-global-search-composition` is also **not** a business module. It owns only cross-domain rebuildable projection composition; Party remains the identity owner and search remains non-authoritative."
               text = text.replace(anchor, anchor + "\n\n`crm.customer360` is an independently lifecycle-managed **read-composition module**, not an authoritative owner module. It publishes `customer360.customer.get@1.0.0`, consumes immutable owner events and materializes rebuildable contribution documents, but declares no owned objects, record types, private authoritative state or mutation capability. It is tracked separately from the six authoritative owner modules and the optional link-module count.", 1)
@@ -178,13 +151,7 @@ All 11 applicable CI workflows were green together on pre-documentation exact he
           text = plan.read_text()
           text = text.replace("#### 8A.3c — Party Relationship lifecycle and hierarchy foundations — Complete / merge gate", "#### 8A.3c — Party Relationship lifecycle and hierarchy foundations — Complete", 1)
           text = text.replace("Tracked by #108 / draft PR #109 on `develop/phase8a3c-party-relationship`.", "Delivered by #108 / merged PR #109.", 1)
-          text = re.sub(
-              r"All 11 applicable CI workflows were green together on pre-documentation exact head `a26d0364382c3fa5fb369d8ca1c65941863ff75b`\..*?merge gate is satisfied\.",
-              f"The final exact-head merge gate completed and PR #109 merged to `main` as `{REL_MERGE}`.",
-              text,
-              count=1,
-              flags=re.S,
-          )
+          text = re.sub(r"All 11 applicable CI workflows were green together on pre-documentation exact head `a26d0364382c3fa5fb369d8ca1c65941863ff75b`\..*?merge gate is satisfied\.", f"The final exact-head merge gate completed and PR #109 merged to `main` as `{REL_MERGE}`.", text, count=1, flags=re.S)
           plan_section = f"""#### 8A.3d — Customer 360 composition — Complete / merge gate
 
 Tracked by #110 / draft PR #111 on `develop/phase8a3d-customer-360`.
@@ -220,15 +187,16 @@ All 11 applicable CI workflows were green together on pre-documentation exact he
               if missing:
                   raise SystemExit(f"{filename} missing normative markers: {missing}")
           PY
-      - name: Commit synchronized normative status
+      - name: Commit synchronized normative status and restore standard workflow
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
+          git show origin/main:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/IMPLEMENTATION_ROADMAP.md docs/PROJECT_STATUS.md docs/MODULE_CATALOG.md docs/PHASE8_DELIVERY_PLAN.md
+          git add .github/workflows/rust-generated-sync.yml docs/IMPLEMENTATION_ROADMAP.md docs/PROJECT_STATUS.md docs/MODULE_CATALOG.md docs/PHASE8_DELIVERY_PLAN.md
           if git diff --cached --quiet; then
-            echo "Phase 8A.3d normative status is already synchronized."
+            echo "Phase 8A.3d normative status and standard workflow are already synchronized."
             exit 0
           fi
           git commit -m "Finalize Phase 8A.3d normative merge-gate status"
