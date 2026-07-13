@@ -5,7 +5,7 @@ use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
-    PortFuture, RecordId, RecordType, SdkError, TypedPayload,
+    PortFuture, RecordId, RecordType, SdkError,
 };
 use crm_parties::{Party, decode_party_state};
 use crm_parties_capability_adapter::{MODULE_ID, RECORD_TYPE, party_to_wire, persisted_contract};
