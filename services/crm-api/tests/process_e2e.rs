@@ -375,12 +375,17 @@ fn query_definition(capability_id: &str) -> CapabilityDefinition {
 }
 
 fn payload<M: Message>(definition: &CapabilityDefinition, message: M) -> TypedPayload {
+    let data_class = *definition
+        .input_contract
+        .allowed_data_classes
+        .first()
+        .expect("governed input contract must declare a data class");
     let payload = TypedPayload {
         owner: definition.input_contract.owner.clone(),
         schema_id: definition.input_contract.schema_id.clone(),
         schema_version: definition.input_contract.schema_version.clone(),
         descriptor_hash: definition.input_contract.descriptor_hash,
-        data_class: DataClass::Confidential,
+        data_class,
         encoding: PayloadEncoding::Protobuf,
         maximum_size_bytes: definition.input_contract.maximum_size_bytes,
         retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
@@ -396,11 +401,25 @@ fn wire_payload(payload: TypedPayload) -> GatewayTypedPayload {
         schema_id: payload.schema_id.as_str().to_owned(),
         schema_version: payload.schema_version.as_str().to_owned(),
         descriptor_hash: payload.descriptor_hash.to_vec(),
-        data_class: "confidential".to_owned(),
+        data_class: data_class_name(payload.data_class).to_owned(),
         encoding: "protobuf".to_owned(),
         maximum_size_bytes: payload.maximum_size_bytes,
         retention_policy_id: payload.retention_policy_id.as_str().to_owned(),
         payload: payload.bytes,
+    }
+}
+
+fn data_class_name(data_class: DataClass) -> &'static str {
+    match data_class {
+        DataClass::Public => "public",
+        DataClass::Internal => "internal",
+        DataClass::Confidential => "confidential",
+        DataClass::Restricted => "restricted",
+        DataClass::Personal => "personal",
+        DataClass::SensitivePersonal => "sensitive_personal",
+        DataClass::Biometric => "biometric",
+        DataClass::Financial => "financial",
+        DataClass::Credential => "credential",
     }
 }
 
