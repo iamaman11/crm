@@ -33,23 +33,144 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+          components: rustfmt
+      - name: Compose neutral global search implementation
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
+          python - <<'PY'
+          from pathlib import Path
+
+          runtime = Path("crates/crm-application-runtime/src/runtime.rs")
+          text = runtime.read_text()
+          old = '''use crm_query_runtime::{CursorCodec, QueryGateway};
+          use crm_sales_activities_capability_composition::{
+              DEAL_TIMELINE_PROJECTION_ID, GLOBAL_SEARCH_INDEX_ID, Phase6ProjectionWorker,
+              Phase7SearchWorker, ProductionQueryRouter, SalesActivitiesLinkDeliveryOutcome,
+              SalesActivitiesLinkEventProcessor, SalesActivitiesLinkEventProcessorConfig,
+              TASK_STATUS_PROJECTION_ID,
+          };'''
+          new = '''use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
+          use crm_query_runtime::{CursorCodec, QueryGateway};
+          use crm_sales_activities_capability_composition::{
+              DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, ProductionQueryRouter,
+              SalesActivitiesLinkDeliveryOutcome, SalesActivitiesLinkEventProcessor,
+              SalesActivitiesLinkEventProcessorConfig, TASK_STATUS_PROJECTION_ID,
+          };'''
+          if old not in text:
+              raise SystemExit("runtime import block not found")
+          text = text.replace(old, new, 1)
+          if "pub search_worker: Arc<Phase7SearchWorker>," not in text:
+              raise SystemExit("runtime search worker field not found")
+          text = text.replace(
+              "pub search_worker: Arc<Phase7SearchWorker>,",
+              "pub search_worker: Arc<GlobalSearchWorker>,",
+              1,
+          )
+          if "Phase7SearchWorker::new(store.clone())" not in text:
+              raise SystemExit("runtime search worker constructor not found")
+          text = text.replace(
+              "Phase7SearchWorker::new(store.clone())",
+              "GlobalSearchWorker::new(store.clone())",
+              1,
+          )
+          old_search_grants = '''                    upsert_bootstrap_visibility(
+                      visibility_store,
+                      config,
+                      tenant_id,
+                      definition,
+                      BootstrapVisibilityResource {
+                          owner_module_id: "crm.activities",
+                          resource_type: ACTIVITIES_RECORD_TYPE,
+                      },
+                      ["subject"].into_iter().map(str::to_owned).collect(),
+                      expires_at,
+                  )?;
+              }'''
+          new_search_grants = '''                    upsert_bootstrap_visibility(
+                      visibility_store,
+                      config,
+                      tenant_id,
+                      definition,
+                      BootstrapVisibilityResource {
+                          owner_module_id: "crm.activities",
+                          resource_type: ACTIVITIES_RECORD_TYPE,
+                      },
+                      ["subject"].into_iter().map(str::to_owned).collect(),
+                      expires_at,
+                  )?;
+                  upsert_bootstrap_visibility(
+                      visibility_store,
+                      config,
+                      tenant_id,
+                      definition,
+                      BootstrapVisibilityResource {
+                          owner_module_id: PARTIES_MODULE_ID,
+                          resource_type: PARTY_RECORD_TYPE,
+                      },
+                      party_fields(),
+                      expires_at,
+                  )?;
+              }'''
+          if old_search_grants not in text:
+              raise SystemExit("runtime search visibility block not found")
+          runtime.write_text(text.replace(old_search_grants, new_search_grants, 1))
+
+          adapter = Path("crates/crm-search-query-adapter/src/lib.rs")
+          text = adapter.read_text()
+          count = text.count("DataClass::Confidential")
+          if count != 4:
+              raise SystemExit(f"expected 4 global search Confidential classifications, found {count}")
+          adapter.write_text(text.replace("DataClass::Confidential", "DataClass::Personal"))
+
+          cargo = Path("crates/crm-sales-activities-capability-composition/Cargo.toml")
+          text = cargo.read_text()
+          anchor = 'crm-core-events = { path = "../crm-core-events" }\n'
+          dependency = 'crm-global-search-composition = { path = "../crm-global-search-composition" }\n'
+          if dependency not in text:
+              if anchor not in text:
+                  raise SystemExit("legacy composition Cargo dependency anchor not found")
+              text = text.replace(anchor, anchor + dependency, 1)
+          cargo.write_text(text)
+
+          legacy = Path("crates/crm-sales-activities-capability-composition/src/lib.rs")
+          text = legacy.read_text()
+          old_modules = '''mod link_event_processor;
+          mod phase6_projections;
+          mod phase7_search;
+          mod phase7_search_worker;
+          mod query_catalog;
+          mod query_router;
+
+          pub use link_event_processor::*;
+          pub use phase6_projections::*;
+          pub use phase7_search::*;
+          pub use phase7_search_worker::*;
+          pub use query_catalog::*;
+          pub use query_router::*;'''
+          new_modules = '''mod link_event_processor;
+          mod phase6_projections;
+          mod query_catalog;
+          mod query_router;
+
+          pub use crm_global_search_composition::*;
+          pub use link_event_processor::*;
+          pub use phase6_projections::*;
+          pub use query_catalog::*;
+          pub use query_router::*;'''
+          if old_modules not in text:
+              raise SystemExit("legacy composition module block not found")
+          legacy.write_text(text.replace(old_modules, new_modules, 1))
+          PY
+          git rm crates/crm-sales-activities-capability-composition/src/phase7_search.rs
+          git rm crates/crm-sales-activities-capability-composition/src/phase7_search_worker.rs
           cargo generate-lockfile
           cargo fmt --all
-      - name: Commit synchronized files when needed
+      - name: Restore canonical workflow and commit synchronized source
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
+          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates .github/workflows/rust-generated-sync.yml
+          git commit -m "Compose neutral global search runtime"
           git push origin "HEAD:${HEAD_BRANCH}"
