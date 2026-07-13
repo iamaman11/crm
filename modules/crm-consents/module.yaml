@@ -27,9 +27,24 @@ dependencies:
   conflicts: []
 
 provides:
-  capabilities: []
-  events: []
-  objects: []
+  capabilities:
+    - id: consents.authorization.create
+      version: "1.0.0"
+    - id: consents.authorization.withdraw
+      version: "1.0.0"
+    - id: consents.authorization.get
+      version: "1.0.0"
+    - id: consents.authorization.list
+      version: "1.0.0"
+    - id: consents.communication.authorize
+      version: "1.0.0"
+  events:
+    - id: consents.authorization.created
+      version: "1.0.0"
+    - id: consents.authorization.withdrawn
+      version: "1.0.0"
+  objects:
+    - consents.authorization
   ui_extensions: []
 
 consumes:
@@ -37,12 +52,15 @@ consumes:
   events: []
 
 storage:
-  record_types: []
+  record_types:
+    - consents.authorization
   private_state_namespaces:
     - crm.consents.authorization
 
 security:
   data_classes:
+    - internal
+    - confidential
     - personal
   network_egress: []
   secret_handles: []
@@ -50,5 +68,7 @@ security:
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported
-  uninstall_policy: delete_private_state
-  retained_record_types: []
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-consents/migrations
+  retained_record_types:
+    - consents.authorization
