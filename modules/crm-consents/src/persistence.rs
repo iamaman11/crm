@@ -1,7 +1,7 @@
 use crate::domain::{
-    CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId, ConsentAuthorizationSnapshot,
-    ConsentAuthorizationStatus, ConsentEffect, ContactPointReference, EvidenceReference,
-    JurisdictionCode, LegalBasisCode, PartyReference, PurposeCode, SourceCode,
+    CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId,
+    ConsentAuthorizationSnapshot, ConsentAuthorizationStatus, ConsentEffect, ContactPointReference,
+    EvidenceReference, JurisdictionCode, LegalBasisCode, PartyReference, PurposeCode, SourceCode,
 };
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,9 @@ pub fn encode_consent_authorization_state(
 pub fn decode_consent_authorization_state(bytes: &[u8]) -> Result<ConsentAuthorization, SdkError> {
     validate_size(bytes)?;
     let state: ConsentAuthorizationStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!("Consent Authorization state JSON is invalid: {error}"))
+        persisted_error(format!(
+            "Consent Authorization state JSON is invalid: {error}"
+        ))
     })?;
     ConsentAuthorization::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
@@ -258,7 +260,9 @@ mod tests {
         ConsentAuthorization::create(CreateConsentAuthorization {
             authorization_id: ConsentAuthorizationId::try_new("consent-auth-persisted-1").unwrap(),
             party_ref: PartyReference::try_new("party-ada").unwrap(),
-            contact_point_ref: Some(ContactPointReference::try_new("contact-point-email-1").unwrap()),
+            contact_point_ref: Some(
+                ContactPointReference::try_new("contact-point-email-1").unwrap(),
+            ),
             purpose: PurposeCode::try_new("marketing.newsletter").unwrap(),
             channel: CommunicationChannel::Email,
             effect: ConsentEffect::Grant,

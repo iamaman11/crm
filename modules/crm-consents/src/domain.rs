@@ -70,14 +70,8 @@ macro_rules! semantic_code_type {
 
         impl $name {
             pub fn try_new(value: impl Into<String>) -> Result<Self, SdkError> {
-                normalize_semantic_identifier(
-                    &value.into(),
-                    $maximum,
-                    $code,
-                    $field,
-                    $label,
-                )
-                .map(Self)
+                normalize_semantic_identifier(&value.into(), $maximum, $code, $field, $label)
+                    .map(Self)
             }
 
             pub fn as_str(&self) -> &str {
@@ -385,7 +379,10 @@ impl ConsentAuthorization {
         Ok(())
     }
 
-    pub fn decision_point_at(&self, evaluation_time_unix_nanos: i64) -> Option<ConsentDecisionPoint> {
+    pub fn decision_point_at(
+        &self,
+        evaluation_time_unix_nanos: i64,
+    ) -> Option<ConsentDecisionPoint> {
         if evaluation_time_unix_nanos <= 0
             || evaluation_time_unix_nanos < self.effective_from_unix_nanos
         {
@@ -686,11 +683,7 @@ fn normalize_semantic_identifier(
     Ok(normalized)
 }
 
-fn invalid(
-    code: &'static str,
-    field: &'static str,
-    internal: impl Into<String>,
-) -> SdkError {
+fn invalid(code: &'static str, field: &'static str, internal: impl Into<String>) -> SdkError {
     SdkError::new(
         code,
         ErrorCategory::InvalidArgument,
@@ -924,7 +917,7 @@ mod tests {
 
     #[test]
     fn version_overflow_failure_is_atomic() {
-        let mut value = ConsentAuthorization::rehydrate(ConsentAuthorizationSnapshot {
+        let value = ConsentAuthorization::rehydrate(ConsentAuthorizationSnapshot {
             version: i64::MAX,
             status: ConsentAuthorizationStatus::Active,
             ..grant(None).snapshot()
