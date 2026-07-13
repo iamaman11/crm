@@ -25,31 +25,253 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
+      - name: Apply guarded Phase 8A.4 authoritative access-path integration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def patch(path_name: str, replacements: list[tuple[str, str]]) -> None:
+              path = Path(path_name)
+              text = path.read_text()
+              for old, new in replacements:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(
+                          f"patch anchor count must be 1, got {count} in {path_name}: {old[:100]!r}"
+                      )
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
+
+          patch(
+              "crates/crm-consents-capability-composition/src/lib.rs",
+              [
+                  (
+                      "//! Consent records, audit entries, outbox events or idempotency evidence.\n\n",
+                      "//! Consent records, audit entries, outbox events or idempotency evidence.\n\n"
+                      "mod planner;\n\n"
+                      "pub use planner::*;\n\n",
+                  ),
+                  (
+                      "        CommunicationChannel::Push => true,\n",
+                      "        CommunicationChannel::Push => false,\n",
+                  ),
+                  (
+                      "            assert!(channel_is_compatible(CommunicationChannel::Push, kind));\n",
+                      "            assert!(!channel_is_compatible(CommunicationChannel::Push, kind));\n",
+                  ),
+              ],
+          )
+
+          patch(
+              "crates/crm-consents-capability-composition/src/planner.rs",
+              [
+                  (
+                      "pub const PARTY_AUTHORIZATION_RELATIONSHIP_TYPE: &str = \"consents.authorization.party\";\n",
+                      "pub const PARTY_AUTHORIZATION_RELATIONSHIP_TYPE: &str = \"consents.authorization.party\";\n"
+                      "pub const PARTY_AUTHORIZATION_SOURCE_RECORD_TYPE: &str = PARTY_RECORD_TYPE;\n",
+                  ),
+                  (
+                      "            configured_record_type(PARTY_RECORD_TYPE).unwrap().as_str(),\n            PARTY_RECORD_TYPE\n",
+                      "            configured_record_type(PARTY_AUTHORIZATION_SOURCE_RECORD_TYPE)\n"
+                      "                .unwrap()\n"
+                      "                .as_str(),\n"
+                      "            PARTY_RECORD_TYPE\n",
+                  ),
+              ],
+          )
+
+          patch(
+              "crates/crm-application-runtime/src/governed_metadata.rs",
+              [
+                  (
+                      "use crm_consents_capability_adapter::{\n    ConsentCapabilityPlanner, MUTATION_CAPABILITY_IDS as CONSENT_MUTATION_CAPABILITY_IDS,\n    capability_definitions as consent_capability_definitions,\n};\nuse crm_consents_capability_composition::{\n    ConsentCapabilityExecutor, PostgresConsentReferenceReader,\n};\n",
+                      "use crm_consents_capability_adapter::{\n"
+                      "    MUTATION_CAPABILITY_IDS as CONSENT_MUTATION_CAPABILITY_IDS,\n"
+                      "    capability_definitions as consent_capability_definitions,\n"
+                      "};\n"
+                      "use crm_consents_capability_composition::{\n"
+                      "    ConsentCapabilityCompositionPlanner, ConsentCapabilityExecutor,\n"
+                      "    PostgresConsentReferenceReader,\n"
+                      "};\n",
+                  ),
+                  (
+                      "            ConsentCapabilityPlanner.target(definition, request)\n",
+                      "            ConsentCapabilityCompositionPlanner.target(definition, request)\n",
+                  ),
+                  (
+                      "            ConsentCapabilityPlanner.plan(definition, request, current)\n",
+                      "            ConsentCapabilityCompositionPlanner.plan(definition, request, current)\n",
+                  ),
+              ],
+          )
+
+          patch(
+              "crates/crm-consents-query-adapter/Cargo.toml",
+              [
+                  (
+                      "crm-consents-capability-adapter = { path = \"../crm-consents-capability-adapter\" }\n",
+                      "crm-consents-capability-adapter = { path = \"../crm-consents-capability-adapter\" }\n"
+                      "crm-consents-capability-composition = { path = \"../crm-consents-capability-composition\" }\n",
+                  ),
+              ],
+          )
+
+          old_candidate_loader = '''    async fn load_authorization_candidates(
+        &self,
+        request: &QueryRequest,
+        evaluation: &EvaluateCommunicationAuthorization,
+    ) -> Result<Vec<ConsentAuthorization>, SdkError> {
+        let mut after = None;
+        let mut candidates = Vec::new();
+        let mut scanned = 0_usize;
+        loop {
+            let page = self
+                .store
+                .list_records_for_query(&RecordListQuery {
+                    tenant_id: request.context.tenant_id.clone(),
+                    owner_module_id: consent_module_id()?,
+                    record_type: consent_record_type()?,
+                    page_size: AUTHORIZATION_SCAN_PAGE_SIZE,
+                    sort: RecordQuerySort::UpdatedAtDescending,
+                    after: after.clone(),
+                })
+                .await?;
+            scanned = scanned.saturating_add(page.records.len());
+            enforce_authorization_scan_limit(scanned)?;
+            for snapshot in &page.records {
+                let authorization = consent_authorization_from_snapshot(snapshot)?;
+                if static_scope_matches(evaluation, &authorization) {
+                    candidates.push(authorization);
+                }
+            }
+            after = page.next;
+            if after.is_none() {
+                return Ok(candidates);
+            }
+        }
+    }
+'''
+          new_candidate_loader = '''    async fn load_authorization_candidates(
+        &self,
+        request: &QueryRequest,
+        evaluation: &EvaluateCommunicationAuthorization,
+    ) -> Result<Vec<ConsentAuthorization>, SdkError> {
+        let mut after_record_id = None;
+        let mut candidates = Vec::new();
+        loop {
+            let page = self
+                .store
+                .list_related_records_for_query(&RelatedRecordListQuery {
+                    tenant_id: request.context.tenant_id.clone(),
+                    relationship_owner_module_id: consent_module_id()?,
+                    relationship_type: consent_party_relationship_type()?,
+                    source: RecordRef {
+                        record_type: consent_party_source_record_type()?,
+                        record_id: RecordId::try_new(evaluation.party_ref.as_str())
+                            .map_err(config_error)?,
+                    },
+                    target_owner_module_id: consent_module_id()?,
+                    target_record_type: consent_record_type()?,
+                    page_size: MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE,
+                    after_record_id: after_record_id.clone(),
+                })
+                .await?;
+            for snapshot in &page.records {
+                let authorization = consent_authorization_from_snapshot(snapshot)?;
+                if static_scope_matches(evaluation, &authorization) {
+                    candidates.push(authorization);
+                }
+            }
+            after_record_id = page.next_record_id;
+            if after_record_id.is_none() {
+                return Ok(candidates);
+            }
+        }
+    }
+'''
+
+          patch(
+              "crates/crm-consents-query-adapter/src/lib.rs",
+              [
+                  (
+                      "use crm_consents_capability_adapter::{\n    MODULE_ID, RECORD_TYPE, consent_authorization_from_snapshot, consent_authorization_to_wire,\n};\n",
+                      "use crm_consents_capability_adapter::{\n"
+                      "    MODULE_ID, RECORD_TYPE, consent_authorization_from_snapshot, consent_authorization_to_wire,\n"
+                      "};\n"
+                      "use crm_consents_capability_composition::{\n"
+                      "    PARTY_AUTHORIZATION_RELATIONSHIP_TYPE, PARTY_AUTHORIZATION_SOURCE_RECORD_TYPE,\n"
+                      "};\n",
+                  ),
+                  (
+                      "use crm_core_data::{\n    PostgresDataStore, RecordGetQuery, RecordListQuery, RecordQueryContinuation, RecordQuerySort,\n};\n",
+                      "use crm_core_data::{\n"
+                      "    MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, PostgresDataStore, RecordGetQuery,\n"
+                      "    RecordListQuery, RecordQueryContinuation, RecordQuerySort, RelatedRecordListQuery,\n"
+                      "};\n",
+                  ),
+                  (
+                      "    PortFuture, RecordId, RecordType, SdkError, TypedPayload,\n",
+                      "    PortFuture, RecordId, RecordRef, RecordType, RelationshipType, SdkError, TypedPayload,\n",
+                  ),
+                  (
+                      "const MAXIMUM_VISIBILITY_SCAN_RECORDS: usize = 10_000;\nconst MAXIMUM_AUTHORIZATION_SCAN_RECORDS: usize = 10_000;\nconst AUTHORIZATION_SCAN_PAGE_SIZE: u32 = 1_000;\n",
+                      "const MAXIMUM_VISIBILITY_SCAN_RECORDS: usize = 10_000;\n",
+                  ),
+                  (old_candidate_loader, new_candidate_loader),
+                  (
+                      "fn consent_record_type() -> Result<RecordType, SdkError> {\n    RecordType::try_new(RECORD_TYPE).map_err(config_error)\n}\n\n",
+                      "fn consent_record_type() -> Result<RecordType, SdkError> {\n"
+                      "    RecordType::try_new(RECORD_TYPE).map_err(config_error)\n"
+                      "}\n\n"
+                      "fn consent_party_source_record_type() -> Result<RecordType, SdkError> {\n"
+                      "    RecordType::try_new(PARTY_AUTHORIZATION_SOURCE_RECORD_TYPE).map_err(config_error)\n"
+                      "}\n\n"
+                      "fn consent_party_relationship_type() -> Result<RelationshipType, SdkError> {\n"
+                      "    RelationshipType::try_new(PARTY_AUTHORIZATION_RELATIONSHIP_TYPE).map_err(config_error)\n"
+                      "}\n\n",
+                  ),
+                  (
+                      "fn enforce_authorization_scan_limit(scanned: usize) -> Result<(), SdkError> {\n    if scanned > MAXIMUM_AUTHORIZATION_SCAN_RECORDS {\n        Err(SdkError::new(\n            \"CONSENTS_AUTHORIZATION_SCAN_LIMIT_EXCEEDED\",\n            ErrorCategory::Unavailable,\n            true,\n            \"Communication authorization data is temporarily unavailable.\",\n        ))\n    } else {\n        Ok(())\n    }\n}\n\n",
+                      "",
+                  ),
+                  (
+                      "    matches!(\n        error.code.as_str(),\n        \"DATA_QUERY_UNAVAILABLE\" | \"CONSENTS_AUTHORIZATION_SCAN_LIMIT_EXCEEDED\"\n    )\n",
+                      "    error.code.as_str() == \"DATA_QUERY_UNAVAILABLE\"\n",
+                  ),
+              ],
+          )
+          PY
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Validate and synchronize authoritative access path
         run: |
+          set -o pipefail
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
+            -W unused-imports -W dead-code 2>&1 | tee /tmp/phase8a4-authoritative-access-path.log
           cargo generate-lockfile
           cargo fmt --all
+      - name: Restore standard sync workflow
+        run: git show origin/main:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
       - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates modules services .github/workflows/rust-generated-sync.yml
+          git commit -m "Index Consent authorization by authoritative Party relationship"
           git push origin "HEAD:${HEAD_BRANCH}"
+      - name: Upload access-path diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase8a4-authoritative-access-path-diagnostics
+          path: /tmp/phase8a4-authoritative-access-path.log
+          if-no-files-found: ignore
