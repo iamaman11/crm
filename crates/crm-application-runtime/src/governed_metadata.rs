@@ -3,30 +3,44 @@ use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     TransactionalCapabilityExecutor,
 };
-use crm_core_data::{PostgresMetadataCapabilityExecutor, PostgresTransactionalAggregateExecutor};
+use crm_core_data::{
+    AggregateTarget, CapabilityBatchExecutionPlan, PostgresMetadataCapabilityExecutor,
+    PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner,
+};
 use crm_metadata_api_adapter::{
     METADATA_MUTATION_CAPABILITY_IDS, METADATA_QUERY_CAPABILITY_IDS,
     metadata_mutation_capability_definitions, metadata_query_capability_definitions,
 };
 use crm_metadata_query_adapter::MetadataQueryAdapter;
-use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
+use crm_module_sdk::{ErrorCategory, PortFuture, RecordSnapshot, SdkError};
+use crm_parties_capability_adapter::{
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, PartyCapabilityPlanner,
+    capability_definition as party_capability_definition,
+};
+use crm_parties_query_adapter::{
+    GET_CAPABILITY as PARTY_GET_CAPABILITY, PartyQueryAdapter,
+    query_capability_definition as party_query_capability_definition,
+};
 use crm_query_runtime::{
     QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator,
 };
 use crm_sales_activities_capability_composition::{
-    ProductionQueryRouter, capability_definitions, query_capability_definitions,
+    ProductionQueryRouter, SalesActivitiesCapabilityPlannerRouter, capability_definitions,
+    query_capability_definitions,
 };
 use std::fmt;
 use std::sync::Arc;
 
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = capability_definitions()?;
+    definitions.push(party_capability_definition(PARTY_CREATE_CAPABILITY)?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
 
 pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = query_capability_definitions()?;
+    definitions.push(party_query_capability_definition()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -37,6 +51,36 @@ pub fn application_capability_catalog() -> Result<CapabilityCatalog, SdkError> {
 
 pub fn application_query_capability_catalog() -> Result<CapabilityCatalog, SdkError> {
     CapabilityCatalog::new(application_query_definitions()?).map_err(catalog_error)
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ApplicationAggregatePlannerRouter;
+
+impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
+    fn target(
+        &self,
+        definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+    ) -> Result<AggregateTarget, SdkError> {
+        if definition.capability_id.as_str() == PARTY_CREATE_CAPABILITY {
+            PartyCapabilityPlanner.target(definition, request)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.target(definition, request)
+        }
+    }
+
+    fn plan(
+        &self,
+        definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+        current: Option<&RecordSnapshot>,
+    ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+        if definition.capability_id.as_str() == PARTY_CREATE_CAPABILITY {
+            PartyCapabilityPlanner.plan(definition, request, current)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -84,13 +128,19 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
 #[derive(Debug, Clone)]
 pub struct ApplicationQueryRouter {
     production: ProductionQueryRouter,
+    parties: PartyQueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
 impl ApplicationQueryRouter {
-    pub fn new(production: ProductionQueryRouter, metadata: MetadataQueryAdapter) -> Self {
+    pub fn new(
+        production: ProductionQueryRouter,
+        parties: PartyQueryAdapter,
+        metadata: MetadataQueryAdapter,
+    ) -> Self {
         Self {
             production,
+            parties,
             metadata,
         }
     }
@@ -104,6 +154,8 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
     ) -> PortFuture<'a, Result<(), SdkError>> {
         if METADATA_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.metadata.validate(definition, request)
+        } else if definition.capability_id.as_str() == PARTY_GET_CAPABILITY {
+            self.parties.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -118,6 +170,8 @@ impl QueryExecutor for ApplicationQueryRouter {
     ) -> PortFuture<'a, Result<QueryExecutionResult, SdkError>> {
         if METADATA_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.metadata.execute(definition, request)
+        } else if definition.capability_id.as_str() == PARTY_GET_CAPABILITY {
+            self.parties.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }
@@ -146,7 +200,7 @@ mod tests {
         let mutations = application_mutation_definitions().unwrap();
         assert_eq!(
             mutations.len(),
-            PRODUCTION_MUTATION_CAPABILITY_IDS.len() + METADATA_MUTATION_CAPABILITY_IDS.len()
+            PRODUCTION_MUTATION_CAPABILITY_IDS.len() + 1 + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
             assert!(
@@ -155,6 +209,11 @@ mod tests {
                     .any(|definition| { definition.capability_id.as_str() == coordinate })
             );
         }
+        assert!(
+            mutations
+                .iter()
+                .any(|definition| definition.capability_id.as_str() == PARTY_CREATE_CAPABILITY)
+        );
         for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
             assert!(
                 mutations
@@ -166,12 +225,17 @@ mod tests {
         let queries = application_query_definitions().unwrap();
         assert_eq!(
             queries.len(),
-            PRODUCTION_QUERY_CAPABILITY_IDS.len() + 1 + METADATA_QUERY_CAPABILITY_IDS.len()
+            PRODUCTION_QUERY_CAPABILITY_IDS.len() + 2 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(
             queries
                 .iter()
                 .any(|definition| { definition.capability_id.as_str() == SEARCH_QUERY_CAPABILITY })
+        );
+        assert!(
+            queries
+                .iter()
+                .any(|definition| definition.capability_id.as_str() == PARTY_GET_CAPABILITY)
         );
         for coordinate in METADATA_QUERY_CAPABILITY_IDS {
             assert!(

@@ -15,6 +15,8 @@ crm-metadata-api-adapter = { path = "../crm-metadata-api-adapter" }
 crm-metadata-query-adapter = { path = "../crm-metadata-query-adapter" }
 crm-module-registry = { path = "../crm-module-registry" }
 crm-module-sdk = { path = "../crm-module-sdk" }
+crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
 crm-query-runtime = { path = "../crm-query-runtime" }
 crm-sales-activities-capability-composition = { path = "../crm-sales-activities-capability-composition" }
 crm-sales-activities-link = { path = "../../modules/crm-sales-activities-link" }

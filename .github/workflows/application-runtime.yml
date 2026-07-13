@@ -8,6 +8,8 @@ on:
       - "proto/crm/gateway/**"
       - "proto/crm/search/**"
       - "proto/crm/metadata/**"
+      - "proto/crm/customer/**"
+      - "proto/crm/parties/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -16,11 +18,14 @@ on:
       - "crates/crm-core-events/**"
       - "crates/crm-metadata-api-adapter/**"
       - "crates/crm-metadata-query-adapter/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
       - "crates/crm-query-runtime/**"
       - "crates/crm-search-runtime/**"
       - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-parties/**"
       - "modules/crm-sales-activities-link/**"
       - "services/crm-api/**"
       - "database/migrations/**"
@@ -33,6 +38,8 @@ on:
       - "proto/crm/gateway/**"
       - "proto/crm/search/**"
       - "proto/crm/metadata/**"
+      - "proto/crm/customer/**"
+      - "proto/crm/parties/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -41,11 +48,14 @@ on:
       - "crates/crm-core-events/**"
       - "crates/crm-metadata-api-adapter/**"
       - "crates/crm-metadata-query-adapter/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
       - "crates/crm-query-runtime/**"
       - "crates/crm-search-runtime/**"
       - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-parties/**"
       - "modules/crm-sales-activities-link/**"
       - "services/crm-api/**"
       - "database/migrations/**"
@@ -58,7 +68,7 @@ permissions:
 jobs:
   application-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:17-alpine
@@ -105,6 +115,12 @@ jobs:
           set -o pipefail
           cargo test -p crm-api --test process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-process.log
+      - name: Verify Party crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test party_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-party-process.log
       - name: Upload application runtime diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -112,9 +128,12 @@ jobs:
           name: application-runtime-diagnostics
           path: |
             database/application-runtime-process.log
+            database/application-runtime-party-process.log
             crates/crm-application-runtime/
             crates/crm-metadata-api-adapter/
             crates/crm-metadata-query-adapter/
+            crates/crm-parties-capability-adapter/
+            crates/crm-parties-query-adapter/
             crates/crm-search-query-adapter/
             services/crm-api/
           if-no-files-found: error

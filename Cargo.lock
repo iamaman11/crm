@@ -280,6 +280,8 @@ dependencies = [
  "crm-metadata-query-adapter",
  "crm-module-registry",
  "crm-module-sdk",
+ "crm-parties-capability-adapter",
+ "crm-parties-query-adapter",
  "crm-query-runtime",
  "crm-sales-activities-capability-composition",
  "crm-sales-activities-link",
@@ -518,6 +520,42 @@ version = "0.1.0"
 dependencies = [
  "crm-core-contracts",
  "crm-module-sdk",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-parties-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-adapters",
+ "crm-capability-ingress",
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-parties",
+ "crm-proto-contracts",
+ "http",
+ "prost",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "crm-parties-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-parties",
+ "crm-parties-capability-adapter",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
 ]
 
 [[package]]

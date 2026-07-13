@@ -1,5 +1,11 @@
 #![forbid(unsafe_code)]
 
+pub mod domain;
+pub mod persistence;
+
+pub use domain::*;
+pub use persistence::*;
+
 /// Stable crate identity for repository tooling.
 pub const CRATE_NAME: &str = "crm-parties";
 /// Immutable governed module identity.
