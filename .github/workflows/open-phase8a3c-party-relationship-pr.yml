@@ -1,0 +1,81 @@
+name: Open Phase 8A.3c Party Relationship PR
+
+on:
+  push:
+    branches:
+      - ops/merge-phase8a3b-exact-green
+    paths:
+      - ".github/workflows/open-phase8a3c-party-relationship-pr.yml"
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+concurrency:
+  group: open-phase8a3c-party-relationship-pr
+  cancel-in-progress: false
+
+jobs:
+  open:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: iamaman11/crm
+      PREVIOUS_PR: "104"
+      HEAD_BRANCH: develop/phase8a3c-party-relationship
+    steps:
+      - name: Wait for merged Phase 8A.3b and active Phase 8A.3c branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 80); do
+            merged="$(gh api "repos/${REPOSITORY}/pulls/${PREVIOUS_PR}" --jq '.merged')"
+            if [ "$merged" = "true" ] && gh api "repos/${REPOSITORY}/git/ref/heads/${HEAD_BRANCH}" >/tmp/head-ref.json 2>/dev/null; then
+              main_sha="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+              head_sha="$(jq -r '.object.sha' /tmp/head-ref.json)"
+              if [ "$head_sha" != "$main_sha" ]; then
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for merged 8A.3b and active 8A.3c branch."
+          exit 1
+
+      - name: Locate authoritative Party Relationship issue and open draft PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method GET search/issues \
+            -f q='repo:iamaman11/crm is:issue "Party Relationship" in:title,body' \
+            -f per_page=100 \
+            > /tmp/issues.json
+          issue="$(python - <<'PY'
+          import json
+          items = [item for item in json.load(open('/tmp/issues.json'))['items'] if 'pull_request' not in item]
+          preferred = [item for item in items if '8A.3c' in (item.get('title','') + '\n' + (item.get('body') or '')) and 'Party Relationship' in (item.get('title','') + '\n' + (item.get('body') or ''))]
+          candidates = [item for item in preferred if item.get('state') == 'open'] or preferred
+          if len(candidates) != 1:
+              raise SystemExit(f'expected exactly one Phase 8A.3c Party Relationship issue, found {[item["number"] for item in candidates]}')
+          print(candidates[0]['number'])
+          PY
+          )"
+
+          existing="$(gh api --method GET "repos/${REPOSITORY}/pulls" \
+            -f state=open \
+            -f head="iamaman11:${HEAD_BRANCH}" \
+            -f base=main \
+            --jq 'length')"
+          if [ "$existing" != "0" ]; then
+            exit 0
+          fi
+
+          gh api --method POST "repos/${REPOSITORY}/pulls" \
+            -f title='Phase 8A.3c: authoritative Party Relationship domain' \
+            -f head="$HEAD_BRANCH" \
+            -f base=main \
+            -F draft=true \
+            -f body="Tracks #${issue}.\n\nBegins from the merged Phase 8A.3b Contact Point baseline. Scope is limited to the authoritative Party Relationship owner domain, additive contracts, governed adapters, application composition and production proof. It must not absorb Party identity, Contact Point consent/communication authorization, provider delivery state or Customer 360 composition." \
+            > /tmp/pr.json
