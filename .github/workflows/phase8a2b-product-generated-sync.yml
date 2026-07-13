@@ -5,9 +5,6 @@ on:
     branches:
       - develop/phase8a2b-party-update-list
     paths:
-      - "proto/**"
-      - "crates/crm-proto-contracts/**"
-      - "packages/client/src/contract_hashes.ts"
       - ".github/workflows/phase8a2b-product-generated-sync.yml"
 
 permissions:
@@ -21,23 +18,39 @@ jobs:
   sync:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
           ref: develop/phase8a2b-party-update-list
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24.18.0"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: "11.12.0"
-      - name: Generate browser contract descriptor hashes
+      - name: Apply generator-produced Party descriptor block
         run: |
-          pnpm install --frozen-lockfile
-          pnpm web:generate
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("packages/client/src/contract_hashes.ts")
+          lines = path.read_text().splitlines()
+          prefix = '  "crm.parties.v1.'
+          retained = [line for line in lines if not line.startswith(prefix)]
+          insertion = next(
+              index for index, line in enumerate(retained)
+              if line.startswith('  "crm.sales.v1.')
+          )
+          party_block = '''  "crm.parties.v1.CreatePartyRequest": new Uint8Array([51, 199, 137, 141, 85, 10, 11, 101, 1, 132, 64, 66, 253, 162, 151, 252, 146, 31, 51, 196, 161, 169, 248, 52, 37, 4, 166, 124, 135, 226, 122, 192]),
+          "crm.parties.v1.CreatePartyResponse": new Uint8Array([157, 218, 111, 179, 203, 162, 149, 170, 126, 236, 209, 132, 254, 43, 179, 220, 235, 175, 55, 165, 17, 36, 139, 218, 50, 203, 136, 61, 206, 64, 150, 153]),
+          "crm.parties.v1.GetPartyRequest": new Uint8Array([137, 15, 157, 188, 251, 68, 27, 211, 50, 109, 212, 158, 121, 18, 3, 241, 205, 9, 0, 53, 197, 246, 31, 142, 59, 199, 182, 112, 37, 4, 214, 240]),
+          "crm.parties.v1.GetPartyResponse": new Uint8Array([155, 137, 69, 150, 184, 181, 82, 104, 131, 189, 144, 57, 55, 171, 238, 57, 224, 82, 130, 143, 98, 229, 114, 125, 236, 177, 248, 87, 189, 76, 23, 26]),
+          "crm.parties.v1.ListPartiesRequest": new Uint8Array([162, 101, 140, 68, 240, 158, 203, 124, 51, 225, 122, 185, 144, 64, 112, 68, 252, 198, 58, 243, 46, 34, 254, 78, 144, 51, 187, 95, 7, 19, 165, 93]),
+          "crm.parties.v1.ListPartiesResponse": new Uint8Array([151, 152, 254, 131, 97, 34, 243, 167, 107, 213, 215, 35, 238, 74, 44, 39, 114, 213, 162, 131, 173, 185, 62, 112, 86, 130, 59, 176, 239, 188, 75, 98]),
+          "crm.parties.v1.Party": new Uint8Array([227, 153, 126, 49, 156, 96, 19, 49, 208, 95, 0, 100, 204, 136, 57, 102, 147, 62, 154, 16, 215, 143, 124, 93, 138, 10, 72, 61, 123, 223, 205, 56]),
+          "crm.parties.v1.PartyCreatedEvent": new Uint8Array([237, 181, 251, 4, 113, 221, 198, 44, 9, 32, 124, 116, 246, 136, 37, 119, 242, 228, 200, 142, 109, 120, 12, 177, 253, 52, 146, 50, 166, 110, 128, 215]),
+          "crm.parties.v1.PartyUpdatedEvent": new Uint8Array([28, 159, 198, 135, 157, 190, 72, 55, 239, 114, 9, 196, 127, 156, 218, 51, 73, 112, 112, 177, 63, 224, 66, 4, 123, 9, 18, 122, 170, 224, 203, 196]),
+          "crm.parties.v1.UpdatePartyRequest": new Uint8Array([42, 153, 226, 226, 3, 173, 23, 86, 199, 45, 15, 1, 91, 241, 227, 112, 185, 160, 103, 118, 168, 86, 59, 210, 94, 10, 213, 243, 217, 147, 177, 107]),
+          "crm.parties.v1.UpdatePartyResponse": new Uint8Array([145, 146, 219, 178, 96, 167, 178, 160, 195, 165, 237, 22, 176, 41, 198, 92, 108, 155, 139, 35, 48, 187, 254, 47, 41, 22, 187, 99, 240, 176, 18, 168]),'''.splitlines()
+          retained[insertion:insertion] = party_block
+          path.write_text("\n".join(retained) + "\n")
+          PY
       - name: Commit generated registry and remove one-shot workflow
         run: |
           git rm .github/workflows/phase8a2b-product-generated-sync.yml
