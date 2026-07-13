@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package crm.customer.v1;
+
+import "crm/core/v1/common.proto";
+
+// Customer-master references are tenant-scoped by the authenticated execution
+// context. Tenant identity is deliberately not caller-controlled payload data.
+// These messages carry opaque immutable identities only; authoritative state
+// remains owned by the corresponding customer-master owner module.
+message PartyRef {
+  string party_id = 1;
+}
+
+message AccountRef {
+  string account_id = 1;
+}
+
+message ContactPointRef {
+  string contact_point_id = 1;
+}
+
+// Shared public lifecycle/version metadata for customer-master resources.
+// Domain-private state, provenance and persistence representation are not part
+// of this cross-owner contract.
+message CustomerResourceVersion {
+  int64 version = 1;
+  crm.core.v1.UnixTime created_at = 2;
+  crm.core.v1.UnixTime updated_at = 3;
+}
