@@ -1,0 +1,158 @@
+name: Start Phase 8A.3c Party Relationship
+
+on:
+  push:
+    branches:
+      - ops/merge-phase8a3b-exact-green
+    paths:
+      - ".github/workflows/start-phase8a3c-party-relationship.yml"
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: start-phase8a3c-party-relationship
+  cancel-in-progress: false
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: iamaman11/crm
+      PR_NUMBER: "104"
+      NEXT_BRANCH: develop/phase8a3c-party-relationship
+      VERIFIED_HEAD_SHA: 0af9ef201fbe96e74e825e648927a7f36ae39e10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Require merged Contact Point PR and locate Party Relationship issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          merged=false
+          for attempt in $(seq 1 80); do
+            gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" > /tmp/pr.json
+            merged="$(jq -r '.merged' /tmp/pr.json)"
+            if [ "$merged" = "true" ]; then
+              break
+            fi
+            sleep 15
+          done
+          test "$merged" = "true"
+          test "$(jq -r '.head.sha' /tmp/pr.json)" = "$VERIFIED_HEAD_SHA"
+          jq -r '.merge_commit_sha' /tmp/pr.json > /tmp/contact-point-merge-sha
+
+          gh api --method GET search/issues \
+            -f q='repo:iamaman11/crm is:issue "Party Relationship" in:title,body' \
+            -f per_page=100 \
+            > /tmp/issues.json
+          python - <<'PY'
+          import json
+          items = [item for item in json.load(open('/tmp/issues.json'))['items'] if 'pull_request' not in item]
+          preferred = [item for item in items if '8A.3c' in (item.get('title','') + '\n' + (item.get('body') or '')) and 'Party Relationship' in (item.get('title','') + '\n' + (item.get('body') or ''))]
+          candidates = preferred or [item for item in items if 'Party Relationship' in item.get('title','')]
+          open_candidates = [item for item in candidates if item.get('state') == 'open']
+          candidates = open_candidates or candidates
+          if len(candidates) != 1:
+              raise SystemExit(f'expected exactly one Party Relationship issue, found {[item["number"] for item in candidates]}')
+          open('/tmp/party-relationship-issue', 'w').write(str(candidates[0]['number']))
+          PY
+
+      - name: Create Phase 8A.3c branch from merged main and synchronize status docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          main_sha="$(git rev-parse origin/main)"
+          merge_sha="$(cat /tmp/contact-point-merge-sha)"
+          git merge-base --is-ancestor "$merge_sha" "$main_sha"
+
+          if git ls-remote --exit-code --heads origin "$NEXT_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$NEXT_BRANCH"
+            existing_sha="$(git rev-parse FETCH_HEAD)"
+            test "$existing_sha" = "$main_sha"
+          else
+            git push origin "$main_sha:refs/heads/$NEXT_BRANCH"
+          fi
+
+          git checkout -B "$NEXT_BRANCH" "$main_sha"
+          issue="$(cat /tmp/party-relationship-issue)"
+          merge_sha="$(cat /tmp/contact-point-merge-sha)"
+          python - "$issue" "$merge_sha" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          issue, merge_sha = sys.argv[1], sys.argv[2]
+          verified = '0af9ef201fbe96e74e825e648927a7f36ae39e10'
+          branch = 'develop/phase8a3c-party-relationship'
+
+          phase8 = Path('docs/PHASE8_DELIVERY_PLAN.md')
+          text = phase8.read_text()
+          old = f"The implementation packet is **Complete**. All 11 applicable CI workflows were green together on exact head `{verified}`. PR #104 remains merge-gated until the post-documentation exact head is also fully green, after which Party Relationship is next."
+          new = f"The implementation packet is **Complete and merged** through PR #104. The final exact head `{verified}` passed the full applicable CI gate before merge; merge commit `{merge_sha}` is the Phase 8A.3b baseline."
+          if text.count(old) != 1:
+              raise SystemExit('expected one Phase 8A.3b merge-gate paragraph')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '#### 8A.3c — Party Relationship — Planned',
+              f'#### 8A.3c — Party Relationship — Active (#{issue})',
+              1,
+          )
+          phase8.write_text(text)
+
+          status = Path('docs/PROJECT_STATUS.md')
+          text = status.read_text()
+          text = text.replace(
+              '### 8A.3b — Contact Point lifecycle, verification and preference — Complete / merge gate',
+              '### 8A.3b — Contact Point lifecycle, verification and preference — Complete / merged',
+              1,
+          )
+          old = f"The implementation packet is **Complete**: all 11 applicable CI workflows were green together on exact head `{verified}`. PR #104 remains draft only for the post-documentation exact-head rerun and merge gate."
+          new = f"The implementation packet is **Complete and merged** through PR #104. The final exact head `{verified}` passed the full applicable CI gate; merge commit `{merge_sha}` is the authoritative Phase 8A.3b baseline."
+          if text.count(old) != 1:
+              raise SystemExit('expected one PROJECT_STATUS Phase 8A.3b merge-gate paragraph')
+          text = text.replace(old, new, 1)
+          marker = '### Remaining 8A sequence\n'
+          section = f'''### 8A.3c — Party Relationship — Active\n\nIssue #{issue} is now active on `{branch}` from the merged Phase 8A.3b baseline. The owner domain will model explicit typed relationships between Party records without copying Party identity, Contact Point consent, provider state or Customer 360 composition into the relationship aggregate.\n\n'''
+          if section not in text:
+              if text.count(marker) != 1:
+                  raise SystemExit('expected one Remaining 8A sequence marker')
+              text = text.replace(marker, section + marker, 1)
+          text = re.sub(
+              r'^1\. Confirm the post-documentation exact head of Phase 8A\.3b / #103 is fully green, merge PR #104, then begin Party Relationship\.$',
+              f'1. Continue Phase 8A.3c / #{issue} on `{branch}` with the authoritative Party Relationship owner domain, contracts, governed adapters and production proof.',
+              text,
+              count=1,
+              flags=re.M,
+          )
+          status.write_text(text)
+
+          roadmap = Path('docs/IMPLEMENTATION_ROADMAP.md')
+          text = roadmap.read_text()
+          old = f"The implementation is complete: all 11 applicable CI workflows were green together on exact head `{verified}`; PR #104 remains only in the post-documentation exact-head merge gate."
+          new = f"Phase 8A.3b is complete and merged through PR #104: final exact head `{verified}` passed the full applicable CI gate and merge commit `{merge_sha}` is the baseline. Phase 8A.3c / #{issue} Party Relationship is now active on `{branch}`."
+          if text.count(old) != 1:
+              raise SystemExit('expected one IMPLEMENTATION_ROADMAP Phase 8A.3b gate sentence')
+          roadmap.write_text(text.replace(old, new, 1))
+
+          catalog = Path('docs/MODULE_CATALOG.md')
+          text = catalog.read_text()
+          old = f"The implementation packet is complete: all 11 applicable CI workflows were green together on exact head `{verified}`; only the post-documentation exact-head merge gate remains."
+          new = f"The implementation packet is complete and merged through PR #104. Final exact head `{verified}` passed the full applicable CI gate; merge commit `{merge_sha}` is the Contact Point baseline."
+          if text.count(old) != 1:
+              raise SystemExit('expected one MODULE_CATALOG Contact Point gate sentence')
+          catalog.write_text(text.replace(old, new, 1))
+          PY
+
+          git add docs/PHASE8_DELIVERY_PLAN.md docs/PROJECT_STATUS.md docs/IMPLEMENTATION_ROADMAP.md docs/MODULE_CATALOG.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Start Phase 8A.3c Party Relationship"
+          git push origin "HEAD:$NEXT_BRANCH"
