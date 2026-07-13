@@ -3,8 +3,17 @@
 -- module/capability foreign keys and audit lineage for real PostgreSQL process
 -- acceptance. Publication is immutable and therefore idempotent via DO NOTHING.
 -- The Account process acceptance also exercises a tenant-B Party through the
--- same service actor used by crm-api, so provision that actor explicitly here
--- rather than weakening the global platform fixture's tenant-isolation proof.
+-- same service actor used by crm-api. Provision that actor through the same
+-- transaction-local write-context guard required by normal platform writes,
+-- without weakening the global platform fixture's tenant-isolation proof.
+BEGIN;
+SET LOCAL app.tenant_id = 'tenant-b';
+SET LOCAL app.actor_id = 'actor-a';
+SET LOCAL app.request_id = 'account-process-actor-bootstrap-request';
+SET LOCAL app.capability_id = 'test.record.mutate';
+SET LOCAL app.capability_version = '1.0.0';
+SET LOCAL app.business_transaction_id = 'account-process-actor-bootstrap';
+
 INSERT INTO crm.actors (
   tenant_id,
   actor_id,
@@ -22,6 +31,7 @@ VALUES (
   'account-process-actor-bootstrap'
 )
 ON CONFLICT (tenant_id, actor_id) DO NOTHING;
+COMMIT;
 
 INSERT INTO crm.module_versions (
   module_id,
