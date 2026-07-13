@@ -109,7 +109,11 @@ impl PostgresDataStore {
             records.pop();
         }
         let next_record_id = has_more
-            .then(|| records.last().map(|record| record.reference.record_id.clone()))
+            .then(|| {
+                records
+                    .last()
+                    .map(|record| record.reference.record_id.clone())
+            })
             .flatten();
         Ok(RelatedRecordQueryPage {
             records,
@@ -134,10 +138,7 @@ async fn bind_read_context(
     Ok(())
 }
 
-fn decode_related_record(
-    record_type: &RecordType,
-    row: PgRow,
-) -> Result<RecordSnapshot, SdkError> {
+fn decode_related_record(record_type: &RecordType, row: PgRow) -> Result<RecordSnapshot, SdkError> {
     let descriptor_hash: Vec<u8> = row
         .try_get("descriptor_hash")
         .map_err(|error| stored_value_invalid(error.to_string()))?;
