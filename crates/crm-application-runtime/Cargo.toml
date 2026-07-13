@@ -11,6 +11,7 @@ crm-capability-ingress = { path = "../crm-capability-ingress" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-core-events = { path = "../crm-core-events" }
+crm-global-search-composition = { path = "../crm-global-search-composition" }
 crm-metadata-api-adapter = { path = "../crm-metadata-api-adapter" }
 crm-metadata-query-adapter = { path = "../crm-metadata-query-adapter" }
 crm-module-registry = { path = "../crm-module-registry" }

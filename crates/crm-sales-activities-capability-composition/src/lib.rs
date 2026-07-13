@@ -9,15 +9,12 @@
 
 mod link_event_processor;
 mod phase6_projections;
-mod phase7_search;
-mod phase7_search_worker;
 mod query_catalog;
 mod query_router;
 
+pub use crm_global_search_composition::*;
 pub use link_event_processor::*;
 pub use phase6_projections::*;
-pub use phase7_search::*;
-pub use phase7_search_worker::*;
 pub use query_catalog::*;
 pub use query_router::*;
 

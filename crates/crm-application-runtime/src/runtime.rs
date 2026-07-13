@@ -27,6 +27,7 @@ use crm_core_data::{
     PostgresTransactionalAggregateExecutor,
 };
 use crm_core_events::EventHistoryRequest;
+use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_metadata_api_adapter::METADATA_MODULE_ID;
 use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_registry::ModuleRegistry;
@@ -40,10 +41,9 @@ use crm_parties_capability_adapter::{
 use crm_parties_query_adapter::PartyQueryAdapter;
 use crm_query_runtime::{CursorCodec, QueryGateway};
 use crm_sales_activities_capability_composition::{
-    DEAL_TIMELINE_PROJECTION_ID, GLOBAL_SEARCH_INDEX_ID, Phase6ProjectionWorker,
-    Phase7SearchWorker, ProductionQueryRouter, SalesActivitiesLinkDeliveryOutcome,
-    SalesActivitiesLinkEventProcessor, SalesActivitiesLinkEventProcessorConfig,
-    TASK_STATUS_PROJECTION_ID,
+    DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, ProductionQueryRouter,
+    SalesActivitiesLinkDeliveryOutcome, SalesActivitiesLinkEventProcessor,
+    SalesActivitiesLinkEventProcessorConfig, TASK_STATUS_PROJECTION_ID,
 };
 use crm_sales_activities_link::MODULE_ID as LINK_MODULE_ID;
 use crm_sales_activities_query_adapter::{
@@ -83,7 +83,7 @@ pub struct ApplicationComponents {
     pub query_grpc: Arc<GrpcQueryMiddleware>,
     pub link_processor: Arc<SalesActivitiesLinkEventProcessor>,
     pub projection_worker: Arc<Phase6ProjectionWorker>,
-    pub search_worker: Arc<Phase7SearchWorker>,
+    pub search_worker: Arc<GlobalSearchWorker>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -288,7 +288,7 @@ impl ApplicationRuntime {
         );
         let projection_worker = Arc::new(Phase6ProjectionWorker::new(store.clone()));
         let search_worker = Arc::new(
-            Phase7SearchWorker::new(store.clone())
+            GlobalSearchWorker::new(store.clone())
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
         let components = Arc::new(ApplicationComponents {
@@ -765,6 +765,18 @@ fn bootstrap_application_access(
                             resource_type: ACTIVITIES_RECORD_TYPE,
                         },
                         ["subject"].into_iter().map(str::to_owned).collect(),
+                        expires_at,
+                    )?;
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: PARTIES_MODULE_ID,
+                            resource_type: PARTY_RECORD_TYPE,
+                        },
+                        party_fields(),
                         expires_at,
                     )?;
                 }

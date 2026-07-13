@@ -39,12 +39,12 @@ pub fn search_query_capability_definition() -> Result<CapabilityDefinition, SdkE
         input_contract: support::protobuf_contract(
             SEARCH_MODULE_ID,
             SEARCH_REQUEST_SCHEMA,
-            vec![DataClass::Confidential],
+            vec![DataClass::Personal],
         )?,
         output_contract: Some(support::protobuf_contract(
             SEARCH_MODULE_ID,
             SEARCH_RESPONSE_SCHEMA,
-            vec![DataClass::Confidential],
+            vec![DataClass::Personal],
         )?),
         risk: CapabilityRisk::Low,
         mutation: false,
@@ -127,7 +127,7 @@ impl QueryExecutor for SearchQueryAdapter {
             let output = support::protobuf_payload(
                 SEARCH_MODULE_ID,
                 SEARCH_RESPONSE_SCHEMA,
-                DataClass::Confidential,
+                DataClass::Personal,
                 &search_proto::SearchResponse {
                     hits: page
                         .hits
@@ -178,7 +178,7 @@ fn decode_input(request: &QueryRequest) -> Result<search_proto::SearchRequest, S
         || payload.schema_id.as_str() != SEARCH_REQUEST_SCHEMA
         || payload.schema_version.as_str() != support::CONTRACT_VERSION
         || payload.descriptor_hash != support::message_descriptor_hash(SEARCH_REQUEST_SCHEMA)
-        || payload.data_class != DataClass::Confidential
+        || payload.data_class != DataClass::Personal
         || payload.encoding != PayloadEncoding::Protobuf
         || payload.maximum_size_bytes > support::MAX_PROTOBUF_BYTES
         || payload.validate().is_err()
@@ -233,13 +233,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn publishes_one_stable_read_only_search_capability() {
+    fn publishes_one_stable_read_only_personal_search_capability() {
         let definition = search_query_capability_definition().unwrap();
         assert_eq!(definition.owner_module_id.as_str(), SEARCH_MODULE_ID);
         assert_eq!(definition.capability_id.as_str(), SEARCH_QUERY_CAPABILITY);
         assert_eq!(
             definition.capability_version.as_str(),
             support::CONTRACT_VERSION
+        );
+        assert_eq!(
+            definition.input_contract.allowed_data_classes,
+            vec![DataClass::Personal]
+        );
+        assert_eq!(
+            definition
+                .output_contract
+                .as_ref()
+                .expect("search output contract")
+                .allowed_data_classes,
+            vec![DataClass::Personal]
         );
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);
