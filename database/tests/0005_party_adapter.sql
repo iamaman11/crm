@@ -1,5 +1,3 @@
-\set ON_ERROR_STOP on
-
 -- Production-adapter fixture for the Phase 8A.2 Party vertical slice.
 -- The runtime contract catalog remains authoritative for request validation;
 -- these rows satisfy the durable module/capability registry foreign-key and
