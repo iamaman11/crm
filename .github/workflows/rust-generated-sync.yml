@@ -34,96 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Strengthen Customer 360 process acceptance
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('services/crm-api/tests/customer_360_process_e2e.rs')
-          text = path.read_text()
-
-          def once(old, new, label):
-              global text
-              if new in text:
-                  return
-              if old not in text:
-                  raise SystemExit(f'missing {label} anchor')
-              text = text.replace(old, new, 1)
-
-          once(
-              'accounts::v1 as accounts, contact_points::v1 as contact_points, customer::v1 as customer,\n    customer_360::v1 as customer_360, parties::v1 as parties,',
-              'accounts::v1 as accounts, contact_points::v1 as contact_points, core::v1 as core,\n    customer::v1 as customer, customer_360::v1 as customer_360, parties::v1 as parties,',
-              'core proto import',
-          )
-          once(
-              'const CONTACT_POINT_UPDATE: &str = "contact-points.contact-point.update";',
-              'const CONTACT_POINT_UPDATE: &str = "contact-points.contact-point.update";\nconst CONTACT_POINT_VERIFY: &str = "contact-points.contact-point.verify";',
-              'verify capability constant',
-          )
-          once(
-              '    let contact_point_update = mutation_definition(CONTACT_POINT_UPDATE);',
-              '    let contact_point_update = mutation_definition(CONTACT_POINT_UPDATE);\n    let contact_point_verify = mutation_definition(CONTACT_POINT_VERIFY);',
-              'verify capability definition',
-          )
-          once(
-              '    .await\n    .expect("create Contact Point through real crm-api");\n\n    mutate(\n        &mut grpc,\n        &relationship_create,',
-              '    .await\n    .expect("create Contact Point through real crm-api");\n\n    mutate(\n        &mut grpc,\n        &contact_point_verify,\n        payload(\n            &contact_point_verify,\n            contact_points::VerifyContactPointRequest {\n                contact_point_ref: Some(customer::ContactPointRef {\n                    contact_point_id: contact_point_id.clone(),\n                }),\n                expected_version: 1,\n                evidence_ref: format!("c360-evidence-{run_id}"),\n            },\n        ),\n        TENANT_A,\n        &format!("c360-contact-verify-{run_id}"),\n        true,\n    )\n    .await\n    .expect("verify Contact Point through real crm-api");\n\n    mutate(\n        &mut grpc,\n        &relationship_create,',
-              'Contact Point verification mutation',
-          )
-          once(
-              '                && view.contact_points.len() == 1\n                && view.party_relationships.len() == 1',
-              '                && view.contact_points.len() == 1\n                && contact_point_verification_status(&view.contact_points[0])\n                    == contact_points::ContactPointVerificationStatus::Verified as i32\n                && view.party_relationships.len() == 1',
-              'initial verified convergence',
-          )
-          once('            .applied_event_count\n            >= 5', '            .applied_event_count\n            >= 6', 'initial freshness event count')
-          once('                expected_version: 1,\n                value: "ada.updated@example.com".to_owned(),', '                expected_version: 2,\n                value: "ada.updated@example.com".to_owned(),', 'Contact Point update version')
-          once('                status: relationships::PartyRelationshipStatus::Inactive as i32,\n                valid_from: None,\n                valid_until: None,', '                status: relationships::PartyRelationshipStatus::Inactive as i32,\n                valid_from: None,\n                valid_until: Some(core::UnixTime {\n                    unix_nanos: now_unix_nanos(),\n                }),', 'Relationship validity update')
-          once(
-              '                && contact_point_normalized_value(&view.contact_points[0])\n                    == "ada.updated@example.com"\n                && view.party_relationships.len() == 1\n                && relationship_status(&view.party_relationships[0])\n                    == relationships::PartyRelationshipStatus::Inactive as i32',
-              '                && contact_point_normalized_value(&view.contact_points[0])\n                    == "ada.updated@example.com"\n                && contact_point_verification_status(&view.contact_points[0])\n                    == contact_points::ContactPointVerificationStatus::Unverified as i32\n                && view.party_relationships.len() == 1\n                && relationship_status(&view.party_relationships[0])\n                    == relationships::PartyRelationshipStatus::Inactive as i32\n                && relationship_valid_until(&view.party_relationships[0]).is_some()',
-              'post-update owner semantics',
-          )
-          once('        2\n    );\n    assert_eq!(\n        source_version(\n            converged.party_relationships[0]', '        3\n    );\n    assert_eq!(\n        source_version(\n            converged.party_relationships[0]', 'Contact Point source version')
-          once(
-              '    assert_eq!(\n        source_version(\n            converged.party_relationships[0]\n                .source\n                .as_ref()\n                .expect("Party Relationship source lineage")\n        ),\n        2\n    );',
-              '    assert_eq!(\n        source_version(\n            converged.party_relationships[0]\n                .source\n                .as_ref()\n                .expect("Party Relationship source lineage")\n        ),\n        2\n    );\n    assert_eq!(\n        converged\n            .freshness\n            .as_ref()\n            .expect("converged Customer 360 freshness")\n            .applied_event_count,\n        initial\n            .freshness\n            .as_ref()\n            .expect("initial Customer 360 freshness")\n            .applied_event_count\n            + 3\n    );',
-              'freshness progression',
-          )
-          once('    stop_crm_api(&mut child).await;\n\n    let store = PostgresDataStore::connect(&database_url, 5)', '    let authoritative_before_rebuild = authoritative_evidence(&admin, TENANT_A).await;\n    stop_crm_api(&mut child).await;\n\n    let store = PostgresDataStore::connect(&database_url, 5)', 'authoritative evidence snapshot')
-          once('    assert!(rebuilt_event_count >= 8);', '    assert!(rebuilt_event_count >= 9);\n    assert_eq!(\n        authoritative_evidence(&admin, TENANT_A).await,\n        authoritative_before_rebuild,\n        "Customer 360 rebuild must not mutate authoritative records, outbox or audit evidence"\n    );', 'rebuild evidence invariant')
-          once('fn contact_point_normalized_value(section: &customer_360::Customer360ContactPointSection) -> &str {', 'fn contact_point_verification_status(\n    section: &customer_360::Customer360ContactPointSection,\n) -> i32 {\n    section\n        .contact_point\n        .as_ref()\n        .and_then(|contact_point| contact_point.verification.as_ref())\n        .expect("Customer 360 Contact Point verification")\n        .status\n}\n\nfn contact_point_normalized_value(section: &customer_360::Customer360ContactPointSection) -> &str {', 'verification helper')
-          once('fn source_version(source: &customer_360::Customer360SourceLineage) -> i64 {', 'fn relationship_valid_until(\n    section: &customer_360::Customer360PartyRelationshipSection,\n) -> Option<i64> {\n    section\n        .party_relationship\n        .as_ref()\n        .expect("Customer 360 Party Relationship")\n        .valid_until\n        .as_ref()\n        .map(|value| value.unix_nanos)\n}\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nstruct AuthoritativeEvidence {\n    records: i64,\n    outbox_events: i64,\n    audit_records: i64,\n}\n\nasync fn authoritative_evidence(admin: &PgPool, tenant_id: &str) -> AuthoritativeEvidence {\n    let records = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.records WHERE tenant_id = $1 AND deleted_at IS NULL").bind(tenant_id).fetch_one(admin).await.expect("count authoritative records");\n    let outbox_events = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.outbox_events WHERE tenant_id = $1").bind(tenant_id).fetch_one(admin).await.expect("count authoritative outbox events");\n    let audit_records = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1").bind(tenant_id).fetch_one(admin).await.expect("count authoritative audit records");\n    AuthoritativeEvidence { records, outbox_events, audit_records }\n}\n\nfn source_version(source: &customer_360::Customer360SourceLineage) -> i64 {', 'authoritative evidence helpers')
-          once('fn unique_id(prefix: &str) -> String {', 'fn now_unix_nanos() -> i64 {\n    i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH).expect("system time after Unix epoch").as_nanos()).expect("current Unix nanoseconds fit i64")\n}\n\nfn unique_id(prefix: &str) -> String {', 'current time helper')
-
-          required = [
-              'CONTACT_POINT_VERIFY',
-              'VerifyContactPointRequest',
-              'ContactPointVerificationStatus::Verified',
-              'ContactPointVerificationStatus::Unverified',
-              'relationship_valid_until',
-              'AuthoritativeEvidence',
-              'rebuilt_event_count >= 9',
-          ]
-          missing = [marker for marker in required if marker not in text]
-          if missing:
-              raise SystemExit(f'missing strengthened acceptance markers: {missing}')
-          path.write_text(text)
-          PY
-      - name: Verify strengthened Customer 360 process acceptance compiles
-        run: |
-          cargo fmt --all
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
           cargo generate-lockfile
-          cargo check -p crm-api --test customer_360_process_e2e
-      - name: Commit strengthened Customer 360 process acceptance
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock services/crm-api/tests/customer_360_process_e2e.rs
-          if git diff --cached --quiet; then
-            echo "Customer 360 process acceptance is already strengthened."
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
             exit 0
           fi
-          git commit -m "Strengthen Customer 360 owner-semantics rebuild acceptance"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
