@@ -34,22 +34,85 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Repair Party Relationship projection EventDelivery fixture
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-party-relationships-projection/src/lib.rs')
+          text = path.read_text()
+          old_import = '''    use crm_module_sdk::{
+              EventId, RecordId, RecordRef, RecordType, RetentionPolicyId, SchemaId, SchemaVersion,
+              TypedPayload,
+          };
+          '''
+          new_import = '''    use crm_module_sdk::{
+              ActorId, CorrelationId, DeliveryId, EventId, EventVersion, RecordId, RecordRef,
+              RecordType, RetentionPolicyId, SchemaId, SchemaVersion, TraceId, TypedPayload,
+          };
+          '''
+          if old_import in text:
+              text = text.replace(old_import, new_import, 1)
+          elif 'DeliveryId' not in text:
+              raise SystemExit('unexpected projection test import shape')
+
+          old_delivery = '''        EventDelivery {
+              tenant_id: TenantId::try_new("tenant-a").unwrap(),
+              event_id: EventId::try_new("event-relationship-created-1").unwrap(),
+              source_module_id: ModuleId::try_new(PARTY_RELATIONSHIPS_MODULE_ID).unwrap(),
+              event_type: EventType::try_new(CREATED_EVENT_TYPE).unwrap(),
+              event_version: SchemaVersion::try_new(CONTRACT_VERSION).unwrap(),
+              aggregate: RecordRef {
+          '''
+          new_delivery = '''        EventDelivery {
+              delivery_id: DeliveryId::try_new("delivery-relationship-created-1").unwrap(),
+              event_id: EventId::try_new("event-relationship-created-1").unwrap(),
+              tenant_id: TenantId::try_new("tenant-a").unwrap(),
+              source_module_id: ModuleId::try_new(PARTY_RELATIONSHIPS_MODULE_ID).unwrap(),
+              consumer_module_id: ModuleId::try_new(
+                  PARTY_RELATIONSHIP_HIERARCHY_CONSUMER_MODULE_ID,
+              )
+              .unwrap(),
+              source_actor_id: ActorId::try_new("actor-a").unwrap(),
+              event_type: EventType::try_new(CREATED_EVENT_TYPE).unwrap(),
+              event_version: EventVersion::try_new(CONTRACT_VERSION).unwrap(),
+              aggregate: RecordRef {
+          '''
+          if old_delivery in text:
+              text = text.replace(old_delivery, new_delivery, 1)
+          elif 'delivery_id: DeliveryId::try_new("delivery-relationship-created-1")' not in text:
+              raise SystemExit('unexpected projection EventDelivery fixture shape')
+
+          old_tail = '''            transaction_id: None,
+              correlation_id: None,
+              causation_id: None,
+          '''
+          new_tail = '''            correlation_id: CorrelationId::try_new("correlation-relationship-created-1").unwrap(),
+              trace_id: TraceId::try_new("trace-relationship-created-1").unwrap(),
+          '''
+          if old_tail in text:
+              text = text.replace(old_tail, new_tail, 1)
+          elif 'trace_id: TraceId::try_new("trace-relationship-created-1")' not in text:
+              raise SystemExit('unexpected projection EventDelivery tail shape')
+
+          path.write_text(text)
+          PY
+          cargo fmt --all
+      - name: Commit targeted projection fixture repair
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- crates/crm-party-relationships-projection/src/lib.rs; then
+            echo "Party Relationship projection fixture is already current."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add crates/crm-party-relationships-projection/src/lib.rs
+            git commit -m "Update Party Relationship projection delivery fixture"
+            git push origin "HEAD:${HEAD_BRANCH}"
+          fi
+      - name: Verify remaining machine-fixable Rust maintenance
         run: |
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
-      - name: Commit synchronized files when needed
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
-        run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
-          git push origin "HEAD:${HEAD_BRANCH}"
