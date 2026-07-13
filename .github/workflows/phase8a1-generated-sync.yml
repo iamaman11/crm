@@ -1,0 +1,56 @@
+name: Phase 8A.1 Generated Artifact Sync
+
+on:
+  push:
+    branches:
+      - develop/phase8a1-customer-contracts
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase8a1-generated-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a1-customer-contracts
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.18.0"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate exact repository artifacts
+        run: |
+          cargo generate-lockfile
+          pnpm web:generate
+
+      - name: Commit generated artifacts only
+        run: |
+          git add Cargo.lock packages/client/src/contract_hashes.ts
+          if git diff --cached --quiet; then
+            echo "Generated artifacts are already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Synchronize generated Phase 8A.1 artifacts"
+          git push origin HEAD:develop/phase8a1-customer-contracts
