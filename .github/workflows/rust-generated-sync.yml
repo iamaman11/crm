@@ -38,11 +38,14 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           runtime = Path('crates/crm-application-runtime/src/runtime.rs')
           text = runtime.read_text()
-          start = text.index('                CUSTOMER_360_MODULE_ID => {')
-          end = text.index('                SEARCH_MODULE_ID => {', start)
+          start_marker = 'CUSTOMER_360_MODULE_ID => {'
+          end_marker = 'SEARCH_MODULE_ID => {'
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
           segment = text[start:end]
           replacements = [
               ('party_fields()', 'customer_360_party_fields()'),
@@ -56,98 +59,109 @@ jobs:
                       raise SystemExit(f'missing Customer 360 bootstrap field anchor: {old}')
                   segment = segment.replace(old, new, 1)
           text = text[:start] + segment + text[end:]
-          helper_marker = '''fn party_fields() -> BTreeSet<String> {'''
-          helpers = '''fn customer_360_party_fields() -> BTreeSet<String> {
-              ["display_name"].into_iter().map(str::to_owned).collect()
-          }
+          for _, new in replacements:
+              if new not in text[start:text.index(end_marker, start)]:
+                  raise SystemExit(f'Customer 360 bootstrap replacement missing: {new}')
 
-          fn customer_360_account_fields() -> BTreeSet<String> {
-              ["name", "status"]
-                  .into_iter()
-                  .map(str::to_owned)
-                  .collect()
-          }
-
-          fn customer_360_contact_point_fields() -> BTreeSet<String> {
-              [
-                  "party_ref",
-                  "kind",
-                  "normalized_value",
-                  "status",
-                  "preferred",
-                  "validity",
-                  "verification",
-              ]
-              .into_iter()
-              .map(str::to_owned)
-              .collect()
-          }
-
-          fn customer_360_party_relationship_fields() -> BTreeSet<String> {
-              ["from_party_ref", "to_party_ref", "status", "validity"]
-                  .into_iter()
-                  .map(str::to_owned)
-                  .collect()
-          }
-
-          '''
           if 'fn customer_360_party_fields()' not in text:
-              if helper_marker not in text:
+              marker = '\nfn party_fields() -> BTreeSet<String> {'
+              if marker not in text:
                   raise SystemExit('missing Customer 360 helper insertion point')
-              text = text.replace(helper_marker, helpers + helper_marker, 1)
+              helpers = dedent('''
+
+              fn customer_360_party_fields() -> BTreeSet<String> {
+                  ["display_name"].into_iter().map(str::to_owned).collect()
+              }
+
+              fn customer_360_account_fields() -> BTreeSet<String> {
+                  ["name", "status"]
+                      .into_iter()
+                      .map(str::to_owned)
+                      .collect()
+              }
+
+              fn customer_360_contact_point_fields() -> BTreeSet<String> {
+                  [
+                      "party_ref",
+                      "kind",
+                      "normalized_value",
+                      "status",
+                      "preferred",
+                      "validity",
+                      "verification",
+                  ]
+                  .into_iter()
+                  .map(str::to_owned)
+                  .collect()
+              }
+
+              fn customer_360_party_relationship_fields() -> BTreeSet<String> {
+                  ["from_party_ref", "to_party_ref", "status", "validity"]
+                      .into_iter()
+                      .map(str::to_owned)
+                      .collect()
+              }
+              ''')
+              text = text.replace(marker, helpers + marker, 1)
           runtime.write_text(text)
 
           test = Path('services/crm-api/tests/customer_360_process_e2e.rs')
           text = test.read_text()
-          anchor = '''    assert_eq!(
-              relationship_id_of(&initial.party_relationships[0]),
-              relationship_id
-          );'''
-          assertions = '''    assert_eq!(
-              relationship_id_of(&initial.party_relationships[0]),
-              relationship_id
-          );
-              assert_eq!(
-                  initial
-                      .party
-                      .as_ref()
-                      .and_then(|section| section.party.as_ref())
-                      .expect("Customer 360 Party section")
-                      .kind,
-                  parties::PartyKind::Unspecified as i32,
-                  "Customer 360 Party kind must be field-redacted by the bootstrap policy"
-              );
-              assert!(
-                  initial.accounts[0]
-                      .account
-                      .as_ref()
-                      .expect("Customer 360 Account")
-                      .party_associations
-                      .is_empty(),
-                  "Customer 360 Account associations must be field-redacted after root selection"
-              );
-              assert!(
-                  initial.contact_points[0]
-                      .contact_point
-                      .as_ref()
-                      .expect("Customer 360 Contact Point")
-                      .display_value
-                      .is_empty(),
-                  "Customer 360 Contact Point display value must be field-redacted"
-              );
-              assert!(
-                  initial.party_relationships[0]
-                      .party_relationship
-                      .as_ref()
-                      .expect("Customer 360 Party Relationship")
-                      .relationship_type
-                      .is_none(),
-                  "Customer 360 Party Relationship type must be field-redacted"
-              );'''
-          if 'Customer 360 Party kind must be field-redacted' not in text:
-              if anchor not in text:
-                  raise SystemExit('missing Customer 360 initial assertion anchor')
-              text = text.replace(anchor, assertions, 1)
+          redaction_marker = 'Customer 360 Party kind must be field-redacted by the bootstrap policy'
+          if redaction_marker not in text:
+              insertion_point = '    assert!(\n        initial\n            .freshness'
+              if insertion_point not in text:
+                  raise SystemExit('missing stable Customer 360 freshness insertion point')
+              assertions = dedent('''
+                  assert_eq!(
+                      initial
+                          .party
+                          .as_ref()
+                          .and_then(|section| section.party.as_ref())
+                          .expect("Customer 360 Party section")
+                          .kind,
+                      parties::PartyKind::Unspecified as i32,
+                      "Customer 360 Party kind must be field-redacted by the bootstrap policy"
+                  );
+                  assert!(
+                      initial.accounts[0]
+                          .account
+                          .as_ref()
+                          .expect("Customer 360 Account")
+                          .party_associations
+                          .is_empty(),
+                      "Customer 360 Account associations must be field-redacted after root selection"
+                  );
+                  assert!(
+                      initial.contact_points[0]
+                          .contact_point
+                          .as_ref()
+                          .expect("Customer 360 Contact Point")
+                          .display_value
+                          .is_empty(),
+                      "Customer 360 Contact Point display value must be field-redacted"
+                  );
+                  assert!(
+                      initial.party_relationships[0]
+                          .party_relationship
+                          .as_ref()
+                          .expect("Customer 360 Party Relationship")
+                          .relationship_type
+                          .is_none(),
+                      "Customer 360 Party Relationship type must be field-redacted"
+                  );
+
+              ''')
+              text = text.replace(insertion_point, assertions + insertion_point, 1)
+          required = [
+              redaction_marker,
+              'Customer 360 Account associations must be field-redacted after root selection',
+              'Customer 360 Contact Point display value must be field-redacted',
+              'Customer 360 Party Relationship type must be field-redacted',
+          ]
+          missing = [value for value in required if value not in text]
+          if missing:
+              raise SystemExit(f'missing Customer 360 redaction assertions: {missing}')
           test.write_text(text)
           PY
       - name: Verify Customer 360 redaction composition compiles
