@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package crm.contact_points.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+
+// Endpoint channel kind owned by crm.contact-points.
+enum ContactPointKind {
+  CONTACT_POINT_KIND_UNSPECIFIED = 0;
+  CONTACT_POINT_KIND_EMAIL = 1;
+  CONTACT_POINT_KIND_PHONE = 2;
+  CONTACT_POINT_KIND_POSTAL = 3;
+  CONTACT_POINT_KIND_WEB = 4;
+  CONTACT_POINT_KIND_MESSAGING = 5;
+}
+
+// Endpoint lifecycle state. This does not express consent, legal basis,
+// communication authorization, suppression, or provider delivery state.
+enum ContactPointStatus {
+  CONTACT_POINT_STATUS_UNSPECIFIED = 0;
+  CONTACT_POINT_STATUS_ACTIVE = 1;
+  CONTACT_POINT_STATUS_INACTIVE = 2;
+}
+
+// Verification state owned by the endpoint lifecycle. Provider-specific
+// verification transport details remain outside this owner contract.
+enum ContactPointVerificationStatus {
+  CONTACT_POINT_VERIFICATION_STATUS_UNSPECIFIED = 0;
+  CONTACT_POINT_VERIFICATION_STATUS_UNVERIFIED = 1;
+  CONTACT_POINT_VERIFICATION_STATUS_VERIFIED = 2;
+}
+
+message ContactPointVerification {
+  ContactPointVerificationStatus status = 1;
+  optional string evidence_ref = 2;
+  crm.core.v1.UnixTime verified_at = 3;
+}
+
+message ContactPoint {
+  crm.customer.v1.ContactPointRef contact_point_ref = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  ContactPointKind kind = 3;
+  string normalized_value = 4;
+  string display_value = 5;
+  ContactPointStatus status = 6;
+  bool preferred = 7;
+  crm.core.v1.UnixTime valid_from = 8;
+  crm.core.v1.UnixTime valid_until = 9;
+  ContactPointVerification verification = 10;
+  crm.customer.v1.CustomerResourceVersion resource_version = 11;
+}
+
+message CreateContactPointRequest {
+  crm.customer.v1.ContactPointRef contact_point_ref = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  ContactPointKind kind = 3;
+  string value = 4;
+  bool preferred = 5;
+  crm.core.v1.UnixTime valid_from = 6;
+  crm.core.v1.UnixTime valid_until = 7;
+}
+
+message CreateContactPointResponse {
+  ContactPoint contact_point = 1;
+}
+
+message UpdateContactPointRequest {
+  crm.customer.v1.ContactPointRef contact_point_ref = 1;
+  int64 expected_version = 2;
+  string value = 3;
+  ContactPointStatus status = 4;
+  bool preferred = 5;
+  crm.core.v1.UnixTime valid_from = 6;
+  crm.core.v1.UnixTime valid_until = 7;
+}
+
+message UpdateContactPointResponse {
+  ContactPoint contact_point = 1;
+}
+
+message VerifyContactPointRequest {
+  crm.customer.v1.ContactPointRef contact_point_ref = 1;
+  int64 expected_version = 2;
+  string evidence_ref = 3;
+}
+
+message VerifyContactPointResponse {
+  ContactPoint contact_point = 1;
+}
+
+message GetContactPointRequest {
+  crm.customer.v1.ContactPointRef contact_point_ref = 1;
+}
+
+message GetContactPointResponse {
+  ContactPoint contact_point = 1;
+}
+
+enum ContactPointSort {
+  CONTACT_POINT_SORT_UNSPECIFIED = 0;
+  CONTACT_POINT_SORT_UPDATED_AT_DESCENDING = 1;
+}
+
+message ListContactPointsRequest {
+  crm.core.v1.PageRequest page = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  optional ContactPointKind kind = 3;
+  optional ContactPointStatus status = 4;
+  optional ContactPointVerificationStatus verification_status = 5;
+  optional bool preferred = 6;
+  ContactPointSort sort = 7;
+}
+
+message ListContactPointsResponse {
+  repeated ContactPoint contact_points = 1;
+  crm.core.v1.PageInfo page = 2;
+}
+
+message ContactPointCreatedEvent {
+  ContactPoint contact_point = 1;
+}
+
+message ContactPointUpdatedEvent {
+  ContactPoint contact_point = 1;
+}
+
+message ContactPointVerifiedEvent {
+  ContactPoint contact_point = 1;
+}
+
+service ContactPointService {
+  rpc CreateContactPoint(CreateContactPointRequest) returns (CreateContactPointResponse);
+  rpc UpdateContactPoint(UpdateContactPointRequest) returns (UpdateContactPointResponse);
+  rpc VerifyContactPoint(VerifyContactPointRequest) returns (VerifyContactPointResponse);
+  rpc GetContactPoint(GetContactPointRequest) returns (GetContactPointResponse);
+  rpc ListContactPoints(ListContactPointsRequest) returns (ListContactPointsResponse);
+}
