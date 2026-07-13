@@ -1,0 +1,90 @@
+name: Finalize Phase 8A.3b Documentation
+
+on:
+  push:
+    branches:
+      - develop/phase8a3b-contact-point-lifecycle
+    paths:
+      - ".github/workflows/finalize-phase8a3b-docs.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a3b-contact-point-lifecycle
+          fetch-depth: 0
+      - name: Mark Phase 8A.3b implementation complete after exact-head green
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          verified = "242a06cf02b7bc6bb9745b7fb3f7d15c0f87c5db"
+
+          phase8 = Path("docs/PHASE8_DELIVERY_PLAN.md")
+          text = phase8.read_text()
+          text = text.replace(
+              "#### 8A.3b — Contact Point lifecycle, verification and preference — Active / final verification",
+              "#### 8A.3b — Contact Point lifecycle, verification and preference — Complete",
+              1,
+          )
+          old = "The packet remains **Active** and PR #104 remains draft until all applicable workflows are green together on one exact final SHA. It is not marked complete or merged prematurely."
+          new = f"The implementation packet is **Complete**. All 11 applicable CI workflows were green together on exact head `{verified}`. PR #104 remains merge-gated until the post-documentation exact head is also fully green, after which Party Relationship is next."
+          if text.count(old) != 1:
+              raise SystemExit("expected one PHASE8 final-verification paragraph")
+          phase8.write_text(text.replace(old, new, 1))
+
+          status = Path("docs/PROJECT_STATUS.md")
+          text = status.read_text()
+          text = text.replace(
+              "### 8A.3b — Contact Point lifecycle, verification and preference — Active / final verification",
+              "### 8A.3b — Contact Point lifecycle, verification and preference — Complete / merge gate",
+              1,
+          )
+          old = "PR #104 remains draft pending one exact-head all-green applicable CI set. The packet is therefore not yet marked **Complete** or merged."
+          new = f"The implementation packet is **Complete**: all 11 applicable CI workflows were green together on exact head `{verified}`. PR #104 remains draft only for the post-documentation exact-head rerun and merge gate."
+          if text.count(old) != 1:
+              raise SystemExit("expected one PROJECT_STATUS final-verification paragraph")
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              "- `crm.contact-points` — implemented authoritative 8A.3b vertical slice in draft PR #104, pending exact-head final verification and merge;",
+              "- `crm.contact-points` — implementation-complete authoritative 8A.3b vertical slice in PR #104, pending only the post-documentation exact-head merge gate;",
+              1,
+          )
+          text = text.replace(
+              "1. Finish exact-head CI verification for Phase 8A.3b / #103, merge draft PR #104 only after the full applicable green set, then begin Party Relationship.",
+              "1. Confirm the post-documentation exact head of Phase 8A.3b / #103 is fully green, merge PR #104, then begin Party Relationship.",
+              1,
+          )
+          status.write_text(text)
+
+          roadmap = Path("docs/IMPLEMENTATION_ROADMAP.md")
+          text = roadmap.read_text()
+          old = "It remains Active until one exact final SHA passes the full applicable CI set and the PR is merged."
+          new = f"The implementation is complete: all 11 applicable CI workflows were green together on exact head `{verified}`; PR #104 remains only in the post-documentation exact-head merge gate."
+          if text.count(old) != 1:
+              raise SystemExit("expected one IMPLEMENTATION_ROADMAP active-gate sentence")
+          roadmap.write_text(text.replace(old, new, 1))
+
+          catalog = Path("docs/MODULE_CATALOG.md")
+          text = catalog.read_text()
+          old = "The packet remains Active until one exact final SHA is fully green and merged."
+          new = f"The implementation packet is complete: all 11 applicable CI workflows were green together on exact head `{verified}`; only the post-documentation exact-head merge gate remains."
+          if text.count(old) != 1:
+              raise SystemExit("expected one MODULE_CATALOG active-gate sentence")
+          catalog.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit final delivery status and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/finalize-phase8a3b-docs.yml
+          git add docs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Mark Phase 8A.3b implementation complete after exact-head green"
+          git push origin HEAD:develop/phase8a3b-contact-point-lifecycle
