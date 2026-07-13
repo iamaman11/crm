@@ -463,7 +463,7 @@ fn ensure_definition(
 ) -> Result<(), SdkError> {
     if !MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         || definition.owner_module_id.as_str() != MODULE_ID
-        || request.owner_module_id.as_str() != MODULE_ID
+        || request.context.module_id.as_str() != MODULE_ID
         || definition.capability_id != request.context.execution.capability_id
         || definition.capability_version != request.context.execution.capability_version
     {
