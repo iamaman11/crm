@@ -36,6 +36,9 @@ members = [
   "modules/crm-sales",
   "modules/crm-activities",
   "modules/crm-sales-activities-link",
+  "modules/crm-parties",
+  "modules/crm-customer-accounts",
+  "modules/crm-contact-points",
   "services/crm-api",
 ]
 
