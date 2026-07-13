@@ -1,0 +1,16 @@
+[package]
+name = "crm-contact-points-query-adapter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-contact-points = { path = "../../modules/crm-contact-points" }
+crm-contact-points-capability-adapter = { path = "../crm-contact-points-capability-adapter" }
+crm-core-data = { path = "../crm-core-data" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-query-runtime = { path = "../crm-query-runtime" }
+prost = "0.14"
