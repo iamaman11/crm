@@ -7,12 +7,12 @@ use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture,
     RecordId, RecordType, SdkError, TypedPayload,
 };
-use crm_parties::decode_party_state;
+use crm_parties::{Party, decode_party_state};
 use crm_parties_capability_adapter::{MODULE_ID, RECORD_TYPE, party_to_wire, persisted_contract};
 use crm_proto_contracts::crm::parties::v1 as wire;
 use crm_query_runtime::{
     QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator,
-    QueryVisibilityAuthorizer,
+    QueryVisibilityAuthorizer, QueryVisibilityDecision,
 };
 use prost::Message;
 use std::sync::Arc;
@@ -78,9 +78,9 @@ impl QuerySemanticValidator for PartyQueryAdapter {
         Box::pin(async move {
             ensure_definition(definition)?;
             let command: wire::GetPartyRequest = decode_input(request)?;
-            let party_ref = command
-                .party_ref
-                .ok_or_else(|| SdkError::invalid_argument("party.party_ref", "Party reference is required"))?;
+            let party_ref = command.party_ref.ok_or_else(|| {
+                SdkError::invalid_argument("party.party_ref", "Party reference is required")
+            })?;
             validate_record_id(&party_ref.party_id)?;
             Ok(())
         })
@@ -96,9 +96,9 @@ impl QueryExecutor for PartyQueryAdapter {
         Box::pin(async move {
             ensure_definition(definition)?;
             let command: wire::GetPartyRequest = decode_input(&request)?;
-            let party_ref = command
-                .party_ref
-                .ok_or_else(|| SdkError::invalid_argument("party.party_ref", "Party reference is required"))?;
+            let party_ref = command.party_ref.ok_or_else(|| {
+                SdkError::invalid_argument("party.party_ref", "Party reference is required")
+            })?;
             let record_id = validate_record_id(&party_ref.party_id)?;
             let snapshot = self
                 .store
@@ -133,12 +133,26 @@ impl QueryExecutor for PartyQueryAdapter {
                 GET_RESPONSE_SCHEMA,
                 DataClass::Personal,
                 &wire::GetPartyResponse {
-                    party: Some(party_to_wire(&party)),
+                    party: Some(party_to_wire_with_visibility(&party, &visibility)),
                 },
             )?;
             Ok(QueryExecutionResult { output })
         })
     }
+}
+
+fn party_to_wire_with_visibility(
+    party: &Party,
+    visibility: &QueryVisibilityDecision,
+) -> wire::Party {
+    let mut output = party_to_wire(party);
+    if !visibility.allows_field("kind") {
+        output.kind = wire::PartyKind::Unspecified as i32;
+    }
+    if !visibility.allows_field("display_name") {
+        output.display_name.clear();
+    }
+    output
 }
 
 fn ensure_definition(definition: &CapabilityDefinition) -> Result<(), SdkError> {
@@ -215,6 +229,8 @@ fn config_error(error: crm_module_sdk::IdentifierError) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_parties::{CreateParty, PartyId, PartyKind};
+    use std::collections::BTreeSet;
 
     #[test]
     fn get_query_is_personal_read_only_and_not_idempotency_bound() {
@@ -223,5 +239,28 @@ mod tests {
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);
         assert_eq!(definition.input_contract.data_classes, vec![DataClass::Personal]);
+    }
+
+    #[test]
+    fn field_visibility_redacts_personal_fields_without_hiding_resource_identity() {
+        let party = Party::create(CreateParty {
+            party_id: PartyId::try_new("party-visible-1").unwrap(),
+            kind: PartyKind::Person,
+            display_name: "Ada Lovelace".to_owned(),
+            occurred_at_unix_nanos: 10,
+        })
+        .unwrap();
+        let decision = QueryVisibilityDecision {
+            resource_visible: true,
+            allowed_fields: BTreeSet::from(["display_name".to_owned()]),
+            decision_id: "decision-1".to_owned(),
+            policy_version: "policy-1".to_owned(),
+        };
+
+        let output = party_to_wire_with_visibility(&party, &decision);
+        assert_eq!(output.party_ref.unwrap().party_id, "party-visible-1");
+        assert_eq!(output.display_name, "Ada Lovelace");
+        assert_eq!(output.kind, wire::PartyKind::Unspecified as i32);
+        assert_eq!(output.resource_version.unwrap().version, 1);
     }
 }
