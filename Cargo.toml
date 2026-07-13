@@ -56,6 +56,7 @@ members = [
   "modules/crm-contact-points",
   "modules/crm-party-relationships",
   "modules/crm-consents",
+  "modules/crm-identity-resolution",
   "services/crm-api",
 ]
 
