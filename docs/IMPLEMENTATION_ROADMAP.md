@@ -228,7 +228,7 @@ Architectural constraints:
 
 Acceptance must cover cross-tenant isolation, deterministic import/replay, merge/unmerge lineage and rollback, immediate consent-withdrawal enforcement, explainable duplicate candidates, privacy export/deletion/legal-hold interactions, contract compatibility, migrations and performance.
 
-Current delivery position: Party create/update/get/list/search is production-proven. The authoritative Account vertical slice is merged and production-proven (#101 / merged PR #102; final verified head `0d6d79dce31aaea4d2a0998fadb1ac842fdcfde4`; merge commit `7ee48530d880ef8aeb6abf2140b524ac724d4fc9`). Contact Point is merged and production-proven (#103 / merged PR #104; merge commit `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`). Party Relationship lifecycle and rebuildable hierarchy foundations are merged and production-proven (#108 / merged PR #109; merge commit `36c238d51a156e3864e2dad0f53762e95e47680d`). Customer 360 composition is implementation-complete in #110 / draft PR #111 on `develop/phase8a3d-customer-360`: the independently governed read-only `crm.customer360` composition module, additive `crm.customer_360.v1` query contract, strict multi-owner event validation, deterministic per-source contributions, indexed Party-root lookup, live source-resource authorization, least-privilege field redaction, runtime projection worker, freshness metadata, canonical generated descriptors and fresh-PostgreSQL real `crm-api` convergence/rebuild acceptance are present. All 11 applicable CI workflows were green together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca`; this documentation commit intentionally invalidates that evidence until the post-documentation exact-head rerun completes. Consent and communication authorization follows as 8A.4; identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit 8A packets.
+Current delivery position: Party create/update/get/list/search is production-proven. Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship (#108 / merged PR #109) and Customer 360 (#110 / merged PR #111; final verified head `b3bca41c393577e2da5a84bcbe0309996fbdef90`; merge commit `30ce84c57064134202c03c07a943bcd0859e1ea9`) are merged and production-proven. Phase 8A.4 Consent and Communication Authorization is implementation-complete in #112 / draft PR #113: the pure `crm.consents` owner, immutable grant/deny assertions, irreversible withdrawal, exact purpose/channel/legal-basis/jurisdiction/source/evidence semantics, deterministic fail-closed decision precedence, strict persistence, governed create/withdraw/get/list/authorize contracts, cross-owner Party/Contact Point integrity, authoritative Party-to-Consent access-path relationships, permission-aware disclosure, synchronized contract bindings/browser hashes and fresh-PostgreSQL real `crm-api` acceptance are present. The relation-based implementation passed workspace-wide Clippy/format/lock synchronization and real process acceptance on code head `70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced `131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. The final post-documentation unchanged exact-head all-workflow gate remains pending before merge. Identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit Phase 8A packets.
 
 ### 8B — product catalog, CPQ and quote-to-revenue lifecycle — Planned
 
@@ -270,11 +270,11 @@ Gate: enterprise claims require automated and operational evidence, not configur
 
 ## 12. Immediate delivery sequence
 
-1. Complete the post-documentation exact-head merge gate for Phase 8A.3d / #110 and merge PR #111 without creating a second customer or identity master.
-2. Begin Phase 8A.4 Consent and communication authorization against stable merged Party, Account, Contact Point, Party Relationship and Customer 360 contracts.
-3. Continue Phase 8A with identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
-4. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.
-5. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.
+1. Complete the post-documentation exact-head merge gate for Phase 8A.4 / #112 and merge PR #113 without weakening authoritative Consent ownership or allowing Contact Point state to become an authorization oracle.
+2. Continue Phase 8A with identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
+3. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.
+4. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.
+5. Keep enterprise/security/operational proof continuous and require one unchanged exact final SHA for every merge gate.
 
 ## 13. Documentation hygiene
 

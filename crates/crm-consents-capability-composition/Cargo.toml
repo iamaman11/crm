@@ -1,0 +1,18 @@
+[package]
+name = "crm-consents-capability-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-consents = { path = "../../modules/crm-consents" }
+crm-consents-capability-adapter = { path = "../crm-consents-capability-adapter" }
+crm-contact-points = { path = "../../modules/crm-contact-points" }
+crm-contact-points-capability-adapter = { path = "../crm-contact-points-capability-adapter" }
+crm-core-data = { path = "../crm-core-data" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }

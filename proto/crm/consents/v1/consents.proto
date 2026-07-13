@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+package crm.consents.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+
+// Stable Consent Authorization identity owned only by crm.consents.
+message ConsentAuthorizationRef {
+  string authorization_id = 1;
+}
+
+enum CommunicationChannel {
+  COMMUNICATION_CHANNEL_UNSPECIFIED = 0;
+  COMMUNICATION_CHANNEL_EMAIL = 1;
+  COMMUNICATION_CHANNEL_PHONE = 2;
+  COMMUNICATION_CHANNEL_SMS = 3;
+  COMMUNICATION_CHANNEL_POSTAL = 4;
+  COMMUNICATION_CHANNEL_MESSAGING = 5;
+  COMMUNICATION_CHANNEL_PUSH = 6;
+}
+
+enum ConsentEffect {
+  CONSENT_EFFECT_UNSPECIFIED = 0;
+  CONSENT_EFFECT_GRANT = 1;
+  CONSENT_EFFECT_DENY = 2;
+}
+
+enum ConsentAuthorizationStatus {
+  CONSENT_AUTHORIZATION_STATUS_UNSPECIFIED = 0;
+  CONSENT_AUTHORIZATION_STATUS_ACTIVE = 1;
+  CONSENT_AUTHORIZATION_STATUS_WITHDRAWN = 2;
+}
+
+enum CommunicationAuthorizationReason {
+  COMMUNICATION_AUTHORIZATION_REASON_UNSPECIFIED = 0;
+  COMMUNICATION_AUTHORIZATION_REASON_ACTIVE_GRANT = 1;
+  COMMUNICATION_AUTHORIZATION_REASON_ACTIVE_DENY = 2;
+  COMMUNICATION_AUTHORIZATION_REASON_WITHDRAWN = 3;
+  COMMUNICATION_AUTHORIZATION_REASON_NO_APPLICABLE_GRANT = 4;
+  COMMUNICATION_AUTHORIZATION_REASON_DATA_UNAVAILABLE = 5;
+}
+
+message ConsentAuthorization {
+  ConsentAuthorizationRef authorization_ref = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  crm.customer.v1.ContactPointRef contact_point_ref = 3;
+  string purpose = 4;
+  CommunicationChannel channel = 5;
+  ConsentEffect effect = 6;
+  string legal_basis = 7;
+  string jurisdiction = 8;
+  string source = 9;
+  string evidence_ref = 10;
+  crm.core.v1.UnixTime effective_from = 11;
+  crm.core.v1.UnixTime expires_at = 12;
+  ConsentAuthorizationStatus status = 13;
+  crm.core.v1.UnixTime withdrawn_at = 14;
+  crm.customer.v1.CustomerResourceVersion resource_version = 15;
+}
+
+message CreateConsentAuthorizationRequest {
+  ConsentAuthorizationRef authorization_ref = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  crm.customer.v1.ContactPointRef contact_point_ref = 3;
+  string purpose = 4;
+  CommunicationChannel channel = 5;
+  ConsentEffect effect = 6;
+  string legal_basis = 7;
+  string jurisdiction = 8;
+  string source = 9;
+  string evidence_ref = 10;
+  crm.core.v1.UnixTime effective_from = 11;
+  crm.core.v1.UnixTime expires_at = 12;
+}
+
+message CreateConsentAuthorizationResponse {
+  ConsentAuthorization authorization = 1;
+}
+
+message WithdrawConsentAuthorizationRequest {
+  ConsentAuthorizationRef authorization_ref = 1;
+  int64 expected_version = 2;
+}
+
+message WithdrawConsentAuthorizationResponse {
+  ConsentAuthorization authorization = 1;
+}
+
+message GetConsentAuthorizationRequest {
+  ConsentAuthorizationRef authorization_ref = 1;
+}
+
+message GetConsentAuthorizationResponse {
+  ConsentAuthorization authorization = 1;
+}
+
+message ListConsentAuthorizationsRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  crm.customer.v1.ContactPointRef contact_point_ref = 2;
+  optional string purpose = 3;
+  CommunicationChannel channel = 4;
+  ConsentEffect effect = 5;
+  ConsentAuthorizationStatus status = 6;
+  int32 page_size = 7;
+  string cursor = 8;
+}
+
+message ListConsentAuthorizationsResponse {
+  repeated ConsentAuthorization authorizations = 1;
+  string next_cursor = 2;
+}
+
+message AuthorizeCommunicationRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  string purpose = 2;
+  CommunicationChannel channel = 3;
+  crm.customer.v1.ContactPointRef contact_point_ref = 4;
+}
+
+message CommunicationAuthorizationDecision {
+  bool allowed = 1;
+  CommunicationAuthorizationReason reason = 2;
+  crm.customer.v1.PartyRef party_ref = 3;
+  string purpose = 4;
+  CommunicationChannel channel = 5;
+  crm.customer.v1.ContactPointRef contact_point_ref = 6;
+  crm.core.v1.UnixTime evaluated_at = 7;
+  repeated ConsentAuthorizationRef determining_authorizations = 8;
+}
+
+message AuthorizeCommunicationResponse {
+  CommunicationAuthorizationDecision decision = 1;
+}
+
+message ConsentAuthorizationCreatedEvent {
+  ConsentAuthorization authorization = 1;
+}
+
+message ConsentAuthorizationWithdrawnEvent {
+  ConsentAuthorization authorization = 1;
+}
+
+service ConsentAuthorizationService {
+  rpc CreateConsentAuthorization(CreateConsentAuthorizationRequest) returns (CreateConsentAuthorizationResponse);
+  rpc WithdrawConsentAuthorization(WithdrawConsentAuthorizationRequest) returns (WithdrawConsentAuthorizationResponse);
+  rpc GetConsentAuthorization(GetConsentAuthorizationRequest) returns (GetConsentAuthorizationResponse);
+  rpc ListConsentAuthorizations(ListConsentAuthorizationsRequest) returns (ListConsentAuthorizationsResponse);
+  rpc AuthorizeCommunication(AuthorizeCommunicationRequest) returns (AuthorizeCommunicationResponse);
+}

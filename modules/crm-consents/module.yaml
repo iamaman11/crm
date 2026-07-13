@@ -1,0 +1,74 @@
+schema_version: crm.module/v1
+module_id: crm.consents
+version: "0.1.0"
+display_name: CRM Consents
+description: Authoritative purpose-specific consent assertions and communication authorization evidence; Contact Point verification or preference never implies authorization.
+
+owner:
+  team: customer-platform
+  contact: "crm-owner@example.com"
+  codeowners:
+    - "@iamaman11"
+
+runtime:
+  kind: in_process
+  entrypoint: modules/crm-consents
+
+platform:
+  minimum_version: "0.1.0"
+
+dependencies:
+  required:
+    - module_id: crm.parties
+      version_range: ">=0.3.0, <1.0.0"
+    - module_id: crm.contact-points
+      version_range: ">=0.2.0, <1.0.0"
+  optional: []
+  conflicts: []
+
+provides:
+  capabilities:
+    - id: consents.authorization.create
+      version: "1.0.0"
+    - id: consents.authorization.withdraw
+      version: "1.0.0"
+    - id: consents.authorization.get
+      version: "1.0.0"
+    - id: consents.authorization.list
+      version: "1.0.0"
+    - id: consents.communication.authorize
+      version: "1.0.0"
+  events:
+    - id: consents.authorization.created
+      version: "1.0.0"
+    - id: consents.authorization.withdrawn
+      version: "1.0.0"
+  objects:
+    - consents.authorization
+  ui_extensions: []
+
+consumes:
+  capabilities: []
+  events: []
+
+storage:
+  record_types:
+    - consents.authorization
+  private_state_namespaces:
+    - crm.consents.authorization
+
+security:
+  data_classes:
+    - internal
+    - confidential
+    - personal
+  network_egress: []
+  secret_handles: []
+
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-consents/migrations
+  retained_record_types:
+    - consents.authorization

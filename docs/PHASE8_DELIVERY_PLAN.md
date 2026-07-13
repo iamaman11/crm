@@ -85,7 +85,7 @@ Delivered by #98 / merged PR #99:
 
 Search remains candidate-only and rebuildable. It does not own Party identity.
 
-### 8A.3 — Account, Contact Point, Party Relationship and Customer 360 — In progress
+### 8A.3 — Account, Contact Point, Party Relationship and Customer 360 — Complete
 
 #### 8A.3a — authoritative Account lifecycle and Party associations — Complete
 
@@ -156,9 +156,9 @@ The packet now implements:
 
 The final exact-head merge gate completed and PR #109 merged to `main` as `36c238d51a156e3864e2dad0f53762e95e47680d`.
 
-#### 8A.3d — Customer 360 composition — Complete / merge gate
+#### 8A.3d — Customer 360 composition — Complete
 
-Tracked by #110 / draft PR #111 on `develop/phase8a3d-customer-360`.
+Delivered by #110 / merged PR #111.
 
 The packet now implements:
 
@@ -173,7 +173,7 @@ The packet now implements:
 - fresh-PostgreSQL real `crm-api` acceptance proving convergence, field redaction, authentication/tenant non-disclosure, Contact Point verify → canonical value change → verification reset, Account root removal, Party Relationship lifecycle/validity updates, source-version/freshness progression, deterministic rebuild equality and unchanged authoritative record/outbox/audit evidence across rebuild;
 - synchronized generated Rust/browser descriptor identities plus migration clean-install/rollback coverage.
 
-All 11 applicable CI workflows were green together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca`. This documentation commit intentionally invalidates that evidence until the post-documentation exact-head rerun is green. Customer 360 owns no second customer or identity master and exposes no mutation capability.
+The final exact-head gate completed with all 11 applicable workflows green on `b3bca41c393577e2da5a84bcbe0309996fbdef90`. PR #111 merged to `main` as `30ce84c57064134202c03c07a943bcd0859e1ea9`. Customer 360 owns no second customer or identity master and exposes no mutation capability.
 
 ### 8A.4 — Consent and communication authorization
 

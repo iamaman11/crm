@@ -22,6 +22,10 @@ use crm_capability_ingress::{
     HttpQueryMiddleware, HttpQueryRequest, QueryContextResolver, QueryIngress, TimeoutPolicy,
 };
 use crm_capability_runtime::{CapabilityDefinition, CapabilityGateway};
+use crm_consents_capability_adapter::{
+    MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
+};
+use crm_consents_query_adapter::ConsentQueryAdapter;
 use crm_contact_points_capability_adapter::{
     MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
 };
@@ -269,6 +273,13 @@ impl ApplicationRuntime {
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let customer_360_query_adapter =
             Customer360QueryAdapter::new(store.clone(), visibility_authorizer.clone());
+        let consent_query_adapter = ConsentQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -289,6 +300,7 @@ impl ApplicationRuntime {
             contact_point_query_adapter,
             party_relationship_query_adapter,
             customer_360_query_adapter,
+            consent_query_adapter,
             metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
@@ -831,6 +843,18 @@ fn bootstrap_application_access(
                     contact_point_fields(),
                     expires_at,
                 )?,
+                CONSENTS_MODULE_ID => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: CONSENTS_MODULE_ID,
+                        resource_type: CONSENT_RECORD_TYPE,
+                    },
+                    consent_fields(),
+                    expires_at,
+                )?,
                 PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
                     visibility_store,
                     config,
@@ -1057,6 +1081,26 @@ fn contact_point_fields() -> BTreeSet<String> {
     .collect()
 }
 
+fn consent_fields() -> BTreeSet<String> {
+    [
+        "party_ref",
+        "contact_point_ref",
+        "purpose",
+        "channel",
+        "effect",
+        "legal_basis",
+        "jurisdiction",
+        "source",
+        "evidence_ref",
+        "validity",
+        "status",
+        "resource_version",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
 fn party_relationship_fields() -> BTreeSet<String> {
     [
         "from_party_ref",
@@ -1111,6 +1155,8 @@ mod tests {
         assert!(account_fields().contains("party_associations"));
         assert!(contact_point_fields().contains("party_ref"));
         assert!(contact_point_fields().contains("verification"));
+        assert!(consent_fields().contains("purpose"));
+        assert!(consent_fields().contains("evidence_ref"));
         assert!(party_relationship_fields().contains("from_party_ref"));
         assert!(party_relationship_fields().contains("relationship_type"));
         assert!(party_relationship_fields().contains("validity"));

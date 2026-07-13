@@ -3,6 +3,17 @@ use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     TransactionalCapabilityExecutor,
 };
+use crm_consents_capability_adapter::{
+    ConsentCapabilityPlanner, MUTATION_CAPABILITY_IDS as CONSENT_MUTATION_CAPABILITY_IDS,
+    capability_definitions as consent_capability_definitions,
+};
+use crm_consents_capability_composition::{
+    ConsentCapabilityExecutor, PostgresConsentReferenceReader,
+};
+use crm_consents_query_adapter::{
+    ConsentQueryAdapter, QUERY_CAPABILITY_IDS as CONSENT_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as consent_query_capability_definitions,
+};
 use crm_contact_points_capability_adapter::{
     ContactPointCapabilityPlanner,
     MUTATION_CAPABILITY_IDS as CONTACT_POINT_MUTATION_CAPABILITY_IDS,
@@ -75,6 +86,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     definitions.extend(account_capability_definitions()?);
     definitions.extend(contact_point_capability_definitions()?);
     definitions.extend(party_relationship_capability_definitions()?);
+    definitions.extend(consent_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
@@ -86,6 +98,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(contact_point_query_capability_definitions()?);
     definitions.extend(party_relationship_query_capability_definitions()?);
     definitions.extend(customer_360_query_capability_definitions()?);
+    definitions.extend(consent_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -118,6 +131,8 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             .contains(&definition.capability_id.as_str())
         {
             PartyRelationshipCapabilityPlanner.target(definition, request)
+        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            ConsentCapabilityPlanner.target(definition, request)
         } else {
             SalesActivitiesCapabilityPlannerRouter.target(definition, request)
         }
@@ -140,6 +155,8 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             .contains(&definition.capability_id.as_str())
         {
             PartyRelationshipCapabilityPlanner.plan(definition, request, current)
+        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            ConsentCapabilityPlanner.plan(definition, request, current)
         } else {
             SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
         }
@@ -151,6 +168,7 @@ pub struct ApplicationCapabilityExecutorRouter {
     store: PostgresDataStore,
     aggregate: Arc<PostgresTransactionalAggregateExecutor>,
     metadata: Arc<PostgresMetadataCapabilityExecutor>,
+    consents: ConsentCapabilityExecutor,
 }
 
 impl ApplicationCapabilityExecutorRouter {
@@ -159,10 +177,15 @@ impl ApplicationCapabilityExecutorRouter {
         aggregate: Arc<PostgresTransactionalAggregateExecutor>,
         metadata: Arc<PostgresMetadataCapabilityExecutor>,
     ) -> Self {
+        let consents = ConsentCapabilityExecutor::new(
+            Arc::new(PostgresConsentReferenceReader::new(store.clone())),
+            aggregate.clone(),
+        );
         Self {
             store,
             aggregate,
             metadata,
+            consents,
         }
     }
 }
@@ -174,6 +197,7 @@ impl fmt::Debug for ApplicationCapabilityExecutorRouter {
             .field("store", &self.store)
             .field("aggregate", &"PostgresTransactionalAggregateExecutor")
             .field("metadata", &"PostgresMetadataCapabilityExecutor")
+            .field("consents", &self.consents)
             .finish()
     }
 }
@@ -186,6 +210,8 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
     ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
         if METADATA_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.metadata.execute(definition, request)
+        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.consents.execute(definition, request)
         } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             Box::pin(async move {
                 validate_account_party_references(&self.store, definition, &request).await?;
@@ -349,6 +375,7 @@ pub struct ApplicationQueryRouter {
     contact_points: ContactPointQueryAdapter,
     party_relationships: PartyRelationshipQueryAdapter,
     customer_360: Customer360QueryAdapter,
+    consents: ConsentQueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
@@ -360,6 +387,7 @@ impl ApplicationQueryRouter {
         contact_points: ContactPointQueryAdapter,
         party_relationships: PartyRelationshipQueryAdapter,
         customer_360: Customer360QueryAdapter,
+        consents: ConsentQueryAdapter,
         metadata: MetadataQueryAdapter,
     ) -> Self {
         Self {
@@ -369,6 +397,7 @@ impl ApplicationQueryRouter {
             contact_points,
             party_relationships,
             customer_360,
+            consents,
             metadata,
         }
     }
@@ -394,6 +423,8 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
             self.party_relationships.validate(definition, request)
         } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.customer_360.validate(definition, request)
+        } else if CONSENT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.consents.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -420,6 +451,8 @@ impl QueryExecutor for ApplicationQueryRouter {
             self.party_relationships.execute(definition, request)
         } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.customer_360.execute(definition, request)
+        } else if CONSENT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.consents.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }
@@ -453,6 +486,7 @@ mod tests {
                 + ACCOUNT_MUTATION_CAPABILITY_IDS.len()
                 + CONTACT_POINT_MUTATION_CAPABILITY_IDS.len()
                 + PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS.len()
+                + CONSENT_MUTATION_CAPABILITY_IDS.len()
                 + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
@@ -490,6 +524,13 @@ mod tests {
                     .any(|definition| definition.capability_id.as_str() == coordinate)
             );
         }
+        for coordinate in CONSENT_MUTATION_CAPABILITY_IDS {
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
         for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
             assert!(
                 mutations
@@ -508,6 +549,7 @@ mod tests {
                 + CONTACT_POINT_QUERY_CAPABILITY_IDS.len()
                 + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()
                 + CUSTOMER_360_QUERY_CAPABILITY_IDS.len()
+                + CONSENT_QUERY_CAPABILITY_IDS.len()
                 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(
@@ -537,6 +579,13 @@ mod tests {
             );
         }
         for coordinate in PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS {
+            assert!(
+                queries
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
+        for coordinate in CONSENT_QUERY_CAPABILITY_IDS {
             assert!(
                 queries
                     .iter()

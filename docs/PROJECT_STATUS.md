@@ -17,8 +17,8 @@ Current Phase 8A execution state:
 - **8A.3a — complete:** authoritative Account lifecycle and Party associations (#101 / merged PR #102);
 - **8A.3b — complete:** authoritative Contact Point lifecycle, verification and preference (#103 / merged PR #104; merge commit `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`);
 - **8A.3c — complete:** authoritative Party Relationship lifecycle and rebuildable hierarchy foundations (#108 / merged PR #109; merge commit `36c238d51a156e3864e2dad0f53762e95e47680d`);
-- **8A.3d — complete / merge gate:** permission-aware rebuildable Customer 360 composition (#110 / draft PR #111); all 11 applicable workflows were green together on pre-documentation head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca`;
-- **8A.4 — next:** Consent and communication authorization;
+- **8A.3d — complete:** permission-aware rebuildable Customer 360 composition (#110 / merged PR #111; final verified head `b3bca41c393577e2da5a84bcbe0309996fbdef90`; merge commit `30ce84c57064134202c03c07a943bcd0859e1ea9`);
+- **8A.4 — implementation complete / final gate:** authoritative Consent and Communication Authorization (#112 / draft PR #113);
 - **8A.5 and later:** identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
 
 The repository now contains a production-composed modular CRM platform foundation plus the first expert customer-master owner domains:

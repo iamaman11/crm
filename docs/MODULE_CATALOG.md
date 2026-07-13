@@ -46,10 +46,11 @@ A manifest may declare future owned object names. That declaration does not mean
 | `crm.customer-accounts` | Canonical customer/commercial relationship | **Vertical slice** | Governed Account create/update/get/list with typed Party associations, live reference integrity, signed cursor listing and real PostgreSQL/process acceptance | Account hierarchy/advanced commercial semantics where justified, plus Customer 360 composition in later 8A.3 packets |
 | `crm.contact-points` | Canonical email/phone/postal/web/messaging endpoints | **Vertical slice** | Merged governed create/update/verify/get/list with deterministic endpoint normalization, verification/preference lifecycle, Party-reference integrity and real PostgreSQL/process acceptance | Broader communication-channel product UX and consent-aware downstream usage remain separate later packets |
 | `crm.party-relationships` | Authoritative typed Party-to-Party relationships and temporal hierarchy source state | **Vertical slice** | Merged create/update/get/list lifecycle with directional/reciprocal semantics, same-tenant Party-reference integrity, signed cursor queries, durable evidence and rebuildable hierarchy acceptance from #108 / PR #109 | Later explicitly governed overlap-policy expansion where justified |
+| `crm.consents` | Authoritative purpose/channel-scoped Consent and Communication Authorization assertions | **Vertical slice** | Immutable grant/deny assertions, governed grant withdrawal, exact authoritative allow/deny decisions, cross-owner Party/Contact Point integrity, authoritative Party access path, signed get/list queries and real PostgreSQL/process acceptance in #112 / PR #113 | Later privacy orchestration and downstream campaign/provider enforcement remain separate governed packets |
 
-Current owner-module count: **6**.
+Current owner-module count: **7**.
 
-Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points and Party Relationships**.3c post-documentation exact-head merge gate.
+Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points, Party Relationships and Consents**. Phase 8A.4 remains at its final exact-head merge gate until PR #113 is verified and merged.
 
 Current count of product-complete expert modules: **0**.
 
@@ -61,7 +62,7 @@ Current count of product-complete expert modules: **0**.
 
 The published `module_id` is fixed as **`crm.sales-activities-link`** and is treated as immutable module identity.
 
-Current business-module count: **7** — six owner modules plus one optional link module.
+Current business-module count: **8** — seven owner modules plus one optional link module. The independently governed `crm.customer360` read-composition module remains tracked separately from this owner/link count.
 
 ## 5. Mandatory customer-master owner domains
 
@@ -71,14 +72,14 @@ Tracked by Phase 8A / issue #28.
 - `crm.customer-accounts` — Account owner for customer/commercial relationships — **Merged production vertical slice** from #101 / PR #102.
 - `crm.contact-points` — Contact Point owner for email, phone, postal, web and messaging endpoints — **Merged production vertical slice** from #103 / PR #104.
 - `crm.party-relationships` — Party Relationship owner for employment, household, parent/subsidiary and bounded configurable typed relationships — **Merged production vertical slice** from #108 / PR #109.
-- Consent and Preferences — purpose/channel/legal-basis consent and suppression — **Planned for 8A.4**.
+- `crm.consents` — authoritative purpose/channel/legal-basis/jurisdiction/source/evidence assertions and exact communication authorization decisions — **Implemented vertical slice in #112 / PR #113; final exact-head merge gate pending**.
 - Identity Resolution — source identities, matching, survivorship and merge/unmerge lineage — **Planned for 8A.5–8A.6**.
 
 The shared `crm.customer.v1` Protobuf package contains only cross-owner references and shared public version metadata. It is **not** a business module and owns no mutable behavior or storage.
 
 `crm-global-search-composition` is also **not** a business module. It owns only cross-domain rebuildable projection composition; Party remains the identity owner and search remains non-authoritative.
 
-`crm.customer360` is an independently lifecycle-managed **read-composition module**, not an authoritative owner module. It publishes `customer360.customer.get@1.0.0`, consumes immutable owner events and materializes rebuildable contribution documents, but declares no owned objects, record types, private authoritative state or mutation capability. It is tracked separately from the six authoritative owner modules and the optional link-module count.
+`crm.customer360` is an independently lifecycle-managed **read-composition module**, not an authoritative owner module. It publishes `customer360.customer.get@1.0.0`, consumes immutable owner events and materializes rebuildable contribution documents, but declares no owned objects, record types, private authoritative state or mutation capability. It is tracked separately from the seven authoritative owner modules and the optional link-module count.
 
 ### Account ownership boundary
 
@@ -126,7 +127,11 @@ Merged PR #104 delivers the authoritative 8A.3b Contact Point vertical slice: st
 
 ### Customer 360 read-composition boundary
 
-`crm.customer360` owns only the versioned read-composition contract, deterministic mapping from validated owner events into rebuildable contributions and the permission-aware query assembly policy. It does **not** own Party identity, Account membership, Contact Point lifecycle/verification, Party Relationship state, consent, identity resolution, provider delivery state or any mutable customer master. Source resources are live-authorized and field-redacted before disclosure, and projection rebuild cannot mutate authoritative records, outbox events or audit evidence. #110 / PR #111 passed all 11 applicable workflows together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca` and is awaiting the post-documentation exact-head merge gate.
+`crm.customer360` owns only the versioned read-composition contract, deterministic mapping from validated owner events into rebuildable contributions and the permission-aware query assembly policy. It does **not** own Party identity, Account membership, Contact Point lifecycle/verification, Party Relationship state, consent, identity resolution, provider delivery state or any mutable customer master. Source resources are live-authorized and field-redacted before disclosure, and projection rebuild cannot mutate authoritative records, outbox events or audit evidence. #110 / PR #111 completed the exact-head gate and merged to `main` as `30ce84c57064134202c03c07a943bcd0859e1ea9`.
+
+### Consent and Communication Authorization ownership boundary
+
+`crm.consents` owns immutable Consent Authorization identity and scope, Party/optional Contact Point references, exact purpose/channel, grant-or-deny effect, legal-basis/jurisdiction/source/evidence codes, effective/expiry windows, irreversible grant withdrawal and the deterministic current communication authorization decision. It does **not** own Party attributes, Contact Point endpoint/verification/preference state, provider delivery state, campaigns, journeys, Customer 360 mutation or identity resolution. The pure owner crate has no SQL or cross-owner storage access. Application composition validates same-tenant Party and Contact Point ownership before mutation, while each create transaction atomically writes one authoritative `consents.authorization.party` relationship so `consents.communication.authorize` can read only that Party's authoritative Consent records without relying on a rebuildable projection or tenant-wide scan. #112 / PR #113 is implementation-complete and awaiting the final unchanged exact-head merge gate.
 
 ## 6. Mandatory commercial lifecycle owner domains
 
