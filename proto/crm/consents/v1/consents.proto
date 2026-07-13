@@ -3,7 +3,7 @@ syntax = "proto3";
 package crm.consents.v1;
 
 import "crm/core/v1/common.proto";
-import "crm/customer/v1/customer_refs.proto";
+import "crm/customer/v1/reference.proto";
 
 // Stable Consent Authorization identity owned only by crm.consents.
 message ConsentAuthorizationRef {
