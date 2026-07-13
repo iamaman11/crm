@@ -196,9 +196,10 @@ async fn validate_account_party_references(
     let record_type = RecordType::try_new(PARTY_RECORD_TYPE).map_err(catalog_error)?;
 
     for party_id in unique_party_ids {
-        ensure_party_reference_available(store, request, &owner_module_id, &record_type, party_id)
-            .await
-            .map_err(|_| account_party_reference_unavailable())?;
+        if !party_reference_exists(store, request, &owner_module_id, &record_type, party_id).await?
+        {
+            return Err(account_party_reference_unavailable());
+        }
     }
     Ok(())
 }
@@ -214,26 +215,30 @@ async fn validate_contact_point_party_reference(
     let reference = referenced_party_id_from_create(request)?;
     let owner_module_id = ModuleId::try_new(PARTIES_MODULE_ID).map_err(catalog_error)?;
     let record_type = RecordType::try_new(PARTY_RECORD_TYPE).map_err(catalog_error)?;
-    ensure_party_reference_available(
+    if party_reference_exists(
         store,
         request,
         &owner_module_id,
         &record_type,
         reference.as_str().to_owned(),
     )
-    .await
-    .map_err(|_| contact_point_party_reference_unavailable())
+    .await?
+    {
+        Ok(())
+    } else {
+        Err(contact_point_party_reference_unavailable())
+    }
 }
 
-async fn ensure_party_reference_available(
+async fn party_reference_exists(
     store: &PostgresDataStore,
     request: &CapabilityRequest,
     owner_module_id: &ModuleId,
     record_type: &RecordType,
     party_id: String,
-) -> Result<(), SdkError> {
+) -> Result<bool, SdkError> {
     let record_id = RecordId::try_new(party_id).map_err(catalog_error)?;
-    let exists = store
+    Ok(store
         .get_record_for_query(&RecordGetQuery {
             tenant_id: request.context.execution.tenant_id.clone(),
             owner_module_id: owner_module_id.clone(),
@@ -241,17 +246,7 @@ async fn ensure_party_reference_available(
             record_id,
         })
         .await?
-        .is_some();
-    if exists {
-        Ok(())
-    } else {
-        Err(SdkError::new(
-            "APPLICATION_PARTY_REFERENCE_UNAVAILABLE",
-            ErrorCategory::InvalidArgument,
-            false,
-            "The referenced Party is unavailable.",
-        ))
-    }
+        .is_some())
 }
 
 fn account_party_reference_unavailable() -> SdkError {
