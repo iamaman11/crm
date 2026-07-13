@@ -22,6 +22,10 @@ use crm_capability_ingress::{
     HttpQueryMiddleware, HttpQueryRequest, QueryContextResolver, QueryIngress, TimeoutPolicy,
 };
 use crm_capability_runtime::{CapabilityDefinition, CapabilityGateway};
+use crm_contact_points_capability_adapter::{
+    MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
+};
+use crm_contact_points_query_adapter::ContactPointQueryAdapter;
 use crm_core_data::{
     PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,
     PostgresTransactionalAggregateExecutor,
@@ -240,6 +244,13 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let contact_point_query_adapter = ContactPointQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -257,6 +268,7 @@ impl ApplicationRuntime {
             production_query_router,
             party_query_adapter,
             account_query_adapter,
+            contact_point_query_adapter,
             metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
@@ -674,10 +686,11 @@ async fn drain_projection(
     worker: &Phase6ProjectionWorker,
     tenant_id: TenantId,
     projection_id: &str,
+    page_size: u32,
 ) -> Result<(), ApplicationRuntimeError> {
     loop {
         let result = worker
-            .run_batch(tenant_id.clone(), projection_id, PROJECTION_PAGE_SIZE)
+            .run_batch(tenant_id.clone(), projection_id, page_size)
             .await
             .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
         if !result.has_more {
@@ -764,6 +777,18 @@ fn bootstrap_application_access(
                         resource_type: ACCOUNT_RECORD_TYPE,
                     },
                     account_fields(),
+                    expires_at,
+                )?,
+                CONTACT_POINTS_MODULE_ID => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: CONTACT_POINTS_MODULE_ID,
+                        resource_type: CONTACT_POINT_RECORD_TYPE,
+                    },
+                    contact_point_fields(),
                     expires_at,
                 )?,
                 METADATA_MODULE_ID => {}
@@ -884,6 +909,22 @@ fn account_fields() -> BTreeSet<String> {
         .collect()
 }
 
+fn contact_point_fields() -> BTreeSet<String> {
+    [
+        "party_ref",
+        "kind",
+        "normalized_value",
+        "display_value",
+        "status",
+        "preferred",
+        "validity",
+        "verification",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
 fn task_fields() -> BTreeSet<String> {
     [
         "subject",
@@ -923,6 +964,8 @@ mod tests {
         assert!(party_fields().contains("display_name"));
         assert!(account_fields().contains("name"));
         assert!(account_fields().contains("party_associations"));
+        assert!(contact_point_fields().contains("party_ref"));
+        assert!(contact_point_fields().contains("verification"));
         assert!(task_fields().contains("subject"));
         assert!(task_fields().contains("status"));
     }
