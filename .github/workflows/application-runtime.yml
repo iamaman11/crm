@@ -11,10 +11,13 @@ on:
       - "proto/crm/customer/**"
       - "proto/crm/parties/**"
       - "proto/crm/accounts/**"
+      - "proto/crm/contact_points/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
+      - "crates/crm-contact-points-capability-adapter/**"
+      - "crates/crm-contact-points-query-adapter/**"
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
       - "crates/crm-customer-accounts-capability-adapter/**"
@@ -28,6 +31,7 @@ on:
       - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
       - "modules/crm-parties/**"
       - "modules/crm-sales-activities-link/**"
@@ -45,10 +49,13 @@ on:
       - "proto/crm/customer/**"
       - "proto/crm/parties/**"
       - "proto/crm/accounts/**"
+      - "proto/crm/contact_points/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
+      - "crates/crm-contact-points-capability-adapter/**"
+      - "crates/crm-contact-points-query-adapter/**"
       - "crates/crm-core-data/**"
       - "crates/crm-core-events/**"
       - "crates/crm-customer-accounts-capability-adapter/**"
@@ -62,6 +69,7 @@ on:
       - "crates/crm-search-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
+      - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
       - "modules/crm-parties/**"
       - "modules/crm-sales-activities-link/**"
@@ -143,6 +151,13 @@ jobs:
           /tmp/reset-application-database.sh
           cargo test -p crm-api --test account_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-account-process.log
+      - name: Verify Contact Point crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test contact_point_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-contact-point-process.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -164,8 +179,11 @@ jobs:
             database/application-runtime-process.log
             database/application-runtime-party-process.log
             database/application-runtime-account-process.log
+            database/application-runtime-contact-point-process.log
             database/application-runtime-postgres.log
             crates/crm-application-runtime/
+            crates/crm-contact-points-capability-adapter/
+            crates/crm-contact-points-query-adapter/
             crates/crm-customer-accounts-capability-adapter/
             crates/crm-customer-accounts-query-adapter/
             crates/crm-metadata-api-adapter/
@@ -173,6 +191,7 @@ jobs:
             crates/crm-parties-capability-adapter/
             crates/crm-parties-query-adapter/
             crates/crm-search-query-adapter/
+            modules/crm-contact-points/
             modules/crm-customer-accounts/
             services/crm-api/
           if-no-files-found: error
