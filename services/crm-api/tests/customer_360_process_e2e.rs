@@ -11,9 +11,7 @@ use crm_application_runtime::{
 use crm_capability_runtime::CapabilityDefinition;
 use crm_core_data::PostgresDataStore;
 use crm_customer_360_composition::Customer360ProjectionWorker;
-use crm_module_sdk::{
-    DataClass, PayloadEncoding, RetentionPolicyId, TenantId, TypedPayload,
-};
+use crm_module_sdk::{DataClass, PayloadEncoding, RetentionPolicyId, TenantId, TypedPayload};
 use crm_proto_contracts::crm::{
     accounts::v1 as accounts, contact_points::v1 as contact_points, customer::v1 as customer,
     customer_360::v1 as customer_360, parties::v1 as parties,
@@ -200,8 +198,14 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
     .await;
     assert_eq!(party_display_name(&initial), "Ada Customer");
     assert_eq!(account_id_of(&initial.accounts[0]), account_id);
-    assert_eq!(contact_point_id_of(&initial.contact_points[0]), contact_point_id);
-    assert_eq!(relationship_id_of(&initial.party_relationships[0]), relationship_id);
+    assert_eq!(
+        contact_point_id_of(&initial.contact_points[0]),
+        contact_point_id
+    );
+    assert_eq!(
+        relationship_id_of(&initial.party_relationships[0]),
+        relationship_id
+    );
     assert!(
         initial
             .freshness
@@ -369,10 +373,7 @@ async fn crm_api_process_composes_customer_360_converges_owner_updates_and_rebui
         .expect("connect Customer 360 rebuild store");
     let rebuilt_event_count = Customer360ProjectionWorker::new(store)
         .expect("construct Customer 360 rebuild worker")
-        .rebuild(
-            TenantId::try_new(TENANT_A).expect("valid tenant id"),
-            200,
-        )
+        .rebuild(TenantId::try_new(TENANT_A).expect("valid tenant id"), 200)
         .await
         .expect("rebuild Customer 360 from immutable owner event history");
     assert!(rebuilt_event_count >= 8);
@@ -458,7 +459,10 @@ async fn create_party(
     .expect("create Party prerequisite through production gateway");
 }
 
-fn association(party_id: &str, role: accounts::AccountPartyRole) -> accounts::AccountPartyAssociation {
+fn association(
+    party_id: &str,
+    role: accounts::AccountPartyRole,
+) -> accounts::AccountPartyAssociation {
     accounts::AccountPartyAssociation {
         party_ref: Some(customer::PartyRef {
             party_id: party_id.to_owned(),
@@ -560,9 +564,7 @@ fn contact_point_id_of(section: &customer_360::Customer360ContactPointSection) -
         .as_str()
 }
 
-fn contact_point_normalized_value(
-    section: &customer_360::Customer360ContactPointSection,
-) -> &str {
+fn contact_point_normalized_value(section: &customer_360::Customer360ContactPointSection) -> &str {
     section
         .contact_point
         .as_ref()
