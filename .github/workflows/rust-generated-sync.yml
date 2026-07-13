@@ -25,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,8 +33,8 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - name: Compose Account runtime and apply machine maintenance
+          components: rustfmt
+      - name: Compose Account runtime and synchronize deterministic Rust source
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -188,8 +188,6 @@ jobs:
               raise SystemExit("Account field test anchor not found")
           path.write_text(text.replace(test_anchor, test_replacement, 1))
           PY
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
       - name: Restore canonical workflow and commit synchronized files
