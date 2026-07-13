@@ -14,33 +14,34 @@ use crm_metadata_api_adapter::{
 use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_sdk::{ErrorCategory, PortFuture, RecordSnapshot, SdkError};
 use crm_parties_capability_adapter::{
-    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, PartyCapabilityPlanner,
-    capability_definition as party_capability_definition,
+    PARTY_MUTATION_CAPABILITY_IDS, PartyCapabilityPlanner,
+    capability_definitions as party_capability_definitions,
 };
 use crm_parties_query_adapter::{
-    GET_CAPABILITY as PARTY_GET_CAPABILITY, PartyQueryAdapter,
-    query_capability_definition as party_query_capability_definition,
+    PARTY_QUERY_CAPABILITY_IDS, PartyQueryAdapter,
+    query_capability_definitions as party_query_capability_definitions,
 };
 use crm_query_runtime::{
     QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator,
 };
 use crm_sales_activities_capability_composition::{
-    ProductionQueryRouter, SalesActivitiesCapabilityPlannerRouter, capability_definitions,
-    query_capability_definitions,
+    ProductionQueryRouter, SalesActivitiesCapabilityPlannerRouter,
+    capability_definitions as sales_activities_capability_definitions,
+    query_capability_definitions as production_query_capability_definitions,
 };
 use std::fmt;
 use std::sync::Arc;
 
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    let mut definitions = capability_definitions()?;
-    definitions.push(party_capability_definition(PARTY_CREATE_CAPABILITY)?);
+    let mut definitions = sales_activities_capability_definitions()?;
+    definitions.extend(party_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
 
 pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    let mut definitions = query_capability_definitions()?;
-    definitions.push(party_query_capability_definition()?);
+    let mut definitions = production_query_capability_definitions()?;
+    definitions.extend(party_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -62,7 +63,7 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
         definition: &CapabilityDefinition,
         request: &CapabilityRequest,
     ) -> Result<AggregateTarget, SdkError> {
-        if definition.capability_id.as_str() == PARTY_CREATE_CAPABILITY {
+        if PARTY_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             PartyCapabilityPlanner.target(definition, request)
         } else {
             SalesActivitiesCapabilityPlannerRouter.target(definition, request)
@@ -75,7 +76,7 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
         request: &CapabilityRequest,
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        if definition.capability_id.as_str() == PARTY_CREATE_CAPABILITY {
+        if PARTY_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             PartyCapabilityPlanner.plan(definition, request, current)
         } else {
             SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
@@ -154,7 +155,7 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
     ) -> PortFuture<'a, Result<(), SdkError>> {
         if METADATA_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.metadata.validate(definition, request)
-        } else if definition.capability_id.as_str() == PARTY_GET_CAPABILITY {
+        } else if PARTY_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.parties.validate(definition, request)
         } else {
             self.production.validate(definition, request)
@@ -170,7 +171,7 @@ impl QueryExecutor for ApplicationQueryRouter {
     ) -> PortFuture<'a, Result<QueryExecutionResult, SdkError>> {
         if METADATA_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.metadata.execute(definition, request)
-        } else if definition.capability_id.as_str() == PARTY_GET_CAPABILITY {
+        } else if PARTY_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.parties.execute(definition, request)
         } else {
             self.production.execute(definition, request)
@@ -200,7 +201,9 @@ mod tests {
         let mutations = application_mutation_definitions().unwrap();
         assert_eq!(
             mutations.len(),
-            PRODUCTION_MUTATION_CAPABILITY_IDS.len() + 1 + METADATA_MUTATION_CAPABILITY_IDS.len()
+            PRODUCTION_MUTATION_CAPABILITY_IDS.len()
+                + PARTY_MUTATION_CAPABILITY_IDS.len()
+                + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
             assert!(
@@ -209,11 +212,13 @@ mod tests {
                     .any(|definition| { definition.capability_id.as_str() == coordinate })
             );
         }
-        assert!(
-            mutations
-                .iter()
-                .any(|definition| definition.capability_id.as_str() == PARTY_CREATE_CAPABILITY)
-        );
+        for coordinate in PARTY_MUTATION_CAPABILITY_IDS {
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
         for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
             assert!(
                 mutations
@@ -225,18 +230,23 @@ mod tests {
         let queries = application_query_definitions().unwrap();
         assert_eq!(
             queries.len(),
-            PRODUCTION_QUERY_CAPABILITY_IDS.len() + 2 + METADATA_QUERY_CAPABILITY_IDS.len()
+            PRODUCTION_QUERY_CAPABILITY_IDS.len()
+                + 1
+                + PARTY_QUERY_CAPABILITY_IDS.len()
+                + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(
             queries
                 .iter()
                 .any(|definition| { definition.capability_id.as_str() == SEARCH_QUERY_CAPABILITY })
         );
-        assert!(
-            queries
-                .iter()
-                .any(|definition| definition.capability_id.as_str() == PARTY_GET_CAPABILITY)
-        );
+        for coordinate in PARTY_QUERY_CAPABILITY_IDS {
+            assert!(
+                queries
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
         for coordinate in METADATA_QUERY_CAPABILITY_IDS {
             assert!(
                 queries
