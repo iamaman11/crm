@@ -6,9 +6,11 @@
 //! cross-owner storage access. Party and optional Contact Point integrity are
 //! validated by application composition before governed owner mutations.
 
+pub mod decision;
 pub mod domain;
 pub mod persistence;
 
+pub use decision::*;
 pub use domain::*;
 pub use persistence::*;
 
