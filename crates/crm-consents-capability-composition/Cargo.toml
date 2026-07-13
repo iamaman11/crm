@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-consents = { path = "../../modules/crm-consents" }
 crm-consents-capability-adapter = { path = "../crm-consents-capability-adapter" }
@@ -13,6 +14,7 @@ crm-contact-points-capability-adapter = { path = "../crm-contact-points-capabili
 crm-core-data = { path = "../crm-core-data" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+sha2 = "0.10"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
