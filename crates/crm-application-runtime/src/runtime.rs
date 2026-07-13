@@ -31,6 +31,10 @@ use crm_core_data::{
     PostgresTransactionalAggregateExecutor,
 };
 use crm_core_events::EventHistoryRequest;
+use crm_customer_360_composition::Customer360ProjectionWorker;
+use crm_customer_360_query_adapter::{
+    Customer360QueryAdapter, MODULE_ID as CUSTOMER_360_MODULE_ID,
+};
 use crm_customer_accounts_capability_adapter::{
     MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
 };
@@ -95,6 +99,7 @@ pub struct ApplicationComponents {
     pub query_grpc: Arc<GrpcQueryMiddleware>,
     pub link_processor: Arc<SalesActivitiesLinkEventProcessor>,
     pub projection_worker: Arc<Phase6ProjectionWorker>,
+    pub customer_360_worker: Arc<Customer360ProjectionWorker>,
     pub search_worker: Arc<GlobalSearchWorker>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
@@ -262,6 +267,8 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_360_query_adapter =
+            Customer360QueryAdapter::new(store.clone(), visibility_authorizer.clone());
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -281,6 +288,7 @@ impl ApplicationRuntime {
             account_query_adapter,
             contact_point_query_adapter,
             party_relationship_query_adapter,
+            customer_360_query_adapter,
             metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
@@ -324,6 +332,10 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
         let projection_worker = Arc::new(Phase6ProjectionWorker::new(store.clone()));
+        let customer_360_worker = Arc::new(
+            Customer360ProjectionWorker::new(store.clone())
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
         let search_worker = Arc::new(
             GlobalSearchWorker::new(store.clone())
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -337,6 +349,7 @@ impl ApplicationRuntime {
             query_grpc: Arc::new(GrpcQueryMiddleware::new(query_ingress)),
             link_processor,
             projection_worker,
+            customer_360_worker,
             search_worker,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
@@ -641,6 +654,7 @@ async fn run_background_cycle(
             TASK_STATUS_PROJECTION_ID,
         )
         .await?;
+        drain_customer_360_projection(&components.customer_360_worker, tenant_id.clone()).await?;
         components
             .search_worker
             .ensure_ready(tenant_id.clone(), SEARCH_PAGE_SIZE)
@@ -648,6 +662,21 @@ async fn run_background_cycle(
             .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
     }
     Ok(())
+}
+
+async fn drain_customer_360_projection(
+    worker: &Customer360ProjectionWorker,
+    tenant_id: TenantId,
+) -> Result<(), ApplicationRuntimeError> {
+    loop {
+        let result = worker
+            .run_batch(tenant_id.clone(), PROJECTION_PAGE_SIZE)
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+        if !result.has_more {
+            return Ok(());
+        }
+    }
 }
 
 async fn scan_link_events(
@@ -815,6 +844,56 @@ fn bootstrap_application_access(
                     expires_at,
                 )?,
                 METADATA_MODULE_ID => {}
+                CUSTOMER_360_MODULE_ID => {
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: PARTIES_MODULE_ID,
+                            resource_type: PARTY_RECORD_TYPE,
+                        },
+                        customer_360_party_fields(),
+                        expires_at,
+                    )?;
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: ACCOUNTS_MODULE_ID,
+                            resource_type: ACCOUNT_RECORD_TYPE,
+                        },
+                        customer_360_account_fields(),
+                        expires_at,
+                    )?;
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: CONTACT_POINTS_MODULE_ID,
+                            resource_type: CONTACT_POINT_RECORD_TYPE,
+                        },
+                        customer_360_contact_point_fields(),
+                        expires_at,
+                    )?;
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
+                            resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
+                        },
+                        customer_360_party_relationship_fields(),
+                        expires_at,
+                    )?;
+                }
                 SEARCH_MODULE_ID => {
                     upsert_bootstrap_visibility(
                         visibility_store,
@@ -916,6 +995,36 @@ fn sales_fields() -> BTreeSet<String> {
     .into_iter()
     .map(str::to_owned)
     .collect()
+}
+
+fn customer_360_party_fields() -> BTreeSet<String> {
+    ["display_name"].into_iter().map(str::to_owned).collect()
+}
+
+fn customer_360_account_fields() -> BTreeSet<String> {
+    ["name", "status"].into_iter().map(str::to_owned).collect()
+}
+
+fn customer_360_contact_point_fields() -> BTreeSet<String> {
+    [
+        "party_ref",
+        "kind",
+        "normalized_value",
+        "status",
+        "preferred",
+        "validity",
+        "verification",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn customer_360_party_relationship_fields() -> BTreeSet<String> {
+    ["from_party_ref", "to_party_ref", "status", "validity"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 fn party_fields() -> BTreeSet<String> {

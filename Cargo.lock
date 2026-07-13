@@ -257,6 +257,7 @@ dependencies = [
  "crm-application-runtime",
  "crm-capability-runtime",
  "crm-core-data",
+ "crm-customer-360-composition",
  "crm-module-sdk",
  "crm-party-relationships-projection",
  "crm-proto-contracts",
@@ -281,6 +282,8 @@ dependencies = [
  "crm-contact-points-query-adapter",
  "crm-core-data",
  "crm-core-events",
+ "crm-customer-360-composition",
+ "crm-customer-360-query-adapter",
  "crm-customer-accounts-capability-adapter",
  "crm-customer-accounts-query-adapter",
  "crm-global-search-composition",
@@ -476,6 +479,36 @@ version = "0.1.0"
 dependencies = [
  "crm-core-contracts",
  "crm-core-permissions",
+]
+
+[[package]]
+name = "crm-customer-360-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-core-data",
+ "crm-core-events",
+ "crm-module-sdk",
+ "crm-projection-runtime",
+ "crm-proto-contracts",
+ "prost",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "crm-customer-360-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-360-composition",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
+ "serde_json",
+ "sqlx",
 ]
 
 [[package]]
@@ -2082,9 +2115,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
+checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys",
@@ -2092,9 +2125,9 @@ dependencies = [
 
 [[package]]
 name = "spin"
-version = "0.9.8"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 dependencies = [
  "lock_api",
 ]

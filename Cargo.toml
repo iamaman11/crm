@@ -29,6 +29,8 @@ members = [
   "crates/crm-search-runtime",
   "crates/crm-search-query-adapter",
   "crates/crm-global-search-composition",
+  "crates/crm-customer-360-composition",
+  "crates/crm-customer-360-query-adapter",
   "crates/crm-sales-capability-adapter",
   "crates/crm-parties-capability-adapter",
   "crates/crm-parties-query-adapter",

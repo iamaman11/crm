@@ -18,6 +18,10 @@ use crm_core_data::{
     PostgresMetadataCapabilityExecutor, PostgresTransactionalAggregateExecutor, RecordGetQuery,
     TransactionalAggregatePlanner,
 };
+use crm_customer_360_query_adapter::{
+    Customer360QueryAdapter, QUERY_CAPABILITY_IDS as CUSTOMER_360_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as customer_360_query_capability_definitions,
+};
 use crm_customer_accounts_capability_adapter::{
     CustomerAccountCapabilityPlanner, MUTATION_CAPABILITY_IDS as ACCOUNT_MUTATION_CAPABILITY_IDS,
     capability_definitions as account_capability_definitions, referenced_party_ids_from_create,
@@ -81,6 +85,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(account_query_capability_definitions()?);
     definitions.extend(contact_point_query_capability_definitions()?);
     definitions.extend(party_relationship_query_capability_definitions()?);
+    definitions.extend(customer_360_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -343,6 +348,7 @@ pub struct ApplicationQueryRouter {
     accounts: AccountQueryAdapter,
     contact_points: ContactPointQueryAdapter,
     party_relationships: PartyRelationshipQueryAdapter,
+    customer_360: Customer360QueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
@@ -353,6 +359,7 @@ impl ApplicationQueryRouter {
         accounts: AccountQueryAdapter,
         contact_points: ContactPointQueryAdapter,
         party_relationships: PartyRelationshipQueryAdapter,
+        customer_360: Customer360QueryAdapter,
         metadata: MetadataQueryAdapter,
     ) -> Self {
         Self {
@@ -361,6 +368,7 @@ impl ApplicationQueryRouter {
             accounts,
             contact_points,
             party_relationships,
+            customer_360,
             metadata,
         }
     }
@@ -384,6 +392,8 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
             .contains(&definition.capability_id.as_str())
         {
             self.party_relationships.validate(definition, request)
+        } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.customer_360.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -408,6 +418,8 @@ impl QueryExecutor for ApplicationQueryRouter {
             .contains(&definition.capability_id.as_str())
         {
             self.party_relationships.execute(definition, request)
+        } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            self.customer_360.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }
@@ -495,6 +507,7 @@ mod tests {
                 + ACCOUNT_QUERY_CAPABILITY_IDS.len()
                 + CONTACT_POINT_QUERY_CAPABILITY_IDS.len()
                 + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()
+                + CUSTOMER_360_QUERY_CAPABILITY_IDS.len()
                 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(

@@ -135,9 +135,9 @@ The implementation packet is **Complete**. All applicable exact-head gates were 
 
 Consent and communication authorization, provider delivery state, Party Relationship and Customer 360 remain separate authoritative ownership and are not hidden inside Contact Point flags.
 
-#### 8A.3c — Party Relationship lifecycle and hierarchy foundations — Complete / merge gate
+#### 8A.3c — Party Relationship lifecycle and hierarchy foundations — Complete
 
-Tracked by #108 / draft PR #109 on `develop/phase8a3c-party-relationship`.
+Delivered by #108 / merged PR #109.
 
 The packet now implements:
 
@@ -154,11 +154,26 @@ The packet now implements:
 - immutable PostgreSQL registry fixtures and synchronized Rust/browser contract identities;
 - fresh-database real `crm-api` process acceptance for Party prerequisites, zero-side-effect reference rejection, create/replay/conflict/duplicate-id behavior, directional and reciprocal semantics, canonicalization, lifecycle/validity update and replay, stale/no-op rejection, typed filters, cursor pagination/tamper rejection, authentication/tenant non-disclosure, exact durable evidence deltas and projection run/rebuild equivalence.
 
-All 11 applicable CI workflows were green together on pre-documentation exact head `a26d0364382c3fa5fb369d8ca1c65941863ff75b`. The documentation commit intentionally invalidates that evidence until a fresh exact-head rerun is green; PR #109 remains draft until that merge gate is satisfied.
+The final exact-head merge gate completed and PR #109 merged to `main` as `36c238d51a156e3864e2dad0f53762e95e47680d`.
 
-#### 8A.3d — Customer 360 composition
+#### 8A.3d — Customer 360 composition — Complete / merge gate
 
-Deliver a permission-aware rebuildable Customer 360 composition over Party, Account, Contact Point and Party Relationship owner contracts without creating a second identity master.
+Tracked by #110 / draft PR #111 on `develop/phase8a3d-customer-360`.
+
+The packet now implements:
+
+- an independently governed read-only `crm.customer360` composition module with no authoritative mutable customer state;
+- additive typed `crm.customer_360.v1` query contracts and canonical `customer360.customer.get@1.0.0` binding;
+- strict owner-event validation across Party, Account, Contact Point and Party Relationship contracts;
+- deterministic one-current-contribution-per-source projection documents with canonical Party-root memberships, avoiding stale Account association fan-out;
+- indexed tenant-scoped root lookup, repeatable-read contribution/checkpoint snapshots and bounded failure instead of silent partial views;
+- live source-resource authorization and least-privilege field redaction across all four owner sections;
+- explicit source lineage/version and projection freshness metadata;
+- production application-runtime query routing and background projection convergence;
+- fresh-PostgreSQL real `crm-api` acceptance proving convergence, field redaction, authentication/tenant non-disclosure, Contact Point verify → canonical value change → verification reset, Account root removal, Party Relationship lifecycle/validity updates, source-version/freshness progression, deterministic rebuild equality and unchanged authoritative record/outbox/audit evidence across rebuild;
+- synchronized generated Rust/browser descriptor identities plus migration clean-install/rollback coverage.
+
+All 11 applicable CI workflows were green together on pre-documentation exact head `1c3008b3dfc801867d8c62fcbb7b0370d87642ca`. This documentation commit intentionally invalidates that evidence until the post-documentation exact-head rerun is green. Customer 360 owns no second customer or identity master and exposes no mutation capability.
 
 ### 8A.4 — Consent and communication authorization
 
