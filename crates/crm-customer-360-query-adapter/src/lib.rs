@@ -4,14 +4,14 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_core_data::PostgresDataStore;
 use crm_customer_360_composition::{
-    AccountContributionSnapshot, ContactPointContributionSnapshot, Customer360ContributionDocument,
-    Customer360ContributionKind, Customer360ContributionSnapshot, CUSTOMER_360_CONSUMER_MODULE_ID,
-    CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE, CUSTOMER_360_PROJECTION_ID,
-    PartyContributionSnapshot, PartyRelationshipContributionSnapshot,
+    AccountContributionSnapshot, CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE,
+    CUSTOMER_360_PROJECTION_ID, ContactPointContributionSnapshot, Customer360ContributionDocument,
+    Customer360ContributionKind, Customer360ContributionSnapshot, PartyContributionSnapshot,
+    PartyRelationshipContributionSnapshot,
 };
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture,
-    RecordId, RecordRef, RecordType, SdkError, TypedPayload,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordRef, RecordType, SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::{
     accounts::v1 as accounts, contact_points::v1 as contact_points, customer::v1 as customer,
@@ -61,10 +61,7 @@ impl std::fmt::Debug for Customer360QueryAdapter {
 }
 
 impl Customer360QueryAdapter {
-    pub fn new(
-        store: PostgresDataStore,
-        visibility: Arc<dyn QueryVisibilityAuthorizer>,
-    ) -> Self {
+    pub fn new(store: PostgresDataStore, visibility: Arc<dyn QueryVisibilityAuthorizer>) -> Self {
         Self { store, visibility }
     }
 }
@@ -109,8 +106,7 @@ impl QuerySemanticValidator for Customer360QueryAdapter {
             if definition.capability_id.as_str() != GET_CAPABILITY {
                 return Err(unsupported_query());
             }
-            let command: wire::GetCustomer360Request =
-                decode_input(request, GET_REQUEST_SCHEMA)?;
+            let command: wire::GetCustomer360Request = decode_input(request, GET_REQUEST_SCHEMA)?;
             let party_ref = command.party_ref.ok_or_else(|| {
                 SdkError::invalid_argument(
                     "customer_360.party_ref",
@@ -183,11 +179,7 @@ impl Customer360QueryAdapter {
                         ));
                     }
                     party = Some(wire::Customer360PartySection {
-                        party: Some(party_to_wire(
-                            &document,
-                            snapshot,
-                            &root_visibility,
-                        )?),
+                        party: Some(party_to_wire(&document, snapshot, &root_visibility)?),
                         source: Some(lineage_to_wire(&document)),
                     });
                 }
@@ -205,9 +197,7 @@ impl Customer360QueryAdapter {
                     if decision.resource_visible {
                         contact_points_output.push(wire::Customer360ContactPointSection {
                             contact_point: Some(contact_point_to_wire(
-                                &document,
-                                snapshot,
-                                &decision,
+                                &document, snapshot, &decision,
                             )?),
                             source: Some(lineage_to_wire(&document)),
                         });
@@ -218,9 +208,7 @@ impl Customer360QueryAdapter {
                     if decision.resource_visible {
                         relationships_output.push(wire::Customer360PartyRelationshipSection {
                             party_relationship: Some(party_relationship_to_wire(
-                                &document,
-                                snapshot,
-                                &decision,
+                                &document, snapshot, &decision,
                             )?),
                             source: Some(lineage_to_wire(&document)),
                         });
@@ -230,7 +218,9 @@ impl Customer360QueryAdapter {
         }
 
         let party = party.ok_or_else(resource_not_found)?;
-        accounts_output.sort_by(|left, right| section_source_id(&left.source).cmp(section_source_id(&right.source)));
+        accounts_output.sort_by(|left, right| {
+            section_source_id(&left.source).cmp(section_source_id(&right.source))
+        });
         contact_points_output.sort_by(|left, right| {
             section_source_id(&left.source).cmp(section_source_id(&right.source))
         });
@@ -279,7 +269,8 @@ impl Customer360QueryAdapter {
         record_id: &str,
     ) -> Result<QueryVisibilityDecision, SdkError> {
         let mut visibility_request = request.clone();
-        visibility_request.owner_module_id = ModuleId::try_new(owner_module_id).map_err(config_error)?;
+        visibility_request.owner_module_id =
+            ModuleId::try_new(owner_module_id).map_err(config_error)?;
         let resource = RecordRef {
             record_type: RecordType::try_new(record_type).map_err(config_error)?,
             record_id: RecordId::try_new(record_id).map_err(config_error)?,
@@ -296,12 +287,7 @@ impl Customer360QueryAdapter {
     ) -> Result<LoadedProjection, SdkError> {
         let query_limit = i64::try_from(MAXIMUM_CONTRIBUTIONS_PER_ROOT + 1)
             .map_err(|_| projection_corrupt("Customer 360 contribution limit overflow"))?;
-        let mut transaction = self
-            .store
-            .pool()
-            .begin()
-            .await
-            .map_err(database_error)?;
+        let mut transaction = self.store.pool().begin().await.map_err(database_error)?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             .execute(&mut *transaction)
             .await
@@ -404,12 +390,13 @@ struct LoadedProjection {
 
 fn validate_document_shape(document: &Customer360ContributionDocument) -> Result<(), SdkError> {
     match (&document.contribution_kind, &document.snapshot) {
-        (
-            Customer360ContributionKind::Party,
-            Customer360ContributionSnapshot::Party(_),
-        ) if document.source_owner_module_id == PARTIES_MODULE_ID
-            && document.source_resource_type == PARTY_RECORD_TYPE
-            && document.root_party_ids == vec![document.source_resource_id.clone()] => Ok(()),
+        (Customer360ContributionKind::Party, Customer360ContributionSnapshot::Party(_))
+            if document.source_owner_module_id == PARTIES_MODULE_ID
+                && document.source_resource_type == PARTY_RECORD_TYPE
+                && document.root_party_ids == vec![document.source_resource_id.clone()] =>
+        {
+            Ok(())
+        }
         (
             Customer360ContributionKind::Account,
             Customer360ContributionSnapshot::Account(snapshot),
@@ -422,13 +409,19 @@ fn validate_document_shape(document: &Customer360ContributionDocument) -> Result
                     .map(|association| association.party_id.clone())
                     .collect::<BTreeSet<_>>()
                     .into_iter()
-                    .collect::<Vec<_>>() => Ok(()),
+                    .collect::<Vec<_>>() =>
+        {
+            Ok(())
+        }
         (
             Customer360ContributionKind::ContactPoint,
             Customer360ContributionSnapshot::ContactPoint(snapshot),
         ) if document.source_owner_module_id == CONTACT_POINTS_MODULE_ID
             && document.source_resource_type == CONTACT_POINT_RECORD_TYPE
-            && document.root_party_ids == vec![snapshot.party_id.clone()] => Ok(()),
+            && document.root_party_ids == vec![snapshot.party_id.clone()] =>
+        {
+            Ok(())
+        }
         (
             Customer360ContributionKind::PartyRelationship,
             Customer360ContributionSnapshot::PartyRelationship(snapshot),
@@ -440,7 +433,10 @@ fn validate_document_shape(document: &Customer360ContributionDocument) -> Result
                     snapshot.to_party_id.clone(),
                 ])
                 .into_iter()
-                .collect::<Vec<_>>() => Ok(()),
+                .collect::<Vec<_>>() =>
+        {
+            Ok(())
+        }
         _ => Err(projection_corrupt(
             "Customer 360 contribution kind, owner, resource type and snapshot do not agree",
         )),
@@ -540,7 +536,11 @@ fn contact_point_to_wire(
         "postal" => contact_points::ContactPointKind::Postal,
         "web" => contact_points::ContactPointKind::Web,
         "messaging" => contact_points::ContactPointKind::Messaging,
-        _ => return Err(projection_corrupt("Customer 360 Contact Point kind is invalid")),
+        _ => {
+            return Err(projection_corrupt(
+                "Customer 360 Contact Point kind is invalid",
+            ));
+        }
     };
     let status = match snapshot.status.as_str() {
         "active" => contact_points::ContactPointStatus::Active,
@@ -709,7 +709,10 @@ fn section_source_id(source: &Option<wire::Customer360SourceLineage>) -> &str {
         .unwrap_or("")
 }
 
-fn decode_input<M: Message + Default>(request: &QueryRequest, schema_id: &str) -> Result<M, SdkError> {
+fn decode_input<M: Message + Default>(
+    request: &QueryRequest,
+    schema_id: &str,
+) -> Result<M, SdkError> {
     let payload = &request.input;
     if payload.owner.as_str() != MODULE_ID
         || payload.schema_id.as_str() != schema_id

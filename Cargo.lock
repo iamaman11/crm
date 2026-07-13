@@ -493,6 +493,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-360-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-360-composition",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
 name = "crm-customer-accounts"
 version = "0.1.0"
 dependencies = [
