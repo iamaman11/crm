@@ -97,8 +97,7 @@ jobs:
           database.write_text(text)
 
           rollback = Path('crates/crm-parties-capability-adapter/tests/postgres_evidence_rollback.rs')
-          text = rollback.read_text()
-          text = text.replace('CapabilityCallEnvelope, ', '')
+          text = rollback.read_text().replace('CapabilityCallEnvelope, ', '')
           rollback.write_text(text)
 
           for source in [
@@ -106,10 +105,12 @@ jobs:
               Path('crates/crm-parties-query-adapter/src/lib.rs'),
               Path('services/crm-api/tests/party_process_e2e.rs'),
           ]:
-              text = source.read_text().replace(
-                  '.input_contract.data_classes',
-                  '.input_contract.allowed_data_classes',
-              )
+              text = source.read_text()
+              if '.allowed_data_classes' not in text:
+                  count = text.count('.data_classes')
+                  if count != 1:
+                      raise SystemExit(f'expected one data-class field repair in {source}, got {count}')
+                  text = text.replace('.data_classes', '.allowed_data_classes', 1)
               source.write_text(text)
           PY
 
