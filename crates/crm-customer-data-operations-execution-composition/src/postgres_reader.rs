@@ -1,4 +1,4 @@
-use crate::{ImportExecutionSnapshot, ImportExecutionSnapshotReader};
+use crate::ImportExecutionSnapshot;
 use crm_capability_plan_support as support;
 use crm_core_data::{
     MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, PostgresDataStore, RecordGetQuery,
@@ -16,6 +16,14 @@ use crm_module_sdk::{
 
 pub const DEFAULT_EXECUTION_READER_PAGE_SIZE: u32 = 1_000;
 
+pub trait ImportExecutionSnapshotReader: Send + Sync {
+    fn load<'a>(
+        &'a self,
+        tenant_id: &'a TenantId,
+        job_id: &'a ImportJobId,
+    ) -> PortFuture<'a, Result<ImportExecutionSnapshot, SdkError>>;
+}
+
 #[derive(Debug, Clone)]
 pub struct PostgresImportExecutionSnapshotReader {
     store: PostgresDataStore,
@@ -31,14 +39,7 @@ impl PostgresImportExecutionSnapshotReader {
     }
 
     pub fn try_with_page_size(store: PostgresDataStore, page_size: u32) -> Result<Self, SdkError> {
-        if page_size == 0 || page_size > MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE {
-            return Err(reader_error(
-                "CUSTOMER_DATA_IMPORT_EXECUTION_READER_PAGE_SIZE_INVALID",
-                ErrorCategory::InvalidArgument,
-                false,
-                "The import execution reader page size is invalid.",
-            ));
-        }
+        validate_page_size(page_size)?;
         Ok(Self { store, page_size })
     }
 }
@@ -86,7 +87,7 @@ impl ImportExecutionSnapshotReader for PostgresImportExecutionSnapshotReader {
                         target_owner_module_id: owner_module_id.clone(),
                         target_record_type: row_record_type.clone(),
                         page_size: self.page_size,
-                        after_record_id,
+                        after_record_id: after_record_id.clone(),
                     })
                     .await?;
                 for snapshot in page.records {
@@ -123,6 +124,19 @@ impl ImportExecutionSnapshotReader for PostgresImportExecutionSnapshotReader {
 
             ImportExecutionSnapshot::try_new(job, rows)
         })
+    }
+}
+
+fn validate_page_size(page_size: u32) -> Result<(), SdkError> {
+    if page_size == 0 || page_size > MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE {
+        Err(reader_error(
+            "CUSTOMER_DATA_IMPORT_EXECUTION_READER_PAGE_SIZE_INVALID",
+            ErrorCategory::InvalidArgument,
+            false,
+            "The import execution reader page size is invalid.",
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -172,28 +186,22 @@ mod tests {
 
     #[test]
     fn rejects_zero_and_oversized_page_sizes_before_database_access() {
-        let invalid_zero = PostgresImportExecutionSnapshotReader::try_with_page_size(
-            unsafe_test_store(),
-            0,
-        )
-        .unwrap_err();
+        let invalid_zero = validate_page_size(0).unwrap_err();
         assert_eq!(
             invalid_zero.code,
             "CUSTOMER_DATA_IMPORT_EXECUTION_READER_PAGE_SIZE_INVALID"
         );
 
-        let invalid_large = PostgresImportExecutionSnapshotReader::try_with_page_size(
-            unsafe_test_store(),
-            MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE + 1,
-        )
-        .unwrap_err();
+        let invalid_large =
+            validate_page_size(MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE + 1).unwrap_err();
         assert_eq!(
             invalid_large.code,
             "CUSTOMER_DATA_IMPORT_EXECUTION_READER_PAGE_SIZE_INVALID"
         );
     }
 
-    fn unsafe_test_store() -> PostgresDataStore {
-        panic!("page-size validation must reject before a PostgreSQL store is needed")
+    #[test]
+    fn accepts_the_default_bounded_page_size() {
+        validate_page_size(DEFAULT_EXECUTION_READER_PAGE_SIZE).unwrap();
     }
 }
