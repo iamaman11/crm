@@ -255,6 +255,8 @@ name = "crm-api"
 version = "0.1.0"
 dependencies = [
  "crm-application-runtime",
+ "crm-capability-adapters",
+ "crm-capability-ingress",
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-360-composition",
