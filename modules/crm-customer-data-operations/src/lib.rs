@@ -1,3 +1,8 @@
+#![expect(
+    clippy::too_many_arguments,
+    reason = "strict import-job persisted-state validation currently checks one canonical counter state shape; remove this expectation when that helper is refactored to a typed state value"
+)]
+
 //! Pure customer-data import coordination domain.
 //!
 //! This crate owns import job, immutable source/mapping identity, deterministic row identity,
