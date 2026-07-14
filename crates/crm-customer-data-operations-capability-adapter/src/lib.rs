@@ -20,6 +20,7 @@ use crm_module_sdk::{
 pub const MODULE_ID: &str = "crm.customer-data-operations";
 pub const IMPORT_JOB_RECORD_TYPE: &str = "customer_data.import_job";
 pub const IMPORT_ROW_RECORD_TYPE: &str = "customer_data.import_row";
+pub const IMPORT_JOB_ROW_RELATIONSHIP_TYPE: &str = "customer_data.import_job.row";
 
 pub const CREATE_PARTY_IMPORT_JOB_CAPABILITY: &str = "customer_data.import.party.create";
 pub const VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY: &str =
@@ -54,7 +55,7 @@ pub const CANCEL_PARTY_IMPORT_JOB_RESPONSE_SCHEMA: &str =
 pub const PARTY_IMPORT_JOB_CREATED_EVENT_TYPE: &str = "customer_data.import.party.created";
 pub const PARTY_IMPORT_JOB_CREATED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportJobCreatedEvent";
-pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE: &str = "customer_data.import.party.row_validated";
+pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE: &str = "customer_data.import.party.row.validated";
 pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportRowValidatedEvent";
 pub const PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_TYPE: &str =
@@ -65,12 +66,14 @@ pub const PARTY_IMPORT_EXECUTION_STARTED_EVENT_TYPE: &str =
     "customer_data.import.party.execution_started";
 pub const PARTY_IMPORT_EXECUTION_STARTED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportExecutionStartedEvent";
-pub const PARTY_IMPORT_ROW_SUCCEEDED_EVENT_TYPE: &str = "customer_data.import.party.row_succeeded";
-pub const PARTY_IMPORT_ROW_SUCCEEDED_EVENT_SCHEMA: &str =
-    "crm.customer_data_operations.v1.PartyImportRowSucceededEvent";
-pub const PARTY_IMPORT_ROW_FAILED_EVENT_TYPE: &str = "customer_data.import.party.row_failed";
-pub const PARTY_IMPORT_ROW_FAILED_EVENT_SCHEMA: &str =
-    "crm.customer_data_operations.v1.PartyImportRowFailedEvent";
+pub const PARTY_IMPORT_ROW_EXECUTION_UPDATED_EVENT_TYPE: &str =
+    "customer_data.import.party.row.execution_updated";
+pub const PARTY_IMPORT_ROW_EXECUTION_UPDATED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportRowExecutionUpdatedEvent";
+pub const PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_TYPE: &str =
+    "customer_data.import.party.checkpoint_advanced";
+pub const PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportCheckpointAdvancedEvent";
 pub const PARTY_IMPORT_COMPLETED_EVENT_TYPE: &str = "customer_data.import.party.completed";
 pub const PARTY_IMPORT_COMPLETED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportCompletedEvent";
