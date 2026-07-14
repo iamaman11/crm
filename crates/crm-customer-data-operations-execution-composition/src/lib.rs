@@ -23,9 +23,9 @@ use crm_customer_data_operations::{
     ImportRowStatus, PartialExecutionPolicy, PartyImportKind, TargetPartyId,
 };
 use crm_module_sdk::{
-    CapabilityClient, CapabilityId, CapabilityInvocation, CapabilityOutcome, CapabilityVersion,
-    DataClass, ErrorCategory, IdempotencyKey, ModuleExecutionContext, ModuleId, PortFuture,
-    SdkError,
+    BusinessTransactionId, CapabilityClient, CapabilityId, CapabilityInvocation, CapabilityOutcome,
+    CapabilityVersion, DataClass, ErrorCategory, IdempotencyKey, ModuleExecutionContext, ModuleId,
+    PortFuture, SdkError,
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY,
@@ -317,8 +317,11 @@ pub fn target_context(
     base.validate()?;
     let mut context = base.clone();
     context.module_id = ModuleId::try_new(MODULE_ID).map_err(configuration_error)?;
+    let target_transaction_id = row.target_idempotency_key();
     context.execution.idempotency_key =
-        IdempotencyKey::try_new(row.target_idempotency_key()).map_err(configuration_error)?;
+        IdempotencyKey::try_new(target_transaction_id.clone()).map_err(configuration_error)?;
+    context.execution.business_transaction_id =
+        BusinessTransactionId::try_new(target_transaction_id).map_err(configuration_error)?;
     Ok(context)
 }
 
