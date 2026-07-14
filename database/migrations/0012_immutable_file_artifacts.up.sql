@@ -48,7 +48,7 @@ CREATE TABLE crm.file_artifact_chunks (
   tenant_id text NOT NULL,
   file_id text NOT NULL,
   chunk_index bigint NOT NULL CHECK (chunk_index >= 0),
-  chunk_size_bytes integer NOT NULL CHECK (chunk_size_bytes BETWEEN 0 AND 524288),
+  chunk_size_bytes integer NOT NULL CHECK (chunk_size_bytes BETWEEN 1 AND 524288),
   chunk_sha256 bytea NOT NULL CHECK (octet_length(chunk_sha256) = 32),
   chunk_bytes bytea NOT NULL CHECK (octet_length(chunk_bytes) = chunk_size_bytes),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -77,6 +77,6 @@ CREATE POLICY tenant_isolation ON crm.file_artifact_chunks
 COMMENT ON TABLE crm.file_artifacts IS
   'Tenant-scoped immutable artifact metadata. Bytes become readable only after exact size and SHA-256 finalization.';
 COMMENT ON TABLE crm.file_artifact_chunks IS
-  'Tenant-scoped bounded upload chunks. Chunk order is exact and finalized artifacts are immutable through the crm-core-files port.';
+  'Tenant-scoped bounded non-empty upload chunks. Chunk order is exact and finalized artifacts are immutable through the crm-core-files port.';
 
 COMMIT;
