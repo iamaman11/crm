@@ -43,12 +43,22 @@ use crm_customer_accounts_query_adapter::{
     query_capability_definitions as account_query_capability_definitions,
 };
 use crm_identity_resolution_capability_adapter::{
+    CANDIDATE_MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_CANDIDATE_MUTATION_CAPABILITY_IDS,
     IdentityResolutionCapabilityPlanner,
+    MERGE_MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MERGE_MUTATION_CAPABILITY_IDS,
     MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS,
     capability_definitions as identity_resolution_capability_definitions,
 };
 use crm_identity_resolution_capability_composition::{
     IdentityResolutionCapabilityExecutor, PostgresIdentityResolutionReferenceReader,
+};
+use crm_identity_resolution_merge_composition::{
+    MergeLineageCapabilityExecutor, PostgresMergeLineageReferenceReader,
+};
+use crm_identity_resolution_merge_query_adapter::{
+    IdentityResolutionMergeQueryAdapter,
+    QUERY_CAPABILITY_IDS as IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as identity_resolution_merge_query_capability_definitions,
 };
 use crm_identity_resolution_query_adapter::{
     IdentityResolutionQueryAdapter,
@@ -114,6 +124,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(customer_360_query_capability_definitions()?);
     definitions.extend(consent_query_capability_definitions()?);
     definitions.extend(identity_resolution_query_capability_definitions()?);
+    definitions.extend(identity_resolution_merge_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -193,6 +204,7 @@ pub struct ApplicationCapabilityExecutorRouter {
     metadata: Arc<PostgresMetadataCapabilityExecutor>,
     consents: ConsentCapabilityExecutor,
     identity_resolution: IdentityResolutionCapabilityExecutor,
+    identity_resolution_merge: MergeLineageCapabilityExecutor,
 }
 
 impl ApplicationCapabilityExecutorRouter {
@@ -211,12 +223,17 @@ impl ApplicationCapabilityExecutorRouter {
             )),
             aggregate.clone(),
         );
+        let identity_resolution_merge = MergeLineageCapabilityExecutor::new(
+            Arc::new(PostgresMergeLineageReferenceReader::new(store.clone())),
+            aggregate.clone(),
+        );
         Self {
             store,
             aggregate,
             metadata,
             consents,
             identity_resolution,
+            identity_resolution_merge,
         }
     }
 }
@@ -230,6 +247,7 @@ impl fmt::Debug for ApplicationCapabilityExecutorRouter {
             .field("metadata", &"PostgresMetadataCapabilityExecutor")
             .field("consents", &self.consents)
             .field("identity_resolution", &self.identity_resolution)
+            .field("identity_resolution_merge", &self.identity_resolution_merge)
             .finish()
     }
 }
@@ -244,10 +262,14 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
             self.metadata.execute(definition, request)
         } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.consents.execute(definition, request)
-        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+        } else if IDENTITY_RESOLUTION_CANDIDATE_MUTATION_CAPABILITY_IDS
             .contains(&definition.capability_id.as_str())
         {
             self.identity_resolution.execute(definition, request)
+        } else if IDENTITY_RESOLUTION_MERGE_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.execute(definition, request)
         } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             Box::pin(async move {
                 validate_account_party_references(&self.store, definition, &request).await?;
@@ -413,6 +435,7 @@ pub struct ApplicationQueryRouter {
     customer_360: Customer360QueryAdapter,
     consents: ConsentQueryAdapter,
     identity_resolution: IdentityResolutionQueryAdapter,
+    identity_resolution_merge: IdentityResolutionMergeQueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
@@ -426,6 +449,7 @@ impl ApplicationQueryRouter {
         customer_360: Customer360QueryAdapter,
         consents: ConsentQueryAdapter,
         identity_resolution: IdentityResolutionQueryAdapter,
+        identity_resolution_merge: IdentityResolutionMergeQueryAdapter,
         metadata: MetadataQueryAdapter,
     ) -> Self {
         Self {
@@ -437,6 +461,7 @@ impl ApplicationQueryRouter {
             customer_360,
             consents,
             identity_resolution,
+            identity_resolution_merge,
             metadata,
         }
     }
@@ -468,6 +493,10 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
             .contains(&definition.capability_id.as_str())
         {
             self.identity_resolution.validate(definition, request)
+        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -500,6 +529,10 @@ impl QueryExecutor for ApplicationQueryRouter {
             .contains(&definition.capability_id.as_str())
         {
             self.identity_resolution.execute(definition, request)
+        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }
@@ -606,6 +639,7 @@ mod tests {
                 + CUSTOMER_360_QUERY_CAPABILITY_IDS.len()
                 + CONSENT_QUERY_CAPABILITY_IDS.len()
                 + IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS.len()
+                + IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS.len()
                 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(
@@ -649,6 +683,13 @@ mod tests {
             );
         }
         for coordinate in IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS {
+            assert!(
+                queries
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
+        for coordinate in IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS {
             assert!(
                 queries
                     .iter()

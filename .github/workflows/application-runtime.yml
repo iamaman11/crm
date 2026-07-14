@@ -14,6 +14,7 @@ on:
       - "proto/crm/contact_points/**"
       - "proto/crm/party_relationships/**"
       - "proto/crm/consents/**"
+      - "proto/crm/identity_resolution/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -27,6 +28,11 @@ on:
       - "crates/crm-core-events/**"
       - "crates/crm-customer-accounts-capability-adapter/**"
       - "crates/crm-customer-accounts-query-adapter/**"
+      - "crates/crm-identity-resolution-capability-adapter/**"
+      - "crates/crm-identity-resolution-capability-composition/**"
+      - "crates/crm-identity-resolution-merge-composition/**"
+      - "crates/crm-identity-resolution-query-adapter/**"
+      - "crates/crm-identity-resolution-merge-query-adapter/**"
       - "crates/crm-metadata-api-adapter/**"
       - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-parties-capability-adapter/**"
@@ -42,6 +48,7 @@ on:
       - "modules/crm-consents/**"
       - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
+      - "modules/crm-identity-resolution/**"
       - "modules/crm-parties/**"
       - "modules/crm-party-relationships/**"
       - "modules/crm-sales-activities-link/**"
@@ -62,6 +69,7 @@ on:
       - "proto/crm/contact_points/**"
       - "proto/crm/party_relationships/**"
       - "proto/crm/consents/**"
+      - "proto/crm/identity_resolution/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -75,6 +83,11 @@ on:
       - "crates/crm-core-events/**"
       - "crates/crm-customer-accounts-capability-adapter/**"
       - "crates/crm-customer-accounts-query-adapter/**"
+      - "crates/crm-identity-resolution-capability-adapter/**"
+      - "crates/crm-identity-resolution-capability-composition/**"
+      - "crates/crm-identity-resolution-merge-composition/**"
+      - "crates/crm-identity-resolution-query-adapter/**"
+      - "crates/crm-identity-resolution-merge-query-adapter/**"
       - "crates/crm-metadata-api-adapter/**"
       - "crates/crm-metadata-query-adapter/**"
       - "crates/crm-parties-capability-adapter/**"
@@ -90,6 +103,7 @@ on:
       - "modules/crm-consents/**"
       - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
+      - "modules/crm-identity-resolution/**"
       - "modules/crm-parties/**"
       - "modules/crm-party-relationships/**"
       - "modules/crm-sales-activities-link/**"
@@ -104,7 +118,7 @@ permissions:
 jobs:
   application-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 70
     services:
       postgres:
         image: postgres:17-alpine
@@ -141,9 +155,9 @@ jobs:
           #!/usr/bin/env bash
           set -euo pipefail
           psql --set ON_ERROR_STOP=1 --command "DROP SCHEMA IF EXISTS crm CASCADE"
-          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/0010_*.up.sql; do
+          while IFS= read -r migration; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
-          done
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
@@ -199,6 +213,13 @@ jobs:
           /tmp/reset-application-database.sh
           cargo test -p crm-api --test identity_resolution_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-identity-resolution-process.log
+      - name: Verify Identity Resolution approved merge and reversible unmerge crm-api process lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test merge_unmerge_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-merge-unmerge-process.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -224,6 +245,7 @@ jobs:
             database/application-runtime-party-relationship-process.log
             database/application-runtime-consent-process.log
             database/application-runtime-identity-resolution-process.log
+            database/application-runtime-merge-unmerge-process.log
             database/application-runtime-postgres.log
             crates/crm-application-runtime/
             crates/crm-consents-capability-adapter/
@@ -233,6 +255,11 @@ jobs:
             crates/crm-contact-points-query-adapter/
             crates/crm-customer-accounts-capability-adapter/
             crates/crm-customer-accounts-query-adapter/
+            crates/crm-identity-resolution-capability-adapter/
+            crates/crm-identity-resolution-capability-composition/
+            crates/crm-identity-resolution-merge-composition/
+            crates/crm-identity-resolution-query-adapter/
+            crates/crm-identity-resolution-merge-query-adapter/
             crates/crm-metadata-api-adapter/
             crates/crm-metadata-query-adapter/
             crates/crm-parties-capability-adapter/
@@ -244,6 +271,7 @@ jobs:
             modules/crm-consents/
             modules/crm-contact-points/
             modules/crm-customer-accounts/
+            modules/crm-identity-resolution/
             modules/crm-party-relationships/
             services/crm-api/
           if-no-files-found: error

@@ -14,6 +14,7 @@ message MutateRequest {
   string capability_id = 2;
   string capability_version = 3;
   TypedPayload input = 4;
+  optional ApprovalEvidence approval = 5;
 }
 
 message MutateResponse {
@@ -31,6 +32,17 @@ message QueryRequest {
 
 message QueryResponse {
   TypedPayload output = 1;
+}
+
+message ApprovalEvidence {
+  string approval_id = 1;
+  string actor_id = 2;
+  string capability_id = 3;
+  string capability_version = 4;
+  bytes input_hash = 5;
+  string policy_version = 6;
+  int64 expires_at_unix_nanos = 7;
+  bytes opaque_proof = 8;
 }
 
 message TypedPayload {

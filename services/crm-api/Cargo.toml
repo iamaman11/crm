@@ -13,6 +13,8 @@ too_many_arguments = "allow"
 crm-application-runtime = { path = "../../crates/crm-application-runtime" }
 
 [dev-dependencies]
+crm-capability-adapters = { path = "../../crates/crm-capability-adapters" }
+crm-capability-ingress = { path = "../../crates/crm-capability-ingress" }
 crm-capability-runtime = { path = "../../crates/crm-capability-runtime" }
 crm-core-data = { path = "../../crates/crm-core-data" }
 crm-customer-360-composition = { path = "../../crates/crm-customer-360-composition" }

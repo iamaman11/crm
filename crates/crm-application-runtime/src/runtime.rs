@@ -11,9 +11,9 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use crm_capability_adapters::{
-    ApprovalStore, AuthorizationGrant, FixedWindowRateLimiter, LiveAuthorizationStore,
+    AuthorizationGrant, FixedWindowRateLimiter, HmacSha256ApprovalVerifier, LiveAuthorizationStore,
     LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore,
-    QueryVisibilityGrant, RateLimitPolicyStore, StoredApprovalVerifier,
+    QueryVisibilityGrant, RateLimitPolicyStore,
 };
 use crm_capability_ingress::{
     AccessTokenGrant, AccessTokenStore, BearerTokenAuthenticator, CapabilityIngress,
@@ -21,7 +21,7 @@ use crm_capability_ingress::{
     HttpCapabilityBody, HttpCapabilityMiddleware, HttpCapabilityRequest, HttpQueryBody,
     HttpQueryMiddleware, HttpQueryRequest, QueryContextResolver, QueryIngress, TimeoutPolicy,
 };
-use crm_capability_runtime::{CapabilityDefinition, CapabilityGateway};
+use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityGateway};
 use crm_consents_capability_adapter::{
     MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
 };
@@ -45,14 +45,16 @@ use crm_customer_accounts_capability_adapter::{
 use crm_customer_accounts_query_adapter::AccountQueryAdapter;
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_identity_resolution_capability_adapter::{
+    MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
 };
+use crm_identity_resolution_merge_query_adapter::IdentityResolutionMergeQueryAdapter;
 use crm_identity_resolution_query_adapter::IdentityResolutionQueryAdapter;
 use crm_metadata_api_adapter::METADATA_MODULE_ID;
 use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_registry::ModuleRegistry;
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,
+    ActorId, CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,
     SchemaVersion, TenantId, TypedPayload,
 };
 use crm_parties_capability_adapter::{
@@ -227,7 +229,10 @@ impl ApplicationRuntime {
                 RateLimitPolicyStore::default(),
                 Arc::clone(&clock),
             )),
-            Arc::new(StoredApprovalVerifier::new(ApprovalStore::default())),
+            Arc::new(
+                HmacSha256ApprovalVerifier::try_new(config.approval_signing_key.clone())
+                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            ),
             authorizer.clone(),
             mutation_executor,
             Arc::clone(&clock),
@@ -291,6 +296,13 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let identity_resolution_merge_query_adapter = IdentityResolutionMergeQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -313,6 +325,7 @@ impl ApplicationRuntime {
             customer_360_query_adapter,
             consent_query_adapter,
             identity_resolution_query_adapter,
+            identity_resolution_merge_query_adapter,
             metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
@@ -468,6 +481,52 @@ struct PathCoordinate {
     capability_version: String,
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum HttpMutationBody {
+    Payload(TypedPayload),
+    Envelope {
+        input: TypedPayload,
+        approval: Option<HttpApprovalEvidence>,
+    },
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct HttpApprovalEvidence {
+    approval_id: String,
+    actor_id: String,
+    capability_id: String,
+    capability_version: String,
+    input_hash: Vec<u8>,
+    policy_version: String,
+    expires_at_unix_nanos: i64,
+    opaque_proof: Vec<u8>,
+}
+
+impl HttpMutationBody {
+    fn into_parts(self) -> Result<(TypedPayload, Option<ApprovalEvidence>), ()> {
+        match self {
+            Self::Payload(input) => Ok((input, None)),
+            Self::Envelope { input, approval } => {
+                Ok((input, approval.map(decode_http_approval).transpose()?))
+            }
+        }
+    }
+}
+
+fn decode_http_approval(value: HttpApprovalEvidence) -> Result<ApprovalEvidence, ()> {
+    Ok(ApprovalEvidence {
+        approval_id: value.approval_id,
+        actor_id: ActorId::try_new(value.actor_id).map_err(|_| ())?,
+        capability_id: CapabilityId::try_new(value.capability_id).map_err(|_| ())?,
+        capability_version: CapabilityVersion::try_new(value.capability_version).map_err(|_| ())?,
+        input_hash: value.input_hash.try_into().map_err(|_| ())?,
+        policy_version: value.policy_version,
+        expires_at_unix_nanos: value.expires_at_unix_nanos,
+        opaque_proof: value.opaque_proof,
+    })
+}
+
 async fn run_http_server(
     listener: TcpListener,
     components: Arc<ApplicationComponents>,
@@ -540,8 +599,12 @@ async fn mutation(
     State(state): State<HttpState>,
     Path(path): Path<PathCoordinate>,
     headers: HeaderMap,
-    Json(input): Json<TypedPayload>,
+    Json(body): Json<HttpMutationBody>,
 ) -> Response {
+    let (input, approval) = match body.into_parts() {
+        Ok(parts) => parts,
+        Err(()) => return bad_approval(),
+    };
     let route = match capability_route(&path, &input) {
         Ok(route) => route,
         Err(()) => return bad_route(),
@@ -553,7 +616,7 @@ async fn mutation(
             headers,
             route,
             input,
-            approval: None,
+            approval,
         })
         .await;
     match response.body {
@@ -610,6 +673,14 @@ fn bad_route() -> Response {
     (
         StatusCode::BAD_REQUEST,
         Json(json!({"error": "invalid_route"})),
+    )
+        .into_response()
+}
+
+fn bad_approval() -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({"error": "invalid_approval"})),
     )
         .into_response()
 }
@@ -867,18 +938,32 @@ fn bootstrap_application_access(
                     consent_fields(),
                     expires_at,
                 )?,
-                IDENTITY_RESOLUTION_MODULE_ID => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
-                        resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,
-                    },
-                    identity_resolution_fields(),
-                    expires_at,
-                )?,
+                IDENTITY_RESOLUTION_MODULE_ID => {
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
+                            resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,
+                        },
+                        identity_resolution_fields(),
+                        expires_at,
+                    )?;
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
+                            resource_type: IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
+                        },
+                        identity_resolution_merge_fields(),
+                        expires_at,
+                    )?;
+                }
                 PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
                     visibility_store,
                     config,
@@ -1131,6 +1216,19 @@ fn identity_resolution_fields() -> BTreeSet<String> {
         "evidence_history",
         "status",
         "decision_reason",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn identity_resolution_merge_fields() -> BTreeSet<String> {
+    [
+        "party_pair",
+        "decision",
+        "survivorship",
+        "status",
+        "unmerge_decision",
     ]
     .into_iter()
     .map(str::to_owned)

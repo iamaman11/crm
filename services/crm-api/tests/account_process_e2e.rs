@@ -547,6 +547,7 @@ async fn mutate(
         capability_id: definition.capability_id.as_str().to_owned(),
         capability_version: definition.capability_version.as_str().to_owned(),
         input: Some(wire_payload(input)),
+        approval: None,
     });
     request.metadata_mut().insert(
         "x-tenant-id",

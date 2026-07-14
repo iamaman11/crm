@@ -255,6 +255,8 @@ name = "crm-api"
 version = "0.1.0"
 dependencies = [
  "crm-application-runtime",
+ "crm-capability-adapters",
+ "crm-capability-ingress",
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-360-composition",
@@ -292,6 +294,8 @@ dependencies = [
  "crm-global-search-composition",
  "crm-identity-resolution-capability-adapter",
  "crm-identity-resolution-capability-composition",
+ "crm-identity-resolution-merge-composition",
+ "crm-identity-resolution-merge-query-adapter",
  "crm-identity-resolution-query-adapter",
  "crm-metadata-api-adapter",
  "crm-metadata-query-adapter",
@@ -657,6 +661,36 @@ dependencies = [
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
  "tokio",
+]
+
+[[package]]
+name = "crm-identity-resolution-merge-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-identity-resolution",
+ "crm-identity-resolution-capability-adapter",
+ "crm-module-sdk",
+ "crm-parties-capability-adapter",
+ "crm-proto-contracts",
+]
+
+[[package]]
+name = "crm-identity-resolution-merge-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-identity-resolution",
+ "crm-identity-resolution-capability-adapter",
+ "crm-module-sdk",
+ "crm-parties-capability-adapter",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
 ]
 
 [[package]]

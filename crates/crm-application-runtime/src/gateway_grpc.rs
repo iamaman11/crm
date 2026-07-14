@@ -1,7 +1,9 @@
 use crate::ApplicationComponents;
 use crm_capability_ingress::{CapabilityRoute, GrpcCapabilityMessage, GrpcQueryMessage};
+use crm_capability_runtime::ApprovalEvidence;
 use crm_module_sdk::{
-    DataClass, ModuleId, PayloadEncoding, RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,
+    ActorId, CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding,
+    RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,
 };
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -42,6 +44,7 @@ impl gateway_v1::application_gateway_service_server::ApplicationGatewayService
         let metadata = request.metadata().clone();
         let request = request.into_inner();
         let input = decode_payload(request.input)?;
+        let approval = decode_approval(request.approval)?;
         let route = decode_route(
             &request.owner_module_id,
             &request.capability_id,
@@ -51,7 +54,7 @@ impl gateway_v1::application_gateway_service_server::ApplicationGatewayService
         let mut governed_request = Request::new(GrpcCapabilityMessage {
             route,
             input,
-            approval: None,
+            approval,
         });
         *governed_request.metadata_mut() = metadata;
         let result = self
@@ -132,6 +135,34 @@ fn decode_payload(input: Option<gateway_v1::TypedPayload>) -> Result<TypedPayloa
         .validate()
         .map_err(|_| Status::invalid_argument("input payload is invalid"))?;
     Ok(payload)
+}
+
+fn decode_approval(
+    approval: Option<gateway_v1::ApprovalEvidence>,
+) -> Result<Option<ApprovalEvidence>, Status> {
+    approval
+        .map(|approval| {
+            let input_hash: [u8; 32] = approval
+                .input_hash
+                .try_into()
+                .map_err(|_| Status::invalid_argument("approval input_hash must be 32 bytes"))?;
+            Ok(ApprovalEvidence {
+                approval_id: approval.approval_id,
+                actor_id: ActorId::try_new(approval.actor_id)
+                    .map_err(|_| Status::invalid_argument("approval actor_id is invalid"))?,
+                capability_id: CapabilityId::try_new(approval.capability_id)
+                    .map_err(|_| Status::invalid_argument("approval capability_id is invalid"))?,
+                capability_version: CapabilityVersion::try_new(approval.capability_version)
+                    .map_err(|_| {
+                        Status::invalid_argument("approval capability_version is invalid")
+                    })?,
+                input_hash,
+                policy_version: approval.policy_version,
+                expires_at_unix_nanos: approval.expires_at_unix_nanos,
+                opaque_proof: approval.opaque_proof,
+            })
+        })
+        .transpose()
 }
 
 fn encode_mutation_result(

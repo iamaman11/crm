@@ -46,6 +46,7 @@ members = [
   "crates/crm-consents-query-adapter",
   "crates/crm-identity-resolution-capability-adapter",
   "crates/crm-identity-resolution-capability-composition",
+  "crates/crm-identity-resolution-merge-composition",
   "crates/crm-identity-resolution-query-adapter",
   "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
