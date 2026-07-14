@@ -26,146 +26,83 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           governed = Path("crates/crm-application-runtime/src/governed_metadata.rs")
           text = governed.read_text()
-          old = '''#[derive(Debug, Clone)]
-          pub struct ApplicationQueryRouter {
-              production: ProductionQueryRouter,
-              parties: PartyQueryAdapter,
-              accounts: AccountQueryAdapter,
-              contact_points: ContactPointQueryAdapter,
-              party_relationships: PartyRelationshipQueryAdapter,
-              customer_360: Customer360QueryAdapter,
-              consents: ConsentQueryAdapter,
-              identity_resolution: IdentityResolutionQueryAdapter,
-              metadata: MetadataQueryAdapter,
-          }
+          pattern = re.compile(
+              r"#\[derive\(Debug, Clone\)\]\npub struct ApplicationQueryRouter \{.*?\n\}\n\nimpl ApplicationQueryRouter \{.*?\n\}\n",
+              re.S,
+          )
+          replacement = '''#[derive(Debug, Clone)]
+pub struct ApplicationQueryAdapters {
+    pub parties: PartyQueryAdapter,
+    pub accounts: AccountQueryAdapter,
+    pub contact_points: ContactPointQueryAdapter,
+    pub party_relationships: PartyRelationshipQueryAdapter,
+    pub customer_360: Customer360QueryAdapter,
+    pub consents: ConsentQueryAdapter,
+    pub identity_resolution: IdentityResolutionQueryAdapter,
+    pub metadata: MetadataQueryAdapter,
+}
 
-          impl ApplicationQueryRouter {
-              pub fn new(
-                  production: ProductionQueryRouter,
-                  parties: PartyQueryAdapter,
-                  accounts: AccountQueryAdapter,
-                  contact_points: ContactPointQueryAdapter,
-                  party_relationships: PartyRelationshipQueryAdapter,
-                  customer_360: Customer360QueryAdapter,
-                  consents: ConsentQueryAdapter,
-                  identity_resolution: IdentityResolutionQueryAdapter,
-                  metadata: MetadataQueryAdapter,
-              ) -> Self {
-                  Self {
-                      production,
-                      parties,
-                      accounts,
-                      contact_points,
-                      party_relationships,
-                      customer_360,
-                      consents,
-                      identity_resolution,
-                      metadata,
-                  }
-              }
-          }
-          '''
-          new = '''#[derive(Debug, Clone)]
-          pub struct ApplicationQueryAdapters {
-              pub parties: PartyQueryAdapter,
-              pub accounts: AccountQueryAdapter,
-              pub contact_points: ContactPointQueryAdapter,
-              pub party_relationships: PartyRelationshipQueryAdapter,
-              pub customer_360: Customer360QueryAdapter,
-              pub consents: ConsentQueryAdapter,
-              pub identity_resolution: IdentityResolutionQueryAdapter,
-              pub metadata: MetadataQueryAdapter,
-          }
+#[derive(Debug, Clone)]
+pub struct ApplicationQueryRouter {
+    production: ProductionQueryRouter,
+    adapters: ApplicationQueryAdapters,
+}
 
-          #[derive(Debug, Clone)]
-          pub struct ApplicationQueryRouter {
-              production: ProductionQueryRouter,
-              adapters: ApplicationQueryAdapters,
-          }
-
-          impl ApplicationQueryRouter {
-              pub fn new(
-                  production: ProductionQueryRouter,
-                  adapters: ApplicationQueryAdapters,
-              ) -> Self {
-                  Self {
-                      production,
-                      adapters,
-                  }
-              }
-          }
-          '''
-          if old not in text:
-              raise SystemExit("governed_metadata constructor anchor not found")
-          text = text.replace(old, new, 1)
-          replacements = {
-              "self.metadata.validate(definition, request)": "self.adapters.metadata.validate(definition, request)",
-              "self.parties.validate(definition, request)": "self.adapters.parties.validate(definition, request)",
-              "self.accounts.validate(definition, request)": "self.adapters.accounts.validate(definition, request)",
-              "self.contact_points.validate(definition, request)": "self.adapters.contact_points.validate(definition, request)",
-              "self.party_relationships.validate(definition, request)": "self.adapters.party_relationships.validate(definition, request)",
-              "self.customer_360.validate(definition, request)": "self.adapters.customer_360.validate(definition, request)",
-              "self.consents.validate(definition, request)": "self.adapters.consents.validate(definition, request)",
-              "self.identity_resolution.validate(definition, request)": "self.adapters.identity_resolution.validate(definition, request)",
-              "self.metadata.execute(definition, request)": "self.adapters.metadata.execute(definition, request)",
-              "self.parties.execute(definition, request)": "self.adapters.parties.execute(definition, request)",
-              "self.accounts.execute(definition, request)": "self.adapters.accounts.execute(definition, request)",
-              "self.contact_points.execute(definition, request)": "self.adapters.contact_points.execute(definition, request)",
-              "self.party_relationships.execute(definition, request)": "self.adapters.party_relationships.execute(definition, request)",
-              "self.customer_360.execute(definition, request)": "self.adapters.customer_360.execute(definition, request)",
-              "self.consents.execute(definition, request)": "self.adapters.consents.execute(definition, request)",
-              "self.identity_resolution.execute(definition, request)": "self.adapters.identity_resolution.execute(definition, request)",
-          }
-          for source, target in replacements.items():
-              if source not in text:
-                  raise SystemExit(f"missing routing anchor: {source}")
-              text = text.replace(source, target)
+impl ApplicationQueryRouter {
+    pub fn new(
+        production: ProductionQueryRouter,
+        adapters: ApplicationQueryAdapters,
+    ) -> Self {
+        Self {
+            production,
+            adapters,
+        }
+    }
+}
+'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f"expected one query router block, replaced {count}")
+          for field in [
+              "metadata", "parties", "accounts", "contact_points",
+              "party_relationships", "customer_360", "consents", "identity_resolution",
+          ]:
+              text = text.replace(f"self.{field}.validate(", f"self.adapters.{field}.validate(")
+              text = text.replace(f"self.{field}.execute(", f"self.adapters.{field}.execute(")
           governed.write_text(text)
 
           runtime = Path("crates/crm-application-runtime/src/runtime.rs")
           text = runtime.read_text()
-          old_import = '''    ApplicationAggregatePlannerRouter, ApplicationCapabilityExecutorRouter, ApplicationConfig,
-              ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,
-          '''
-          new_import = '''    ApplicationAggregatePlannerRouter, ApplicationCapabilityExecutorRouter, ApplicationConfig,
-              ApplicationGatewayService, ApplicationQueryAdapters, ApplicationQueryRouter,
-              ContractBoundMutationSemanticValidator,
-          '''
-          if old_import not in text:
-              raise SystemExit("runtime import anchor not found")
-          text = text.replace(old_import, new_import, 1)
-          old_call = '''        let query_router = Arc::new(ApplicationQueryRouter::new(
-              production_query_router,
-              party_query_adapter,
-              account_query_adapter,
-              contact_point_query_adapter,
-              party_relationship_query_adapter,
-              customer_360_query_adapter,
-              consent_query_adapter,
-              identity_resolution_query_adapter,
-              metadata_query_adapter,
-          ));
-          '''
-          new_call = '''        let query_router = Arc::new(ApplicationQueryRouter::new(
-              production_query_router,
-              ApplicationQueryAdapters {
-                  parties: party_query_adapter,
-                  accounts: account_query_adapter,
-                  contact_points: contact_point_query_adapter,
-                  party_relationships: party_relationship_query_adapter,
-                  customer_360: customer_360_query_adapter,
-                  consents: consent_query_adapter,
-                  identity_resolution: identity_resolution_query_adapter,
-                  metadata: metadata_query_adapter,
-              },
-          ));
-          '''
-          if old_call not in text:
-              raise SystemExit("runtime constructor call anchor not found")
-          runtime.write_text(text.replace(old_call, new_call, 1))
+          if "ApplicationQueryAdapters" not in text:
+              text = text.replace(
+                  "ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,",
+                  "ApplicationGatewayService, ApplicationQueryAdapters, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,",
+                  1,
+              )
+          call_pattern = re.compile(
+              r"let query_router = Arc::new\(ApplicationQueryRouter::new\(\n\s*production_query_router,\n\s*party_query_adapter,\n\s*account_query_adapter,\n\s*contact_point_query_adapter,\n\s*party_relationship_query_adapter,\n\s*customer_360_query_adapter,\n\s*consent_query_adapter,\n\s*identity_resolution_query_adapter,\n\s*metadata_query_adapter,\n\s*\)\);"
+          )
+          call_replacement = '''let query_router = Arc::new(ApplicationQueryRouter::new(
+            production_query_router,
+            ApplicationQueryAdapters {
+                parties: party_query_adapter,
+                accounts: account_query_adapter,
+                contact_points: contact_point_query_adapter,
+                party_relationships: party_relationship_query_adapter,
+                customer_360: customer_360_query_adapter,
+                consents: consent_query_adapter,
+                identity_resolution: identity_resolution_query_adapter,
+                metadata: metadata_query_adapter,
+            },
+        ));'''
+          text, count = call_pattern.subn(call_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f"expected one runtime constructor call, replaced {count}")
+          runtime.write_text(text)
           PY
       - name: Verify refactor
         run: |
