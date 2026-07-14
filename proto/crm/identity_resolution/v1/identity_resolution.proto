@@ -119,6 +119,119 @@ message DuplicateCandidateConfirmedEvent {
   DuplicateCandidateCase candidate_case = 1;
 }
 
+// Stable immutable merge-lineage identity owned only by crm.identity-resolution.
+message MergeOperationRef {
+  string merge_operation_id = 1;
+}
+
+enum MergeOperationStatus {
+  MERGE_OPERATION_STATUS_UNSPECIFIED = 0;
+  MERGE_OPERATION_STATUS_ACTIVE = 1;
+  MERGE_OPERATION_STATUS_UNMERGED = 2;
+}
+
+// Field-level provenance for one explicit survivorship choice. The digest proves
+// which source value participated in the decision without making merge lineage a
+// competing owner of the Party field value itself.
+message SurvivorshipSelection {
+  string field_path = 1;
+  crm.customer.v1.PartyRef provenance_party_ref = 2;
+  int64 provenance_party_version = 3;
+  bytes source_value_sha256 = 4;
+  string evidence_ref = 5;
+}
+
+message MergeUnmergeDecision {
+  string decision_ref = 1;
+  string decided_by_actor_id = 2;
+  string reason = 3;
+  crm.core.v1.UnixTime occurred_at = 4;
+}
+
+message MergeOperation {
+  MergeOperationRef merge_operation_ref = 1;
+  crm.customer.v1.PartyRef source_party_ref = 2;
+  int64 source_party_version = 3;
+  crm.customer.v1.PartyRef survivor_party_ref = 4;
+  int64 survivor_party_version = 5;
+  string decision_ref = 6;
+  string decided_by_actor_id = 7;
+  string reason = 8;
+  repeated SurvivorshipSelection survivorship = 9;
+  MergeOperationStatus status = 10;
+  MergeUnmergeDecision unmerge_decision = 11;
+  crm.customer.v1.CustomerResourceVersion resource_version = 12;
+}
+
+message MergePartyRequest {
+  MergeOperationRef merge_operation_ref = 1;
+  crm.customer.v1.PartyRef source_party_ref = 2;
+  int64 source_party_version = 3;
+  crm.customer.v1.PartyRef survivor_party_ref = 4;
+  int64 survivor_party_version = 5;
+  string decision_ref = 6;
+  string reason = 7;
+  repeated SurvivorshipSelection survivorship = 8;
+}
+
+message MergePartyResponse {
+  MergeOperation merge_operation = 1;
+}
+
+message UnmergePartyRequest {
+  MergeOperationRef merge_operation_ref = 1;
+  int64 expected_version = 2;
+  string decision_ref = 3;
+  string reason = 4;
+}
+
+message UnmergePartyResponse {
+  MergeOperation merge_operation = 1;
+}
+
+message GetMergeOperationRequest {
+  MergeOperationRef merge_operation_ref = 1;
+}
+
+message GetMergeOperationResponse {
+  MergeOperation merge_operation = 1;
+}
+
+message ListMergeOperationsByPartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  MergeOperationStatus status = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+message ListMergeOperationsByPartyResponse {
+  repeated MergeOperation merge_operations = 1;
+  string next_cursor = 2;
+}
+
+message ResolveCanonicalPartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+}
+
+message CanonicalPartyResolution {
+  crm.customer.v1.PartyRef requested_party_ref = 1;
+  crm.customer.v1.PartyRef canonical_party_ref = 2;
+  repeated crm.customer.v1.PartyRef party_path = 3;
+  repeated MergeOperationRef merge_operation_path = 4;
+}
+
+message ResolveCanonicalPartyResponse {
+  CanonicalPartyResolution resolution = 1;
+}
+
+message PartyMergedEvent {
+  MergeOperation merge_operation = 1;
+}
+
+message PartyUnmergedEvent {
+  MergeOperation merge_operation = 1;
+}
+
 service IdentityResolutionService {
   rpc RegisterDuplicateCandidate(RegisterDuplicateCandidateRequest) returns (RegisterDuplicateCandidateResponse);
   rpc RefreshDuplicateCandidateEvidence(RefreshDuplicateCandidateEvidenceRequest) returns (RefreshDuplicateCandidateEvidenceResponse);
@@ -126,4 +239,9 @@ service IdentityResolutionService {
   rpc ConfirmDuplicateCandidate(ConfirmDuplicateCandidateRequest) returns (ConfirmDuplicateCandidateResponse);
   rpc GetDuplicateCandidateCase(GetDuplicateCandidateCaseRequest) returns (GetDuplicateCandidateCaseResponse);
   rpc ListDuplicateCandidateCasesByParty(ListDuplicateCandidateCasesByPartyRequest) returns (ListDuplicateCandidateCasesByPartyResponse);
+  rpc MergeParty(MergePartyRequest) returns (MergePartyResponse);
+  rpc UnmergeParty(UnmergePartyRequest) returns (UnmergePartyResponse);
+  rpc GetMergeOperation(GetMergeOperationRequest) returns (GetMergeOperationResponse);
+  rpc ListMergeOperationsByParty(ListMergeOperationsByPartyRequest) returns (ListMergeOperationsByPartyResponse);
+  rpc ResolveCanonicalParty(ResolveCanonicalPartyRequest) returns (ResolveCanonicalPartyResponse);
 }
