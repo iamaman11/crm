@@ -164,16 +164,34 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
     let admin = PgPool::connect(&admin_database_url)
         .await
         .expect("connect file artifact evidence reader");
-    let actor_bootstrap = sqlx::query(
-        "INSERT INTO crm.actors (tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id) \
-         VALUES ($1, $2, 'service', 'active', $3, $4) \
-         ON CONFLICT (tenant_id, actor_id) DO NOTHING",
-    )
-    .bind("tenant-b")
-    .bind("actor-b")
-    .bind("Tenant B file artifact acceptance actor")
-    .bind("tx-file-artifact-actor-bootstrap")
-    .execute(&admin)
+    let actor_bootstrap = async {
+        let mut transaction = admin.begin().await?;
+        sqlx::query(
+            r#"
+            SELECT
+              set_config('app.tenant_id', 'tenant-b', true),
+              set_config('app.actor_id', 'actor-b', true),
+              set_config('app.request_id', 'request-file-artifact-actor-bootstrap', true),
+              set_config('app.capability_id', 'test.record.mutate', true),
+              set_config('app.capability_version', '1.0.0', true),
+              set_config('app.business_transaction_id', 'tx-file-artifact-actor-bootstrap', true)
+            "#,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        sqlx::query(
+            "INSERT INTO crm.actors (tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id) \
+             VALUES ($1, $2, 'service', 'active', $3, $4) \
+             ON CONFLICT (tenant_id, actor_id) DO NOTHING",
+        )
+        .bind("tenant-b")
+        .bind("actor-b")
+        .bind("Tenant B file artifact acceptance actor")
+        .bind("tx-file-artifact-actor-bootstrap")
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await
+    }
     .await;
     if let Err(error) = actor_bootstrap {
         let diagnostic = format!("actor_bootstrap_error={error:?}\n");
