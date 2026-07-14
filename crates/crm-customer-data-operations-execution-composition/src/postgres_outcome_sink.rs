@@ -322,7 +322,7 @@ fn batch_from_plan(
         ImportExecutionOutcomePlan::SkippedInvalid {
             job,
             row_id,
-            row_position,
+            row_position: _,
         } => skipped_invalid_batch(definition, request, &job, &row_id),
         ImportExecutionOutcomePlan::Succeeded {
             job,
