@@ -1,289 +1,265 @@
 # Ultimate CRM — Implementation Roadmap
 
-Status: **Normative delivery plan**  
-Parent epic: [#2](https://github.com/iamaman11/crm/issues/2)  
-Governing rules: [`SYSTEM_INVARIANTS.md`](SYSTEM_INVARIANTS.md) and accepted ADRs.  
-Structural guide: [`APPLICATION_ARCHITECTURE.md`](APPLICATION_ARCHITECTURE.md).  
-Current concise state: [`PROJECT_STATUS.md`](PROJECT_STATUS.md).  
-Business-module accounting: [`MODULE_CATALOG.md`](MODULE_CATALOG.md).
+Status: **Normative delivery plan**
+
+Parent epic: #2  
+Governing rules: `SYSTEM_INVARIANTS.md`  
+Delivery-control policy: `DELIVERY_GOVERNANCE.md`  
+Current concise state: `PROJECT_STATUS.md`  
+Detailed Phase 8 sequence: `PHASE8_DELIVERY_PLAN.md`  
+Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`  
+Business-module accounting: `MODULE_CATALOG.md`
 
 ## 1. Purpose
 
-This roadmap turns the architecture specification into a controlled delivery sequence. It is not a feature wishlist. Every phase establishes guarantees required by later phases, has explicit acceptance gates, and must preserve all system invariants.
+This roadmap defines the dependency order for a universal modular expert CRM platform. It is not a feature wishlist and it is not a second status page.
 
-The target is a universal modular expert CRM platform where first-party and marketplace modules can be developed, tested, released, installed, activated, upgraded, suspended and removed independently without direct infrastructure access or cross-module state mutation.
+Every phase establishes guarantees required by later phases. A phase or packet is complete only when its acceptance boundary is implemented, merged and backed by the required automated or operational evidence.
 
-Universal means that Sales is not allowed to become the owner of customer identity, catalog, pricing, order, contract, subscription, service, communication or billing state. Those domains require explicit owner modules and versioned integration boundaries.
+Universal means that Sales is not allowed to become the owner of customer identity, communications, service, catalog, pricing, quotes, orders, contracts, subscriptions, billing, consent or other independent business domains. Authoritative ownership remains explicit and versioned.
 
 ## 2. Delivery rules
 
-1. Work is delivered through coherent reviewable delivery packets linked to roadmap issues. A packet must end at a natural architecture boundary with green acceptance gates.
-2. Contract CI, Governance CI and Rust CI must remain green before merge; Database CI is mandatory whenever runtime, SQL, migrations or PostgreSQL behavior changes. Specialized runtime/process/product gates are mandatory where defined by the phase.
-3. Published contracts, policies, metadata and module versions are immutable.
-4. A phase is complete only when its acceptance gates are automated or supported by a documented operational drill.
-5. New state-changing behavior must enter through a versioned capability and produce typed audit evidence.
-6. Business modules may depend only on stable platform contracts and governed SDK ports.
-7. Search, analytics, caches and projections remain rebuildable and non-authoritative.
-8. Security, privacy, tenant isolation, compatibility and rollback are implementation requirements, not later enhancements.
-9. Technical debt discovered by a gate is fixed or explicitly recorded before dependent work begins.
-10. The roadmap and GitHub issues are updated in the same delivery packet when scope or sequencing changes.
-11. Exact money, time, identity, lifecycle and authorization semantics must be represented by typed contracts rather than convention or free-form strings.
-12. No milestone may claim the complete CRM product is finished while required owner domains or production gates remain open.
-13. `README.md` is stable orientation only. Current phase state is synchronized through this roadmap, `PROJECT_STATUS.md`, `MODULE_CATALOG.md` and the active GitHub phase issue.
-14. A backend phase is not application-complete while its production components exist only as libraries or tests and the deployable composition root remains a skeleton.
-15. Frontend evolves in parallel with expert owner domains as end-to-end vertical slices rather than waiting for all backend domains to finish.
-16. Exact-SHA evidence is invalidated by every source-changing or documentation-changing commit until all applicable checks are rerun on the new head.
-17. A typed UI extension is not an authorization or infrastructure boundary. It receives only bounded host-owned context; backend authority remains on governed mutation/query paths. Untrusted third-party execution requires the later signed marketplace sandbox rather than same-realm JavaScript claims.
-18. Canonical customer identity, consent and commercial commitment ownership must remain explicit. Downstream domains reference stable resources and may not create competing local masters.
+1. Work is delivered as coherent reviewable packets linked to roadmap issues.
+2. Every mutable aggregate has exactly one authoritative owner module.
+3. New state-changing behavior enters through an exact versioned capability and produces typed audit evidence.
+4. Search, analytics, caches and projections remain rebuildable and non-authoritative.
+5. Published contracts, policies, metadata and module versions are immutable.
+6. Security, privacy, tenant isolation, compatibility and rollback are implementation requirements, not later cosmetics.
+7. Business modules use governed SDK/platform boundaries and do not access another module’s storage.
+8. Exact money, time, identity, lifecycle and authorization semantics use typed contracts rather than conventions.
+9. A backend packet is not production-complete while its real application composition, persistence or process acceptance is missing.
+10. Frontend and backend evolve as end-to-end vertical slices where the packet has a user-facing surface.
+11. Every source-changing or documentation-changing commit invalidates previous exact-SHA gate evidence until applicable checks rerun on the new head.
+12. Roadmap, status, phase plan, module catalog, issues and PR descriptions are synchronized under `DELIVERY_GOVERNANCE.md`.
+13. No milestone may claim the universal CRM product is complete while required capability families remain unimplemented or unclassified.
 
 ## 3. Work states
 
-- **Planned** — scoped but prerequisites are incomplete.
-- **Ready** — prerequisites and contracts are stable enough to start.
-- **In progress** — an implementation branch or PR exists.
-- **Gate review** — implementation is complete and acceptance evidence is green or under final merge verification.
-- **Complete** — merged and all required gates have passed.
-- **Blocked** — a named dependency, decision or defect prevents progress.
+The normative state vocabulary is defined in `DELIVERY_GOVERNANCE.md`:
+
+- Planned
+- Ready
+- In progress
+- Gate review
+- Complete
+- Blocked
+- Superseded
+
+Only merged work may be represented as **Complete** in `main` documentation.
 
 ## 4. Phase map
 
 | Phase | Issue | Primary result | State | Depends on |
 |---|---:|---|---|---|
-| 0.1 | [#3](https://github.com/iamaman11/crm/issues/3) | Repository hardening and executable roadmap | **Complete** | Governance v1 |
-| 1 | [#4](https://github.com/iamaman11/crm/issues/4) | Typed Module Manifest IR and deterministic identity | **Complete** | #3 |
-| 2 | [#5](https://github.com/iamaman11/crm/issues/5) | Governed Module SDK and test harness | **Complete** | #4 |
-| 3 | [#6](https://github.com/iamaman11/crm/issues/6) | Module lifecycle and registry runtime | **Complete** | #4, #5 |
-| 4 | [#7](https://github.com/iamaman11/crm/issues/7) | PostgreSQL tenant, record, outbox and audit foundation | **Complete** | #6 |
-| 5 | [#8](https://github.com/iamaman11/crm/issues/8) | Capability execution gateway | **Complete** | #5, #7 |
-| 6 | [#9](https://github.com/iamaman11/crm/issues/9) | Sales + Activities + link/projection/application vertical proof | **Complete** | #8 |
-| 7 | [#10](https://github.com/iamaman11/crm/issues/10) | Search, generalized projections, Admin Studio, product shell and UI-extension isolation | **Complete** | #9 |
-| 8 | [#11](https://github.com/iamaman11/crm/issues/11) | Expert modules and product-quality UX | **In progress** | #5, #9, #10 |
-| 8A | [#28](https://github.com/iamaman11/crm/issues/28) | Canonical customer master, identity resolution and consent | **In progress** | #9, #10 |
-| 8B | [#29](https://github.com/iamaman11/crm/issues/29) | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | #9, #10, #28 |
-| 9 | [#12](https://github.com/iamaman11/crm/issues/12) | AI-native governed actor/tool layer | **Planned** | #8, #10 |
-| 10 | [#13](https://github.com/iamaman11/crm/issues/13) | Signed marketplace and WASM sandbox | **Planned** | #6, #8, #10 |
-| 11 | [#14](https://github.com/iamaman11/crm/issues/14) | Enterprise security and production proof | **Planned / continuous hardening** | all critical runtime phases |
+| 0.1 | #3 | Repository hardening and executable roadmap | **Complete** | Governance v1 |
+| 1 | #4 | Typed Module Manifest IR and deterministic identity | **Complete** | #3 |
+| 2 | #5 | Governed Module SDK and test harness | **Complete** | #4 |
+| 3 | #6 | Module lifecycle and registry runtime | **Complete** | #4, #5 |
+| 4 | #7 | PostgreSQL tenant, record, outbox and audit foundation | **Complete** | #6 |
+| 5 | #8 | Capability execution gateway | **Complete** | #5, #7 |
+| 6 | #9 | Sales + Activities + link/projection/application vertical proof | **Complete** | #8 |
+| 7 | #10 | Search, generalized projections, Admin Studio, product shell and UI-extension isolation | **Complete** | #9 |
+| 8 | #11 | Expert modules and product-quality CRM experience | **In progress** | #5, #9, #10 |
+| 8A | #28 | Canonical customer master, identity, consent and governed customer-data lifecycle | **In progress** | #9, #10 |
+| 8B | #29 | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | stable 8A customer references |
+| 9 | #12 | AI-native governed actor/tool layer | **Planned** | #8, #10 and mature domain capabilities |
+| 10 | #13 | Signed marketplace and sandboxed untrusted extensions | **Planned** | #6, #8, #10 |
+| 11 | #14 | Enterprise security, resilience and production proof | **Planned / continuous hardening** | all critical runtime phases |
 
-## 5. Phases 0.1–5 — platform control plane — Complete
+## 5. Completed platform foundation
 
-### Phase 0.1 — repository hardening
+### Phases 0.1–5 — Complete
 
-Delivered version-controlled roadmap and issue hierarchy, stable CODEOWNERS, executable architecture-policy boundaries, generated-artifact/validation documentation and required Contract/Governance/Rust/Database checks.
+Delivered:
 
-### Phase 1 — typed Module Manifest IR
+- repository governance and executable architecture checks;
+- strict typed Module Manifest IR and deterministic immutable identity;
+- governed Module SDK and test harness;
+- module publication/install/activate/suspend/upgrade/rollback/uninstall lifecycle;
+- PostgreSQL tenant/RLS, record, relationship, idempotency, outbox and append-only audit foundations;
+- authenticated capability execution with exact-version routing, validation, live authorization, transactional execution and typed safe results.
 
-Delivered the strict pipeline:
+### Phase 6 — Complete
 
-```text
-module.yaml
-→ strict YAML 1.2 JSON-compatible subset
-→ JSON Schema validation
-→ semantic validation
-→ normalized JSON IR
-→ typed Rust ModuleManifest
-→ crm.cjson/v1 canonical bytes
-→ SHA-256 identity
-→ immutable publication
-```
+Delivered the first modular production proof:
 
-Unknown fields, invalid SemVer/dependencies and dependency cycles are rejected; Python/Rust canonical identity parity is tested.
+- independent Sales `Deal` and Activities `Task` owner aggregates;
+- versioned contracts and PostgreSQL-backed mutation/query paths;
+- authenticated HTTP/gRPC ingress;
+- event delivery and the optional Sales–Activities link module;
+- rebuildable projections;
+- real application composition and deployable `crm-api` process acceptance.
 
-### Phase 2 — governed Module SDK
+### Phase 7 — Complete
 
-Delivered governed capability, record, relationship, event, state, workflow, file, time, randomness and observability ports with tenant/actor/execution-context binding and deterministic test doubles. Business modules are compile-time excluded from raw database, broker, object-storage, arbitrary HTTP, secret-store and LLM-provider clients.
+Delivered:
 
-### Phase 3 — module lifecycle and registry
+- golden module tooling;
+- generalized projection runtime;
+- permission-aware global search;
+- typed web product shell and governed browser-client boundary;
+- immutable tenant-authorized typed metadata;
+- durable metadata persistence and rollback;
+- governed metadata API and application composition;
+- Admin Studio publish/impact/activate/rollback workflow;
+- typed trusted-code UI-extension runtime with failure isolation.
 
-Delivered validate, publish, install, activate, suspend, upgrade, rollback and uninstall transitions; deterministic dependency resolution; immutable module versions; tenant-scoped installations; link-module support; uninstall impact/blockers; and audited idempotent lifecycle transitions.
+Untrusted third-party execution remains Phase 10.
 
-### Phase 4 — PostgreSQL foundation
+## 6. Phase 8 — expert owner domains and product experience
 
-Delivered tenant-scoped records and relationships, FORCE-RLS boundaries, optimistic versions, atomic business state/idempotency/outbox/audit evidence, append-only tenant audit ledger, controlled typed payload metadata and migration clean-install/upgrade/rollback/reapply coverage.
+Phase 8 is the broad product program. It is delivered as independent owner-domain and product-surface waves rather than one mega-branch.
 
-### Phase 5 — capability execution gateway
+Detailed sequencing lives in `PHASE8_DELIVERY_PLAN.md`.
 
-Public mutations follow the governed chain:
+### 8A — canonical customer master, identity, consent and customer-data lifecycle
 
-```text
-request
-→ authentication
-→ tenant and actor resolution
-→ ExecutionContext
-→ exact capability resolution
-→ typed and semantic validation
-→ rate and approval policy
-→ live authorization
-→ synchronous deterministic planner
-→ one atomic PostgreSQL execution
-→ outbox and audit
-→ typed safe response
-```
+State: **In progress**  
+Parent issue: #28
 
-Replay cannot duplicate side effects, semantic idempotency conflicts are typed, and missing evidence rolls back state.
+Completed packets:
 
-## 6. Phase 6 — first modular production proof — Complete
+- **8A.1** — canonical customer references and owner foundations (#92 / PR #93).
+- **8A.2a** — Party create/get (#94 / PR #95).
+- **8A.2b** — Party update/list (#96 / PR #97).
+- **8A.2c** — Party search/customer discovery (#98 / PR #99).
+- **8A.3a** — Account lifecycle and Party associations (#101 / PR #102).
+- **8A.3b** — Contact Point lifecycle, verification and preference (#103 / PR #104).
+- **8A.3c** — Party Relationship lifecycle and hierarchy foundations (#108 / PR #109).
+- **8A.3d** — Customer 360 read composition (#110 / PR #111).
+- **8A.4** — Consent and Communication Authorization (#112 / PR #113).
+- **8A.5** — Identity Resolution duplicate-candidate cases and reviewer decisions (#114 / PR #115).
+- **8A.6** — reversible merge/unmerge, immutable lineage, provenance and survivorship (#116 / merged PR #119; merge commit `d5cb4502ad0c49158e0789d8749dc09160da7895`).
 
-Issue: [#9](https://github.com/iamaman11/crm/issues/9)  
-Delivery packet: merged PR #63 / issue #55.  
-Merge commit: `82910fa17f21074b1e091615a4251092cfa8ab2f`.
+Active and planned sequence:
 
-Phase 6 established independent typed Sales `Deal` and Activities `Task` owner aggregates, publication-compatible Protobuf contracts, production PostgreSQL mutations and permission-bound queries, authenticated HTTP/gRPC ingress, durable event delivery, the optional `crm.sales-activities-link` module, rebuildable projections, a real application composition root and deployable `crm-api` process with process-level PostgreSQL acceptance.
+1. **8A.7 / #120 — In progress:** Customer Import Jobs, Versioned Mappings and Resumable Execution. Draft PR #121 is the single active customer-master production packet.
+2. **8A.8 / #123 — Planned:** Customer Export Jobs, Artifacts and Reconciliation Evidence.
+3. **8A.9 / #124 — Planned:** Customer Data Quality Rules, Completeness and Stewardship.
+4. **8A.10 / #125 — Planned:** Governed Customer Enrichment and Provenance.
+5. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
-## 7. Phase 7 — search, metadata, Admin Studio and product plane — Complete
+Phase 8A is complete only when the customer-master acceptance baseline covers:
 
-Issue: [#10](https://github.com/iamaman11/crm/issues/10).
+- stable canonical identities and references;
+- consent-aware live authorization;
+- explainable duplicate candidates;
+- reversible merge/unmerge and immutable provenance;
+- deterministic import and export with resumability/reconciliation;
+- data-quality and stewardship evidence;
+- governed enrichment provenance;
+- privacy access/export/restriction/deletion/legal-hold interaction proof;
+- tenant isolation, migrations, compatibility, process acceptance and performance appropriate to the maturity claim.
 
-### 7A — golden module tooling — Complete
+### 8B — product catalog, pricing, CPQ and quote-to-revenue
 
-[#56](https://github.com/iamaman11/crm/issues/56) / merged PR #64 established repository-supported owner/link module scaffolding, overwrite-safe generation, dependency validation, architecture-safe manifests/crates, acceptance placeholders and permanent cross-platform quality commands.
+State: **Planned**  
+Issue: #29
 
-### 7B — generalized projection runtime — Complete
+Required owner domains include:
 
-[#65](https://github.com/iamaman11/crm/issues/65) / merged PR #67 introduced deterministic typed projection registration/execution, checkpoint replay, poison/failure state and rebuild orchestration without moving owner-domain decoding into infrastructure.
+- Product Catalog;
+- Price Books and Pricing;
+- CPQ/configuration and pricing explanation;
+- Quotes and immutable revisions;
+- Orders;
+- Contracts and amendments;
+- Subscriptions, entitlements and usage references;
+- governed billing/ERP/payment/tax/fulfillment integration boundaries.
 
-### 7C — permission-aware search — Complete
+Catalog, pricing and commercial commitment ownership must not be absorbed into Sales.
 
-[#66](https://github.com/iamaman11/crm/issues/66) / merged PR #68 delivered candidate-only search, live resource/field visibility re-checks, deterministic logical index generations, PostgreSQL FTS as a replaceable adapter and governed `search.global.query` ingress.
+### Additional Phase 8 waves
 
-### 7D — typed web product shell — Complete
-
-[#71](https://github.com/iamaman11/crm/issues/71) / merged PR #73 established the strict TypeScript product workspace, generated browser contracts, governed typed client boundary, centralized session state, permission-aware UX routing, design-system/application-shell primitives and hermetic Playwright E2E.
-
-### 7E — immutable tenant-authorized typed metadata — Complete
-
-[#77/#78](https://github.com/iamaman11/crm/issues/77), [#79/#80](https://github.com/iamaman11/crm/issues/79) and [#81/#82](https://github.com/iamaman11/crm/issues/81) established immutable complete metadata-bundle snapshots, deterministic revision identity, tenant-scoped publication authority, impact analysis, explicit breaking confirmation, optimistic activation/rollback, strict typed metadata schemas, deterministic dependency extraction and exact governed-capability workflow actions.
-
-### 7F — durable tenant-scoped metadata persistence — Complete
-
-[#83](https://github.com/iamaman11/crm/issues/83) / merged PR #84 established durable PostgreSQL metadata revisions, canonical documents, dependency edges, optimistic activation heads, per-tenant transaction locking, pop-only rollback history, append-only transition evidence, FORCE RLS and real PostgreSQL/migration acceptance. Merge commit: `adbb639da69f5d87873b3c603a1388021c8359da`.
-
-### 7G — governed metadata API and application composition — Complete
-
-[#85](https://github.com/iamaman11/crm/issues/85) / merged PR #86 established exact versioned Protobuf metadata mutations/queries, typed schema-to-bundle conversion, `CapabilityGateway` mutations, `QueryGateway` reads, PostgreSQL-backed production adapters, canonical global audit evidence and typed browser metadata operations over one shared governed gRPC-Web transport. Final review head `7989ea1256f01bfd4e8ee2d33f5ad8370d6cc645`; merge commit `970548d14faf26f4b8f6cb47f7d9f168e61d9c28`.
-
-### 7H — first governed Admin Studio workflow — Complete
-
-[#87](https://github.com/iamaman11/crm/issues/87) / merged PR #88 delivered permission-aware typed Admin Studio authoring with no raw JSON mode and the full immutable publish → impact → explicit breaking confirmation → optimistic activate → activation read → rollback lifecycle. Real browser E2E proves a breaking second revision and rollback. Final review head `f78f1c75bf97733ff88eafcd2d2ed2ab6c7615d9`; merge commit `0f01f22e6c77cd4f138a6b678d75d259f3ac71ff`.
-
-### 7I — typed UI-extension runtime and host failure isolation — Complete
-
-[#89](https://github.com/iamaman11/crm/issues/89) / merged PR #90 closed the final Phase 7 product-plane foundation:
-
-- exact typed record-page extension surfaces;
-- immutable validated registration with owner-bound deterministic coordinates and locale-independent ordering;
-- deterministic rejection of invalid and duplicate registrations;
-- readonly host-owned context without session/client/raw gateway/infrastructure injection;
-- independent lazy loading and `Suspense` per extension instance;
-- independent load/render error boundaries and bounded retry/reset;
-- safe failure evidence with no raw error or record-payload leakage;
-- failure-observer isolation;
-- development-only lazy-loaded record host proof instead of a fake production data surface;
-- real browser acceptance proving the shell, core record content and healthy sibling extensions survive deliberate render and lazy-load failures and targeted retry.
-
-The duplicate-coordinate unit gate exposed and prevented a real implementation defect before merge. Final review head `874dde11f5d558bd5e53f2def3e8903ff12f361a` passed Governance CI, Rust CI and Product Plane CI including generated sync, strict typecheck, lint, unit tests, production build and fresh PostgreSQL/process/browser E2E. PR #90 merged as `0fb389c72b148311f590c3fdbae2a4f89fffd915`.
-
-### Phase 7 closure gate — Satisfied
-
-Merged Phase 7 now proves:
-
-- deleting search indexes or projections cannot destroy authoritative data;
-- permission changes cannot rely on stale search visibility;
-- published metadata is immutable, tenant-authorized, durably reconstructable, strictly validated, impact-analyzed, globally audited and reversible;
-- Admin Studio uses typed governed operations with explicit breaking confirmation and rollback;
-- one trusted-code UI-extension render or lazy-load failure cannot break the host shell, record page, core host content or healthy sibling extensions;
-- frontend code exposes no generic mutation/query bypass;
-- final Phase 7I exact-head Governance, Rust and Product Plane acceptance was green before merge.
-
-The trusted same-realm UI-extension runtime is not an untrusted-code sandbox. Signed packages and untrusted execution remain Phase 10 responsibilities.
-
-## 8. Phase 8 — expert owner domains and product experience — In progress
-
-After Phase 7, backend and frontend evolve as end-to-end vertical slices rather than as long disconnected projects.
-
-### 8A — canonical customer master, identity resolution and consent — In progress
-
-Active issue: [#28](https://github.com/iamaman11/crm/issues/28).
-
-This program establishes the canonical customer identity foundation required by Sales, Service, Marketing, Billing, projects and AI.
-
-Required owner domains:
-
-- Party — person and organization identities;
-- Account — customer/commercial relationship referencing one or more parties;
-- Contact Point — email, phone, postal, social/messaging handle and channel preference;
-- Party Relationship — employment, household, parent/subsidiary, partner and configurable typed roles with validity intervals;
-- Consent and Communication Preference — purpose, channel, legal basis, jurisdiction, source, proof, effective/expiry/withdrawal time;
-- Identity Resolution — source identifiers, match evidence, survivorship decisions and immutable merge/unmerge history.
-
-Architectural constraints:
-
-- customer master is authoritative for identity;
-- downstream domains store stable references and explicitly justified snapshots only;
-- no downstream table mutation of customer-master state;
-- merge, unmerge and consent withdrawal are capability-governed, idempotent, approval-aware where required and audited;
-- source evidence and field-level provenance are never silently discarded;
-- search/projections remain rebuildable and permission-aware;
-- PII access, masking, export and deletion repeat live authorization;
-- AI may suggest matches but cannot merge identities or change consent through an alternate path.
-
-Acceptance must cover cross-tenant isolation, deterministic import/replay, merge/unmerge lineage and rollback, immediate consent-withdrawal enforcement, explainable duplicate candidates, privacy export/deletion/legal-hold interactions, contract compatibility, migrations and performance.
-
-Current delivery position: Party create/update/get/list/search, Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship (#108 / merged PR #109), Customer 360 (#110 / merged PR #111), Phase 8A.4 Consent and Communication Authorization (#112 / merged PR #113) and Phase 8A.5 Identity Resolution and Duplicate Candidates (#114 / merged PR #115; final verified head `74ab48427b9dd5a30f0a0637cc52e74bd395b3c7`; merge commit `bdefcbd85496d9a0481b57d04ef1d6c731a12683`) are merged and production-proven. Phase 8A.6 Merge, Unmerge, Provenance and Survivorship is now in gate review in #116 / PR #119: immutable merge-operation lineage, approval-required merge/unmerge, exact Party-version and same-tenant integrity, field-level survivorship provenance, authoritative Party-to-lineage relationships, cycle-safe canonical redirects, permission-aware get/list/canonical-resolution queries, signed public approval transport, hard PostgreSQL topology invariants, complete migration-ledger rollback/reapply coverage and fresh-PostgreSQL real `crm-api` reversible merge/unmerge acceptance are implemented. Party remains authoritative and merge/unmerge does not delete or destructively rewrite Party records. The post-documentation exact-head all-workflow gate against `main` remains pending before PR #119 can be marked ready for review.
-
-### 8B — product catalog, CPQ and quote-to-revenue lifecycle — Planned
-
-[#29](https://github.com/iamaman11/crm/issues/29) follows the customer-master foundation. Catalog, pricing, quote, order, contract and subscription ownership must remain explicit and must not be absorbed into Sales.
-
-### Additional Phase 8 owner-domain programs
+After or alongside stable prerequisite domains, Phase 8 continues with:
 
 - Sales and Activities expert expansion;
 - communications and omnichannel interaction history;
-- support and service management;
-- marketing segmentation, journeys and attribution;
-- billing and governed ERP/payment/tax integrations;
-- projects/cases/configurable work management;
-- documents and e-signature;
-- analytics, forecasting and performance management;
-- product-quality global search, command palette, tables, saved views, bulk actions, timelines, onboarding, imports, responsive/mobile behavior, accessibility and localization.
+- Service/Support, Knowledge and optional Field Service;
+- Marketing automation, segmentation, journeys and attribution;
+- Customer Success and optional Partner Relationship Management;
+- projects/configurable work, documents and e-signature;
+- analytics, reporting and performance management;
+- workflow, approvals, human tasks and collaboration;
+- product completeness: responsive/mobile UX, accessibility, localization, onboarding, saved views, bulk actions, offline/retry states and critical browser E2E.
 
-Gate: each module owns typed domain invariants, contracts, manifest, CI target and release notes. Critical rules cannot be bypassed by arbitrary metadata, scripts or AI.
+Each authoritative domain receives an explicit owner and cannot be hidden inside generic metadata or a giant Sales module.
 
-## 9. Phase 9 — AI-native layer — Planned
+## 7. Phase 9 — AI-native CRM
 
-AI is an Actor, not an infrastructure shortcut.
+State: **Planned**  
+Issue: #12
 
-Deliver model routing by tenant/data class/purpose/residency/cost, permission-scoped tools generated from the Capability Registry, permission-filtered retrieval, approval flows, reversible actions, budgets, prompt-injection/leakage/correctness evaluations and complete actor/tool/model/cost audit evidence.
+AI is an authenticated audited Actor, not an infrastructure shortcut.
 
-Gate: AI has no alternate mutation path. Restricted data is default-deny for external providers. Every tool call repeats live authorization before side effects.
+Required outcomes:
 
-## 10. Phase 10 — signed marketplace and sandbox — Planned
+- tenant/data-class/purpose/residency/cost-aware model routing;
+- permission-scoped tools generated from governed capability/query registries;
+- permission-filtered retrieval;
+- live authorization before retrieval and side effects;
+- approval flows and reversible actions where supported;
+- budgets, latency/provider-failure controls and complete audit evidence;
+- prompt-injection, data-leakage, hallucination and tool-correctness evaluations.
 
-Deliver signed packages, publisher identity, WASM sandbox, SBOM/provenance verification, vulnerability policy, capability/data/network/secret grants, quotas, kill switch and safe upgrade/rollback/uninstall.
+AI has no alternate identity-merge, consent or mutation path.
 
-Gate: untrusted or policy-violating modules cannot install. Marketplace code cannot access resources outside explicit host grants.
+## 8. Phase 10 — signed marketplace and sandbox
 
-## 11. Phase 11 — enterprise and production proof — Planned / continuous
+State: **Planned**  
+Issue: #13
 
-Deliver SSO/OIDC/SAML, SCIM, tenant key hierarchy, field encryption, legal hold, WORM audit export, privacy deletion, crypto-shredding, backup/PITR, tenant restore, tenant mobility, data residency, SBOM/dependency/secret scans, penetration/load/chaos tests, SLOs and runbooks.
+Required outcomes:
 
-Gate: enterprise claims require automated and operational evidence, not configuration placeholders.
+- signed packages and publisher identity;
+- dependency/compatibility resolution;
+- SBOM/provenance and vulnerability policy;
+- explicit capability/data/network/secret grants;
+- sandboxed untrusted execution, planned as WASM;
+- quotas, timeouts and kill switch;
+- safe install/upgrade/rollback/suspend/uninstall lifecycle.
 
-## 12. Immediate delivery sequence
+## 9. Phase 11 — enterprise security and production proof
 
-1. Complete the post-documentation exact-head gate for Phase 8A.6 / #116 and move PR #119 to ready-for-review without weakening Party ownership, approval requirements or immutable merge lineage.
-2. Continue Phase 8A with explicit import/export, data-quality/enrichment provenance and privacy lifecycle packets.
-3. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.
-4. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.
-5. Keep enterprise/security/operational proof continuous and require one unchanged exact final SHA for every merge gate.
+State: **Planned / continuous hardening**  
+Issue: #14
 
-## 13. Documentation hygiene
+Required outcomes include:
 
-When implementation state changes, update together where applicable:
+- OIDC/SAML and SCIM;
+- enterprise authorization, delegation and separation of duties;
+- tenant key hierarchy and field/data-class encryption where required;
+- WORM audit export;
+- privacy lifecycle and legal hold;
+- backup/PITR/tenant restore and mobility;
+- data residency;
+- SBOM/dependency/secret scanning;
+- penetration, load and chaos testing;
+- SLOs, alerting, incident response and operational runbooks.
 
-- `IMPLEMENTATION_ROADMAP.md` — normative phase state and sequence;
-- `PROJECT_STATUS.md` — concise current state;
-- `MODULE_CATALOG.md` — module lifecycle/readiness state;
-- parent/phase GitHub issues;
-- README only for stable orientation, not detailed phase bookkeeping.
+Enterprise claims require automated and operational evidence, not configuration placeholders.
 
-README must not become a second manually maintained roadmap.
+## 10. Immediate authoritative delivery sequence
+
+1. Adopt/merge documentation-governance synchronization issue #122.
+2. Close superseded PR #118 so there is only one historical Phase 8A.6 implementation path.
+3. Keep #120 / PR #121 as the single active customer-master production packet.
+4. Complete 8A.7 contracts, adapters, PostgreSQL/runtime composition, process acceptance and exact-head gate.
+5. Deliver #123, #124, #125 and #126 in dependency order.
+6. Begin Phase 8B / #29 from the stable customer-master baseline.
+7. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
+8. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
+
+## 11. Documentation hygiene
+
+When implementation state changes, synchronize under `DELIVERY_GOVERNANCE.md`:
+
+- `IMPLEMENTATION_ROADMAP.md` — phase and dependency sequence;
+- `PROJECT_STATUS.md` — current concise state;
+- `PHASE8_DELIVERY_PLAN.md` — detailed active Phase 8 packet state;
+- `MODULE_CATALOG.md` — business-module readiness/count where justified;
+- parent and packet issues;
+- active PR body and exact validation state.
+
+`README.md` remains stable orientation and must not become a second manually maintained roadmap.
