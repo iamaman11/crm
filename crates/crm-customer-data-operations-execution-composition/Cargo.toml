@@ -5,7 +5,9 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-capability-adapters = { path = "../crm-capability-adapters" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-data-operations = { path = "../../modules/crm-customer-data-operations" }
 crm-customer-data-operations-capability-adapter = { path = "../crm-customer-data-operations-capability-adapter" }
