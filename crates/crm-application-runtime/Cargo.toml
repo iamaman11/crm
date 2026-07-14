@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[lints.clippy]
+# The application composition root intentionally wires multiple independent query adapters.
+# Keep the exception local to this crate rather than weakening workspace-wide Clippy policy.
+too_many_arguments = "allow"
+
 [dependencies]
 axum = "0.8"
 crm-capability-adapters = { path = "../crm-capability-adapters" }
