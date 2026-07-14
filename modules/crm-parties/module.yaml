@@ -1,8 +1,8 @@
 schema_version: crm.module/v1
 module_id: crm.parties
-version: "0.3.0"
+version: "0.4.0"
 display_name: CRM Parties
-description: Canonical owner domain for person and organization identity.
+description: Canonical owner domain for person and organization identity, including reversible merge redirect lifecycle state.
 
 owner:
   team: customer-platform
