@@ -13,10 +13,12 @@
 
 pub mod domain;
 pub mod merge_lineage;
+pub mod merge_lineage_persistence;
 pub mod persistence;
 
 pub use domain::*;
 pub use merge_lineage::*;
+pub use merge_lineage_persistence::*;
 pub use persistence::*;
 
 pub const MODULE_ID: &str = "crm.identity-resolution";
