@@ -1,0 +1,98 @@
+name: Phase 8A.6 Merge Persistence Wire Once
+
+on:
+  push:
+    branches:
+      - develop/phase8a6-reversible-party-merge-unmerge
+    paths:
+      - ".github/workflows/phase8a6-merge-persistence-wire-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a6-reversible-party-merge-unmerge
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Add strict persisted-decision reconstruction and wire persistence
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          merge = Path("modules/crm-identity-resolution/src/merge.rs")
+          text = merge.read_text()
+          anchor = '''impl UnmergeDecision {
+    pub fn actor_ref(&self) -> &MergeActorReference {
+'''
+          replacement = '''impl UnmergeDecision {
+    pub(crate) fn from_persisted_parts(
+        actor_ref: MergeActorReference,
+        reason: UnmergeReasonCode,
+        survivor_pre_unmerge_version: i64,
+        absorbed_pre_unmerge_version: i64,
+        survivor_post_unmerge_version: i64,
+        absorbed_post_unmerge_version: i64,
+        occurred_at_unix_nanos: i64,
+    ) -> Self {
+        Self {
+            actor_ref,
+            reason,
+            survivor_pre_unmerge_version,
+            absorbed_pre_unmerge_version,
+            survivor_post_unmerge_version,
+            absorbed_post_unmerge_version,
+            occurred_at_unix_nanos,
+        }
+    }
+
+    pub fn actor_ref(&self) -> &MergeActorReference {
+'''
+          if anchor not in text:
+              raise SystemExit("UnmergeDecision impl anchor not found")
+          merge.write_text(text.replace(anchor, replacement, 1))
+
+          lib = Path("modules/crm-identity-resolution/src/lib.rs")
+          text = lib.read_text()
+          old = '''pub mod domain;
+pub mod merge;
+pub mod persistence;
+
+pub use domain::*;
+pub use merge::*;
+pub use persistence::*;
+'''
+          new = '''pub mod domain;
+pub mod merge;
+pub mod merge_persistence;
+pub mod persistence;
+
+pub use domain::*;
+pub use merge::*;
+pub use merge_persistence::*;
+pub use persistence::*;
+'''
+          if old not in text:
+              raise SystemExit("identity-resolution lib module anchor not found")
+          lib.write_text(text.replace(old, new, 1))
+          PY
+      - name: Verify merge-lineage owner foundation
+        run: |
+          cargo fmt --all
+          cargo clippy -p crm-identity-resolution --all-targets --all-features -- -D warnings
+          cargo test -p crm-identity-resolution
+      - name: Remove one-shot workflow and commit
+        run: |
+          rm .github/workflows/phase8a6-merge-persistence-wire-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/crm-identity-resolution .github/workflows/phase8a6-merge-persistence-wire-once.yml
+          git commit -m "Wire strict merge-lineage persistence"
+          git push origin HEAD:develop/phase8a6-reversible-party-merge-unmerge
