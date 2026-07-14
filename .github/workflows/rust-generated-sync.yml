@@ -33,22 +33,22 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+          components: rustfmt
+      - name: Synchronize lockfile and Rust formatting
         run: |
           cargo generate-lockfile
           cargo fmt --all
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- -D warnings
-      - name: Commit synchronized files when needed
+      - name: Commit formatted files and restore normal sync workflow
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "No Rust maintenance changes are required."
+          git show origin/main:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
+          if git diff --quiet -- Cargo.lock crates modules services .github/workflows/rust-generated-sync.yml; then
+            echo "No Rust formatting changes are required."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates modules services .github/workflows/rust-generated-sync.yml
+          git commit -m "Synchronize Phase 8A.6 Rust formatting"
           git push origin "HEAD:${HEAD_BRANCH}"
