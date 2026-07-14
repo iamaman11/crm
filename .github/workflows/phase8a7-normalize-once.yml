@@ -1,0 +1,49 @@
+name: Phase 8A.7 Normalize Once
+
+on:
+  push:
+    branches:
+      - develop/phase8a7-customer-import-jobs
+    paths:
+      - crates/crm-customer-data-operations-capability-adapter/src/**
+      - modules/crm-customer-data-operations/src/**
+      - .github/workflows/phase8a7-normalize-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a7-customer-import-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Remove accidental planner import and apply rustfmt
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-customer-data-operations-capability-adapter/src/planner.rs')
+          text = path.read_text()
+          text = text.replace('    CANCEL_PARTY_IMPORT_JOB_CAPABILITY as _, CancelImportJob, ', '    CancelImportJob, ')
+          path.write_text(text)
+          PY
+          cargo fmt --all
+      - name: Commit normalization when needed
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No normalization changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- '*.rs'
+          git commit -m "chore(phase8a7): normalize import planner"
+          git push origin HEAD:develop/phase8a7-customer-import-jobs
