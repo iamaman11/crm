@@ -43,6 +43,8 @@ provides:
       version: "1.0.0"
     - id: parties.party.merge_survivorship_updated
       version: "1.0.0"
+    - id: parties.party.merge_survivorship_restored
+      version: "1.0.0"
   objects:
     - parties.party
     - parties.person
