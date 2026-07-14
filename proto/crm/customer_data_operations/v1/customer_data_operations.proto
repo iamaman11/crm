@@ -48,7 +48,7 @@ enum PartyImportKind {
 
 enum ImportSourceFormat {
   IMPORT_SOURCE_FORMAT_UNSPECIFIED = 0;
-  IMPORT_SOURCE_FORMAT_DELIMITED_TEXT = 1;
+  IMPORT_SOURCE_FORMAT_CSV = 1;
 }
 
 enum ImportTextEncoding {
@@ -58,33 +58,40 @@ enum ImportTextEncoding {
 
 enum ImportHeaderMode {
   IMPORT_HEADER_MODE_UNSPECIFIED = 0;
-  IMPORT_HEADER_MODE_FIRST_ROW = 1;
+  IMPORT_HEADER_MODE_REQUIRED_FIRST_ROW = 1;
 }
 
-// Immutable source interpretation identity. A job binds to one exact parser profile;
-// changing any field requires a new job/source interpretation rather than silently
-// reinterpreting already validated bytes.
+enum ImportParserVersion {
+  IMPORT_PARSER_VERSION_UNSPECIFIED = 0;
+  IMPORT_PARSER_VERSION_CSV_V1 = 1;
+}
+
+enum ImportCanonicalizationVersion {
+  IMPORT_CANONICALIZATION_VERSION_UNSPECIFIED = 0;
+  IMPORT_CANONICALIZATION_VERSION_V1 = 1;
+}
+
+// Immutable source interpretation identity. These fields are semantic inputs to validation
+// and execution; changing any one requires a new job/source interpretation.
 message ImportParserProfile {
-  // Stable semantic parser family, for example "crm.import.delimited-text".
-  string parser_profile_id = 1;
-  // Immutable semantic parser version, for example "1.0.0".
-  string parser_profile_version = 2;
-  ImportSourceFormat format = 3;
-  ImportTextEncoding encoding = 4;
-  // Exact delimiter used by the delimited-text profile. V1 accepts one bounded Unicode scalar.
-  string delimiter = 5;
-  // Exact quote character used by the delimited-text profile. V1 accepts one bounded Unicode scalar.
-  string quote_character = 6;
-  ImportHeaderMode header_mode = 7;
-  // Versioned canonicalization identity used before mapping/row interpretation.
-  string canonicalization_profile_id = 8;
+  ImportSourceFormat format = 1;
+  ImportTextEncoding encoding = 2;
+  // Exact non-zero ASCII byte other than CR/LF.
+  uint32 delimiter_ascii = 3;
+  // Exact non-zero ASCII byte other than CR/LF and distinct from delimiter_ascii.
+  uint32 quote_ascii = 4;
+  ImportHeaderMode header_mode = 5;
+  ImportParserVersion parser_version = 6;
+  ImportCanonicalizationVersion canonicalization_version = 7;
 }
 
 message ImportSourceDescriptor {
   string source_name = 1;
   bytes content_sha256 = 2;
   uint32 row_count = 3;
-  ImportParserProfile parser_profile = 4;
+  // Stable source-system identity used only to contextualize source identifier evidence.
+  string source_system_id = 4;
+  ImportParserProfile parser_profile = 5;
 }
 
 // Immutable v1 mapping. Values are bounded source column names, never executable expressions.
