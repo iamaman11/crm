@@ -183,6 +183,8 @@ message UnmergePartyRequest {
   int64 expected_version = 2;
   string decision_ref = 3;
   string reason = 4;
+  int64 expected_source_party_version = 5;
+  int64 expected_survivor_party_version = 6;
 }
 
 message UnmergePartyResponse {
