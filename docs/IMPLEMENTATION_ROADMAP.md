@@ -14,7 +14,7 @@ Business-module accounting: `MODULE_CATALOG.md`
 
 This roadmap defines the dependency order for a universal modular expert CRM platform. It is not a feature wishlist and it is not a second status page.
 
-Every phase establishes guarantees required by later phases. A phase or packet is complete only when its acceptance boundary is implemented, merged and backed by the required automated or operational evidence.
+Every phase establishes guarantees required by later phases. A phase or packet is complete only when its acceptance boundary is implemented, merged and backed by required automated or operational evidence.
 
 Universal means that Sales is not allowed to become the owner of customer identity, communications, service, catalog, pricing, quotes, orders, contracts, subscriptions, billing, consent or other independent business domains. Authoritative ownership remains explicit and versioned.
 
@@ -25,10 +25,10 @@ Universal means that Sales is not allowed to become the owner of customer identi
 3. New state-changing behavior enters through an exact versioned capability and produces typed audit evidence.
 4. Search, analytics, caches and projections remain rebuildable and non-authoritative.
 5. Published contracts, policies, metadata and module versions are immutable.
-6. Security, privacy, tenant isolation, compatibility and rollback are implementation requirements, not later cosmetics.
-7. Business modules use governed SDK/platform boundaries and do not access another module’s storage.
+6. Security, privacy, tenant isolation, compatibility and rollback are implementation requirements.
+7. Business modules use governed SDK/platform boundaries and do not access another module’s storage directly.
 8. Exact money, time, identity, lifecycle and authorization semantics use typed contracts rather than conventions.
-9. A backend packet is not production-complete while its real application composition, persistence or process acceptance is missing.
+9. A backend packet is not production-complete while real application composition, persistence or process acceptance is missing.
 10. Frontend and backend evolve as end-to-end vertical slices where the packet has a user-facing surface.
 11. Every source-changing or documentation-changing commit invalidates previous exact-SHA gate evidence until applicable checks rerun on the new head.
 12. Roadmap, status, phase plan, module catalog, issues and PR descriptions are synchronized under `DELIVERY_GOVERNANCE.md`.
@@ -56,13 +56,13 @@ Only merged work may be represented as **Complete** in `main` documentation.
 | 1 | #4 | Typed Module Manifest IR and deterministic identity | **Complete** | #3 |
 | 2 | #5 | Governed Module SDK and test harness | **Complete** | #4 |
 | 3 | #6 | Module lifecycle and registry runtime | **Complete** | #4, #5 |
-| 4 | #7 | PostgreSQL tenant, record, outbox and audit foundation | **Complete** | #6 |
+| 4 | #7 | PostgreSQL tenant, record, file/artifact, outbox and audit foundation | **Complete** | #6 |
 | 5 | #8 | Capability execution gateway | **Complete** | #5, #7 |
 | 6 | #9 | Sales + Activities + link/projection/application vertical proof | **Complete** | #8 |
 | 7 | #10 | Search, generalized projections, Admin Studio, product shell and UI-extension isolation | **Complete** | #9 |
 | 8 | #11 | Expert modules and product-quality CRM experience | **In progress** | #5, #9, #10 |
 | 8A | #28 | Canonical customer master, identity, consent and governed customer-data lifecycle | **In progress** | #9, #10 |
-| 8B | #29 | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | stable 8A customer references |
+| 8B | #29 | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | completed 8A customer-master baseline |
 | 9 | #12 | AI-native governed actor/tool layer | **Planned** | #8, #10 and mature domain capabilities |
 | 10 | #13 | Signed marketplace and sandboxed untrusted extensions | **Planned** | #6, #8, #10 |
 | 11 | #14 | Enterprise security, resilience and production proof | **Planned / continuous hardening** | all critical runtime phases |
@@ -71,39 +71,15 @@ Only merged work may be represented as **Complete** in `main` documentation.
 
 ### Phases 0.1–5 — Complete
 
-Delivered:
-
-- repository governance and executable architecture checks;
-- strict typed Module Manifest IR and deterministic immutable identity;
-- governed Module SDK and test harness;
-- module publication/install/activate/suspend/upgrade/rollback/uninstall lifecycle;
-- PostgreSQL tenant/RLS, record, relationship, idempotency, outbox and append-only audit foundations;
-- authenticated capability execution with exact-version routing, validation, live authorization, transactional execution and typed safe results.
+Delivered repository governance, immutable module identity, governed Module SDK, module lifecycle, PostgreSQL tenant/RLS/record/file/idempotency/outbox/audit foundations and exact-version authenticated capability execution.
 
 ### Phase 6 — Complete
 
-Delivered the first modular production proof:
-
-- independent Sales `Deal` and Activities `Task` owner aggregates;
-- versioned contracts and PostgreSQL-backed mutation/query paths;
-- authenticated HTTP/gRPC ingress;
-- event delivery and the optional Sales–Activities link module;
-- rebuildable projections;
-- real application composition and deployable `crm-api` process acceptance.
+Delivered independent Sales `Deal` and Activities `Task` owner aggregates, versioned contracts, PostgreSQL-backed mutation/query paths, authenticated HTTP/gRPC ingress, governed event delivery, the optional Sales–Activities link module, rebuildable projections and a real deployable `crm-api` process.
 
 ### Phase 7 — Complete
 
-Delivered:
-
-- golden module tooling;
-- generalized projection runtime;
-- permission-aware global search;
-- typed web product shell and governed browser-client boundary;
-- immutable tenant-authorized typed metadata;
-- durable metadata persistence and rollback;
-- governed metadata API and application composition;
-- Admin Studio publish/impact/activate/rollback workflow;
-- typed trusted-code UI-extension runtime with failure isolation.
+Delivered golden module tooling, generalized projection runtime, permission-aware global search, typed web product shell, immutable tenant-authorized metadata, Admin Studio publication/rollback and trusted-code UI-extension failure isolation.
 
 Untrusted third-party execution remains Phase 10.
 
@@ -130,15 +106,15 @@ Completed packets:
 - **8A.3d** — Customer 360 read composition (#110 / PR #111).
 - **8A.4** — Consent and Communication Authorization (#112 / PR #113).
 - **8A.5** — Identity Resolution duplicate-candidate cases and reviewer decisions (#114 / PR #115).
-- **8A.6** — reversible merge/unmerge, immutable lineage, provenance and survivorship (#116 / merged PR #119; merge commit `d5cb4502ad0c49158e0789d8749dc09160da7895`).
+- **8A.6** — reversible merge/unmerge, immutable lineage, provenance and survivorship (#116 / PR #119; merge `d5cb4502ad0c49158e0789d8749dc09160da7895`).
+- **8A.7** — governed immutable import sources, exact server-side parsing/validation, resumable Party import execution, retry recovery and crash/restart process acceptance (#120 / PR #121; merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`).
 
 Active and planned sequence:
 
-1. **8A.7 / #120 — In progress:** Customer Import Jobs, Versioned Mappings and Resumable Execution. Draft PR #121 is the single active customer-master production packet.
-2. **8A.8 / #123 — Planned:** Customer Export Jobs, Artifacts and Reconciliation Evidence.
-3. **8A.9 / #124 — Planned:** Customer Data Quality Rules, Completeness and Stewardship.
-4. **8A.10 / #125 — Planned:** Governed Customer Enrichment and Provenance.
-5. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
+1. **8A.8 / #123 — In progress:** Customer Export Jobs, Artifacts and Reconciliation Evidence. This is the single active customer-master production packet.
+2. **8A.9 / #124 — Planned:** Customer Data Quality Rules, Completeness and Stewardship.
+3. **8A.10 / #125 — Planned:** Governed Customer Enrichment and Provenance.
+4. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
 Phase 8A is complete only when the customer-master acceptance baseline covers:
 
@@ -146,27 +122,36 @@ Phase 8A is complete only when the customer-master acceptance baseline covers:
 - consent-aware live authorization;
 - explainable duplicate candidates;
 - reversible merge/unmerge and immutable provenance;
-- deterministic import and export with resumability/reconciliation;
+- deterministic import and export with resumability and reconciliation;
 - data-quality and stewardship evidence;
 - governed enrichment provenance;
 - privacy access/export/restriction/deletion/legal-hold interaction proof;
 - tenant isolation, migrations, compatibility, process acceptance and performance appropriate to the maturity claim.
+
+#### Active 8A.8 contract boundary
+
+The customer-data-operations module may own export-job lifecycle, immutable export specification/profile identity, selection/snapshot evidence, resumable checkpoints, derived artifact references and reconciliation evidence. It must not own or copy authoritative mutable customer-master records.
+
+The 8A.8 production packet must prove:
+
+- immutable bounded export specifications and resource scope;
+- deterministic snapshot/watermark or equivalent immutable selection evidence;
+- live authorization and field/data-class filtering during execution;
+- governed owner-domain reads rather than direct cross-module table access;
+- staged derived-artifact writing and exactly-once logical finalization;
+- artifact digest, byte-size, retention and expiry metadata;
+- deterministic retry/resume across process interruption;
+- exact selected/emitted/excluded/redacted reconciliation counts;
+- tenant isolation and safe non-disclosure;
+- fresh-PostgreSQL real `crm-api` process acceptance;
+- one unchanged exact final SHA with all applicable gates green.
 
 ### 8B — product catalog, pricing, CPQ and quote-to-revenue
 
 State: **Planned**  
 Issue: #29
 
-Required owner domains include:
-
-- Product Catalog;
-- Price Books and Pricing;
-- CPQ/configuration and pricing explanation;
-- Quotes and immutable revisions;
-- Orders;
-- Contracts and amendments;
-- Subscriptions, entitlements and usage references;
-- governed billing/ERP/payment/tax/fulfillment integration boundaries.
+Required owner domains include Product Catalog, Price Books/Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements and governed billing/ERP/payment/tax/fulfillment integration boundaries.
 
 Catalog, pricing and commercial commitment ownership must not be absorbed into Sales.
 
@@ -191,63 +176,34 @@ Each authoritative domain receives an explicit owner and cannot be hidden inside
 State: **Planned**  
 Issue: #12
 
-AI is an authenticated audited Actor, not an infrastructure shortcut.
+AI is an authenticated audited Actor using permission-scoped governed tools. It has no alternate identity-merge, consent or mutation path.
 
-Required outcomes:
-
-- tenant/data-class/purpose/residency/cost-aware model routing;
-- permission-scoped tools generated from governed capability/query registries;
-- permission-filtered retrieval;
-- live authorization before retrieval and side effects;
-- approval flows and reversible actions where supported;
-- budgets, latency/provider-failure controls and complete audit evidence;
-- prompt-injection, data-leakage, hallucination and tool-correctness evaluations.
-
-AI has no alternate identity-merge, consent or mutation path.
+Required outcomes include tenant/data-class/purpose/residency/cost-aware model routing, permission-filtered retrieval, live authorization, approval flows, budgets/failure controls, complete audit evidence and security/correctness evaluations.
 
 ## 8. Phase 10 — signed marketplace and sandbox
 
 State: **Planned**  
 Issue: #13
 
-Required outcomes:
-
-- signed packages and publisher identity;
-- dependency/compatibility resolution;
-- SBOM/provenance and vulnerability policy;
-- explicit capability/data/network/secret grants;
-- sandboxed untrusted execution, planned as WASM;
-- quotas, timeouts and kill switch;
-- safe install/upgrade/rollback/suspend/uninstall lifecycle.
+Required outcomes include signed packages, publisher identity, dependency/compatibility resolution, SBOM/provenance policy, explicit grants, sandboxed untrusted execution, quotas, timeouts, kill switch and safe lifecycle operations.
 
 ## 9. Phase 11 — enterprise security and production proof
 
 State: **Planned / continuous hardening**  
 Issue: #14
 
-Required outcomes include:
-
-- OIDC/SAML and SCIM;
-- enterprise authorization, delegation and separation of duties;
-- tenant key hierarchy and field/data-class encryption where required;
-- WORM audit export;
-- privacy lifecycle and legal hold;
-- backup/PITR/tenant restore and mobility;
-- data residency;
-- SBOM/dependency/secret scanning;
-- penetration, load and chaos testing;
-- SLOs, alerting, incident response and operational runbooks.
+Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarchy/encryption, WORM audit export, privacy/legal-hold integration, backup/PITR/restore, residency, supply-chain/security testing, load/chaos proof, SLOs, alerting, incident response and runbooks.
 
 Enterprise claims require automated and operational evidence, not configuration placeholders.
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Adopt/merge documentation-governance synchronization issue #122.
-2. Close superseded PR #118 so there is only one historical Phase 8A.6 implementation path.
-3. Keep #120 / PR #121 as the single active customer-master production packet.
-4. Complete 8A.7 contracts, adapters, PostgreSQL/runtime composition, process acceptance and exact-head gate.
-5. Deliver #123, #124, #125 and #126 in dependency order.
-6. Begin Phase 8B / #29 from the stable customer-master baseline.
+1. Keep #123 as the single active Phase 8A customer-master production packet.
+2. Freeze the 8A.8 export ownership, snapshot, artifact and reconciliation contract before broad implementation.
+3. Deliver 8A.8 through contracts, domain, persistence, runtime composition and fresh-process acceptance.
+4. Deliver #124, #125 and #126 in dependency order.
+5. Close Phase 8A only after its full merged acceptance baseline is proven.
+6. Begin Phase 8B / #29 from the completed customer-master baseline.
 7. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
 8. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
 
