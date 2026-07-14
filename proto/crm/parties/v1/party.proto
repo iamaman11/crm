@@ -19,10 +19,9 @@ enum PartySort {
   PARTY_SORT_UPDATED_AT_DESCENDING = 1;
 }
 
-// Public Party state is intentionally minimal in the contract foundation.
-// Structured person/organization profiles, provenance and matching evidence
-// remain additive follow-on contracts rather than leaking private aggregate
-// persistence into the first wire schema.
+// Public Party state is intentionally minimal. Merge redirects remain an
+// authoritative private Party lifecycle concern and are resolved through the
+// governed canonical-resolution query rather than by rewriting Party identity.
 message Party {
   crm.customer.v1.PartyRef party_ref = 1;
   PartyKind kind = 2;
@@ -76,6 +75,32 @@ message PartyCreatedEvent {
 message PartyUpdatedEvent {
   Party party = 1;
   repeated string changed_fields = 2;
+}
+
+// Party-owned evidence that an absorbed Party entered the reversible merged
+// lifecycle. The Party record remains durable and is never hard-deleted.
+message PartyMergeRedirectAppliedEvent {
+  crm.customer.v1.PartyRef absorbed_party_ref = 1;
+  crm.customer.v1.PartyRef survivor_party_ref = 2;
+  string merge_lineage_id = 3;
+  int64 absorbed_party_version = 4;
+}
+
+// Party-owned evidence that a merge redirect was removed by exact governed
+// unmerge. Historical merge lineage remains owned by crm.identity-resolution.
+message PartyMergeRedirectRemovedEvent {
+  crm.customer.v1.PartyRef absorbed_party_ref = 1;
+  crm.customer.v1.PartyRef survivor_party_ref = 2;
+  string merge_lineage_id = 3;
+  int64 absorbed_party_version = 4;
+}
+
+// Party-owned evidence that merge survivorship changed the survivor's mutable
+// Party state. The corresponding provenance decision is retained by the merge lineage.
+message PartyMergeSurvivorshipUpdatedEvent {
+  Party party = 1;
+  string merge_lineage_id = 2;
+  repeated string changed_fields = 3;
 }
 
 service PartyService {
