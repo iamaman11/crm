@@ -4,7 +4,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - "services/**/*.rs"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -25,73 +24,52 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
           show-progress: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Add explicit empty approval to existing gateway mutations
+      - name: Make migration CI consume the complete ordered ledger
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          def blocks(text: str):
-              cursor = 0
-              while True:
-                  start = text.find("GatewayMutateRequest {", cursor)
-                  if start < 0:
-                      return
-                  brace = text.find("{", start)
-                  depth = 0
-                  end = None
-                  for index in range(brace, len(text)):
-                      if text[index] == "{":
-                          depth += 1
-                      elif text[index] == "}":
-                          depth -= 1
-                          if depth == 0:
-                              end = index
-                              break
-                  if end is None:
-                      raise SystemExit("unclosed GatewayMutateRequest initializer")
-                  yield start, end
-                  cursor = end + 1
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement, found {count}")
+              target.write_text(text.replace(old, new, 1))
 
-          changed = 0
-          for path in sorted(Path("services/crm-api/tests").glob("*.rs")):
-              text = path.read_text()
-              spans = list(blocks(text))
-              if not spans:
-                  continue
-              output = []
-              cursor = 0
-              for start, end in spans:
-                  output.append(text[cursor:start])
-                  block = text[start:end + 1]
-                  if "approval:" not in block:
-                      closing_line_start = text.rfind("\n", start, end) + 1
-                      closing_indent = text[closing_line_start:end]
-                      block = block[:-1] + "    approval: None,\n" + closing_indent + "}"
-                      changed += 1
-                  output.append(block)
-                  cursor = end + 1
-              output.append(text[cursor:])
-              updated = "".join(output)
-              for start, end in blocks(updated):
-                  if "approval:" not in updated[start:end + 1]:
-                      raise SystemExit(f"approval field still missing in {path}")
-              path.write_text(updated)
+          database = ".github/workflows/database.yml"
+          replace_once(
+              database,
+              '''      - name: Apply clean migrations\n        run: |\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql\n''',
+              '''      - name: Apply clean migrations\n        shell: bash\n        run: |\n          set -euo pipefail\n          while IFS= read -r migration; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)\n''',
+          )
+          replace_once(
+              database,
+              '''      - name: Roll back migrations\n        run: |\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql\n''',
+              '''      - name: Roll back migrations\n        shell: bash\n        run: |\n          set -euo pipefail\n          while IFS= read -r migration; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)\n''',
+          )
+          replace_once(
+              database,
+              '''      - name: Reapply migrations after rollback\n        run: |\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql\n''',
+              '''      - name: Reapply migrations after rollback\n        shell: bash\n        run: |\n          set -euo pipefail\n          while IFS= read -r migration; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)\n''',
+          )
 
-          if changed == 0:
-              raise SystemExit("no legacy GatewayMutateRequest initializer required migration")
-          print(f"updated {changed} GatewayMutateRequest initializers")
+          application = ".github/workflows/application-runtime.yml"
+          replace_once(
+              application,
+              '''          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/0010_*.up.sql; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done\n''',
+              '''          while IFS= read -r migration; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)\n''',
+          )
+
+          Path(".github/workflows/rust-generated-sync.yml").write_text('''name: Rust Generated Sync\n\non:\n  pull_request:\n    types: [opened, synchronize, reopened]\n    paths:\n      - "Cargo.toml"\n      - "Cargo.lock"\n      - "crates/**/Cargo.toml"\n      - "crates/**/*.rs"\n      - "modules/**/Cargo.toml"\n      - "modules/**/*.rs"\n      - "services/**/Cargo.toml"\n      - "services/**/*.rs"\n      - ".github/workflows/rust-generated-sync.yml"\n\npermissions:\n  contents: write\n\nconcurrency:\n  group: rust-generated-sync-${{ github.event.pull_request.number }}\n  cancel-in-progress: true\n\njobs:\n  sync:\n    if: github.event.pull_request.head.repo.full_name == github.repository\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - uses: actions/checkout@v7\n        with:\n          ref: ${{ github.head_ref }}\n          fetch-depth: 0\n      - uses: dtolnay/rust-toolchain@stable\n        with:\n          components: rustfmt, clippy\n      - name: Apply machine-fixable Rust maintenance\n        run: |\n          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \\\n            -W unused-imports -W dead-code\n          cargo generate-lockfile\n          cargo fmt --all\n      - name: Commit synchronized files when needed\n        env:\n          HEAD_BRANCH: ${{ github.head_ref }}\n        run: |\n          if git diff --quiet -- Cargo.lock crates modules services; then\n            echo "Rust maintenance files are already synchronized."\n            exit 0\n          fi\n          git config user.name "github-actions[bot]"\n          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"\n          git add Cargo.lock crates modules services\n          git commit -m "Synchronize machine-fixable Rust maintenance"\n          git push origin "HEAD:${HEAD_BRANCH}"\n''')
           PY
-          cargo fmt --all
-      - name: Commit compatibility updates
+      - name: Commit complete migration ledger CI
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/crm-api/tests
-          git commit -m "Adapt process tests to optional approval transport"
+          git add .github/workflows/database.yml .github/workflows/application-runtime.yml .github/workflows/rust-generated-sync.yml
+          git commit -m "Verify complete ordered database migration ledger"
           git push origin "HEAD:${HEAD_BRANCH}"
