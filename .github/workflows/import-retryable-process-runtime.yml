@@ -102,7 +102,7 @@ jobs:
           set -o pipefail
           cargo test -p crm-api --test import_process_retryable_e2e \
             crm_api_process_persists_retryable_target_failure_without_advancing_checkpoint_and_recovers \
-            -- --exact --nocapture 2>&1 | tee database/import-retryable-process-runtime.log
+            -- --nocapture 2>&1 | tee database/import-retryable-process-runtime.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
