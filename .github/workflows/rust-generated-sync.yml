@@ -25,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,38 +33,23 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
-      - name: Repair Identity Resolution evidence accounting
+          components: rustfmt, clippy
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("services/crm-api/tests/identity_resolution_process_e2e.rs")
-          text = path.read_text()
-          replacements = {
-              "assert_evidence_delta(after_ab, baseline, 1, 2, 1);": "assert_evidence_delta(after_ab, baseline, 1, 2, 1, 1);",
-              "assert_evidence_delta(after_ac, baseline, 2, 4, 2);": "assert_evidence_delta(after_ac, baseline, 2, 4, 2, 2);",
-              "assert_evidence_delta(final_counts, baseline, 2, 4, 6);": "assert_evidence_delta(final_counts, baseline, 2, 4, 6, 7);",
-              "    successful_mutations: i64,\n) {": "    identity_successful_mutations: i64,\n    tenant_successful_mutations: i64,\n) {",
-              "    assert_eq!(actual.events, baseline.events + successful_mutations);": "    assert_eq!(\n        actual.events,\n        baseline.events + identity_successful_mutations\n    );",
-              "    assert_eq!(actual.audits, baseline.audits + successful_mutations);": "    assert_eq!(actual.audits, baseline.audits + tenant_successful_mutations);",
-              "        baseline.idempotency + successful_mutations": "        baseline.idempotency + tenant_successful_mutations",
-              "        baseline.transactions + successful_mutations": "        baseline.transactions + tenant_successful_mutations",
-          }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f"missing exact evidence-accounting anchor: {old!r}")
-              text = text.replace(old, new, 1)
-          path.write_text(text)
-          PY
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
           cargo fmt --all
-          cargo test -p crm-api --test identity_resolution_process_e2e --no-run
-      - name: Commit repaired acceptance source
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/crm-api/tests/identity_resolution_process_e2e.rs
-          git commit -m "fix(identity-resolution): account for Party mutation evidence"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
