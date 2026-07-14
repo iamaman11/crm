@@ -135,7 +135,12 @@ struct ImportRowStateV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 enum RowIdentitySourceState {
     Position(u32),
     ExternalKeySha256(String),
@@ -198,9 +203,12 @@ impl TryFrom<ImportJobStateV1> for ImportJobSnapshot {
     type Error = SdkError;
 
     fn try_from(value: ImportJobStateV1) -> Result<Self, Self::Error> {
-        let job_id = parse_canonical_record_id(value.job_id, ImportJobId::try_new, |value| {
-            value.as_str()
-        }, "import-job ID")?;
+        let job_id = parse_canonical_record_id(
+            value.job_id,
+            ImportJobId::try_new,
+            |value| value.as_str(),
+            "import-job ID",
+        )?;
         let source = value.source.try_into()?;
         let mapping: PartyImportMapping = value.mapping.try_into()?;
         let mapping_version_id = parse_canonical_record_id(
@@ -252,7 +260,9 @@ impl TryFrom<SourceDescriptorStateV1> for SourceDescriptor {
         if source.source_name() != value.source_name
             || source.content_sha256() != value.content_sha256
         {
-            return Err(persisted_error("persisted source descriptor is not canonical"));
+            return Err(persisted_error(
+                "persisted source descriptor is not canonical",
+            ));
         }
         Ok(source)
     }
@@ -285,7 +295,9 @@ impl TryFrom<PartyImportMappingStateV1> for PartyImportMapping {
             || mapping.display_name_column() != value.display_name_column
             || mapping.external_row_key_column() != value.external_row_key_column.as_deref()
         {
-            return Err(persisted_error("persisted Party import mapping is not canonical"));
+            return Err(persisted_error(
+                "persisted Party import mapping is not canonical",
+            ));
         }
         Ok(mapping)
     }
@@ -319,16 +331,27 @@ impl TryFrom<ImportRowStateV1> for ImportRowSnapshot {
     type Error = SdkError;
 
     fn try_from(value: ImportRowStateV1) -> Result<Self, Self::Error> {
-        let row_id = parse_canonical_record_id(value.row_id, ImportRowId::try_new, |value| {
-            value.as_str()
-        }, "import-row ID")?;
-        let job_id = parse_canonical_record_id(value.job_id, ImportJobId::try_new, |value| {
-            value.as_str()
-        }, "import-job ID")?;
+        let row_id = parse_canonical_record_id(
+            value.row_id,
+            ImportRowId::try_new,
+            |value| value.as_str(),
+            "import-row ID",
+        )?;
+        let job_id = parse_canonical_record_id(
+            value.job_id,
+            ImportJobId::try_new,
+            |value| value.as_str(),
+            "import-job ID",
+        )?;
         let target_party_id = value
             .target_party_id
             .map(|raw| {
-                parse_canonical_record_id(raw, TargetPartyId::try_new, |value| value.as_str(), "target Party ID")
+                parse_canonical_record_id(
+                    raw,
+                    TargetPartyId::try_new,
+                    |value| value.as_str(),
+                    "target Party ID",
+                )
             })
             .transpose()?;
         let prepared_party = value
@@ -405,13 +428,19 @@ impl TryFrom<PreparedPartyStateV1> for PreparedPartyRow {
     type Error = SdkError;
 
     fn try_from(value: PreparedPartyStateV1) -> Result<Self, Self::Error> {
-        let party_id = parse_canonical_record_id(value.party_id, TargetPartyId::try_new, |value| {
-            value.as_str()
-        }, "prepared Party ID")?;
-        let prepared = PreparedPartyRow::try_new(party_id, value.kind.into(), value.display_name.clone())
-            .map_err(|error| persisted_error(error.to_string()))?;
+        let party_id = parse_canonical_record_id(
+            value.party_id,
+            TargetPartyId::try_new,
+            |value| value.as_str(),
+            "prepared Party ID",
+        )?;
+        let prepared =
+            PreparedPartyRow::try_new(party_id, value.kind.into(), value.display_name.clone())
+                .map_err(|error| persisted_error(error.to_string()))?;
         if prepared.display_name() != value.display_name {
-            return Err(persisted_error("persisted prepared Party row is not canonical"));
+            return Err(persisted_error(
+                "persisted prepared Party row is not canonical",
+            ));
         }
         Ok(prepared)
     }
@@ -535,7 +564,9 @@ where
 {
     let parsed = parse(raw.clone()).map_err(|error| persisted_error(error.to_string()))?;
     if view(&parsed) != raw {
-        return Err(persisted_error(format!("persisted {label} is not canonical")));
+        return Err(persisted_error(format!(
+            "persisted {label} is not canonical"
+        )));
     }
     Ok(parsed)
 }
@@ -545,8 +576,9 @@ fn require_canonical_json<T: Serialize>(
     state: &T,
     label: &str,
 ) -> Result<(), SdkError> {
-    let canonical = serde_json::to_vec(state)
-        .map_err(|error| persisted_error(format!("{label} canonical serialization failed: {error}")))?;
+    let canonical = serde_json::to_vec(state).map_err(|error| {
+        persisted_error(format!("{label} canonical serialization failed: {error}"))
+    })?;
     if canonical != original {
         return Err(persisted_error(format!(
             "persisted {label} state is not in canonical JSON representation"
@@ -669,8 +701,10 @@ mod tests {
             "CUSTOMER_DATA_PERSISTED_STATE_INVALID"
         );
 
-        let pretty = serde_json::to_vec_pretty(&serde_json::from_slice::<serde_json::Value>(&bytes).unwrap())
-            .unwrap();
+        let pretty = serde_json::to_vec_pretty(
+            &serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+        )
+        .unwrap();
         assert_eq!(
             decode_import_job_state(&pretty).unwrap_err().code,
             "CUSTOMER_DATA_PERSISTED_STATE_INVALID"
