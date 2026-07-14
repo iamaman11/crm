@@ -164,7 +164,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
     let admin = PgPool::connect(&admin_database_url)
         .await
         .expect("connect file artifact evidence reader");
-    sqlx::query(
+    let actor_bootstrap = sqlx::query(
         "INSERT INTO crm.actors (tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id) \
          VALUES ($1, $2, 'service', 'active', $3, $4) \
          ON CONFLICT (tenant_id, actor_id) DO NOTHING",
@@ -174,8 +174,12 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
     .bind("Tenant B file artifact acceptance actor")
     .bind("tx-file-artifact-actor-bootstrap")
     .execute(&admin)
-    .await
-    .expect("bootstrap isolated file artifact acceptance actor");
+    .await;
+    if let Err(error) = actor_bootstrap {
+        let diagnostic = format!("actor_bootstrap_error={error:?}\n");
+        write_artifact_diagnostic(&diagnostic);
+        panic!("bootstrap isolated file artifact acceptance actor failed: {diagnostic}");
+    }
 
     let suffix = std::process::id();
     let file_id = format!("atomic-file-{suffix}");
@@ -243,62 +247,55 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         Ok(result) => result,
         Err(error) => {
             let diagnostic = format!("execute_error={error:?}\n");
-            let _ = std::fs::write("atomic_file_artifact_failure.txt", &diagnostic);
+            write_artifact_diagnostic(&diagnostic);
             panic!("commit evidenced file artifact capability transaction failed: {diagnostic}");
         }
     };
     assert!(!result.replayed);
 
-    assert_eq!(
-        count(
-            &admin,
-            "SELECT count(*) FROM crm.file_artifacts WHERE tenant_id = $1 AND file_id = $2",
-            "tenant-b",
-            &file_id,
-        )
-        .await,
-        1
-    );
-    assert_eq!(
-        count(
-            &admin,
-            "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND business_transaction_id = $2 AND status = 'completed'",
-            "tenant-b",
-            &transaction_id,
-        )
-        .await,
-        1
-    );
-    assert_eq!(
-        count(
-            &admin,
-            "SELECT count(*) FROM crm.outbox_events WHERE tenant_id = $1 AND business_transaction_id = $2",
-            "tenant-b",
-            &transaction_id,
-        )
-        .await,
-        1
-    );
-    assert_eq!(
-        count(
-            &admin,
-            "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2",
-            "tenant-b",
-            &transaction_id,
-        )
-        .await,
-        1
-    );
-    assert_eq!(
-        count(
-            &admin,
-            "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2 AND expected_outbox_events = 1 AND expected_audit_records = 1 AND expected_idempotency_records = 1",
-            "tenant-b",
-            &transaction_id,
-        )
-        .await,
-        1
-    );
+    let artifact_count = count(
+        &admin,
+        "SELECT count(*) FROM crm.file_artifacts WHERE tenant_id = $1 AND file_id = $2",
+        "tenant-b",
+        &file_id,
+    )
+    .await;
+    let idempotency_count = count(
+        &admin,
+        "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND business_transaction_id = $2 AND status = 'completed'",
+        "tenant-b",
+        &transaction_id,
+    )
+    .await;
+    let outbox_count = count(
+        &admin,
+        "SELECT count(*) FROM crm.outbox_events WHERE tenant_id = $1 AND business_transaction_id = $2",
+        "tenant-b",
+        &transaction_id,
+    )
+    .await;
+    let audit_count = count(
+        &admin,
+        "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2",
+        "tenant-b",
+        &transaction_id,
+    )
+    .await;
+    let transaction_count = count(
+        &admin,
+        "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2 AND expected_outbox_events = 1 AND expected_audit_records = 1 AND expected_idempotency_records = 1",
+        "tenant-b",
+        &transaction_id,
+    )
+    .await;
+    write_artifact_diagnostic(&format!(
+        "stage=committed artifact={artifact_count} idempotency={idempotency_count} outbox={outbox_count} audit={audit_count} transaction={transaction_count}\n"
+    ));
+    assert_eq!(artifact_count, 1);
+    assert_eq!(idempotency_count, 1);
+    assert_eq!(outbox_count, 1);
+    assert_eq!(audit_count, 1);
+    assert_eq!(transaction_count, 1);
 
     let rollback_file_id = format!("atomic-file-rollback-{suffix}");
     let rollback_transaction_id = format!("tx-file-artifact-rollback-{suffix}");
@@ -400,6 +397,11 @@ fn file_capability_request(transaction_id: &str, idempotency_key: &str) -> Capab
         input_hash: [96; 32],
         approval: None,
     }
+}
+
+fn write_artifact_diagnostic(contents: &str) {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/atomic_file_artifact_failure.txt");
+    let _ = std::fs::write(path, contents);
 }
 
 async fn count(pool: &PgPool, sql: &'static str, first: &str, second: &str) -> i64 {
