@@ -2,7 +2,7 @@ schema_version: crm.module/v1
 module_id: crm.customer-data-operations
 version: "0.1.0"
 display_name: CRM Customer Data Operations
-description: Governed customer import job, immutable source artifact binding, parser profile, mapping, row-outcome and resumable execution coordination without owning customer-master records.
+description: Governed customer import source artifacts, jobs, parser profiles, mappings, row outcomes and resumable execution coordination without owning customer-master records.
 
 owner:
   team: customer-platform
@@ -26,6 +26,12 @@ dependencies:
 
 provides:
   capabilities:
+    - id: customer_data.import.party.source.create
+      version: "1.0.0"
+    - id: customer_data.import.party.source.chunk.append
+      version: "1.0.0"
+    - id: customer_data.import.party.source.finalize
+      version: "1.0.0"
     - id: customer_data.import.party.source.job.create
       version: "1.0.0"
     - id: customer_data.import.party.source.rows.validate
@@ -43,6 +49,12 @@ provides:
     - id: customer_data.import.party.rows.list
       version: "1.0.0"
   events:
+    - id: customer_data.import.party.source.created
+      version: "1.0.0"
+    - id: customer_data.import.party.source.chunk_appended
+      version: "1.0.0"
+    - id: customer_data.import.party.source.finalized
+      version: "1.0.0"
     - id: customer_data.import.party.created
       version: "1.0.0"
     - id: customer_data.import.party.row_validated
@@ -81,6 +93,7 @@ storage:
   private_state_namespaces:
     - crm.customer-data-operations.import_job
     - crm.customer-data-operations.import_row
+    - crm.customer-data-operations.import_source_artifact
 
 security:
   data_classes:
