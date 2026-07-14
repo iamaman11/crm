@@ -42,6 +42,12 @@ provides:
       version: "1.0.0"
     - id: identity_resolution.merge.unmerge
       version: "1.0.0"
+    - id: identity_resolution.merge.get
+      version: "1.0.0"
+    - id: identity_resolution.merge.list_by_party
+      version: "1.0.0"
+    - id: identity_resolution.party.resolve_canonical
+      version: "1.0.0"
   events:
     - id: identity_resolution.candidate.registered
       version: "1.0.0"
