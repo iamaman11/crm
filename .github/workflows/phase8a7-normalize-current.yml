@@ -1,0 +1,279 @@
+name: Phase 8A.7 Normalize Current Boundary
+
+on:
+  pull_request:
+    types: [synchronize, reopened]
+    paths:
+      - "crates/**/*.rs"
+      - "modules/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/phase8a7-normalize-current.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase8a7-normalize-current-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  normalize:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'develop/phase8a7-customer-import-jobs'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Normalize exact current Phase 8A.7 boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str) -> str:
+              return text.replace(old, new, 1) if old in text else text
+
+          # Export the execution position index from the pure domain crate.
+          path = Path('modules/crm-customer-data-operations/src/lib.rs')
+          text = path.read_text()
+          if 'pub mod execution;' not in text:
+              text = text.replace('pub mod domain;\n', 'pub mod domain;\npub mod execution;\n')
+          if 'pub use execution::*;' not in text:
+              text = text.replace('pub use domain::*;\n', 'pub use domain::*;\npub use execution::*;\n')
+          path.write_text(text)
+
+          # Forward-compatible Prost enum handling in the mutation adapter.
+          path = Path('crates/crm-customer-data-operations-capability-adapter/src/planner.rs')
+          text = path.read_text()
+          for old in [
+              'Ok(wire::ImportSourceFormat::Unspecified) | Err(_) =>',
+              'Ok(wire::ImportTextEncoding::Unspecified) | Err(_) =>',
+              'Ok(wire::ImportHeaderMode::Unspecified) | Err(_) =>',
+              'Ok(wire::ImportParserVersion::Unspecified) | Err(_) =>',
+              'Ok(wire::ImportCanonicalizationVersion::Unspecified) | Err(_) =>',
+          ]:
+              text = text.replace(old, 'Ok(_) | Err(_) =>')
+          path.write_text(text)
+
+          # Forward-compatible status filtering in the query adapter.
+          path = Path('crates/crm-customer-data-operations-query-adapter/src/lib.rs')
+          text = path.read_text()
+          job_tail = '        Some(wire::ImportJobStatus::Cancelled) => job.status() == ImportJobStatus::Cancelled,\n    }\n}\n'
+          if job_tail in text:
+              text = text.replace(job_tail, '        Some(wire::ImportJobStatus::Cancelled) => job.status() == ImportJobStatus::Cancelled,\n        Some(_) => false,\n    }\n}\n', 1)
+          row_tail = '        Some(wire::ImportRowStatus::Succeeded) => row.status() == ImportRowStatus::Succeeded,\n    }\n}\n'
+          if row_tail in text:
+              text = text.replace(row_tail, '        Some(wire::ImportRowStatus::Succeeded) => row.status() == ImportRowStatus::Succeeded,\n        Some(_) => false,\n    }\n}\n', 1)
+          path.write_text(text)
+
+          # Complete mutation and query routing only when the branches are still absent.
+          path = Path('crates/crm-application-runtime/src/governed_metadata.rs')
+          text = path.read_text()
+          if 'CustomerDataOperationsCapabilityPlanner.target(definition, request)' not in text:
+              old = '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.target(definition, request)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.target(definition, request)
+        }
+'''
+              new = '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.target(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            CustomerDataOperationsCapabilityPlanner.target(definition, request)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.target(definition, request)
+        }
+'''
+              text = replace_once(text, old, new)
+          if 'CustomerDataOperationsCapabilityPlanner.plan(definition, request, current)' not in text:
+              old = '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.plan(definition, request, current)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
+        }
+'''
+              new = '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.plan(definition, request, current)
+        } else if CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            CustomerDataOperationsCapabilityPlanner.plan(definition, request, current)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
+        }
+'''
+              text = replace_once(text, old, new)
+          if 'self.customer_data_operations.validate(definition, request)' not in text:
+              old = '''        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.validate(definition, request)
+        } else {
+            self.production.validate(definition, request)
+        }
+'''
+              new = '''        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.validate(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.customer_data_operations.validate(definition, request)
+        } else {
+            self.production.validate(definition, request)
+        }
+'''
+              text = replace_once(text, old, new)
+          if 'self.customer_data_operations.execute(definition, request)' not in text:
+              old = '''        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.execute(definition, request)
+        } else {
+            self.production.execute(definition, request)
+        }
+'''
+              new = '''        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.execute(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.customer_data_operations.execute(definition, request)
+        } else {
+            self.production.execute(definition, request)
+        }
+'''
+              text = replace_once(text, old, new)
+          path.write_text(text)
+
+          # Construct the query adapter and add visibility bootstrap if still absent.
+          path = Path('crates/crm-application-runtime/src/runtime.rs')
+          text = path.read_text()
+          if 'let customer_data_operations_query_adapter =' not in text:
+              anchor = '''        let identity_resolution_merge_query_adapter = IdentityResolutionMergeQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+'''
+              addition = anchor + '''        let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+'''
+              text = replace_once(text, anchor, addition)
+          if 'CUSTOMER_DATA_OPERATIONS_MODULE_ID =>' not in text:
+              anchor = '''                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
+                        resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
+                    },
+                    party_relationship_fields(),
+                    expires_at,
+                )?,
+'''
+              addition = anchor + '''                CUSTOMER_DATA_OPERATIONS_MODULE_ID => {
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+                            resource_type: CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
+                        },
+                        customer_data_import_job_fields(),
+                        expires_at,
+                    )?;
+                    if definition.capability_id.as_str() == LIST_IMPORT_ROWS_CAPABILITY {
+                        upsert_bootstrap_visibility(
+                            visibility_store,
+                            config,
+                            tenant_id,
+                            definition,
+                            BootstrapVisibilityResource {
+                                owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+                                resource_type: CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
+                            },
+                            customer_data_import_row_fields(),
+                            expires_at,
+                        )?;
+                    }
+                }
+'''
+              text = replace_once(text, anchor, addition)
+          if 'fn customer_data_import_job_fields()' not in text:
+              anchor = 'fn customer_360_party_fields() -> BTreeSet<String> {\n'
+              helpers = '''fn customer_data_import_job_fields() -> BTreeSet<String> {
+    ["source", "mapping", "status", "counters", "checkpoint"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn customer_data_import_row_fields() -> BTreeSet<String> {
+    [
+        "row_position",
+        "source_identity",
+        "status",
+        "prepared_party",
+        "diagnostics",
+        "execution",
+        "target_party_ref",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+'''
+              text = replace_once(text, anchor, helpers + anchor)
+          path.write_text(text)
+          PY
+          cargo generate-lockfile
+          cargo fmt --all
+          rm -f .github/workflows/phase8a7-current-fix.yml
+          rm .github/workflows/phase8a7-normalize-current.yml
+      - name: Commit normalized production boundary
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No normalization changes required."
+            exit 0
+          fi
+          git commit -m "fix(phase8a7): normalize import routing and forward compatibility"
+          git push origin "HEAD:${HEAD_BRANCH}"
