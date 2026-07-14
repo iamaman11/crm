@@ -25,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,23 +33,161 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+          components: rustfmt
+      - uses: bufbuild/buf-action@v1.4.0
+        with:
+          version: 1.50.1
+          setup_only: true
+      - name: Apply confirmed Phase 8A.6 compatibility synchronization
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          planner = Path("crates/crm-parties-capability-adapter/src/planner.rs")
+          text = planner.read_text()
+          old = '''pub fn party_from_snapshot(snapshot: &RecordSnapshot) -> Result<Party, SdkError> {
+    let party = decode_party_state(support::persisted_json_bytes_with_data_class(
+        snapshot,
+        persisted_contract(),
+        DataClass::Personal,
+    )?)?;
+    if party.party_id().as_str() != snapshot.reference.record_id.as_str()
+        || party.version() != snapshot.version
+    {
+        return Err(support::stored_data_error(
+            "PARTIES_PERSISTED_PARTY_IDENTITY_INVALID",
+        ));
+    }
+    Ok(party)
+}
+'''
+          new = '''pub fn party_from_snapshot(snapshot: &RecordSnapshot) -> Result<Party, SdkError> {
+    let v1_contract = persisted_contract();
+    let v2_contract = crate::merge_planner::party_v2_persisted_contract();
+    let contract = if snapshot.payload.schema_version == v1_contract.schema_version
+        && snapshot.payload.descriptor_hash == v1_contract.descriptor_hash
+    {
+        v1_contract
+    } else if snapshot.payload.schema_version == v2_contract.schema_version
+        && snapshot.payload.descriptor_hash == v2_contract.descriptor_hash
+    {
+        v2_contract
+    } else {
+        return Err(support::stored_data_error(
+            "PARTIES_PERSISTED_PARTY_CONTRACT_INVALID",
+        ));
+    };
+    let party = decode_party_state(support::persisted_json_bytes_with_data_class(
+        snapshot,
+        contract,
+        DataClass::Personal,
+    )?)?;
+    if party.party_id().as_str() != snapshot.reference.record_id.as_str()
+        || party.version() != snapshot.version
+    {
+        return Err(support::stored_data_error(
+            "PARTIES_PERSISTED_PARTY_IDENTITY_INVALID",
+        ));
+    }
+    Ok(party)
+}
+'''
+          if old not in text:
+              raise SystemExit("Party dual-read anchor not found")
+          planner.write_text(text.replace(old, new, 1))
+
+          merge = Path("crates/crm-parties-capability-adapter/src/merge_planner.rs")
+          text = merge.read_text()
+          public_call = "    validate_pair(input.survivor, input.absorbed)?;"
+          if text.count(public_call) != 2:
+              raise SystemExit(f"expected two public pair-validation calls, found {text.count(public_call)}")
+          text = text.replace(public_call, "    validate_merge_pair(input.survivor, input.absorbed)?;", 1)
+          text = text.replace(public_call, "    validate_unmerge_pair(input.survivor, input.absorbed)?;", 1)
+          old_fn = "fn validate_pair(survivor: &Party, absorbed: &Party) -> Result<(), SdkError> {"
+          if old_fn not in text:
+              raise SystemExit("merge validator anchor not found")
+          text = text.replace(old_fn, "fn validate_merge_pair(survivor: &Party, absorbed: &Party) -> Result<(), SdkError> {", 1)
+          helper_call = "        validate_pair(survivor, absorbed)?;"
+          if text.count(helper_call) != 2:
+              raise SystemExit(f"expected two test helper pair validators, found {text.count(helper_call)}")
+          text = text.replace(helper_call, "        validate_merge_pair(survivor, absorbed)?;", 1)
+          text = text.replace(helper_call, "        validate_unmerge_pair(survivor, absorbed)?;", 1)
+          anchor = "fn require_expected_version(party: &Party, expected_version: i64) -> Result<(), SdkError> {"
+          insertion = '''fn validate_unmerge_pair(survivor: &Party, absorbed: &Party) -> Result<(), SdkError> {
+    if survivor.party_id() == absorbed.party_id() {
+        return Err(invalid_owner_plan(
+            "PARTIES_MERGE_SELF_INVALID",
+            "a Party cannot be unmerged from itself",
+        ));
+    }
+    if survivor.kind() != absorbed.kind() {
+        return Err(invalid_owner_plan(
+            "PARTIES_MERGE_KIND_MISMATCH",
+            "Party unmerge requires matching Party kinds",
+        ));
+    }
+    require_active(survivor)
+}
+
+fn require_expected_version(party: &Party, expected_version: i64) -> Result<(), SdkError> {'''
+          if anchor not in text:
+              raise SystemExit("unmerge validator insertion anchor not found")
+          merge.write_text(text.replace(anchor, insertion, 1))
+
+          bindings_path = Path("contracts/module-contract-bindings.json")
+          bindings = json.loads(bindings_path.read_text())
+          modules = {module["module_id"]: module for module in bindings["modules"]}
+
+          parties = modules["crm.parties"]
+          existing = {event["id"] for event in parties["events"]}
+          for event_id, message in [
+              ("parties.party.merge_redirect_applied", "crm.parties.v1.PartyMergeRedirectAppliedEvent"),
+              ("parties.party.merge_redirect_removed", "crm.parties.v1.PartyMergeRedirectRemovedEvent"),
+              ("parties.party.merge_survivorship_updated", "crm.parties.v1.PartyMergeSurvivorshipUpdatedEvent"),
+              ("parties.party.merge_survivorship_restored", "crm.parties.v1.PartyMergeSurvivorshipRestoredEvent"),
+          ]:
+              if event_id not in existing:
+                  parties["events"].append({"id": event_id, "version": "1.0.0", "message": message})
+
+          identity = modules["crm.identity-resolution"]
+          existing = {cap["id"] for cap in identity["capabilities"]}
+          for cap_id, method, request, response in [
+              ("identity_resolution.merge.apply", "MergeParties", "MergePartiesRequest", "MergePartiesResponse"),
+              ("identity_resolution.merge.unmerge", "UnmergeParties", "UnmergePartiesRequest", "UnmergePartiesResponse"),
+              ("identity_resolution.merge.get", "GetPartyMergeLineage", "GetPartyMergeLineageRequest", "GetPartyMergeLineageResponse"),
+              ("identity_resolution.merge.list_by_party", "ListPartyMergeLineageByParty", "ListPartyMergeLineageByPartyRequest", "ListPartyMergeLineageByPartyResponse"),
+              ("identity_resolution.party.resolve_canonical", "ResolveCanonicalParty", "ResolveCanonicalPartyRequest", "ResolveCanonicalPartyResponse"),
+          ]:
+              if cap_id not in existing:
+                  identity["capabilities"].append({
+                      "id": cap_id,
+                      "version": "1.0.0",
+                      "rpc": f"crm.identity_resolution.v1.IdentityResolutionService.{method}",
+                      "request": f"crm.identity_resolution.v1.{request}",
+                      "response": f"crm.identity_resolution.v1.{response}",
+                  })
+          existing = {event["id"] for event in identity["events"]}
+          for event_id, message in [
+              ("identity_resolution.merge.applied", "crm.identity_resolution.v1.PartyMergeAppliedEvent"),
+              ("identity_resolution.merge.unmerged", "crm.identity_resolution.v1.PartyMergeUnmergedEvent"),
+          ]:
+              if event_id not in existing:
+                  identity["events"].append({"id": event_id, "version": "1.0.0", "message": message})
+          bindings_path.write_text(json.dumps(bindings, indent=2) + "\n")
+          PY
+          buf format -w proto
           cargo generate-lockfile
           cargo fmt --all
-      - name: Commit synchronized files when needed
+      - name: Commit synchronized files and restore normal sync workflow
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
+          git show origin/main:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
+          rm -f .github/workflows/phase8a6-apply-known-fixes-once.yml
+          rm -f .github/workflows/phase8a6-visible-foundation-gate-once.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock contracts proto crates modules .github/workflows
+          git commit -m "Synchronize Phase 8A.6 compatibility and contracts"
           git push origin "HEAD:${HEAD_BRANCH}"
