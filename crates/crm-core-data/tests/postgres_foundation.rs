@@ -400,7 +400,10 @@ fn file_capability_request(transaction_id: &str, idempotency_key: &str) -> Capab
 }
 
 fn write_artifact_diagnostic(contents: &str) {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/atomic_file_artifact_failure.txt");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/atomic_file_artifact_failure.txt"
+    );
     let _ = std::fs::write(path, contents);
 }
 
