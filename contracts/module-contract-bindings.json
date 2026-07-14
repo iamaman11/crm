@@ -415,6 +415,41 @@
           "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ListDuplicateCandidateCasesByParty",
           "request": "crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyRequest",
           "response": "crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyResponse"
+        },
+        {
+          "id": "identity_resolution.merge.execute",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.MergeParty",
+          "request": "crm.identity_resolution.v1.MergePartyRequest",
+          "response": "crm.identity_resolution.v1.MergePartyResponse"
+        },
+        {
+          "id": "identity_resolution.merge.unmerge",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.UnmergeParty",
+          "request": "crm.identity_resolution.v1.UnmergePartyRequest",
+          "response": "crm.identity_resolution.v1.UnmergePartyResponse"
+        },
+        {
+          "id": "identity_resolution.merge.get",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.GetMergeOperation",
+          "request": "crm.identity_resolution.v1.GetMergeOperationRequest",
+          "response": "crm.identity_resolution.v1.GetMergeOperationResponse"
+        },
+        {
+          "id": "identity_resolution.merge.list_by_party",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ListMergeOperationsByParty",
+          "request": "crm.identity_resolution.v1.ListMergeOperationsByPartyRequest",
+          "response": "crm.identity_resolution.v1.ListMergeOperationsByPartyResponse"
+        },
+        {
+          "id": "identity_resolution.party.resolve_canonical",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ResolveCanonicalParty",
+          "request": "crm.identity_resolution.v1.ResolveCanonicalPartyRequest",
+          "response": "crm.identity_resolution.v1.ResolveCanonicalPartyResponse"
         }
       ],
       "events": [
@@ -437,6 +472,16 @@
           "id": "identity_resolution.candidate.confirmed_duplicate",
           "version": "1.0.0",
           "message": "crm.identity_resolution.v1.DuplicateCandidateConfirmedEvent"
+        },
+        {
+          "id": "identity_resolution.party.merged",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.PartyMergedEvent"
+        },
+        {
+          "id": "identity_resolution.party.unmerged",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.PartyUnmergedEvent"
         }
       ]
     },
