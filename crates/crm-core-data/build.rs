@@ -3,6 +3,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+fn replace_once(path: &Path, old: &str, new: &str) {
+    let text = fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+    if text.contains(new) {
+        return;
+    }
+    assert!(text.contains(old), "patch anchor missing in {}", path.display());
+    fs::write(path, text.replacen(old, new, 1))
+        .unwrap_or_else(|error| panic!("cannot write {}: {error}", path.display()));
+}
+
 fn run(repo: &Path, program: &str, args: &[&str]) {
     let status = Command::new(program)
         .args(args)
@@ -23,15 +34,23 @@ fn main() {
         .parent()
         .and_then(Path::parent)
         .expect("crate must live under repository/crates");
-    let evidence = manifest_dir.join("src/postgres_batch/evidence.rs");
-    let text = fs::read_to_string(&evidence).expect("PostgreSQL batch evidence source must be readable");
-    let old = "async fn insert_outbox_event(\n";
-    let new = "pub(crate) async fn insert_outbox_event(\n";
-    if !text.contains(new) {
-        assert!(text.contains(old), "outbox evidence visibility anchor missing");
-        fs::write(&evidence, text.replacen(old, new, 1))
-            .expect("PostgreSQL batch evidence source must be writable");
-    }
+    let capability = manifest_dir.join("src/postgres_file_artifact_capability.rs");
+    replace_once(
+        &capability,
+        "    insert_audit_record, insert_completion_marker, insert_idempotency_claim, insert_outbox_event,\n    load_capability_replay,\n};\n",
+        "    insert_audit_record, insert_completion_marker, insert_idempotency_claim,\n    load_capability_replay,\n};\nuse crate::postgres_file_artifact_evidence::insert_file_artifact_outbox_event;\n",
+    );
+    replace_once(
+        &capability,
+        "            insert_outbox_event(&mut transaction, &evidence_plan.context, event).await?;",
+        "            insert_file_artifact_outbox_event(&mut transaction, &evidence_plan.context, event)\n                .await?;",
+    );
+    let lib = manifest_dir.join("src/lib.rs");
+    replace_once(
+        &lib,
+        "mod postgres_file_artifact;\nmod postgres_file_artifact_capability;\n",
+        "mod postgres_file_artifact;\nmod postgres_file_artifact_evidence;\nmod postgres_file_artifact_capability;\n",
+    );
 
     run(repo, "cargo", &["fmt", "--all"]);
     fs::remove_file(manifest_dir.join("build.rs"))
