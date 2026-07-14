@@ -11,6 +11,7 @@
 //! deferred to governed application composition rather than exposed from this pure domain crate.
 //! Its private job and row state is encoded through strict versioned deterministic persistence.
 //! Source-system identifiers remain import-owned evidence and never become canonical Party IDs.
+//! Import-row validation evidence is durable before any governed target-owner execution begins.
 
 pub mod domain;
 pub mod persistence;
