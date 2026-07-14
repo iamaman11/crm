@@ -9,21 +9,25 @@
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest, TransactionalCapabilityExecutor,
+    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
+    TransactionalCapabilityExecutor,
 };
 use crm_core_data::{PostgresDataStore, RecordGetQuery, RelatedRecordListQuery};
-use crm_identity_resolution::{MergeOperation, MergeOperationId, MergeOperationStatus, PartyReference};
+use crm_identity_resolution::{
+    MergeOperation, MergeOperationId, MergeOperationStatus, PartyReference,
+};
 use crm_identity_resolution_capability_adapter::{
-    CANONICAL_REDIRECT_PARTY_RECORD_TYPE, CANONICAL_REDIRECT_RELATIONSHIP_TYPE,
-    MERGE_CAPABILITY, MERGE_MUTATION_CAPABILITY_IDS, MERGE_OPERATION_RECORD_TYPE,
-    MERGE_REQUEST_SCHEMA, MODULE_ID, UNMERGE_CAPABILITY, UNMERGE_REQUEST_SCHEMA,
-    merge_operation_from_snapshot, merge_reference_scope_from_request,
+    CANONICAL_REDIRECT_PARTY_RECORD_TYPE, CANONICAL_REDIRECT_RELATIONSHIP_TYPE, MERGE_CAPABILITY,
+    MERGE_MUTATION_CAPABILITY_IDS, MERGE_OPERATION_RECORD_TYPE, MODULE_ID, UNMERGE_CAPABILITY,
+    UNMERGE_REQUEST_SCHEMA, merge_operation_from_snapshot, merge_reference_scope_from_request,
 };
 use crm_module_sdk::{
-    ErrorCategory, ModuleId, PortFuture, RecordId, RecordRef, RecordType, RelationshipType, SdkError,
-    TenantId,
+    ErrorCategory, ModuleId, PortFuture, RecordId, RecordRef, RecordType, RelationshipType,
+    SdkError, TenantId,
 };
-use crm_parties_capability_adapter::{MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE};
+use crm_parties_capability_adapter::{
+    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
+};
 use crm_proto_contracts::crm::identity_resolution::v1 as wire;
 use std::collections::BTreeSet;
 use std::fmt;
@@ -195,12 +199,9 @@ impl MergeLineageCapabilityExecutor {
             }
         }
 
-        let source_root = resolve_canonical_root(
-            self.references.as_ref(),
-            tenant_id,
-            &scope.source.party_ref,
-        )
-        .await?;
+        let source_root =
+            resolve_canonical_root(self.references.as_ref(), tenant_id, &scope.source.party_ref)
+                .await?;
         if source_root != scope.source.party_ref {
             return Err(source_not_canonical());
         }
@@ -257,7 +258,9 @@ impl MergeLineageCapabilityExecutor {
             .references
             .immediate_redirect_target(tenant_id, operation.source_party_ref())
             .await?
-            .ok_or_else(|| canonical_redirect_corrupt("active merge operation has no active redirect"))?;
+            .ok_or_else(|| {
+                canonical_redirect_corrupt("active merge operation has no active redirect")
+            })?;
         if redirect_target != *operation.survivor_party_ref() {
             return Err(canonical_redirect_corrupt(
                 "active merge operation redirect target does not match its survivor Party",
@@ -456,7 +459,13 @@ mod tests {
 
     #[test]
     fn merge_capability_coordinates_are_separate_from_candidate_mutations() {
-        assert_eq!(MERGE_MUTATION_CAPABILITY_IDS, [MERGE_CAPABILITY, UNMERGE_CAPABILITY]);
-        assert_eq!(CANONICAL_REDIRECT_RELATIONSHIP_TYPE, "identity_resolution.canonical_redirect");
+        assert_eq!(
+            MERGE_MUTATION_CAPABILITY_IDS,
+            [MERGE_CAPABILITY, UNMERGE_CAPABILITY]
+        );
+        assert_eq!(
+            CANONICAL_REDIRECT_RELATIONSHIP_TYPE,
+            "identity_resolution.canonical_redirect"
+        );
     }
 }
