@@ -25,6 +25,7 @@ use std::fmt;
 include!("postgres_batch/model.rs");
 include!("postgres_batch/composition.rs");
 include!("postgres_batch/executor.rs");
+include!("postgres_batch/composition_executor.rs");
 include!("postgres_batch/records.rs");
 include!("postgres_batch/evidence.rs");
 include!("postgres_batch/helpers.rs");
