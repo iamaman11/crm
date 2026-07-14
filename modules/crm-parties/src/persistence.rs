@@ -6,36 +6,58 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub const PARTY_STATE_SCHEMA_ID: &str = "crm.parties.party.state";
-pub const PARTY_STATE_SCHEMA_VERSION: &str = "2.0.0";
-pub const PARTY_STATE_V1_SCHEMA_VERSION: &str = "1.0.0";
+/// Existing immutable private-state contract used by ordinary Party create/update.
+pub const PARTY_STATE_SCHEMA_VERSION: &str = "1.0.0";
+pub const PARTY_STATE_V2_SCHEMA_VERSION: &str = "2.0.0";
 pub const PARTY_STATE_MAXIMUM_BYTES: u64 = 64 * 1024;
 pub const PARTY_STATE_RETENTION_POLICY_ID: &str = "crm.parties.business_record";
 const PARTY_STATE_V1_DESCRIPTOR: &[u8] =
     b"crm.parties.party.state/v1:party_id,kind,display_name,created_at_unix_nanos,updated_at_unix_nanos,version";
 const PARTY_STATE_V2_DESCRIPTOR: &[u8] = b"crm.parties.party.state/v2:party_id,kind,display_name,lifecycle[status,survivor_party_id,merge_lineage_id],created_at_unix_nanos,updated_at_unix_nanos,version";
 
+/// Backward-compatible descriptor hash for the published v1 Party state contract.
 pub fn party_state_descriptor_hash() -> [u8; 32] {
-    Sha256::digest(PARTY_STATE_V2_DESCRIPTOR).into()
-}
-
-pub fn party_state_v1_descriptor_hash() -> [u8; 32] {
     Sha256::digest(PARTY_STATE_V1_DESCRIPTOR).into()
 }
 
+pub fn party_state_v2_descriptor_hash() -> [u8; 32] {
+    Sha256::digest(PARTY_STATE_V2_DESCRIPTOR).into()
+}
+
+/// Encode the existing immutable v1 Party state contract.
+///
+/// Merge lifecycle state must use [`encode_party_state_v2`] explicitly so the
+/// published v1 descriptor is never reused for a different shape.
 pub fn encode_party_state(party: &Party) -> Result<Vec<u8>, SdkError> {
-    let bytes = serde_json::to_vec(&PartyStateV2::from(party.snapshot()))
+    if !party.is_active() {
+        return Err(SdkError::new(
+            "PARTIES_PARTY_V1_MERGED_STATE_UNSUPPORTED",
+            ErrorCategory::Internal,
+            false,
+            "Merged Party state requires the version 2 persistence contract.",
+        ));
+    }
+    let bytes = serde_json::to_vec(&PartyStateV1::from(party.snapshot()))
         .map_err(|error| persisted_error(format!("Party state serialization failed: {error}")))?;
     validate_size(&bytes)?;
     Ok(bytes)
 }
 
+pub fn encode_party_state_v2(party: &Party) -> Result<Vec<u8>, SdkError> {
+    let bytes = serde_json::to_vec(&PartyStateV2::from(party.snapshot()))
+        .map_err(|error| persisted_error(format!("Party v2 state serialization failed: {error}")))?;
+    validate_size(&bytes)?;
+    Ok(bytes)
+}
+
+/// Decode either the immutable legacy v1 shape or the additive v2 lifecycle shape.
 pub fn decode_party_state(bytes: &[u8]) -> Result<Party, SdkError> {
     validate_size(bytes)?;
 
     if let Ok(state) = serde_json::from_slice::<PartyStateV2>(bytes) {
         let party = Party::rehydrate(state.try_into()?)
             .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))?;
-        let canonical = encode_party_state(&party)?;
+        let canonical = encode_party_state_v2(&party)?;
         if canonical != bytes {
             return Err(persisted_error(
                 "persisted Party v2 representation is not canonical",
@@ -48,11 +70,7 @@ pub fn decode_party_state(bytes: &[u8]) -> Result<Party, SdkError> {
         .map_err(|error| persisted_error(format!("Party state JSON is invalid: {error}")))?;
     let party = Party::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))?;
-    let canonical = serde_json::to_vec(&PartyStateV1::from(party.snapshot())).map_err(|error| {
-        persisted_error(format!(
-            "legacy Party state canonical serialization failed: {error}"
-        ))
-    })?;
+    let canonical = encode_party_state(&party)?;
     if canonical != bytes {
         return Err(persisted_error(
             "persisted Party v1 representation is not canonical",
@@ -265,18 +283,15 @@ mod tests {
     }
 
     #[test]
-    fn v2_round_trip_preserves_exact_active_state_and_schema_hash() {
+    fn v1_round_trip_remains_exact_for_active_party_state() {
         let value = party();
         let encoded = encode_party_state(&value).unwrap();
         let decoded = decode_party_state(&encoded).unwrap();
 
         assert_eq!(decoded, value);
         assert_eq!(decoded.lifecycle(), &PartyLifecycle::Active);
+        assert_eq!(PARTY_STATE_SCHEMA_VERSION, "1.0.0");
         assert_ne!(party_state_descriptor_hash(), [0; 32]);
-        assert_ne!(
-            party_state_descriptor_hash(),
-            party_state_v1_descriptor_hash()
-        );
     }
 
     #[test]
@@ -293,17 +308,34 @@ mod tests {
                 occurred_at_unix_nanos: 20,
             })
             .unwrap();
-        let encoded = encode_party_state(&value).unwrap();
+        let encoded = encode_party_state_v2(&value).unwrap();
         assert_eq!(decode_party_state(&encoded).unwrap(), value);
+        assert_ne!(party_state_descriptor_hash(), party_state_v2_descriptor_hash());
     }
 
     #[test]
-    fn legacy_v1_state_decodes_as_active_without_mutating_the_published_contract() {
+    fn immutable_v1_writer_rejects_merged_state() {
+        let mut value = party();
+        value
+            .mark_merged(MarkPartyMerged {
+                expected_version: 1,
+                survivor_party_id: PartyId::try_new("party-survivor").unwrap(),
+                merge_lineage_ref: MergeLineageReference::try_new("merge-lineage-1").unwrap(),
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap();
+        assert_eq!(
+            encode_party_state(&value).unwrap_err().code,
+            "PARTIES_PARTY_V1_MERGED_STATE_UNSUPPORTED"
+        );
+    }
+
+    #[test]
+    fn existing_legacy_v1_bytes_decode_as_active() {
         let legacy = br#"{"party_id":"party-legacy-1","kind":"person","display_name":"Ada Lovelace","created_at_unix_nanos":1,"updated_at_unix_nanos":1,"version":1}"#;
         let decoded = decode_party_state(legacy).unwrap();
         assert_eq!(decoded.party_id().as_str(), "party-legacy-1");
         assert_eq!(decoded.lifecycle(), &PartyLifecycle::Active);
-        assert_eq!(PARTY_STATE_V1_SCHEMA_VERSION, "1.0.0");
     }
 
     #[test]
