@@ -1,0 +1,69 @@
+name: Phase 8A.7 Job Row Link Once
+
+on:
+  push:
+    branches:
+      - develop/phase8a7-customer-import-jobs
+    paths:
+      - .github/workflows/phase8a7-job-row-link-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a7-customer-import-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Add authoritative import-job row relationship
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-customer-data-operations-capability-adapter/src/planner.rs')
+          text = path.read_text()
+          text = text.replace(
+              'FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY, IMPORT_JOB_RECORD_TYPE, IMPORT_ROW_RECORD_TYPE,',
+              'FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY, IMPORT_JOB_RECORD_TYPE, IMPORT_JOB_ROW_RELATIONSHIP_TYPE, IMPORT_ROW_RECORD_TYPE,'
+          )
+          text = text.replace(
+              'RecordMutation, TransactionalAggregatePlanner,',
+              'RecordMutation, RelationshipMutation, TransactionalAggregatePlanner,'
+          )
+          text = text.replace(
+              'use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, SdkError};',
+              'use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, RelationshipRef, RelationshipType, SdkError};'
+          )
+          text = text.replace(
+              '    let mut records = Vec::with_capacity(command.rows.len());\n    let mut events = Vec::with_capacity(command.rows.len());',
+              '    let mut records = Vec::with_capacity(command.rows.len());\n    let mut relationships = Vec::with_capacity(command.rows.len());\n    let mut events = Vec::with_capacity(command.rows.len());'
+          )
+          anchor = '''        records.push(RecordMutation::Create {\n            reference: aggregate.clone(),\n            payload: import_row_persisted_payload(&row)?,\n        });\n        events.push(support::event_evidence_with_data_class('''
+          replacement = '''        records.push(RecordMutation::Create {\n            reference: aggregate.clone(),\n            payload: import_row_persisted_payload(&row)?,\n        });\n        let import_row_ref = public_row.import_row_ref.clone().ok_or_else(invalid_plan)?;\n        relationships.push(RelationshipMutation::Link {\n            relationship: RelationshipRef {\n                relationship_type: RelationshipType::try_new(IMPORT_JOB_ROW_RELATIONSHIP_TYPE)\n                    .map_err(|_| invalid_plan())?,\n                source: current.reference.clone(),\n                target: aggregate.clone(),\n            },\n            payload: support::protobuf_payload(\n                MODULE_ID,\n                "crm.customer_data_operations.v1.ImportRowRef",\n                DataClass::Personal,\n                &import_row_ref,\n            )?,\n        });\n        events.push(support::event_evidence_with_data_class('''
+          if anchor not in text:
+              raise SystemExit('record/event anchor not found')
+          text = text.replace(anchor, replacement, 1)
+          text = text.replace(
+              '            relationships: Vec::new(),\n            events,',
+              '            relationships,\n            events,',
+              1,
+          )
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          rm .github/workflows/phase8a7-job-row-link-once.yml
+      - name: Commit relationship boundary and self-remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(phase8a7): link import jobs to authoritative row records"
+          git push origin HEAD:develop/phase8a7-customer-import-jobs
