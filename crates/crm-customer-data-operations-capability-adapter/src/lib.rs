@@ -2,9 +2,12 @@
 
 //! Governed mutation adapter boundary for customer import jobs.
 //!
-//! This crate publishes import-owned capability coordinates only. Party remains the
-//! authoritative target owner; later execution composition must invoke the existing
-//! Party capability rather than reading or writing Party storage directly.
+//! Party remains the authoritative target owner. Import execution composition must invoke the
+//! existing Party capability rather than reading or writing Party storage directly.
+
+mod planner;
+
+pub use planner::*;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
@@ -48,6 +51,10 @@ pub const CANCEL_PARTY_IMPORT_JOB_RESPONSE_SCHEMA: &str =
 pub const PARTY_IMPORT_JOB_CREATED_EVENT_TYPE: &str = "customer_data.import.party.created";
 pub const PARTY_IMPORT_JOB_CREATED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportJobCreatedEvent";
+pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE: &str =
+    "customer_data.import.party.row.validated";
+pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportRowValidatedEvent";
 pub const PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_TYPE: &str =
     "customer_data.import.party.validation_completed";
 pub const PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_SCHEMA: &str =
@@ -56,6 +63,14 @@ pub const PARTY_IMPORT_EXECUTION_STARTED_EVENT_TYPE: &str =
     "customer_data.import.party.execution_started";
 pub const PARTY_IMPORT_EXECUTION_STARTED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportExecutionStartedEvent";
+pub const PARTY_IMPORT_ROW_EXECUTION_UPDATED_EVENT_TYPE: &str =
+    "customer_data.import.party.row.execution_updated";
+pub const PARTY_IMPORT_ROW_EXECUTION_UPDATED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportRowExecutionUpdatedEvent";
+pub const PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_TYPE: &str =
+    "customer_data.import.party.checkpoint_advanced";
+pub const PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportCheckpointAdvancedEvent";
 pub const PARTY_IMPORT_COMPLETED_EVENT_TYPE: &str = "customer_data.import.party.completed";
 pub const PARTY_IMPORT_COMPLETED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportCompletedEvent";
