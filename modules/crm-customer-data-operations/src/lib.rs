@@ -11,7 +11,10 @@
 //! deferred to governed application composition rather than exposed from this pure domain crate.
 //! Its private job and row state is encoded through strict versioned deterministic persistence.
 //! Source-system identifiers remain import-owned evidence and never become canonical Party IDs.
-//! Import-row validation evidence is durable before any governed target-owner execution begins.
+//! Validation progress and finalization are server-derived, version-checked and durably routed
+//! through the production application capability boundary before target-owner execution begins.
+//! Execution ordering is derived from a complete authoritative source-position index rather than
+//! relationship pagination order; target Party writes still require governed application composition.
 
 pub mod domain;
 pub mod execution;
