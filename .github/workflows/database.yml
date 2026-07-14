@@ -15,6 +15,11 @@ on:
       - "crates/crm-activities-capability-adapter/**"
       - "crates/crm-parties-capability-adapter/**"
       - "crates/crm-parties-query-adapter/**"
+      - "crates/crm-identity-resolution-capability-adapter/**"
+      - "crates/crm-identity-resolution-capability-composition/**"
+      - "crates/crm-identity-resolution-merge-composition/**"
+      - "crates/crm-identity-resolution-query-adapter/**"
+      - "crates/crm-identity-resolution-merge-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
       - "crates/crm-search-runtime/**"
@@ -23,6 +28,7 @@ on:
       - "services/crm-api/**"
       - "modules/crm-sales/**"
       - "modules/crm-parties/**"
+      - "modules/crm-identity-resolution/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - "docs/adr/ADR-030-public-gateway-acceptance.md"
@@ -41,6 +47,11 @@ on:
       - "crates/crm-activities-capability-adapter/**"
       - "crates/crm-parties-capability-adapter/**"
       - "crates/crm-parties-query-adapter/**"
+      - "crates/crm-identity-resolution-capability-adapter/**"
+      - "crates/crm-identity-resolution-capability-composition/**"
+      - "crates/crm-identity-resolution-merge-composition/**"
+      - "crates/crm-identity-resolution-query-adapter/**"
+      - "crates/crm-identity-resolution-merge-query-adapter/**"
       - "crates/crm-sales-activities-capability-composition/**"
       - "crates/crm-sales-activities-query-adapter/**"
       - "crates/crm-search-runtime/**"
@@ -49,6 +60,7 @@ on:
       - "services/crm-api/**"
       - "modules/crm-sales/**"
       - "modules/crm-parties/**"
+      - "modules/crm-identity-resolution/**"
       - "database/**"
       - "docs/adr/ADR-025-postgresql-tenant-transaction-foundation.md"
       - "docs/adr/ADR-030-public-gateway-acceptance.md"
@@ -60,7 +72,7 @@ permissions:
 jobs:
   postgres-foundation:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:17-alpine
@@ -89,16 +101,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
       - name: Apply clean migrations
+        shell: bash
         run: |
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
       - name: Verify SQL platform invariants
         run: psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
       - name: Apply search runtime grants
@@ -140,31 +148,23 @@ jobs:
           set -o pipefail
           cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e -- --nocapture 2>&1 | tee database/postgres-gateway-e2e.log
       - name: Roll back migrations
+        shell: bash
         run: |
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
       - name: Verify rollback removed authoritative schema
         run: |
           count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
           test "${count}" = "0"
       - name: Reapply migrations after rollback
+        shell: bash
         run: |
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
       - name: Rebuild runtime fixtures after rollback
         run: |
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
@@ -233,6 +233,11 @@ jobs:
             crates/crm-capability-ingress/
             crates/crm-parties-capability-adapter/
             crates/crm-parties-query-adapter/
+            crates/crm-identity-resolution-capability-adapter/
+            crates/crm-identity-resolution-capability-composition/
+            crates/crm-identity-resolution-merge-composition/
+            crates/crm-identity-resolution-query-adapter/
+            crates/crm-identity-resolution-merge-query-adapter/
             crates/crm-sales-activities-capability-composition/
             crates/crm-sales-activities-query-adapter/
             crates/crm-search-runtime/
@@ -270,12 +275,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
       - name: Verify legacy snapshot upgrade through current migrations
+        shell: bash
         run: |
+          set -euo pipefail
           psql --set ON_ERROR_STOP=1 --file database/tests/0002_legacy_upgrade.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql
-          psql --set ON_ERROR_STOP=1 --file database/migrations/0010_metadata_publication_runtime.up.sql
+          while IFS= read -r migration; do
+            case "$(basename "${migration}")" in
+              0001_*|0002_*|0003_*) continue ;;
+            esac
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
