@@ -390,7 +390,7 @@ fn file_capability_request(transaction_id: &str, idempotency_key: &str) -> Capab
     }
 }
 
-async fn count(pool: &PgPool, sql: &str, first: &str, second: &str) -> i64 {
+async fn count(pool: &PgPool, sql: &'static str, first: &str, second: &str) -> i64 {
     sqlx::query_scalar::<_, i64>(sql)
         .bind(first)
         .bind(second)
