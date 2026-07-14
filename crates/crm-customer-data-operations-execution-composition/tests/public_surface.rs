@@ -90,7 +90,11 @@ fn executing_job(job_id: ImportJobId, total_rows: u32) -> ImportJob {
     job
 }
 
-fn valid_row(job_id: ImportJobId, row_position: u32, party_id: &str) -> crm_customer_data_operations::ImportRow {
+fn valid_row(
+    job_id: ImportJobId,
+    row_position: u32,
+    party_id: &str,
+) -> crm_customer_data_operations::ImportRow {
     create_validated_import_row(CreateValidatedImportRow {
         job_id,
         row_position,
