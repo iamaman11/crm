@@ -212,7 +212,7 @@ mod tests {
     fn rejects_oversized_artifacts_and_chunks() {
         let artifact_error =
             validate_expected_size_and_hash(MAXIMUM_FILE_ARTIFACT_BYTES + 1, &[1; 32]).unwrap_err();
-        assert_eq!(artifact_error.code, "INVALID_ARGUMENT");
+        assert_eq!(artifact_error.code, "SDK_INVALID_ARGUMENT");
 
         let chunk = AppendImmutableFileChunk {
             file_id: FileId::try_new("file-1").unwrap(),
