@@ -104,13 +104,18 @@ pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkEr
 
 pub fn query_capability_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkError> {
     let (input_schema, output_schema) = match capability_id {
-        GET_IMPORT_JOB_CAPABILITY => (GET_IMPORT_JOB_REQUEST_SCHEMA, GET_IMPORT_JOB_RESPONSE_SCHEMA),
-        LIST_IMPORT_JOBS_CAPABILITY => {
-            (LIST_IMPORT_JOBS_REQUEST_SCHEMA, LIST_IMPORT_JOBS_RESPONSE_SCHEMA)
-        }
-        LIST_IMPORT_ROWS_CAPABILITY => {
-            (LIST_IMPORT_ROWS_REQUEST_SCHEMA, LIST_IMPORT_ROWS_RESPONSE_SCHEMA)
-        }
+        GET_IMPORT_JOB_CAPABILITY => (
+            GET_IMPORT_JOB_REQUEST_SCHEMA,
+            GET_IMPORT_JOB_RESPONSE_SCHEMA,
+        ),
+        LIST_IMPORT_JOBS_CAPABILITY => (
+            LIST_IMPORT_JOBS_REQUEST_SCHEMA,
+            LIST_IMPORT_JOBS_RESPONSE_SCHEMA,
+        ),
+        LIST_IMPORT_ROWS_CAPABILITY => (
+            LIST_IMPORT_ROWS_REQUEST_SCHEMA,
+            LIST_IMPORT_ROWS_RESPONSE_SCHEMA,
+        ),
         _ => return Err(unsupported_query()),
     };
 
@@ -156,8 +161,12 @@ impl QuerySemanticValidator for CustomerDataOperationsQueryAdapter {
                     let command: wire::ListPartyImportJobsRequest =
                         decode_input(request, LIST_IMPORT_JOBS_REQUEST_SCHEMA)?;
                     validate_job_status_filter(command.status)?;
-                    let page_size = self.page_policy.resolve(command.page_size).map_err(cursor_error)?;
-                    let binding = jobs_cursor_binding(request, job_filter_hash(command.status), page_size)?;
+                    let page_size = self
+                        .page_policy
+                        .resolve(command.page_size)
+                        .map_err(cursor_error)?;
+                    let binding =
+                        jobs_cursor_binding(request, job_filter_hash(command.status), page_size)?;
                     let _ = decode_job_after(self, &command.cursor, &binding)?;
                 }
                 LIST_IMPORT_ROWS_CAPABILITY => {
@@ -165,7 +174,10 @@ impl QuerySemanticValidator for CustomerDataOperationsQueryAdapter {
                         decode_input(request, LIST_IMPORT_ROWS_REQUEST_SCHEMA)?;
                     let job_id = import_job_record_id(command.import_job_ref)?;
                     validate_row_status_filter(command.status)?;
-                    let page_size = self.page_policy.resolve(command.page_size).map_err(cursor_error)?;
+                    let page_size = self
+                        .page_policy
+                        .resolve(command.page_size)
+                        .map_err(cursor_error)?;
                     let binding = rows_cursor_binding(
                         request,
                         row_filter_hash(job_id.as_str(), command.status),
@@ -224,7 +236,10 @@ impl CustomerDataOperationsQueryAdapter {
         let command: wire::ListPartyImportJobsRequest =
             decode_input(request, LIST_IMPORT_JOBS_REQUEST_SCHEMA)?;
         validate_job_status_filter(command.status)?;
-        let page_size = self.page_policy.resolve(command.page_size).map_err(cursor_error)?;
+        let page_size = self
+            .page_policy
+            .resolve(command.page_size)
+            .map_err(cursor_error)?;
         let binding = jobs_cursor_binding(request, job_filter_hash(command.status), page_size)?;
         let after = decode_job_after(self, &command.cursor, &binding)?;
         let (jobs, next) = self
@@ -248,8 +263,13 @@ impl CustomerDataOperationsQueryAdapter {
             decode_input(request, LIST_IMPORT_ROWS_REQUEST_SCHEMA)?;
         let job_id = import_job_record_id(command.import_job_ref)?;
         validate_row_status_filter(command.status)?;
-        let job_snapshot = self.get_visible_job_snapshot(request, job_id.clone()).await?;
-        let page_size = self.page_policy.resolve(command.page_size).map_err(cursor_error)?;
+        let job_snapshot = self
+            .get_visible_job_snapshot(request, job_id.clone())
+            .await?;
+        let page_size = self
+            .page_policy
+            .resolve(command.page_size)
+            .map_err(cursor_error)?;
         let binding = rows_cursor_binding(
             request,
             row_filter_hash(job_id.as_str(), command.status),
@@ -490,7 +510,9 @@ impl CustomerDataOperationsQueryAdapter {
     }
 }
 
-fn import_row_from_snapshot(snapshot: &crm_module_sdk::RecordSnapshot) -> Result<ImportRow, SdkError> {
+fn import_row_from_snapshot(
+    snapshot: &crm_module_sdk::RecordSnapshot,
+) -> Result<ImportRow, SdkError> {
     let row = decode_import_row_state(support::persisted_json_bytes_with_data_class(
         snapshot,
         import_row_persisted_contract(),
