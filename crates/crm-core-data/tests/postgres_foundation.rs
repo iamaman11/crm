@@ -243,7 +243,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         Ok(result) => result,
         Err(error) => {
             let diagnostic = format!("execute_error={error:?}\n");
-            let _ = std::fs::write("database/atomic_file_artifact_failure.txt", &diagnostic);
+            let _ = std::fs::write("atomic_file_artifact_failure.txt", &diagnostic);
             panic!("commit evidenced file artifact capability transaction failed: {diagnostic}");
         }
     };
