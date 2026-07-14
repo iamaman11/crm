@@ -25,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,22 +34,124 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.18.0"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
       - name: Apply machine-fixable Rust maintenance
         run: |
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
+      - name: Publish Phase 8A.5 canonical contract binding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          path = Path("contracts/module-contract-bindings.json")
+          text = path.read_text()
+          if '"module_id": "crm.identity-resolution"' not in text:
+              anchor = '''    {
+      "module_id": "crm.customer360",'''
+              if text.count(anchor) != 1:
+                  raise SystemExit(f"expected one customer360 anchor, found {text.count(anchor)}")
+              block = '''    {
+      "module_id": "crm.identity-resolution",
+      "capabilities": [
+        {
+          "id": "identity_resolution.candidate.register",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.RegisterDuplicateCandidate",
+          "request": "crm.identity_resolution.v1.RegisterDuplicateCandidateRequest",
+          "response": "crm.identity_resolution.v1.RegisterDuplicateCandidateResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.evidence.refresh",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.RefreshDuplicateCandidateEvidence",
+          "request": "crm.identity_resolution.v1.RefreshDuplicateCandidateEvidenceRequest",
+          "response": "crm.identity_resolution.v1.RefreshDuplicateCandidateEvidenceResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.dismiss",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.DismissDuplicateCandidate",
+          "request": "crm.identity_resolution.v1.DismissDuplicateCandidateRequest",
+          "response": "crm.identity_resolution.v1.DismissDuplicateCandidateResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.confirm_duplicate",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ConfirmDuplicateCandidate",
+          "request": "crm.identity_resolution.v1.ConfirmDuplicateCandidateRequest",
+          "response": "crm.identity_resolution.v1.ConfirmDuplicateCandidateResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.get",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.GetDuplicateCandidateCase",
+          "request": "crm.identity_resolution.v1.GetDuplicateCandidateCaseRequest",
+          "response": "crm.identity_resolution.v1.GetDuplicateCandidateCaseResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.list_by_party",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ListDuplicateCandidateCasesByParty",
+          "request": "crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyRequest",
+          "response": "crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "identity_resolution.candidate.registered",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.DuplicateCandidateRegisteredEvent"
+        },
+        {
+          "id": "identity_resolution.candidate.evidence_refreshed",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.DuplicateCandidateEvidenceRefreshedEvent"
+        },
+        {
+          "id": "identity_resolution.candidate.dismissed",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.DuplicateCandidateDismissedEvent"
+        },
+        {
+          "id": "identity_resolution.candidate.confirmed_duplicate",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.DuplicateCandidateConfirmedEvent"
+        }
+      ]
+    },
+'''
+              path.write_text(text.replace(anchor, block + anchor, 1))
+          json.loads(path.read_text())
+          PY
+      - name: Generate canonical browser contract hashes
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm web:generate
+      - name: Restore standard workflow and remove temporary publication workflow
+        run: |
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
+          rm -f .github/workflows/phase8a5-contract-publish-once.yml
+          git diff --check
       - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates modules services contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts .github/workflows/rust-generated-sync.yml .github/workflows/phase8a5-contract-publish-once.yml
+          if git diff --cached --quiet; then
+            echo "Phase 8A.5 generated publication artifacts are already synchronized."
+            exit 0
+          fi
+          git commit -m "Synchronize Phase 8A.5 generated publication artifacts"
           git push origin "HEAD:${HEAD_BRANCH}"
