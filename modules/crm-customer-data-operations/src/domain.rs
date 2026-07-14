@@ -10,7 +10,8 @@ const MAX_DIAGNOSTICS_PER_ROW: usize = 16;
 const MAX_IMPORT_ROWS: u32 = 100_000;
 const MAPPING_ID_DOMAIN: &[u8] = b"crm.customer-data-operations.party-import-mapping/v1";
 const ROW_ID_DOMAIN: &[u8] = b"crm.customer-data-operations.import-row/v1";
-const TARGET_IDEMPOTENCY_DOMAIN: &[u8] = b"crm.customer-data-operations.party-create-idempotency/v1";
+const TARGET_IDEMPOTENCY_DOMAIN: &[u8] =
+    b"crm.customer-data-operations.party-create-idempotency/v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ImportJobId(RecordId);
@@ -569,10 +570,7 @@ impl ImportJob {
         self.advance(command.occurred_at_unix_nanos)
     }
 
-    pub fn advance_checkpoint(
-        &mut self,
-        command: AdvanceImportCheckpoint,
-    ) -> Result<(), SdkError> {
+    pub fn advance_checkpoint(&mut self, command: AdvanceImportCheckpoint) -> Result<(), SdkError> {
         self.require_version(command.expected_version)?;
         self.require_monotonic_time(command.occurred_at_unix_nanos)?;
         if self.status != ImportJobStatus::Executing {
@@ -581,10 +579,12 @@ impl ImportJob {
                 "only an executing import job can advance its checkpoint",
             ));
         }
-        let expected_position = self
-            .checkpoint_row_position
-            .checked_add(1)
-            .ok_or_else(|| conflict("CUSTOMER_DATA_IMPORT_CHECKPOINT_EXHAUSTED", "checkpoint cannot advance further"))?;
+        let expected_position = self.checkpoint_row_position.checked_add(1).ok_or_else(|| {
+            conflict(
+                "CUSTOMER_DATA_IMPORT_CHECKPOINT_EXHAUSTED",
+                "checkpoint cannot advance further",
+            )
+        })?;
         if command.row_position != expected_position || command.row_position > self.total_rows {
             return Err(conflict(
                 "CUSTOMER_DATA_IMPORT_CHECKPOINT_SEQUENCE_CONFLICT",
@@ -634,7 +634,8 @@ impl ImportJob {
                 "only an executing import job can complete",
             ));
         }
-        if self.checkpoint_row_position != self.total_rows || self.succeeded_rows != self.valid_rows {
+        if self.checkpoint_row_position != self.total_rows || self.succeeded_rows != self.valid_rows
+        {
             return Err(conflict(
                 "CUSTOMER_DATA_IMPORT_JOB_INCOMPLETE",
                 "all source rows must be checkpointed and all valid rows must succeed before completion",
@@ -715,7 +716,10 @@ impl ImportJob {
         if expected_version != self.version {
             return Err(conflict(
                 "CUSTOMER_DATA_IMPORT_JOB_VERSION_CONFLICT",
-                format!("expected version {expected_version}, current version {}", self.version),
+                format!(
+                    "expected version {expected_version}, current version {}",
+                    self.version
+                ),
             ));
         }
         Ok(())
@@ -832,10 +836,8 @@ impl ImportRow {
             "customer_data.import_row.occurred_at_unix_nanos",
             command.occurred_at_unix_nanos,
         )?;
-        let identity_source = RowIdentitySource::for_row(
-            command.row_position,
-            command.external_row_key.as_deref(),
-        )?;
+        let identity_source =
+            RowIdentitySource::for_row(command.row_position, command.external_row_key.as_deref())?;
         let row_id = ImportRowId::for_identity(&command.job_id, &identity_source)?;
         Ok(Self {
             row_id,
@@ -894,7 +896,8 @@ impl ImportRow {
                 "customer_data.import_row.identity_source",
             )?;
         }
-        let expected_row_id = ImportRowId::for_identity(&snapshot.job_id, &snapshot.identity_source)?;
+        let expected_row_id =
+            ImportRowId::for_identity(&snapshot.job_id, &snapshot.identity_source)?;
         if expected_row_id != snapshot.row_id {
             return Err(invalid(
                 "CUSTOMER_DATA_IMPORT_ROW_PERSISTED_ID_INVALID",
@@ -1012,7 +1015,10 @@ impl ImportRow {
         hash_part(&mut hasher, self.job_id.as_str().as_bytes());
         hash_part(&mut hasher, self.row_id.as_str().as_bytes());
         hash_part(&mut hasher, b"parties.party.create@1.0.0");
-        Ok(format!("cdo-party-create-{}", hex_digest(hasher.finalize())))
+        Ok(format!(
+            "cdo-party-create-{}",
+            hex_digest(hasher.finalize())
+        ))
     }
 
     pub fn snapshot(&self) -> ImportRowSnapshot {
@@ -1077,7 +1083,10 @@ impl ImportRow {
         if expected_version != self.version {
             return Err(conflict(
                 "CUSTOMER_DATA_IMPORT_ROW_VERSION_CONFLICT",
-                format!("expected version {expected_version}, current version {}", self.version),
+                format!(
+                    "expected version {expected_version}, current version {}",
+                    self.version
+                ),
             ));
         }
         Ok(())
@@ -1122,8 +1131,13 @@ fn validate_job_counters(
     let validated_total = valid_rows
         .checked_add(invalid_rows)
         .ok_or_else(|| invalid_counter("validation counters overflow"))?;
-    if validated_total > total_rows || succeeded_rows > valid_rows || checkpoint_row_position > total_rows {
-        return Err(invalid_counter("persisted import-job counters exceed their bounds"));
+    if validated_total > total_rows
+        || succeeded_rows > valid_rows
+        || checkpoint_row_position > total_rows
+    {
+        return Err(invalid_counter(
+            "persisted import-job counters exceed their bounds",
+        ));
     }
     match status {
         ImportJobStatus::Created => {
@@ -1139,7 +1153,8 @@ fn validate_job_counters(
             }
         }
         ImportJobStatus::Validated => {
-            if validated_total != total_rows || succeeded_rows != 0 || checkpoint_row_position != 0 {
+            if validated_total != total_rows || succeeded_rows != 0 || checkpoint_row_position != 0
+            {
                 return Err(invalid_counter(
                     "validated import jobs require complete validation counters and zero execution progress",
                 ));
@@ -1261,9 +1276,7 @@ fn validate_diagnostics(diagnostics: &[RowDiagnostic]) -> Result<(), SdkError> {
         return Err(invalid(
             "CUSTOMER_DATA_IMPORT_ROW_DIAGNOSTICS_INVALID",
             "customer_data.import_row.diagnostics",
-            format!(
-                "row diagnostics must contain between 1 and {MAX_DIAGNOSTICS_PER_ROW} entries"
-            ),
+            format!("row diagnostics must contain between 1 and {MAX_DIAGNOSTICS_PER_ROW} entries"),
         ));
     }
     validate_diagnostics_allow_empty(diagnostics)
@@ -1489,8 +1502,13 @@ mod tests {
     }
 
     fn mapping() -> PartyImportMapping {
-        PartyImportMapping::try_new("party_id", "kind", "display_name", Some("external_id".into()))
-            .unwrap()
+        PartyImportMapping::try_new(
+            "party_id",
+            "kind",
+            "display_name",
+            Some("external_id".into()),
+        )
+        .unwrap()
     }
 
     fn job(policy: PartialExecutionPolicy, rows: u32) -> ImportJob {
