@@ -1,15 +1,20 @@
 #![forbid(unsafe_code)]
 
-//! Governed mutation adapter boundary for customer import jobs.
+//! Governed mutation adapter boundary for customer-data operations.
 //!
-//! Party remains the authoritative target owner. Import execution composition must invoke the
-//! existing Party capability rather than reading or writing Party storage directly. The planner
-//! may atomically mutate only import-owned job and row records; target Party creation remains a
-//! separate governed execution-composition responsibility. Validation finalization remains an
-//! application-composition concern because it must derive counters from authoritative row state.
+//! Party remains the authoritative customer identity owner. Import target execution must invoke the
+//! existing Party capability rather than reading or writing Party storage directly. Export owns only
+//! its job/specification/selection/artifact/reconciliation evidence and must read Party data through
+//! governed query composition rather than direct Party storage access.
+//!
+//! Public import/export mutation planners may atomically mutate only customer-data-operation-owned
+//! records. Background worker-only selection, checkpoint and completion outcomes remain separate
+//! internal capability/composition responsibilities and must not leak into public mutation catalogs.
 
+mod export_planner;
 mod planner;
 
+pub use export_planner::*;
 pub use planner::*;
 
 use crm_capability_plan_support as support;
