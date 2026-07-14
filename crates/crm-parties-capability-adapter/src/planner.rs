@@ -331,9 +331,24 @@ pub fn persisted_payload(party: &Party) -> Result<crm_module_sdk::TypedPayload, 
 }
 
 pub fn party_from_snapshot(snapshot: &RecordSnapshot) -> Result<Party, SdkError> {
+    let v1_contract = persisted_contract();
+    let v2_contract = crate::merge_planner::party_v2_persisted_contract();
+    let contract = if snapshot.payload.schema_version == v1_contract.schema_version
+        && snapshot.payload.descriptor_hash == v1_contract.descriptor_hash
+    {
+        v1_contract
+    } else if snapshot.payload.schema_version == v2_contract.schema_version
+        && snapshot.payload.descriptor_hash == v2_contract.descriptor_hash
+    {
+        v2_contract
+    } else {
+        return Err(support::stored_data_error(
+            "PARTIES_PERSISTED_PARTY_CONTRACT_INVALID",
+        ));
+    };
     let party = decode_party_state(support::persisted_json_bytes_with_data_class(
         snapshot,
-        persisted_contract(),
+        contract,
         DataClass::Personal,
     )?)?;
     if party.party_id().as_str() != snapshot.reference.record_id.as_str()
