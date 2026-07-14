@@ -44,6 +44,8 @@ A fresh PostgreSQL process scenario must prove:
 
 Target replay evidence is checked using the platform canonical idempotency scope `capability:parties.party.create:1.0.0`, not a display-oriented capability coordinate.
 
+Target capability mutations and import-owned outcome/checkpoint commits must also use distinct deterministic business transaction identities. A target row uses its restart-stable target idempotency identity; each private outcome uses its own restart-stable outcome identity. Reusing the import job ID as the transaction ID for both sides is invalid because a committed target mutation must never block recovery of the subsequent import-owned outcome on the `business_transactions` primary key.
+
 ## Crash-window proof
 
 The required uncertain-success scenario is:
