@@ -42,6 +42,8 @@ A fresh PostgreSQL process scenario must prove:
 7. retryable target failure is durably recorded without advancing the checkpoint;
 8. terminal completion is persisted only after all immutable source positions are accounted for.
 
+Target replay evidence is checked using the platform canonical idempotency scope `capability:parties.party.create:1.0.0`, not a display-oriented capability coordinate.
+
 ## Crash-window proof
 
 The required uncertain-success scenario is:
