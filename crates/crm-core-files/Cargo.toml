@@ -5,5 +5,4 @@ edition = "2024"
 publish = false
 
 [dependencies]
-crm-core-contracts = { path = "../crm-core-contracts" }
-crm-core-permissions = { path = "../crm-core-permissions" }
+crm-module-sdk = { path = "../crm-module-sdk" }
