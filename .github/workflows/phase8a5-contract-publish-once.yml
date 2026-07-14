@@ -1,0 +1,140 @@
+name: Phase 8A.5 Contract Publish Once
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase8a5-contract-publish-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.18.0"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
+      - name: Publish canonical module contract binding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          path = Path("contracts/module-contract-bindings.json")
+          text = path.read_text()
+          if '"module_id": "crm.identity-resolution"' in text:
+              raise SystemExit("crm.identity-resolution binding already exists")
+          anchor = '''    {
+              "module_id": "crm.customer360",'''.replace('              ', '      ')
+          if text.count(anchor) != 1:
+              raise SystemExit(f"expected one customer360 anchor, found {text.count(anchor)}")
+          block = '''    {
+              "module_id": "crm.identity-resolution",
+              "capabilities": [
+                {
+                  "id": "identity_resolution.candidate.register",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.RegisterDuplicateCandidate",
+                  "request": "crm.identity_resolution.v1.RegisterDuplicateCandidateRequest",
+                  "response": "crm.identity_resolution.v1.RegisterDuplicateCandidateResponse"
+                },
+                {
+                  "id": "identity_resolution.candidate.evidence.refresh",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.RefreshDuplicateCandidateEvidence",
+                  "request": "crm.identity_resolution.v1.RefreshDuplicateCandidateEvidenceRequest",
+                  "response": "crm.identity_resolution.v1.RefreshDuplicateCandidateEvidenceResponse"
+                },
+                {
+                  "id": "identity_resolution.candidate.dismiss",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.DismissDuplicateCandidate",
+                  "request": "crm.identity_resolution.v1.DismissDuplicateCandidateRequest",
+                  "response": "crm.identity_resolution.v1.DismissDuplicateCandidateResponse"
+                },
+                {
+                  "id": "identity_resolution.candidate.confirm_duplicate",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ConfirmDuplicateCandidate",
+                  "request": "crm.identity_resolution.v1.ConfirmDuplicateCandidateRequest",
+                  "response": "crm.identity_resolution.v1.ConfirmDuplicateCandidateResponse"
+                },
+                {
+                  "id": "identity_resolution.candidate.get",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.GetDuplicateCandidateCase",
+                  "request": "crm.identity_resolution.v1.GetDuplicateCandidateCaseRequest",
+                  "response": "crm.identity_resolution.v1.GetDuplicateCandidateCaseResponse"
+                },
+                {
+                  "id": "identity_resolution.candidate.list_by_party",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ListDuplicateCandidateCasesByParty",
+                  "request": "crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyRequest",
+                  "response": "crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyResponse"
+                }
+              ],
+              "events": [
+                {
+                  "id": "identity_resolution.candidate.registered",
+                  "version": "1.0.0",
+                  "message": "crm.identity_resolution.v1.DuplicateCandidateRegisteredEvent"
+                },
+                {
+                  "id": "identity_resolution.candidate.evidence_refreshed",
+                  "version": "1.0.0",
+                  "message": "crm.identity_resolution.v1.DuplicateCandidateEvidenceRefreshedEvent"
+                },
+                {
+                  "id": "identity_resolution.candidate.dismissed",
+                  "version": "1.0.0",
+                  "message": "crm.identity_resolution.v1.DuplicateCandidateDismissedEvent"
+                },
+                {
+                  "id": "identity_resolution.candidate.confirmed_duplicate",
+                  "version": "1.0.0",
+                  "message": "crm.identity_resolution.v1.DuplicateCandidateConfirmedEvent"
+                }
+              ]
+            },
+'''.replace('              ', '      ')
+          text = text.replace(anchor, block + anchor, 1)
+          path.write_text(text)
+          json.loads(path.read_text())
+          PY
+      - name: Generate canonical browser descriptor hashes
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm web:generate
+      - name: Verify publication files
+        run: |
+          python -m json.tool contracts/module-contract-bindings.json >/dev/null
+          git diff --check
+          git diff -- contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts
+      - name: Remove one-shot workflow and commit
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          rm .github/workflows/phase8a5-contract-publish-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts .github/workflows/phase8a5-contract-publish-once.yml
+          if git diff --cached --quiet; then
+            echo "No contract publication changes to commit."
+            exit 0
+          fi
+          git commit -m "Publish Phase 8A.5 identity resolution contracts"
+          git push origin "HEAD:${HEAD_BRANCH}"
