@@ -3,6 +3,34 @@
 -- module/capability foreign keys and audit lineage for real PostgreSQL process
 -- acceptance. Publication is immutable and idempotent via DO NOTHING.
 
+-- Cross-tenant process acceptance uses the same authenticated service actor in both tenants.
+BEGIN;
+SET LOCAL app.tenant_id = 'tenant-b';
+SET LOCAL app.actor_id = 'actor-a';
+SET LOCAL app.request_id = 'identity-resolution-process-actor-bootstrap-request';
+SET LOCAL app.capability_id = 'test.record.mutate';
+SET LOCAL app.capability_version = '1.0.0';
+SET LOCAL app.business_transaction_id = 'identity-resolution-process-actor-bootstrap';
+
+INSERT INTO crm.actors (
+  tenant_id,
+  actor_id,
+  actor_type,
+  status,
+  display_name,
+  last_business_transaction_id
+)
+VALUES (
+  'tenant-b',
+  'actor-a',
+  'service',
+  'active',
+  'Identity Resolution acceptance cross-tenant actor',
+  'identity-resolution-process-actor-bootstrap'
+)
+ON CONFLICT (tenant_id, actor_id) DO NOTHING;
+COMMIT;
+
 INSERT INTO crm.module_versions (
   module_id,
   version,
