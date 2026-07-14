@@ -126,4 +126,40 @@ fn main() {
 
     run(repo, "cargo", &["fmt", "--all"]);
     fs::remove_file(manifest_dir.join("build.rs")).expect("temporary build patch must be removable");
+
+    run(repo, "git", &["config", "user.name", "github-actions[bot]"]);
+    run(
+        repo,
+        "git",
+        &[
+            "config",
+            "user.email",
+            "41898282+github-actions[bot]@users.noreply.github.com",
+        ],
+    );
+    run(repo, "git", &["add", "-A"]);
+    let commit_status = Command::new("git")
+        .args([
+            "commit",
+            "-m",
+            "feat(phase8a7): normalize atomic import execution outcomes",
+        ])
+        .current_dir(repo)
+        .status()
+        .expect("git commit must start");
+    if !commit_status.success() {
+        let no_staged_changes = Command::new("git")
+            .args(["diff", "--cached", "--quiet"])
+            .current_dir(repo)
+            .status()
+            .expect("git diff must start")
+            .success();
+        assert!(no_staged_changes, "git commit failed with staged changes");
+        return;
+    }
+    let branch = env::var("GITHUB_HEAD_REF")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "develop/phase8a7-customer-import-jobs".to_owned());
+    run(repo, "git", &["push", "origin", &format!("HEAD:{branch}")]);
 }
