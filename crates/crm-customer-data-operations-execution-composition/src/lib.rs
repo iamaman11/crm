@@ -15,11 +15,13 @@ use crm_customer_data_operations::{
 };
 use crm_module_sdk::{
     CapabilityClient, CapabilityId, CapabilityInvocation, CapabilityOutcome, CapabilityVersion,
-    DataClass, ErrorCategory, IdempotencyKey, ModuleExecutionContext, ModuleId, PortFuture, SdkError,
+    DataClass, ErrorCategory, IdempotencyKey, ModuleExecutionContext, ModuleId, PortFuture,
+    SdkError,
 };
 use crm_parties_capability_adapter::{
-    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA,
-    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY,
+    CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA, MODULE_ID as PARTIES_MODULE_ID,
+    RECORD_TYPE as PARTY_RECORD_TYPE,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer, parties::v1 as parties};
 use std::sync::Arc;
@@ -55,11 +57,7 @@ impl ImportExecutionSnapshot {
         let position_index = ExecutionPositionIndex::build(
             job.total_rows(),
             rows.iter().map(|row| {
-                ExecutionRowReference::new(
-                    row.row_id().clone(),
-                    row.row_position(),
-                    row.status(),
-                )
+                ExecutionRowReference::new(row.row_id().clone(), row.row_position(), row.status())
             }),
         )?;
         Ok(Self {
@@ -133,7 +131,9 @@ pub trait ImportExecutionOutcomeSink: Send + Sync {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutionCycleOutcome {
     Completed,
-    SkippedInvalid { row_position: u32 },
+    SkippedInvalid {
+        row_position: u32,
+    },
     PartySucceeded {
         row_position: u32,
         party_id: String,
@@ -231,12 +231,7 @@ impl PartyImportExecutionCoordinator {
                         }
                         Err(error) if error.retryable => {
                             self.outcomes
-                                .record_retryable_failure(
-                                    context,
-                                    snapshot.job(),
-                                    row,
-                                    &error.code,
-                                )
+                                .record_retryable_failure(context, snapshot.job(), row, &error.code)
                                 .await?;
                             Ok(ExecutionCycleOutcome::RetryableFailureRecorded {
                                 row_position: row.row_position(),
@@ -264,7 +259,10 @@ impl PartyImportExecutionCoordinator {
 }
 
 pub fn party_create_invocation(row: &ImportRow) -> Result<CapabilityInvocation, SdkError> {
-    if !matches!(row.status(), ImportRowStatus::Valid | ImportRowStatus::FailedRetryable) {
+    if !matches!(
+        row.status(),
+        ImportRowStatus::Valid | ImportRowStatus::FailedRetryable
+    ) {
         return Err(execution_error(
             "CUSTOMER_DATA_IMPORT_EXECUTION_ROW_NOT_EXECUTABLE",
             ErrorCategory::Conflict,
@@ -388,10 +386,7 @@ mod tests {
             context: &'a ModuleExecutionContext,
             request: CapabilityInvocation,
         ) -> PortFuture<'a, Result<CapabilityOutcome, SdkError>> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push((context.clone(), request));
+            self.calls.lock().unwrap().push((context.clone(), request));
             let result = self.result.lock().unwrap().clone();
             Box::pin(async move { result })
         }
@@ -461,11 +456,8 @@ mod tests {
         let job = executing_job(2, 2, 0, PartialExecutionPolicy::AllValidRows);
         let row_one = valid_row(job.job_id().clone(), 1, "party-1");
         let row_two = valid_row(job.job_id().clone(), 2, "party-2");
-        let snapshot = ImportExecutionSnapshot::try_new(
-            job,
-            vec![row_two.clone(), row_one.clone()],
-        )
-        .unwrap();
+        let snapshot =
+            ImportExecutionSnapshot::try_new(job, vec![row_two.clone(), row_one.clone()]).unwrap();
         let client = Arc::new(FakeClient {
             calls: Mutex::new(Vec::new()),
             result: Mutex::new(Ok(CapabilityOutcome {
@@ -498,11 +490,9 @@ mod tests {
             calls[0].0.execution.idempotency_key.as_str(),
             row_one.target_idempotency_key()
         );
-        assert_eq!(
-            calls[0].1.capability_id.as_str(),
-            PARTY_CREATE_CAPABILITY
-        );
-        let request = parties::CreatePartyRequest::decode(calls[0].1.input.bytes.as_slice()).unwrap();
+        assert_eq!(calls[0].1.capability_id.as_str(), PARTY_CREATE_CAPABILITY);
+        let request =
+            parties::CreatePartyRequest::decode(calls[0].1.input.bytes.as_slice()).unwrap();
         assert_eq!(request.party_ref.unwrap().party_id, "party-1");
         assert_eq!(
             sink.actions.lock().unwrap().as_slice(),
