@@ -1,5 +1,5 @@
 use crm_customer_data_operations::{
-    AdvanceImportCheckpoint, CheckpointOutcome, FinishImportJob, ImportJob, ImportRow,
+    AdvanceImportCheckpoint, CheckpointOutcome, FinishImportJob, ImportJob, ImportRow, ImportRowId,
     ImportRowStatus, MarkImportRowSucceeded, RecordImportRowRetryableFailure, TargetPartyId,
 };
 use crm_module_sdk::{ErrorCategory, SdkError};
@@ -39,20 +39,21 @@ impl PlannedImportRowUpdate {
 #[derive(Debug, Clone)]
 pub enum ImportExecutionOutcomePlan {
     SkippedInvalid {
-        job: PlannedImportJobUpdate,
+        job: Box<PlannedImportJobUpdate>,
+        row_id: ImportRowId,
         row_position: u32,
     },
     Succeeded {
-        job: PlannedImportJobUpdate,
-        row: PlannedImportRowUpdate,
+        job: Box<PlannedImportJobUpdate>,
+        row: Box<PlannedImportRowUpdate>,
         target_party_id: TargetPartyId,
     },
     RetryableFailure {
-        row: PlannedImportRowUpdate,
+        row: Box<PlannedImportRowUpdate>,
         error_code: String,
     },
     Completed {
-        job: PlannedImportJobUpdate,
+        job: Box<PlannedImportJobUpdate>,
     },
 }
 
@@ -80,10 +81,11 @@ pub fn plan_skip_invalid(
     })?;
 
     Ok(ImportExecutionOutcomePlan::SkippedInvalid {
-        job: PlannedImportJobUpdate {
+        job: Box::new(PlannedImportJobUpdate {
             expected_version,
             after,
-        },
+        }),
+        row_id: row.row_id().clone(),
         row_position: row.row_position(),
     })
 }
@@ -114,14 +116,14 @@ pub fn plan_success(
     })?;
 
     Ok(ImportExecutionOutcomePlan::Succeeded {
-        job: PlannedImportJobUpdate {
+        job: Box::new(PlannedImportJobUpdate {
             expected_version: expected_job_version,
             after: job_after,
-        },
-        row: PlannedImportRowUpdate {
+        }),
+        row: Box::new(PlannedImportRowUpdate {
             expected_version: expected_row_version,
             after: row_after,
-        },
+        }),
         target_party_id,
     })
 }
@@ -154,10 +156,10 @@ pub fn plan_retryable_failure(
         })?;
 
     Ok(ImportExecutionOutcomePlan::RetryableFailure {
-        row: PlannedImportRowUpdate {
+        row: Box::new(PlannedImportRowUpdate {
             expected_version,
             after,
-        },
+        }),
         error_code: persisted_error_code,
     })
 }
@@ -258,7 +260,10 @@ mod tests {
 
         let plan = plan_skip_invalid(&job, &row, 40).unwrap();
 
-        let ImportExecutionOutcomePlan::SkippedInvalid { job, row_position } = plan else {
+        let ImportExecutionOutcomePlan::SkippedInvalid {
+            job, row_position, ..
+        } = plan
+        else {
             panic!("expected skipped-invalid plan");
         };
         assert_eq!(row_position, 1);

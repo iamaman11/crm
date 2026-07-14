@@ -1,6 +1,7 @@
 use crate::{
     ImportExecutionOutcomePlan, ImportExecutionOutcomeSink, PlannedImportJobUpdate,
-    PlannedImportRowUpdate, plan_completion, plan_retryable_failure, plan_skip_invalid, plan_success,
+    PlannedImportRowUpdate, plan_completion, plan_retryable_failure, plan_skip_invalid,
+    plan_success,
 };
 use crm_capability_adapters::semantic_input_hash;
 use crm_capability_plan_support::{self as support, EventSpec};
@@ -9,7 +10,8 @@ use crm_capability_runtime::{
 };
 use crm_core_data::{BatchError, BatchMutationPlan, PostgresDataStore, RecordMutation};
 use crm_customer_data_operations::{
-    ImportJob, ImportRow, TargetPartyId, encode_import_job_state, encode_import_row_state,
+    ImportJob, ImportRow, ImportRowId, TargetPartyId, encode_import_job_state,
+    encode_import_row_state,
 };
 use crm_customer_data_operations_capability_adapter::{
     IMPORT_JOB_RECORD_TYPE, IMPORT_ROW_RECORD_TYPE, MODULE_ID,
@@ -21,7 +23,7 @@ use crm_customer_data_operations_capability_adapter::{
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, IdempotencyKey,
-    ModuleExecutionContext, ModuleId, PortFuture, RecordRef, SdkError, SchemaVersion, TypedPayload,
+    ModuleExecutionContext, ModuleId, PortFuture, RecordRef, SchemaVersion, SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::{
     customer::v1 as customer, customer_data_operations::v1 as wire,
@@ -272,7 +274,11 @@ pub fn internal_capability_definition(
         capability_version: CapabilityVersion::try_new(support::CONTRACT_VERSION)
             .map_err(configuration_error)?,
         owner_module_id: ModuleId::try_new(MODULE_ID).map_err(configuration_error)?,
-        input_contract: support::protobuf_contract(MODULE_ID, schema_id, vec![DataClass::Personal])?,
+        input_contract: support::protobuf_contract(
+            MODULE_ID,
+            schema_id,
+            vec![DataClass::Personal],
+        )?,
         output_contract: None,
         risk: CapabilityRisk::Medium,
         mutation: true,
@@ -294,13 +300,11 @@ fn internal_request(
     context.module_id = definition.owner_module_id.clone();
     context.execution.capability_id = definition.capability_id.clone();
     context.execution.capability_version = definition.capability_version.clone();
-    context.execution.schema_version = SchemaVersion::try_new(support::CONTRACT_VERSION)
-        .map_err(configuration_error)?;
-    context.execution.idempotency_key = IdempotencyKey::try_new(format!(
-        "cdo-outcome-{}",
-        hex(&input_hash)
-    ))
-    .map_err(configuration_error)?;
+    context.execution.schema_version =
+        SchemaVersion::try_new(support::CONTRACT_VERSION).map_err(configuration_error)?;
+    context.execution.idempotency_key =
+        IdempotencyKey::try_new(format!("cdo-outcome-{}", hex(&input_hash)))
+            .map_err(configuration_error)?;
     Ok(CapabilityRequest {
         context,
         input,
@@ -315,9 +319,11 @@ fn batch_from_plan(
     plan: ImportExecutionOutcomePlan,
 ) -> Result<BatchMutationPlan, SdkError> {
     match plan {
-        ImportExecutionOutcomePlan::SkippedInvalid { job, row_position } => {
-            skipped_invalid_batch(definition, request, &job, row_position)
-        }
+        ImportExecutionOutcomePlan::SkippedInvalid {
+            job,
+            row_id,
+            row_position,
+        } => skipped_invalid_batch(definition, request, &job, &row_id, row_position),
         ImportExecutionOutcomePlan::Succeeded {
             job,
             row,
@@ -336,6 +342,7 @@ fn skipped_invalid_batch(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
     job: &PlannedImportJobUpdate,
+    row_id: &ImportRowId,
     row_position: u32,
 ) -> Result<BatchMutationPlan, SdkError> {
     let job_ref = job_record_ref(job.after())?;
@@ -354,7 +361,7 @@ fn skipped_invalid_batch(
             import_job: Some(job_to_wire(job.after())?),
             import_row_ref: Some(wire::ImportRowRef {
                 import_job_ref: Some(job_ref_wire(job.after())),
-                import_row_id: format!("position:{row_position}"),
+                import_row_id: row_id.as_str().to_owned(),
             }),
             skipped_invalid: true,
         },
@@ -668,7 +675,10 @@ mod tests {
             assert!(definition.requires_idempotency);
             assert!(!definition.requires_approval);
             assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-            assert_eq!(definition.input_contract.allowed_data_classes, vec![DataClass::Personal]);
+            assert_eq!(
+                definition.input_contract.allowed_data_classes,
+                vec![DataClass::Personal]
+            );
             assert!(!MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()));
         }
     }

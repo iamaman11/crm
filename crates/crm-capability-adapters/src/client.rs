@@ -94,7 +94,7 @@ impl CapabilityClient for GatewayCapabilityClient {
     }
 }
 
-fn semantic_input_hash(payload: &TypedPayload) -> [u8; 32] {
+pub fn semantic_input_hash(payload: &TypedPayload) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hash_field(&mut hasher, SEMANTIC_HASH_PROFILE);
     hash_field(&mut hasher, payload.owner.as_str().as_bytes());

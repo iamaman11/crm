@@ -641,7 +641,9 @@ dependencies = [
 name = "crm-customer-data-operations-execution-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-capability-adapters",
  "crm-capability-plan-support",
+ "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-data-operations",
  "crm-customer-data-operations-capability-adapter",
