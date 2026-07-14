@@ -10,7 +10,7 @@ fn main() {
         .parent()
         .and_then(Path::parent)
         .expect("module must live under repository/modules");
-    let script = manifest_dir.join("phase8a7_patch.py");
+    let script = manifest_dir.join("phase8a7_patch2.py");
     let status = Command::new("python3")
         .arg(script)
         .current_dir(repo)
