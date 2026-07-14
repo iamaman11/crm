@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          {
+          (
             set -euo pipefail
             git show 38834f97565ec8fb554ec8657c5226130c316e28:.github/workflows/phase8a7-validation-application-once.yml > /tmp/phase8a7-patch.yml
             python - <<'PY'
@@ -55,7 +55,7 @@ jobs:
           PY
             cargo generate-lockfile
             cargo fmt --all
-          } > /tmp/phase8a7-patch.log 2>&1
+          ) > /tmp/phase8a7-patch.log 2>&1
           status=$?
 
           git fetch origin main --depth=1
