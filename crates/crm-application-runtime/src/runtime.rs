@@ -45,6 +45,7 @@ use crm_customer_accounts_capability_adapter::{
 use crm_customer_accounts_query_adapter::AccountQueryAdapter;
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_identity_resolution_capability_adapter::{
+    MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
 };
 use crm_identity_resolution_merge_query_adapter::IdentityResolutionMergeQueryAdapter;
@@ -937,18 +938,32 @@ fn bootstrap_application_access(
                     consent_fields(),
                     expires_at,
                 )?,
-                IDENTITY_RESOLUTION_MODULE_ID => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
-                        resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,
-                    },
-                    identity_resolution_fields(),
-                    expires_at,
-                )?,
+                IDENTITY_RESOLUTION_MODULE_ID => {
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
+                            resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,
+                        },
+                        identity_resolution_fields(),
+                        expires_at,
+                    )?;
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
+                            resource_type: IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
+                        },
+                        identity_resolution_merge_fields(),
+                        expires_at,
+                    )?;
+                }
                 PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
                     visibility_store,
                     config,
@@ -1201,6 +1216,19 @@ fn identity_resolution_fields() -> BTreeSet<String> {
         "evidence_history",
         "status",
         "decision_reason",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn identity_resolution_merge_fields() -> BTreeSet<String> {
+    [
+        "party_pair",
+        "decision",
+        "survivorship",
+        "status",
+        "unmerge_decision",
     ]
     .into_iter()
     .map(str::to_owned)
