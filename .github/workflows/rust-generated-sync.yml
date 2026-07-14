@@ -12,6 +12,7 @@ on:
       - "modules/**/*.rs"
       - "services/**/Cargo.toml"
       - "services/**/*.rs"
+      - "proto/**"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -25,7 +26,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,18 +35,100 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Format signed approval verifier
-        run: cargo fmt --all
-      - name: Commit formatted verifier when needed
+      - name: Apply signed approval transport wiring
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement, found {count}: {old[:100]!r}")
+              target.write_text(text.replace(old, new, 1))
+
+          grpc = "crates/crm-application-runtime/src/gateway_grpc.rs"
+          replace_once(
+              grpc,
+              'use crm_capability_ingress::{CapabilityRoute, GrpcCapabilityMessage, GrpcQueryMessage};\nuse crm_module_sdk::{',
+              'use crm_capability_ingress::{CapabilityRoute, GrpcCapabilityMessage, GrpcQueryMessage};\nuse crm_capability_runtime::ApprovalEvidence;\nuse crm_module_sdk::{',
+          )
+          replace_once(
+              grpc,
+              '    DataClass, ModuleId, PayloadEncoding, RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,\n};',
+              '    ActorId, CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding,\n    RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,\n};',
+          )
+          replace_once(
+              grpc,
+              '''        let request = request.into_inner();\n        let input = decode_payload(request.input)?;\n        let route = decode_route(''',
+              '''        let request = request.into_inner();\n        let input = decode_payload(request.input)?;\n        let approval = decode_approval(request.approval)?;\n        let route = decode_route(''',
+          )
+          replace_once(
+              grpc,
+              '''        let mut governed_request = Request::new(GrpcCapabilityMessage {\n            route,\n            input,\n            approval: None,\n        });''',
+              '''        let mut governed_request = Request::new(GrpcCapabilityMessage {\n            route,\n            input,\n            approval,\n        });''',
+          )
+          replace_once(
+              grpc,
+              '''fn encode_mutation_result(\n    result: crm_capability_runtime::CapabilityExecutionResult,''',
+              '''fn decode_approval(\n    approval: Option<gateway_v1::ApprovalEvidence>,\n) -> Result<Option<ApprovalEvidence>, Status> {\n    approval\n        .map(|approval| {\n            let input_hash: [u8; 32] = approval\n                .input_hash\n                .try_into()\n                .map_err(|_| Status::invalid_argument("approval input_hash must be 32 bytes"))?;\n            Ok(ApprovalEvidence {\n                approval_id: approval.approval_id,\n                actor_id: ActorId::try_new(approval.actor_id)\n                    .map_err(|_| Status::invalid_argument("approval actor_id is invalid"))?,\n                capability_id: CapabilityId::try_new(approval.capability_id)\n                    .map_err(|_| Status::invalid_argument("approval capability_id is invalid"))?,\n                capability_version: CapabilityVersion::try_new(approval.capability_version)\n                    .map_err(|_| Status::invalid_argument("approval capability_version is invalid"))?,\n                input_hash,\n                policy_version: approval.policy_version,\n                expires_at_unix_nanos: approval.expires_at_unix_nanos,\n                opaque_proof: approval.opaque_proof,\n            })\n        })\n        .transpose()\n}\n\nfn encode_mutation_result(\n    result: crm_capability_runtime::CapabilityExecutionResult,''',
+          )
+
+          runtime = "crates/crm-application-runtime/src/runtime.rs"
+          replace_once(
+              runtime,
+              '''use crm_capability_adapters::{\n    ApprovalStore, AuthorizationGrant, FixedWindowRateLimiter, LiveAuthorizationStore,\n    LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore,\n    QueryVisibilityGrant, RateLimitPolicyStore, StoredApprovalVerifier,\n};''',
+              '''use crm_capability_adapters::{\n    AuthorizationGrant, FixedWindowRateLimiter, HmacSha256ApprovalVerifier,\n    LiveAuthorizationStore, LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer,\n    LiveQueryVisibilityStore, QueryVisibilityGrant, RateLimitPolicyStore,\n};''',
+          )
+          replace_once(
+              runtime,
+              'use crm_capability_runtime::{CapabilityDefinition, CapabilityGateway};',
+              'use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityGateway};',
+          )
+          replace_once(
+              runtime,
+              '''use crm_module_sdk::{\n    CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,''',
+              '''use crm_module_sdk::{\n    ActorId, CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,''',
+          )
+          replace_once(
+              runtime,
+              '            Arc::new(StoredApprovalVerifier::new(ApprovalStore::default())),',
+              '''            Arc::new(\n                HmacSha256ApprovalVerifier::try_new(config.approval_signing_key.clone())\n                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            ),''',
+          )
+          replace_once(
+              runtime,
+              '''#[derive(Debug, serde::Deserialize)]\nstruct PathCoordinate {\n    owner_module_id: String,\n    capability_id: String,\n    capability_version: String,\n}\n''',
+              '''#[derive(Debug, serde::Deserialize)]\nstruct PathCoordinate {\n    owner_module_id: String,\n    capability_id: String,\n    capability_version: String,\n}\n\n#[derive(Debug, serde::Deserialize)]\n#[serde(untagged)]\nenum HttpMutationBody {\n    Payload(TypedPayload),\n    Envelope {\n        input: TypedPayload,\n        approval: Option<HttpApprovalEvidence>,\n    },\n}\n\n#[derive(Debug, serde::Deserialize)]\nstruct HttpApprovalEvidence {\n    approval_id: String,\n    actor_id: String,\n    capability_id: String,\n    capability_version: String,\n    input_hash: Vec<u8>,\n    policy_version: String,\n    expires_at_unix_nanos: i64,\n    opaque_proof: Vec<u8>,\n}\n\nimpl HttpMutationBody {\n    fn into_parts(self) -> Result<(TypedPayload, Option<ApprovalEvidence>), ()> {\n        match self {\n            Self::Payload(input) => Ok((input, None)),\n            Self::Envelope { input, approval } => {\n                Ok((input, approval.map(decode_http_approval).transpose()?))\n            }\n        }\n    }\n}\n\nfn decode_http_approval(value: HttpApprovalEvidence) -> Result<ApprovalEvidence, ()> {\n    Ok(ApprovalEvidence {\n        approval_id: value.approval_id,\n        actor_id: ActorId::try_new(value.actor_id).map_err(|_| ())?,\n        capability_id: CapabilityId::try_new(value.capability_id).map_err(|_| ())?,\n        capability_version: CapabilityVersion::try_new(value.capability_version).map_err(|_| ())?,\n        input_hash: value.input_hash.try_into().map_err(|_| ())?,\n        policy_version: value.policy_version,\n        expires_at_unix_nanos: value.expires_at_unix_nanos,\n        opaque_proof: value.opaque_proof,\n    })\n}\n''',
+          )
+          replace_once(
+              runtime,
+              '''    headers: HeaderMap,\n    Json(input): Json<TypedPayload>,\n) -> Response {\n    let route = match capability_route(&path, &input) {''',
+              '''    headers: HeaderMap,\n    Json(body): Json<HttpMutationBody>,\n) -> Response {\n    let (input, approval) = match body.into_parts() {\n        Ok(parts) => parts,\n        Err(()) => return bad_approval(),\n    };\n    let route = match capability_route(&path, &input) {''',
+          )
+          replace_once(
+              runtime,
+              '''            headers,\n            route,\n            input,\n            approval: None,\n        })''',
+              '''            headers,\n            route,\n            input,\n            approval,\n        })''',
+          )
+          replace_once(
+              runtime,
+              '''fn bad_route() -> Response {\n    (\n        StatusCode::BAD_REQUEST,\n        Json(json!({"error": "invalid_route"})),\n    )\n        .into_response()\n}\n''',
+              '''fn bad_route() -> Response {\n    (\n        StatusCode::BAD_REQUEST,\n        Json(json!({"error": "invalid_route"})),\n    )\n        .into_response()\n}\n\nfn bad_approval() -> Response {\n    (\n        StatusCode::BAD_REQUEST,\n        Json(json!({"error": "invalid_approval"})),\n    )\n        .into_response()\n}\n''',
+          )
+          PY
+          cargo fmt --all
+      - name: Commit signed approval transport wiring
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- crates/crm-capability-adapters/src/signed_approval.rs; then
-            echo "Signed approval verifier is already formatted."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-capability-adapters/src/signed_approval.rs
-          git commit -m "Format signed approval verifier"
+          git add crates/crm-application-runtime
+          if git diff --cached --quiet; then
+            echo "Signed approval transport wiring is already present."
+            exit 0
+          fi
+          git commit -m "Wire signed approval transport"
           git push origin "HEAD:${HEAD_BRANCH}"
