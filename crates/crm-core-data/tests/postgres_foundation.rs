@@ -156,8 +156,8 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         );
         return;
     };
-    let admin_database_url =
-        std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
+    let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
+        .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
     let store = PostgresDataStore::connect(&database_url, 4)
         .await
         .expect("connect file artifact capability store");
