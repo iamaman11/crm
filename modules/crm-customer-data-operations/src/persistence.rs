@@ -4,6 +4,10 @@ use crate::domain::{
     PartyImportMapping, PreparedPartyRow, RowDiagnostic, RowIdentitySource, SourceDescriptor,
     TargetPartyId,
 };
+use crate::profile::{
+    ExternalPartyIdentifierDigest, ImportCanonicalizationVersion, ImportHeaderMode,
+    ImportParserProfile, ImportParserVersion, ImportSourceFormat, ImportTextEncoding, SourceSystemId,
+};
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -18,8 +22,8 @@ pub const IMPORT_ROW_STATE_SCHEMA_VERSION: &str = "1.0.0";
 pub const IMPORT_ROW_STATE_MAXIMUM_BYTES: u64 = 128 * 1024;
 pub const IMPORT_ROW_STATE_RETENTION_POLICY_ID: &str = "crm.customer_data.import_row";
 
-const IMPORT_JOB_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.import_job.state/v1:job_id,source[source_name,content_sha256,row_count],mapping[party_id_column,party_kind_column,display_name_column,external_row_key_column],mapping_version_id,partial_execution_policy,status,total_rows,valid_rows,invalid_rows,succeeded_rows,checkpoint_row_position,created_at_unix_nanos,updated_at_unix_nanos,version";
-const IMPORT_ROW_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.import_row.state/v1:row_id,job_id,row_position,identity_source, status,prepared_party[party_id,kind,display_name],diagnostics[code,field],execution_attempts,last_execution_error_code,target_party_id,created_at_unix_nanos,updated_at_unix_nanos,version";
+const IMPORT_JOB_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.import_job.state/v1:job_id,source[source_name,content_sha256,row_count,source_system_id,parser_profile[format,encoding,delimiter_ascii,quote_ascii,header_mode,parser_version,canonicalization_version]],mapping[target_party_id_column,party_kind_column,display_name_column,source_external_id_column,external_row_key_column],mapping_version_id,partial_execution_policy,status,total_rows,valid_rows,invalid_rows,succeeded_rows,checkpoint_row_position,created_at_unix_nanos,updated_at_unix_nanos,version";
+const IMPORT_ROW_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.import_row.state/v1:row_id,job_id,row_position,identity_source,source_external_id_sha256,status,prepared_party[party_id,kind,display_name],diagnostics[code,field],execution_attempts,last_execution_error_code,target_party_id,created_at_unix_nanos,updated_at_unix_nanos,version";
 
 pub fn import_job_state_descriptor_hash() -> [u8; 32] {
     Sha256::digest(IMPORT_JOB_STATE_DESCRIPTOR).into()
@@ -88,14 +92,29 @@ struct SourceDescriptorStateV1 {
     source_name: String,
     content_sha256: String,
     row_count: u32,
+    source_system_id: String,
+    parser_profile: ImportParserProfileStateV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImportParserProfileStateV1 {
+    format: String,
+    encoding: String,
+    delimiter_ascii: u8,
+    quote_ascii: u8,
+    header_mode: String,
+    parser_version: String,
+    canonicalization_version: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PartyImportMappingStateV1 {
-    party_id_column: String,
+    target_party_id_column: Option<String>,
     party_kind_column: String,
     display_name_column: String,
+    source_external_id_column: Option<String>,
     external_row_key_column: Option<String>,
 }
 
@@ -123,6 +142,7 @@ struct ImportRowStateV1 {
     job_id: String,
     row_position: u32,
     identity_source: RowIdentitySourceState,
+    source_external_id_sha256: Option<String>,
     status: ImportRowStatusState,
     prepared_party: Option<PreparedPartyStateV1>,
     diagnostics: Vec<RowDiagnosticStateV1>,
@@ -135,12 +155,7 @@ struct ImportRowStateV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    content = "value",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case", deny_unknown_fields)]
 enum RowIdentitySourceState {
     Position(u32),
     ExternalKeySha256(String),
@@ -182,8 +197,8 @@ impl From<ImportJobSnapshot> for ImportJobStateV1 {
     fn from(value: ImportJobSnapshot) -> Self {
         Self {
             job_id: value.job_id.as_str().to_owned(),
-            source: SourceDescriptorStateV1::from(value.source),
-            mapping: PartyImportMappingStateV1::from(value.mapping),
+            source: value.source.into(),
+            mapping: value.mapping.into(),
             mapping_version_id: value.mapping_version_id.as_str().to_owned(),
             partial_execution_policy: value.partial_execution_policy.into(),
             status: value.status.into(),
@@ -203,21 +218,14 @@ impl TryFrom<ImportJobStateV1> for ImportJobSnapshot {
     type Error = SdkError;
 
     fn try_from(value: ImportJobStateV1) -> Result<Self, Self::Error> {
-        let job_id = parse_canonical_record_id(
-            value.job_id,
-            ImportJobId::try_new,
-            |value| value.as_str(),
-            "import-job ID",
-        )?;
+        let job_id = parse_record_id(value.job_id, ImportJobId::try_new, "import-job ID")?;
         let source = value.source.try_into()?;
         let mapping: PartyImportMapping = value.mapping.try_into()?;
-        let mapping_version_id = parse_canonical_record_id(
+        let mapping_version_id = parse_record_id(
             value.mapping_version_id,
             MappingVersionId::try_new,
-            |value| value.as_str(),
             "mapping-version ID",
         )?;
-
         Ok(Self {
             job_id,
             source,
@@ -243,6 +251,8 @@ impl From<SourceDescriptor> for SourceDescriptorStateV1 {
             source_name: value.source_name().to_owned(),
             content_sha256: value.content_sha256().to_owned(),
             row_count: value.row_count(),
+            source_system_id: value.source_system_id().as_str().to_owned(),
+            parser_profile: value.parser_profile().clone().into(),
         }
     }
 }
@@ -251,29 +261,94 @@ impl TryFrom<SourceDescriptorStateV1> for SourceDescriptor {
     type Error = SdkError;
 
     fn try_from(value: SourceDescriptorStateV1) -> Result<Self, Self::Error> {
+        let source_system_id = SourceSystemId::try_new(value.source_system_id.clone())
+            .map_err(|error| persisted_error(error.to_string()))?;
+        let parser_profile: ImportParserProfile = value.parser_profile.try_into()?;
         let source = SourceDescriptor::try_new(
             value.source_name.clone(),
             value.content_sha256.clone(),
             value.row_count,
+            source_system_id,
+            parser_profile,
         )
         .map_err(|error| persisted_error(error.to_string()))?;
         if source.source_name() != value.source_name
             || source.content_sha256() != value.content_sha256
+            || source.source_system_id().as_str() != value.source_system_id
         {
-            return Err(persisted_error(
-                "persisted source descriptor is not canonical",
-            ));
+            return Err(persisted_error("persisted source descriptor is not canonical"));
         }
         Ok(source)
+    }
+}
+
+impl From<ImportParserProfile> for ImportParserProfileStateV1 {
+    fn from(value: ImportParserProfile) -> Self {
+        Self {
+            format: value.format().code().to_owned(),
+            encoding: value.encoding().code().to_owned(),
+            delimiter_ascii: value.delimiter(),
+            quote_ascii: value.quote(),
+            header_mode: value.header_mode().code().to_owned(),
+            parser_version: value.parser_version().code().to_owned(),
+            canonicalization_version: value.canonicalization_version().code().to_owned(),
+        }
+    }
+}
+
+impl TryFrom<ImportParserProfileStateV1> for ImportParserProfile {
+    type Error = SdkError;
+
+    fn try_from(value: ImportParserProfileStateV1) -> Result<Self, Self::Error> {
+        let format = match value.format.as_str() {
+            "csv" => ImportSourceFormat::Csv,
+            _ => return Err(persisted_error("persisted parser format is unsupported")),
+        };
+        let encoding = match value.encoding.as_str() {
+            "utf-8" => ImportTextEncoding::Utf8,
+            _ => return Err(persisted_error("persisted parser encoding is unsupported")),
+        };
+        let header_mode = match value.header_mode.as_str() {
+            "required-first-row" => ImportHeaderMode::RequiredFirstRow,
+            _ => return Err(persisted_error("persisted parser header mode is unsupported")),
+        };
+        let parser_version = match value.parser_version.as_str() {
+            "csv-v1" => ImportParserVersion::CsvV1,
+            _ => return Err(persisted_error("persisted parser version is unsupported")),
+        };
+        let canonicalization_version = match value.canonicalization_version.as_str() {
+            "customer-import-v1" => ImportCanonicalizationVersion::V1,
+            _ => {
+                return Err(persisted_error(
+                    "persisted parser canonicalization version is unsupported",
+                ))
+            }
+        };
+        let profile = ImportParserProfile::try_new(
+            format,
+            encoding,
+            value.delimiter_ascii,
+            value.quote_ascii,
+            header_mode,
+            parser_version,
+            canonicalization_version,
+        )
+        .map_err(|error| persisted_error(error.to_string()))?;
+        let canonical: ImportParserProfileStateV1 = profile.clone().into();
+        if canonical != value {
+            return Err(persisted_error("persisted parser profile is not canonical"));
+        }
+        Ok(profile)
     }
 }
 
 impl From<PartyImportMapping> for PartyImportMappingStateV1 {
     fn from(value: PartyImportMapping) -> Self {
         Self {
-            party_id_column: value.party_id_column().to_owned(),
+            target_party_id_column: value.target_party_id_column().map(str::to_owned),
             party_kind_column: value.party_kind_column().to_owned(),
             display_name_column: value.display_name_column().to_owned(),
+            source_external_id_column: value.source_external_id_column().map(str::to_owned),
             external_row_key_column: value.external_row_key_column().map(str::to_owned),
         }
     }
@@ -284,20 +359,20 @@ impl TryFrom<PartyImportMappingStateV1> for PartyImportMapping {
 
     fn try_from(value: PartyImportMappingStateV1) -> Result<Self, Self::Error> {
         let mapping = PartyImportMapping::try_new(
-            value.party_id_column.clone(),
+            value.target_party_id_column.clone(),
             value.party_kind_column.clone(),
             value.display_name_column.clone(),
+            value.source_external_id_column.clone(),
             value.external_row_key_column.clone(),
         )
         .map_err(|error| persisted_error(error.to_string()))?;
-        if mapping.party_id_column() != value.party_id_column
+        if mapping.target_party_id_column() != value.target_party_id_column.as_deref()
             || mapping.party_kind_column() != value.party_kind_column
             || mapping.display_name_column() != value.display_name_column
+            || mapping.source_external_id_column() != value.source_external_id_column.as_deref()
             || mapping.external_row_key_column() != value.external_row_key_column.as_deref()
         {
-            return Err(persisted_error(
-                "persisted Party import mapping is not canonical",
-            ));
+            return Err(persisted_error("persisted Party import mapping is not canonical"));
         }
         Ok(mapping)
     }
@@ -310,13 +385,12 @@ impl From<ImportRowSnapshot> for ImportRowStateV1 {
             job_id: value.job_id.as_str().to_owned(),
             row_position: value.row_position,
             identity_source: value.identity_source.into(),
+            source_external_id_sha256: value
+                .source_external_id_sha256
+                .map(|value| value.as_str().to_owned()),
             status: value.status.into(),
-            prepared_party: value.prepared_party.map(PreparedPartyStateV1::from),
-            diagnostics: value
-                .diagnostics
-                .into_iter()
-                .map(RowDiagnosticStateV1::from)
-                .collect(),
+            prepared_party: value.prepared_party.map(Into::into),
+            diagnostics: value.diagnostics.into_iter().map(Into::into).collect(),
             execution_attempts: value.execution_attempts,
             last_execution_error_code: value.last_execution_error_code,
             target_party_id: value.target_party_id.map(|value| value.as_str().to_owned()),
@@ -331,28 +405,16 @@ impl TryFrom<ImportRowStateV1> for ImportRowSnapshot {
     type Error = SdkError;
 
     fn try_from(value: ImportRowStateV1) -> Result<Self, Self::Error> {
-        let row_id = parse_canonical_record_id(
-            value.row_id,
-            ImportRowId::try_new,
-            |value| value.as_str(),
-            "import-row ID",
-        )?;
-        let job_id = parse_canonical_record_id(
-            value.job_id,
-            ImportJobId::try_new,
-            |value| value.as_str(),
-            "import-job ID",
-        )?;
+        let row_id = parse_record_id(value.row_id, ImportRowId::try_new, "import-row ID")?;
+        let job_id = parse_record_id(value.job_id, ImportJobId::try_new, "import-job ID")?;
+        let source_external_id_sha256 = value
+            .source_external_id_sha256
+            .map(ExternalPartyIdentifierDigest::try_from_sha256)
+            .transpose()
+            .map_err(|error| persisted_error(error.to_string()))?;
         let target_party_id = value
             .target_party_id
-            .map(|raw| {
-                parse_canonical_record_id(
-                    raw,
-                    TargetPartyId::try_new,
-                    |value| value.as_str(),
-                    "target Party ID",
-                )
-            })
+            .map(|raw| parse_record_id(raw, TargetPartyId::try_new, "target Party ID"))
             .transpose()?;
         let prepared_party = value
             .prepared_party
@@ -363,12 +425,12 @@ impl TryFrom<ImportRowStateV1> for ImportRowSnapshot {
             .into_iter()
             .map(RowDiagnosticStateV1::try_into)
             .collect::<Result<Vec<_>, _>>()?;
-
         Ok(Self {
             row_id,
             job_id,
             row_position: value.row_position,
             identity_source: value.identity_source.try_into()?,
+            source_external_id_sha256,
             status: value.status.into(),
             prepared_party,
             diagnostics,
@@ -395,8 +457,8 @@ impl TryFrom<RowIdentitySourceState> for RowIdentitySource {
     type Error = SdkError;
 
     fn try_from(value: RowIdentitySourceState) -> Result<Self, Self::Error> {
-        match value {
-            RowIdentitySourceState::Position(position) => Ok(Self::Position(position)),
+        Ok(match value {
+            RowIdentitySourceState::Position(position) => Self::Position(position),
             RowIdentitySourceState::ExternalKeySha256(value) => {
                 if value.len() != 64
                     || value
@@ -405,12 +467,12 @@ impl TryFrom<RowIdentitySourceState> for RowIdentitySource {
                         .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
                 {
                     return Err(persisted_error(
-                        "persisted external-row-key digest is not canonical lowercase SHA-256",
+                        "persisted external row-key digest is not canonical SHA-256",
                     ));
                 }
-                Ok(Self::ExternalKeySha256(value))
+                Self::ExternalKeySha256(value)
             }
-        }
+        })
     }
 }
 
@@ -428,21 +490,9 @@ impl TryFrom<PreparedPartyStateV1> for PreparedPartyRow {
     type Error = SdkError;
 
     fn try_from(value: PreparedPartyStateV1) -> Result<Self, Self::Error> {
-        let party_id = parse_canonical_record_id(
-            value.party_id,
-            TargetPartyId::try_new,
-            |value| value.as_str(),
-            "prepared Party ID",
-        )?;
-        let prepared =
-            PreparedPartyRow::try_new(party_id, value.kind.into(), value.display_name.clone())
-                .map_err(|error| persisted_error(error.to_string()))?;
-        if prepared.display_name() != value.display_name {
-            return Err(persisted_error(
-                "persisted prepared Party row is not canonical",
-            ));
-        }
-        Ok(prepared)
+        let party_id = parse_record_id(value.party_id, TargetPartyId::try_new, "prepared Party ID")?;
+        PreparedPartyRow::try_new(party_id, value.kind.into(), value.display_name)
+            .map_err(|error| persisted_error(error.to_string()))
     }
 }
 
@@ -459,12 +509,8 @@ impl TryFrom<RowDiagnosticStateV1> for RowDiagnostic {
     type Error = SdkError;
 
     fn try_from(value: RowDiagnosticStateV1) -> Result<Self, Self::Error> {
-        let diagnostic = RowDiagnostic::try_new(value.code.clone(), value.field.clone())
-            .map_err(|error| persisted_error(error.to_string()))?;
-        if diagnostic.code() != value.code || diagnostic.field() != value.field {
-            return Err(persisted_error("persisted row diagnostic is not canonical"));
-        }
-        Ok(diagnostic)
+        RowDiagnostic::try_new(value.code, value.field)
+            .map_err(|error| persisted_error(error.to_string()))
     }
 }
 
@@ -552,182 +598,124 @@ impl From<PartyImportKindState> for PartyImportKind {
     }
 }
 
-fn parse_canonical_record_id<T, Parse, View>(
+fn parse_record_id<T>(
     raw: String,
-    parse: Parse,
-    view: View,
-    label: &str,
-) -> Result<T, SdkError>
+    parse: impl FnOnce(String) -> Result<T, SdkError>,
+    label: &'static str,
+) -> Result<T, SdkError> {
+    parse(raw).map_err(|error| persisted_error(format!("persisted {label} is invalid: {error}")))
+}
+
+fn require_canonical_json<T>(bytes: &[u8], state: &T, label: &str) -> Result<(), SdkError>
 where
-    Parse: FnOnce(String) -> Result<T, SdkError>,
-    View: Fn(&T) -> &str,
+    T: Serialize,
 {
-    let parsed = parse(raw.clone()).map_err(|error| persisted_error(error.to_string()))?;
-    if view(&parsed) != raw {
+    let canonical = serde_json::to_vec(state)
+        .map_err(|error| persisted_error(format!("{label} canonical JSON failed: {error}")))?;
+    if canonical != bytes {
         return Err(persisted_error(format!(
-            "persisted {label} is not canonical"
-        )));
-    }
-    Ok(parsed)
-}
-
-fn require_canonical_json<T: Serialize>(
-    original: &[u8],
-    state: &T,
-    label: &str,
-) -> Result<(), SdkError> {
-    let canonical = serde_json::to_vec(state).map_err(|error| {
-        persisted_error(format!("{label} canonical serialization failed: {error}"))
-    })?;
-    if canonical != original {
-        return Err(persisted_error(format!(
-            "persisted {label} state is not in canonical JSON representation"
+            "persisted {label} state is not canonical JSON"
         )));
     }
     Ok(())
 }
 
-fn validate_size(bytes: &[u8], maximum_bytes: u64, label: &str) -> Result<(), SdkError> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > maximum_bytes {
+fn validate_size(bytes: &[u8], maximum: u64, label: &str) -> Result<(), SdkError> {
+    let size = u64::try_from(bytes.len())
+        .map_err(|_| persisted_error(format!("{label} state size does not fit u64")))?;
+    if size > maximum {
         return Err(persisted_error(format!(
-            "{label} state exceeds the maximum of {maximum_bytes} bytes"
+            "persisted {label} state exceeds maximum size {maximum}"
         )));
     }
     Ok(())
 }
 
-fn persisted_error(message: impl Into<String>) -> SdkError {
+fn persisted_error(internal: impl Into<String>) -> SdkError {
     SdkError::new(
-        "CUSTOMER_DATA_PERSISTED_STATE_INVALID",
+        "CUSTOMER_DATA_IMPORT_PERSISTED_STATE_INVALID",
         ErrorCategory::Internal,
         false,
-        "The persisted customer-data import state is invalid.",
+        "Persisted customer-data import state is invalid.",
     )
-    .with_internal_reference(message)
+    .with_internal_reference(internal)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
-        CreateImportJob, CreateImportRow, MarkImportJobValidated, PartialExecutionPolicy,
-        ValidateImportRowFailure,
-    };
+    use crate::domain::{CreateImportJob, CreateImportRow};
 
-    fn source(rows: u32) -> SourceDescriptor {
+    fn source() -> SourceDescriptor {
         SourceDescriptor::try_new(
             "customers.csv",
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            rows,
+            "11".repeat(32),
+            2,
+            SourceSystemId::try_new("legacy-crm").unwrap(),
+            ImportParserProfile::csv_v1(b',', b'"').unwrap(),
         )
         .unwrap()
     }
 
     fn mapping() -> PartyImportMapping {
         PartyImportMapping::try_new(
-            "party_id",
+            None,
             "kind",
             "display_name",
-            Some("external_id".to_owned()),
+            Some("legacy_customer_id".to_owned()),
+            Some("row_key".to_owned()),
         )
         .unwrap()
     }
 
     #[test]
-    fn import_job_state_round_trip_is_deterministic() {
-        let mut job = ImportJob::create(CreateImportJob {
+    fn job_state_round_trip_preserves_source_interpretation_identity() {
+        let job = ImportJob::create(CreateImportJob {
             job_id: ImportJobId::try_new("import-job-1").unwrap(),
-            source: source(2),
+            source: source(),
             mapping: mapping(),
             partial_execution_policy: PartialExecutionPolicy::AllValidRows,
-            occurred_at_unix_nanos: 100,
+            occurred_at_unix_nanos: 1,
         })
         .unwrap();
-        job.mark_validated(MarkImportJobValidated {
-            expected_version: 1,
-            valid_rows: 1,
-            invalid_rows: 1,
-            occurred_at_unix_nanos: 200,
-        })
-        .unwrap();
-
-        let first = encode_import_job_state(&job).unwrap();
-        let decoded = decode_import_job_state(&first).unwrap();
-        let second = encode_import_job_state(&decoded).unwrap();
-        assert_eq!(first, second);
+        let bytes = encode_import_job_state(&job).unwrap();
+        let decoded = decode_import_job_state(&bytes).unwrap();
         assert_eq!(decoded.snapshot(), job.snapshot());
+        assert_eq!(decoded.source().source_system_id().as_str(), "legacy-crm");
+        assert_eq!(decoded.source().parser_profile().parser_version(), ImportParserVersion::CsvV1);
     }
 
     #[test]
-    fn import_row_state_round_trip_preserves_invalid_evidence() {
-        let mut row = ImportRow::create(CreateImportRow {
+    fn row_state_round_trip_preserves_external_identifier_digest() {
+        let row = ImportRow::create(CreateImportRow {
             job_id: ImportJobId::try_new("import-job-1").unwrap(),
             row_position: 1,
-            external_row_key: Some("customer-42".to_owned()),
-            occurred_at_unix_nanos: 100,
+            external_row_key: Some("row-1".to_owned()),
+            source_external_id: Some("legacy-customer-42".to_owned()),
+            occurred_at_unix_nanos: 1,
         })
         .unwrap();
-        row.mark_invalid(ValidateImportRowFailure {
-            expected_version: 1,
-            diagnostics: vec![RowDiagnostic::try_new("mapping.missing", "display_name").unwrap()],
-            occurred_at_unix_nanos: 200,
-        })
-        .unwrap();
-
-        let first = encode_import_row_state(&row).unwrap();
-        let decoded = decode_import_row_state(&first).unwrap();
-        let second = encode_import_row_state(&decoded).unwrap();
-        assert_eq!(first, second);
+        let bytes = encode_import_row_state(&row).unwrap();
+        let decoded = decode_import_row_state(&bytes).unwrap();
         assert_eq!(decoded.snapshot(), row.snapshot());
+        assert!(decoded.source_external_id_sha256().is_some());
     }
 
     #[test]
-    fn unknown_fields_and_noncanonical_json_are_rejected() {
+    fn decoder_rejects_non_canonical_json() {
         let job = ImportJob::create(CreateImportJob {
             job_id: ImportJobId::try_new("import-job-1").unwrap(),
-            source: source(1),
+            source: source(),
             mapping: mapping(),
-            partial_execution_policy: PartialExecutionPolicy::RequireAllValid,
-            occurred_at_unix_nanos: 100,
+            partial_execution_policy: PartialExecutionPolicy::AllValidRows,
+            occurred_at_unix_nanos: 1,
         })
         .unwrap();
-        let bytes = encode_import_job_state(&job).unwrap();
-        let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        value["unexpected"] = serde_json::json!(true);
+        let mut bytes = encode_import_job_state(&job).unwrap();
+        bytes.push(b'\n');
         assert_eq!(
-            decode_import_job_state(&serde_json::to_vec(&value).unwrap())
-                .unwrap_err()
-                .code,
-            "CUSTOMER_DATA_PERSISTED_STATE_INVALID"
-        );
-
-        let pretty = serde_json::to_vec_pretty(
-            &serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            decode_import_job_state(&pretty).unwrap_err().code,
-            "CUSTOMER_DATA_PERSISTED_STATE_INVALID"
-        );
-    }
-
-    #[test]
-    fn semantically_noncanonical_source_is_rejected() {
-        let job = ImportJob::create(CreateImportJob {
-            job_id: ImportJobId::try_new("import-job-1").unwrap(),
-            source: source(1),
-            mapping: mapping(),
-            partial_execution_policy: PartialExecutionPolicy::RequireAllValid,
-            occurred_at_unix_nanos: 100,
-        })
-        .unwrap();
-        let bytes = encode_import_job_state(&job).unwrap();
-        let mut state: ImportJobStateV1 = serde_json::from_slice(&bytes).unwrap();
-        state.source.source_name = " customers.csv ".to_owned();
-        let tampered = serde_json::to_vec(&state).unwrap();
-        assert_eq!(
-            decode_import_job_state(&tampered).unwrap_err().code,
-            "CUSTOMER_DATA_PERSISTED_STATE_INVALID"
+            decode_import_job_state(&bytes).unwrap_err().code,
+            "CUSTOMER_DATA_IMPORT_PERSISTED_STATE_INVALID"
         );
     }
 }
