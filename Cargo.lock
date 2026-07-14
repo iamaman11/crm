@@ -245,7 +245,7 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost 0.14.4",
+ "prost",
  "sqlx",
  "tokio",
 ]
@@ -264,7 +264,7 @@ dependencies = [
  "crm-party-relationships-projection",
  "crm-proto-contracts",
  "crm-sales-activities-capability-composition",
- "prost 0.14.4",
+ "prost",
  "reqwest",
  "serde_json",
  "sqlx",
@@ -315,7 +315,7 @@ dependencies = [
  "crm-search-query-adapter",
  "crm-search-runtime",
  "http",
- "prost 0.14.4",
+ "prost",
  "prost-build",
  "protoc-bin-vendored",
  "semver",
@@ -355,7 +355,7 @@ dependencies = [
  "crm-sales-activities-capability-composition",
  "crm-sales-activities-query-adapter",
  "http",
- "prost 0.14.4",
+ "prost",
  "sha2 0.10.9",
  "sqlx",
  "tokio",
@@ -371,7 +371,7 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost 0.14.4",
+ "prost",
  "prost-types",
  "serde_json",
  "sha2 0.10.9",
@@ -434,7 +434,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -460,7 +460,7 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -475,7 +475,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -496,7 +496,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-search-runtime",
- "prost 0.14.4",
+ "prost",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -554,7 +554,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-projection-runtime",
  "crm-proto-contracts",
- "prost 0.14.4",
+ "prost",
  "serde",
  "serde_json",
 ]
@@ -570,7 +570,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
  "serde_json",
  "sqlx",
 ]
@@ -596,7 +596,7 @@ dependencies = [
  "crm-customer-accounts",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost 0.14.4",
+ "prost",
  "serde_json",
 ]
 
@@ -612,7 +612,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -646,7 +646,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
- "prost 0.13.5",
+ "prost",
  "tokio",
 ]
 
@@ -662,7 +662,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -675,7 +675,7 @@ dependencies = [
  "crm-projection-runtime",
  "crm-proto-contracts",
  "crm-search-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -742,7 +742,7 @@ dependencies = [
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -757,7 +757,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -769,7 +769,7 @@ dependencies = [
  "crm-metadata-schema",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost 0.14.4",
+ "prost",
  "serde_json",
 ]
 
@@ -783,7 +783,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
  "tokio",
 ]
 
@@ -856,7 +856,7 @@ dependencies = [
  "crm-parties",
  "crm-proto-contracts",
  "http",
- "prost 0.14.4",
+ "prost",
  "sqlx",
  "tokio",
 ]
@@ -873,7 +873,7 @@ dependencies = [
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -896,7 +896,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-party-relationships",
  "crm-proto-contracts",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -908,7 +908,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-projection-runtime",
  "crm-proto-contracts",
- "prost 0.14.4",
+ "prost",
  "serde",
  "serde_json",
 ]
@@ -925,7 +925,7 @@ dependencies = [
  "crm-party-relationships-capability-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -942,7 +942,7 @@ dependencies = [
 name = "crm-proto-contracts"
 version = "0.1.0"
 dependencies = [
- "prost 0.14.4",
+ "prost",
  "prost-build",
  "prost-types",
  "protoc-bin-vendored",
@@ -992,7 +992,7 @@ dependencies = [
  "crm-sales-capability-adapter",
  "crm-search-query-adapter",
  "crm-search-runtime",
- "prost 0.14.4",
+ "prost",
  "serde_json",
  "sqlx",
  "tokio",
@@ -1015,7 +1015,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-sales-activities-link",
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -1030,7 +1030,7 @@ dependencies = [
  "crm-proto-contracts",
  "crm-query-runtime",
  "crm-sales",
- "prost 0.14.4",
+ "prost",
  "tokio",
 ]
 
@@ -1045,7 +1045,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-sales",
- "prost 0.14.4",
+ "prost",
  "sqlx",
  "tokio",
 ]
@@ -1061,7 +1061,7 @@ dependencies = [
  "crm-proto-contracts",
  "crm-query-runtime",
  "crm-search-runtime",
- "prost 0.14.4",
+ "prost",
  "tokio",
 ]
 
@@ -1911,22 +1911,12 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2796faa41db3ec313a31f7624d9286acf277b52de526150b7e69f3debf891ee5"
-dependencies = [
- "bytes",
- "prost-derive 0.13.5",
-]
-
-[[package]]
-name = "prost"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
 dependencies = [
  "bytes",
- "prost-derive 0.14.4",
+ "prost-derive",
 ]
 
 [[package]]
@@ -1941,26 +1931,13 @@ dependencies = [
  "multimap",
  "petgraph",
  "prettyplease",
- "prost 0.14.4",
+ "prost",
  "prost-types",
  "pulldown-cmark",
  "pulldown-cmark-to-cmark",
  "regex",
  "syn",
  "tempfile",
-]
-
-[[package]]
-name = "prost-derive"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
-dependencies = [
- "anyhow",
- "itertools",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1982,7 +1959,7 @@ version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f94967dc7688f3054c7fac87473ffae4cc4c3904800e2d9f5b857246d8963b0a"
 dependencies = [
- "prost 0.14.4",
+ "prost",
 ]
 
 [[package]]
@@ -2732,7 +2709,7 @@ version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcfab99db777fba2802f0dfa861d1628d1ae916fb199d29819941f139ae85082"
 dependencies = [
- "prost 0.14.4",
+ "prost",
  "tokio",
  "tokio-stream",
  "tonic",
@@ -2746,7 +2723,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50849f68853be452acf590cde0b146665b8d507b3b8af17261df47e02c209ea0"
 dependencies = [
  "bytes",
- "prost 0.14.4",
+ "prost",
  "tonic",
 ]
 

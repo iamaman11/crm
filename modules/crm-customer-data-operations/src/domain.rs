@@ -1279,14 +1279,9 @@ fn validate_job_counters(
     }
     match status {
         ImportJobStatus::Created => {
-            if version != 1
-                || valid_rows != 0
-                || invalid_rows != 0
-                || succeeded_rows != 0
-                || checkpoint_row_position != 0
-            {
+            if succeeded_rows != 0 || checkpoint_row_position != 0 {
                 return Err(invalid_counter(
-                    "created import jobs must retain the initial version and zero counters",
+                    "created import jobs may contain partial validation progress but cannot contain execution progress",
                 ));
             }
         }
