@@ -1,4 +1,5 @@
 name: Rust Generated Sync
+# One-shot Phase 8A.6 registry fixture generation.
 
 on:
   pull_request:
