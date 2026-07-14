@@ -1264,7 +1264,7 @@ fn validate_job_counters(
     invalid_rows: u32,
     succeeded_rows: u32,
     checkpoint_row_position: u32,
-    version: i64,
+    _version: i64,
 ) -> Result<(), SdkError> {
     let validated_total = valid_rows
         .checked_add(invalid_rows)
