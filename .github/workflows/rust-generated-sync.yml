@@ -1,5 +1,6 @@
 name: Rust Generated Sync
 
+# One-shot Phase 8A.7 counter-validation refactor verification.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
