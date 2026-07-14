@@ -1,7 +1,7 @@
 use crate::{
     CreateImportRow, ImportJobId, ImportRow, ImportRowStatus, PreparedPartyRow, RowDiagnostic,
-    SdkError,
 };
+use crm_module_sdk::SdkError;
 
 /// Initial validation outcome used when a validation batch first persists an import row.
 ///
