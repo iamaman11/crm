@@ -84,14 +84,9 @@ message ValidatePartyImportSourceBatchResponse {
 }
 
 service CustomerDataOperationsSourceService {
-  rpc CreatePartyImportSourceArtifact(CreatePartyImportSourceArtifactRequest)
-      returns (CreatePartyImportSourceArtifactResponse);
-  rpc AppendPartyImportSourceChunk(AppendPartyImportSourceChunkRequest)
-      returns (AppendPartyImportSourceChunkResponse);
-  rpc FinalizePartyImportSourceArtifact(FinalizePartyImportSourceArtifactRequest)
-      returns (FinalizePartyImportSourceArtifactResponse);
-  rpc CreatePartyImportJobFromSourceArtifact(CreatePartyImportJobFromSourceArtifactRequest)
-      returns (CreatePartyImportJobFromSourceArtifactResponse);
-  rpc ValidatePartyImportSourceBatch(ValidatePartyImportSourceBatchRequest)
-      returns (ValidatePartyImportSourceBatchResponse);
+  rpc CreatePartyImportSourceArtifact(CreatePartyImportSourceArtifactRequest) returns (CreatePartyImportSourceArtifactResponse);
+  rpc AppendPartyImportSourceChunk(AppendPartyImportSourceChunkRequest) returns (AppendPartyImportSourceChunkResponse);
+  rpc FinalizePartyImportSourceArtifact(FinalizePartyImportSourceArtifactRequest) returns (FinalizePartyImportSourceArtifactResponse);
+  rpc CreatePartyImportJobFromSourceArtifact(CreatePartyImportJobFromSourceArtifactRequest) returns (CreatePartyImportJobFromSourceArtifactResponse);
+  rpc ValidatePartyImportSourceBatch(ValidatePartyImportSourceBatchRequest) returns (ValidatePartyImportSourceBatchResponse);
 }
