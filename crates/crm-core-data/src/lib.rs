@@ -10,6 +10,9 @@ pub mod postgres;
 pub mod postgres_batch;
 mod postgres_event_delivery;
 mod postgres_event_delivery_ledger;
+mod postgres_file_artifact;
+mod postgres_file_artifact_capability;
+mod postgres_file_artifact_evidence;
 mod postgres_projection;
 mod postgres_query;
 mod postgres_related_query;
@@ -29,6 +32,11 @@ pub use postgres_batch::*;
 pub use postgres_event_delivery::EventDeliveryQuery;
 pub use postgres_event_delivery_ledger::{
     ClaimedEventDelivery, EventDeliveryClaim, EventDeliveryCompletion,
+};
+pub use postgres_file_artifact::PostgresImmutableFileArtifactStore;
+pub use postgres_file_artifact_capability::{
+    FileArtifactCapabilityEvidence, FileArtifactCapabilityMutation,
+    FileArtifactCapabilityMutationResult,
 };
 pub use postgres_query::{
     MAXIMUM_RECORD_QUERY_PAGE_SIZE, RecordGetQuery, RecordListQuery, RecordQueryContinuation,

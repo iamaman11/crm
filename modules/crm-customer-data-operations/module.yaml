@@ -1,0 +1,113 @@
+schema_version: crm.module/v1
+module_id: crm.customer-data-operations
+version: "0.1.0"
+display_name: CRM Customer Data Operations
+description: Governed customer import source artifacts, jobs, parser profiles, mappings, row outcomes and resumable execution coordination without owning customer-master records.
+
+owner:
+  team: customer-platform
+  contact: "crm-owner@example.com"
+  codeowners:
+    - "@iamaman11"
+
+runtime:
+  kind: in_process
+  entrypoint: modules/crm-customer-data-operations
+
+platform:
+  minimum_version: "0.1.0"
+
+dependencies:
+  required:
+    - module_id: crm.parties
+      version_range: ">=0.3.0, <1.0.0"
+  optional: []
+  conflicts: []
+
+provides:
+  capabilities:
+    - id: customer_data.import.party.source.create
+      version: "1.0.0"
+    - id: customer_data.import.party.source.chunk.append
+      version: "1.0.0"
+    - id: customer_data.import.party.source.finalize
+      version: "1.0.0"
+    - id: customer_data.import.party.source.job.create
+      version: "1.0.0"
+    - id: customer_data.import.party.source.rows.validate
+      version: "1.0.0"
+    - id: customer_data.import.party.validation.finalize
+      version: "1.0.0"
+    - id: customer_data.import.party.execution.start
+      version: "1.0.0"
+    - id: customer_data.import.party.cancel
+      version: "1.0.0"
+    - id: customer_data.import.party.get
+      version: "1.0.0"
+    - id: customer_data.import.party.list
+      version: "1.0.0"
+    - id: customer_data.import.party.rows.list
+      version: "1.0.0"
+  events:
+    - id: customer_data.import.party.source.created
+      version: "1.0.0"
+    - id: customer_data.import.party.source.chunk_appended
+      version: "1.0.0"
+    - id: customer_data.import.party.source.finalized
+      version: "1.0.0"
+    - id: customer_data.import.party.created
+      version: "1.0.0"
+    - id: customer_data.import.party.row_validated
+      version: "1.0.0"
+    - id: customer_data.import.party.validation_progressed
+      version: "1.0.0"
+    - id: customer_data.import.party.validation_completed
+      version: "1.0.0"
+    - id: customer_data.import.party.execution_started
+      version: "1.0.0"
+    - id: customer_data.import.party.row_succeeded
+      version: "1.0.0"
+    - id: customer_data.import.party.row_failed
+      version: "1.0.0"
+    - id: customer_data.import.party.checkpoint_advanced
+      version: "1.0.0"
+    - id: customer_data.import.party.completed
+      version: "1.0.0"
+    - id: customer_data.import.party.cancelled
+      version: "1.0.0"
+  objects:
+    - customer_data.import_job
+    - customer_data.import_row
+  ui_extensions: []
+
+consumes:
+  capabilities:
+    - id: parties.party.create
+      version: "1.0.0"
+  events: []
+
+storage:
+  record_types:
+    - customer_data.import_job
+    - customer_data.import_row
+  private_state_namespaces:
+    - crm.customer-data-operations.import_job
+    - crm.customer-data-operations.import_row
+    - crm.customer-data-operations.import_source_artifact
+
+security:
+  data_classes:
+    - internal
+    - confidential
+    - personal
+  network_egress: []
+  secret_handles: []
+
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-customer-data-operations/migrations
+  retained_record_types:
+    - customer_data.import_job
+    - customer_data.import_row

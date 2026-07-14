@@ -1,0 +1,308 @@
+syntax = "proto3";
+
+package crm.customer_data_operations.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+
+// Stable import-job identity owned only by crm.customer-data-operations.
+message ImportJobRef {
+  string import_job_id = 1;
+}
+
+// Stable row identity inside one import job.
+message ImportRowRef {
+  ImportJobRef import_job_ref = 1;
+  string import_row_id = 2;
+}
+
+enum PartialExecutionPolicy {
+  PARTIAL_EXECUTION_POLICY_UNSPECIFIED = 0;
+  PARTIAL_EXECUTION_POLICY_ALL_VALID_ROWS = 1;
+  PARTIAL_EXECUTION_POLICY_REQUIRE_ALL_VALID = 2;
+}
+
+enum ImportJobStatus {
+  IMPORT_JOB_STATUS_UNSPECIFIED = 0;
+  IMPORT_JOB_STATUS_CREATED = 1;
+  IMPORT_JOB_STATUS_VALIDATED = 2;
+  IMPORT_JOB_STATUS_EXECUTING = 3;
+  IMPORT_JOB_STATUS_COMPLETED = 4;
+  IMPORT_JOB_STATUS_CANCELLED = 5;
+}
+
+enum ImportRowStatus {
+  IMPORT_ROW_STATUS_UNSPECIFIED = 0;
+  IMPORT_ROW_STATUS_PENDING = 1;
+  IMPORT_ROW_STATUS_VALID = 2;
+  IMPORT_ROW_STATUS_INVALID = 3;
+  IMPORT_ROW_STATUS_FAILED_RETRYABLE = 4;
+  IMPORT_ROW_STATUS_SUCCEEDED = 5;
+}
+
+enum PartyImportKind {
+  PARTY_IMPORT_KIND_UNSPECIFIED = 0;
+  PARTY_IMPORT_KIND_PERSON = 1;
+  PARTY_IMPORT_KIND_ORGANIZATION = 2;
+}
+
+enum ImportSourceFormat {
+  IMPORT_SOURCE_FORMAT_UNSPECIFIED = 0;
+  IMPORT_SOURCE_FORMAT_CSV = 1;
+}
+
+enum ImportTextEncoding {
+  IMPORT_TEXT_ENCODING_UNSPECIFIED = 0;
+  IMPORT_TEXT_ENCODING_UTF8 = 1;
+}
+
+enum ImportHeaderMode {
+  IMPORT_HEADER_MODE_UNSPECIFIED = 0;
+  IMPORT_HEADER_MODE_REQUIRED_FIRST_ROW = 1;
+}
+
+enum ImportParserVersion {
+  IMPORT_PARSER_VERSION_UNSPECIFIED = 0;
+  IMPORT_PARSER_VERSION_CSV_V1 = 1;
+}
+
+enum ImportCanonicalizationVersion {
+  IMPORT_CANONICALIZATION_VERSION_UNSPECIFIED = 0;
+  IMPORT_CANONICALIZATION_VERSION_V1 = 1;
+}
+
+// Immutable source interpretation identity. These fields are semantic inputs to validation
+// and execution; changing any one requires a new job/source interpretation.
+message ImportParserProfile {
+  ImportSourceFormat format = 1;
+  ImportTextEncoding encoding = 2;
+  // Exact non-zero ASCII byte other than CR/LF.
+  uint32 delimiter_ascii = 3;
+  // Exact non-zero ASCII byte other than CR/LF and distinct from delimiter_ascii.
+  uint32 quote_ascii = 4;
+  ImportHeaderMode header_mode = 5;
+  ImportParserVersion parser_version = 6;
+  ImportCanonicalizationVersion canonicalization_version = 7;
+}
+
+message ImportSourceDescriptor {
+  string source_name = 1;
+  bytes content_sha256 = 2;
+  uint32 row_count = 3;
+  // Stable source-system identity used only to contextualize source identifier evidence.
+  string source_system_id = 4;
+  ImportParserProfile parser_profile = 5;
+}
+
+// Immutable v1 mapping. Values are bounded source column names, never executable expressions.
+// Source-system identifiers and canonical CRM Party IDs are deliberately distinct concepts.
+message PartyImportMapping {
+  // Optional explicit canonical CRM Party ID column. When absent, application composition
+  // derives a deterministic target Party ID from the import job and row identity.
+  optional string target_party_id_column = 1;
+  string party_kind_column = 2;
+  string display_name_column = 3;
+  // Optional source-system identifier retained only as import-owned evidence; it is never
+  // interpreted as the canonical CRM Party ID.
+  optional string source_external_id_column = 4;
+  // Optional stable source row key used only for deterministic import-row identity.
+  optional string external_row_key_column = 5;
+}
+
+message RowDiagnostic {
+  string code = 1;
+  string field = 2;
+}
+
+message PreparedPartyRow {
+  // Canonical target Party identity prepared for the governed Party create capability.
+  crm.customer.v1.PartyRef party_ref = 1;
+  PartyImportKind kind = 2;
+  string display_name = 3;
+}
+
+message ImportJob {
+  ImportJobRef import_job_ref = 1;
+  ImportSourceDescriptor source = 2;
+  PartyImportMapping mapping = 3;
+  string mapping_version_id = 4;
+  PartialExecutionPolicy partial_execution_policy = 5;
+  ImportJobStatus status = 6;
+  uint32 total_rows = 7;
+  uint32 valid_rows = 8;
+  uint32 invalid_rows = 9;
+  uint32 succeeded_rows = 10;
+  uint32 checkpoint_row_position = 11;
+  crm.core.v1.UnixTime created_at = 12;
+  crm.core.v1.UnixTime updated_at = 13;
+  crm.customer.v1.CustomerResourceVersion resource_version = 14;
+}
+
+message ImportRow {
+  ImportRowRef import_row_ref = 1;
+  uint32 row_position = 2;
+  string external_row_key_sha256 = 3;
+  // Hash of optional source-system identifier evidence. This field is not a Party ID.
+  string source_external_id_sha256 = 4;
+  ImportRowStatus status = 5;
+  PreparedPartyRow prepared_party = 6;
+  repeated RowDiagnostic diagnostics = 7;
+  uint32 execution_attempts = 8;
+  string last_execution_error_code = 9;
+  crm.customer.v1.PartyRef target_party_ref = 10;
+  crm.core.v1.UnixTime created_at = 11;
+  crm.core.v1.UnixTime updated_at = 12;
+  crm.customer.v1.CustomerResourceVersion resource_version = 13;
+}
+
+message CreatePartyImportJobRequest {
+  ImportJobRef import_job_ref = 1;
+  ImportSourceDescriptor source = 2;
+  PartyImportMapping mapping = 3;
+  PartialExecutionPolicy partial_execution_policy = 4;
+}
+
+message CreatePartyImportJobResponse {
+  ImportJob import_job = 1;
+}
+
+// One externally parsed source row. Column values are data only and are interpreted
+// solely by the immutable source parser profile and PartyImportMapping attached to the job.
+message PartyImportSourceRow {
+  uint32 row_position = 1;
+  map<string, string> columns = 2;
+}
+
+// Bounded batch validation. Validation may persist import-owned row evidence but must
+// not invoke Party mutations or create Party idempotency/outbox/audit side effects.
+message ValidatePartyImportRowsRequest {
+  ImportJobRef import_job_ref = 1;
+  repeated PartyImportSourceRow rows = 2;
+}
+
+message ValidatePartyImportRowsResponse {
+  repeated ImportRow import_rows = 1;
+}
+
+// Finalization derives authoritative valid/invalid counts from import-owned row state;
+// clients do not supply counters.
+message FinalizePartyImportValidationRequest {
+  ImportJobRef import_job_ref = 1;
+  int64 expected_version = 2;
+}
+
+message FinalizePartyImportValidationResponse {
+  ImportJob import_job = 1;
+}
+
+// Starts or resumes governed background execution. Target Party creation must use the
+// existing exact Party capability with deterministic per-row target idempotency.
+message StartPartyImportExecutionRequest {
+  ImportJobRef import_job_ref = 1;
+  int64 expected_version = 2;
+}
+
+message StartPartyImportExecutionResponse {
+  ImportJob import_job = 1;
+}
+
+message CancelPartyImportJobRequest {
+  ImportJobRef import_job_ref = 1;
+  int64 expected_version = 2;
+}
+
+message CancelPartyImportJobResponse {
+  ImportJob import_job = 1;
+}
+
+message GetPartyImportJobRequest {
+  ImportJobRef import_job_ref = 1;
+}
+
+message GetPartyImportJobResponse {
+  ImportJob import_job = 1;
+}
+
+message ListPartyImportJobsRequest {
+  ImportJobStatus status = 1;
+  int32 page_size = 2;
+  string cursor = 3;
+}
+
+message ListPartyImportJobsResponse {
+  repeated ImportJob import_jobs = 1;
+  string next_cursor = 2;
+}
+
+message ListPartyImportRowsRequest {
+  ImportJobRef import_job_ref = 1;
+  ImportRowStatus status = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+message ListPartyImportRowsResponse {
+  repeated ImportRow import_rows = 1;
+  string next_cursor = 2;
+}
+
+message PartyImportJobCreatedEvent {
+  ImportJob import_job = 1;
+}
+
+// One event is emitted for each newly persisted validated or invalid import row.
+message PartyImportRowValidatedEvent {
+  ImportRow import_row = 1;
+}
+
+// Emitted atomically with a validation batch after server-derived row outcomes update
+// the authoritative import-job valid/invalid counters.
+message PartyImportValidationProgressedEvent {
+  ImportJob import_job = 1;
+}
+
+message PartyImportValidationCompletedEvent {
+  ImportJob import_job = 1;
+}
+
+message PartyImportExecutionStartedEvent {
+  ImportJob import_job = 1;
+}
+
+// Emitted when the governed target Party capability succeeds for a row and the
+// authoritative import-owned row outcome is persisted as succeeded.
+message PartyImportRowSucceededEvent {
+  ImportRow import_row = 1;
+}
+
+// Emitted when an executable row records bounded retryable execution failure evidence.
+message PartyImportRowFailedEvent {
+  ImportRow import_row = 1;
+}
+
+// Emitted whenever the import job advances its durable sequential checkpoint after a
+// successful target result or an explicitly skipped invalid row.
+message PartyImportCheckpointAdvancedEvent {
+  ImportJob import_job = 1;
+  ImportRowRef import_row_ref = 2;
+  bool skipped_invalid = 3;
+}
+
+message PartyImportCompletedEvent {
+  ImportJob import_job = 1;
+}
+
+message PartyImportCancelledEvent {
+  ImportJob import_job = 1;
+}
+
+service CustomerDataOperationsService {
+  rpc CreatePartyImportJob(CreatePartyImportJobRequest) returns (CreatePartyImportJobResponse);
+  rpc ValidatePartyImportRows(ValidatePartyImportRowsRequest) returns (ValidatePartyImportRowsResponse);
+  rpc FinalizePartyImportValidation(FinalizePartyImportValidationRequest) returns (FinalizePartyImportValidationResponse);
+  rpc StartPartyImportExecution(StartPartyImportExecutionRequest) returns (StartPartyImportExecutionResponse);
+  rpc CancelPartyImportJob(CancelPartyImportJobRequest) returns (CancelPartyImportJobResponse);
+  rpc GetPartyImportJob(GetPartyImportJobRequest) returns (GetPartyImportJobResponse);
+  rpc ListPartyImportJobs(ListPartyImportJobsRequest) returns (ListPartyImportJobsResponse);
+  rpc ListPartyImportRows(ListPartyImportRowsRequest) returns (ListPartyImportRowsResponse);
+}

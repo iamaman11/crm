@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package crm.customer_data_operations_internal.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/customer_data_operations/v1/customer_data_operations.proto";
+
+// Internal worker-only command contracts. These messages are not exposed by a public RPC service
+// and their capability coordinates must never be registered in the public application ingress.
+
+message CommitPartyImportInvalidSkipRequest {
+  crm.customer_data_operations.v1.ImportJobRef import_job_ref = 1;
+  int64 expected_job_version = 2;
+  crm.customer_data_operations.v1.ImportRowRef import_row_ref = 3;
+  uint32 row_position = 4;
+}
+
+message CommitPartyImportSuccessRequest {
+  crm.customer_data_operations.v1.ImportJobRef import_job_ref = 1;
+  int64 expected_job_version = 2;
+  crm.customer_data_operations.v1.ImportRowRef import_row_ref = 3;
+  int64 expected_row_version = 4;
+  crm.customer.v1.PartyRef target_party_ref = 5;
+  uint32 row_position = 6;
+}
+
+message RecordPartyImportRetryableFailureRequest {
+  crm.customer_data_operations.v1.ImportJobRef import_job_ref = 1;
+  crm.customer_data_operations.v1.ImportRowRef import_row_ref = 2;
+  int64 expected_row_version = 3;
+  string error_code = 4;
+}
+
+message CompletePartyImportExecutionRequest {
+  crm.customer_data_operations.v1.ImportJobRef import_job_ref = 1;
+  int64 expected_job_version = 2;
+}
