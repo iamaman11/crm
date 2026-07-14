@@ -65,10 +65,7 @@ async fn immutable_artifact_upload_is_sequential_replay_safe_finalized_and_tenan
 
     if chunks.len() > 2 {
         let out_of_order = artifacts
-            .append_chunk(
-                &context_a,
-                chunk_command(2, chunks[2]),
-            )
+            .append_chunk(&context_a, chunk_command(2, chunks[2]))
             .await
             .unwrap_err();
         assert_eq!(out_of_order.code, "FILE_ARTIFACT_CHUNK_OUT_OF_ORDER");

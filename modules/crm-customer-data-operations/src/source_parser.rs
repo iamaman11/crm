@@ -43,11 +43,13 @@ impl ParsedImportSource {
                 "Source validation batch position and size must be positive",
             ));
         }
-        let start = usize::try_from(start_row_position - 1).map_err(|_| parser_error(
-            "CUSTOMER_DATA_IMPORT_SOURCE_BATCH_POSITION_INVALID",
-            "customer_data.import.source_batch.start_row_position",
-            "Source validation batch position is invalid.",
-        ))?;
+        let start = usize::try_from(start_row_position - 1).map_err(|_| {
+            parser_error(
+                "CUSTOMER_DATA_IMPORT_SOURCE_BATCH_POSITION_INVALID",
+                "customer_data.import.source_batch.start_row_position",
+                "Source validation batch position is invalid.",
+            )
+        })?;
         if start > self.rows.len() {
             return Err(SdkError::invalid_argument(
                 "customer_data.import.source_batch.start_row_position",
@@ -117,8 +119,8 @@ pub fn parse_import_source(
                 "Import source exceeds the maximum supported row count.",
             ));
         }
-        let record = result
-            .map_err(|error| csv_error("CUSTOMER_DATA_IMPORT_SOURCE_ROW_INVALID", error))?;
+        let record =
+            result.map_err(|error| csv_error("CUSTOMER_DATA_IMPORT_SOURCE_ROW_INVALID", error))?;
         if record.len() != headers.len() {
             return Err(parser_error(
                 "CUSTOMER_DATA_IMPORT_SOURCE_ROW_WIDTH_INVALID",
@@ -137,11 +139,13 @@ pub fn parse_import_source(
             }
             columns.insert(header.clone(), value.to_owned());
         }
-        let row_position = u32::try_from(rows.len() + 1).map_err(|_| parser_error(
-            "CUSTOMER_DATA_IMPORT_SOURCE_ROW_POSITION_INVALID",
-            "customer_data.import.source.rows",
-            "Import source row position is invalid.",
-        ))?;
+        let row_position = u32::try_from(rows.len() + 1).map_err(|_| {
+            parser_error(
+                "CUSTOMER_DATA_IMPORT_SOURCE_ROW_POSITION_INVALID",
+                "customer_data.import.source.rows",
+                "Import source row position is invalid.",
+            )
+        })?;
         rows.push(ParsedImportSourceRow {
             row_position,
             columns,
@@ -168,11 +172,7 @@ fn csv_error(code: &'static str, error: csv::Error) -> SdkError {
     .with_internal_reference(error.to_string())
 }
 
-fn parser_error(
-    code: &'static str,
-    field: &'static str,
-    safe_message: &'static str,
-) -> SdkError {
+fn parser_error(code: &'static str, field: &'static str, safe_message: &'static str) -> SdkError {
     let mut error = SdkError::new(code, ErrorCategory::InvalidArgument, false, safe_message);
     error.field_violations.push(FieldViolation {
         field: FieldName::try_new(field).expect("static import source parser field must be valid"),

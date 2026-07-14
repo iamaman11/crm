@@ -201,6 +201,9 @@ fn file_error(
     SdkError::new(code, category, retryable, safe_message)
 }
 
+/// Architecture marker for `crm-core-files`.
+pub const CRATE_NAME: &str = "crm-core-files";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,6 +231,3 @@ mod tests {
         assert!(empty.validate().is_err());
     }
 }
-
-/// Architecture marker for `crm-core-files`.
-pub const CRATE_NAME: &str = "crm-core-files";

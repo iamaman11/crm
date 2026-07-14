@@ -34,9 +34,15 @@ impl ImmutableFileArtifactStore for PostgresImmutableFileArtifactStore {
                 return Err(owner_mismatch());
             }
 
-            let expected_size_bytes = i64::try_from(command.expected_size_bytes)
-                .map_err(|_| invalid_stored_value("artifact size does not fit PostgreSQL bigint"))?;
-            let mut transaction = self.store.pool().begin().await.map_err(database_unavailable)?;
+            let expected_size_bytes = i64::try_from(command.expected_size_bytes).map_err(|_| {
+                invalid_stored_value("artifact size does not fit PostgreSQL bigint")
+            })?;
+            let mut transaction = self
+                .store
+                .pool()
+                .begin()
+                .await
+                .map_err(database_unavailable)?;
             bind_tenant(&mut transaction, context).await?;
             sqlx::query(
                 r#"
@@ -102,12 +108,19 @@ impl ImmutableFileArtifactStore for PostgresImmutableFileArtifactStore {
                     "File artifact chunk SHA-256 does not match the supplied bytes",
                 ));
             }
-            let chunk_index = i64::try_from(command.chunk_index)
-                .map_err(|_| SdkError::invalid_argument("file_artifact.chunk_index", "Chunk index is too large"))?;
-            let chunk_size = i32::try_from(command.bytes.len())
-                .map_err(|_| SdkError::invalid_argument("file_artifact.chunk.bytes", "Chunk is too large"))?;
+            let chunk_index = i64::try_from(command.chunk_index).map_err(|_| {
+                SdkError::invalid_argument("file_artifact.chunk_index", "Chunk index is too large")
+            })?;
+            let chunk_size = i32::try_from(command.bytes.len()).map_err(|_| {
+                SdkError::invalid_argument("file_artifact.chunk.bytes", "Chunk is too large")
+            })?;
 
-            let mut transaction = self.store.pool().begin().await.map_err(database_unavailable)?;
+            let mut transaction = self
+                .store
+                .pool()
+                .begin()
+                .await
+                .map_err(database_unavailable)?;
             bind_tenant(&mut transaction, context).await?;
             let metadata = load_metadata_for_update(&mut transaction, context, &command.file_id)
                 .await?
@@ -134,7 +147,9 @@ impl ImmutableFileArtifactStore for PostgresImmutableFileArtifactStore {
                 .fetch_optional(&mut *transaction)
                 .await
                 .map_err(database_unavailable)?
-                .ok_or_else(|| invalid_stored_value("previously accepted artifact chunk is missing"))?;
+                .ok_or_else(|| {
+                    invalid_stored_value("previously accepted artifact chunk is missing")
+                })?;
                 let stored_hash: Vec<u8> = existing
                     .try_get("chunk_sha256")
                     .map_err(|error| invalid_stored_value(error.to_string()))?;
@@ -163,10 +178,12 @@ impl ImmutableFileArtifactStore for PostgresImmutableFileArtifactStore {
             let new_received = metadata
                 .received_size_bytes
                 .checked_add(command.bytes.len() as u64)
-                .ok_or_else(|| artifact_conflict(
-                    "FILE_ARTIFACT_SIZE_OVERFLOW",
-                    "File artifact received size cannot advance further.",
-                ))?;
+                .ok_or_else(|| {
+                    artifact_conflict(
+                        "FILE_ARTIFACT_SIZE_OVERFLOW",
+                        "File artifact received size cannot advance further.",
+                    )
+                })?;
             if new_received > metadata.expected_size_bytes {
                 return Err(artifact_conflict(
                     "FILE_ARTIFACT_SIZE_EXCEEDED",
@@ -201,7 +218,9 @@ impl ImmutableFileArtifactStore for PostgresImmutableFileArtifactStore {
             )
             .bind(context.execution.tenant_id.as_str())
             .bind(command.file_id.as_str())
-            .bind(i64::try_from(new_received).map_err(|_| invalid_stored_value("artifact size does not fit PostgreSQL bigint"))?)
+            .bind(i64::try_from(new_received).map_err(|_| {
+                invalid_stored_value("artifact size does not fit PostgreSQL bigint")
+            })?)
             .execute(&mut *transaction)
             .await
             .map_err(database_unavailable)?;
@@ -224,7 +243,12 @@ impl ImmutableFileArtifactStore for PostgresImmutableFileArtifactStore {
     ) -> PortFuture<'a, Result<FileArtifactMetadata, SdkError>> {
         Box::pin(async move {
             context.validate()?;
-            let mut transaction = self.store.pool().begin().await.map_err(database_unavailable)?;
+            let mut transaction = self
+                .store
+                .pool()
+                .begin()
+                .await
+                .map_err(database_unavailable)?;
             bind_tenant(&mut transaction, context).await?;
             let metadata = load_metadata_for_update(&mut transaction, context, file_id)
                 .await?
@@ -242,7 +266,9 @@ impl ImmutableFileArtifactStore for PostgresImmutableFileArtifactStore {
             }
             let bytes = load_and_verify_chunks(&mut transaction, context, &metadata).await?;
             if bytes.len() as u64 != metadata.expected_size_bytes {
-                return Err(invalid_stored_value("artifact chunk bytes do not match declared size"));
+                return Err(invalid_stored_value(
+                    "artifact chunk bytes do not match declared size",
+                ));
             }
 
             sqlx::query(
@@ -272,7 +298,12 @@ impl ImmutableFileArtifactStore for PostgresImmutableFileArtifactStore {
     ) -> PortFuture<'a, Result<FinalizedFileArtifact, SdkError>> {
         Box::pin(async move {
             context.validate()?;
-            let mut transaction = self.store.pool().begin().await.map_err(database_unavailable)?;
+            let mut transaction = self
+                .store
+                .pool()
+                .begin()
+                .await
+                .map_err(database_unavailable)?;
             sqlx::query("SET TRANSACTION READ ONLY")
                 .execute(&mut *transaction)
                 .await
@@ -372,7 +403,9 @@ async fn load_and_verify_chunks(
     .map_err(database_unavailable)?;
 
     if rows.len() as u64 != metadata.next_chunk_index {
-        return Err(invalid_stored_value("artifact chunk count does not match next chunk index"));
+        return Err(invalid_stored_value(
+            "artifact chunk count does not match next chunk index",
+        ));
     }
     let capacity = usize::try_from(metadata.expected_size_bytes)
         .map_err(|_| invalid_stored_value("artifact size does not fit memory address space"))?;
@@ -397,7 +430,9 @@ async fn load_and_verify_chunks(
             || chunk_hash.len() != 32
             || Sha256::digest(&chunk_bytes).as_slice() != chunk_hash.as_slice()
         {
-            return Err(invalid_stored_value("artifact chunk integrity validation failed"));
+            return Err(invalid_stored_value(
+                "artifact chunk integrity validation failed",
+            ));
         }
         bytes.extend_from_slice(&chunk_bytes);
     }

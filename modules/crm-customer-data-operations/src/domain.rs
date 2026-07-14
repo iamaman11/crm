@@ -1,5 +1,5 @@
 use crate::profile::{ExternalPartyIdentifierDigest, ImportParserProfile, SourceSystemId};
-use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, RecordId, SdkError};
+use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, FileId, RecordId, SdkError};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 
@@ -133,6 +133,7 @@ impl TargetPartyId {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceDescriptor {
+    source_artifact_id: Option<FileId>,
     source_name: String,
     content_sha256: String,
     row_count: u32,
@@ -142,6 +143,42 @@ pub struct SourceDescriptor {
 
 impl SourceDescriptor {
     pub fn try_new(
+        source_name: impl Into<String>,
+        content_sha256: impl Into<String>,
+        row_count: u32,
+        source_system_id: SourceSystemId,
+        parser_profile: ImportParserProfile,
+    ) -> Result<Self, SdkError> {
+        Self::try_new_internal(
+            None,
+            source_name,
+            content_sha256,
+            row_count,
+            source_system_id,
+            parser_profile,
+        )
+    }
+
+    pub fn try_new_bound(
+        source_artifact_id: FileId,
+        source_name: impl Into<String>,
+        content_sha256: impl Into<String>,
+        row_count: u32,
+        source_system_id: SourceSystemId,
+        parser_profile: ImportParserProfile,
+    ) -> Result<Self, SdkError> {
+        Self::try_new_internal(
+            Some(source_artifact_id),
+            source_name,
+            content_sha256,
+            row_count,
+            source_system_id,
+            parser_profile,
+        )
+    }
+
+    fn try_new_internal(
+        source_artifact_id: Option<FileId>,
         source_name: impl Into<String>,
         content_sha256: impl Into<String>,
         row_count: u32,
@@ -162,12 +199,17 @@ impl SourceDescriptor {
         )?;
         validate_row_count(row_count)?;
         Ok(Self {
+            source_artifact_id,
             source_name,
             content_sha256,
             row_count,
             source_system_id,
             parser_profile,
         })
+    }
+
+    pub fn source_artifact_id(&self) -> Option<&FileId> {
+        self.source_artifact_id.as_ref()
     }
 
     pub fn source_name(&self) -> &str {

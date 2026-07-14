@@ -9,7 +9,7 @@ use crate::profile::{
     ImportParserProfile, ImportParserVersion, ImportSourceFormat, ImportTextEncoding,
     SourceSystemId,
 };
-use crm_module_sdk::{ErrorCategory, SdkError};
+use crm_module_sdk::{ErrorCategory, FileId, SdkError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -23,7 +23,7 @@ pub const IMPORT_ROW_STATE_SCHEMA_VERSION: &str = "1.0.0";
 pub const IMPORT_ROW_STATE_MAXIMUM_BYTES: u64 = 128 * 1024;
 pub const IMPORT_ROW_STATE_RETENTION_POLICY_ID: &str = "crm.customer_data.import_row";
 
-const IMPORT_JOB_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.import_job.state/v1:job_id,source[source_name,content_sha256,row_count,source_system_id,parser_profile[format,encoding,delimiter_ascii,quote_ascii,header_mode,parser_version,canonicalization_version]],mapping[target_party_id_column,party_kind_column,display_name_column,source_external_id_column,external_row_key_column],mapping_version_id,partial_execution_policy,status,total_rows,valid_rows,invalid_rows,succeeded_rows,checkpoint_row_position,created_at_unix_nanos,updated_at_unix_nanos,version";
+const IMPORT_JOB_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.import_job.state/v1:job_id,source[source_artifact_id,source_name,content_sha256,row_count,source_system_id,parser_profile[format,encoding,delimiter_ascii,quote_ascii,header_mode,parser_version,canonicalization_version]],mapping[target_party_id_column,party_kind_column,display_name_column,source_external_id_column,external_row_key_column],mapping_version_id,partial_execution_policy,status,total_rows,valid_rows,invalid_rows,succeeded_rows,checkpoint_row_position,created_at_unix_nanos,updated_at_unix_nanos,version";
 const IMPORT_ROW_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.import_row.state/v1:row_id,job_id,row_position,identity_source,source_external_id_sha256,status,prepared_party[party_id,kind,display_name],diagnostics[code,field],execution_attempts,last_execution_error_code,target_party_id,created_at_unix_nanos,updated_at_unix_nanos,version";
 
 pub fn import_job_state_descriptor_hash() -> [u8; 32] {
@@ -90,6 +90,7 @@ struct ImportJobStateV1 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SourceDescriptorStateV1 {
+    source_artifact_id: Option<String>,
     source_name: String,
     content_sha256: String,
     row_count: u32,
@@ -254,6 +255,9 @@ impl TryFrom<ImportJobStateV1> for ImportJobSnapshot {
 impl From<SourceDescriptor> for SourceDescriptorStateV1 {
     fn from(value: SourceDescriptor) -> Self {
         Self {
+            source_artifact_id: value
+                .source_artifact_id()
+                .map(|value| value.as_str().to_owned()),
             source_name: value.source_name().to_owned(),
             content_sha256: value.content_sha256().to_owned(),
             row_count: value.row_count(),
@@ -270,15 +274,33 @@ impl TryFrom<SourceDescriptorStateV1> for SourceDescriptor {
         let source_system_id = SourceSystemId::try_new(value.source_system_id.clone())
             .map_err(|error| persisted_error(error.to_string()))?;
         let parser_profile: ImportParserProfile = value.parser_profile.try_into()?;
-        let source = SourceDescriptor::try_new(
-            value.source_name.clone(),
-            value.content_sha256.clone(),
-            value.row_count,
-            source_system_id,
-            parser_profile,
-        )
+        let source_artifact_id = value
+            .source_artifact_id
+            .as_ref()
+            .map(|value| FileId::try_new(value.clone()))
+            .transpose()
+            .map_err(|error| persisted_error(error.to_string()))?;
+        let source = match source_artifact_id {
+            Some(source_artifact_id) => SourceDescriptor::try_new_bound(
+                source_artifact_id,
+                value.source_name.clone(),
+                value.content_sha256.clone(),
+                value.row_count,
+                source_system_id,
+                parser_profile,
+            ),
+            None => SourceDescriptor::try_new(
+                value.source_name.clone(),
+                value.content_sha256.clone(),
+                value.row_count,
+                source_system_id,
+                parser_profile,
+            ),
+        }
         .map_err(|error| persisted_error(error.to_string()))?;
-        if source.source_name() != value.source_name
+        if source.source_artifact_id().map(|value| value.as_str())
+            != value.source_artifact_id.as_deref()
+            || source.source_name() != value.source_name
             || source.content_sha256() != value.content_sha256
             || source.source_system_id().as_str() != value.source_system_id
         {
