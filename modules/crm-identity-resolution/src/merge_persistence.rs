@@ -8,8 +8,7 @@ use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-pub const PARTY_MERGE_LINEAGE_STATE_SCHEMA_ID: &str =
-    "crm.identity_resolution.merge_lineage.state";
+pub const PARTY_MERGE_LINEAGE_STATE_SCHEMA_ID: &str = "crm.identity_resolution.merge_lineage.state";
 pub const PARTY_MERGE_LINEAGE_STATE_SCHEMA_VERSION: &str = "1.0.0";
 pub const PARTY_MERGE_LINEAGE_STATE_MAXIMUM_BYTES: u64 = 256 * 1024;
 pub const PARTY_MERGE_LINEAGE_STATE_RETENTION_POLICY_ID: &str =
@@ -198,7 +197,9 @@ impl PartyMergeLineageStateV1 {
             MergeLineageStatusState::Unmerged => {
                 let command = self
                     .unmerge_decision
-                    .ok_or_else(|| persisted_error("unmerged lineage is missing reversal evidence"))?
+                    .ok_or_else(|| {
+                        persisted_error("unmerged lineage is missing reversal evidence")
+                    })?
                     .into_command()?;
                 lineage.unmerge(command).map_err(|error| {
                     persisted_error(format!("{}: {}", error.code, error.safe_message))
@@ -321,8 +322,8 @@ impl From<MergeLineageStatus> for MergeLineageStatusState {
 }
 
 fn canonical_merge_id(raw: String) -> Result<MergeLineageId, SdkError> {
-    let parsed = MergeLineageId::try_new(raw.clone())
-        .map_err(|error| persisted_error(error.to_string()))?;
+    let parsed =
+        MergeLineageId::try_new(raw.clone()).map_err(|error| persisted_error(error.to_string()))?;
     if parsed.as_str() != raw {
         return Err(persisted_error("persisted merge ID is not canonical"));
     }
@@ -341,8 +342,8 @@ fn canonical_case_id(raw: String) -> Result<DuplicateCandidateCaseId, SdkError> 
 }
 
 fn canonical_party_ref(raw: String) -> Result<PartyReference, SdkError> {
-    let parsed = PartyReference::try_new(raw.clone())
-        .map_err(|error| persisted_error(error.to_string()))?;
+    let parsed =
+        PartyReference::try_new(raw.clone()).map_err(|error| persisted_error(error.to_string()))?;
     if parsed.as_str() != raw {
         return Err(persisted_error(
             "persisted Party reference is not canonical",
@@ -366,9 +367,7 @@ fn canonical_unmerge_reason(raw: String) -> Result<UnmergeReasonCode, SdkError> 
     let parsed = UnmergeReasonCode::try_new(raw.clone())
         .map_err(|error| persisted_error(error.to_string()))?;
     if parsed.as_str() != raw {
-        return Err(persisted_error(
-            "persisted unmerge reason is not canonical",
-        ));
+        return Err(persisted_error("persisted unmerge reason is not canonical"));
     }
     Ok(parsed)
 }
