@@ -14,7 +14,8 @@
 //! Validation progress and finalization are server-derived, version-checked and durably routed
 //! through the production application capability boundary before target-owner execution begins.
 //! Execution ordering is derived from a complete authoritative source-position index rather than
-//! relationship pagination order; target Party writes still require governed application composition.
+//! relationship pagination order. The current owner/query boundary is cataloged and routed by the
+//! production application runtime; target Party execution remains a separate governed composition.
 
 pub mod domain;
 pub mod execution;
