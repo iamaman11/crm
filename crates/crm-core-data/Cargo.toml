@@ -73,3 +73,8 @@ required-features = ["postgres-integration"]
 name = "postgres_metadata_capability"
 path = "tests/postgres_metadata_capability.rs"
 required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_file_artifact"
+path = "tests/postgres_file_artifact.rs"
+required-features = ["postgres-integration"]
