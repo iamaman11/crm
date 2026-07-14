@@ -11,9 +11,10 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use crm_capability_adapters::{
-    AuthorizationGrant, FixedWindowRateLimiter, HmacSha256ApprovalVerifier, LiveAuthorizationStore,
-    LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore,
-    QueryVisibilityGrant, RateLimitPolicyStore,
+    AuthorizationGrant, FixedWindowRateLimiter, GatewayCapabilityClient,
+    HmacSha256ApprovalVerifier, LiveAuthorizationStore, LiveCapabilityAuthorizer,
+    LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore, QueryVisibilityGrant,
+    RateLimitPolicyStore,
 };
 use crm_capability_ingress::{
     AccessTokenGrant, AccessTokenStore, BearerTokenAuthenticator, CapabilityIngress,
@@ -48,6 +49,11 @@ use crm_customer_data_operations_capability_adapter::{
     IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
     MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
 };
+use crm_customer_data_operations_execution_composition::{
+    IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyImportExecutionCoordinator, PartyImportExecutionWorker,
+    PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,
+    internal_capability_definitions,
+};
 use crm_customer_data_operations_query_adapter::{
     CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
 };
@@ -66,7 +72,8 @@ use crm_module_sdk::{
     SchemaVersion, TenantId, TypedPayload,
 };
 use crm_parties_capability_adapter::{
-    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
+    RECORD_TYPE as PARTY_RECORD_TYPE,
 };
 use crm_parties_query_adapter::PartyQueryAdapter;
 use crm_party_relationships_capability_adapter::{
@@ -119,6 +126,7 @@ pub struct ApplicationComponents {
     pub projection_worker: Arc<Phase6ProjectionWorker>,
     pub customer_360_worker: Arc<Customer360ProjectionWorker>,
     pub search_worker: Arc<GlobalSearchWorker>,
+    pub import_execution_worker: Arc<PartyImportExecutionWorker>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -204,6 +212,11 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let query_definitions = application_query_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let internal_import_outcome_definitions = internal_capability_definitions()
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let import_execution_worker_actor_id =
+            ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         if config.bootstrap_allow_phase6 {
             bootstrap_application_access(
                 &config,
@@ -212,6 +225,14 @@ impl ApplicationRuntime {
                 &visibility_store,
                 &mutation_definitions,
                 &query_definitions,
+            )?;
+            bootstrap_import_execution_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &mutation_definitions,
+                &internal_import_outcome_definitions,
+                &import_execution_worker_actor_id,
             )?;
         }
 
@@ -245,6 +266,26 @@ impl ApplicationRuntime {
             mutation_executor,
             Arc::clone(&clock),
         ));
+
+        let import_execution_reader =
+            Arc::new(PostgresImportExecutionSnapshotReader::new(store.clone()));
+        let import_execution_outcomes = Arc::new(PostgresImportExecutionOutcomeSink::new(
+            store.clone(),
+            authorizer.clone(),
+        ));
+        let import_execution_coordinator = Arc::new(PartyImportExecutionCoordinator::new(
+            Arc::new(GatewayCapabilityClient::new(Arc::clone(&mutation_gateway))),
+            import_execution_outcomes,
+        ));
+        let import_execution_worker = Arc::new(
+            PartyImportExecutionWorker::new(
+                store.clone(),
+                import_execution_reader,
+                import_execution_coordinator,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
 
         let visibility_authorizer = Arc::new(LiveQueryVisibilityAuthorizer::new(
             visibility_store,
@@ -404,6 +445,7 @@ impl ApplicationRuntime {
             projection_worker,
             customer_360_worker,
             search_worker,
+            import_execution_worker,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
             last_worker_error: Arc::new(Mutex::new(None)),
@@ -752,6 +794,11 @@ async fn run_background_cycle(
     components: &ApplicationComponents,
 ) -> Result<(), ApplicationRuntimeError> {
     for tenant_id in &components.tenant_ids {
+        components
+            .import_execution_worker
+            .run_tenant_cycle(tenant_id.clone())
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
         scan_link_events(components, tenant_id.clone()).await?;
         drain_projection(
             &components.projection_worker,
@@ -1115,6 +1162,45 @@ fn bootstrap_application_access(
                     ));
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+fn bootstrap_import_execution_worker_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    mutation_definitions: &[CapabilityDefinition],
+    internal_definitions: &[CapabilityDefinition],
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    let party_create = mutation_definitions
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+                && definition.capability_id.as_str() == PARTY_CREATE_CAPABILITY
+        })
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party create capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    for tenant_id in &config.tenant_ids {
+        for definition in std::iter::once(party_create).chain(internal_definitions.iter()) {
+            authorization_store
+                .upsert(AuthorizationGrant {
+                    tenant_id: tenant_id.clone(),
+                    actor_id: worker_actor_id.clone(),
+                    policy_id: definition.authorization_policy_id.clone(),
+                    capability_id: definition.capability_id.clone(),
+                    capability_version: definition.capability_version.clone(),
+                    owner_module_id: definition.owner_module_id.clone(),
+                    policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                    expires_at_unix_nanos: Some(expires_at),
+                })
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         }
     }
     Ok(())

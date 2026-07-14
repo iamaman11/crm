@@ -292,6 +292,7 @@ dependencies = [
  "crm-customer-accounts-capability-adapter",
  "crm-customer-accounts-query-adapter",
  "crm-customer-data-operations-capability-adapter",
+ "crm-customer-data-operations-execution-composition",
  "crm-customer-data-operations-query-adapter",
  "crm-global-search-composition",
  "crm-identity-resolution-capability-adapter",

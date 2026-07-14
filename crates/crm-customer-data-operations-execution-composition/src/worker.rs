@@ -130,7 +130,8 @@ impl PartyImportExecutionWorker {
                 .map_err(|_| worker_state_unavailable())?
                 .insert(tenant_id.clone(), next_cursor.clone());
 
-            let scanned_jobs = u32::try_from(page.records.len()).map_err(|_| worker_state_unavailable())?;
+            let scanned_jobs =
+                u32::try_from(page.records.len()).map_err(|_| worker_state_unavailable())?;
             let mut executed_jobs = 0_u32;
             for record in page.records {
                 let job = import_job_from_snapshot(&record)?;
@@ -218,13 +219,17 @@ mod tests {
         let _ = error;
         assert!(DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE > 0);
         assert!(
-            DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE
+            DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE
+                <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE
         );
     }
 
     #[test]
     fn worker_identity_is_separate_from_public_api_actor_identity() {
-        assert_eq!(IMPORT_EXECUTION_WORKER_ACTOR_ID, "crm-api-import-execution-worker");
+        assert_eq!(
+            IMPORT_EXECUTION_WORKER_ACTOR_ID,
+            "crm-api-import-execution-worker"
+        );
         assert!(IMPORT_EXECUTION_WORKER_CAPABILITY_ID.contains("internal.execute_cycle"));
     }
 }
