@@ -14,6 +14,7 @@ crm-consents-capability-composition = { path = "../crm-consents-capability-compo
 crm-consents-query-adapter = { path = "../crm-consents-query-adapter" }
 crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
 crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }
+crm-identity-resolution-query-adapter = { path = "../crm-identity-resolution-query-adapter" }
 crm-contact-points-capability-adapter = { path = "../crm-contact-points-capability-adapter" }
 crm-contact-points-query-adapter = { path = "../crm-contact-points-query-adapter" }
 crm-core-data = { path = "../crm-core-data" }

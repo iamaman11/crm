@@ -292,6 +292,7 @@ dependencies = [
  "crm-global-search-composition",
  "crm-identity-resolution-capability-adapter",
  "crm-identity-resolution-capability-composition",
+ "crm-identity-resolution-query-adapter",
  "crm-metadata-api-adapter",
  "crm-metadata-query-adapter",
  "crm-module-registry",
