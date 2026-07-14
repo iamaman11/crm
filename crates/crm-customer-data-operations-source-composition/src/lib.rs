@@ -43,8 +43,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
 
-pub const CREATE_JOB_FROM_SOURCE_CAPABILITY: &str =
-    "customer_data.import.party.source.job.create";
+pub const CREATE_JOB_FROM_SOURCE_CAPABILITY: &str = "customer_data.import.party.source.job.create";
 pub const VALIDATE_SOURCE_BATCH_CAPABILITY: &str =
     "customer_data.import.party.source.rows.validate";
 
@@ -71,9 +70,7 @@ pub fn source_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
         .collect()
 }
 
-pub fn source_capability_definition(
-    capability_id: &str,
-) -> Result<CapabilityDefinition, SdkError> {
+pub fn source_capability_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkError> {
     let (input_schema, output_schema, risk) = match capability_id {
         CREATE_JOB_FROM_SOURCE_CAPABILITY => (
             CREATE_JOB_FROM_SOURCE_REQUEST_SCHEMA,
@@ -88,7 +85,8 @@ pub fn source_capability_definition(
         _ => return Err(configuration_error("unsupported source capability")),
     };
     Ok(CapabilityDefinition {
-        capability_id: CapabilityId::try_new(capability_id).map_err(identifier_configuration_error)?,
+        capability_id: CapabilityId::try_new(capability_id)
+            .map_err(identifier_configuration_error)?,
         capability_version: CapabilityVersion::try_new(support::CONTRACT_VERSION)
             .map_err(identifier_configuration_error)?,
         owner_module_id: ModuleId::try_new(MODULE_ID).map_err(identifier_configuration_error)?,
@@ -255,14 +253,22 @@ impl CustomerDataOperationsSourceExecutor {
         };
 
         reauthorize(&*self.authorizer, definition, &request).await?;
-        let result = self.store.execute_batch(&plan).await.map_err(batch_error_to_sdk)?;
+        let result = self
+            .store
+            .execute_batch(&plan)
+            .await
+            .map_err(batch_error_to_sdk)?;
         Ok(CapabilityExecutionResult {
             output: Some(output),
             affected_resources: result
                 .records
                 .iter()
-                .map(|record| support::domain_resource_to_wire_ref(&record.reference, record.version))
-                .collect::<Result<Vec<_>, _>>()?,
+                .map(|record| crm_module_sdk::ResourceRef {
+                    resource_type: record.reference.record_type.as_str().to_owned(),
+                    resource_id: record.reference.record_id.as_str().to_owned(),
+                    version: Some(record.version),
+                })
+                .collect(),
             replayed: result.replayed,
         })
     }
@@ -295,10 +301,12 @@ impl CustomerDataOperationsSourceExecutor {
             .store
             .get_record_for_query(&RecordGetQuery {
                 tenant_id: request.context.execution.tenant_id.clone(),
-                owner_module_id: ModuleId::try_new(MODULE_ID).map_err(identifier_configuration_error)?,
+                owner_module_id: ModuleId::try_new(MODULE_ID)
+                    .map_err(identifier_configuration_error)?,
                 record_type: RecordType::try_new(IMPORT_JOB_RECORD_TYPE)
                     .map_err(identifier_configuration_error)?,
-                record_id: RecordId::try_new(job_id.as_str()).map_err(identifier_configuration_error)?,
+                record_id: RecordId::try_new(job_id.as_str())
+                    .map_err(identifier_configuration_error)?,
             })
             .await?
             .ok_or_else(|| source_not_found("The import job was not found."))?;
@@ -309,14 +317,12 @@ impl CustomerDataOperationsSourceExecutor {
                 "Only a created import job can accept source validation.",
             ));
         }
-        let artifact_id = job
-            .source()
-            .source_artifact_id()
-            .cloned()
-            .ok_or_else(|| source_conflict(
+        let artifact_id = job.source().source_artifact_id().cloned().ok_or_else(|| {
+            source_conflict(
                 "CUSTOMER_DATA_IMPORT_SOURCE_ARTIFACT_BINDING_MISSING",
                 "The import job is not bound to an immutable source artifact.",
-            ))?;
+            )
+        })?;
         let artifact = self
             .artifacts
             .read_finalized(&request.context, &artifact_id)
@@ -373,10 +379,8 @@ impl CustomerDataOperationsSourceExecutor {
             let import_row_ref = public_row.import_row_ref.clone().ok_or_else(invalid_plan)?;
             relationships.push(RelationshipMutation::Link {
                 relationship: RelationshipRef {
-                    relationship_type: RelationshipType::try_new(
-                        IMPORT_JOB_ROW_RELATIONSHIP_TYPE,
-                    )
-                    .map_err(identifier_configuration_error)?,
+                    relationship_type: RelationshipType::try_new(IMPORT_JOB_ROW_RELATIONSHIP_TYPE)
+                        .map_err(identifier_configuration_error)?,
                     source: current.reference.clone(),
                     target: aggregate.clone(),
                 },
@@ -481,14 +485,22 @@ impl CustomerDataOperationsSourceExecutor {
         };
 
         reauthorize(&*self.authorizer, definition, &request).await?;
-        let result = self.store.execute_batch(&plan).await.map_err(batch_error_to_sdk)?;
+        let result = self
+            .store
+            .execute_batch(&plan)
+            .await
+            .map_err(batch_error_to_sdk)?;
         Ok(CapabilityExecutionResult {
             output: Some(output),
             affected_resources: result
                 .records
                 .iter()
-                .map(|record| support::domain_resource_to_wire_ref(&record.reference, record.version))
-                .collect::<Result<Vec<_>, _>>()?,
+                .map(|record| crm_module_sdk::ResourceRef {
+                    resource_type: record.reference.record_type.as_str().to_owned(),
+                    resource_id: record.reference.record_id.as_str().to_owned(),
+                    version: Some(record.version),
+                })
+                .collect(),
             replayed: result.replayed,
         })
     }
@@ -573,7 +585,8 @@ fn validate_source_row(
         ));
     }
 
-    let target_party_id = target_party_id_for_row(columns, job.mapping(), &probe, &mut diagnostics)?;
+    let target_party_id =
+        target_party_id_for_row(columns, job.mapping(), &probe, &mut diagnostics)?;
     let party_kind = party_kind_for_row(columns, job.mapping(), &mut diagnostics)?;
     let display_name = required_mapped_value(
         columns,
@@ -697,60 +710,79 @@ fn parser_profile_from_wire(
     })?;
     let format = match wire::ImportSourceFormat::try_from(value.format) {
         Ok(wire::ImportSourceFormat::Csv) => ImportSourceFormat::Csv,
-        _ => return Err(SdkError::invalid_argument(
-            "customer_data.import.source.parser_profile.format",
-            "Import source format must be CSV",
-        )),
+        _ => {
+            return Err(SdkError::invalid_argument(
+                "customer_data.import.source.parser_profile.format",
+                "Import source format must be CSV",
+            ));
+        }
     };
     let encoding = match wire::ImportTextEncoding::try_from(value.encoding) {
         Ok(wire::ImportTextEncoding::Utf8) => ImportTextEncoding::Utf8,
-        _ => return Err(SdkError::invalid_argument(
-            "customer_data.import.source.parser_profile.encoding",
-            "Import source encoding must be UTF8",
-        )),
+        _ => {
+            return Err(SdkError::invalid_argument(
+                "customer_data.import.source.parser_profile.encoding",
+                "Import source encoding must be UTF8",
+            ));
+        }
     };
     let header_mode = match wire::ImportHeaderMode::try_from(value.header_mode) {
         Ok(wire::ImportHeaderMode::RequiredFirstRow) => ImportHeaderMode::RequiredFirstRow,
-        _ => return Err(SdkError::invalid_argument(
-            "customer_data.import.source.parser_profile.header_mode",
-            "Import header mode must be REQUIRED_FIRST_ROW",
-        )),
+        _ => {
+            return Err(SdkError::invalid_argument(
+                "customer_data.import.source.parser_profile.header_mode",
+                "Import header mode must be REQUIRED_FIRST_ROW",
+            ));
+        }
     };
     let parser_version = match wire::ImportParserVersion::try_from(value.parser_version) {
         Ok(wire::ImportParserVersion::CsvV1) => ImportParserVersion::CsvV1,
-        _ => return Err(SdkError::invalid_argument(
-            "customer_data.import.source.parser_profile.parser_version",
-            "Import parser version must be CSV_V1",
-        )),
+        _ => {
+            return Err(SdkError::invalid_argument(
+                "customer_data.import.source.parser_profile.parser_version",
+                "Import parser version must be CSV_V1",
+            ));
+        }
     };
     let canonicalization_version =
         match wire::ImportCanonicalizationVersion::try_from(value.canonicalization_version) {
             Ok(wire::ImportCanonicalizationVersion::V1) => ImportCanonicalizationVersion::V1,
-            _ => return Err(SdkError::invalid_argument(
-                "customer_data.import.source.parser_profile.canonicalization_version",
-                "Import canonicalization version must be V1",
-            )),
+            _ => {
+                return Err(SdkError::invalid_argument(
+                    "customer_data.import.source.parser_profile.canonicalization_version",
+                    "Import canonicalization version must be V1",
+                ));
+            }
         };
     ImportParserProfile::try_new(
         format,
         encoding,
-        u8::try_from(value.delimiter_ascii).map_err(|_| SdkError::invalid_argument(
-            "customer_data.import.source.parser_profile.delimiter_ascii",
-            "Delimiter must fit one ASCII byte",
-        ))?,
-        u8::try_from(value.quote_ascii).map_err(|_| SdkError::invalid_argument(
-            "customer_data.import.source.parser_profile.quote_ascii",
-            "Quote character must fit one ASCII byte",
-        ))?,
+        u8::try_from(value.delimiter_ascii).map_err(|_| {
+            SdkError::invalid_argument(
+                "customer_data.import.source.parser_profile.delimiter_ascii",
+                "Delimiter must fit one ASCII byte",
+            )
+        })?,
+        u8::try_from(value.quote_ascii).map_err(|_| {
+            SdkError::invalid_argument(
+                "customer_data.import.source.parser_profile.quote_ascii",
+                "Quote character must fit one ASCII byte",
+            )
+        })?,
         header_mode,
         parser_version,
         canonicalization_version,
     )
 }
 
-fn mapping_from_wire(value: Option<wire::PartyImportMapping>) -> Result<PartyImportMapping, SdkError> {
+fn mapping_from_wire(
+    value: Option<wire::PartyImportMapping>,
+) -> Result<PartyImportMapping, SdkError> {
     let value = value.ok_or_else(|| {
-        SdkError::invalid_argument("customer_data.import.mapping", "Party import mapping is required")
+        SdkError::invalid_argument(
+            "customer_data.import.mapping",
+            "Party import mapping is required",
+        )
     })?;
     PartyImportMapping::try_new(
         value.target_party_id_column,
@@ -858,7 +890,9 @@ fn ensure_definition(
         || definition.owner_module_id.as_str() != MODULE_ID
         || definition.capability_id != request.context.execution.capability_id
     {
-        return Err(configuration_error("source capability definition binding is invalid"));
+        return Err(configuration_error(
+            "source capability definition binding is invalid",
+        ));
     }
     Ok(())
 }
@@ -920,6 +954,10 @@ mod tests {
             VALIDATE_SOURCE_BATCH_CAPABILITY
         );
         assert!(definitions.iter().all(|definition| definition.mutation));
-        assert!(definitions.iter().all(|definition| definition.requires_idempotency));
+        assert!(
+            definitions
+                .iter()
+                .all(|definition| definition.requires_idempotency)
+        );
     }
 }
