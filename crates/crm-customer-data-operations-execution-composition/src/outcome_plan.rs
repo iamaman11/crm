@@ -106,6 +106,7 @@ pub fn plan_success(
         occurred_at_unix_nanos,
     })?;
     let mut row_snapshot = row_after.snapshot();
+    row_snapshot.last_execution_error_code = None;
     row_snapshot.execution_attempts =
         row_snapshot
             .execution_attempts
@@ -273,7 +274,6 @@ mod tests {
         let row = invalid_row(job.job_id().clone(), 1);
 
         let plan = plan_skip_invalid(&job, &row, 40).unwrap();
-
         let ImportExecutionOutcomePlan::SkippedInvalid {
             job, row_position, ..
         } = plan
