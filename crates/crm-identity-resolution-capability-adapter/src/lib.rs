@@ -6,7 +6,8 @@
 //! The pure owner remains free of SQL, transport types and direct Party storage
 //! access. Same-tenant Party existence, exact authoritative source-version checks
 //! and active canonical-topology validation are composed outside this crate before
-//! execution.
+//! execution. Merge and unmerge are high-risk, idempotent, approval-required
+//! mutations and never bypass the platform authorization or approval boundary.
 
 mod merge_planner;
 mod planner;
