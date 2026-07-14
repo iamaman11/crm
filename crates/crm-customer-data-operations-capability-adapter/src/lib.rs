@@ -51,8 +51,7 @@ pub const CANCEL_PARTY_IMPORT_JOB_RESPONSE_SCHEMA: &str =
 pub const PARTY_IMPORT_JOB_CREATED_EVENT_TYPE: &str = "customer_data.import.party.created";
 pub const PARTY_IMPORT_JOB_CREATED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportJobCreatedEvent";
-pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE: &str =
-    "customer_data.import.party.row.validated";
+pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE: &str = "customer_data.import.party.row.validated";
 pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportRowValidatedEvent";
 pub const PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_TYPE: &str =

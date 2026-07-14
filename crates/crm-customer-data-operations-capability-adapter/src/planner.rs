@@ -19,18 +19,17 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_customer_data_operations::{
-    CANCEL_PARTY_IMPORT_JOB_CAPABILITY as _, CancelImportJob, CreateImportJob,
-    CreateValidatedImportRow, ExternalPartyIdentifierDigest, ImportCanonicalizationVersion,
-    ImportHeaderMode, ImportJob, ImportJobId, ImportJobStatus, ImportParserProfile,
-    ImportParserVersion, ImportRow, ImportRowStatus, ImportSourceFormat, ImportTextEncoding,
-    InitialImportRowValidation, PartialExecutionPolicy, PartyImportKind, PartyImportMapping,
-    PreparedPartyRow, RowDiagnostic, RowIdentitySource, SourceDescriptor, SourceSystemId,
-    StartImportExecution, TargetPartyId, create_validated_import_row, decode_import_job_state,
-    encode_import_job_state, encode_import_row_state, import_job_state_descriptor_hash,
-    import_row_state_descriptor_hash, IMPORT_JOB_STATE_MAXIMUM_BYTES,
-    IMPORT_JOB_STATE_RETENTION_POLICY_ID, IMPORT_JOB_STATE_SCHEMA_ID, IMPORT_JOB_STATE_SCHEMA_VERSION,
-    IMPORT_ROW_STATE_MAXIMUM_BYTES, IMPORT_ROW_STATE_RETENTION_POLICY_ID,
-    IMPORT_ROW_STATE_SCHEMA_ID, IMPORT_ROW_STATE_SCHEMA_VERSION,
+    CancelImportJob, CreateImportJob, CreateValidatedImportRow, ExternalPartyIdentifierDigest,
+    IMPORT_JOB_STATE_MAXIMUM_BYTES, IMPORT_JOB_STATE_RETENTION_POLICY_ID,
+    IMPORT_JOB_STATE_SCHEMA_ID, IMPORT_JOB_STATE_SCHEMA_VERSION, IMPORT_ROW_STATE_MAXIMUM_BYTES,
+    IMPORT_ROW_STATE_RETENTION_POLICY_ID, IMPORT_ROW_STATE_SCHEMA_ID,
+    IMPORT_ROW_STATE_SCHEMA_VERSION, ImportCanonicalizationVersion, ImportHeaderMode, ImportJob,
+    ImportJobId, ImportJobStatus, ImportParserProfile, ImportParserVersion, ImportRow,
+    ImportRowStatus, ImportSourceFormat, ImportTextEncoding, InitialImportRowValidation,
+    PartialExecutionPolicy, PartyImportKind, PartyImportMapping, PreparedPartyRow, RowDiagnostic,
+    RowIdentitySource, SourceDescriptor, SourceSystemId, StartImportExecution, TargetPartyId,
+    create_validated_import_row, decode_import_job_state, encode_import_job_state,
+    encode_import_row_state, import_job_state_descriptor_hash, import_row_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, SdkError};
 use crm_proto_contracts::crm::{
@@ -242,9 +241,7 @@ fn plan_validate_rows(
     if command.rows.is_empty() || command.rows.len() > MAX_VALIDATION_BATCH_ROWS {
         return Err(SdkError::invalid_argument(
             "customer_data.import.rows",
-            format!(
-                "Validation batch must contain between 1 and {MAX_VALIDATION_BATCH_ROWS} rows"
-            ),
+            format!("Validation batch must contain between 1 and {MAX_VALIDATION_BATCH_ROWS} rows"),
         ));
     }
 
@@ -278,16 +275,20 @@ fn plan_validate_rows(
             &mut diagnostics,
         );
         let external_row_key = match external_row_key {
-            Some(value) => match RowIdentitySource::for_row(source_row.row_position, Some(&value)) {
-                Ok(_) => Some(value),
-                Err(_) => {
-                    diagnostics.push(RowDiagnostic::try_new(
-                        "EXTERNAL_ROW_KEY_INVALID",
-                        job.mapping().external_row_key_column().unwrap_or("external_row_key"),
-                    )?);
-                    None
+            Some(value) => {
+                match RowIdentitySource::for_row(source_row.row_position, Some(&value)) {
+                    Ok(_) => Some(value),
+                    Err(_) => {
+                        diagnostics.push(RowDiagnostic::try_new(
+                            "EXTERNAL_ROW_KEY_INVALID",
+                            job.mapping()
+                                .external_row_key_column()
+                                .unwrap_or("external_row_key"),
+                        )?);
+                        None
+                    }
                 }
-            },
+            }
             None => None,
         };
 
@@ -327,12 +328,8 @@ fn plan_validate_rows(
             ));
         }
 
-        let target_party_id = target_party_id_for_row(
-            &source_row.columns,
-            job.mapping(),
-            &probe,
-            &mut diagnostics,
-        )?;
+        let target_party_id =
+            target_party_id_for_row(&source_row.columns, job.mapping(), &probe, &mut diagnostics)?;
         let party_kind = party_kind_for_row(&source_row.columns, job.mapping(), &mut diagnostics)?;
         let display_name = required_mapped_value(
             &source_row.columns,
@@ -639,7 +636,9 @@ pub fn job_to_wire(job: &ImportJob) -> Result<wire::ImportJob, SdkError> {
         mapping: Some(mapping_to_wire(&snapshot.mapping)),
         mapping_version_id: snapshot.mapping_version_id.as_str().to_owned(),
         partial_execution_policy: match snapshot.partial_execution_policy {
-            PartialExecutionPolicy::AllValidRows => wire::PartialExecutionPolicy::AllValidRows as i32,
+            PartialExecutionPolicy::AllValidRows => {
+                wire::PartialExecutionPolicy::AllValidRows as i32
+            }
             PartialExecutionPolicy::RequireAllValid => {
                 wire::PartialExecutionPolicy::RequireAllValid as i32
             }
@@ -721,7 +720,9 @@ pub fn import_row_to_wire(row: &ImportRow) -> Result<wire::ImportRow, SdkError> 
     })
 }
 
-fn source_from_wire(value: Option<wire::ImportSourceDescriptor>) -> Result<SourceDescriptor, SdkError> {
+fn source_from_wire(
+    value: Option<wire::ImportSourceDescriptor>,
+) -> Result<SourceDescriptor, SdkError> {
     let value = value.ok_or_else(|| {
         SdkError::invalid_argument("customer_data.import.source", "Import source is required")
     })?;
@@ -832,9 +833,14 @@ fn parser_profile_to_wire(profile: &ImportParserProfile) -> wire::ImportParserPr
     }
 }
 
-fn mapping_from_wire(value: Option<wire::PartyImportMapping>) -> Result<PartyImportMapping, SdkError> {
+fn mapping_from_wire(
+    value: Option<wire::PartyImportMapping>,
+) -> Result<PartyImportMapping, SdkError> {
     let value = value.ok_or_else(|| {
-        SdkError::invalid_argument("customer_data.import.mapping", "Party import mapping is required")
+        SdkError::invalid_argument(
+            "customer_data.import.mapping",
+            "Party import mapping is required",
+        )
     })?;
     PartyImportMapping::try_new(
         value.target_party_id_column,
@@ -955,7 +961,11 @@ fn required_mapped_value(
     missing_code: &str,
     diagnostics: &mut Vec<RowDiagnostic>,
 ) -> Option<String> {
-    match columns.get(column).map(|value| value.trim()).filter(|value| !value.is_empty()) {
+    match columns
+        .get(column)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    {
         Some(value) => Some(value.to_owned()),
         None => {
             if let Ok(diagnostic) = RowDiagnostic::try_new(missing_code, column) {
@@ -1021,9 +1031,7 @@ fn sha256_hex_to_bytes(value: &str) -> Result<Vec<u8>, SdkError> {
     }
     (0..64)
         .step_by(2)
-        .map(|index| {
-            u8::from_str_radix(&value[index..index + 2], 16).map_err(|_| invalid_plan())
-        })
+        .map(|index| u8::from_str_radix(&value[index..index + 2], 16).map_err(|_| invalid_plan()))
         .collect()
 }
 
