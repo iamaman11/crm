@@ -6,8 +6,10 @@
 //! access. Same-tenant Party existence and exact authoritative source-version
 //! checks are composed outside this crate before execution.
 
+mod merge_owner_planner;
 mod planner;
 
+pub use merge_owner_planner::*;
 pub use planner::*;
 
 use crm_capability_plan_support as support;
