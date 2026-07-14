@@ -175,10 +175,10 @@ pub fn plan_completion(
         occurred_at_unix_nanos,
     })?;
     Ok(ImportExecutionOutcomePlan::Completed {
-        job: PlannedImportJobUpdate {
+        job: Box::new(PlannedImportJobUpdate {
             expected_version,
             after,
-        },
+        }),
     })
 }
 
