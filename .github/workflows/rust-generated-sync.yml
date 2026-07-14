@@ -1,12 +1,17 @@
 name: Rust Generated Sync
 
-# One-shot generated hash synchronization after the Phase 8A.7 contract freeze.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - "proto/crm/customer_data_operations/**"
-      - "packages/client/src/contract_hashes.ts"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "crates/**/*.rs"
+      - "modules/**/Cargo.toml"
+      - "modules/**/*.rs"
+      - "services/**/Cargo.toml"
+      - "services/**/*.rs"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -26,30 +31,25 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: "24.18.0"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: "11.12.0"
-      - name: Regenerate frozen browser contract hashes
+          components: rustfmt, clippy
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          set -euo pipefail
-          pnpm install --frozen-lockfile
-          pnpm web:generate
-      - name: Restore permanent workflow and commit generated hashes
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          set -euo pipefail
-          git fetch origin main --depth=1
-          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
-          if git diff --quiet -- packages/client/src/contract_hashes.ts .github/workflows/rust-generated-sync.yml; then
-            echo "Generated browser contract hashes are already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/client/src/contract_hashes.ts .github/workflows/rust-generated-sync.yml
-          git commit -m "Synchronize customer import browser contract hashes"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
