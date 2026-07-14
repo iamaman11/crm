@@ -119,6 +119,135 @@ message DuplicateCandidateConfirmedEvent {
   DuplicateCandidateCase candidate_case = 1;
 }
 
+// Stable merge-lineage identity. Merge direction is explicit: survivor and absorbed
+// Party roles are part of the merge identity and are never inferred from score order.
+message PartyMergeLineageRef {
+  string merge_id = 1;
+}
+
+enum PartyMergeLineageStatus {
+  PARTY_MERGE_LINEAGE_STATUS_UNSPECIFIED = 0;
+  PARTY_MERGE_LINEAGE_STATUS_ACTIVE = 1;
+  PARTY_MERGE_LINEAGE_STATUS_UNMERGED = 2;
+}
+
+enum MergePartyKind {
+  MERGE_PARTY_KIND_UNSPECIFIED = 0;
+  MERGE_PARTY_KIND_PERSON = 1;
+  MERGE_PARTY_KIND_ORGANIZATION = 2;
+}
+
+enum SurvivorshipSource {
+  SURVIVORSHIP_SOURCE_UNSPECIFIED = 0;
+  SURVIVORSHIP_SOURCE_SURVIVOR = 1;
+  SURVIVORSHIP_SOURCE_ABSORBED = 2;
+}
+
+message DisplayNameSurvivorship {
+  SurvivorshipSource chosen_source = 1;
+  string survivor_value = 2;
+  string absorbed_value = 3;
+  string chosen_value = 4;
+}
+
+message PartyMergeUnmergeDecision {
+  string actor_ref = 1;
+  string reason = 2;
+  int64 survivor_pre_unmerge_version = 3;
+  int64 absorbed_pre_unmerge_version = 4;
+  int64 survivor_post_unmerge_version = 5;
+  int64 absorbed_post_unmerge_version = 6;
+  crm.core.v1.UnixTime occurred_at = 7;
+}
+
+message PartyMergeLineage {
+  PartyMergeLineageRef merge_ref = 1;
+  DuplicateCandidateCaseRef candidate_case_ref = 2;
+  int64 candidate_case_version = 3;
+  crm.customer.v1.PartyRef left_party_ref = 4;
+  crm.customer.v1.PartyRef right_party_ref = 5;
+  crm.customer.v1.PartyRef survivor_party_ref = 6;
+  crm.customer.v1.PartyRef absorbed_party_ref = 7;
+  MergePartyKind party_kind = 8;
+  int64 survivor_pre_merge_version = 9;
+  int64 absorbed_pre_merge_version = 10;
+  int64 survivor_post_merge_version = 11;
+  int64 absorbed_post_merge_version = 12;
+  DisplayNameSurvivorship display_name_survivorship = 13;
+  string merge_actor_ref = 14;
+  crm.core.v1.UnixTime merged_at = 15;
+  PartyMergeLineageStatus status = 16;
+  PartyMergeUnmergeDecision unmerge_decision = 17;
+  crm.customer.v1.CustomerResourceVersion resource_version = 18;
+}
+
+message MergePartiesRequest {
+  DuplicateCandidateCaseRef candidate_case_ref = 1;
+  int64 expected_candidate_case_version = 2;
+  crm.customer.v1.PartyRef survivor_party_ref = 3;
+  int64 expected_survivor_party_version = 4;
+  crm.customer.v1.PartyRef absorbed_party_ref = 5;
+  int64 expected_absorbed_party_version = 6;
+  SurvivorshipSource display_name_source = 7;
+}
+
+message MergePartiesResponse {
+  PartyMergeLineage merge_lineage = 1;
+}
+
+message UnmergePartiesRequest {
+  PartyMergeLineageRef merge_ref = 1;
+  int64 expected_merge_lineage_version = 2;
+  int64 expected_survivor_party_version = 3;
+  int64 expected_absorbed_party_version = 4;
+  string reason = 5;
+}
+
+message UnmergePartiesResponse {
+  PartyMergeLineage merge_lineage = 1;
+}
+
+message GetPartyMergeLineageRequest {
+  PartyMergeLineageRef merge_ref = 1;
+}
+
+message GetPartyMergeLineageResponse {
+  PartyMergeLineage merge_lineage = 1;
+}
+
+message ListPartyMergeLineageByPartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  PartyMergeLineageStatus status = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+message ListPartyMergeLineageByPartyResponse {
+  repeated PartyMergeLineage merge_lineage = 1;
+  string next_cursor = 2;
+}
+
+message ResolveCanonicalPartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+}
+
+message ResolveCanonicalPartyResponse {
+  crm.customer.v1.PartyRef requested_party_ref = 1;
+  int64 requested_party_version = 2;
+  crm.customer.v1.PartyRef canonical_party_ref = 3;
+  int64 canonical_party_version = 4;
+  bool redirected = 5;
+  PartyMergeLineageRef active_merge_ref = 6;
+}
+
+message PartyMergeAppliedEvent {
+  PartyMergeLineage merge_lineage = 1;
+}
+
+message PartyMergeUnmergedEvent {
+  PartyMergeLineage merge_lineage = 1;
+}
+
 service IdentityResolutionService {
   rpc RegisterDuplicateCandidate(RegisterDuplicateCandidateRequest) returns (RegisterDuplicateCandidateResponse);
   rpc RefreshDuplicateCandidateEvidence(RefreshDuplicateCandidateEvidenceRequest) returns (RefreshDuplicateCandidateEvidenceResponse);
@@ -126,4 +255,9 @@ service IdentityResolutionService {
   rpc ConfirmDuplicateCandidate(ConfirmDuplicateCandidateRequest) returns (ConfirmDuplicateCandidateResponse);
   rpc GetDuplicateCandidateCase(GetDuplicateCandidateCaseRequest) returns (GetDuplicateCandidateCaseResponse);
   rpc ListDuplicateCandidateCasesByParty(ListDuplicateCandidateCasesByPartyRequest) returns (ListDuplicateCandidateCasesByPartyResponse);
+  rpc MergeParties(MergePartiesRequest) returns (MergePartiesResponse);
+  rpc UnmergeParties(UnmergePartiesRequest) returns (UnmergePartiesResponse);
+  rpc GetPartyMergeLineage(GetPartyMergeLineageRequest) returns (GetPartyMergeLineageResponse);
+  rpc ListPartyMergeLineageByParty(ListPartyMergeLineageByPartyRequest) returns (ListPartyMergeLineageByPartyResponse);
+  rpc ResolveCanonicalParty(ResolveCanonicalPartyRequest) returns (ResolveCanonicalPartyResponse);
 }
