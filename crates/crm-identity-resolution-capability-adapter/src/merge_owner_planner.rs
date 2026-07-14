@@ -30,8 +30,8 @@ const PARTY_LINK_SCHEMA_ID: &str = "crm.identity_resolution.merge_lineage.party-
 const PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
 const PARTY_LINK_MAXIMUM_BYTES: u64 = 1_024;
 const PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
-    109, 245, 152, 107, 117, 103, 54, 25, 21, 128, 179, 21, 53, 99, 129, 125, 79, 196, 84,
-    233, 194, 245, 94, 61, 134, 153, 164, 9, 151, 33, 140, 142,
+    109, 245, 152, 107, 117, 103, 54, 25, 21, 128, 179, 21, 53, 99, 129, 125, 79, 196, 84, 233,
+    194, 245, 94, 61, 134, 153, 164, 9, 151, 33, 140, 142,
 ];
 
 pub fn plan_identity_merge_owner_fragment(
@@ -133,7 +133,9 @@ pub fn merge_lineage_persisted_contract() -> PersistedPayloadContract<'static> {
     }
 }
 
-pub fn merge_lineage_from_snapshot(snapshot: &RecordSnapshot) -> Result<PartyMergeLineage, SdkError> {
+pub fn merge_lineage_from_snapshot(
+    snapshot: &RecordSnapshot,
+) -> Result<PartyMergeLineage, SdkError> {
     let lineage = decode_party_merge_lineage_state(support::persisted_json_bytes_with_data_class(
         snapshot,
         merge_lineage_persisted_contract(),
@@ -356,12 +358,21 @@ mod tests {
     fn merge_lineage_wire_and_persistence_coordinates_are_stable() {
         let value = lineage();
         let public = party_merge_lineage_to_wire(&value);
-        assert_eq!(public.merge_ref.unwrap().merge_id, value.merge_id().as_str());
+        assert_eq!(
+            public.merge_ref.unwrap().merge_id,
+            value.merge_id().as_str()
+        );
         let contract = merge_lineage_persisted_contract();
         assert_eq!(contract.owner, MODULE_ID);
         assert_eq!(contract.schema_id, PARTY_MERGE_LINEAGE_STATE_SCHEMA_ID);
-        assert_eq!(contract.schema_version, PARTY_MERGE_LINEAGE_STATE_SCHEMA_VERSION);
-        assert_eq!(contract.descriptor_hash, party_merge_lineage_state_descriptor_hash());
+        assert_eq!(
+            contract.schema_version,
+            PARTY_MERGE_LINEAGE_STATE_SCHEMA_VERSION
+        );
+        assert_eq!(
+            contract.descriptor_hash,
+            party_merge_lineage_state_descriptor_hash()
+        );
     }
 
     #[test]
