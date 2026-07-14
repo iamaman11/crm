@@ -24,52 +24,105 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
           show-progress: false
-      - name: Make migration CI consume the complete ordered ledger
+      - name: Generate authoritative Phase 8A.6 registry rows
         run: |
           set -euo pipefail
           python - <<'PY'
+          import re
           from pathlib import Path
 
-          def replace_once(path: str, old: str, new: str) -> None:
-              target = Path(path)
-              text = target.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected one replacement, found {count}")
-              target.write_text(text.replace(old, new, 1))
+          hashes = Path("packages/client/src/contract_hashes.ts").read_text()
 
-          database = ".github/workflows/database.yml"
-          replace_once(
-              database,
-              '''      - name: Apply clean migrations\n        run: |\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql\n''',
-              '''      - name: Apply clean migrations\n        shell: bash\n        run: |\n          set -euo pipefail\n          while IFS= read -r migration; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)\n''',
+          def descriptor_hex(schema: str) -> str:
+              pattern = re.compile(
+                  rf'"{re.escape(schema)}": new Uint8Array\(\[([^\]]+)\]\)'
+              )
+              match = pattern.search(hashes)
+              if not match:
+                  raise SystemExit(f"missing generated descriptor hash for {schema}")
+              values = [int(value.strip()) for value in match.group(1).split(",")]
+              if len(values) != 32 or any(value < 0 or value > 255 for value in values):
+                  raise SystemExit(f"invalid generated descriptor hash for {schema}: {values}")
+              return "".join(f"{value:02x}" for value in values)
+
+          merge_request = descriptor_hex("crm.identity_resolution.v1.MergePartyRequest")
+          merge_response = descriptor_hex("crm.identity_resolution.v1.MergePartyResponse")
+          unmerge_request = descriptor_hex("crm.identity_resolution.v1.UnmergePartyRequest")
+          unmerge_response = descriptor_hex("crm.identity_resolution.v1.UnmergePartyResponse")
+
+          path = Path("database/tests/0010_identity_resolution_adapter.sql")
+          text = path.read_text()
+          text = text.replace(
+              "-- Production-adapter fixture for the Phase 8A.5 Identity Resolution candidate slice.",
+              "-- Production-adapter fixture for the Phase 8A.6 Identity Resolution candidate and reversible merge slice.",
+              1,
           )
-          replace_once(
-              database,
-              '''      - name: Roll back migrations\n        run: |\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.down.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.down.sql\n''',
-              '''      - name: Roll back migrations\n        shell: bash\n        run: |\n          set -euo pipefail\n          while IFS= read -r migration; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)\n''',
+          text = text.replace(
+              "  'crm.identity-resolution',\n  '0.1.0',",
+              "  'crm.identity-resolution',\n  '0.2.0',",
+              1,
           )
-          replace_once(
-              database,
-              '''      - name: Reapply migrations after rollback\n        run: |\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0001_platform_foundation.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0002_typed_payload_encoding.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0003_relationship_payload_governance.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0004_delete_execution_context.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0005_audited_noop_transactions.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0006_event_delivery_lineage.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0007_consumer_event_delivery_ledger.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0008_rebuildable_projection_runtime.up.sql\n          psql --set ON_ERROR_STOP=1 --file database/migrations/0009_search_index_generations.up.sql\n''',
-              '''      - name: Reapply migrations after rollback\n        shell: bash\n        run: |\n          set -euo pipefail\n          while IFS= read -r migration; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)\n''',
+          text = text.replace(
+              "    'crm.identity-resolution',\n    '0.1.0',",
+              "    'crm.identity-resolution',\n    '0.2.0',",
           )
 
-          application = ".github/workflows/application-runtime.yml"
-          replace_once(
-              application,
-              '''          for migration in database/migrations/000{1,2,3,4,5,6,7,8,9}_*.up.sql database/migrations/0010_*.up.sql; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done\n''',
-              '''          while IFS= read -r migration; do\n            psql --set ON_ERROR_STOP=1 --file "${migration}"\n          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)\n''',
-          )
-
-          Path(".github/workflows/rust-generated-sync.yml").write_text('''name: Rust Generated Sync\n\non:\n  pull_request:\n    types: [opened, synchronize, reopened]\n    paths:\n      - "Cargo.toml"\n      - "Cargo.lock"\n      - "crates/**/Cargo.toml"\n      - "crates/**/*.rs"\n      - "modules/**/Cargo.toml"\n      - "modules/**/*.rs"\n      - "services/**/Cargo.toml"\n      - "services/**/*.rs"\n      - ".github/workflows/rust-generated-sync.yml"\n\npermissions:\n  contents: write\n\nconcurrency:\n  group: rust-generated-sync-${{ github.event.pull_request.number }}\n  cancel-in-progress: true\n\njobs:\n  sync:\n    if: github.event.pull_request.head.repo.full_name == github.repository\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - uses: actions/checkout@v7\n        with:\n          ref: ${{ github.head_ref }}\n          fetch-depth: 0\n      - uses: dtolnay/rust-toolchain@stable\n        with:\n          components: rustfmt, clippy\n      - name: Apply machine-fixable Rust maintenance\n        run: |\n          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \\\n            -W unused-imports -W dead-code\n          cargo generate-lockfile\n          cargo fmt --all\n      - name: Commit synchronized files when needed\n        env:\n          HEAD_BRANCH: ${{ github.head_ref }}\n        run: |\n          if git diff --quiet -- Cargo.lock crates modules services; then\n            echo "Rust maintenance files are already synchronized."\n            exit 0\n          fi\n          git config user.name "github-actions[bot]"\n          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"\n          git add Cargo.lock crates modules services\n          git commit -m "Synchronize machine-fixable Rust maintenance"\n          git push origin "HEAD:${HEAD_BRANCH}"\n''')
+          marker = "  )\nON CONFLICT (capability_id, capability_version) DO NOTHING;"
+          if text.count(marker) != 1:
+              raise SystemExit("identity resolution capability fixture terminator is not unique")
+          merge_rows = f'''  ),
+  (
+    'identity_resolution.merge.execute',
+    '1.0.0',
+    'crm.identity-resolution',
+    '0.2.0',
+    'crm.identity_resolution.v1.IdentityResolutionService',
+    'MergeParty',
+    decode('{merge_request}', 'hex'),
+    decode('{merge_response}', 'hex'),
+    'high',
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    ARRAY['personal']::text[]
+  ),
+  (
+    'identity_resolution.merge.unmerge',
+    '1.0.0',
+    'crm.identity-resolution',
+    '0.2.0',
+    'crm.identity_resolution.v1.IdentityResolutionService',
+    'UnmergeParty',
+    decode('{unmerge_request}', 'hex'),
+    decode('{unmerge_response}', 'hex'),
+    'high',
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    ARRAY['personal']::text[]
+  )
+ON CONFLICT (capability_id, capability_version) DO NOTHING;'''
+          text = text.replace(marker, merge_rows, 1)
+          path.write_text(text)
+          print("MergePartyRequest", merge_request)
+          print("MergePartyResponse", merge_response)
+          print("UnmergePartyRequest", unmerge_request)
+          print("UnmergePartyResponse", unmerge_response)
           PY
-      - name: Commit complete migration ledger CI
+      - name: Commit Phase 8A.6 registry fixture
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/database.yml .github/workflows/application-runtime.yml .github/workflows/rust-generated-sync.yml
-          git commit -m "Verify complete ordered database migration ledger"
+          git add database/tests/0010_identity_resolution_adapter.sql
+          git commit -m "Publish Phase 8A.6 Identity Resolution registry fixture"
           git push origin "HEAD:${HEAD_BRANCH}"
