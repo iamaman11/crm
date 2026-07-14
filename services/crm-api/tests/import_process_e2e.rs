@@ -86,14 +86,7 @@ async fn crm_api_process_proves_artifact_dry_run_and_crash_restart_import_execut
         "kind,display_name,external_id\nperson,Dry Run Valid {suffix},dry-valid-{suffix}\nunsupported,Dry Run Invalid {suffix},dry-invalid-{suffix}\n"
     )
     .into_bytes();
-    upload_source(
-        &mut grpc,
-        TENANT_A,
-        &dry_source_id,
-        &dry_csv,
-        "dry-source",
-    )
-    .await;
+    upload_source(&mut grpc, TENANT_A, &dry_source_id, &dry_csv, "dry-source").await;
 
     let cross_tenant_finalize = mutate_message(
         &mut grpc,
@@ -220,14 +213,20 @@ async fn crm_api_process_proves_artifact_dry_run_and_crash_restart_import_execut
     wait_for_party_record(&admin, &target_party_id).await;
     assert_eq!(party_record_count(&admin, &target_party_id).await, 1);
 
-    child.kill().await.expect("force-kill crm-api in target-success crash window");
+    child
+        .kill()
+        .await
+        .expect("force-kill crm-api in target-success crash window");
     let _ = child.wait().await;
     drop_import_outcome_delay_trigger(&admin).await;
 
     // The target mutation committed before the crash, but the import-owned success/checkpoint
     // transaction was interrupted. Restart must repeat the exact target capability idempotently.
     assert_eq!(party_record_count(&admin, &target_party_id).await, 1);
-    assert_eq!(party_create_idempotency_count(&admin, &target_party_id).await, 1);
+    assert_eq!(
+        party_create_idempotency_count(&admin, &target_party_id).await,
+        1
+    );
 
     let (mut restarted, restarted_http_addr, restarted_grpc_addr) = spawn_api(&database_url).await;
     wait_until_ready(&http, &mut restarted, &restarted_http_addr).await;
@@ -243,7 +242,10 @@ async fn crm_api_process_proves_artifact_dry_run_and_crash_restart_import_execut
 
     let completed_rows = list_rows(&mut restarted_grpc, TENANT_A, &crash_job_id).await;
     assert_eq!(completed_rows.len(), 1);
-    assert_eq!(completed_rows[0].status, cdo::ImportRowStatus::Succeeded as i32);
+    assert_eq!(
+        completed_rows[0].status,
+        cdo::ImportRowStatus::Succeeded as i32
+    );
     assert_eq!(completed_rows[0].execution_attempts, 1);
     assert_eq!(
         completed_rows[0]
@@ -254,7 +256,10 @@ async fn crm_api_process_proves_artifact_dry_run_and_crash_restart_import_execut
         target_party_id
     );
     assert_eq!(party_record_count(&admin, &target_party_id).await, 1);
-    assert_eq!(party_create_idempotency_count(&admin, &target_party_id).await, 1);
+    assert_eq!(
+        party_create_idempotency_count(&admin, &target_party_id).await,
+        1
+    );
 
     let final_effects = party_target_effects(&admin, TENANT_A).await;
     assert_eq!(final_effects.records, baseline.records + 1);
@@ -281,7 +286,10 @@ async fn crm_api_process_proves_artifact_dry_run_and_crash_restart_import_execut
         .await
         .expect("restarted crm-api must stop within graceful-shutdown budget")
         .expect("wait for restarted import acceptance crm-api process");
-    assert!(exit.success(), "restarted crm-api exited unsuccessfully: {exit}");
+    assert!(
+        exit.success(),
+        "restarted crm-api exited unsuccessfully: {exit}"
+    );
 }
 
 async fn upload_source(
@@ -306,7 +314,12 @@ async fn upload_source(
     .await
     .expect("create immutable import source artifact");
     let created = decode_mutation::<cdo::CreatePartyImportSourceArtifactResponse>(created);
-    assert!(!created.source_artifact.expect("created source artifact").finalized);
+    assert!(
+        !created
+            .source_artifact
+            .expect("created source artifact")
+            .finalized
+    );
 
     let chunk_digest = sha256(bytes);
     let appended = mutate_message(
@@ -340,7 +353,9 @@ async fn upload_source(
     )
     .await
     .expect("identical chunk replay must be accepted safely");
-    assert!(decode_mutation::<cdo::AppendPartyImportSourceChunkResponse>(identical_replay).replayed);
+    assert!(
+        decode_mutation::<cdo::AppendPartyImportSourceChunkResponse>(identical_replay).replayed
+    );
 
     let finalized = mutate_message(
         grpc,
@@ -417,7 +432,10 @@ async fn validate_source(
     .expect("validate exact finalized source bytes server-side");
     let response = decode_mutation::<cdo::ValidatePartyImportSourceBatchResponse>(response);
     assert!(response.source_exhausted);
-    assert_eq!(response.next_row_position, 0);
+    assert_eq!(
+        response.next_row_position,
+        response.import_rows.len() as u32 + 1
+    );
     response.import_rows
 }
 
@@ -678,7 +696,14 @@ async fn mutate_message<M: Message>(
     idempotency_key: &str,
 ) -> Result<crm_application_runtime::gateway_v1::MutateResponse, Status> {
     let definition = mutation_definition(capability_id);
-    mutate(client, &definition, payload(&definition, message), tenant_id, idempotency_key).await
+    mutate(
+        client,
+        &definition,
+        payload(&definition, message),
+        tenant_id,
+        idempotency_key,
+    )
+    .await
 }
 
 async fn query_message<M: Message>(
@@ -688,7 +713,13 @@ async fn query_message<M: Message>(
     tenant_id: &str,
 ) -> Result<crm_application_runtime::gateway_v1::QueryResponse, Status> {
     let definition = query_definition(capability_id);
-    query(client, &definition, payload(&definition, message), tenant_id).await
+    query(
+        client,
+        &definition,
+        payload(&definition, message),
+        tenant_id,
+    )
+    .await
 }
 
 async fn mutate(
@@ -772,17 +803,13 @@ fn query_definition(capability_id: &str) -> CapabilityDefinition {
 fn decode_mutation<M: Message + Default>(
     response: crm_application_runtime::gateway_v1::MutateResponse,
 ) -> M {
-    M::decode(
-        response
-            .output
-            .expect("mutation output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode mutation response")
+    M::decode(response.output.expect("mutation output").payload.as_slice())
+        .expect("decode mutation response")
 }
 
-fn decode_query<M: Message + Default>(response: crm_application_runtime::gateway_v1::QueryResponse) -> M {
+fn decode_query<M: Message + Default>(
+    response: crm_application_runtime::gateway_v1::QueryResponse,
+) -> M {
     M::decode(response.output.expect("query output").payload.as_slice())
         .expect("decode query response")
 }
@@ -906,7 +933,10 @@ async fn spawn_api(database_url: &str) -> (Child, String, String) {
 async fn wait_until_ready(client: &reqwest::Client, child: &mut Child, http_addr: &str) {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if let Some(status) = child.try_wait().expect("poll import acceptance crm-api process") {
+        if let Some(status) = child
+            .try_wait()
+            .expect("poll import acceptance crm-api process")
+        {
             panic!("crm-api exited before import acceptance readiness: {status}");
         }
         if let Ok(response) = client

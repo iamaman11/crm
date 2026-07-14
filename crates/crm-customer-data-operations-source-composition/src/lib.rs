@@ -1276,14 +1276,13 @@ mod tests {
     #[test]
     fn publishes_only_artifact_backed_job_create_and_validation_coordinates() {
         let definitions = source_capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 2);
+        assert_eq!(definitions.len(), SOURCE_MUTATION_CAPABILITY_IDS.len());
         assert_eq!(
-            definitions[0].capability_id.as_str(),
-            CREATE_JOB_FROM_SOURCE_CAPABILITY
-        );
-        assert_eq!(
-            definitions[1].capability_id.as_str(),
-            VALIDATE_SOURCE_BATCH_CAPABILITY
+            definitions
+                .iter()
+                .map(|definition| definition.capability_id.as_str())
+                .collect::<Vec<_>>(),
+            SOURCE_MUTATION_CAPABILITY_IDS
         );
         assert!(definitions.iter().all(|definition| definition.mutation));
         assert!(
