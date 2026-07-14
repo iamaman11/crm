@@ -10,11 +10,8 @@ on:
       - "crates/**/*.rs"
       - "modules/**/Cargo.toml"
       - "modules/**/*.rs"
-      - "modules/**/module.yaml"
       - "services/**/Cargo.toml"
       - "services/**/*.rs"
-      - "contracts/module-contract-bindings.json"
-      - "proto/**"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -28,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,109 +34,135 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24.18.0"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: "11.12.0"
-      - name: Apply machine-fixable maintenance and Phase 8A.6 contract synchronization
+      - name: Wire Phase 8A.6 application runtime
         run: |
           set -euo pipefail
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
-          cargo fmt --all
           python - <<'PY'
-          import json
           from pathlib import Path
 
-          path = Path("contracts/module-contract-bindings.json")
-          data = json.loads(path.read_text())
-          module = next(item for item in data["modules"] if item["module_id"] == "crm.identity-resolution")
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement, found {count}: {old[:80]!r}")
+              target.write_text(text.replace(old, new, 1))
 
-          capabilities = [
-              {
-                  "id": "identity_resolution.merge.execute",
-                  "version": "1.0.0",
-                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.MergeParty",
-                  "request": "crm.identity_resolution.v1.MergePartyRequest",
-                  "response": "crm.identity_resolution.v1.MergePartyResponse",
-              },
-              {
-                  "id": "identity_resolution.merge.unmerge",
-                  "version": "1.0.0",
-                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.UnmergeParty",
-                  "request": "crm.identity_resolution.v1.UnmergePartyRequest",
-                  "response": "crm.identity_resolution.v1.UnmergePartyResponse",
-              },
-              {
-                  "id": "identity_resolution.merge.get",
-                  "version": "1.0.0",
-                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.GetMergeOperation",
-                  "request": "crm.identity_resolution.v1.GetMergeOperationRequest",
-                  "response": "crm.identity_resolution.v1.GetMergeOperationResponse",
-              },
-              {
-                  "id": "identity_resolution.merge.list_by_party",
-                  "version": "1.0.0",
-                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ListMergeOperationsByParty",
-                  "request": "crm.identity_resolution.v1.ListMergeOperationsByPartyRequest",
-                  "response": "crm.identity_resolution.v1.ListMergeOperationsByPartyResponse",
-              },
-              {
-                  "id": "identity_resolution.party.resolve_canonical",
-                  "version": "1.0.0",
-                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ResolveCanonicalParty",
-                  "request": "crm.identity_resolution.v1.ResolveCanonicalPartyRequest",
-                  "response": "crm.identity_resolution.v1.ResolveCanonicalPartyResponse",
-              },
-          ]
-          events = [
-              {
-                  "id": "identity_resolution.party.merged",
-                  "version": "1.0.0",
-                  "message": "crm.identity_resolution.v1.PartyMergedEvent",
-              },
-              {
-                  "id": "identity_resolution.party.unmerged",
-                  "version": "1.0.0",
-                  "message": "crm.identity_resolution.v1.PartyUnmergedEvent",
-              },
-          ]
+          cargo = "crates/crm-application-runtime/Cargo.toml"
+          replace_once(
+              cargo,
+              'crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }\ncrm-identity-resolution-query-adapter = { path = "../crm-identity-resolution-query-adapter" }',
+              'crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }\ncrm-identity-resolution-merge-composition = { path = "../crm-identity-resolution-merge-composition" }\ncrm-identity-resolution-query-adapter = { path = "../crm-identity-resolution-query-adapter" }\ncrm-identity-resolution-merge-query-adapter = { path = "../crm-identity-resolution-merge-query-adapter" }',
+          )
 
-          existing_capabilities = {item["id"]: item for item in module["capabilities"]}
-          for item in capabilities:
-              existing_capabilities[item["id"]] = item
-          ordered_ids = [item["id"] for item in module["capabilities"]]
-          for item in capabilities:
-              if item["id"] not in ordered_ids:
-                  ordered_ids.append(item["id"])
-          module["capabilities"] = [existing_capabilities[item_id] for item_id in ordered_ids]
+          governed = "crates/crm-application-runtime/src/governed_metadata.rs"
+          replace_once(
+              governed,
+              '''use crm_identity_resolution_capability_adapter::{\n    IdentityResolutionCapabilityPlanner,\n    MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS,\n    capability_definitions as identity_resolution_capability_definitions,\n};''',
+              '''use crm_identity_resolution_capability_adapter::{\n    CANDIDATE_MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_CANDIDATE_MUTATION_CAPABILITY_IDS,\n    IdentityResolutionCapabilityPlanner,\n    MERGE_MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MERGE_MUTATION_CAPABILITY_IDS,\n    MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS,\n    capability_definitions as identity_resolution_capability_definitions,\n};''',
+          )
+          replace_once(
+              governed,
+              '''use crm_identity_resolution_capability_composition::{\n    IdentityResolutionCapabilityExecutor, PostgresIdentityResolutionReferenceReader,\n};\nuse crm_identity_resolution_query_adapter::{''',
+              '''use crm_identity_resolution_capability_composition::{\n    IdentityResolutionCapabilityExecutor, PostgresIdentityResolutionReferenceReader,\n};\nuse crm_identity_resolution_merge_composition::{\n    MergeLineageCapabilityExecutor, PostgresMergeLineageReferenceReader,\n};\nuse crm_identity_resolution_merge_query_adapter::{\n    IdentityResolutionMergeQueryAdapter,\n    QUERY_CAPABILITY_IDS as IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS,\n    query_capability_definitions as identity_resolution_merge_query_capability_definitions,\n};\nuse crm_identity_resolution_query_adapter::{''',
+          )
+          replace_once(
+              governed,
+              '    definitions.extend(identity_resolution_query_capability_definitions()?);\n    definitions.extend(metadata_query_capability_definitions()?);',
+              '    definitions.extend(identity_resolution_query_capability_definitions()?);\n    definitions.extend(identity_resolution_merge_query_capability_definitions()?);\n    definitions.extend(metadata_query_capability_definitions()?);',
+          )
+          replace_once(
+              governed,
+              '    identity_resolution: IdentityResolutionCapabilityExecutor,\n}',
+              '    identity_resolution: IdentityResolutionCapabilityExecutor,\n    identity_resolution_merge: MergeLineageCapabilityExecutor,\n}',
+          )
+          replace_once(
+              governed,
+              '''        let identity_resolution = IdentityResolutionCapabilityExecutor::new(\n            Arc::new(PostgresIdentityResolutionReferenceReader::new(\n                store.clone(),\n            )),\n            aggregate.clone(),\n        );\n        Self {''',
+              '''        let identity_resolution = IdentityResolutionCapabilityExecutor::new(\n            Arc::new(PostgresIdentityResolutionReferenceReader::new(\n                store.clone(),\n            )),\n            aggregate.clone(),\n        );\n        let identity_resolution_merge = MergeLineageCapabilityExecutor::new(\n            Arc::new(PostgresMergeLineageReferenceReader::new(store.clone())),\n            aggregate.clone(),\n        );\n        Self {''',
+          )
+          replace_once(
+              governed,
+              '            consents,\n            identity_resolution,\n        }',
+              '            consents,\n            identity_resolution,\n            identity_resolution_merge,\n        }',
+          )
+          replace_once(
+              governed,
+              '            .field("identity_resolution", &self.identity_resolution)\n            .finish()',
+              '            .field("identity_resolution", &self.identity_resolution)\n            .field("identity_resolution_merge", &self.identity_resolution_merge)\n            .finish()',
+          )
+          replace_once(
+              governed,
+              '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.execute(definition, request)\n        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {''',
+              '''        } else if IDENTITY_RESOLUTION_CANDIDATE_MUTATION_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.execute(definition, request)\n        } else if IDENTITY_RESOLUTION_MERGE_MUTATION_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution_merge.execute(definition, request)\n        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {''',
+          )
+          replace_once(
+              governed,
+              '    identity_resolution: IdentityResolutionQueryAdapter,\n    metadata: MetadataQueryAdapter,',
+              '    identity_resolution: IdentityResolutionQueryAdapter,\n    identity_resolution_merge: IdentityResolutionMergeQueryAdapter,\n    metadata: MetadataQueryAdapter,',
+          )
+          replace_once(
+              governed,
+              '        identity_resolution: IdentityResolutionQueryAdapter,\n        metadata: MetadataQueryAdapter,',
+              '        identity_resolution: IdentityResolutionQueryAdapter,\n        identity_resolution_merge: IdentityResolutionMergeQueryAdapter,\n        metadata: MetadataQueryAdapter,',
+          )
+          replace_once(
+              governed,
+              '            identity_resolution,\n            metadata,',
+              '            identity_resolution,\n            identity_resolution_merge,\n            metadata,',
+          )
+          replace_once(
+              governed,
+              '''        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.validate(definition, request)\n        } else {''',
+              '''        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.validate(definition, request)\n        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution_merge.validate(definition, request)\n        } else {''',
+          )
+          replace_once(
+              governed,
+              '''        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.execute(definition, request)\n        } else {''',
+              '''        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.execute(definition, request)\n        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution_merge.execute(definition, request)\n        } else {''',
+          )
+          replace_once(
+              governed,
+              '                + IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS.len()\n                + METADATA_QUERY_CAPABILITY_IDS.len()',
+              '                + IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS.len()\n                + IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS.len()\n                + METADATA_QUERY_CAPABILITY_IDS.len()',
+          )
+          replace_once(
+              governed,
+              '''        for coordinate in IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS {\n            assert!(\n                queries\n                    .iter()\n                    .any(|definition| definition.capability_id.as_str() == coordinate)\n            );\n        }\n        for coordinate in METADATA_QUERY_CAPABILITY_IDS {''',
+              '''        for coordinate in IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS {\n            assert!(\n                queries\n                    .iter()\n                    .any(|definition| definition.capability_id.as_str() == coordinate)\n            );\n        }\n        for coordinate in IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS {\n            assert!(\n                queries\n                    .iter()\n                    .any(|definition| definition.capability_id.as_str() == coordinate)\n            );\n        }\n        for coordinate in METADATA_QUERY_CAPABILITY_IDS {''',
+          )
 
-          existing_events = {item["id"]: item for item in module["events"]}
-          for item in events:
-              existing_events[item["id"]] = item
-          ordered_event_ids = [item["id"] for item in module["events"]]
-          for item in events:
-              if item["id"] not in ordered_event_ids:
-                  ordered_event_ids.append(item["id"])
-          module["events"] = [existing_events[item_id] for item_id in ordered_event_ids]
-
-          path.write_text(json.dumps(data, indent=2) + "\n")
+          runtime = "crates/crm-application-runtime/src/runtime.rs"
+          replace_once(
+              runtime,
+              'use crm_identity_resolution_query_adapter::IdentityResolutionQueryAdapter;',
+              'use crm_identity_resolution_merge_query_adapter::IdentityResolutionMergeQueryAdapter;\nuse crm_identity_resolution_query_adapter::IdentityResolutionQueryAdapter;',
+          )
+          replace_once(
+              runtime,
+              '''        let identity_resolution_query_adapter = IdentityResolutionQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let search_query_adapter = SearchQueryAdapter::new(''',
+              '''        let identity_resolution_query_adapter = IdentityResolutionQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let identity_resolution_merge_query_adapter = IdentityResolutionMergeQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let search_query_adapter = SearchQueryAdapter::new(''',
+          )
+          replace_once(
+              runtime,
+              '            consent_query_adapter,\n            identity_resolution_query_adapter,\n            metadata_query_adapter,',
+              '            consent_query_adapter,\n            identity_resolution_query_adapter,\n            identity_resolution_merge_query_adapter,\n            metadata_query_adapter,',
+          )
           PY
-          pnpm install --frozen-lockfile
-          pnpm web:generate
-      - name: Commit synchronized files when needed
+          cargo generate-lockfile
+          cargo fmt --all
+          cargo clippy -p crm-application-runtime --all-targets --all-features -- -D warnings
+          cargo test -p crm-application-runtime
+      - name: Commit runtime wiring when verified
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts; then
-            echo "Maintenance and contract surfaces are already synchronized."
+          if git diff --quiet -- Cargo.lock crates/crm-application-runtime; then
+            echo "Phase 8A.6 runtime wiring is already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts
-          git commit -m "Synchronize Phase 8A.6 generated contract surfaces"
+          git add Cargo.lock crates/crm-application-runtime
+          git commit -m "Wire Phase 8A.6 merge runtime and queries"
           git push origin "HEAD:${HEAD_BRANCH}"
