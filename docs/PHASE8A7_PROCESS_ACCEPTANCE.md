@@ -2,6 +2,10 @@
 
 This document defines the process-level acceptance evidence required before Phase 8A.7 can leave draft state. It complements the architecture and execution/resume protocol and does not replace exact-head CI evidence.
 
+## Required CI execution
+
+The fresh-PostgreSQL process scenarios in this document are executed by the dedicated `Import Process Runtime CI` workflow. The workflow is an applicable Phase 8A.7 merge gate: adding the test and workflow does not itself constitute passing evidence; only a green run on the unchanged final candidate SHA does.
+
 ## Source artifact proof
 
 The production path must prove:
