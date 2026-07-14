@@ -50,8 +50,8 @@ const CANONICAL_REDIRECT_SCHEMA_ID: &str = "crm.identity_resolution.canonical_re
 const CANONICAL_REDIRECT_SCHEMA_VERSION: &str = "1.0.0";
 const CANONICAL_REDIRECT_MAXIMUM_BYTES: u64 = 1_024;
 const CANONICAL_REDIRECT_DESCRIPTOR_HASH: [u8; 32] = [
-    116, 222, 36, 232, 8, 51, 80, 134, 40, 101, 85, 41, 108, 205, 203, 215, 131, 29, 31, 241,
-    92, 245, 63, 130, 194, 181, 243, 199, 181, 87, 229, 104,
+    116, 222, 36, 232, 8, 51, 80, 134, 40, 101, 85, 41, 108, 205, 203, 215, 131, 29, 31, 241, 92,
+    245, 63, 130, 194, 181, 243, 199, 181, 87, 229, 104,
 ];
 
 /// Governed Identity Resolution planner that routes candidate-case and merge-lineage
@@ -177,21 +177,19 @@ fn remove_canonical_redirect_link(
     current: Option<&RecordSnapshot>,
 ) -> Result<(), SdkError> {
     let operation = crate::merge_operation_from_snapshot(current.ok_or_else(invalid_merge_state)?)?;
-    plan.batch
-        .relationships
-        .push(RelationshipMutation::Unlink {
-            relationship: RelationshipRef {
-                relationship_type: configured_relationship_type(
-                    CANONICAL_REDIRECT_RELATIONSHIP_TYPE,
-                )?,
-                source: party_record_ref(operation.source_party_ref())?,
-                target: party_record_ref(operation.survivor_party_ref())?,
-            },
-        });
+    plan.batch.relationships.push(RelationshipMutation::Unlink {
+        relationship: RelationshipRef {
+            relationship_type: configured_relationship_type(CANONICAL_REDIRECT_RELATIONSHIP_TYPE)?,
+            source: party_record_ref(operation.source_party_ref())?,
+            target: party_record_ref(operation.survivor_party_ref())?,
+        },
+    });
     Ok(())
 }
 
-fn party_record_ref(party_ref: &crm_identity_resolution::PartyReference) -> Result<RecordRef, SdkError> {
+fn party_record_ref(
+    party_ref: &crm_identity_resolution::PartyReference,
+) -> Result<RecordRef, SdkError> {
     Ok(RecordRef {
         record_type: configured_record_type(CANONICAL_REDIRECT_PARTY_RECORD_TYPE)?,
         record_id: RecordId::try_new(party_ref.as_str()).map_err(config_error)?,
