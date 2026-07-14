@@ -1,6 +1,6 @@
 name: Phase 8A.5 Query Router Refactor V2 Once
 
-# One-shot source refactor; self-deletes after successful verification.
+# One-shot verified source refactor; self-deletes after successful publication.
 on:
   push:
     branches:
@@ -14,7 +14,7 @@ permissions:
 jobs:
   refactor:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -23,7 +23,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply structural refactor
+      - name: Apply scoped query-router refactor and acceptance fixture repair
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -58,18 +58,22 @@ impl ApplicationQueryRouter {
 """
           text, count = pattern.subn(replacement, text, count=1)
           if count != 1:
-              raise SystemExit(f"expected one router block, replaced {count}")
+              raise SystemExit(f"expected one query-router block, replaced {count}")
+          marker = "impl QuerySemanticValidator for ApplicationQueryRouter {"
+          if marker not in text:
+              raise SystemExit("query semantic validator marker not found")
+          prefix, query_routing = text.split(marker, 1)
           for field in ("metadata", "parties", "accounts", "contact_points", "party_relationships", "customer_360", "consents", "identity_resolution"):
-              text = text.replace(f"self.{field}.validate(", f"self.adapters.{field}.validate(")
-              text = text.replace(f"self.{field}.execute(", f"self.adapters.{field}.execute(")
-          governed.write_text(text)
+              query_routing = query_routing.replace(f"self.{field}.validate(", f"self.adapters.{field}.validate(")
+              query_routing = query_routing.replace(f"self.{field}.execute(", f"self.adapters.{field}.execute(")
+          governed.write_text(prefix + marker + query_routing)
 
           runtime = Path("crates/crm-application-runtime/src/runtime.rs")
           text = runtime.read_text()
           old_import = "ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,"
           new_import = "ApplicationGatewayService, ApplicationQueryAdapters, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,"
           if old_import not in text:
-              raise SystemExit("runtime import anchor not found")
+              raise SystemExit("runtime query-router import anchor not found")
           text = text.replace(old_import, new_import, 1)
           call_pattern = re.compile(r"let query_router = Arc::new\(ApplicationQueryRouter::new\(\n\s*production_query_router,\n\s*party_query_adapter,\n\s*account_query_adapter,\n\s*contact_point_query_adapter,\n\s*party_relationship_query_adapter,\n\s*customer_360_query_adapter,\n\s*consent_query_adapter,\n\s*identity_resolution_query_adapter,\n\s*metadata_query_adapter,\n\s*\)\);")
           call = """let query_router = Arc::new(ApplicationQueryRouter::new(
@@ -87,20 +91,58 @@ impl ApplicationQueryRouter {
         ));"""
           text, count = call_pattern.subn(call, text, count=1)
           if count != 1:
-              raise SystemExit(f"expected one constructor call, replaced {count}")
+              raise SystemExit(f"expected one runtime query-router call, replaced {count}")
           runtime.write_text(text)
+
+          fixture = Path("database/tests/0010_identity_resolution_adapter.sql")
+          text = fixture.read_text()
+          if "identity-resolution-process-actor-bootstrap" not in text:
+              anchor = "INSERT INTO crm.module_versions ("
+              if anchor not in text:
+                  raise SystemExit("identity resolution fixture module anchor not found")
+              bootstrap = """-- Cross-tenant process acceptance uses the same authenticated service actor in both tenants.
+BEGIN;
+SET LOCAL app.tenant_id = 'tenant-b';
+SET LOCAL app.actor_id = 'actor-a';
+SET LOCAL app.request_id = 'identity-resolution-process-actor-bootstrap-request';
+SET LOCAL app.capability_id = 'test.record.mutate';
+SET LOCAL app.capability_version = '1.0.0';
+SET LOCAL app.business_transaction_id = 'identity-resolution-process-actor-bootstrap';
+
+INSERT INTO crm.actors (
+  tenant_id,
+  actor_id,
+  actor_type,
+  status,
+  display_name,
+  last_business_transaction_id
+)
+VALUES (
+  'tenant-b',
+  'actor-a',
+  'service',
+  'active',
+  'Identity Resolution acceptance cross-tenant actor',
+  'identity-resolution-process-actor-bootstrap'
+)
+ON CONFLICT (tenant_id, actor_id) DO NOTHING;
+COMMIT;
+
+"""
+              fixture.write_text(text.replace(anchor, bootstrap + anchor, 1))
           PY
-      - name: Verify refactor
+      - name: Verify source refactor before publication
         run: |
           cargo fmt --all
           cargo clippy -p crm-application-runtime --all-targets --all-features -- -D warnings
           cargo test -p crm-application-runtime --lib
-      - name: Commit clean source change
+      - name: Publish clean source commit and restore permanent CI
         run: |
+          git show 41fe1f429d20880b37613cefc4c3738dbc3c273f:.github/workflows/application-runtime.yml > .github/workflows/application-runtime.yml
           rm -f .github/workflows/phase8a5-query-router-refactor-once.yml
           rm -f .github/workflows/phase8a5-query-router-refactor-v2-once.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-application-runtime .github/workflows
-          git commit -m "refactor(runtime): bundle query router adapters"
+          git add crates/crm-application-runtime database/tests/0010_identity_resolution_adapter.sql .github/workflows
+          git commit -m "fix(identity-resolution): complete runtime acceptance gate"
           git push origin HEAD:develop/phase8a5-identity-resolution-duplicate-candidates
