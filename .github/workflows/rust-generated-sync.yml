@@ -68,40 +68,40 @@ jobs:
           text = text.replace(old_call, new_call)
 
           old_fn = '''fn validate_job_counters(
-              status: ImportJobStatus,
-              policy: PartialExecutionPolicy,
-              total_rows: u32,
-              valid_rows: u32,
-              invalid_rows: u32,
-              succeeded_rows: u32,
-              checkpoint_row_position: u32,
-              version: i64,
-          ) -> Result<(), SdkError> {
-              let validated_total = valid_rows'''
+    status: ImportJobStatus,
+    policy: PartialExecutionPolicy,
+    total_rows: u32,
+    valid_rows: u32,
+    invalid_rows: u32,
+    succeeded_rows: u32,
+    checkpoint_row_position: u32,
+    version: i64,
+) -> Result<(), SdkError> {
+    let validated_total = valid_rows'''
           new_fn = '''#[derive(Debug, Clone, Copy)]
-          struct ImportJobCounterState {
-              status: ImportJobStatus,
-              policy: PartialExecutionPolicy,
-              total_rows: u32,
-              valid_rows: u32,
-              invalid_rows: u32,
-              succeeded_rows: u32,
-              checkpoint_row_position: u32,
-              version: i64,
-          }
+struct ImportJobCounterState {
+    status: ImportJobStatus,
+    policy: PartialExecutionPolicy,
+    total_rows: u32,
+    valid_rows: u32,
+    invalid_rows: u32,
+    succeeded_rows: u32,
+    checkpoint_row_position: u32,
+    version: i64,
+}
 
-          fn validate_job_counters(state: ImportJobCounterState) -> Result<(), SdkError> {
-              let ImportJobCounterState {
-                  status,
-                  policy,
-                  total_rows,
-                  valid_rows,
-                  invalid_rows,
-                  succeeded_rows,
-                  checkpoint_row_position,
-                  version,
-              } = state;
-              let validated_total = valid_rows'''
+fn validate_job_counters(state: ImportJobCounterState) -> Result<(), SdkError> {
+    let ImportJobCounterState {
+        status,
+        policy,
+        total_rows,
+        valid_rows,
+        invalid_rows,
+        succeeded_rows,
+        checkpoint_row_position,
+        version,
+    } = state;
+    let validated_total = valid_rows'''
           if text.count(old_fn) != 1:
               raise SystemExit(f"expected exactly one counter validation function, found {text.count(old_fn)}")
           text = text.replace(old_fn, new_fn)
