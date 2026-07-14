@@ -365,6 +365,13 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         .await,
         0
     );
+
+    sqlx::query("DELETE FROM crm.file_artifacts WHERE tenant_id = $1 AND file_id = $2")
+        .bind("tenant-b")
+        .bind(&file_id)
+        .execute(&admin)
+        .await
+        .expect("remove file artifact acceptance fixture before migration rollback");
 }
 
 fn file_capability_definition() -> CapabilityDefinition {
