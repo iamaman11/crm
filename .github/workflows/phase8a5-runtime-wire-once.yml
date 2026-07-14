@@ -1,0 +1,155 @@
+name: Phase 8A.5 Runtime Wire Once
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase8a5-runtime-wire-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  wire:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply exact runtime composition patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one exact anchor, found {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_exact(
+              "crates/crm-application-runtime/Cargo.toml",
+              'crm-consents-query-adapter = { path = "../crm-consents-query-adapter" }\n',
+              'crm-consents-query-adapter = { path = "../crm-consents-query-adapter" }\n'
+              'crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }\n'
+              'crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }\n',
+          )
+
+          path = "crates/crm-application-runtime/src/governed_metadata.rs"
+          replace_exact(
+              path,
+              'use crm_consents_capability_composition::{\n    ConsentCapabilityExecutor, PostgresConsentReferenceReader,\n};\n',
+              'use crm_consents_capability_composition::{\n    ConsentCapabilityExecutor, PostgresConsentReferenceReader,\n};\n'
+              'use crm_identity_resolution_capability_adapter::{\n'
+              '    IdentityResolutionCapabilityPlanner,\n'
+              '    MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS,\n'
+              '    capability_definitions as identity_resolution_capability_definitions,\n'
+              '};\n'
+              'use crm_identity_resolution_capability_composition::{\n'
+              '    IdentityResolutionCapabilityExecutor, PostgresIdentityResolutionReferenceReader,\n'
+              '};\n',
+          )
+          replace_exact(
+              path,
+              '    definitions.extend(consent_capability_definitions()?);\n    definitions.extend(metadata_mutation_capability_definitions()?);\n',
+              '    definitions.extend(consent_capability_definitions()?);\n'
+              '    definitions.extend(identity_resolution_capability_definitions()?);\n'
+              '    definitions.extend(metadata_mutation_capability_definitions()?);\n',
+          )
+          replace_exact(
+              path,
+              '        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n            ConsentCapabilityPlanner.target(definition, request)\n        } else {\n',
+              '        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n'
+              '            ConsentCapabilityPlanner.target(definition, request)\n'
+              '        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS\n'
+              '            .contains(&definition.capability_id.as_str())\n'
+              '        {\n'
+              '            IdentityResolutionCapabilityPlanner.target(definition, request)\n'
+              '        } else {\n',
+          )
+          replace_exact(
+              path,
+              '        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n            ConsentCapabilityPlanner.plan(definition, request, current)\n        } else {\n',
+              '        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n'
+              '            ConsentCapabilityPlanner.plan(definition, request, current)\n'
+              '        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS\n'
+              '            .contains(&definition.capability_id.as_str())\n'
+              '        {\n'
+              '            IdentityResolutionCapabilityPlanner.plan(definition, request, current)\n'
+              '        } else {\n',
+          )
+          replace_exact(
+              path,
+              '    metadata: Arc<PostgresMetadataCapabilityExecutor>,\n    consents: ConsentCapabilityExecutor,\n',
+              '    metadata: Arc<PostgresMetadataCapabilityExecutor>,\n'
+              '    consents: ConsentCapabilityExecutor,\n'
+              '    identity_resolution: IdentityResolutionCapabilityExecutor,\n',
+          )
+          replace_exact(
+              path,
+              '        let consents = ConsentCapabilityExecutor::new(\n            Arc::new(PostgresConsentReferenceReader::new(store.clone())),\n            aggregate.clone(),\n        );\n        Self {\n            store,\n            aggregate,\n            metadata,\n            consents,\n        }\n',
+              '        let consents = ConsentCapabilityExecutor::new(\n'
+              '            Arc::new(PostgresConsentReferenceReader::new(store.clone())),\n'
+              '            aggregate.clone(),\n'
+              '        );\n'
+              '        let identity_resolution = IdentityResolutionCapabilityExecutor::new(\n'
+              '            Arc::new(PostgresIdentityResolutionReferenceReader::new(store.clone())),\n'
+              '            aggregate.clone(),\n'
+              '        );\n'
+              '        Self {\n'
+              '            store,\n'
+              '            aggregate,\n'
+              '            metadata,\n'
+              '            consents,\n'
+              '            identity_resolution,\n'
+              '        }\n',
+          )
+          replace_exact(
+              path,
+              '            .field("metadata", &"PostgresMetadataCapabilityExecutor")\n            .field("consents", &self.consents)\n            .finish()\n',
+              '            .field("metadata", &"PostgresMetadataCapabilityExecutor")\n'
+              '            .field("consents", &self.consents)\n'
+              '            .field("identity_resolution", &self.identity_resolution)\n'
+              '            .finish()\n',
+          )
+          replace_exact(
+              path,
+              '        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n            self.consents.execute(definition, request)\n        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n',
+              '        } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n'
+              '            self.consents.execute(definition, request)\n'
+              '        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS\n'
+              '            .contains(&definition.capability_id.as_str())\n'
+              '        {\n'
+              '            self.identity_resolution.execute(definition, request)\n'
+              '        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {\n',
+          )
+          PY
+      - name: Verify runtime wiring
+        run: |
+          cargo fmt --all
+          cargo check -p crm-application-runtime --all-targets
+          git diff --check
+      - name: Remove one-shot workflow and commit
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          rm .github/workflows/phase8a5-runtime-wire-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock crates modules services .github/workflows/phase8a5-runtime-wire-once.yml
+          if git diff --cached --quiet; then
+            echo "No runtime wiring changes to commit."
+            exit 0
+          fi
+          git commit -m "Wire Phase 8A.5 identity resolution mutations into application runtime"
+          git push origin "HEAD:${HEAD_BRANCH}"
