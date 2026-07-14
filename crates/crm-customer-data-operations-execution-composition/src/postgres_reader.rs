@@ -97,11 +97,12 @@ impl ImportExecutionSnapshotReader for PostgresImportExecutionSnapshotReader {
                     })
                     .await?;
                 for snapshot in page.records {
-                    let row = decode_import_row_state(support::persisted_json_bytes_with_data_class(
-                        &snapshot,
-                        import_row_persisted_contract(),
-                        DataClass::Personal,
-                    )?)?;
+                    let row =
+                        decode_import_row_state(support::persisted_json_bytes_with_data_class(
+                            &snapshot,
+                            import_row_persisted_contract(),
+                            DataClass::Personal,
+                        )?)?;
                     if row.row_id().as_str() != snapshot.reference.record_id.as_str()
                         || row.version() != snapshot.version
                     {
