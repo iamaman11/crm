@@ -1,5 +1,3 @@
-#![cfg(unix)]
-
 use crm_application_runtime::{
     application_mutation_definitions, application_query_definitions,
     gateway_v1::{
@@ -47,6 +45,12 @@ struct PartyTargetEffects {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn crm_api_process_proves_artifact_dry_run_and_crash_restart_import_execution() {
+    if !cfg!(unix) {
+        eprintln!(
+            "skipping import process acceptance because Unix process signals are unavailable"
+        );
+        return;
+    }
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
         eprintln!("skipping import process acceptance because DATABASE_URL is absent");
         return;

@@ -3,9 +3,11 @@ mod retryable_process {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn crm_api_process_persists_retryable_target_failure_without_advancing_checkpoint_and_recovers()
-    {
+     {
         let Ok(database_url) = std::env::var("DATABASE_URL") else {
-            eprintln!("skipping retryable import process acceptance because DATABASE_URL is absent");
+            eprintln!(
+                "skipping retryable import process acceptance because DATABASE_URL is absent"
+            );
             return;
         };
         let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -29,14 +31,7 @@ mod retryable_process {
         wait_until_ready(&http, &mut process, &http_addr).await;
         let mut grpc = connect_grpc(&grpc_addr).await;
 
-        upload_source(
-            &mut grpc,
-            TENANT_A,
-            &source_id,
-            &csv,
-            "retry-source",
-        )
-        .await;
+        upload_source(&mut grpc, TENANT_A, &source_id, &csv, "retry-source").await;
         create_job_from_source(
             &mut grpc,
             &job_id,
@@ -96,7 +91,8 @@ mod retryable_process {
         assert_eq!(party_record_count(&admin, &target_party_id).await, 0);
         assert_eq!(party_target_effects(&admin, TENANT_A).await, baseline);
 
-        let (mut recovered, recovered_http_addr, recovered_grpc_addr) = spawn_api(&database_url).await;
+        let (mut recovered, recovered_http_addr, recovered_grpc_addr) =
+            spawn_api(&database_url).await;
         wait_until_ready(&http, &mut recovered, &recovered_http_addr).await;
         let mut recovered_grpc = connect_grpc(&recovered_grpc_addr).await;
         let completed = wait_for_completed_job(&mut recovered_grpc, &job_id).await;
@@ -124,7 +120,10 @@ mod retryable_process {
             .await
             .expect("recovered crm-api must stop within graceful-shutdown budget")
             .expect("wait for recovered retryable process acceptance crm-api process");
-        assert!(exit.success(), "recovered crm-api exited unsuccessfully: {exit}");
+        assert!(
+            exit.success(),
+            "recovered crm-api exited unsuccessfully: {exit}"
+        );
     }
 
     async fn install_party_retryable_failure_trigger(admin: &PgPool) {
