@@ -20,6 +20,10 @@ pub const IMPORT_EXECUTION_WORKER_CAPABILITY_ID: &str =
     "customer_data.import.party.internal.execute_cycle";
 pub const IMPORT_EXECUTION_WORKER_CAPABILITY_VERSION: &str = "1.0.0";
 
+const _: () = assert!(DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE > 0);
+const _: () =
+    assert!(DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportExecutionTenantCycle {
     pub scanned_jobs: u32,
@@ -214,22 +218,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_unbounded_scan_page_sizes() {
-        let error = PartyImportExecutionWorker::try_with_page_size;
-        let _ = error;
-        assert!(DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE > 0);
-        assert!(
-            DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE
-                <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE
-        );
-    }
+    fn worker_context_uses_a_private_worker_identity_and_internal_cycle_coordinate() {
+        let tenant_id = TenantId::try_new("tenant-worker-test").unwrap();
+        let actor_id = ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID).unwrap();
+        let context = worker_context(&tenant_id, &actor_id, "import-job-worker-test", 123).unwrap();
 
-    #[test]
-    fn worker_identity_is_separate_from_public_api_actor_identity() {
+        assert_eq!(context.execution.tenant_id, tenant_id);
+        assert_eq!(context.execution.actor_id, actor_id);
         assert_eq!(
-            IMPORT_EXECUTION_WORKER_ACTOR_ID,
-            "crm-api-import-execution-worker"
+            context.execution.capability_id.as_str(),
+            IMPORT_EXECUTION_WORKER_CAPABILITY_ID
         );
-        assert!(IMPORT_EXECUTION_WORKER_CAPABILITY_ID.contains("internal.execute_cycle"));
+        assert_eq!(
+            context.execution.capability_version.as_str(),
+            IMPORT_EXECUTION_WORKER_CAPABILITY_VERSION
+        );
+        assert_eq!(context.execution.request_started_at_unix_nanos, 123);
     }
 }
