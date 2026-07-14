@@ -92,7 +92,10 @@ fn wire_job_preserves_parser_profile_and_source_system_identity() {
     assert_eq!(source.content_sha256.len(), 32);
     assert_eq!(profile.delimiter_ascii, u32::from(b','));
     assert_eq!(profile.quote_ascii, u32::from(b'"'));
-    assert_eq!(wire.mapping.unwrap().source_external_id_column.as_deref(), Some("legacy_customer_id"));
+    assert_eq!(
+        wire.mapping.unwrap().source_external_id_column.as_deref(),
+        Some("legacy_customer_id")
+    );
 }
 
 #[test]
