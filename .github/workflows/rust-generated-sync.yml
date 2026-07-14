@@ -25,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,23 +33,19 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
-        run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
-          cargo fmt --all
-      - name: Commit synchronized files when needed
+          components: rustfmt
+      - name: Format signed approval transport
+        run: cargo fmt --all
+      - name: Commit formatted transport when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
+          if git diff --quiet -- crates/crm-application-runtime; then
+            echo "Signed approval transport is already formatted."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add crates/crm-application-runtime
+          git commit -m "Format signed approval transport"
           git push origin "HEAD:${HEAD_BRANCH}"
