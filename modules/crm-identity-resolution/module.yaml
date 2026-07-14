@@ -34,6 +34,10 @@ provides:
       version: "1.0.0"
     - id: identity_resolution.candidate.confirm_duplicate
       version: "1.0.0"
+    - id: identity_resolution.candidate.get
+      version: "1.0.0"
+    - id: identity_resolution.candidate.list_by_party
+      version: "1.0.0"
   events:
     - id: identity_resolution.candidate.registered
       version: "1.0.0"
