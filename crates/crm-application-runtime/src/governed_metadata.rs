@@ -633,6 +633,8 @@ mod tests {
                 + CONSENT_MUTATION_CAPABILITY_IDS.len()
                 + IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS.len()
                 + CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS.len()
+                - 2
+                + CUSTOMER_DATA_OPERATIONS_SOURCE_MUTATION_CAPABILITY_IDS.len()
                 + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
@@ -684,6 +686,25 @@ mod tests {
                     .any(|definition| definition.capability_id.as_str() == coordinate)
             );
         }
+        for coordinate in CUSTOMER_DATA_OPERATIONS_SOURCE_MUTATION_CAPABILITY_IDS {
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
+        assert!(
+            mutations
+                .iter()
+                .all(|definition| definition.capability_id.as_str()
+                    != CREATE_PARTY_IMPORT_JOB_CAPABILITY)
+        );
+        assert!(
+            mutations
+                .iter()
+                .all(|definition| definition.capability_id.as_str()
+                    != VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY)
+        );
         for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
             assert!(
                 mutations
