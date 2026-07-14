@@ -12,7 +12,6 @@ on:
       - "modules/**/*.rs"
       - "services/**/Cargo.toml"
       - "services/**/*.rs"
-      - "database/tests/0010_identity_resolution_adapter.sql"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -26,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -35,130 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply exact Phase 8A.5 runtime cleanup
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          governed = Path("crates/crm-application-runtime/src/governed_metadata.rs")
-          text = governed.read_text()
-          if "pub struct ApplicationQueryAdapters" not in text:
-              pattern = re.compile(r"#\[derive\(Debug, Clone\)\]\npub struct ApplicationQueryRouter \{.*?\n\}\n\nimpl ApplicationQueryRouter \{.*?\n\}\n", re.S)
-              replacement = """#[derive(Debug, Clone)]
-pub struct ApplicationQueryAdapters {
-    pub parties: PartyQueryAdapter,
-    pub accounts: AccountQueryAdapter,
-    pub contact_points: ContactPointQueryAdapter,
-    pub party_relationships: PartyRelationshipQueryAdapter,
-    pub customer_360: Customer360QueryAdapter,
-    pub consents: ConsentQueryAdapter,
-    pub identity_resolution: IdentityResolutionQueryAdapter,
-    pub metadata: MetadataQueryAdapter,
-}
-
-#[derive(Debug, Clone)]
-pub struct ApplicationQueryRouter {
-    production: ProductionQueryRouter,
-    adapters: ApplicationQueryAdapters,
-}
-
-impl ApplicationQueryRouter {
-    pub fn new(production: ProductionQueryRouter, adapters: ApplicationQueryAdapters) -> Self {
-        Self { production, adapters }
-    }
-}
-"""
-              text, count = pattern.subn(replacement, text, count=1)
-              if count != 1:
-                  raise SystemExit(f"expected one query-router block, replaced {count}")
-              marker = "impl QuerySemanticValidator for ApplicationQueryRouter {"
-              if marker not in text:
-                  raise SystemExit("query semantic validator marker not found")
-              prefix, query_routing = text.split(marker, 1)
-              for field in ("metadata", "parties", "accounts", "contact_points", "party_relationships", "customer_360", "consents", "identity_resolution"):
-                  query_routing = query_routing.replace(f"self.{field}.validate(", f"self.adapters.{field}.validate(")
-                  query_routing = query_routing.replace(f"self.{field}.execute(", f"self.adapters.{field}.execute(")
-              governed.write_text(prefix + marker + query_routing)
-
-              runtime = Path("crates/crm-application-runtime/src/runtime.rs")
-              runtime_text = runtime.read_text()
-              old_import = "ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,"
-              new_import = "ApplicationGatewayService, ApplicationQueryAdapters, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,"
-              if old_import not in runtime_text:
-                  raise SystemExit("runtime query-router import anchor not found")
-              runtime_text = runtime_text.replace(old_import, new_import, 1)
-              call_pattern = re.compile(r"let query_router = Arc::new\(ApplicationQueryRouter::new\(\n\s*production_query_router,\n\s*party_query_adapter,\n\s*account_query_adapter,\n\s*contact_point_query_adapter,\n\s*party_relationship_query_adapter,\n\s*customer_360_query_adapter,\n\s*consent_query_adapter,\n\s*identity_resolution_query_adapter,\n\s*metadata_query_adapter,\n\s*\)\);")
-              call = """let query_router = Arc::new(ApplicationQueryRouter::new(
-            production_query_router,
-            ApplicationQueryAdapters {
-                parties: party_query_adapter,
-                accounts: account_query_adapter,
-                contact_points: contact_point_query_adapter,
-                party_relationships: party_relationship_query_adapter,
-                customer_360: customer_360_query_adapter,
-                consents: consent_query_adapter,
-                identity_resolution: identity_resolution_query_adapter,
-                metadata: metadata_query_adapter,
-            },
-        ));"""
-              runtime_text, count = call_pattern.subn(call, runtime_text, count=1)
-              if count != 1:
-                  raise SystemExit(f"expected one runtime query-router call, replaced {count}")
-              runtime.write_text(runtime_text)
-
-          fixture = Path("database/tests/0010_identity_resolution_adapter.sql")
-          fixture_text = fixture.read_text()
-          if "identity-resolution-process-actor-bootstrap" not in fixture_text:
-              anchor = "INSERT INTO crm.module_versions ("
-              if anchor not in fixture_text:
-                  raise SystemExit("identity resolution fixture module anchor not found")
-              bootstrap = """-- Cross-tenant process acceptance uses the same authenticated service actor in both tenants.
-BEGIN;
-SET LOCAL app.tenant_id = 'tenant-b';
-SET LOCAL app.actor_id = 'actor-a';
-SET LOCAL app.request_id = 'identity-resolution-process-actor-bootstrap-request';
-SET LOCAL app.capability_id = 'test.record.mutate';
-SET LOCAL app.capability_version = '1.0.0';
-SET LOCAL app.business_transaction_id = 'identity-resolution-process-actor-bootstrap';
-
-INSERT INTO crm.actors (
-  tenant_id,
-  actor_id,
-  actor_type,
-  status,
-  display_name,
-  last_business_transaction_id
-)
-VALUES (
-  'tenant-b',
-  'actor-a',
-  'service',
-  'active',
-  'Identity Resolution acceptance cross-tenant actor',
-  'identity-resolution-process-actor-bootstrap'
-)
-ON CONFLICT (tenant_id, actor_id) DO NOTHING;
-COMMIT;
-
-"""
-              fixture.write_text(fixture_text.replace(anchor, bootstrap + anchor, 1))
-          PY
-      - name: Verify repaired runtime boundary
-        run: |
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
           cargo fmt --all
-          cargo clippy -p crm-application-runtime --all-targets --all-features -- -D warnings
-          cargo test -p crm-application-runtime --lib
-      - name: Restore permanent workflows and publish clean source commit
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git show 41fe1f429d20880b37613cefc4c3738dbc3c273f:.github/workflows/application-runtime.yml > .github/workflows/application-runtime.yml
-          git show 8fe02f9f1fe8b6af1b8bd3b30681cca9ec4fa822:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
-          rm -f .github/workflows/phase8a5-query-router-refactor-once.yml
-          rm -f .github/workflows/phase8a5-query-router-refactor-v2-once.yml
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-application-runtime database/tests/0010_identity_resolution_adapter.sql .github/workflows
-          git commit -m "fix(identity-resolution): complete runtime acceptance gate"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
