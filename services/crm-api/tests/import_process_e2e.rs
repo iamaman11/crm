@@ -644,7 +644,7 @@ async fn party_target_effects(admin: &PgPool, tenant_id: &str) -> PartyTargetEff
         .await
         .expect("count Party records"),
         idempotency: sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = 'parties.party.create@1.0.0' AND status = 'completed'",
+            "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = 'capability:parties.party.create:1.0.0' AND status = 'completed'",
         )
         .bind(tenant_id)
         .fetch_one(admin)
@@ -680,7 +680,7 @@ async fn party_record_count(admin: &PgPool, party_id: &str) -> i64 {
 
 async fn party_create_idempotency_count(admin: &PgPool, _party_id: &str) -> i64 {
     sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = 'parties.party.create@1.0.0' AND status = 'completed'",
+        "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = 'capability:parties.party.create:1.0.0' AND status = 'completed'",
     )
     .bind(TENANT_A)
     .fetch_one(admin)
