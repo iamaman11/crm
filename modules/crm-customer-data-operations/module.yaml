@@ -36,12 +36,24 @@ provides:
       version: "1.0.0"
     - id: customer_data.import.party.cancel
       version: "1.0.0"
+    - id: customer_data.import.party.get
+      version: "1.0.0"
+    - id: customer_data.import.party.list
+      version: "1.0.0"
+    - id: customer_data.import.party.rows.list
+      version: "1.0.0"
   events:
     - id: customer_data.import.party.created
+      version: "1.0.0"
+    - id: customer_data.import.party.row.validated
       version: "1.0.0"
     - id: customer_data.import.party.validation_completed
       version: "1.0.0"
     - id: customer_data.import.party.execution_started
+      version: "1.0.0"
+    - id: customer_data.import.party.row.execution_updated
+      version: "1.0.0"
+    - id: customer_data.import.party.checkpoint_advanced
       version: "1.0.0"
     - id: customer_data.import.party.completed
       version: "1.0.0"
