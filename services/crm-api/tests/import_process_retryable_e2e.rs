@@ -3,7 +3,7 @@ mod retryable_process {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn crm_api_process_persists_retryable_target_failure_without_advancing_checkpoint_and_recovers()
-     {
+    {
         let Ok(database_url) = std::env::var("DATABASE_URL") else {
             eprintln!(
                 "skipping retryable import process acceptance because DATABASE_URL is absent"
@@ -15,6 +15,19 @@ mod retryable_process {
         let admin = PgPool::connect(&admin_database_url)
             .await
             .expect("connect retryable process acceptance evidence reader");
+        admin
+            .execute(sqlx::raw_sql(include_str!(
+                "../../../database/tests/0005_party_adapter.sql"
+            )))
+            .await
+            .expect("publish Party capability registry fixture");
+        admin
+            .execute(sqlx::raw_sql(include_str!(
+                "../../../database/tests/0012_customer_data_operations_adapter.sql"
+            )))
+            .await
+            .expect("publish customer-data operations registry and worker fixture");
+
         let http = reqwest::Client::builder()
             .build()
             .expect("build retryable process acceptance HTTP client");
