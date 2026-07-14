@@ -1,5 +1,6 @@
 name: Rust Generated Sync
 
+# One-shot generated hash synchronization after the Phase 8A.7 contract freeze.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
