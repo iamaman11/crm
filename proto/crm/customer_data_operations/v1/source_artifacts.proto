@@ -83,6 +83,19 @@ message ValidatePartyImportSourceBatchResponse {
   bool source_exhausted = 3;
 }
 
+message PartyImportSourceArtifactCreatedEvent {
+  PartyImportSourceArtifact source_artifact = 1;
+}
+
+message PartyImportSourceChunkAppendedEvent {
+  PartyImportSourceArtifact source_artifact = 1;
+  uint64 chunk_index = 2;
+}
+
+message PartyImportSourceArtifactFinalizedEvent {
+  PartyImportSourceArtifact source_artifact = 1;
+}
+
 service CustomerDataOperationsSourceService {
   rpc CreatePartyImportSourceArtifact(CreatePartyImportSourceArtifactRequest) returns (CreatePartyImportSourceArtifactResponse);
   rpc AppendPartyImportSourceChunk(AppendPartyImportSourceChunkRequest) returns (AppendPartyImportSourceChunkResponse);
