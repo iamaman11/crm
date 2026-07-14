@@ -1,0 +1,226 @@
+syntax = "proto3";
+
+package crm.customer_data_operations.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+
+// Stable import-job identity owned only by crm.customer-data-operations.
+message ImportJobRef {
+  string import_job_id = 1;
+}
+
+// Stable row identity inside one import job.
+message ImportRowRef {
+  ImportJobRef import_job_ref = 1;
+  string import_row_id = 2;
+}
+
+enum PartialExecutionPolicy {
+  PARTIAL_EXECUTION_POLICY_UNSPECIFIED = 0;
+  PARTIAL_EXECUTION_POLICY_ALL_VALID_ROWS = 1;
+  PARTIAL_EXECUTION_POLICY_REQUIRE_ALL_VALID = 2;
+}
+
+enum ImportJobStatus {
+  IMPORT_JOB_STATUS_UNSPECIFIED = 0;
+  IMPORT_JOB_STATUS_CREATED = 1;
+  IMPORT_JOB_STATUS_VALIDATED = 2;
+  IMPORT_JOB_STATUS_EXECUTING = 3;
+  IMPORT_JOB_STATUS_COMPLETED = 4;
+  IMPORT_JOB_STATUS_CANCELLED = 5;
+}
+
+enum ImportRowStatus {
+  IMPORT_ROW_STATUS_UNSPECIFIED = 0;
+  IMPORT_ROW_STATUS_PENDING = 1;
+  IMPORT_ROW_STATUS_VALID = 2;
+  IMPORT_ROW_STATUS_INVALID = 3;
+  IMPORT_ROW_STATUS_FAILED_RETRYABLE = 4;
+  IMPORT_ROW_STATUS_SUCCEEDED = 5;
+}
+
+enum PartyImportKind {
+  PARTY_IMPORT_KIND_UNSPECIFIED = 0;
+  PARTY_IMPORT_KIND_PERSON = 1;
+  PARTY_IMPORT_KIND_ORGANIZATION = 2;
+}
+
+message ImportSourceDescriptor {
+  string source_name = 1;
+  bytes content_sha256 = 2;
+  uint32 row_count = 3;
+}
+
+// Immutable v1 mapping. Values are column names, not executable expressions.
+message PartyImportMapping {
+  string party_id_column = 1;
+  string party_kind_column = 2;
+  string display_name_column = 3;
+  string external_row_key_column = 4;
+}
+
+message RowDiagnostic {
+  string code = 1;
+  string field = 2;
+}
+
+message PreparedPartyRow {
+  crm.customer.v1.PartyRef party_ref = 1;
+  PartyImportKind kind = 2;
+  string display_name = 3;
+}
+
+message ImportJob {
+  ImportJobRef import_job_ref = 1;
+  ImportSourceDescriptor source = 2;
+  PartyImportMapping mapping = 3;
+  string mapping_version_id = 4;
+  PartialExecutionPolicy partial_execution_policy = 5;
+  ImportJobStatus status = 6;
+  uint32 total_rows = 7;
+  uint32 valid_rows = 8;
+  uint32 invalid_rows = 9;
+  uint32 succeeded_rows = 10;
+  uint32 checkpoint_row_position = 11;
+  crm.core.v1.UnixTime created_at = 12;
+  crm.core.v1.UnixTime updated_at = 13;
+  crm.customer.v1.CustomerResourceVersion resource_version = 14;
+}
+
+message ImportRow {
+  ImportRowRef import_row_ref = 1;
+  uint32 row_position = 2;
+  string external_row_key_sha256 = 3;
+  ImportRowStatus status = 4;
+  PreparedPartyRow prepared_party = 5;
+  repeated RowDiagnostic diagnostics = 6;
+  uint32 execution_attempts = 7;
+  string last_execution_error_code = 8;
+  crm.customer.v1.PartyRef target_party_ref = 9;
+  crm.core.v1.UnixTime created_at = 10;
+  crm.core.v1.UnixTime updated_at = 11;
+  crm.customer.v1.CustomerResourceVersion resource_version = 12;
+}
+
+message CreatePartyImportJobRequest {
+  ImportJobRef import_job_ref = 1;
+  ImportSourceDescriptor source = 2;
+  PartyImportMapping mapping = 3;
+  PartialExecutionPolicy partial_execution_policy = 4;
+}
+
+message CreatePartyImportJobResponse {
+  ImportJob import_job = 1;
+}
+
+// One externally parsed source row. Column values are data only and are interpreted
+// solely by the immutable PartyImportMapping attached to the job.
+message PartyImportSourceRow {
+  uint32 row_position = 1;
+  map<string, string> columns = 2;
+}
+
+// Bounded batch validation. Validation may persist import-owned row evidence but must
+// not invoke Party mutations or create Party idempotency/outbox/audit side effects.
+message ValidatePartyImportRowsRequest {
+  ImportJobRef import_job_ref = 1;
+  repeated PartyImportSourceRow rows = 2;
+}
+
+message ValidatePartyImportRowsResponse {
+  repeated ImportRow import_rows = 1;
+}
+
+// Finalization derives authoritative valid/invalid counts from import-owned row state;
+// clients do not supply counters.
+message FinalizePartyImportValidationRequest {
+  ImportJobRef import_job_ref = 1;
+  int64 expected_version = 2;
+}
+
+message FinalizePartyImportValidationResponse {
+  ImportJob import_job = 1;
+}
+
+// Starts or resumes governed background execution. Target Party creation must use the
+// existing exact Party capability with deterministic per-row target idempotency.
+message StartPartyImportExecutionRequest {
+  ImportJobRef import_job_ref = 1;
+  int64 expected_version = 2;
+}
+
+message StartPartyImportExecutionResponse {
+  ImportJob import_job = 1;
+}
+
+message CancelPartyImportJobRequest {
+  ImportJobRef import_job_ref = 1;
+  int64 expected_version = 2;
+}
+
+message CancelPartyImportJobResponse {
+  ImportJob import_job = 1;
+}
+
+message GetPartyImportJobRequest {
+  ImportJobRef import_job_ref = 1;
+}
+
+message GetPartyImportJobResponse {
+  ImportJob import_job = 1;
+}
+
+message ListPartyImportJobsRequest {
+  ImportJobStatus status = 1;
+  int32 page_size = 2;
+  string cursor = 3;
+}
+
+message ListPartyImportJobsResponse {
+  repeated ImportJob import_jobs = 1;
+  string next_cursor = 2;
+}
+
+message ListPartyImportRowsRequest {
+  ImportJobRef import_job_ref = 1;
+  ImportRowStatus status = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+message ListPartyImportRowsResponse {
+  repeated ImportRow import_rows = 1;
+  string next_cursor = 2;
+}
+
+message PartyImportJobCreatedEvent {
+  ImportJob import_job = 1;
+}
+
+message PartyImportValidationCompletedEvent {
+  ImportJob import_job = 1;
+}
+
+message PartyImportExecutionStartedEvent {
+  ImportJob import_job = 1;
+}
+
+message PartyImportCompletedEvent {
+  ImportJob import_job = 1;
+}
+
+message PartyImportCancelledEvent {
+  ImportJob import_job = 1;
+}
+
+service CustomerDataOperationsService {
+  rpc CreatePartyImportJob(CreatePartyImportJobRequest) returns (CreatePartyImportJobResponse);
+  rpc ValidatePartyImportRows(ValidatePartyImportRowsRequest) returns (ValidatePartyImportRowsResponse);
+  rpc FinalizePartyImportValidation(FinalizePartyImportValidationRequest) returns (FinalizePartyImportValidationResponse);
+  rpc StartPartyImportExecution(StartPartyImportExecutionRequest) returns (StartPartyImportExecutionResponse);
+  rpc CancelPartyImportJob(CancelPartyImportJobRequest) returns (CancelPartyImportJobResponse);
+  rpc GetPartyImportJob(GetPartyImportJobRequest) returns (GetPartyImportJobResponse);
+  rpc ListPartyImportJobs(ListPartyImportJobsRequest) returns (ListPartyImportJobsResponse);
+  rpc ListPartyImportRows(ListPartyImportRowsRequest) returns (ListPartyImportRowsResponse);
+}
