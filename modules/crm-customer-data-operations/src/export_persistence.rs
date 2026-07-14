@@ -1,7 +1,7 @@
 use crate::export::{
-    ExportJobId, PartyExportArtifactEvidence, PartyExportField, PartyExportJob, PartyExportJobStatus,
-    PartyExportKindFilter, PartyExportProfile, PartyExportReconciliation, PartyExportScope,
-    PartyExportSelectionSummary, PartyExportSpecification,
+    ExportJobId, PartyExportArtifactEvidence, PartyExportField, PartyExportJob,
+    PartyExportJobStatus, PartyExportKindFilter, PartyExportProfile, PartyExportReconciliation,
+    PartyExportScope, PartyExportSelectionSummary, PartyExportSpecification,
 };
 use crm_module_sdk::{ErrorCategory, FileId, SdkError};
 use serde::{Deserialize, Serialize};
@@ -272,14 +272,10 @@ impl ExportJobStateV1 {
             ));
         }
         let specification = self.specification.try_into_domain()?;
-        let job_id = ExportJobId::try_new(self.job_id)
+        let job_id = ExportJobId::try_new(self.job_id.clone())
             .map_err(|error| persisted_domain_error("export-job ID", error))?;
-        let mut job = PartyExportJob::create(
-            job_id,
-            specification,
-            self.created_at_unix_nanos,
-        )
-        .map_err(|error| persisted_domain_error("export-job create", error))?;
+        let mut job = PartyExportJob::create(job_id, specification, self.created_at_unix_nanos)
+            .map_err(|error| persisted_domain_error("export-job create", error))?;
         let transition_time = self.updated_at_unix_nanos;
 
         match self.status {
@@ -292,25 +288,23 @@ impl ExportJobStateV1 {
                     &self.last_execution_error_code,
                     "selecting export execution error",
                 )?;
-                require_zero(self.checkpoint_manifest_position, "selecting export checkpoint")?;
-                start(&mut job, transition_time)?;
-                replay_completed_retry_cycles(
-                    &mut job,
-                    self.execution_attempts,
-                    transition_time,
+                require_zero(
+                    self.checkpoint_manifest_position,
+                    "selecting export checkpoint",
                 )?;
+                start(&mut job, transition_time)?;
+                replay_completed_retry_cycles(&mut job, self.execution_attempts, transition_time)?;
             }
             PartyExportJobStatusState::Ready => {
                 require_none(&self.artifact, "ready export artifact")?;
                 require_none(&self.reconciliation, "ready export reconciliation")?;
-                require_none(&self.last_execution_error_code, "ready export execution error")?;
+                require_none(
+                    &self.last_execution_error_code,
+                    "ready export execution error",
+                )?;
                 require_zero(self.checkpoint_manifest_position, "ready export checkpoint")?;
                 start(&mut job, transition_time)?;
-                replay_completed_retry_cycles(
-                    &mut job,
-                    self.execution_attempts,
-                    transition_time,
-                )?;
+                replay_completed_retry_cycles(&mut job, self.execution_attempts, transition_time)?;
                 complete_selection(&mut job, &self.selection, transition_time)?;
             }
             PartyExportJobStatusState::Executing => {
@@ -321,16 +315,8 @@ impl ExportJobStateV1 {
                     "executing export execution error",
                 )?;
                 enter_execution(&mut job, &self.selection, transition_time)?;
-                replay_completed_retry_cycles(
-                    &mut job,
-                    self.execution_attempts,
-                    transition_time,
-                )?;
-                replay_checkpoints(
-                    &mut job,
-                    self.checkpoint_manifest_position,
-                    transition_time,
-                )?;
+                replay_completed_retry_cycles(&mut job, self.execution_attempts, transition_time)?;
+                replay_checkpoints(&mut job, self.checkpoint_manifest_position, transition_time)?;
             }
             PartyExportJobStatusState::FailedRetryable => {
                 require_none(&self.artifact, "retryable export artifact")?;
@@ -359,11 +345,7 @@ impl ExportJobStateV1 {
                     )?;
                     start(&mut job, transition_time)?;
                 }
-                replay_prior_retry_cycles(
-                    &mut job,
-                    self.execution_attempts - 1,
-                    transition_time,
-                )?;
+                replay_prior_retry_cycles(&mut job, self.execution_attempts - 1, transition_time)?;
                 record_failure(&mut job, error_code, transition_time)?;
             }
             PartyExportJobStatusState::Completed => {
@@ -372,20 +354,14 @@ impl ExportJobStateV1 {
                     "completed export execution error",
                 )?;
                 enter_execution(&mut job, &self.selection, transition_time)?;
-                replay_completed_retry_cycles(
-                    &mut job,
-                    self.execution_attempts,
-                    transition_time,
-                )?;
-                replay_checkpoints(
-                    &mut job,
-                    self.checkpoint_manifest_position,
-                    transition_time,
-                )?;
+                replay_completed_retry_cycles(&mut job, self.execution_attempts, transition_time)?;
+                replay_checkpoints(&mut job, self.checkpoint_manifest_position, transition_time)?;
                 let artifact = self
                     .artifact
                     .as_ref()
-                    .ok_or_else(|| persisted_error("completed export artifact is missing".to_owned()))?
+                    .ok_or_else(|| {
+                        persisted_error("completed export artifact is missing".to_owned())
+                    })?
                     .try_into_domain()?;
                 let reconciliation = self
                     .reconciliation
@@ -424,7 +400,12 @@ impl PartyExportSpecificationStateV1 {
         )
         .map_err(|error| persisted_domain_error("export scope", error))?;
         let profile = PartyExportProfile::v1(
-            self.profile.fields.iter().copied().map(Into::into).collect(),
+            self.profile
+                .fields
+                .iter()
+                .copied()
+                .map(Into::into)
+                .collect(),
             self.profile.retention_policy_id.clone(),
         )
         .map_err(|error| persisted_domain_error("export profile", error))?;
@@ -458,7 +439,7 @@ impl PartyExportArtifactStateV1 {
     fn try_into_domain(&self) -> Result<PartyExportArtifactEvidence, SdkError> {
         PartyExportArtifactEvidence::try_new(
             FileId::try_new(self.file_id.clone())
-                .map_err(|error| persisted_domain_error("export artifact file ID", error))?,
+                .map_err(|error| persisted_error(format!("export artifact file ID: {error}")))?,
             self.content_sha256.clone(),
             self.size_bytes,
             self.retention_policy_id.clone(),
@@ -525,7 +506,11 @@ fn replay_prior_retry_cycles(
     occurred_at_unix_nanos: i64,
 ) -> Result<(), SdkError> {
     for _ in 0..attempts {
-        record_failure(job, "PERSISTED_RETRYABLE_EXPORT_FAILURE", occurred_at_unix_nanos)?;
+        record_failure(
+            job,
+            "PERSISTED_RETRYABLE_EXPORT_FAILURE",
+            occurred_at_unix_nanos,
+        )?;
         start(job, occurred_at_unix_nanos)?;
     }
     Ok(())
@@ -583,7 +568,10 @@ fn replay_cancelled_state(
                     )?;
                     record_failure(
                         job,
-                        state.last_execution_error_code.as_deref().unwrap_or_default(),
+                        state
+                            .last_execution_error_code
+                            .as_deref()
+                            .unwrap_or_default(),
                         occurred_at_unix_nanos,
                     )?;
                 } else {
@@ -622,7 +610,10 @@ fn replay_cancelled_state(
                     )?;
                     record_failure(
                         job,
-                        state.last_execution_error_code.as_deref().unwrap_or_default(),
+                        state
+                            .last_execution_error_code
+                            .as_deref()
+                            .unwrap_or_default(),
                         occurred_at_unix_nanos,
                     )?;
                 } else {
