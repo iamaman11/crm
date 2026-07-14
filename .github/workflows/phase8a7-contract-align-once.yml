@@ -1,0 +1,68 @@
+name: Phase 8A.7 Contract Align Once
+
+on:
+  push:
+    branches:
+      - develop/phase8a7-customer-import-jobs
+    paths:
+      - .github/workflows/phase8a7-contract-align-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  align:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a7-customer-import-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Align contract, manifest and adapter coordinates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          lib = Path('crates/crm-customer-data-operations-capability-adapter/src/lib.rs')
+          text = lib.read_text()
+          marker = 'pub const IMPORT_ROW_RECORD_TYPE: &str = "customer_data.import_row";\n'
+          if 'IMPORT_JOB_ROW_RELATIONSHIP_TYPE' not in text:
+              text = text.replace(marker, marker + 'pub const IMPORT_JOB_ROW_RELATIONSHIP_TYPE: &str = "customer_data.import_job.row";\n')
+          checkpoint = '''pub const PARTY_IMPORT_ROW_FAILED_EVENT_SCHEMA: &str =\n    "crm.customer_data_operations.v1.PartyImportRowFailedEvent";\n'''
+          if 'PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_TYPE' not in text:
+              text = text.replace(checkpoint, checkpoint + '''pub const PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_TYPE: &str =\n    "customer_data.import.party.checkpoint_advanced";\npub const PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_SCHEMA: &str =\n    "crm.customer_data_operations.v1.PartyImportCheckpointAdvancedEvent";\n''')
+          lib.write_text(text)
+
+          proto = Path('proto/crm/customer_data_operations/v1/customer_data_operations.proto')
+          text = proto.read_text()
+          old = '''// Emitted whenever execution changes authoritative import-row outcome state, including\n// retryable failure and success. Target Party state remains owned by crm.parties.\nmessage PartyImportRowExecutionUpdatedEvent {\n  ImportRow import_row = 1;\n}\n'''
+          new = '''// Emitted when the governed target Party capability succeeds for a row and the\n// authoritative import-owned row outcome is persisted as succeeded.\nmessage PartyImportRowSucceededEvent {\n  ImportRow import_row = 1;\n}\n\n// Emitted when an executable row records bounded retryable execution failure evidence.\nmessage PartyImportRowFailedEvent {\n  ImportRow import_row = 1;\n}\n'''
+          if old in text:
+              text = text.replace(old, new)
+          proto.write_text(text)
+
+          manifest = Path('modules/crm-customer-data-operations/module.yaml')
+          text = manifest.read_text()
+          text = text.replace('customer_data.import.party.row.validated', 'customer_data.import.party.row_validated')
+          text = text.replace(
+              '''    - id: customer_data.import.party.row.execution_updated\n      version: "1.0.0"\n''',
+              '''    - id: customer_data.import.party.row_succeeded\n      version: "1.0.0"\n    - id: customer_data.import.party.row_failed\n      version: "1.0.0"\n'''
+          )
+          manifest.write_text(text)
+          PY
+          cargo fmt --all
+          rm .github/workflows/phase8a7-contract-align-once.yml
+      - name: Commit aligned contracts and self-remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(phase8a7): align import event and relationship coordinates"
+          git push origin HEAD:develop/phase8a7-customer-import-jobs
