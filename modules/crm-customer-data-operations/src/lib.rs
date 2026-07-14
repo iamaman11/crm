@@ -14,17 +14,19 @@
 //! Validation progress and finalization are server-derived, version-checked and durably routed
 //! through the production application capability boundary before target-owner execution begins.
 //! Execution ordering is derived from a complete authoritative source-position index rather than
-//! relationship pagination order. The current owner/query boundary is cataloged and routed by the
-//! production application runtime; target Party execution remains a separate governed composition.
+//! relationship pagination order. Exact source bytes are interpreted only by the versioned strict
+//! parser profile before any validated row state is planned.
 
 pub mod domain;
 pub mod execution;
 pub mod persistence;
 pub mod profile;
+pub mod source_parser;
 pub mod validation;
 
 pub use domain::*;
 pub use execution::*;
 pub use persistence::*;
 pub use profile::*;
+pub use source_parser::*;
 pub use validation::*;
