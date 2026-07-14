@@ -1,5 +1,6 @@
 name: Phase 8A.5 Query Router Refactor V2 Once
 
+# One-shot source refactor; self-deletes after successful verification.
 on:
   pull_request:
     types: [synchronize]
