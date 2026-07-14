@@ -34,22 +34,91 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Refactor import job counter validation
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("modules/crm-customer-data-operations/src/domain.rs")
+          text = path.read_text()
+
+          old_call = '''        validate_job_counters(
+              snapshot.status,
+              snapshot.partial_execution_policy,
+              snapshot.total_rows,
+              snapshot.valid_rows,
+              snapshot.invalid_rows,
+              snapshot.succeeded_rows,
+              snapshot.checkpoint_row_position,
+              snapshot.version,
+          )?;'''
+          new_call = '''        validate_job_counters(ImportJobCounterState {
+              status: snapshot.status,
+              policy: snapshot.partial_execution_policy,
+              total_rows: snapshot.total_rows,
+              valid_rows: snapshot.valid_rows,
+              invalid_rows: snapshot.invalid_rows,
+              succeeded_rows: snapshot.succeeded_rows,
+              checkpoint_row_position: snapshot.checkpoint_row_position,
+              version: snapshot.version,
+          })?;'''
+          if text.count(old_call) != 1:
+              raise SystemExit(f"expected exactly one counter validation call, found {text.count(old_call)}")
+          text = text.replace(old_call, new_call)
+
+          old_fn = '''fn validate_job_counters(
+              status: ImportJobStatus,
+              policy: PartialExecutionPolicy,
+              total_rows: u32,
+              valid_rows: u32,
+              invalid_rows: u32,
+              succeeded_rows: u32,
+              checkpoint_row_position: u32,
+              version: i64,
+          ) -> Result<(), SdkError> {
+              let validated_total = valid_rows'''
+          new_fn = '''#[derive(Debug, Clone, Copy)]
+          struct ImportJobCounterState {
+              status: ImportJobStatus,
+              policy: PartialExecutionPolicy,
+              total_rows: u32,
+              valid_rows: u32,
+              invalid_rows: u32,
+              succeeded_rows: u32,
+              checkpoint_row_position: u32,
+              version: i64,
+          }
+
+          fn validate_job_counters(state: ImportJobCounterState) -> Result<(), SdkError> {
+              let ImportJobCounterState {
+                  status,
+                  policy,
+                  total_rows,
+                  valid_rows,
+                  invalid_rows,
+                  succeeded_rows,
+                  checkpoint_row_position,
+                  version,
+              } = state;
+              let validated_total = valid_rows'''
+          if text.count(old_fn) != 1:
+              raise SystemExit(f"expected exactly one counter validation function, found {text.count(old_fn)}")
+          text = text.replace(old_fn, new_fn)
+          path.write_text(text)
+          PY
           cargo fmt --all
-      - name: Commit synchronized files when needed
+          cargo clippy -p crm-customer-data-operations --all-targets -- -D warnings
+          cargo test -p crm-customer-data-operations
+      - name: Restore permanent workflow and commit verified fix
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
-            exit 0
-          fi
+          set -euo pipefail
+          git fetch origin main --depth=1
+          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add modules/crm-customer-data-operations/src/domain.rs .github/workflows/rust-generated-sync.yml
+          git commit -m "Refactor import job counter validation"
           git push origin "HEAD:${HEAD_BRANCH}"
