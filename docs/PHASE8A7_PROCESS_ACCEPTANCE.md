@@ -4,7 +4,7 @@ This document defines the process-level acceptance evidence required before Phas
 
 ## Required CI execution
 
-The fresh-PostgreSQL process scenarios in this document are executed by the dedicated `Import Process Runtime CI` workflow. The workflow is an applicable Phase 8A.7 merge gate: adding the test and workflow does not itself constitute passing evidence; only a green run on the unchanged final candidate SHA does.
+The fresh-PostgreSQL process scenarios in this document are executed by two dedicated merge gates: `Import Process Runtime CI` proves source bytes, dry-run, target-success crash/restart recovery, tenant isolation and cursor tamper rejection; `Import Retryable Process Runtime CI` proves durable retryable target failure without checkpoint advancement followed by restart recovery and exactly-once target creation. Adding these tests and workflows does not itself constitute passing evidence; both workflows must be green on the unchanged final candidate SHA.
 
 ## Source artifact proof
 
