@@ -22,8 +22,9 @@ use crm_customer_data_operations_capability_adapter::{
     import_job_persisted_contract, import_row_persisted_contract, import_row_to_wire, job_to_wire,
 };
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, IdempotencyKey,
-    ModuleExecutionContext, ModuleId, PortFuture, RecordRef, SchemaVersion, SdkError, TypedPayload,
+    BusinessTransactionId, CapabilityId, CapabilityVersion, DataClass, ErrorCategory,
+    IdempotencyKey, ModuleExecutionContext, ModuleId, PortFuture, RecordRef, SchemaVersion,
+    SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::{
     customer::v1 as customer, customer_data_operations::v1 as wire,
@@ -302,9 +303,11 @@ fn internal_request(
     context.execution.capability_version = definition.capability_version.clone();
     context.execution.schema_version =
         SchemaVersion::try_new(support::CONTRACT_VERSION).map_err(configuration_error)?;
+    let outcome_identity = format!("cdo-outcome-{}", hex(&input_hash));
     context.execution.idempotency_key =
-        IdempotencyKey::try_new(format!("cdo-outcome-{}", hex(&input_hash)))
-            .map_err(configuration_error)?;
+        IdempotencyKey::try_new(outcome_identity.clone()).map_err(configuration_error)?;
+    context.execution.business_transaction_id =
+        BusinessTransactionId::try_new(outcome_identity).map_err(configuration_error)?;
     Ok(CapabilityRequest {
         context,
         input,
