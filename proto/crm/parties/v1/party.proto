@@ -103,6 +103,14 @@ message PartyMergeSurvivorshipUpdatedEvent {
   repeated string changed_fields = 3;
 }
 
+// Party-owned evidence that governed unmerge restored the exact survivor value
+// owned by the active merge lineage. Later unrelated edits are never overwritten.
+message PartyMergeSurvivorshipRestoredEvent {
+  Party party = 1;
+  string merge_lineage_id = 2;
+  repeated string changed_fields = 3;
+}
+
 service PartyService {
   rpc CreateParty(CreatePartyRequest) returns (CreatePartyResponse);
   rpc UpdateParty(UpdatePartyRequest) returns (UpdatePartyResponse);
