@@ -344,7 +344,7 @@ fn file_capability_definition() -> CapabilityDefinition {
         maximum_size_bytes: 1024,
     };
     CapabilityDefinition {
-        capability_id: CapabilityId::try_new("test.file.create").unwrap(),
+        capability_id: CapabilityId::try_new("test.record.mutate").unwrap(),
         capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
         owner_module_id: ModuleId::try_new("crm.test").unwrap(),
         input_contract: contract.clone(),
@@ -357,14 +357,14 @@ fn file_capability_definition() -> CapabilityDefinition {
         mutation: true,
         requires_idempotency: true,
         requires_approval: false,
-        authorization_policy_id: "test.file.create".to_owned(),
+        authorization_policy_id: "test.record.mutate".to_owned(),
         rate_limit_policy_id: None,
     }
 }
 
 fn file_capability_request(transaction_id: &str, idempotency_key: &str) -> CapabilityRequest {
     let mut execution = context("tenant-a", transaction_id, idempotency_key);
-    execution.execution.capability_id = CapabilityId::try_new("test.file.create").unwrap();
+    execution.execution.capability_id = CapabilityId::try_new("test.record.mutate").unwrap();
     CapabilityRequest {
         context: execution,
         input: TypedPayload {
