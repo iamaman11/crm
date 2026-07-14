@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package crm.customer_data_operations.v1;
+
+import "crm/customer_data_operations/v1/customer_data_operations.proto";
+
+// Stable immutable import-source artifact identity. The artifact bytes are platform-owned
+// storage; crm.customer-data-operations remains the business owner of import semantics.
+message PartyImportSourceArtifactRef {
+  string file_id = 1;
+}
+
+message PartyImportSourceArtifact {
+  PartyImportSourceArtifactRef source_artifact_ref = 1;
+  string source_name = 2;
+  string source_system_id = 3;
+  ImportParserProfile parser_profile = 4;
+  uint64 expected_size_bytes = 5;
+  bytes expected_sha256 = 6;
+  uint64 received_size_bytes = 7;
+  uint64 next_chunk_index = 8;
+  bool finalized = 9;
+}
+
+// Starts an immutable bounded upload. The expected digest and size are frozen before bytes arrive.
+message CreatePartyImportSourceArtifactRequest {
+  PartyImportSourceArtifactRef source_artifact_ref = 1;
+  string source_name = 2;
+  string source_system_id = 3;
+  ImportParserProfile parser_profile = 4;
+  uint64 expected_size_bytes = 5;
+  bytes expected_sha256 = 6;
+}
+
+message CreatePartyImportSourceArtifactResponse {
+  PartyImportSourceArtifact source_artifact = 1;
+}
+
+// Chunks are non-empty, bounded, exact-order and replay-safe only for identical bytes.
+message AppendPartyImportSourceChunkRequest {
+  PartyImportSourceArtifactRef source_artifact_ref = 1;
+  uint64 chunk_index = 2;
+  bytes chunk_sha256 = 3;
+  bytes chunk_bytes = 4;
+}
+
+message AppendPartyImportSourceChunkResponse {
+  PartyImportSourceArtifact source_artifact = 1;
+  bool replayed = 2;
+}
+
+// Finalization verifies exact size and SHA-256 over the ordered immutable bytes.
+message FinalizePartyImportSourceArtifactRequest {
+  PartyImportSourceArtifactRef source_artifact_ref = 1;
+}
+
+message FinalizePartyImportSourceArtifactResponse {
+  PartyImportSourceArtifact source_artifact = 1;
+}
+
+// Production job creation derives content SHA-256 and row count from the finalized artifact bytes;
+// clients never supply authoritative row_count for this path.
+message CreatePartyImportJobFromSourceArtifactRequest {
+  ImportJobRef import_job_ref = 1;
+  PartyImportSourceArtifactRef source_artifact_ref = 2;
+  PartyImportMapping mapping = 3;
+  PartialExecutionPolicy partial_execution_policy = 4;
+}
+
+message CreatePartyImportJobFromSourceArtifactResponse {
+  ImportJob import_job = 1;
+  PartyImportSourceArtifactRef source_artifact_ref = 2;
+}
+
+// Server-side validation reads and parses the exact finalized bytes bound to the job. The batch is
+// selected by source row position; clients do not submit pre-parsed column maps on this path.
+message ValidatePartyImportSourceBatchRequest {
+  ImportJobRef import_job_ref = 1;
+  uint32 start_row_position = 2;
+  uint32 max_rows = 3;
+}
+
+message ValidatePartyImportSourceBatchResponse {
+  repeated ImportRow import_rows = 1;
+  uint32 next_row_position = 2;
+  bool source_exhausted = 3;
+}
+
+service CustomerDataOperationsSourceService {
+  rpc CreatePartyImportSourceArtifact(CreatePartyImportSourceArtifactRequest)
+      returns (CreatePartyImportSourceArtifactResponse);
+  rpc AppendPartyImportSourceChunk(AppendPartyImportSourceChunkRequest)
+      returns (AppendPartyImportSourceChunkResponse);
+  rpc FinalizePartyImportSourceArtifact(FinalizePartyImportSourceArtifactRequest)
+      returns (FinalizePartyImportSourceArtifactResponse);
+  rpc CreatePartyImportJobFromSourceArtifact(CreatePartyImportJobFromSourceArtifactRequest)
+      returns (CreatePartyImportJobFromSourceArtifactResponse);
+  rpc ValidatePartyImportSourceBatch(ValidatePartyImportSourceBatchRequest)
+      returns (ValidatePartyImportSourceBatchResponse);
+}
