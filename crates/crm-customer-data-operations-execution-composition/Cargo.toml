@@ -12,5 +12,5 @@ crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 
 [dev-dependencies]
-prost = "0.13"
+prost = "0.14"
 tokio = { version = "1", features = ["macros", "rt"] }
