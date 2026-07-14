@@ -670,28 +670,26 @@ fn source_artifact_create_evidence(
             source_artifact: Some(public.clone()),
         },
     )?;
-    file_artifact_evidence(
-        definition,
-        result,
-        request,
-        output,
-        if result.changed {
-            Some((
-                SOURCE_ARTIFACT_CREATED_EVENT_TYPE,
-                SOURCE_ARTIFACT_CREATED_EVENT_SCHEMA,
-                support::protobuf_payload(
-                    MODULE_ID,
-                    SOURCE_ARTIFACT_CREATED_EVENT_SCHEMA,
-                    DataClass::Personal,
-                    &wire::PartyImportSourceArtifactCreatedEvent {
-                        source_artifact: Some(public),
-                    },
-                )?,
-            ))
-        } else {
-            None
-        },
-    )
+    let event = if result.changed {
+        Some(support::event_evidence_with_data_class(
+            request,
+            file_artifact_record_ref(&result.metadata)?,
+            MODULE_ID,
+            EventSpec {
+                event_type: SOURCE_ARTIFACT_CREATED_EVENT_TYPE,
+                event_schema_id: SOURCE_ARTIFACT_CREATED_EVENT_SCHEMA,
+                aggregate_version: file_artifact_version(&result.metadata)?,
+                previous_version: None,
+            },
+            DataClass::Personal,
+            &wire::PartyImportSourceArtifactCreatedEvent {
+                source_artifact: Some(public),
+            },
+        )?)
+    } else {
+        None
+    };
+    file_artifact_evidence(definition, result, request, output, event)
 }
 
 fn source_chunk_append_evidence(
@@ -710,29 +708,28 @@ fn source_chunk_append_evidence(
             replayed: result.chunk_replayed,
         },
     )?;
-    file_artifact_evidence(
-        definition,
-        result,
-        request,
-        output,
-        if result.changed {
-            Some((
-                SOURCE_CHUNK_APPENDED_EVENT_TYPE,
-                SOURCE_CHUNK_APPENDED_EVENT_SCHEMA,
-                support::protobuf_payload(
-                    MODULE_ID,
-                    SOURCE_CHUNK_APPENDED_EVENT_SCHEMA,
-                    DataClass::Personal,
-                    &wire::PartyImportSourceChunkAppendedEvent {
-                        source_artifact: Some(public),
-                        chunk_index,
-                    },
-                )?,
-            ))
-        } else {
-            None
-        },
-    )
+    let event = if result.changed {
+        let version = file_artifact_version(&result.metadata)?;
+        Some(support::event_evidence_with_data_class(
+            request,
+            file_artifact_record_ref(&result.metadata)?,
+            MODULE_ID,
+            EventSpec {
+                event_type: SOURCE_CHUNK_APPENDED_EVENT_TYPE,
+                event_schema_id: SOURCE_CHUNK_APPENDED_EVENT_SCHEMA,
+                aggregate_version: version,
+                previous_version: version.checked_sub(1),
+            },
+            DataClass::Personal,
+            &wire::PartyImportSourceChunkAppendedEvent {
+                source_artifact: Some(public),
+                chunk_index,
+            },
+        )?)
+    } else {
+        None
+    };
+    file_artifact_evidence(definition, result, request, output, event)
 }
 
 fn source_artifact_finalize_evidence(
@@ -749,28 +746,27 @@ fn source_artifact_finalize_evidence(
             source_artifact: Some(public.clone()),
         },
     )?;
-    file_artifact_evidence(
-        definition,
-        result,
-        request,
-        output,
-        if result.changed {
-            Some((
-                SOURCE_ARTIFACT_FINALIZED_EVENT_TYPE,
-                SOURCE_ARTIFACT_FINALIZED_EVENT_SCHEMA,
-                support::protobuf_payload(
-                    MODULE_ID,
-                    SOURCE_ARTIFACT_FINALIZED_EVENT_SCHEMA,
-                    DataClass::Personal,
-                    &wire::PartyImportSourceArtifactFinalizedEvent {
-                        source_artifact: Some(public),
-                    },
-                )?,
-            ))
-        } else {
-            None
-        },
-    )
+    let event = if result.changed {
+        let version = file_artifact_version(&result.metadata)?;
+        Some(support::event_evidence_with_data_class(
+            request,
+            file_artifact_record_ref(&result.metadata)?,
+            MODULE_ID,
+            EventSpec {
+                event_type: SOURCE_ARTIFACT_FINALIZED_EVENT_TYPE,
+                event_schema_id: SOURCE_ARTIFACT_FINALIZED_EVENT_SCHEMA,
+                aggregate_version: version,
+                previous_version: version.checked_sub(1),
+            },
+            DataClass::Personal,
+            &wire::PartyImportSourceArtifactFinalizedEvent {
+                source_artifact: Some(public),
+            },
+        )?)
+    } else {
+        None
+    };
+    file_artifact_evidence(definition, result, request, output, event)
 }
 
 fn file_artifact_evidence(
@@ -778,40 +774,13 @@ fn file_artifact_evidence(
     result: &FileArtifactCapabilityMutationResult,
     request: &CapabilityRequest,
     output: TypedPayload,
-    event: Option<(&str, &str, TypedPayload)>,
+    event: Option<crm_core_data::EventEvidence>,
 ) -> Result<FileArtifactCapabilityEvidence, SdkError> {
-    let aggregate = support::record_ref(
-        "file_artifact",
-        result.metadata.file_id.as_str(),
-        "customer_data.import.source_artifact_ref.file_id",
-    )?;
+    let aggregate = file_artifact_record_ref(&result.metadata)?;
     let version = file_artifact_version(&result.metadata)?;
-    let events = event
-        .map(|(event_type, event_schema_id, payload)| {
-            let mut evidence = support::event_evidence_with_data_class(
-                request,
-                aggregate.clone(),
-                MODULE_ID,
-                EventSpec {
-                    event_type,
-                    event_schema_id,
-                    aggregate_version: version,
-                    previous_version: version.checked_sub(1),
-                },
-                DataClass::Personal,
-                &wire::PartyImportSourceArtifactCreatedEvent {
-                    source_artifact: Some(source_artifact_to_wire(&result.metadata)),
-                },
-            )?;
-            evidence.event.payload = payload;
-            Ok::<_, SdkError>(evidence)
-        })
-        .transpose()?
-        .into_iter()
-        .collect();
     Ok(FileArtifactCapabilityEvidence {
         output: output.clone(),
-        events,
+        events: event.into_iter().collect(),
         audits: vec![support::audit_intent(
             request,
             &aggregate,
@@ -825,6 +794,14 @@ fn file_artifact_evidence(
             version: Some(version),
         }],
     })
+}
+
+fn file_artifact_record_ref(metadata: &FileArtifactMetadata) -> Result<RecordRef, SdkError> {
+    support::record_ref(
+        "file_artifact",
+        metadata.file_id.as_str(),
+        "customer_data.import.source_artifact_ref.file_id",
+    )
 }
 
 fn source_artifact_to_wire(metadata: &FileArtifactMetadata) -> wire::PartyImportSourceArtifact {
