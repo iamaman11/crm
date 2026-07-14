@@ -261,7 +261,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Bundle query adapters and verify exact source refactor
+      - name: Apply scoped router refactor and cross-tenant fixture bootstrap
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -297,10 +297,14 @@ impl ApplicationQueryRouter {
           text, count = pattern.subn(replacement, text, count=1)
           if count != 1:
               raise SystemExit(f"expected one query-router block, replaced {count}")
+          marker = "impl QuerySemanticValidator for ApplicationQueryRouter {"
+          if marker not in text:
+              raise SystemExit("query semantic validator marker not found")
+          prefix, query_routing = text.split(marker, 1)
           for field in ("metadata", "parties", "accounts", "contact_points", "party_relationships", "customer_360", "consents", "identity_resolution"):
-              text = text.replace(f"self.{field}.validate(", f"self.adapters.{field}.validate(")
-              text = text.replace(f"self.{field}.execute(", f"self.adapters.{field}.execute(")
-          governed.write_text(text)
+              query_routing = query_routing.replace(f"self.{field}.validate(", f"self.adapters.{field}.validate(")
+              query_routing = query_routing.replace(f"self.{field}.execute(", f"self.adapters.{field}.execute(")
+          governed.write_text(prefix + marker + query_routing)
 
           runtime = Path("crates/crm-application-runtime/src/runtime.rs")
           text = runtime.read_text()
@@ -327,17 +331,55 @@ impl ApplicationQueryRouter {
           if count != 1:
               raise SystemExit(f"expected one runtime query-router call, replaced {count}")
           runtime.write_text(text)
+
+          fixture = Path("database/tests/0010_identity_resolution_adapter.sql")
+          text = fixture.read_text()
+          if "identity-resolution-process-actor-bootstrap" not in text:
+              anchor = "INSERT INTO crm.module_versions ("
+              if anchor not in text:
+                  raise SystemExit("identity resolution fixture module anchor not found")
+              bootstrap = """-- Cross-tenant process acceptance uses the same authenticated service actor in both tenants.
+BEGIN;
+SET LOCAL app.tenant_id = 'tenant-b';
+SET LOCAL app.actor_id = 'actor-a';
+SET LOCAL app.request_id = 'identity-resolution-process-actor-bootstrap-request';
+SET LOCAL app.capability_id = 'test.record.mutate';
+SET LOCAL app.capability_version = '1.0.0';
+SET LOCAL app.business_transaction_id = 'identity-resolution-process-actor-bootstrap';
+
+INSERT INTO crm.actors (
+  tenant_id,
+  actor_id,
+  actor_type,
+  status,
+  display_name,
+  last_business_transaction_id
+)
+VALUES (
+  'tenant-b',
+  'actor-a',
+  'service',
+  'active',
+  'Identity Resolution acceptance cross-tenant actor',
+  'identity-resolution-process-actor-bootstrap'
+)
+ON CONFLICT (tenant_id, actor_id) DO NOTHING;
+COMMIT;
+
+"""
+              text = text.replace(anchor, bootstrap + anchor, 1)
+              fixture.write_text(text)
           PY
           cargo fmt --all
           cargo clippy -p crm-application-runtime --all-targets --all-features -- -D warnings
           cargo test -p crm-application-runtime --lib
-      - name: Restore permanent CI and commit clean source refactor
+      - name: Restore permanent CI and commit verified fixes
         run: |
           git show 41fe1f429d20880b37613cefc4c3738dbc3c273f:.github/workflows/application-runtime.yml > .github/workflows/application-runtime.yml
           rm -f .github/workflows/phase8a5-query-router-refactor-once.yml
           rm -f .github/workflows/phase8a5-query-router-refactor-v2-once.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-application-runtime .github/workflows
-          git commit -m "refactor(runtime): bundle query router adapters"
+          git add crates/crm-application-runtime database/tests/0010_identity_resolution_adapter.sql .github/workflows
+          git commit -m "fix(identity-resolution): complete runtime acceptance gate"
           git push origin HEAD:develop/phase8a5-identity-resolution-duplicate-candidates
