@@ -4,6 +4,14 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "crates/**/*.rs"
+      - "modules/**/Cargo.toml"
+      - "modules/**/*.rs"
+      - "services/**/Cargo.toml"
+      - "services/**/*.rs"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -17,85 +25,31 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-          show-progress: false
-      - name: Synchronize Phase 8A.6 normative status
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          replacements = {
-              Path("docs/IMPLEMENTATION_ROADMAP.md"): [
-                  (
-                      "Current delivery position: Party create/update/get/list/search, Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship (#108 / merged PR #109), Customer 360 (#110 / merged PR #111) and Phase 8A.4 Consent and Communication Authorization (#112 / merged PR #113; final verified head `9e9f86bea82581f3e3d0ff8b6027d3b39e84cfcc`; merge commit `381a9fd5e6eb54918fc43801062957ca4a854486`) are merged and production-proven. Phase 8A.5 Identity Resolution and Duplicate Candidates is now in gate review in #114 / draft PR #115: the pure `crm.identity-resolution` owner, canonical unordered Party-pair identity, deterministic case IDs, immutable explainable evidence snapshots with exact Party source versions, governed register/refresh/dismiss/confirm-duplicate mutations, authoritative Party-to-case relationships, stale-evidence fail-closed composition, permission-aware get/list-by-Party queries with signed cursors, synchronized contract bindings/browser hashes and fresh-PostgreSQL real `crm-api` process acceptance are implemented. `confirmed_duplicate` records a reviewer decision only and does not mutate, merge, delete or alias Party records. Merge/unmerge, provenance and survivorship remain Phase 8A.6. The final unchanged exact-head all-workflow gate remains pending before PR #115 can merge.",
-                      "Current delivery position: Party create/update/get/list/search, Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship (#108 / merged PR #109), Customer 360 (#110 / merged PR #111), Phase 8A.4 Consent and Communication Authorization (#112 / merged PR #113) and Phase 8A.5 Identity Resolution and Duplicate Candidates (#114 / merged PR #115; final verified head `74ab48427b9dd5a30f0a0637cc52e74bd395b3c7`; merge commit `bdefcbd85496d9a0481b57d04ef1d6c731a12683`) are merged and production-proven. Phase 8A.6 Merge, Unmerge, Provenance and Survivorship is now in gate review in #116 / PR #119: immutable merge-operation lineage, approval-required merge/unmerge, exact Party-version and same-tenant integrity, field-level survivorship provenance, authoritative Party-to-lineage relationships, cycle-safe canonical redirects, permission-aware get/list/canonical-resolution queries, signed public approval transport, hard PostgreSQL topology invariants, complete migration-ledger rollback/reapply coverage and fresh-PostgreSQL real `crm-api` reversible merge/unmerge acceptance are implemented. Party remains authoritative and merge/unmerge does not delete or destructively rewrite Party records. The post-documentation exact-head all-workflow gate against `main` remains pending before PR #119 can be marked ready for review.",
-                  ),
-                  (
-                      "1. Complete the post-documentation exact-head merge gate for Phase 8A.4 / #112 and merge PR #113 without weakening authoritative Consent ownership or allowing Contact Point state to become an authorization oracle.\n2. Continue Phase 8A with identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.\n3. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.\n4. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.\n5. Keep enterprise/security/operational proof continuous and require one unchanged exact final SHA for every merge gate.",
-                      "1. Complete the post-documentation exact-head gate for Phase 8A.6 / #116 and move PR #119 to ready-for-review without weakening Party ownership, approval requirements or immutable merge lineage.\n2. Continue Phase 8A with explicit import/export, data-quality/enrichment provenance and privacy lifecycle packets.\n3. Follow with Phase 8B / #29 commercial lifecycle without moving catalog/pricing/order/contract ownership into Sales.\n4. Continue frontend and expert backend modules as end-to-end vertical slices while enterprise/security/operational hardening remains continuous.\n5. Keep enterprise/security/operational proof continuous and require one unchanged exact final SHA for every merge gate.",
-                  ),
-              ],
-              Path("docs/PROJECT_STATUS.md"): [
-                  (
-                      "- **8A.5 — gate review:** authoritative Identity Resolution duplicate-candidate cases and reviewer decisions without Party merge (#114 / draft PR #115);\n- **8A.6 and later:** governed merge/unmerge, provenance/survivorship, import/export, data quality and privacy lifecycle proof.",
-                      "- **8A.5 — complete:** authoritative Identity Resolution duplicate-candidate cases and reviewer decisions without Party merge (#114 / merged PR #115; final verified head `74ab48427b9dd5a30f0a0637cc52e74bd395b3c7`; merge commit `bdefcbd85496d9a0481b57d04ef1d6c731a12683`);\n- **8A.6 — gate review:** approval-required non-destructive merge/unmerge, immutable lineage, survivorship provenance and canonical Party resolution (#116 / PR #119);\n- **later 8A packets:** import/export, data quality/enrichment provenance and privacy lifecycle proof.",
-                  ),
-                  (
-                      "- authoritative `crm.identity-resolution` duplicate-candidate cases with canonical unordered Party-pair identity, immutable explainable evidence/version provenance, exact Party-version integrity, authoritative Party-to-case access paths, signed permission-aware queries and terminal reviewer decisions that do not merge Party records;",
-                      "- authoritative `crm.identity-resolution` duplicate-candidate cases plus immutable merge/unmerge lineage, approval-required reversible canonical Party redirection, exact Party-version integrity, field-level survivorship provenance, authoritative Party access paths and signed permission-aware duplicate/merge/canonical-resolution queries without destructive Party deletion or historical-reference rewriting;",
-                  ),
-                  (
-                      "After merged Consent and the Phase 8A.5 duplicate-candidate packet:\n\n1. complete the unchanged exact-head gate and merge Phase 8A.5;\n2. deliver governed merge/unmerge, provenance and survivorship in Phase 8A.6;\n3. deliver import/export, data quality, enrichment provenance and privacy lifecycle proof in later explicit packets.",
-                      "After merged Consent and Phase 8A.5 duplicate-candidate delivery:\n\n1. complete the post-documentation exact-head gate for Phase 8A.6 and move PR #119 to ready-for-review;\n2. merge Phase 8A.6 only as a separate explicit action after review;\n3. deliver import/export, data quality, enrichment provenance and privacy lifecycle proof in later explicit packets.",
-                  ),
-                  (
-                      "- `crm.identity-resolution` — duplicate-candidate and reviewer-decision owner in final gate review, explicitly without Party merge;",
-                      "- `crm.identity-resolution` — merged duplicate-candidate/reviewer-decision owner plus Phase 8A.6 merge/unmerge lineage, provenance and canonical-resolution implementation in gate review;",
-                  ),
-              ],
-              Path("docs/MODULE_CATALOG.md"): [
-                  (
-                      "| `crm.identity-resolution` | Authoritative duplicate-candidate cases, explainable evidence provenance and reviewer decisions | **Vertical slice — gate review** | Canonical unordered Party-pair cases, deterministic IDs, immutable evidence/version provenance, exact Party-version integrity, authoritative Party access paths, governed register/refresh/dismiss/confirm-duplicate, signed permission-aware get/list-by-Party queries and real PostgreSQL/process acceptance in #114 / PR #115 | Party merge/unmerge, reference redirection, immutable merge lineage and survivorship remain Phase 8A.6 |",
-                      "| `crm.identity-resolution` | Authoritative duplicate-candidate cases, immutable merge/unmerge lineage, survivorship provenance and canonical Party resolution | **Expert expansion — gate review** | Merged duplicate-candidate/reviewer-decision vertical slice from #114 / PR #115 plus Phase 8A.6 approval-required reversible merge/unmerge, immutable lineage, exact Party-version/provenance integrity, authoritative Party access paths, cycle-safe canonical redirects, permission-aware merge queries/resolution and real PostgreSQL/process acceptance in #116 / PR #119 | Import/export, data quality/enrichment provenance and privacy lifecycle orchestration remain later Phase 8A packets |",
-                  ),
-                  (
-                      "Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points, Party Relationships and Consents**. `crm.identity-resolution` has a production-complete duplicate-candidate vertical slice in final gate review; its later Party merge/unmerge capability is intentionally not part of Phase 8A.5.",
-                      "Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points, Party Relationships, Consents and Identity Resolution**. `crm.identity-resolution` has a merged duplicate-candidate vertical slice and its Phase 8A.6 merge/unmerge/provenance expansion is now in gate review.",
-                  ),
-                  (
-                      "- `crm.identity-resolution` — authoritative duplicate-candidate cases, immutable explainable evidence/version provenance and reviewer decisions — **Implemented production vertical slice in #114 / PR #115; final exact-head merge gate pending**.\n- Party merge/unmerge, reference redirection, immutable merge lineage and survivorship — **Planned for Phase 8A.6**.",
-                      "- `crm.identity-resolution` — authoritative duplicate-candidate cases and reviewer decisions — **Merged production vertical slice from #114 / PR #115**.\n- `crm.identity-resolution` Phase 8A.6 expansion — approval-required Party merge/unmerge, immutable lineage, field-level survivorship provenance and canonical Party resolution — **Implemented in #116 / PR #119; post-documentation exact-head gate pending**.",
-                  ),
-                  (
-                      "`crm.identity-resolution` owns canonical unordered duplicate-candidate Party pairs, deterministic candidate-case identity, immutable bounded evidence snapshots with exact authoritative Party source versions, matcher/signal provenance and terminal reviewer decisions. It does **not** own mutable Party attributes and Phase 8A.5 never merges, deletes, aliases or redirects Party records. Application composition validates same-tenant Party existence and exact current versions before registration or evidence refresh, and refuses terminal reviewer decisions when the current evidence snapshot is stale. Registration atomically creates authoritative Party-to-case relationships used by permission-aware get/list-by-Party queries without tenant-wide scans or rebuildable projections. #114 / PR #115 is in final exact-head gate review; merge/unmerge remains Phase 8A.6.",
-                      "`crm.identity-resolution` owns canonical unordered duplicate-candidate Party pairs, deterministic candidate-case identity, immutable bounded evidence snapshots with exact authoritative Party source versions, matcher/signal provenance, terminal reviewer decisions, immutable merge-operation lineage, active canonical redirect topology and field-level survivorship provenance. It does **not** own mutable Party attributes: `crm.parties` remains authoritative, and Phase 8A.6 does not delete Party records or destructively rewrite historical references. Application composition validates same-tenant Party existence, exact current versions and provenance membership; merge/unmerge require signed approval evidence and produce audited idempotent atomic lineage/topology changes. Authoritative Party-to-case and Party-to-merge-operation relationships support permission-aware queries without tenant-wide scans, while canonical resolution follows bounded cycle-safe redirects. #114 / PR #115 merged the duplicate-candidate slice; #116 / PR #119 contains the Phase 8A.6 production expansion in post-documentation gate review.",
-                  ),
-              ],
-          }
-
-          for path, path_replacements in replacements.items():
-              text = path.read_text()
-              for old, new in path_replacements:
-                  count = text.count(old)
-                  if count != 1:
-                      raise SystemExit(f"{path}: expected exactly one replacement match, found {count}: {old[:100]!r}")
-                  text = text.replace(old, new, 1)
-              path.write_text(text)
-          PY
-      - name: Commit synchronized documentation
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          set -euo pipefail
-          git diff --check
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/IMPLEMENTATION_ROADMAP.md docs/PROJECT_STATUS.md docs/MODULE_CATALOG.md
-          git commit -m "Synchronize Phase 8A.6 delivery status"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
