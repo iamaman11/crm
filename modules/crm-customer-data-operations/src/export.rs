@@ -111,9 +111,7 @@ impl PartyExportScope {
             return Err(invalid(
                 "CUSTOMER_DATA_EXPORT_MAXIMUM_RESOURCES_INVALID",
                 "customer_data.export.scope.maximum_resources",
-                format!(
-                    "maximum resources must be between 1 and {MAX_PARTY_EXPORT_RESOURCES}"
-                ),
+                format!("maximum resources must be between 1 and {MAX_PARTY_EXPORT_RESOURCES}"),
             ));
         }
         Ok(Self {
@@ -193,10 +191,7 @@ pub struct PartyExportSpecification {
 }
 
 impl PartyExportSpecification {
-    pub fn try_new(
-        scope: PartyExportScope,
-        profile: PartyExportProfile,
-    ) -> Result<Self, SdkError> {
+    pub fn try_new(scope: PartyExportScope, profile: PartyExportProfile) -> Result<Self, SdkError> {
         let mut specification = Self {
             scope,
             profile,
@@ -721,7 +716,11 @@ fn normalize_identifier(
         || value.len() > maximum_bytes
         || value.chars().any(|character| character.is_control())
     {
-        return Err(invalid(code, field, "identifier is empty, too long or contains control characters"));
+        return Err(invalid(
+            code,
+            field,
+            "identifier is empty, too long or contains control characters",
+        ));
     }
     Ok(value)
 }
@@ -733,7 +732,11 @@ fn normalize_sha256(
 ) -> Result<String, SdkError> {
     let value = value.to_ascii_lowercase();
     if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(invalid(code, field, "SHA-256 must be exactly 64 hexadecimal characters"));
+        return Err(invalid(
+            code,
+            field,
+            "SHA-256 must be exactly 64 hexadecimal characters",
+        ));
     }
     Ok(value)
 }
@@ -753,11 +756,7 @@ fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
     output
 }
 
-fn invalid(
-    code: &'static str,
-    field: &'static str,
-    message: impl Into<String>,
-) -> SdkError {
+fn invalid(code: &'static str, field: &'static str, message: impl Into<String>) -> SdkError {
     let mut error = SdkError::invalid_argument(field, message.into());
     error.code = code.to_owned();
     error
@@ -818,11 +817,8 @@ mod tests {
             .is_err()
         );
         assert!(
-            PartyExportProfile::v1(
-                vec![PartyExportField::DisplayName],
-                "customer-export-30d"
-            )
-            .is_err()
+            PartyExportProfile::v1(vec![PartyExportField::DisplayName], "customer-export-30d")
+                .is_err()
         );
     }
 
@@ -830,7 +826,10 @@ mod tests {
     fn completes_only_after_every_selected_resource_is_reconciled() {
         let mut job = PartyExportJob::create(
             ExportJobId::try_new("export-job-1").unwrap(),
-            specification(vec![PartyExportField::PartyId, PartyExportField::DisplayName]),
+            specification(vec![
+                PartyExportField::PartyId,
+                PartyExportField::DisplayName,
+            ]),
             10,
         )
         .unwrap();
@@ -889,7 +888,10 @@ mod tests {
             .unwrap();
         selecting.start_or_resume(7, 80).unwrap();
         assert_eq!(selecting.status(), PartyExportJobStatus::Executing);
-        assert_eq!(selecting.specification().version_id(), specification(vec![PartyExportField::PartyId]).version_id());
+        assert_eq!(
+            selecting.specification().version_id(),
+            specification(vec![PartyExportField::PartyId]).version_id()
+        );
     }
 
     #[test]
