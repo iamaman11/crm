@@ -1,0 +1,132 @@
+name: Import Retryable Process Runtime CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/customer_data_operations/**"
+      - "proto/crm/customer_data_operations_internal/**"
+      - "proto/crm/parties/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-files/**"
+      - "crates/crm-customer-data-operations-capability-adapter/**"
+      - "crates/crm-customer-data-operations-execution-composition/**"
+      - "crates/crm-customer-data-operations-query-adapter/**"
+      - "crates/crm-customer-data-operations-source-composition/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "modules/crm-customer-data-operations/**"
+      - "modules/crm-parties/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/0012_customer_data_operations_adapter.sql"
+      - ".github/workflows/import-retryable-process-runtime.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/customer_data_operations/**"
+      - "proto/crm/customer_data_operations_internal/**"
+      - "proto/crm/parties/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-files/**"
+      - "crates/crm-customer-data-operations-capability-adapter/**"
+      - "crates/crm-customer-data-operations-execution-composition/**"
+      - "crates/crm-customer-data-operations-query-adapter/**"
+      - "crates/crm-customer-data-operations-source-composition/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "modules/crm-customer-data-operations/**"
+      - "modules/crm-parties/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/0012_customer_data_operations_adapter.sql"
+      - ".github/workflows/import-retryable-process-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  import-retryable-process-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_import_retryable_runtime_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5437:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_import_retryable_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5437
+      PGDATABASE: crm_import_retryable_runtime_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5437/crm_import_retryable_runtime_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5437/crm_import_retryable_runtime_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Prepare fresh retryable import process database
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --command "DROP SCHEMA IF EXISTS crm CASCADE"
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify durable retryable import failure and restart recovery
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test import_process_retryable_e2e \
+            crm_api_process_persists_retryable_target_failure_without_advancing_checkpoint_and_recovers \
+            -- --exact --nocapture 2>&1 | tee database/import-retryable-process-runtime.log
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/import-retryable-process-runtime-postgres.log 2>&1
+          else
+            echo "PostgreSQL service container was not found." > database/import-retryable-process-runtime-postgres.log
+            docker ps -a >> database/import-retryable-process-runtime-postgres.log 2>&1
+          fi
+      - name: Upload retryable import process diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: import-retryable-process-runtime-diagnostics
+          path: |
+            database/import-retryable-process-runtime.log
+            database/import-retryable-process-runtime-postgres.log
+            services/crm-api/tests/import_process_e2e.rs
+            services/crm-api/tests/import_process_retryable_e2e.rs
+            database/tests/0012_customer_data_operations_adapter.sql
+            crates/crm-customer-data-operations-execution-composition/
+            crates/crm-customer-data-operations-source-composition/
+          if-no-files-found: error
+          retention-days: 7
