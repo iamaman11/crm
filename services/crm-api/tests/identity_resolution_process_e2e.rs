@@ -249,7 +249,7 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     );
 
     let after_ab = evidence_counts(&admin, TENANT_A).await;
-    assert_evidence_delta(after_ab, baseline, 1, 2, 1);
+    assert_evidence_delta(after_ab, baseline, 1, 2, 1, 1);
     assert_eq!(
         relationship_count_for_case(&admin, TENANT_A, &case_ab).await,
         2
@@ -332,7 +332,7 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     let case_ac = case_id(&candidate_ac).to_owned();
     assert_ne!(case_ab, case_ac);
     let after_ac = evidence_counts(&admin, TENANT_A).await;
-    assert_evidence_delta(after_ac, baseline, 2, 4, 2);
+    assert_evidence_delta(after_ac, baseline, 2, 4, 2, 2);
     assert_eq!(
         relationship_count_for_case(&admin, TENANT_A, &case_ac).await,
         2
@@ -643,7 +643,7 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     );
 
     let final_counts = evidence_counts(&admin, TENANT_A).await;
-    assert_evidence_delta(final_counts, baseline, 2, 4, 6);
+    assert_evidence_delta(final_counts, baseline, 2, 4, 6, 7);
 
     send_sigint(&child).await;
     let exit = timeout(Duration::from_secs(15), child.wait())
@@ -1189,22 +1189,26 @@ fn assert_evidence_delta(
     baseline: EvidenceCounts,
     created_records: i64,
     created_relationships: i64,
-    successful_mutations: i64,
+    identity_successful_mutations: i64,
+    tenant_successful_mutations: i64,
 ) {
     assert_eq!(actual.records, baseline.records + created_records);
     assert_eq!(
         actual.relationships,
         baseline.relationships + created_relationships
     );
-    assert_eq!(actual.events, baseline.events + successful_mutations);
-    assert_eq!(actual.audits, baseline.audits + successful_mutations);
+    assert_eq!(
+        actual.events,
+        baseline.events + identity_successful_mutations
+    );
+    assert_eq!(actual.audits, baseline.audits + tenant_successful_mutations);
     assert_eq!(
         actual.idempotency,
-        baseline.idempotency + successful_mutations
+        baseline.idempotency + tenant_successful_mutations
     );
     assert_eq!(
         actual.transactions,
-        baseline.transactions + successful_mutations
+        baseline.transactions + tenant_successful_mutations
     );
 }
 
