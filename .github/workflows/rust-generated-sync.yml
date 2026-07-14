@@ -2,35 +2,25 @@ name: Rust Generated Sync
 
 # One-shot Phase 8A.7 counter-validation refactor verification.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "crates/**/Cargo.toml"
-      - "crates/**/*.rs"
-      - "modules/**/Cargo.toml"
-      - "modules/**/*.rs"
-      - "services/**/Cargo.toml"
-      - "services/**/*.rs"
-      - ".github/workflows/rust-generated-sync.yml"
+  push:
+    branches:
+      - "develop/phase8a7-customer-import-jobs"
 
 permissions:
   contents: write
 
 concurrency:
-  group: rust-generated-sync-${{ github.event.pull_request.number }}
+  group: rust-generated-sync-phase8a7-counter-refactor
   cancel-in-progress: true
 
 jobs:
   sync:
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -113,7 +103,7 @@ fn validate_job_counters(state: ImportJobCounterState) -> Result<(), SdkError> {
           cargo test -p crm-customer-data-operations
       - name: Restore permanent workflow and commit verified fix
         env:
-          HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           git fetch origin main --depth=1
