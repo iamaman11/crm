@@ -24,6 +24,12 @@ pub trait ImportExecutionSnapshotReader: Send + Sync {
     ) -> PortFuture<'a, Result<ImportExecutionSnapshot, SdkError>>;
 }
 
+/// Reads one authoritative executing import snapshot through tenant-scoped core-data query ports.
+///
+/// The reader never assumes relationship pagination order is source order. It loads every
+/// authoritative job-to-row target under tenant RLS, strictly rehydrates import-owned row state,
+/// and delegates duplicate/missing/out-of-range position rejection to `ExecutionPositionIndex`
+/// before any target Party capability can be invoked.
 #[derive(Debug, Clone)]
 pub struct PostgresImportExecutionSnapshotReader {
     store: PostgresDataStore,
@@ -91,12 +97,11 @@ impl ImportExecutionSnapshotReader for PostgresImportExecutionSnapshotReader {
                     })
                     .await?;
                 for snapshot in page.records {
-                    let row =
-                        decode_import_row_state(support::persisted_json_bytes_with_data_class(
-                            &snapshot,
-                            import_row_persisted_contract(),
-                            DataClass::Personal,
-                        )?)?;
+                    let row = decode_import_row_state(support::persisted_json_bytes_with_data_class(
+                        &snapshot,
+                        import_row_persisted_contract(),
+                        DataClass::Personal,
+                    )?)?;
                     if row.row_id().as_str() != snapshot.reference.record_id.as_str()
                         || row.version() != snapshot.version
                     {
