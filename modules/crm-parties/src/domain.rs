@@ -537,7 +537,10 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(value.party_id().as_str(), "party-01J00000000000000000000000");
+        assert_eq!(
+            value.party_id().as_str(),
+            "party-01J00000000000000000000000"
+        );
         assert_eq!(value.canonical_party_id(), &survivor_id());
         assert!(!value.is_active());
         assert_eq!(value.version(), 2);

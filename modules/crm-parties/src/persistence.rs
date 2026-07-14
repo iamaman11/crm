@@ -211,7 +211,8 @@ impl From<PartyKindState> for PartyKind {
 }
 
 fn canonical_party_id(raw: String) -> Result<PartyId, SdkError> {
-    let parsed = PartyId::try_new(raw.clone()).map_err(|error| persisted_error(error.to_string()))?;
+    let parsed =
+        PartyId::try_new(raw.clone()).map_err(|error| persisted_error(error.to_string()))?;
     if parsed.as_str() != raw {
         return Err(persisted_error("persisted Party ID is not canonical"));
     }
@@ -272,7 +273,10 @@ mod tests {
         assert_eq!(decoded, value);
         assert_eq!(decoded.lifecycle(), &PartyLifecycle::Active);
         assert_ne!(party_state_descriptor_hash(), [0; 32]);
-        assert_ne!(party_state_descriptor_hash(), party_state_v1_descriptor_hash());
+        assert_ne!(
+            party_state_descriptor_hash(),
+            party_state_v1_descriptor_hash()
+        );
     }
 
     #[test]
