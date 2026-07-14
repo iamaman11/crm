@@ -333,7 +333,7 @@ impl ApplicationQueryRouter {
           cargo test -p crm-application-runtime --lib
       - name: Restore permanent CI and commit clean source refactor
         run: |
-          git checkout HEAD^ -- .github/workflows/application-runtime.yml
+          git show 41fe1f429d20880b37613cefc4c3738dbc3c273f:.github/workflows/application-runtime.yml > .github/workflows/application-runtime.yml
           rm -f .github/workflows/phase8a5-query-router-refactor-once.yml
           rm -f .github/workflows/phase8a5-query-router-refactor-v2-once.yml
           git config user.name "github-actions[bot]"
