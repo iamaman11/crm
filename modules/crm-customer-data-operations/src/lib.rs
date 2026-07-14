@@ -15,7 +15,9 @@
 pub mod domain;
 pub mod persistence;
 pub mod profile;
+pub mod validation;
 
 pub use domain::*;
 pub use persistence::*;
 pub use profile::*;
+pub use validation::*;
