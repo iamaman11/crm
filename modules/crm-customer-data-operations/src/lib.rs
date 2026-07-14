@@ -11,5 +11,7 @@
 //! deferred to governed application composition rather than exposed from this pure domain crate.
 
 pub mod domain;
+pub mod persistence;
 
 pub use domain::*;
+pub use persistence::*;
