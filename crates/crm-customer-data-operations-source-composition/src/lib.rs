@@ -13,10 +13,14 @@ use crm_capability_runtime::{
     CapabilityRequest, CapabilityRisk, TransactionalCapabilityExecutor,
 };
 use crm_core_data::{
-    BatchMutationPlan, PostgresDataStore, RecordGetQuery, RecordMutation, RelationshipMutation,
-    batch_error_to_sdk,
+    BatchMutationPlan, FileArtifactCapabilityEvidence, FileArtifactCapabilityMutation,
+    FileArtifactCapabilityMutationResult, PostgresDataStore, RecordGetQuery, RecordMutation,
+    RelationshipMutation, batch_error_to_sdk,
 };
-use crm_core_files::{FileArtifactStatus, ImmutableFileArtifactStore};
+use crm_core_files::{
+    AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactMetadata,
+    FileArtifactStatus, ImmutableFileArtifactStore,
+};
 use crm_customer_data_operations::{
     CreateImportJob, CreateImportRow, CreateValidatedImportRow, ExternalPartyIdentifierDigest,
     ImportCanonicalizationVersion, ImportHeaderMode, ImportJob, ImportJobId, ImportJobStatus,
@@ -36,16 +40,45 @@ use crm_customer_data_operations_capability_adapter::{
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, FileId, ModuleId, PortFuture,
-    RecordId, RecordRef, RecordType, RelationshipRef, RelationshipType, SdkError, TypedPayload,
+    RecordId, RecordRef, RecordType, RelationshipRef, RelationshipType, ResourceRef,
+    RetentionPolicyId, SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::customer_data_operations::v1 as wire;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
 
+pub const CREATE_SOURCE_ARTIFACT_CAPABILITY: &str = "customer_data.import.party.source.create";
+pub const APPEND_SOURCE_CHUNK_CAPABILITY: &str = "customer_data.import.party.source.chunk.append";
+pub const FINALIZE_SOURCE_ARTIFACT_CAPABILITY: &str = "customer_data.import.party.source.finalize";
 pub const CREATE_JOB_FROM_SOURCE_CAPABILITY: &str = "customer_data.import.party.source.job.create";
 pub const VALIDATE_SOURCE_BATCH_CAPABILITY: &str =
     "customer_data.import.party.source.rows.validate";
+
+pub const CREATE_SOURCE_ARTIFACT_REQUEST_SCHEMA: &str =
+    "crm.customer_data_operations.v1.CreatePartyImportSourceArtifactRequest";
+pub const CREATE_SOURCE_ARTIFACT_RESPONSE_SCHEMA: &str =
+    "crm.customer_data_operations.v1.CreatePartyImportSourceArtifactResponse";
+pub const APPEND_SOURCE_CHUNK_REQUEST_SCHEMA: &str =
+    "crm.customer_data_operations.v1.AppendPartyImportSourceChunkRequest";
+pub const APPEND_SOURCE_CHUNK_RESPONSE_SCHEMA: &str =
+    "crm.customer_data_operations.v1.AppendPartyImportSourceChunkResponse";
+pub const FINALIZE_SOURCE_ARTIFACT_REQUEST_SCHEMA: &str =
+    "crm.customer_data_operations.v1.FinalizePartyImportSourceArtifactRequest";
+pub const FINALIZE_SOURCE_ARTIFACT_RESPONSE_SCHEMA: &str =
+    "crm.customer_data_operations.v1.FinalizePartyImportSourceArtifactResponse";
+
+pub const SOURCE_ARTIFACT_CREATED_EVENT_TYPE: &str = "customer_data.import.party.source.created";
+pub const SOURCE_ARTIFACT_CREATED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportSourceArtifactCreatedEvent";
+pub const SOURCE_CHUNK_APPENDED_EVENT_TYPE: &str =
+    "customer_data.import.party.source.chunk_appended";
+pub const SOURCE_CHUNK_APPENDED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportSourceChunkAppendedEvent";
+pub const SOURCE_ARTIFACT_FINALIZED_EVENT_TYPE: &str =
+    "customer_data.import.party.source.finalized";
+pub const SOURCE_ARTIFACT_FINALIZED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportSourceArtifactFinalizedEvent";
 
 pub const CREATE_JOB_FROM_SOURCE_REQUEST_SCHEMA: &str =
     "crm.customer_data_operations.v1.CreatePartyImportJobFromSourceArtifactRequest";
@@ -56,7 +89,10 @@ pub const VALIDATE_SOURCE_BATCH_REQUEST_SCHEMA: &str =
 pub const VALIDATE_SOURCE_BATCH_RESPONSE_SCHEMA: &str =
     "crm.customer_data_operations.v1.ValidatePartyImportSourceBatchResponse";
 
-pub const SOURCE_MUTATION_CAPABILITY_IDS: [&str; 2] = [
+pub const SOURCE_MUTATION_CAPABILITY_IDS: [&str; 5] = [
+    CREATE_SOURCE_ARTIFACT_CAPABILITY,
+    APPEND_SOURCE_CHUNK_CAPABILITY,
+    FINALIZE_SOURCE_ARTIFACT_CAPABILITY,
     CREATE_JOB_FROM_SOURCE_CAPABILITY,
     VALIDATE_SOURCE_BATCH_CAPABILITY,
 ];
@@ -72,6 +108,21 @@ pub fn source_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
 
 pub fn source_capability_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkError> {
     let (input_schema, output_schema, risk) = match capability_id {
+        CREATE_SOURCE_ARTIFACT_CAPABILITY => (
+            CREATE_SOURCE_ARTIFACT_REQUEST_SCHEMA,
+            CREATE_SOURCE_ARTIFACT_RESPONSE_SCHEMA,
+            CapabilityRisk::High,
+        ),
+        APPEND_SOURCE_CHUNK_CAPABILITY => (
+            APPEND_SOURCE_CHUNK_REQUEST_SCHEMA,
+            APPEND_SOURCE_CHUNK_RESPONSE_SCHEMA,
+            CapabilityRisk::High,
+        ),
+        FINALIZE_SOURCE_ARTIFACT_CAPABILITY => (
+            FINALIZE_SOURCE_ARTIFACT_REQUEST_SCHEMA,
+            FINALIZE_SOURCE_ARTIFACT_RESPONSE_SCHEMA,
+            CapabilityRisk::High,
+        ),
         CREATE_JOB_FROM_SOURCE_CAPABILITY => (
             CREATE_JOB_FROM_SOURCE_REQUEST_SCHEMA,
             CREATE_JOB_FROM_SOURCE_RESPONSE_SCHEMA,
@@ -150,6 +201,15 @@ impl TransactionalCapabilityExecutor for CustomerDataOperationsSourceExecutor {
         Box::pin(async move {
             ensure_definition(definition, &request)?;
             match definition.capability_id.as_str() {
+                CREATE_SOURCE_ARTIFACT_CAPABILITY => {
+                    self.create_source_artifact(definition, request).await
+                }
+                APPEND_SOURCE_CHUNK_CAPABILITY => {
+                    self.append_source_chunk(definition, request).await
+                }
+                FINALIZE_SOURCE_ARTIFACT_CAPABILITY => {
+                    self.finalize_source_artifact(definition, request).await
+                }
                 CREATE_JOB_FROM_SOURCE_CAPABILITY => {
                     self.create_job_from_source(definition, request).await
                 }
@@ -163,6 +223,96 @@ impl TransactionalCapabilityExecutor for CustomerDataOperationsSourceExecutor {
 }
 
 impl CustomerDataOperationsSourceExecutor {
+    async fn create_source_artifact(
+        &self,
+        definition: &CapabilityDefinition,
+        request: CapabilityRequest,
+    ) -> Result<CapabilityExecutionResult, SdkError> {
+        let command: wire::CreatePartyImportSourceArtifactRequest =
+            support::decode_request_with_data_class(
+                &request,
+                MODULE_ID,
+                CREATE_SOURCE_ARTIFACT_REQUEST_SCHEMA,
+                DataClass::Personal,
+            )?;
+        let file_id = artifact_id_from_ref(command.source_artifact_ref)?;
+        let expected_sha256 = sha256_array(
+            &command.expected_sha256,
+            "customer_data.import.source_artifact.expected_sha256",
+        )?;
+        let mutation = FileArtifactCapabilityMutation::Create(CreateImmutableFileArtifact {
+            file_id,
+            owner_module_id: ModuleId::try_new(MODULE_ID)
+                .map_err(identifier_configuration_error)?,
+            media_type: "text/csv".to_owned(),
+            data_class: DataClass::Personal,
+            retention_policy_id: RetentionPolicyId::try_new("crm.customer_data.import_source")
+                .map_err(identifier_configuration_error)?,
+            expected_size_bytes: command.expected_size_bytes,
+            expected_sha256,
+        });
+        self.store
+            .execute_file_artifact_capability(definition, request, mutation, |result, request| {
+                source_artifact_create_evidence(definition, result, request)
+            })
+            .await
+            .map_err(batch_error_to_sdk)
+    }
+
+    async fn append_source_chunk(
+        &self,
+        definition: &CapabilityDefinition,
+        request: CapabilityRequest,
+    ) -> Result<CapabilityExecutionResult, SdkError> {
+        let command: wire::AppendPartyImportSourceChunkRequest =
+            support::decode_request_with_data_class(
+                &request,
+                MODULE_ID,
+                APPEND_SOURCE_CHUNK_REQUEST_SCHEMA,
+                DataClass::Personal,
+            )?;
+        let file_id = artifact_id_from_ref(command.source_artifact_ref)?;
+        let chunk_index = command.chunk_index;
+        let mutation = FileArtifactCapabilityMutation::AppendChunk(AppendImmutableFileChunk {
+            file_id,
+            chunk_index,
+            chunk_sha256: sha256_array(
+                &command.chunk_sha256,
+                "customer_data.import.source_artifact.chunk_sha256",
+            )?,
+            bytes: command.chunk_bytes,
+        });
+        self.store
+            .execute_file_artifact_capability(definition, request, mutation, |result, request| {
+                source_chunk_append_evidence(definition, result, request, chunk_index)
+            })
+            .await
+            .map_err(batch_error_to_sdk)
+    }
+
+    async fn finalize_source_artifact(
+        &self,
+        definition: &CapabilityDefinition,
+        request: CapabilityRequest,
+    ) -> Result<CapabilityExecutionResult, SdkError> {
+        let command: wire::FinalizePartyImportSourceArtifactRequest =
+            support::decode_request_with_data_class(
+                &request,
+                MODULE_ID,
+                FINALIZE_SOURCE_ARTIFACT_REQUEST_SCHEMA,
+                DataClass::Personal,
+            )?;
+        let mutation = FileArtifactCapabilityMutation::Finalize {
+            file_id: artifact_id_from_ref(command.source_artifact_ref)?,
+        };
+        self.store
+            .execute_file_artifact_capability(definition, request, mutation, |result, request| {
+                source_artifact_finalize_evidence(definition, result, request)
+            })
+            .await
+            .map_err(batch_error_to_sdk)
+    }
+
     async fn create_job_from_source(
         &self,
         definition: &CapabilityDefinition,
@@ -504,6 +654,211 @@ impl CustomerDataOperationsSourceExecutor {
             replayed: result.replayed,
         })
     }
+}
+
+fn source_artifact_create_evidence(
+    definition: &CapabilityDefinition,
+    result: &FileArtifactCapabilityMutationResult,
+    request: &CapabilityRequest,
+) -> Result<FileArtifactCapabilityEvidence, SdkError> {
+    let public = source_artifact_to_wire(&result.metadata);
+    let output = support::protobuf_payload(
+        MODULE_ID,
+        CREATE_SOURCE_ARTIFACT_RESPONSE_SCHEMA,
+        DataClass::Personal,
+        &wire::CreatePartyImportSourceArtifactResponse {
+            source_artifact: Some(public.clone()),
+        },
+    )?;
+    file_artifact_evidence(
+        definition,
+        result,
+        request,
+        output,
+        if result.changed {
+            Some((
+                SOURCE_ARTIFACT_CREATED_EVENT_TYPE,
+                SOURCE_ARTIFACT_CREATED_EVENT_SCHEMA,
+                support::protobuf_payload(
+                    MODULE_ID,
+                    SOURCE_ARTIFACT_CREATED_EVENT_SCHEMA,
+                    DataClass::Personal,
+                    &wire::PartyImportSourceArtifactCreatedEvent {
+                        source_artifact: Some(public),
+                    },
+                )?,
+            ))
+        } else {
+            None
+        },
+    )
+}
+
+fn source_chunk_append_evidence(
+    definition: &CapabilityDefinition,
+    result: &FileArtifactCapabilityMutationResult,
+    request: &CapabilityRequest,
+    chunk_index: u64,
+) -> Result<FileArtifactCapabilityEvidence, SdkError> {
+    let public = source_artifact_to_wire(&result.metadata);
+    let output = support::protobuf_payload(
+        MODULE_ID,
+        APPEND_SOURCE_CHUNK_RESPONSE_SCHEMA,
+        DataClass::Personal,
+        &wire::AppendPartyImportSourceChunkResponse {
+            source_artifact: Some(public.clone()),
+            replayed: result.chunk_replayed,
+        },
+    )?;
+    file_artifact_evidence(
+        definition,
+        result,
+        request,
+        output,
+        if result.changed {
+            Some((
+                SOURCE_CHUNK_APPENDED_EVENT_TYPE,
+                SOURCE_CHUNK_APPENDED_EVENT_SCHEMA,
+                support::protobuf_payload(
+                    MODULE_ID,
+                    SOURCE_CHUNK_APPENDED_EVENT_SCHEMA,
+                    DataClass::Personal,
+                    &wire::PartyImportSourceChunkAppendedEvent {
+                        source_artifact: Some(public),
+                        chunk_index,
+                    },
+                )?,
+            ))
+        } else {
+            None
+        },
+    )
+}
+
+fn source_artifact_finalize_evidence(
+    definition: &CapabilityDefinition,
+    result: &FileArtifactCapabilityMutationResult,
+    request: &CapabilityRequest,
+) -> Result<FileArtifactCapabilityEvidence, SdkError> {
+    let public = source_artifact_to_wire(&result.metadata);
+    let output = support::protobuf_payload(
+        MODULE_ID,
+        FINALIZE_SOURCE_ARTIFACT_RESPONSE_SCHEMA,
+        DataClass::Personal,
+        &wire::FinalizePartyImportSourceArtifactResponse {
+            source_artifact: Some(public.clone()),
+        },
+    )?;
+    file_artifact_evidence(
+        definition,
+        result,
+        request,
+        output,
+        if result.changed {
+            Some((
+                SOURCE_ARTIFACT_FINALIZED_EVENT_TYPE,
+                SOURCE_ARTIFACT_FINALIZED_EVENT_SCHEMA,
+                support::protobuf_payload(
+                    MODULE_ID,
+                    SOURCE_ARTIFACT_FINALIZED_EVENT_SCHEMA,
+                    DataClass::Personal,
+                    &wire::PartyImportSourceArtifactFinalizedEvent {
+                        source_artifact: Some(public),
+                    },
+                )?,
+            ))
+        } else {
+            None
+        },
+    )
+}
+
+fn file_artifact_evidence(
+    definition: &CapabilityDefinition,
+    result: &FileArtifactCapabilityMutationResult,
+    request: &CapabilityRequest,
+    output: TypedPayload,
+    event: Option<(&str, &str, TypedPayload)>,
+) -> Result<FileArtifactCapabilityEvidence, SdkError> {
+    let aggregate = support::record_ref(
+        "file_artifact",
+        result.metadata.file_id.as_str(),
+        "customer_data.import.source_artifact_ref.file_id",
+    )?;
+    let version = file_artifact_version(&result.metadata)?;
+    let events = event
+        .map(|(event_type, event_schema_id, payload)| {
+            let mut evidence = support::event_evidence_with_data_class(
+                request,
+                aggregate.clone(),
+                MODULE_ID,
+                EventSpec {
+                    event_type,
+                    event_schema_id,
+                    aggregate_version: version,
+                    previous_version: version.checked_sub(1),
+                },
+                DataClass::Personal,
+                &wire::PartyImportSourceArtifactCreatedEvent {
+                    source_artifact: Some(source_artifact_to_wire(&result.metadata)),
+                },
+            )?;
+            evidence.event.payload = payload;
+            Ok::<_, SdkError>(evidence)
+        })
+        .transpose()?
+        .into_iter()
+        .collect();
+    Ok(FileArtifactCapabilityEvidence {
+        output: output.clone(),
+        events,
+        audits: vec![support::audit_intent(
+            request,
+            &aggregate,
+            version,
+            definition.capability_id.as_str(),
+            &output.bytes,
+        )?],
+        affected_resources: vec![ResourceRef {
+            resource_type: "file_artifact".to_owned(),
+            resource_id: result.metadata.file_id.as_str().to_owned(),
+            version: Some(version),
+        }],
+    })
+}
+
+fn source_artifact_to_wire(metadata: &FileArtifactMetadata) -> wire::PartyImportSourceArtifact {
+    wire::PartyImportSourceArtifact {
+        source_artifact_ref: Some(wire::PartyImportSourceArtifactRef {
+            file_id: metadata.file_id.as_str().to_owned(),
+        }),
+        expected_size_bytes: metadata.expected_size_bytes,
+        expected_sha256: metadata.expected_sha256.to_vec(),
+        received_size_bytes: metadata.received_size_bytes,
+        next_chunk_index: metadata.next_chunk_index,
+        finalized: metadata.status == FileArtifactStatus::Finalized,
+    }
+}
+
+fn file_artifact_version(metadata: &FileArtifactMetadata) -> Result<i64, SdkError> {
+    let base = metadata
+        .next_chunk_index
+        .checked_add(1)
+        .and_then(|value| {
+            if metadata.status == FileArtifactStatus::Finalized {
+                value.checked_add(1)
+            } else {
+                Some(value)
+            }
+        })
+        .ok_or_else(invalid_plan)?;
+    i64::try_from(base).map_err(|_| invalid_plan())
+}
+
+fn sha256_array(bytes: &[u8], field: &'static str) -> Result<[u8; 32], SdkError> {
+    bytes
+        .try_into()
+        .map_err(|_| SdkError::invalid_argument(field, "SHA-256 must contain exactly 32 bytes"))
 }
 
 fn validate_source_row(
