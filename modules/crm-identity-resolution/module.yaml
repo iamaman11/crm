@@ -1,8 +1,8 @@
 schema_version: crm.module/v1
 module_id: crm.identity-resolution
-version: "0.1.0"
+version: "0.2.0"
 display_name: CRM Identity Resolution
-description: Authoritative duplicate-candidate cases, immutable match evidence and governed reviewer decisions without Party merge or survivorship.
+description: Authoritative duplicate-candidate review, reversible merge lineage, canonical Party redirection and survivorship provenance without a competing Party master.
 
 owner:
   team: customer-platform
@@ -49,6 +49,7 @@ provides:
       version: "1.0.0"
   objects:
     - identity_resolution.candidate_case
+    - identity_resolution.merge_operation
   ui_extensions: []
 
 consumes:
@@ -58,8 +59,10 @@ consumes:
 storage:
   record_types:
     - identity_resolution.candidate_case
+    - identity_resolution.merge_operation
   private_state_namespaces:
     - crm.identity-resolution.candidate_case
+    - crm.identity-resolution.merge_operation
 
 security:
   data_classes:
@@ -76,3 +79,4 @@ lifecycle:
   migrations_path: modules/crm-identity-resolution/migrations
   retained_record_types:
     - identity_resolution.candidate_case
+    - identity_resolution.merge_operation
