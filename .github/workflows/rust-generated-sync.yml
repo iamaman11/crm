@@ -1,10 +1,17 @@
 name: Rust Generated Sync
-# One-shot Phase 8A.6 registry fixture generation.
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "crates/**/*.rs"
+      - "modules/**/Cargo.toml"
+      - "modules/**/*.rs"
+      - "services/**/Cargo.toml"
+      - "services/**/*.rs"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -18,112 +25,31 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-          show-progress: false
-      - name: Generate authoritative Phase 8A.6 registry rows
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          set -euo pipefail
-          python - <<'PY'
-          import re
-          from pathlib import Path
-
-          hashes = Path("packages/client/src/contract_hashes.ts").read_text()
-
-          def descriptor_hex(schema: str) -> str:
-              pattern = re.compile(
-                  rf'"{re.escape(schema)}": new Uint8Array\(\[([^\]]+)\]\)'
-              )
-              match = pattern.search(hashes)
-              if not match:
-                  raise SystemExit(f"missing generated descriptor hash for {schema}")
-              values = [int(value.strip()) for value in match.group(1).split(",")]
-              if len(values) != 32 or any(value < 0 or value > 255 for value in values):
-                  raise SystemExit(f"invalid generated descriptor hash for {schema}: {values}")
-              return "".join(f"{value:02x}" for value in values)
-
-          merge_request = descriptor_hex("crm.identity_resolution.v1.MergePartyRequest")
-          merge_response = descriptor_hex("crm.identity_resolution.v1.MergePartyResponse")
-          unmerge_request = descriptor_hex("crm.identity_resolution.v1.UnmergePartyRequest")
-          unmerge_response = descriptor_hex("crm.identity_resolution.v1.UnmergePartyResponse")
-
-          path = Path("database/tests/0010_identity_resolution_adapter.sql")
-          text = path.read_text()
-          text = text.replace(
-              "-- Production-adapter fixture for the Phase 8A.5 Identity Resolution candidate slice.",
-              "-- Production-adapter fixture for the Phase 8A.6 Identity Resolution candidate and reversible merge slice.",
-              1,
-          )
-          text = text.replace(
-              "  'crm.identity-resolution',\n  '0.1.0',",
-              "  'crm.identity-resolution',\n  '0.2.0',",
-              1,
-          )
-          text = text.replace(
-              "    'crm.identity-resolution',\n    '0.1.0',",
-              "    'crm.identity-resolution',\n    '0.2.0',",
-          )
-
-          marker = "  )\nON CONFLICT (capability_id, capability_version) DO NOTHING;"
-          if text.count(marker) != 1:
-              raise SystemExit("identity resolution capability fixture terminator is not unique")
-          merge_rows = f'''  ),
-  (
-    'identity_resolution.merge.execute',
-    '1.0.0',
-    'crm.identity-resolution',
-    '0.2.0',
-    'crm.identity_resolution.v1.IdentityResolutionService',
-    'MergeParty',
-    decode('{merge_request}', 'hex'),
-    decode('{merge_response}', 'hex'),
-    'high',
-    true,
-    true,
-    true,
-    false,
-    false,
-    false,
-    false,
-    ARRAY['personal']::text[]
-  ),
-  (
-    'identity_resolution.merge.unmerge',
-    '1.0.0',
-    'crm.identity-resolution',
-    '0.2.0',
-    'crm.identity_resolution.v1.IdentityResolutionService',
-    'UnmergeParty',
-    decode('{unmerge_request}', 'hex'),
-    decode('{unmerge_response}', 'hex'),
-    'high',
-    true,
-    true,
-    true,
-    false,
-    false,
-    false,
-    false,
-    ARRAY['personal']::text[]
-  )
-ON CONFLICT (capability_id, capability_version) DO NOTHING;'''
-          text = text.replace(marker, merge_rows, 1)
-          path.write_text(text)
-          print("MergePartyRequest", merge_request)
-          print("MergePartyResponse", merge_response)
-          print("UnmergePartyRequest", unmerge_request)
-          print("UnmergePartyResponse", unmerge_response)
-          PY
-      - name: Commit Phase 8A.6 registry fixture
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add database/tests/0010_identity_resolution_adapter.sql
-          git commit -m "Publish Phase 8A.6 Identity Resolution registry fixture"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
