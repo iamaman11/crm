@@ -803,7 +803,8 @@ fn invalid(code: &'static str, field: &'static str, internal: impl Into<String>)
     )
     .with_internal_reference(internal)
     .with_field_violation(FieldViolation {
-        field: FieldName::try_new(field).expect("static Identity Resolution merge field must be valid"),
+        field: FieldName::try_new(field)
+            .expect("static Identity Resolution merge field must be valid"),
         code: "INVALID".to_owned(),
         safe_message: "The Identity Resolution merge-lineage field is invalid.".to_owned(),
     })
@@ -884,8 +885,14 @@ mod tests {
         assert_eq!(operation.version(), 1);
         assert_eq!(operation.source_party_ref().as_str(), "party-a");
         assert_eq!(operation.survivor_party_ref().as_str(), "party-b");
-        assert_eq!(operation.survivorship()[0].field_path().as_str(), "custom.vip_tier");
-        assert_eq!(operation.survivorship()[1].field_path().as_str(), "display_name");
+        assert_eq!(
+            operation.survivorship()[0].field_path().as_str(),
+            "custom.vip_tier"
+        );
+        assert_eq!(
+            operation.survivorship()[1].field_path().as_str(),
+            "display_name"
+        );
         assert!(operation.active_edge().is_some());
     }
 
@@ -904,7 +911,10 @@ mod tests {
             occurred_at_unix_nanos: 100,
         })
         .unwrap_err();
-        assert_eq!(self_merge.code.as_str(), "IDENTITY_RESOLUTION_SELF_MERGE_INVALID");
+        assert_eq!(
+            self_merge.code.as_str(),
+            "IDENTITY_RESOLUTION_SELF_MERGE_INVALID"
+        );
 
         let duplicate_field = MergeOperation::create(CreateMergeOperation {
             operation_id: operation_id("merge-op-duplicate-field"),
@@ -940,7 +950,10 @@ mod tests {
                 occurred_at_unix_nanos: 200,
             })
             .unwrap_err();
-        assert_eq!(stale.code.as_str(), "IDENTITY_RESOLUTION_MERGE_VERSION_CONFLICT");
+        assert_eq!(
+            stale.code.as_str(),
+            "IDENTITY_RESOLUTION_MERGE_VERSION_CONFLICT"
+        );
 
         operation
             .unmerge(UnmergeMergeOperation {
@@ -964,16 +977,27 @@ mod tests {
                 occurred_at_unix_nanos: 300,
             })
             .unwrap_err();
-        assert_eq!(repeated.code.as_str(), "IDENTITY_RESOLUTION_MERGE_ALREADY_UNMERGED");
+        assert_eq!(
+            repeated.code.as_str(),
+            "IDENTITY_RESOLUTION_MERGE_ALREADY_UNMERGED"
+        );
     }
 
     #[test]
     fn canonical_graph_resolves_chains_and_unmerge_restores_prior_root() {
         let graph = CanonicalPartyGraph::try_new([
-            ActiveMergeEdge::try_new(operation_id("merge-a-b"), party("party-a"), party("party-b"))
-                .unwrap(),
-            ActiveMergeEdge::try_new(operation_id("merge-b-c"), party("party-b"), party("party-c"))
-                .unwrap(),
+            ActiveMergeEdge::try_new(
+                operation_id("merge-a-b"),
+                party("party-a"),
+                party("party-b"),
+            )
+            .unwrap(),
+            ActiveMergeEdge::try_new(
+                operation_id("merge-b-c"),
+                party("party-b"),
+                party("party-c"),
+            )
+            .unwrap(),
         ])
         .unwrap();
 
@@ -1010,10 +1034,18 @@ mod tests {
     #[test]
     fn canonical_graph_rejects_duplicate_sources_and_cycles() {
         let duplicate_source = CanonicalPartyGraph::try_new([
-            ActiveMergeEdge::try_new(operation_id("merge-a-b"), party("party-a"), party("party-b"))
-                .unwrap(),
-            ActiveMergeEdge::try_new(operation_id("merge-a-c"), party("party-a"), party("party-c"))
-                .unwrap(),
+            ActiveMergeEdge::try_new(
+                operation_id("merge-a-b"),
+                party("party-a"),
+                party("party-b"),
+            )
+            .unwrap(),
+            ActiveMergeEdge::try_new(
+                operation_id("merge-a-c"),
+                party("party-a"),
+                party("party-c"),
+            )
+            .unwrap(),
         ])
         .unwrap_err();
         assert_eq!(
@@ -1022,10 +1054,18 @@ mod tests {
         );
 
         let cycle = CanonicalPartyGraph::try_new([
-            ActiveMergeEdge::try_new(operation_id("merge-a-b"), party("party-a"), party("party-b"))
-                .unwrap(),
-            ActiveMergeEdge::try_new(operation_id("merge-b-a"), party("party-b"), party("party-a"))
-                .unwrap(),
+            ActiveMergeEdge::try_new(
+                operation_id("merge-a-b"),
+                party("party-a"),
+                party("party-b"),
+            )
+            .unwrap(),
+            ActiveMergeEdge::try_new(
+                operation_id("merge-b-a"),
+                party("party-b"),
+                party("party-a"),
+            )
+            .unwrap(),
         ])
         .unwrap_err();
         assert_eq!(cycle.code.as_str(), "IDENTITY_RESOLUTION_MERGE_GRAPH_CYCLE");
@@ -1033,10 +1073,12 @@ mod tests {
 
     #[test]
     fn new_merge_requires_both_endpoints_to_be_current_roots() {
-        let graph = CanonicalPartyGraph::try_new([
-            ActiveMergeEdge::try_new(operation_id("merge-a-b"), party("party-a"), party("party-b"))
-                .unwrap(),
-        ])
+        let graph = CanonicalPartyGraph::try_new([ActiveMergeEdge::try_new(
+            operation_id("merge-a-b"),
+            party("party-a"),
+            party("party-b"),
+        )
+        .unwrap()])
         .unwrap();
 
         let redirected_source = graph
