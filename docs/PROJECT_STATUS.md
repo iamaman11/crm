@@ -19,8 +19,9 @@ Current Phase 8A execution state:
 - **8A.3c — complete:** authoritative Party Relationship lifecycle and rebuildable hierarchy foundations (#108 / merged PR #109; merge commit `36c238d51a156e3864e2dad0f53762e95e47680d`);
 - **8A.3d — complete:** permission-aware rebuildable Customer 360 composition (#110 / merged PR #111; final verified head `b3bca41c393577e2da5a84bcbe0309996fbdef90`; merge commit `30ce84c57064134202c03c07a943bcd0859e1ea9`);
 - **8A.4 — complete:** authoritative Consent and Communication Authorization (#112 / merged PR #113; final verified head `9e9f86bea82581f3e3d0ff8b6027d3b39e84cfcc`; merge commit `381a9fd5e6eb54918fc43801062957ca4a854486`);
-- **8A.5 — gate review:** authoritative Identity Resolution duplicate-candidate cases and reviewer decisions without Party merge (#114 / draft PR #115);
-- **8A.6 and later:** governed merge/unmerge, provenance/survivorship, import/export, data quality and privacy lifecycle proof.
+- **8A.5 — complete:** authoritative Identity Resolution duplicate-candidate cases and reviewer decisions without Party merge (#114 / merged PR #115; final verified head `74ab48427b9dd5a30f0a0637cc52e74bd395b3c7`; merge commit `bdefcbd85496d9a0481b57d04ef1d6c731a12683`);
+- **8A.6 — gate review:** approval-required non-destructive merge/unmerge, immutable lineage, survivorship provenance and canonical Party resolution (#116 / PR #119);
+- **later 8A packets:** import/export, data quality/enrichment provenance and privacy lifecycle proof.
 
 The repository now contains a production-composed modular CRM platform foundation plus the first expert customer-master owner domains:
 
@@ -36,7 +37,7 @@ The repository now contains a production-composed modular CRM platform foundatio
 - canonical Contact Point owner with typed endpoint normalization, verification/preference lifecycle and production Party-reference integrity;
 - authoritative Party Relationship owner with typed directional/reciprocal semantics, temporal lifecycle and a rebuildable cycle-safe hierarchy projection;
 - independently governed read-only `crm.customer360` composition with deterministic multi-owner contributions, live source authorization/redaction, indexed Party-root lookup and rebuildable freshness-aware views;
-- authoritative `crm.identity-resolution` duplicate-candidate cases with canonical unordered Party-pair identity, immutable explainable evidence/version provenance, exact Party-version integrity, authoritative Party-to-case access paths, signed permission-aware queries and terminal reviewer decisions that do not merge Party records;
+- authoritative `crm.identity-resolution` duplicate-candidate cases plus immutable merge/unmerge lineage, approval-required reversible canonical Party redirection, exact Party-version integrity, field-level survivorship provenance, authoritative Party access paths and signed permission-aware duplicate/merge/canonical-resolution queries without destructive Party deletion or historical-reference rewriting;
 - governed event delivery and the optional `crm.sales-activities-link` module;
 - generalized rebuildable projections and tenant/permission-aware search;
 - neutral cross-domain global-search composition that owns projection mapping but no authoritative business state;
@@ -209,10 +210,10 @@ All 11 applicable CI workflows were green together on pre-documentation exact he
 
 ### Remaining 8A sequence
 
-After merged Consent and the Phase 8A.5 duplicate-candidate packet:
+After merged Consent and Phase 8A.5 duplicate-candidate delivery:
 
-1. complete the unchanged exact-head gate and merge Phase 8A.5;
-2. deliver governed merge/unmerge, provenance and survivorship in Phase 8A.6;
+1. complete the post-documentation exact-head gate for Phase 8A.6 and move PR #119 to ready-for-review;
+2. merge Phase 8A.6 only as a separate explicit action after review;
 3. deliver import/export, data quality, enrichment provenance and privacy lifecycle proof in later explicit packets.
 
 ## Product readiness summary
@@ -228,7 +229,7 @@ The repository currently tracks **nine business modules**:
 - `crm.contact-points` — merged authoritative Contact Point production vertical slice;
 - `crm.party-relationships` — merged authoritative Party Relationship production vertical slice;
 - `crm.consents` — merged authoritative Consent and Communication Authorization vertical slice;
-- `crm.identity-resolution` — duplicate-candidate and reviewer-decision owner in final gate review, explicitly without Party merge;
+- `crm.identity-resolution` — merged duplicate-candidate/reviewer-decision owner plus Phase 8A.6 merge/unmerge lineage, provenance and canonical-resolution implementation in gate review;
 - `crm.sales-activities-link` — optional independently governed production integration slice.
 
 The repository also contains the independently governed read-only composition module `crm.customer360`. It is not counted as an authoritative owner module because it owns no customer aggregate or mutable source state; it provides a rebuildable permission-aware Customer 360 query surface over owner contracts.
