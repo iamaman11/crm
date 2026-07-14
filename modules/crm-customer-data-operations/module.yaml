@@ -2,7 +2,7 @@ schema_version: crm.module/v1
 module_id: crm.customer-data-operations
 version: "0.1.0"
 display_name: CRM Customer Data Operations
-description: Governed customer import job, mapping, row-outcome and resumable execution coordination without owning customer-master records.
+description: Governed customer import job, parser profile, mapping, row-outcome and resumable execution coordination without owning customer-master records.
 
 owner:
   team: customer-platform
@@ -25,15 +25,37 @@ dependencies:
   conflicts: []
 
 provides:
-  capabilities: []
-  events: []
+  capabilities:
+    - id: customer_data.import.party.create
+      version: "1.0.0"
+    - id: customer_data.import.party.rows.validate
+      version: "1.0.0"
+    - id: customer_data.import.party.validation.finalize
+      version: "1.0.0"
+    - id: customer_data.import.party.execution.start
+      version: "1.0.0"
+    - id: customer_data.import.party.cancel
+      version: "1.0.0"
+  events:
+    - id: customer_data.import.party.created
+      version: "1.0.0"
+    - id: customer_data.import.party.validation_completed
+      version: "1.0.0"
+    - id: customer_data.import.party.execution_started
+      version: "1.0.0"
+    - id: customer_data.import.party.completed
+      version: "1.0.0"
+    - id: customer_data.import.party.cancelled
+      version: "1.0.0"
   objects:
     - customer_data.import_job
     - customer_data.import_row
   ui_extensions: []
 
 consumes:
-  capabilities: []
+  capabilities:
+    - id: parties.party.create
+      version_range: ">=1.0.0, <2.0.0"
   events: []
 
 storage:
