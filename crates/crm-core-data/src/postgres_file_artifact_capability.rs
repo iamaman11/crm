@@ -2,13 +2,12 @@ use crate::audit::materialize_audit_chain;
 use crate::capability_executor::capability_idempotency_scope;
 use crate::postgres_batch::{
     bind_execution_context, capability_idempotency, complete_capability_idempotency,
-    insert_audit_record, insert_completion_marker, insert_idempotency_claim, insert_outbox_event,
+    insert_audit_record, insert_completion_marker, insert_idempotency_claim,
     load_capability_replay,
 };
+use crate::postgres_file_artifact_evidence::insert_file_artifact_outbox_event;
 use crate::{AuditIntent, BatchError, BatchMutationPlan, EventEvidence, PostgresDataStore};
-use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
-};
+use crm_capability_runtime::{CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest};
 use crm_core_files::{
     AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactMetadata, FileArtifactStatus,
 };
@@ -87,19 +86,13 @@ impl PostgresDataStore {
             ));
         }
         request.context.validate().map_err(BatchError::Sdk)?;
-        let idempotency = capability_idempotency(
-            &request,
-            capability_idempotency_scope(definition),
-        )?;
+        let idempotency =
+            capability_idempotency(&request, capability_idempotency_scope(definition))?;
         let mut transaction = self.pool().begin().await?;
         bind_execution_context(&mut transaction, &request.context).await?;
 
-        if let Some(result) = load_capability_replay(
-            &mut transaction,
-            &request.context,
-            &idempotency,
-        )
-        .await?
+        if let Some(result) =
+            load_capability_replay(&mut transaction, &request.context, &idempotency).await?
         {
             transaction.commit().await?;
             return Ok(result);
@@ -125,7 +118,8 @@ impl PostgresDataStore {
         };
 
         for event in &evidence_plan.events {
-            insert_outbox_event(&mut transaction, &evidence_plan.context, event).await?;
+            insert_file_artifact_outbox_event(&mut transaction, &evidence_plan.context, event)
+                .await?;
         }
         let materialized = materialize_audit_chain(
             &mut transaction,
@@ -197,7 +191,9 @@ async fn apply_file_artifact_mutation(
             .await?;
             let metadata = load_metadata_for_update(transaction, context, &command.file_id)
                 .await?
-                .ok_or_else(|| BatchError::InvalidStoredValue("created artifact is missing".to_owned()))?;
+                .ok_or_else(|| {
+                    BatchError::InvalidStoredValue("created artifact is missing".to_owned())
+                })?;
             if metadata.owner_module_id != command.owner_module_id
                 || metadata.media_type != command.media_type
                 || metadata.data_class != command.data_class
@@ -265,12 +261,12 @@ async fn apply_file_artifact_mutation(
                         "previously accepted artifact chunk is missing".to_owned(),
                     )
                 })?;
-                let stored_hash: Vec<u8> = existing.try_get("chunk_sha256").map_err(|error| {
-                    BatchError::InvalidStoredValue(error.to_string())
-                })?;
-                let stored_bytes: Vec<u8> = existing.try_get("chunk_bytes").map_err(|error| {
-                    BatchError::InvalidStoredValue(error.to_string())
-                })?;
+                let stored_hash: Vec<u8> = existing
+                    .try_get("chunk_sha256")
+                    .map_err(|error| BatchError::InvalidStoredValue(error.to_string()))?;
+                let stored_bytes: Vec<u8> = existing
+                    .try_get("chunk_bytes")
+                    .map_err(|error| BatchError::InvalidStoredValue(error.to_string()))?;
                 if stored_hash.as_slice() != command.chunk_sha256 || stored_bytes != command.bytes {
                     return Err(BatchError::Sdk(file_conflict(
                         "FILE_ARTIFACT_CHUNK_REPLAY_CONFLICT",
@@ -336,7 +332,9 @@ async fn apply_file_artifact_mutation(
             .await?;
             let updated = load_metadata_for_update(transaction, context, &command.file_id)
                 .await?
-                .ok_or_else(|| BatchError::InvalidStoredValue("updated artifact is missing".to_owned()))?;
+                .ok_or_else(|| {
+                    BatchError::InvalidStoredValue("updated artifact is missing".to_owned())
+                })?;
             Ok(FileArtifactCapabilityMutationResult {
                 metadata: updated,
                 changed: true,
@@ -375,7 +373,9 @@ async fn apply_file_artifact_mutation(
             .await?;
             let finalized = load_metadata_for_update(transaction, context, &file_id)
                 .await?
-                .ok_or_else(|| BatchError::InvalidStoredValue("finalized artifact is missing".to_owned()))?;
+                .ok_or_else(|| {
+                    BatchError::InvalidStoredValue("finalized artifact is missing".to_owned())
+                })?;
             Ok(FileArtifactCapabilityMutationResult {
                 metadata: finalized,
                 changed: true,
