@@ -9,55 +9,34 @@ use std::fmt::Write as _;
 
 const MAX_EXTERNAL_PARTY_IDENTIFIER_BYTES: usize = 512;
 
-macro_rules! record_identifier_type {
-    ($name:ident, $code:literal, $field:literal) => {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        pub struct $name(RecordId);
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SourceSystemId(RecordId);
 
-        impl $name {
-            pub fn try_new(value: impl Into<String>) -> Result<Self, SdkError> {
-                RecordId::try_new(value.into()).map(Self).map_err(|error| {
-                    invalid($code, $field, error.to_string())
-                })
-            }
+impl SourceSystemId {
+    pub fn try_new(value: impl Into<String>) -> Result<Self, SdkError> {
+        RecordId::try_new(value.into()).map(Self).map_err(|error| {
+            invalid(
+                "CUSTOMER_DATA_SOURCE_SYSTEM_ID_INVALID",
+                "customer_data.source.source_system_id",
+                error.to_string(),
+            )
+        })
+    }
 
-            pub fn as_str(&self) -> &str {
-                self.0.as_str()
-            }
-        }
-    };
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
-
-record_identifier_type!(
-    SourceSystemId,
-    "CUSTOMER_DATA_SOURCE_SYSTEM_ID_INVALID",
-    "customer_data.source.source_system_id"
-);
-record_identifier_type!(
-    ParserProfileId,
-    "CUSTOMER_DATA_PARSER_PROFILE_ID_INVALID",
-    "customer_data.source.parser_profile.parser_profile_id"
-);
-record_identifier_type!(
-    ParserProfileVersion,
-    "CUSTOMER_DATA_PARSER_PROFILE_VERSION_INVALID",
-    "customer_data.source.parser_profile.parser_profile_version"
-);
-record_identifier_type!(
-    CanonicalizationProfileId,
-    "CUSTOMER_DATA_CANONICALIZATION_PROFILE_ID_INVALID",
-    "customer_data.source.parser_profile.canonicalization_profile_id"
-);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportSourceFormat {
-    DelimitedText,
+    Csv,
 }
 
 impl ImportSourceFormat {
     pub const fn code(self) -> &'static str {
         match self {
-            Self::DelimitedText => "delimited-text",
+            Self::Csv => "csv",
         }
     }
 }
@@ -77,90 +56,104 @@ impl ImportTextEncoding {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportHeaderMode {
-    FirstRow,
+    RequiredFirstRow,
 }
 
 impl ImportHeaderMode {
     pub const fn code(self) -> &'static str {
         match self {
-            Self::FirstRow => "first-row",
+            Self::RequiredFirstRow => "required-first-row",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportParserVersion {
+    CsvV1,
+}
+
+impl ImportParserVersion {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::CsvV1 => "csv-v1",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportCanonicalizationVersion {
+    V1,
+}
+
+impl ImportCanonicalizationVersion {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::V1 => "customer-import-v1",
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportParserProfile {
-    parser_profile_id: ParserProfileId,
-    parser_profile_version: ParserProfileVersion,
     format: ImportSourceFormat,
     encoding: ImportTextEncoding,
-    delimiter: char,
-    quote_character: char,
+    delimiter: u8,
+    quote: u8,
     header_mode: ImportHeaderMode,
-    canonicalization_profile_id: CanonicalizationProfileId,
+    parser_version: ImportParserVersion,
+    canonicalization_version: ImportCanonicalizationVersion,
 }
 
 impl ImportParserProfile {
     pub fn try_new(
-        parser_profile_id: ParserProfileId,
-        parser_profile_version: ParserProfileVersion,
         format: ImportSourceFormat,
         encoding: ImportTextEncoding,
-        delimiter: char,
-        quote_character: char,
+        delimiter: u8,
+        quote: u8,
         header_mode: ImportHeaderMode,
-        canonicalization_profile_id: CanonicalizationProfileId,
+        parser_version: ImportParserVersion,
+        canonicalization_version: ImportCanonicalizationVersion,
     ) -> Result<Self, SdkError> {
-        validate_dialect_character(
+        validate_dialect_byte(
             delimiter,
             "CUSTOMER_DATA_IMPORT_DELIMITER_INVALID",
-            "customer_data.source.parser_profile.delimiter",
+            "customer_data.source.parser_profile.delimiter_ascii",
             "delimiter",
         )?;
-        validate_dialect_character(
-            quote_character,
+        validate_dialect_byte(
+            quote,
             "CUSTOMER_DATA_IMPORT_QUOTE_INVALID",
-            "customer_data.source.parser_profile.quote_character",
-            "quote character",
+            "customer_data.source.parser_profile.quote_ascii",
+            "quote",
         )?;
-        if delimiter == quote_character {
+        if delimiter == quote {
             return Err(invalid(
                 "CUSTOMER_DATA_IMPORT_DIALECT_INVALID",
                 "customer_data.source.parser_profile",
-                "delimiter and quote character must be distinct",
+                "delimiter and quote bytes must be distinct",
             ));
         }
         Ok(Self {
-            parser_profile_id,
-            parser_profile_version,
             format,
             encoding,
             delimiter,
-            quote_character,
+            quote,
             header_mode,
-            canonicalization_profile_id,
+            parser_version,
+            canonicalization_version,
         })
     }
 
-    pub fn delimited_text_v1(delimiter: char, quote_character: char) -> Result<Self, SdkError> {
+    pub fn csv_v1(delimiter: u8, quote: u8) -> Result<Self, SdkError> {
         Self::try_new(
-            ParserProfileId::try_new("crm.import.delimited-text")?,
-            ParserProfileVersion::try_new("1.0.0")?,
-            ImportSourceFormat::DelimitedText,
+            ImportSourceFormat::Csv,
             ImportTextEncoding::Utf8,
             delimiter,
-            quote_character,
-            ImportHeaderMode::FirstRow,
-            CanonicalizationProfileId::try_new("crm.import.canonicalization-v1")?,
+            quote,
+            ImportHeaderMode::RequiredFirstRow,
+            ImportParserVersion::CsvV1,
+            ImportCanonicalizationVersion::V1,
         )
-    }
-
-    pub fn parser_profile_id(&self) -> &ParserProfileId {
-        &self.parser_profile_id
-    }
-
-    pub fn parser_profile_version(&self) -> &ParserProfileVersion {
-        &self.parser_profile_version
     }
 
     pub const fn format(&self) -> ImportSourceFormat {
@@ -171,20 +164,24 @@ impl ImportParserProfile {
         self.encoding
     }
 
-    pub const fn delimiter(&self) -> char {
+    pub const fn delimiter(&self) -> u8 {
         self.delimiter
     }
 
-    pub const fn quote_character(&self) -> char {
-        self.quote_character
+    pub const fn quote(&self) -> u8 {
+        self.quote
     }
 
     pub const fn header_mode(&self) -> ImportHeaderMode {
         self.header_mode
     }
 
-    pub fn canonicalization_profile_id(&self) -> &CanonicalizationProfileId {
-        &self.canonicalization_profile_id
+    pub const fn parser_version(&self) -> ImportParserVersion {
+        self.parser_version
+    }
+
+    pub const fn canonicalization_version(&self) -> ImportCanonicalizationVersion {
+        self.canonicalization_version
     }
 }
 
@@ -236,17 +233,17 @@ impl ExternalPartyIdentifierDigest {
     }
 }
 
-fn validate_dialect_character(
-    value: char,
+fn validate_dialect_byte(
+    value: u8,
     code: &'static str,
     field: &'static str,
     label: &str,
 ) -> Result<(), SdkError> {
-    if value == '\0' || value == '\r' || value == '\n' || value.is_control() {
+    if matches!(value, 0 | b'\r' | b'\n') || !value.is_ascii() {
         return Err(invalid(
             code,
             field,
-            format!("{label} must be one non-control Unicode scalar other than NUL, CR or LF"),
+            format!("{label} must be one non-zero ASCII byte other than CR or LF"),
         ));
     }
     Ok(())
@@ -282,11 +279,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parser_profile_rejects_ambiguous_dialect() {
+    fn parser_profile_rejects_ambiguous_csv_dialect() {
         assert_eq!(
-            ImportParserProfile::delimited_text_v1(',', ',')
-                .unwrap_err()
-                .code,
+            ImportParserProfile::csv_v1(b',', b',').unwrap_err().code,
             "CUSTOMER_DATA_IMPORT_DIALECT_INVALID"
         );
     }
