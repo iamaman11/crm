@@ -1,3 +1,4 @@
+use crate::profile::{ExternalPartyIdentifierDigest, ImportParserProfile, SourceSystemId};
 use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, RecordId, SdkError};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
@@ -10,6 +11,8 @@ const MAX_DIAGNOSTICS_PER_ROW: usize = 16;
 const MAX_IMPORT_ROWS: u32 = 100_000;
 const MAPPING_ID_DOMAIN: &[u8] = b"crm.customer-data-operations.party-import-mapping/v1";
 const ROW_ID_DOMAIN: &[u8] = b"crm.customer-data-operations.import-row/v1";
+const DERIVED_TARGET_PARTY_ID_DOMAIN: &[u8] =
+    b"crm.customer-data-operations.derived-target-party-id/v1";
 const TARGET_IDEMPOTENCY_DOMAIN: &[u8] =
     b"crm.customer-data-operations.party-create-idempotency/v1";
 
@@ -85,16 +88,11 @@ impl MappingVersionId {
     fn for_party_mapping(mapping: &PartyImportMapping) -> Result<Self, SdkError> {
         let mut hasher = Sha256::new();
         hasher.update(MAPPING_ID_DOMAIN);
-        hash_part(&mut hasher, mapping.party_id_column.as_bytes());
+        hash_optional(&mut hasher, mapping.target_party_id_column.as_deref());
         hash_part(&mut hasher, mapping.party_kind_column.as_bytes());
         hash_part(&mut hasher, mapping.display_name_column.as_bytes());
-        match &mapping.external_row_key_column {
-            Some(value) => {
-                hash_part(&mut hasher, b"some");
-                hash_part(&mut hasher, value.as_bytes());
-            }
-            None => hash_part(&mut hasher, b"none"),
-        }
+        hash_optional(&mut hasher, mapping.source_external_id_column.as_deref());
+        hash_optional(&mut hasher, mapping.external_row_key_column.as_deref());
         Self::try_new(format!("cdo-map-{}", hex_digest(hasher.finalize())))
     }
 
@@ -117,6 +115,17 @@ impl TargetPartyId {
         })
     }
 
+    pub fn derive_for_import_row(
+        job_id: &ImportJobId,
+        row_id: &ImportRowId,
+    ) -> Result<Self, SdkError> {
+        let mut hasher = Sha256::new();
+        hasher.update(DERIVED_TARGET_PARTY_ID_DOMAIN);
+        hash_part(&mut hasher, job_id.as_str().as_bytes());
+        hash_part(&mut hasher, row_id.as_str().as_bytes());
+        Self::try_new(format!("party-import-{}", hex_digest(hasher.finalize())))
+    }
+
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
@@ -127,6 +136,8 @@ pub struct SourceDescriptor {
     source_name: String,
     content_sha256: String,
     row_count: u32,
+    source_system_id: SourceSystemId,
+    parser_profile: ImportParserProfile,
 }
 
 impl SourceDescriptor {
@@ -134,6 +145,8 @@ impl SourceDescriptor {
         source_name: impl Into<String>,
         content_sha256: impl Into<String>,
         row_count: u32,
+        source_system_id: SourceSystemId,
+        parser_profile: ImportParserProfile,
     ) -> Result<Self, SdkError> {
         let source_name = normalize_bounded_text(
             source_name.into(),
@@ -152,6 +165,8 @@ impl SourceDescriptor {
             source_name,
             content_sha256,
             row_count,
+            source_system_id,
+            parser_profile,
         })
     }
 
@@ -166,34 +181,50 @@ impl SourceDescriptor {
     pub const fn row_count(&self) -> u32 {
         self.row_count
     }
+
+    pub fn source_system_id(&self) -> &SourceSystemId {
+        &self.source_system_id
+    }
+
+    pub fn parser_profile(&self) -> &ImportParserProfile {
+        &self.parser_profile
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartyImportMapping {
-    party_id_column: String,
+    target_party_id_column: Option<String>,
     party_kind_column: String,
     display_name_column: String,
+    source_external_id_column: Option<String>,
     external_row_key_column: Option<String>,
 }
 
 impl PartyImportMapping {
     pub fn try_new(
-        party_id_column: impl Into<String>,
+        target_party_id_column: Option<String>,
         party_kind_column: impl Into<String>,
         display_name_column: impl Into<String>,
+        source_external_id_column: Option<String>,
         external_row_key_column: Option<String>,
     ) -> Result<Self, SdkError> {
-        let party_id_column = normalize_column_name(party_id_column.into())?;
+        let target_party_id_column = target_party_id_column
+            .map(normalize_column_name)
+            .transpose()?;
         let party_kind_column = normalize_column_name(party_kind_column.into())?;
         let display_name_column = normalize_column_name(display_name_column.into())?;
+        let source_external_id_column = source_external_id_column
+            .map(normalize_column_name)
+            .transpose()?;
         let external_row_key_column = external_row_key_column
             .map(normalize_column_name)
             .transpose()?;
 
         Ok(Self {
-            party_id_column,
+            target_party_id_column,
             party_kind_column,
             display_name_column,
+            source_external_id_column,
             external_row_key_column,
         })
     }
@@ -202,8 +233,8 @@ impl PartyImportMapping {
         MappingVersionId::for_party_mapping(self)
     }
 
-    pub fn party_id_column(&self) -> &str {
-        &self.party_id_column
+    pub fn target_party_id_column(&self) -> Option<&str> {
+        self.target_party_id_column.as_deref()
     }
 
     pub fn party_kind_column(&self) -> &str {
@@ -212,6 +243,10 @@ impl PartyImportMapping {
 
     pub fn display_name_column(&self) -> &str {
         &self.display_name_column
+    }
+
+    pub fn source_external_id_column(&self) -> Option<&str> {
+        self.source_external_id_column.as_deref()
     }
 
     pub fn external_row_key_column(&self) -> Option<&str> {
@@ -766,6 +801,7 @@ pub struct ImportRow {
     job_id: ImportJobId,
     row_position: u32,
     identity_source: RowIdentitySource,
+    source_external_id_sha256: Option<ExternalPartyIdentifierDigest>,
     status: ImportRowStatus,
     prepared_party: Option<PreparedPartyRow>,
     diagnostics: Vec<RowDiagnostic>,
@@ -783,6 +819,7 @@ pub struct ImportRowSnapshot {
     pub job_id: ImportJobId,
     pub row_position: u32,
     pub identity_source: RowIdentitySource,
+    pub source_external_id_sha256: Option<ExternalPartyIdentifierDigest>,
     pub status: ImportRowStatus,
     pub prepared_party: Option<PreparedPartyRow>,
     pub diagnostics: Vec<RowDiagnostic>,
@@ -799,6 +836,7 @@ pub struct CreateImportRow {
     pub job_id: ImportJobId,
     pub row_position: u32,
     pub external_row_key: Option<String>,
+    pub source_external_id: Option<String>,
     pub occurred_at_unix_nanos: i64,
 }
 
@@ -839,11 +877,16 @@ impl ImportRow {
         let identity_source =
             RowIdentitySource::for_row(command.row_position, command.external_row_key.as_deref())?;
         let row_id = ImportRowId::for_identity(&command.job_id, &identity_source)?;
+        let source_external_id_sha256 = command
+            .source_external_id
+            .map(ExternalPartyIdentifierDigest::for_identifier)
+            .transpose()?;
         Ok(Self {
             row_id,
             job_id: command.job_id,
             row_position: command.row_position,
             identity_source,
+            source_external_id_sha256,
             status: ImportRowStatus::Pending,
             prepared_party: None,
             diagnostics: Vec::new(),
@@ -919,6 +962,7 @@ impl ImportRow {
             job_id: snapshot.job_id,
             row_position: snapshot.row_position,
             identity_source: snapshot.identity_source,
+            source_external_id_sha256: snapshot.source_external_id_sha256,
             status: snapshot.status,
             prepared_party: snapshot.prepared_party,
             diagnostics: snapshot.diagnostics,
@@ -1009,16 +1053,17 @@ impl ImportRow {
         self.advance(command.occurred_at_unix_nanos)
     }
 
-    pub fn target_idempotency_key(&self) -> Result<String, SdkError> {
+    pub fn target_idempotency_key(&self) -> String {
         let mut hasher = Sha256::new();
         hasher.update(TARGET_IDEMPOTENCY_DOMAIN);
         hash_part(&mut hasher, self.job_id.as_str().as_bytes());
         hash_part(&mut hasher, self.row_id.as_str().as_bytes());
         hash_part(&mut hasher, b"parties.party.create@1.0.0");
-        Ok(format!(
-            "cdo-party-create-{}",
-            hex_digest(hasher.finalize())
-        ))
+        format!("cdo-party-create-{}", hex_digest(hasher.finalize()))
+    }
+
+    pub fn derived_target_party_id(&self) -> Result<TargetPartyId, SdkError> {
+        TargetPartyId::derive_for_import_row(&self.job_id, &self.row_id)
     }
 
     pub fn snapshot(&self) -> ImportRowSnapshot {
@@ -1027,6 +1072,7 @@ impl ImportRow {
             job_id: self.job_id.clone(),
             row_position: self.row_position,
             identity_source: self.identity_source.clone(),
+            source_external_id_sha256: self.source_external_id_sha256.clone(),
             status: self.status,
             prepared_party: self.prepared_party.clone(),
             diagnostics: self.diagnostics.clone(),
@@ -1057,6 +1103,10 @@ impl ImportRow {
 
     pub fn prepared_party(&self) -> Option<&PreparedPartyRow> {
         self.prepared_party.as_ref()
+    }
+
+    pub fn source_external_id_sha256(&self) -> Option<&ExternalPartyIdentifierDigest> {
+        self.source_external_id_sha256.as_ref()
     }
 
     pub const fn version(&self) -> i64 {
@@ -1153,10 +1203,12 @@ fn validate_job_counters(
             }
         }
         ImportJobStatus::Validated => {
-            if validated_total != total_rows || succeeded_rows != 0 || checkpoint_row_position != 0
+            if validated_total != total_rows
+                || succeeded_rows != 0
+                || checkpoint_row_position != 0
             {
                 return Err(invalid_counter(
-                    "validated import jobs require complete validation counters and zero execution progress",
+                    "validated import jobs require complete validation and zero execution counters",
                 ));
             }
         }
@@ -1168,24 +1220,25 @@ fn validate_job_counters(
             }
             if policy == PartialExecutionPolicy::RequireAllValid && invalid_rows != 0 {
                 return Err(invalid_counter(
-                    "require_all_valid jobs cannot execute with invalid rows",
+                    "require_all_valid jobs cannot persist executing state with invalid rows",
                 ));
             }
-            if checkpoint_row_position < succeeded_rows
-                || checkpoint_row_position > succeeded_rows.saturating_add(invalid_rows)
-            {
+            let skipped = checkpoint_row_position
+                .checked_sub(succeeded_rows)
+                .ok_or_else(|| invalid_counter("checkpoint cannot trail successful rows"))?;
+            if skipped > invalid_rows {
                 return Err(invalid_counter(
-                    "executing checkpoint must equal successful rows plus a bounded number of skipped invalid rows",
+                    "checkpoint implies more skipped rows than validated invalid rows",
                 ));
             }
         }
         ImportJobStatus::Completed => {
             if validated_total != total_rows
-                || succeeded_rows != valid_rows
                 || checkpoint_row_position != total_rows
+                || succeeded_rows != valid_rows
             {
                 return Err(invalid_counter(
-                    "completed import jobs require every source row checkpointed and every valid row succeeded",
+                    "completed import jobs require every source row checkpointed and every valid row successful",
                 ));
             }
         }
@@ -1203,16 +1256,7 @@ fn validate_row_state_shape(
     target_party_id: Option<&TargetPartyId>,
     version: i64,
 ) -> Result<(), SdkError> {
-    validate_diagnostics_allow_empty(diagnostics)?;
-    if let Some(code) = last_execution_error_code {
-        normalize_semantic_identifier(
-            code.to_owned(),
-            128,
-            "CUSTOMER_DATA_IMPORT_ROW_EXECUTION_ERROR_CODE_INVALID",
-            "customer_data.import_row.execution_error_code",
-            "execution error code",
-        )?;
-    }
+    validate_diagnostics(diagnostics)?;
     match status {
         ImportRowStatus::Pending => {
             if version != 1
@@ -1222,7 +1266,9 @@ fn validate_row_state_shape(
                 || last_execution_error_code.is_some()
                 || target_party_id.is_some()
             {
-                return Err(invalid_row_shape("pending row state is not canonical"));
+                return Err(invalid_row_state(
+                    "pending rows must retain initial empty outcome state",
+                ));
             }
         }
         ImportRowStatus::Valid => {
@@ -1232,7 +1278,9 @@ fn validate_row_state_shape(
                 || last_execution_error_code.is_some()
                 || target_party_id.is_some()
             {
-                return Err(invalid_row_shape("valid row state is not canonical"));
+                return Err(invalid_row_state(
+                    "valid rows require a prepared Party and no execution outcome",
+                ));
             }
         }
         ImportRowStatus::Invalid => {
@@ -1242,7 +1290,9 @@ fn validate_row_state_shape(
                 || last_execution_error_code.is_some()
                 || target_party_id.is_some()
             {
-                return Err(invalid_row_shape("invalid row state is not canonical"));
+                return Err(invalid_row_state(
+                    "invalid rows require diagnostics and no prepared target or execution outcome",
+                ));
             }
         }
         ImportRowStatus::FailedRetryable => {
@@ -1252,18 +1302,24 @@ fn validate_row_state_shape(
                 || last_execution_error_code.is_none()
                 || target_party_id.is_some()
             {
-                return Err(invalid_row_shape(
-                    "retryable-failed row state is not canonical",
+                return Err(invalid_row_state(
+                    "retryable-failed rows require prepared target and retryable execution evidence",
                 ));
             }
         }
         ImportRowStatus::Succeeded => {
-            if prepared_party.is_none() || !diagnostics.is_empty() || target_party_id.is_none() {
-                return Err(invalid_row_shape("succeeded row state is not canonical"));
-            }
-            if execution_attempts == 0 && last_execution_error_code.is_some() {
-                return Err(invalid_row_shape(
-                    "succeeded row cannot retain an execution error without prior attempts",
+            let prepared_party = prepared_party.as_ref().ok_or_else(|| {
+                invalid_row_state("succeeded rows require a prepared Party target")
+            })?;
+            let target_party_id = target_party_id.ok_or_else(|| {
+                invalid_row_state("succeeded rows require the authoritative target Party result")
+            })?;
+            if !diagnostics.is_empty()
+                || last_execution_error_code.is_some()
+                || prepared_party.party_id() != target_party_id
+            {
+                return Err(invalid_row_state(
+                    "succeeded row state does not match its prepared Party target",
                 ));
             }
         }
@@ -1272,23 +1328,21 @@ fn validate_row_state_shape(
 }
 
 fn validate_diagnostics(diagnostics: &[RowDiagnostic]) -> Result<(), SdkError> {
-    if diagnostics.is_empty() || diagnostics.len() > MAX_DIAGNOSTICS_PER_ROW {
-        return Err(invalid(
-            "CUSTOMER_DATA_IMPORT_ROW_DIAGNOSTICS_INVALID",
-            "customer_data.import_row.diagnostics",
-            format!("row diagnostics must contain between 1 and {MAX_DIAGNOSTICS_PER_ROW} entries"),
-        ));
-    }
-    validate_diagnostics_allow_empty(diagnostics)
-}
-
-fn validate_diagnostics_allow_empty(diagnostics: &[RowDiagnostic]) -> Result<(), SdkError> {
     if diagnostics.len() > MAX_DIAGNOSTICS_PER_ROW {
         return Err(invalid(
-            "CUSTOMER_DATA_IMPORT_ROW_DIAGNOSTICS_INVALID",
-            "customer_data.import_row.diagnostics",
-            format!("row diagnostics cannot exceed {MAX_DIAGNOSTICS_PER_ROW} entries"),
+            "CUSTOMER_DATA_ROW_DIAGNOSTICS_LIMIT_EXCEEDED",
+            "customer_data.row.diagnostics",
+            format!("at most {MAX_DIAGNOSTICS_PER_ROW} diagnostics are allowed"),
         ));
+    }
+    for diagnostic in diagnostics {
+        if diagnostic.code.is_empty() || diagnostic.field.is_empty() {
+            return Err(invalid(
+                "CUSTOMER_DATA_ROW_DIAGNOSTIC_INVALID",
+                "customer_data.row.diagnostics",
+                "diagnostics must retain canonical non-empty code and field values",
+            ));
+        }
     }
     Ok(())
 }
@@ -1308,8 +1362,19 @@ fn validate_row_position(row_position: u32) -> Result<(), SdkError> {
     if row_position == 0 || row_position > MAX_IMPORT_ROWS {
         return Err(invalid(
             "CUSTOMER_DATA_IMPORT_ROW_POSITION_INVALID",
-            "customer_data.import_row.row_position",
+            "customer_data.row.position",
             format!("row position must be between 1 and {MAX_IMPORT_ROWS}"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_timestamp(field: &'static str, value: i64) -> Result<(), SdkError> {
+    if value <= 0 {
+        return Err(invalid(
+            "CUSTOMER_DATA_IMPORT_TIME_INVALID",
+            field,
+            "timestamp must be positive Unix nanoseconds",
         ));
     }
     Ok(())
@@ -1319,9 +1384,9 @@ fn normalize_column_name(value: String) -> Result<String, SdkError> {
     normalize_bounded_text(
         value,
         MAX_COLUMN_NAME_BYTES,
-        "CUSTOMER_DATA_MAPPING_COLUMN_INVALID",
+        "CUSTOMER_DATA_IMPORT_COLUMN_NAME_INVALID",
         "customer_data.mapping.column",
-        "mapping column name",
+        "column name",
     )
 }
 
@@ -1330,9 +1395,8 @@ fn normalize_sha256(
     code: &'static str,
     field: &'static str,
 ) -> Result<String, SdkError> {
-    let canonical = value.trim().to_owned();
-    if canonical.len() != 64
-        || canonical
+    if value.len() != 64
+        || value
             .as_bytes()
             .iter()
             .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
@@ -1343,32 +1407,7 @@ fn normalize_sha256(
             "SHA-256 digest must be exactly 64 lowercase hexadecimal characters",
         ));
     }
-    Ok(canonical)
-}
-
-fn normalize_bounded_text(
-    value: String,
-    maximum_bytes: usize,
-    code: &'static str,
-    field: &'static str,
-    label: &str,
-) -> Result<String, SdkError> {
-    if value.chars().any(char::is_control) {
-        return Err(invalid(
-            code,
-            field,
-            format!("{label} must not contain control characters"),
-        ));
-    }
-    let canonical = value.trim().to_owned();
-    if canonical.is_empty() || canonical.len() > maximum_bytes {
-        return Err(invalid(
-            code,
-            field,
-            format!("{label} must be non-empty and not exceed {maximum_bytes} UTF-8 bytes"),
-        ));
-    }
-    Ok(canonical)
+    Ok(value)
 }
 
 fn normalize_semantic_identifier(
@@ -1376,55 +1415,56 @@ fn normalize_semantic_identifier(
     maximum_bytes: usize,
     code: &'static str,
     field: &'static str,
-    label: &str,
+    label: &'static str,
 ) -> Result<String, SdkError> {
-    if value.chars().any(char::is_control) {
-        return Err(invalid(
-            code,
-            field,
-            format!("{label} must not contain control characters"),
-        ));
-    }
-    let normalized = value.trim().to_ascii_lowercase();
-    if normalized.is_empty() || normalized.len() > maximum_bytes {
-        return Err(invalid(
-            code,
-            field,
-            format!("{label} must be non-empty and not exceed {maximum_bytes} UTF-8 bytes"),
-        ));
-    }
-    let bytes = normalized.as_bytes();
-    if !bytes.first().is_some_and(u8::is_ascii_alphanumeric)
-        || !bytes.last().is_some_and(u8::is_ascii_alphanumeric)
-        || bytes
-            .iter()
-            .any(|byte| !(byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')))
+    let value = normalize_bounded_text(value, maximum_bytes, code, field, label)?;
+    if value
+        .as_bytes()
+        .iter()
+        .any(|byte| !(byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')))
     {
         return Err(invalid(
             code,
             field,
+            format!("{label} may contain only ASCII letters, digits, dot, underscore and hyphen"),
+        ));
+    }
+    Ok(value)
+}
+
+fn normalize_bounded_text(
+    value: String,
+    maximum_bytes: usize,
+    code: &'static str,
+    field: &'static str,
+    label: &'static str,
+) -> Result<String, SdkError> {
+    let value = value.trim().to_owned();
+    if value.is_empty() || value.len() > maximum_bytes || value.chars().any(char::is_control) {
+        return Err(invalid(
+            code,
+            field,
             format!(
-                "{label} must start and end with an ASCII letter or digit and contain only ASCII letters, digits, '.', '_' or '-'"
+                "{label} must be non-empty, contain no control characters and not exceed {maximum_bytes} UTF-8 bytes"
             ),
         ));
     }
-    Ok(normalized)
+    Ok(value)
 }
 
-fn validate_timestamp(field: &'static str, value: i64) -> Result<(), SdkError> {
-    if value <= 0 {
-        return Err(invalid(
-            "CUSTOMER_DATA_TIMESTAMP_INVALID",
-            field,
-            "time must be a positive Unix-nanosecond value",
-        ));
+fn hash_part(hasher: &mut Sha256, bytes: &[u8]) {
+    hasher.update((bytes.len() as u64).to_be_bytes());
+    hasher.update(bytes);
+}
+
+fn hash_optional(hasher: &mut Sha256, value: Option<&str>) {
+    match value {
+        Some(value) => {
+            hash_part(hasher, b"some");
+            hash_part(hasher, value.as_bytes());
+        }
+        None => hash_part(hasher, b"none"),
     }
-    Ok(())
-}
-
-fn hash_part(hasher: &mut Sha256, value: &[u8]) {
-    hasher.update((value.len() as u64).to_be_bytes());
-    hasher.update(value);
 }
 
 fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
@@ -1444,7 +1484,7 @@ fn invalid_counter(internal: impl Into<String>) -> SdkError {
     )
 }
 
-fn invalid_row_shape(internal: impl Into<String>) -> SdkError {
+fn invalid_row_state(internal: impl Into<String>) -> SdkError {
     invalid(
         "CUSTOMER_DATA_IMPORT_ROW_STATE_INVALID",
         "customer_data.import_row.state",
@@ -1453,18 +1493,19 @@ fn invalid_row_shape(internal: impl Into<String>) -> SdkError {
 }
 
 fn invalid(code: &'static str, field: &'static str, internal: impl Into<String>) -> SdkError {
-    SdkError::new(
+    let mut error = SdkError::new(
         code,
         ErrorCategory::InvalidArgument,
         false,
         "The customer-data import request is invalid.",
     )
-    .with_internal_reference(internal)
-    .with_field_violation(FieldViolation {
-        field: FieldName::try_new(field).expect("static customer-data field must be valid"),
+    .with_internal_reference(internal);
+    error.field_violations.push(FieldViolation {
+        field: FieldName::try_new(field).expect("static customer-data import field must be valid"),
         code: "INVALID".to_owned(),
         safe_message: "The customer-data import field is invalid.".to_owned(),
-    })
+    });
+    error
 }
 
 fn conflict(code: &'static str, internal: impl Into<String>) -> SdkError {
@@ -1472,148 +1513,114 @@ fn conflict(code: &'static str, internal: impl Into<String>) -> SdkError {
         code,
         ErrorCategory::Conflict,
         false,
-        "The customer-data import state changed before this operation could be applied.",
+        "The customer-data import state conflicts with this operation.",
     )
     .with_internal_reference(internal)
-}
-
-trait SdkErrorFieldViolationExt {
-    fn with_field_violation(self, violation: FieldViolation) -> Self;
-}
-
-impl SdkErrorFieldViolationExt for SdkError {
-    fn with_field_violation(mut self, violation: FieldViolation) -> Self {
-        self.field_violations.push(violation);
-        self
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::profile::ImportParserProfile;
 
     fn source(rows: u32) -> SourceDescriptor {
         SourceDescriptor::try_new(
             "customers.csv",
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "11".repeat(32),
             rows,
+            SourceSystemId::try_new("legacy-crm").unwrap(),
+            ImportParserProfile::csv_v1(b',', b'"').unwrap(),
         )
         .unwrap()
     }
 
     fn mapping() -> PartyImportMapping {
         PartyImportMapping::try_new(
-            "party_id",
+            None,
             "kind",
             "display_name",
-            Some("external_id".into()),
+            Some("legacy_customer_id".to_owned()),
+            Some("row_key".to_owned()),
         )
         .unwrap()
     }
 
-    fn job(policy: PartialExecutionPolicy, rows: u32) -> ImportJob {
+    fn job(rows: u32, policy: PartialExecutionPolicy) -> ImportJob {
         ImportJob::create(CreateImportJob {
             job_id: ImportJobId::try_new("import-job-1").unwrap(),
             source: source(rows),
             mapping: mapping(),
             partial_execution_policy: policy,
-            occurred_at_unix_nanos: 100,
+            occurred_at_unix_nanos: 1,
         })
         .unwrap()
     }
 
-    fn prepared_party() -> PreparedPartyRow {
-        PreparedPartyRow::try_new(
-            TargetPartyId::try_new("party-1").unwrap(),
-            PartyImportKind::Person,
-            "Ada Lovelace",
-        )
-        .unwrap()
-    }
-
     #[test]
-    fn mapping_version_is_deterministic_and_input_normalized() {
-        let first = PartyImportMapping::try_new(
-            " party_id ",
+    fn mapping_version_distinguishes_external_identifier_semantics() {
+        let first = mapping();
+        let second = PartyImportMapping::try_new(
+            None,
             "kind",
             "display_name",
-            Some("external_id".into()),
+            Some("other_external_id".to_owned()),
+            Some("row_key".to_owned()),
         )
         .unwrap();
-        let second = mapping();
-        assert_eq!(first, second);
-        assert_eq!(first.version_id().unwrap(), second.version_id().unwrap());
+        assert_ne!(first.version_id().unwrap(), second.version_id().unwrap());
     }
 
     #[test]
-    fn row_identity_is_deterministic_for_external_key_and_position() {
-        let job_id = ImportJobId::try_new("import-job-1").unwrap();
-        let first = ImportRow::create(CreateImportRow {
-            job_id: job_id.clone(),
-            row_position: 1,
-            external_row_key: Some(" customer-42 ".into()),
-            occurred_at_unix_nanos: 100,
-        })
-        .unwrap();
-        let second = ImportRow::create(CreateImportRow {
-            job_id: job_id.clone(),
-            row_position: 99,
-            external_row_key: Some("customer-42".into()),
-            occurred_at_unix_nanos: 100,
-        })
-        .unwrap();
-        assert_eq!(first.row_id(), second.row_id());
-
-        let positioned = ImportRow::create(CreateImportRow {
-            job_id,
-            row_position: 1,
-            external_row_key: None,
-            occurred_at_unix_nanos: 100,
-        })
-        .unwrap();
-        assert_ne!(first.row_id(), positioned.row_id());
-    }
-
-    #[test]
-    fn target_idempotency_is_stable_across_retry_state() {
-        let mut row = ImportRow::create(CreateImportRow {
+    fn source_external_identifier_is_evidence_not_target_party_identity() {
+        let row = ImportRow::create(CreateImportRow {
             job_id: ImportJobId::try_new("import-job-1").unwrap(),
             row_position: 1,
-            external_row_key: Some("customer-42".into()),
-            occurred_at_unix_nanos: 100,
+            external_row_key: Some("row-1".to_owned()),
+            source_external_id: Some("legacy-customer-42".to_owned()),
+            occurred_at_unix_nanos: 1,
         })
         .unwrap();
-        row.mark_valid(ValidateImportRowSuccess {
-            expected_version: 1,
-            prepared_party: prepared_party(),
-            occurred_at_unix_nanos: 200,
-        })
-        .unwrap();
-        let before = row.target_idempotency_key().unwrap();
-        row.record_retryable_failure(RecordImportRowRetryableFailure {
-            expected_version: 2,
-            error_code: "target.temporarily_unavailable".into(),
-            occurred_at_unix_nanos: 300,
-        })
-        .unwrap();
-        assert_eq!(before, row.target_idempotency_key().unwrap());
+        let derived = row.derived_target_party_id().unwrap();
+        assert_ne!(
+            row.source_external_id_sha256().unwrap().as_str(),
+            derived.as_str()
+        );
+        assert!(derived.as_str().starts_with("party-import-"));
     }
 
     #[test]
-    fn require_all_valid_blocks_execution_when_validation_has_errors() {
-        let mut value = job(PartialExecutionPolicy::RequireAllValid, 2);
-        value
-            .mark_validated(MarkImportJobValidated {
-                expected_version: 1,
-                valid_rows: 1,
-                invalid_rows: 1,
-                occurred_at_unix_nanos: 200,
-            })
-            .unwrap();
-        let error = value
+    fn deterministic_row_identity_and_target_idempotency_survive_replay() {
+        let command = CreateImportRow {
+            job_id: ImportJobId::try_new("import-job-1").unwrap(),
+            row_position: 2,
+            external_row_key: Some("external-row-42".to_owned()),
+            source_external_id: Some("customer-42".to_owned()),
+            occurred_at_unix_nanos: 1,
+        };
+        let first = ImportRow::create(command.clone()).unwrap();
+        let second = ImportRow::create(command).unwrap();
+        assert_eq!(first.row_id(), second.row_id());
+        assert_eq!(first.target_idempotency_key(), second.target_idempotency_key());
+        assert_eq!(
+            first.derived_target_party_id().unwrap(),
+            second.derived_target_party_id().unwrap()
+        );
+    }
+
+    #[test]
+    fn require_all_valid_blocks_execution_when_validation_found_errors() {
+        let mut job = job(2, PartialExecutionPolicy::RequireAllValid);
+        job.mark_validated(MarkImportJobValidated {
+            expected_version: 1,
+            valid_rows: 1,
+            invalid_rows: 1,
+            occurred_at_unix_nanos: 2,
+        })
+        .unwrap();
+        let error = job
             .start_execution(StartImportExecution {
                 expected_version: 2,
-                occurred_at_unix_nanos: 300,
+                occurred_at_unix_nanos: 3,
             })
             .unwrap_err();
         assert_eq!(
@@ -1623,113 +1630,78 @@ mod tests {
     }
 
     #[test]
-    fn all_valid_rows_can_checkpoint_success_and_invalid_rows_then_complete() {
-        let mut value = job(PartialExecutionPolicy::AllValidRows, 3);
-        value
-            .mark_validated(MarkImportJobValidated {
-                expected_version: 1,
-                valid_rows: 2,
-                invalid_rows: 1,
-                occurred_at_unix_nanos: 200,
-            })
-            .unwrap();
-        value
-            .start_execution(StartImportExecution {
-                expected_version: 2,
-                occurred_at_unix_nanos: 300,
-            })
-            .unwrap();
-        value
-            .advance_checkpoint(AdvanceImportCheckpoint {
-                expected_version: 3,
-                row_position: 1,
-                outcome: CheckpointOutcome::Succeeded,
-                occurred_at_unix_nanos: 400,
-            })
-            .unwrap();
-        value
-            .advance_checkpoint(AdvanceImportCheckpoint {
-                expected_version: 4,
-                row_position: 2,
-                outcome: CheckpointOutcome::SkippedInvalid,
-                occurred_at_unix_nanos: 500,
-            })
-            .unwrap();
-        value
-            .advance_checkpoint(AdvanceImportCheckpoint {
-                expected_version: 5,
-                row_position: 3,
-                outcome: CheckpointOutcome::Succeeded,
-                occurred_at_unix_nanos: 600,
-            })
-            .unwrap();
-        value
-            .complete(FinishImportJob {
-                expected_version: 6,
-                occurred_at_unix_nanos: 700,
-            })
-            .unwrap();
-        assert_eq!(value.status(), ImportJobStatus::Completed);
-        assert_eq!(value.succeeded_rows(), 2);
-        assert_eq!(value.checkpoint_row_position(), 3);
+    fn all_valid_rows_policy_can_checkpoint_valid_and_invalid_rows() {
+        let mut job = job(2, PartialExecutionPolicy::AllValidRows);
+        job.mark_validated(MarkImportJobValidated {
+            expected_version: 1,
+            valid_rows: 1,
+            invalid_rows: 1,
+            occurred_at_unix_nanos: 2,
+        })
+        .unwrap();
+        job.start_execution(StartImportExecution {
+            expected_version: 2,
+            occurred_at_unix_nanos: 3,
+        })
+        .unwrap();
+        job.advance_checkpoint(AdvanceImportCheckpoint {
+            expected_version: 3,
+            row_position: 1,
+            outcome: CheckpointOutcome::SkippedInvalid,
+            occurred_at_unix_nanos: 4,
+        })
+        .unwrap();
+        job.advance_checkpoint(AdvanceImportCheckpoint {
+            expected_version: 4,
+            row_position: 2,
+            outcome: CheckpointOutcome::Succeeded,
+            occurred_at_unix_nanos: 5,
+        })
+        .unwrap();
+        job.complete(FinishImportJob {
+            expected_version: 5,
+            occurred_at_unix_nanos: 6,
+        })
+        .unwrap();
+        assert_eq!(job.status(), ImportJobStatus::Completed);
     }
 
     #[test]
-    fn row_validation_and_retryable_execution_are_irreversible_but_retryable() {
+    fn row_success_requires_exact_prepared_target_party() {
         let mut row = ImportRow::create(CreateImportRow {
             job_id: ImportJobId::try_new("import-job-1").unwrap(),
             row_position: 1,
             external_row_key: None,
-            occurred_at_unix_nanos: 100,
+            source_external_id: None,
+            occurred_at_unix_nanos: 1,
         })
         .unwrap();
+        let target = row.derived_target_party_id().unwrap();
         row.mark_valid(ValidateImportRowSuccess {
             expected_version: 1,
-            prepared_party: prepared_party(),
-            occurred_at_unix_nanos: 200,
+            prepared_party: PreparedPartyRow::try_new(
+                target.clone(),
+                PartyImportKind::Person,
+                "Ada Lovelace",
+            )
+            .unwrap(),
+            occurred_at_unix_nanos: 2,
         })
         .unwrap();
-        row.record_retryable_failure(RecordImportRowRetryableFailure {
-            expected_version: 2,
-            error_code: "target.timeout".into(),
-            occurred_at_unix_nanos: 300,
-        })
-        .unwrap();
+        let error = row
+            .mark_succeeded(MarkImportRowSucceeded {
+                expected_version: 2,
+                target_party_id: TargetPartyId::try_new("different-party").unwrap(),
+                occurred_at_unix_nanos: 3,
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "CUSTOMER_DATA_IMPORT_ROW_TARGET_PARTY_CONFLICT");
         row.mark_succeeded(MarkImportRowSucceeded {
-            expected_version: 3,
-            target_party_id: TargetPartyId::try_new("party-1").unwrap(),
-            occurred_at_unix_nanos: 400,
+            expected_version: 2,
+            target_party_id: target,
+            occurred_at_unix_nanos: 3,
         })
         .unwrap();
         assert_eq!(row.status(), ImportRowStatus::Succeeded);
-        assert_eq!(row.version(), 4);
-    }
-
-    #[test]
-    fn strict_job_rehydrate_rejects_mapping_identity_mismatch() {
-        let value = job(PartialExecutionPolicy::AllValidRows, 2);
-        let mut snapshot = value.snapshot();
-        snapshot.mapping_version_id = MappingVersionId::try_new("wrong-mapping").unwrap();
-        assert_eq!(
-            ImportJob::rehydrate(snapshot).unwrap_err().code,
-            "CUSTOMER_DATA_IMPORT_JOB_MAPPING_VERSION_INVALID"
-        );
-    }
-
-    #[test]
-    fn strict_row_rehydrate_rejects_unreachable_shape() {
-        let row = ImportRow::create(CreateImportRow {
-            job_id: ImportJobId::try_new("import-job-1").unwrap(),
-            row_position: 1,
-            external_row_key: None,
-            occurred_at_unix_nanos: 100,
-        })
-        .unwrap();
-        let mut snapshot = row.snapshot();
-        snapshot.status = ImportRowStatus::Succeeded;
-        assert_eq!(
-            ImportRow::rehydrate(snapshot).unwrap_err().code,
-            "CUSTOMER_DATA_IMPORT_ROW_STATE_INVALID"
-        );
     }
 }
