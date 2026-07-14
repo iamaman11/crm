@@ -27,8 +27,8 @@ const PARTY_LINK_SCHEMA_ID: &str = "crm.identity_resolution.candidate.party-link
 const PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
 const PARTY_LINK_MAXIMUM_BYTES: u64 = 1_024;
 const PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
-    37, 183, 202, 14, 177, 222, 72, 169, 159, 53, 204, 23, 148, 41, 31, 224, 90, 184, 197,
-    78, 56, 196, 177, 36, 3, 152, 108, 209, 14, 197, 73, 111,
+    37, 183, 202, 14, 177, 222, 72, 169, 159, 53, 204, 23, 148, 41, 31, 224, 90, 184, 197, 78, 56,
+    196, 177, 36, 3, 152, 108, 209, 14, 197, 73, 111,
 ];
 
 /// Governed Identity Resolution planner that preserves the pure owner plan and
@@ -57,8 +57,8 @@ impl TransactionalAggregatePlanner for IdentityResolutionCapabilityPlanner {
         request: &CapabilityRequest,
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        let mut plan =
-            owner_planner::IdentityResolutionCapabilityPlanner.plan(definition, request, current)?;
+        let mut plan = owner_planner::IdentityResolutionCapabilityPlanner
+            .plan(definition, request, current)?;
         if definition.capability_id.as_str() == REGISTER_CAPABILITY {
             let scope = evidence_reference_scope_from_request(REGISTER_CAPABILITY, request)?
                 .ok_or_else(invalid_registration_scope)?;
@@ -70,7 +70,9 @@ impl TransactionalAggregatePlanner for IdentityResolutionCapabilityPlanner {
                     relationship: RelationshipRef {
                         relationship_type: configured_relationship_type()?,
                         source: RecordRef {
-                            record_type: configured_record_type(PARTY_CANDIDATE_SOURCE_RECORD_TYPE)?,
+                            record_type: configured_record_type(
+                                PARTY_CANDIDATE_SOURCE_RECORD_TYPE,
+                            )?,
                             record_id: RecordId::try_new(expectation.party_ref.as_str())
                                 .map_err(config_error)?,
                         },

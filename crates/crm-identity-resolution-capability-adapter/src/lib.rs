@@ -149,7 +149,10 @@ mod tests {
         assert_eq!(definitions[3].capability_id.as_str(), CONFIRM_CAPABILITY);
         for definition in definitions {
             assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-            assert_eq!(definition.capability_version.as_str(), support::CONTRACT_VERSION);
+            assert_eq!(
+                definition.capability_version.as_str(),
+                support::CONTRACT_VERSION
+            );
             assert_eq!(
                 definition.input_contract.allowed_data_classes,
                 vec![DataClass::Personal]

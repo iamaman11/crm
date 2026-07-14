@@ -1,10 +1,10 @@
 use crate::{
     CONFIRM_CAPABILITY, CONFIRM_REQUEST_SCHEMA, CONFIRM_RESPONSE_SCHEMA, CONFIRMED_EVENT_SCHEMA,
     CONFIRMED_EVENT_TYPE, DISMISS_CAPABILITY, DISMISS_REQUEST_SCHEMA, DISMISS_RESPONSE_SCHEMA,
-    DISMISSED_EVENT_SCHEMA, DISMISSED_EVENT_TYPE, MODULE_ID, MUTATION_CAPABILITY_IDS,
-    RECORD_TYPE, REFRESH_CAPABILITY, REFRESH_REQUEST_SCHEMA, REFRESH_RESPONSE_SCHEMA,
-    REFRESHED_EVENT_SCHEMA, REFRESHED_EVENT_TYPE, REGISTER_CAPABILITY, REGISTER_REQUEST_SCHEMA,
-    REGISTER_RESPONSE_SCHEMA, REGISTERED_EVENT_SCHEMA, REGISTERED_EVENT_TYPE,
+    DISMISSED_EVENT_SCHEMA, DISMISSED_EVENT_TYPE, MODULE_ID, MUTATION_CAPABILITY_IDS, RECORD_TYPE,
+    REFRESH_CAPABILITY, REFRESH_REQUEST_SCHEMA, REFRESH_RESPONSE_SCHEMA, REFRESHED_EVENT_SCHEMA,
+    REFRESHED_EVENT_TYPE, REGISTER_CAPABILITY, REGISTER_REQUEST_SCHEMA, REGISTER_RESPONSE_SCHEMA,
+    REGISTERED_EVENT_SCHEMA, REGISTERED_EVENT_TYPE,
 };
 use crm_capability_plan_support::{self as support, EventSpec, PersistedPayloadContract};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
@@ -13,15 +13,14 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_identity_resolution::{
-    DUPLICATE_CANDIDATE_CASE_STATE_MAXIMUM_BYTES,
+    CreateDuplicateCandidateCase, DUPLICATE_CANDIDATE_CASE_STATE_MAXIMUM_BYTES,
     DUPLICATE_CANDIDATE_CASE_STATE_RETENTION_POLICY_ID, DUPLICATE_CANDIDATE_CASE_STATE_SCHEMA_ID,
-    DUPLICATE_CANDIDATE_CASE_STATE_SCHEMA_VERSION, CreateDuplicateCandidateCase,
-    DecisionReasonCode, DecideDuplicateCandidateCase, DuplicateCandidateCase,
-    DuplicateCandidateCaseId, DuplicateCandidateCaseStatus, EvidenceReference,
-    MatchEvidenceSnapshot, MatchSignal, MatcherProfileCode, PartyReference,
-    RefreshDuplicateCandidateEvidence, SignalKindCode, SignalSourceCode,
-    decode_duplicate_candidate_case_state, duplicate_candidate_case_state_descriptor_hash,
-    encode_duplicate_candidate_case_state,
+    DUPLICATE_CANDIDATE_CASE_STATE_SCHEMA_VERSION, DecideDuplicateCandidateCase,
+    DecisionReasonCode, DuplicateCandidateCase, DuplicateCandidateCaseId,
+    DuplicateCandidateCaseStatus, EvidenceReference, MatchEvidenceSnapshot, MatchSignal,
+    MatcherProfileCode, PartyReference, RefreshDuplicateCandidateEvidence, SignalKindCode,
+    SignalSourceCode, decode_duplicate_candidate_case_state,
+    duplicate_candidate_case_state_descriptor_hash, encode_duplicate_candidate_case_state,
 };
 use crm_module_sdk::{DataClass, RecordSnapshot, SdkError};
 use crm_proto_contracts::crm::{
@@ -58,10 +57,8 @@ impl TransactionalAggregatePlanner for IdentityResolutionCapabilityPlanner {
                         REGISTER_REQUEST_SCHEMA,
                         DataClass::Personal,
                     )?;
-                let evidence = evidence_from_wire(
-                    command.evidence,
-                    "identity_resolution.candidate.evidence",
-                )?;
+                let evidence =
+                    evidence_from_wire(command.evidence, "identity_resolution.candidate.evidence")?;
                 (
                     DuplicateCandidateCaseId::for_pair(evidence.pair())?,
                     AggregatePresence::MustBeAbsent,
@@ -560,14 +557,13 @@ fn evidence_from_wire(
         .signals
         .into_iter()
         .map(|signal| {
-            let contribution_basis_points = i16::try_from(signal.contribution_basis_points).map_err(
-                |_| {
+            let contribution_basis_points = i16::try_from(signal.contribution_basis_points)
+                .map_err(|_| {
                     SdkError::invalid_argument(
                         "identity_resolution.candidate.evidence.signal.contribution_basis_points",
                         "signal contribution is outside the supported range",
                     )
-                },
-            )?;
+                })?;
             MatchSignal::try_new(
                 SignalKindCode::try_new(signal.kind)?,
                 SignalSourceCode::try_new(signal.source)?,
@@ -621,13 +617,12 @@ pub fn persisted_payload(
 pub fn duplicate_candidate_case_from_snapshot(
     snapshot: &RecordSnapshot,
 ) -> Result<DuplicateCandidateCase, SdkError> {
-    let candidate = decode_duplicate_candidate_case_state(
-        support::persisted_json_bytes_with_data_class(
+    let candidate =
+        decode_duplicate_candidate_case_state(support::persisted_json_bytes_with_data_class(
             snapshot,
             persisted_contract(),
             DataClass::Personal,
-        )?,
-    )?;
+        )?)?;
     if candidate.case_id().as_str() != snapshot.reference.record_id.as_str()
         || candidate.version() != snapshot.version
     {
