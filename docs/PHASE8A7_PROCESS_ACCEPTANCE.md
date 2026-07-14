@@ -4,7 +4,7 @@ This document defines the process-level acceptance evidence required before Phas
 
 ## Required CI execution
 
-The fresh-PostgreSQL process scenarios in this document are executed by two dedicated merge gates: `Import Process Runtime CI` proves source bytes, dry-run, target-success crash/restart recovery, tenant isolation and cursor tamper rejection; `Import Retryable Process Runtime CI` proves durable retryable target failure without checkpoint advancement followed by restart recovery and exactly-once target creation. Adding these tests and workflows does not itself constitute passing evidence; both workflows must be green on the unchanged final candidate SHA.
+The fresh-PostgreSQL process scenarios in this document are executed by two dedicated merge gates: `Import Process Runtime CI` proves source bytes, dry-run, target-success crash/restart recovery, tenant isolation and cursor tamper rejection; `Import Retryable Process Runtime CI` proves durable retryable target failure without checkpoint advancement followed by restart recovery and exactly-once target creation. Each process scenario publishes its required durable capability/worker fixtures into its own fresh database before `crm-api` starts, so process evidence does not depend on state left by another test job. Adding these tests and workflows does not itself constitute passing evidence; both workflows must be green on the unchanged final candidate SHA.
 
 ## Source artifact proof
 
