@@ -12,6 +12,7 @@ on:
       - "modules/**/*.rs"
       - "services/**/Cargo.toml"
       - "services/**/*.rs"
+      - "proto/**"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -25,7 +26,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,7 +35,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Wire Phase 8A.6 application runtime
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.18.0"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
+      - name: Wire and verify signed approval transport
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -45,124 +52,94 @@ jobs:
               text = target.read_text()
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"{path}: expected one replacement, found {count}: {old[:80]!r}")
+                  raise SystemExit(f"{path}: expected one replacement, found {count}: {old[:100]!r}")
               target.write_text(text.replace(old, new, 1))
 
-          cargo = "crates/crm-application-runtime/Cargo.toml"
+          grpc = "crates/crm-application-runtime/src/gateway_grpc.rs"
           replace_once(
-              cargo,
-              'crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }\ncrm-identity-resolution-query-adapter = { path = "../crm-identity-resolution-query-adapter" }',
-              'crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }\ncrm-identity-resolution-merge-composition = { path = "../crm-identity-resolution-merge-composition" }\ncrm-identity-resolution-query-adapter = { path = "../crm-identity-resolution-query-adapter" }\ncrm-identity-resolution-merge-query-adapter = { path = "../crm-identity-resolution-merge-query-adapter" }',
-          )
-
-          governed = "crates/crm-application-runtime/src/governed_metadata.rs"
-          replace_once(
-              governed,
-              '''use crm_identity_resolution_capability_adapter::{\n    IdentityResolutionCapabilityPlanner,\n    MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS,\n    capability_definitions as identity_resolution_capability_definitions,\n};''',
-              '''use crm_identity_resolution_capability_adapter::{\n    CANDIDATE_MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_CANDIDATE_MUTATION_CAPABILITY_IDS,\n    IdentityResolutionCapabilityPlanner,\n    MERGE_MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MERGE_MUTATION_CAPABILITY_IDS,\n    MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS,\n    capability_definitions as identity_resolution_capability_definitions,\n};''',
+              grpc,
+              'use crm_capability_ingress::{CapabilityRoute, GrpcCapabilityMessage, GrpcQueryMessage};\nuse crm_module_sdk::{',
+              'use crm_capability_ingress::{CapabilityRoute, GrpcCapabilityMessage, GrpcQueryMessage};\nuse crm_capability_runtime::ApprovalEvidence;\nuse crm_module_sdk::{',
           )
           replace_once(
-              governed,
-              '''use crm_identity_resolution_capability_composition::{\n    IdentityResolutionCapabilityExecutor, PostgresIdentityResolutionReferenceReader,\n};\nuse crm_identity_resolution_query_adapter::{''',
-              '''use crm_identity_resolution_capability_composition::{\n    IdentityResolutionCapabilityExecutor, PostgresIdentityResolutionReferenceReader,\n};\nuse crm_identity_resolution_merge_composition::{\n    MergeLineageCapabilityExecutor, PostgresMergeLineageReferenceReader,\n};\nuse crm_identity_resolution_merge_query_adapter::{\n    IdentityResolutionMergeQueryAdapter,\n    QUERY_CAPABILITY_IDS as IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS,\n    query_capability_definitions as identity_resolution_merge_query_capability_definitions,\n};\nuse crm_identity_resolution_query_adapter::{''',
+              grpc,
+              '    DataClass, ModuleId, PayloadEncoding, RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,\n};',
+              '    ActorId, CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding,\n    RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,\n};',
           )
           replace_once(
-              governed,
-              '    definitions.extend(identity_resolution_query_capability_definitions()?);\n    definitions.extend(metadata_query_capability_definitions()?);',
-              '    definitions.extend(identity_resolution_query_capability_definitions()?);\n    definitions.extend(identity_resolution_merge_query_capability_definitions()?);\n    definitions.extend(metadata_query_capability_definitions()?);',
+              grpc,
+              '''        let request = request.into_inner();\n        let input = decode_payload(request.input)?;\n        let route = decode_route(''',
+              '''        let request = request.into_inner();\n        let input = decode_payload(request.input)?;\n        let approval = decode_approval(request.approval)?;\n        let route = decode_route(''',
           )
           replace_once(
-              governed,
-              '    identity_resolution: IdentityResolutionCapabilityExecutor,\n}',
-              '    identity_resolution: IdentityResolutionCapabilityExecutor,\n    identity_resolution_merge: MergeLineageCapabilityExecutor,\n}',
+              grpc,
+              '''        let mut governed_request = Request::new(GrpcCapabilityMessage {\n            route,\n            input,\n            approval: None,\n        });''',
+              '''        let mut governed_request = Request::new(GrpcCapabilityMessage {\n            route,\n            input,\n            approval,\n        });''',
           )
           replace_once(
-              governed,
-              '''        let identity_resolution = IdentityResolutionCapabilityExecutor::new(\n            Arc::new(PostgresIdentityResolutionReferenceReader::new(\n                store.clone(),\n            )),\n            aggregate.clone(),\n        );\n        Self {''',
-              '''        let identity_resolution = IdentityResolutionCapabilityExecutor::new(\n            Arc::new(PostgresIdentityResolutionReferenceReader::new(\n                store.clone(),\n            )),\n            aggregate.clone(),\n        );\n        let identity_resolution_merge = MergeLineageCapabilityExecutor::new(\n            Arc::new(PostgresMergeLineageReferenceReader::new(store.clone())),\n            aggregate.clone(),\n        );\n        Self {''',
-          )
-          replace_once(
-              governed,
-              '            consents,\n            identity_resolution,\n        }',
-              '            consents,\n            identity_resolution,\n            identity_resolution_merge,\n        }',
-          )
-          replace_once(
-              governed,
-              '            .field("identity_resolution", &self.identity_resolution)\n            .finish()',
-              '            .field("identity_resolution", &self.identity_resolution)\n            .field("identity_resolution_merge", &self.identity_resolution_merge)\n            .finish()',
-          )
-          replace_once(
-              governed,
-              '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.execute(definition, request)\n        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {''',
-              '''        } else if IDENTITY_RESOLUTION_CANDIDATE_MUTATION_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.execute(definition, request)\n        } else if IDENTITY_RESOLUTION_MERGE_MUTATION_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution_merge.execute(definition, request)\n        } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {''',
-          )
-          replace_once(
-              governed,
-              '    identity_resolution: IdentityResolutionQueryAdapter,\n    metadata: MetadataQueryAdapter,',
-              '    identity_resolution: IdentityResolutionQueryAdapter,\n    identity_resolution_merge: IdentityResolutionMergeQueryAdapter,\n    metadata: MetadataQueryAdapter,',
-          )
-          replace_once(
-              governed,
-              '        identity_resolution: IdentityResolutionQueryAdapter,\n        metadata: MetadataQueryAdapter,',
-              '        identity_resolution: IdentityResolutionQueryAdapter,\n        identity_resolution_merge: IdentityResolutionMergeQueryAdapter,\n        metadata: MetadataQueryAdapter,',
-          )
-          replace_once(
-              governed,
-              '            identity_resolution,\n            metadata,',
-              '            identity_resolution,\n            identity_resolution_merge,\n            metadata,',
-          )
-          replace_once(
-              governed,
-              '''        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.validate(definition, request)\n        } else {''',
-              '''        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.validate(definition, request)\n        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution_merge.validate(definition, request)\n        } else {''',
-          )
-          replace_once(
-              governed,
-              '''        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.execute(definition, request)\n        } else {''',
-              '''        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution.execute(definition, request)\n        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS\n            .contains(&definition.capability_id.as_str())\n        {\n            self.identity_resolution_merge.execute(definition, request)\n        } else {''',
-          )
-          replace_once(
-              governed,
-              '                + IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS.len()\n                + METADATA_QUERY_CAPABILITY_IDS.len()',
-              '                + IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS.len()\n                + IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS.len()\n                + METADATA_QUERY_CAPABILITY_IDS.len()',
-          )
-          replace_once(
-              governed,
-              '''        for coordinate in IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS {\n            assert!(\n                queries\n                    .iter()\n                    .any(|definition| definition.capability_id.as_str() == coordinate)\n            );\n        }\n        for coordinate in METADATA_QUERY_CAPABILITY_IDS {''',
-              '''        for coordinate in IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS {\n            assert!(\n                queries\n                    .iter()\n                    .any(|definition| definition.capability_id.as_str() == coordinate)\n            );\n        }\n        for coordinate in IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS {\n            assert!(\n                queries\n                    .iter()\n                    .any(|definition| definition.capability_id.as_str() == coordinate)\n            );\n        }\n        for coordinate in METADATA_QUERY_CAPABILITY_IDS {''',
+              grpc,
+              '''fn encode_mutation_result(\n    result: crm_capability_runtime::CapabilityExecutionResult,''',
+              '''fn decode_approval(\n    approval: Option<gateway_v1::ApprovalEvidence>,\n) -> Result<Option<ApprovalEvidence>, Status> {\n    approval\n        .map(|approval| {\n            let input_hash: [u8; 32] = approval\n                .input_hash\n                .try_into()\n                .map_err(|_| Status::invalid_argument("approval input_hash must be 32 bytes"))?;\n            Ok(ApprovalEvidence {\n                approval_id: approval.approval_id,\n                actor_id: ActorId::try_new(approval.actor_id)\n                    .map_err(|_| Status::invalid_argument("approval actor_id is invalid"))?,\n                capability_id: CapabilityId::try_new(approval.capability_id)\n                    .map_err(|_| Status::invalid_argument("approval capability_id is invalid"))?,\n                capability_version: CapabilityVersion::try_new(approval.capability_version)\n                    .map_err(|_| Status::invalid_argument("approval capability_version is invalid"))?,\n                input_hash,\n                policy_version: approval.policy_version,\n                expires_at_unix_nanos: approval.expires_at_unix_nanos,\n                opaque_proof: approval.opaque_proof,\n            })\n        })\n        .transpose()\n}\n\nfn encode_mutation_result(\n    result: crm_capability_runtime::CapabilityExecutionResult,''',
           )
 
           runtime = "crates/crm-application-runtime/src/runtime.rs"
           replace_once(
               runtime,
-              'use crm_identity_resolution_query_adapter::IdentityResolutionQueryAdapter;',
-              'use crm_identity_resolution_merge_query_adapter::IdentityResolutionMergeQueryAdapter;\nuse crm_identity_resolution_query_adapter::IdentityResolutionQueryAdapter;',
+              '''use crm_capability_adapters::{\n    ApprovalStore, AuthorizationGrant, FixedWindowRateLimiter, LiveAuthorizationStore,\n    LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore,\n    QueryVisibilityGrant, RateLimitPolicyStore, StoredApprovalVerifier,\n};''',
+              '''use crm_capability_adapters::{\n    AuthorizationGrant, FixedWindowRateLimiter, HmacSha256ApprovalVerifier,\n    LiveAuthorizationStore, LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer,\n    LiveQueryVisibilityStore, QueryVisibilityGrant, RateLimitPolicyStore,\n};''',
           )
           replace_once(
               runtime,
-              '''        let identity_resolution_query_adapter = IdentityResolutionQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let search_query_adapter = SearchQueryAdapter::new(''',
-              '''        let identity_resolution_query_adapter = IdentityResolutionQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let identity_resolution_merge_query_adapter = IdentityResolutionMergeQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let search_query_adapter = SearchQueryAdapter::new(''',
+              'use crm_capability_runtime::{CapabilityDefinition, CapabilityGateway};',
+              'use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityGateway};',
           )
           replace_once(
               runtime,
-              '            consent_query_adapter,\n            identity_resolution_query_adapter,\n            metadata_query_adapter,',
-              '            consent_query_adapter,\n            identity_resolution_query_adapter,\n            identity_resolution_merge_query_adapter,\n            metadata_query_adapter,',
+              '''use crm_module_sdk::{\n    CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,''',
+              '''use crm_module_sdk::{\n    ActorId, CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,''',
+          )
+          replace_once(
+              runtime,
+              '            Arc::new(StoredApprovalVerifier::new(ApprovalStore::default())),',
+              '''            Arc::new(\n                HmacSha256ApprovalVerifier::try_new(config.approval_signing_key.clone())\n                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            ),''',
+          )
+          replace_once(
+              runtime,
+              '''#[derive(Debug, serde::Deserialize)]\nstruct PathCoordinate {\n    owner_module_id: String,\n    capability_id: String,\n    capability_version: String,\n}\n''',
+              '''#[derive(Debug, serde::Deserialize)]\nstruct PathCoordinate {\n    owner_module_id: String,\n    capability_id: String,\n    capability_version: String,\n}\n\n#[derive(Debug, serde::Deserialize)]\n#[serde(untagged)]\nenum HttpMutationBody {\n    Payload(TypedPayload),\n    Envelope {\n        input: TypedPayload,\n        approval: Option<HttpApprovalEvidence>,\n    },\n}\n\n#[derive(Debug, serde::Deserialize)]\nstruct HttpApprovalEvidence {\n    approval_id: String,\n    actor_id: String,\n    capability_id: String,\n    capability_version: String,\n    input_hash: Vec<u8>,\n    policy_version: String,\n    expires_at_unix_nanos: i64,\n    opaque_proof: Vec<u8>,\n}\n\nimpl HttpMutationBody {\n    fn into_parts(self) -> Result<(TypedPayload, Option<ApprovalEvidence>), ()> {\n        match self {\n            Self::Payload(input) => Ok((input, None)),\n            Self::Envelope { input, approval } => {\n                Ok((input, approval.map(decode_http_approval).transpose()?))\n            }\n        }\n    }\n}\n\nfn decode_http_approval(value: HttpApprovalEvidence) -> Result<ApprovalEvidence, ()> {\n    Ok(ApprovalEvidence {\n        approval_id: value.approval_id,\n        actor_id: ActorId::try_new(value.actor_id).map_err(|_| ())?,\n        capability_id: CapabilityId::try_new(value.capability_id).map_err(|_| ())?,\n        capability_version: CapabilityVersion::try_new(value.capability_version).map_err(|_| ())?,\n        input_hash: value.input_hash.try_into().map_err(|_| ())?,\n        policy_version: value.policy_version,\n        expires_at_unix_nanos: value.expires_at_unix_nanos,\n        opaque_proof: value.opaque_proof,\n    })\n}\n''',
+          )
+          replace_once(
+              runtime,
+              '''    headers: HeaderMap,\n    Json(input): Json<TypedPayload>,\n) -> Response {\n    let route = match capability_route(&path, &input) {''',
+              '''    headers: HeaderMap,\n    Json(body): Json<HttpMutationBody>,\n) -> Response {\n    let (input, approval) = match body.into_parts() {\n        Ok(parts) => parts,\n        Err(()) => return bad_approval(),\n    };\n    let route = match capability_route(&path, &input) {''',
+          )
+          replace_once(
+              runtime,
+              '''            headers,\n            route,\n            input,\n            approval: None,\n        })''',
+              '''            headers,\n            route,\n            input,\n            approval,\n        })''',
+          )
+          replace_once(
+              runtime,
+              '''fn bad_route() -> Response {\n    (\n        StatusCode::BAD_REQUEST,\n        Json(json!({"error": "invalid_route"})),\n    )\n        .into_response()\n}\n''',
+              '''fn bad_route() -> Response {\n    (\n        StatusCode::BAD_REQUEST,\n        Json(json!({"error": "invalid_route"})),\n    )\n        .into_response()\n}\n\nfn bad_approval() -> Response {\n    (\n        StatusCode::BAD_REQUEST,\n        Json(json!({"error": "invalid_approval"})),\n    )\n        .into_response()\n}\n''',
           )
           PY
           cargo generate-lockfile
           cargo fmt --all
-          cargo clippy -p crm-application-runtime --all-targets --all-features -- -D warnings
-          cargo test -p crm-application-runtime
-      - name: Commit runtime wiring when verified
+          cargo clippy -p crm-capability-adapters -p crm-application-runtime --all-targets --all-features -- -D warnings
+          cargo test -p crm-capability-adapters -p crm-application-runtime
+          pnpm install --frozen-lockfile
+          pnpm web:generate
+      - name: Commit signed approval wiring when verified
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates/crm-application-runtime; then
-            echo "Phase 8A.6 runtime wiring is already synchronized."
+          if git diff --quiet -- Cargo.lock crates packages/client/src/contract_hashes.ts; then
+            echo "Signed approval transport is already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates/crm-application-runtime
-          git commit -m "Wire Phase 8A.6 merge runtime and queries"
+          git add Cargo.lock crates packages/client/src/contract_hashes.ts
+          git commit -m "Wire signed approval transport and verification"
           git push origin "HEAD:${HEAD_BRANCH}"
