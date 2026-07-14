@@ -52,7 +52,10 @@ fn validation_progress_is_server_accumulated_before_exact_version_finalization()
             occurred_at_unix_nanos: 3,
         })
         .unwrap_err();
-    assert_eq!(incomplete.code, "CUSTOMER_DATA_IMPORT_VALIDATION_INCOMPLETE");
+    assert_eq!(
+        incomplete.code,
+        "CUSTOMER_DATA_IMPORT_VALIDATION_INCOMPLETE"
+    );
 
     job.record_validation_batch(RecordImportValidationBatch {
         expected_version: 2,

@@ -23,15 +23,27 @@ fn public_execution_index_orders_by_source_position_not_relationship_page_order(
     .unwrap();
 
     assert_eq!(
-        index.next_after_checkpoint(0).unwrap().unwrap().row_position(),
+        index
+            .next_after_checkpoint(0)
+            .unwrap()
+            .unwrap()
+            .row_position(),
         1
     );
     assert_eq!(
-        index.next_after_checkpoint(1).unwrap().unwrap().row_position(),
+        index
+            .next_after_checkpoint(1)
+            .unwrap()
+            .unwrap()
+            .row_position(),
         2
     );
     assert_eq!(
-        index.next_after_checkpoint(2).unwrap().unwrap().row_position(),
+        index
+            .next_after_checkpoint(2)
+            .unwrap()
+            .unwrap()
+            .row_position(),
         3
     );
     assert!(index.next_after_checkpoint(3).unwrap().is_none());

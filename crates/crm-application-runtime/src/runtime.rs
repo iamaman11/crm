@@ -311,6 +311,13 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -985,6 +992,34 @@ fn bootstrap_application_access(
                     party_relationship_fields(),
                     expires_at,
                 )?,
+                CUSTOMER_DATA_OPERATIONS_MODULE_ID => {
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+                            resource_type: CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
+                        },
+                        customer_data_import_job_fields(),
+                        expires_at,
+                    )?;
+                    if definition.capability_id.as_str() == LIST_IMPORT_ROWS_CAPABILITY {
+                        upsert_bootstrap_visibility(
+                            visibility_store,
+                            config,
+                            tenant_id,
+                            definition,
+                            BootstrapVisibilityResource {
+                                owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+                                resource_type: CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
+                            },
+                            customer_data_import_row_fields(),
+                            expires_at,
+                        )?;
+                    }
+                }
                 METADATA_MODULE_ID => {}
                 CUSTOMER_360_MODULE_ID => {
                     upsert_bootstrap_visibility(

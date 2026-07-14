@@ -14,11 +14,13 @@
 //! Import-row validation evidence is durable before any governed target-owner execution begins.
 
 pub mod domain;
+pub mod execution;
 pub mod persistence;
 pub mod profile;
 pub mod validation;
 
 pub use domain::*;
+pub use execution::*;
 pub use persistence::*;
 pub use profile::*;
 pub use validation::*;

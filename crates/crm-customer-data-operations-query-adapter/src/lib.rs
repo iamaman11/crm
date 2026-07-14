@@ -594,6 +594,7 @@ fn job_matches_status(job: &ImportJob, status: i32) -> bool {
         Some(wire::ImportJobStatus::Executing) => job.status() == ImportJobStatus::Executing,
         Some(wire::ImportJobStatus::Completed) => job.status() == ImportJobStatus::Completed,
         Some(wire::ImportJobStatus::Cancelled) => job.status() == ImportJobStatus::Cancelled,
+        Some(_) => false,
     }
 }
 
@@ -607,6 +608,7 @@ fn row_matches_status(row: &ImportRow, status: i32) -> bool {
             row.status() == ImportRowStatus::FailedRetryable
         }
         Some(wire::ImportRowStatus::Succeeded) => row.status() == ImportRowStatus::Succeeded,
+        Some(_) => false,
     }
 }
 

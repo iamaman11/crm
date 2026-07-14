@@ -574,6 +574,68 @@ impl ImportJob {
         })
     }
 
+    pub fn record_validation_batch(
+        &mut self,
+        command: RecordImportValidationBatch,
+    ) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
+        self.require_monotonic_time(command.occurred_at_unix_nanos)?;
+        if self.status != ImportJobStatus::Created {
+            return Err(conflict(
+                "CUSTOMER_DATA_IMPORT_JOB_NOT_CREATED",
+                "only a created import job can accept validation progress",
+            ));
+        }
+
+        let next_valid_rows = self
+            .valid_rows
+            .checked_add(command.valid_rows)
+            .ok_or_else(|| invalid_counter("valid row count overflow"))?;
+        let next_invalid_rows = self
+            .invalid_rows
+            .checked_add(command.invalid_rows)
+            .ok_or_else(|| invalid_counter("invalid row count overflow"))?;
+        let next_total = next_valid_rows
+            .checked_add(next_invalid_rows)
+            .ok_or_else(|| invalid_counter("validation row counts overflow"))?;
+        if next_total > self.total_rows {
+            return Err(invalid_counter(
+                "accumulated validation rows cannot exceed the immutable source row count",
+            ));
+        }
+
+        self.valid_rows = next_valid_rows;
+        self.invalid_rows = next_invalid_rows;
+        self.advance(command.occurred_at_unix_nanos)
+    }
+
+    pub fn finalize_validation(
+        &mut self,
+        command: FinalizeImportValidation,
+    ) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
+        self.require_monotonic_time(command.occurred_at_unix_nanos)?;
+        if self.status != ImportJobStatus::Created {
+            return Err(conflict(
+                "CUSTOMER_DATA_IMPORT_JOB_NOT_CREATED",
+                "only a created import job can finalize validation",
+            ));
+        }
+        let validated_rows = self
+            .valid_rows
+            .checked_add(self.invalid_rows)
+            .ok_or_else(|| invalid_counter("validation row counts overflow"))?;
+        if validated_rows != self.total_rows {
+            return Err(conflict(
+                "CUSTOMER_DATA_IMPORT_VALIDATION_INCOMPLETE",
+                "all immutable source rows must have authoritative validation outcomes before finalization",
+            ));
+        }
+
+        self.status = ImportJobStatus::Validated;
+        self.advance(command.occurred_at_unix_nanos)
+    }
+
     pub fn mark_validated(&mut self, command: MarkImportJobValidated) -> Result<(), SdkError> {
         self.require_version(command.expected_version)?;
         self.require_monotonic_time(command.occurred_at_unix_nanos)?;
@@ -751,6 +813,18 @@ impl ImportJob {
 
     pub const fn version(&self) -> i64 {
         self.version
+    }
+
+    pub const fn total_rows(&self) -> u32 {
+        self.total_rows
+    }
+
+    pub const fn valid_rows(&self) -> u32 {
+        self.valid_rows
+    }
+
+    pub const fn invalid_rows(&self) -> u32 {
+        self.invalid_rows
     }
 
     pub const fn checkpoint_row_position(&self) -> u32 {

@@ -175,6 +175,10 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             .contains(&definition.capability_id.as_str())
         {
             IdentityResolutionCapabilityPlanner.target(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            CustomerDataOperationsCapabilityPlanner.target(definition, request)
         } else {
             SalesActivitiesCapabilityPlannerRouter.target(definition, request)
         }
@@ -203,6 +207,10 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             .contains(&definition.capability_id.as_str())
         {
             IdentityResolutionCapabilityPlanner.plan(definition, request, current)
+        } else if CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            CustomerDataOperationsCapabilityPlanner.plan(definition, request, current)
         } else {
             SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
         }
@@ -512,6 +520,10 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
             .contains(&definition.capability_id.as_str())
         {
             self.identity_resolution_merge.validate(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.customer_data_operations.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -548,6 +560,10 @@ impl QueryExecutor for ApplicationQueryRouter {
             .contains(&definition.capability_id.as_str())
         {
             self.identity_resolution_merge.execute(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.customer_data_operations.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }

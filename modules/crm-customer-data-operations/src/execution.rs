@@ -163,9 +163,30 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(index.next_after_checkpoint(0).unwrap().unwrap().row_position(), 1);
-        assert_eq!(index.next_after_checkpoint(1).unwrap().unwrap().row_position(), 2);
-        assert_eq!(index.next_after_checkpoint(2).unwrap().unwrap().row_position(), 3);
+        assert_eq!(
+            index
+                .next_after_checkpoint(0)
+                .unwrap()
+                .unwrap()
+                .row_position(),
+            1
+        );
+        assert_eq!(
+            index
+                .next_after_checkpoint(1)
+                .unwrap()
+                .unwrap()
+                .row_position(),
+            2
+        );
+        assert_eq!(
+            index
+                .next_after_checkpoint(2)
+                .unwrap()
+                .unwrap()
+                .row_position(),
+            3
+        );
         assert!(index.next_after_checkpoint(3).unwrap().is_none());
     }
 
@@ -187,15 +208,27 @@ mod tests {
 
     #[test]
     fn missing_positions_fail_before_target_execution() {
-        let error = ExecutionPositionIndex::build(3, [row(1, ImportRowStatus::Valid), row(3, ImportRowStatus::Valid)])
-            .unwrap_err();
-        assert_eq!(error.code, "CUSTOMER_DATA_IMPORT_EXECUTION_ROW_SET_INCOMPLETE");
+        let error = ExecutionPositionIndex::build(
+            3,
+            [
+                row(1, ImportRowStatus::Valid),
+                row(3, ImportRowStatus::Valid),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.code,
+            "CUSTOMER_DATA_IMPORT_EXECUTION_ROW_SET_INCOMPLETE"
+        );
     }
 
     #[test]
     fn checkpoint_must_stay_inside_source_range() {
         let index = ExecutionPositionIndex::build(1, [row(1, ImportRowStatus::Valid)]).unwrap();
         let error = index.next_after_checkpoint(2).unwrap_err();
-        assert_eq!(error.code, "CUSTOMER_DATA_IMPORT_EXECUTION_CHECKPOINT_INVALID");
+        assert_eq!(
+            error.code,
+            "CUSTOMER_DATA_IMPORT_EXECUTION_CHECKPOINT_INVALID"
+        );
     }
 }

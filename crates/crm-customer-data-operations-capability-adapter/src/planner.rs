@@ -8,6 +8,8 @@ use crate::{
     PARTY_IMPORT_EXECUTION_STARTED_EVENT_SCHEMA, PARTY_IMPORT_EXECUTION_STARTED_EVENT_TYPE,
     PARTY_IMPORT_JOB_CREATED_EVENT_SCHEMA, PARTY_IMPORT_JOB_CREATED_EVENT_TYPE,
     PARTY_IMPORT_ROW_VALIDATED_EVENT_SCHEMA, PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE,
+    PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_SCHEMA, PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_TYPE,
+    PARTY_IMPORT_VALIDATION_PROGRESSED_EVENT_SCHEMA, PARTY_IMPORT_VALIDATION_PROGRESSED_EVENT_TYPE,
     START_PARTY_IMPORT_EXECUTION_CAPABILITY, START_PARTY_IMPORT_EXECUTION_REQUEST_SCHEMA,
     START_PARTY_IMPORT_EXECUTION_RESPONSE_SCHEMA, VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
     VALIDATE_PARTY_IMPORT_ROWS_REQUEST_SCHEMA, VALIDATE_PARTY_IMPORT_ROWS_RESPONSE_SCHEMA,
@@ -20,16 +22,17 @@ use crm_core_data::{
 };
 use crm_customer_data_operations::{
     CancelImportJob, CreateImportJob, CreateValidatedImportRow, ExternalPartyIdentifierDigest,
-    IMPORT_JOB_STATE_MAXIMUM_BYTES, IMPORT_JOB_STATE_RETENTION_POLICY_ID,
+    FinalizeImportValidation, IMPORT_JOB_STATE_MAXIMUM_BYTES, IMPORT_JOB_STATE_RETENTION_POLICY_ID,
     IMPORT_JOB_STATE_SCHEMA_ID, IMPORT_JOB_STATE_SCHEMA_VERSION, IMPORT_ROW_STATE_MAXIMUM_BYTES,
     IMPORT_ROW_STATE_RETENTION_POLICY_ID, IMPORT_ROW_STATE_SCHEMA_ID,
     IMPORT_ROW_STATE_SCHEMA_VERSION, ImportCanonicalizationVersion, ImportHeaderMode, ImportJob,
     ImportJobId, ImportJobStatus, ImportParserProfile, ImportParserVersion, ImportRow,
     ImportRowStatus, ImportSourceFormat, ImportTextEncoding, InitialImportRowValidation,
-    PartialExecutionPolicy, PartyImportKind, PartyImportMapping, PreparedPartyRow, RowDiagnostic,
-    RowIdentitySource, SourceDescriptor, SourceSystemId, StartImportExecution, TargetPartyId,
-    create_validated_import_row, decode_import_job_state, encode_import_job_state,
-    encode_import_row_state, import_job_state_descriptor_hash, import_row_state_descriptor_hash,
+    PartialExecutionPolicy, PartyImportKind, PartyImportMapping, PreparedPartyRow,
+    RecordImportValidationBatch, RowDiagnostic, RowIdentitySource, SourceDescriptor,
+    SourceSystemId, StartImportExecution, TargetPartyId, create_validated_import_row,
+    decode_import_job_state, encode_import_job_state, encode_import_row_state,
+    import_job_state_descriptor_hash, import_row_state_descriptor_hash,
 };
 use crm_module_sdk::{
     DataClass, ErrorCategory, RecordSnapshot, RelationshipRef, RelationshipType, SdkError,
@@ -147,7 +150,9 @@ impl TransactionalAggregatePlanner for CustomerDataOperationsCapabilityPlanner {
                 plan_start_execution(definition, request, current)
             }
             CANCEL_PARTY_IMPORT_JOB_CAPABILITY => plan_cancel(definition, request, current),
-            FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY => Err(finalize_requires_composition()),
+            FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY => {
+                plan_finalize_validation(definition, request, current)
+            }
             _ => Err(unsupported_capability()),
         }
     }
