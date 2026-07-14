@@ -37,6 +37,12 @@ provides:
       version: "1.0.0"
     - id: parties.party.updated
       version: "1.0.0"
+    - id: parties.party.merge_redirect_applied
+      version: "1.0.0"
+    - id: parties.party.merge_redirect_removed
+      version: "1.0.0"
+    - id: parties.party.merge_survivorship_updated
+      version: "1.0.0"
   objects:
     - parties.party
     - parties.person
