@@ -166,6 +166,8 @@ A fresh-PostgreSQL real `crm-api` acceptance scenario MUST prove at least:
 
 ## 11. Current implementation consequence
 
-The next execution implementation packet inside PR #121 must introduce governed import-owned execution result/checkpoint mutations and a worker/composition boundary that uses the production `GatewayCapabilityClient` or an equivalent adapter over the normal `CapabilityGateway`.
+The public import mutation/query boundary is now cataloged and routed through the production application runtime, including server-derived validation progress, race-safe finalization, query visibility and signed cursors. The next execution implementation inside PR #121 must therefore remain behind that governed boundary rather than introducing alternate ingress or storage paths.
+
+The next implementation packet must add private import-owned execution result/checkpoint transactions and a worker/composition boundary that invokes target Party creation through the production `GatewayCapabilityClient` over the normal `CapabilityGateway`.
 
 The worker must not be marked production-complete until the source-byte/parser-profile proof and the process-level crash/restart scenario are both automated.
