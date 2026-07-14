@@ -1,0 +1,18 @@
+[package]
+name = "crm-identity-resolution-capability-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-core-data = { path = "../crm-core-data" }
+crm-identity-resolution = { path = "../../modules/crm-identity-resolution" }
+crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
