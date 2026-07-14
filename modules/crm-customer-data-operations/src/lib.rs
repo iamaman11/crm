@@ -10,6 +10,7 @@
 //! infrastructure or direct customer-master storage access. Target-owner writes are intentionally
 //! deferred to governed application composition rather than exposed from this pure domain crate.
 //! Its private job and row state is encoded through strict versioned deterministic persistence.
+//! Source-system identifiers remain import-owned evidence and never become canonical Party IDs.
 
 pub mod domain;
 pub mod persistence;
