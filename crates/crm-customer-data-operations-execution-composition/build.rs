@@ -108,10 +108,8 @@ fn main() {
         "                import_row_id: row_id.as_str().to_owned(),",
     );
 
-    run(
-        repo,
-        "cargo",
-        &[
+    let hash_status = Command::new("cargo")
+        .args([
             "run",
             "-p",
             "crm-proto-contracts",
@@ -119,8 +117,13 @@ fn main() {
             "generate_hashes",
             "--",
             "packages/client/src/contract_hashes.ts",
-        ],
-    );
+        ])
+        .env("CARGO_TARGET_DIR", "/tmp/phase8a7-contract-hashgen")
+        .current_dir(repo)
+        .status()
+        .expect("contract hash generator must start");
+    assert!(hash_status.success(), "contract hash generation failed: {hash_status}");
+
     run(repo, "cargo", &["fmt", "--all"]);
     fs::remove_file(manifest_dir.join("build.rs")).expect("temporary build patch must be removable");
 }
