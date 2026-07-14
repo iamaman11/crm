@@ -24,53 +24,66 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
+          show-progress: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Add explicit empty approval to legacy process mutations
+      - name: Add explicit empty approval to existing gateway mutations
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          changed = 0
-          for path in sorted(Path("services/crm-api/tests").glob("*_process_e2e.rs")):
-              text = path.read_text()
+          def blocks(text: str):
               cursor = 0
-              pieces = []
               while True:
                   start = text.find("GatewayMutateRequest {", cursor)
                   if start < 0:
-                      pieces.append(text[cursor:])
-                      break
-                  pieces.append(text[cursor:start])
+                      return
                   brace = text.find("{", start)
                   depth = 0
                   end = None
                   for index in range(brace, len(text)):
-                      char = text[index]
-                      if char == "{":
+                      if text[index] == "{":
                           depth += 1
-                      elif char == "}":
+                      elif text[index] == "}":
                           depth -= 1
                           if depth == 0:
                               end = index
                               break
                   if end is None:
-                      raise SystemExit(f"unclosed GatewayMutateRequest initializer in {path}")
+                      raise SystemExit("unclosed GatewayMutateRequest initializer")
+                  yield start, end
+                  cursor = end + 1
+
+          changed = 0
+          for path in sorted(Path("services/crm-api/tests").glob("*.rs")):
+              text = path.read_text()
+              spans = list(blocks(text))
+              if not spans:
+                  continue
+              output = []
+              cursor = 0
+              for start, end in spans:
+                  output.append(text[cursor:start])
                   block = text[start:end + 1]
                   if "approval:" not in block:
-                      line_start = text.rfind("\n", start, end) + 1
                       closing_line_start = text.rfind("\n", start, end) + 1
                       closing_indent = text[closing_line_start:end]
-                      block = block[:-1] + f"    approval: None,\n{closing_indent}" + "}"
+                      block = block[:-1] + "    approval: None,\n" + closing_indent + "}"
                       changed += 1
-                  pieces.append(block)
+                  output.append(block)
                   cursor = end + 1
-              path.write_text("".join(pieces))
+              output.append(text[cursor:])
+              updated = "".join(output)
+              for start, end in blocks(updated):
+                  if "approval:" not in updated[start:end + 1]:
+                      raise SystemExit(f"approval field still missing in {path}")
+              path.write_text(updated)
 
-          if changed != 3:
-              raise SystemExit(f"expected exactly 3 legacy mutation constructors, changed {changed}")
+          if changed == 0:
+              raise SystemExit("no legacy GatewayMutateRequest initializer required migration")
+          print(f"updated {changed} GatewayMutateRequest initializers")
           PY
           cargo fmt --all
       - name: Commit compatibility updates
