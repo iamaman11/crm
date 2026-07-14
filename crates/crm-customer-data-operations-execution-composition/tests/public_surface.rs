@@ -1,8 +1,8 @@
 use crm_customer_data_operations::{
     CreateImportJob, CreateValidatedImportRow, ImportJob, ImportJobId, ImportParserProfile,
     InitialImportRowValidation, MarkImportJobValidated, PartialExecutionPolicy, PartyImportKind,
-    PartyImportMapping, PreparedPartyRow, SourceDescriptor, SourceSystemId, StartImportExecution,
-    TargetPartyId, create_validated_import_row,
+    PartyImportMapping, PreparedPartyRow, RowDiagnostic, SourceDescriptor, SourceSystemId,
+    StartImportExecution, TargetPartyId, create_validated_import_row,
 };
 use crm_customer_data_operations_execution_composition::{
     CONTRACT_VERSION, ImportExecutionSnapshot, party_create_invocation,
@@ -49,6 +49,28 @@ fn execution_snapshot_rejects_an_incomplete_authoritative_row_set_before_target_
     assert_eq!(
         error.code,
         "CUSTOMER_DATA_IMPORT_EXECUTION_ROW_SET_INCOMPLETE"
+    );
+}
+
+#[test]
+fn invalid_row_cannot_build_a_target_party_invocation() {
+    let row = create_validated_import_row(CreateValidatedImportRow {
+        job_id: ImportJobId::try_new("import-job-invalid-target-1").unwrap(),
+        row_position: 1,
+        external_row_key: None,
+        source_external_id: None,
+        outcome: InitialImportRowValidation::Invalid(vec![
+            RowDiagnostic::try_new("DISPLAY_NAME_MISSING", "display_name").unwrap(),
+        ]),
+        occurred_at_unix_nanos: 10,
+    })
+    .unwrap();
+
+    let error = party_create_invocation(&row).unwrap_err();
+
+    assert_eq!(
+        error.code,
+        "CUSTOMER_DATA_IMPORT_EXECUTION_ROW_NOT_EXECUTABLE"
     );
 }
 
