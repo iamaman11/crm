@@ -323,7 +323,7 @@ fn batch_from_plan(
             job,
             row_id,
             row_position,
-        } => skipped_invalid_batch(definition, request, &job, &row_id, row_position),
+        } => skipped_invalid_batch(definition, request, &job, &row_id),
         ImportExecutionOutcomePlan::Succeeded {
             job,
             row,
@@ -343,7 +343,6 @@ fn skipped_invalid_batch(
     request: &CapabilityRequest,
     job: &PlannedImportJobUpdate,
     row_id: &ImportRowId,
-    row_position: u32,
 ) -> Result<BatchMutationPlan, SdkError> {
     let job_ref = job_record_ref(job.after())?;
     let event = support::event_evidence_with_data_class(
