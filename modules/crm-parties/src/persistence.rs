@@ -44,8 +44,9 @@ pub fn encode_party_state(party: &Party) -> Result<Vec<u8>, SdkError> {
 }
 
 pub fn encode_party_state_v2(party: &Party) -> Result<Vec<u8>, SdkError> {
-    let bytes = serde_json::to_vec(&PartyStateV2::from(party.snapshot()))
-        .map_err(|error| persisted_error(format!("Party v2 state serialization failed: {error}")))?;
+    let bytes = serde_json::to_vec(&PartyStateV2::from(party.snapshot())).map_err(|error| {
+        persisted_error(format!("Party v2 state serialization failed: {error}"))
+    })?;
     validate_size(&bytes)?;
     Ok(bytes)
 }
@@ -310,7 +311,10 @@ mod tests {
             .unwrap();
         let encoded = encode_party_state_v2(&value).unwrap();
         assert_eq!(decode_party_state(&encoded).unwrap(), value);
-        assert_ne!(party_state_descriptor_hash(), party_state_v2_descriptor_hash());
+        assert_ne!(
+            party_state_descriptor_hash(),
+            party_state_v2_descriptor_hash()
+        );
     }
 
     #[test]
