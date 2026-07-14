@@ -1,0 +1,183 @@
+name: Phase 8A.7 Router Wire Once
+
+on:
+  push:
+    branches:
+      - develop/phase8a7-customer-import-jobs
+    paths:
+      - .github/workflows/phase8a7-router-wire-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a7-customer-import-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Wire customer data operations into application catalogs and routers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-application-runtime/src/governed_metadata.rs')
+          text = path.read_text()
+
+          anchor = '''use crm_customer_accounts_query_adapter::{
+    AccountQueryAdapter, QUERY_CAPABILITY_IDS as ACCOUNT_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as account_query_capability_definitions,
+};
+'''
+          addition = anchor + '''use crm_customer_data_operations_capability_adapter::{
+    CustomerDataOperationsCapabilityPlanner,
+    MUTATION_CAPABILITY_IDS as CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS,
+    capability_definitions as customer_data_operations_capability_definitions,
+};
+use crm_customer_data_operations_query_adapter::{
+    CustomerDataOperationsQueryAdapter,
+    QUERY_CAPABILITY_IDS as CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as customer_data_operations_query_capability_definitions,
+};
+'''
+          if 'CustomerDataOperationsCapabilityPlanner' not in text:
+              text = text.replace(anchor, addition)
+
+          text = text.replace(
+              '    definitions.extend(identity_resolution_capability_definitions()?);\n    definitions.extend(metadata_mutation_capability_definitions()?);',
+              '    definitions.extend(identity_resolution_capability_definitions()?);\n    definitions.extend(customer_data_operations_capability_definitions()?);\n    definitions.extend(metadata_mutation_capability_definitions()?);'
+          )
+          text = text.replace(
+              '    definitions.extend(identity_resolution_merge_query_capability_definitions()?);\n    definitions.extend(metadata_query_capability_definitions()?);',
+              '    definitions.extend(identity_resolution_merge_query_capability_definitions()?);\n    definitions.extend(customer_data_operations_query_capability_definitions()?);\n    definitions.extend(metadata_query_capability_definitions()?);'
+          )
+
+          target_anchor = '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.target(definition, request)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.target(definition, request)
+        }
+'''
+          target_replacement = '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.target(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            CustomerDataOperationsCapabilityPlanner.target(definition, request)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.target(definition, request)
+        }
+'''
+          text = text.replace(target_anchor, target_replacement)
+
+          plan_anchor = '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.plan(definition, request, current)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
+        }
+'''
+          plan_replacement = '''        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.plan(definition, request, current)
+        } else if CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            CustomerDataOperationsCapabilityPlanner.plan(definition, request, current)
+        } else {
+            SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
+        }
+'''
+          text = text.replace(plan_anchor, plan_replacement)
+
+          text = text.replace(
+              '    identity_resolution_merge: IdentityResolutionMergeQueryAdapter,\n    metadata: MetadataQueryAdapter,',
+              '    identity_resolution_merge: IdentityResolutionMergeQueryAdapter,\n    customer_data_operations: CustomerDataOperationsQueryAdapter,\n    metadata: MetadataQueryAdapter,'
+          )
+          text = text.replace(
+              '        identity_resolution_merge: IdentityResolutionMergeQueryAdapter,\n        metadata: MetadataQueryAdapter,',
+              '        identity_resolution_merge: IdentityResolutionMergeQueryAdapter,\n        customer_data_operations: CustomerDataOperationsQueryAdapter,\n        metadata: MetadataQueryAdapter,'
+          )
+          text = text.replace(
+              '            identity_resolution_merge,\n            metadata,',
+              '            identity_resolution_merge,\n            customer_data_operations,\n            metadata,'
+          )
+
+          validate_anchor = '''        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.validate(definition, request)
+        } else {
+            self.production.validate(definition, request)
+        }
+'''
+          validate_replacement = '''        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.validate(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.customer_data_operations.validate(definition, request)
+        } else {
+            self.production.validate(definition, request)
+        }
+'''
+          text = text.replace(validate_anchor, validate_replacement)
+
+          execute_anchor = '''        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.execute(definition, request)
+        } else {
+            self.production.execute(definition, request)
+        }
+'''
+          execute_replacement = '''        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution_merge.execute(definition, request)
+        } else if CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.customer_data_operations.execute(definition, request)
+        } else {
+            self.production.execute(definition, request)
+        }
+'''
+          text = text.replace(execute_anchor, execute_replacement)
+
+          text = text.replace(
+              '                + IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS.len()\n                + METADATA_MUTATION_CAPABILITY_IDS.len()',
+              '                + IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS.len()\n                + CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS.len()\n                + METADATA_MUTATION_CAPABILITY_IDS.len()'
+          )
+          text = text.replace(
+              '                + IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS.len()\n                + METADATA_QUERY_CAPABILITY_IDS.len()',
+              '                + IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS.len()\n                + CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS.len()\n                + METADATA_QUERY_CAPABILITY_IDS.len()'
+          )
+
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          rm .github/workflows/phase8a7-router-wire-once.yml
+      - name: Commit router wiring and self-remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(phase8a7): route import mutations and queries in application"
+          git push origin HEAD:develop/phase8a7-customer-import-jobs
