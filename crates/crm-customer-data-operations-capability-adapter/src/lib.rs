@@ -58,6 +58,10 @@ pub const PARTY_IMPORT_JOB_CREATED_EVENT_SCHEMA: &str =
 pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE: &str = "customer_data.import.party.row_validated";
 pub const PARTY_IMPORT_ROW_VALIDATED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportRowValidatedEvent";
+pub const PARTY_IMPORT_VALIDATION_PROGRESSED_EVENT_TYPE: &str =
+    "customer_data.import.party.validation_progressed";
+pub const PARTY_IMPORT_VALIDATION_PROGRESSED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportValidationProgressedEvent";
 pub const PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_TYPE: &str =
     "customer_data.import.party.validation_completed";
 pub const PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_SCHEMA: &str =

@@ -47,6 +47,8 @@ provides:
       version: "1.0.0"
     - id: customer_data.import.party.row_validated
       version: "1.0.0"
+    - id: customer_data.import.party.validation_progressed
+      version: "1.0.0"
     - id: customer_data.import.party.validation_completed
       version: "1.0.0"
     - id: customer_data.import.party.execution_started

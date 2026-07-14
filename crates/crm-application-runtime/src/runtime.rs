@@ -43,6 +43,14 @@ use crm_customer_accounts_capability_adapter::{
     MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
 };
 use crm_customer_accounts_query_adapter::AccountQueryAdapter;
+use crm_customer_data_operations_capability_adapter::{
+    IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
+    IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
+    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+};
+use crm_customer_data_operations_query_adapter::{
+    CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
+};
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
@@ -326,6 +334,7 @@ impl ApplicationRuntime {
             consent_query_adapter,
             identity_resolution_query_adapter,
             identity_resolution_merge_query_adapter,
+            customer_data_operations_query_adapter,
             metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
@@ -1124,6 +1133,28 @@ fn sales_fields() -> BTreeSet<String> {
         "close_outcome",
         "created_at",
         "updated_at",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn customer_data_import_job_fields() -> BTreeSet<String> {
+    ["source", "mapping", "status", "counters", "checkpoint"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn customer_data_import_row_fields() -> BTreeSet<String> {
+    [
+        "row_position",
+        "source_identity",
+        "status",
+        "prepared_party",
+        "diagnostics",
+        "execution",
+        "target_party_ref",
     ]
     .into_iter()
     .map(str::to_owned)

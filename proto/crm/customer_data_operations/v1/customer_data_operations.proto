@@ -255,6 +255,12 @@ message PartyImportRowValidatedEvent {
   ImportRow import_row = 1;
 }
 
+// Emitted atomically with a validation batch after server-derived row outcomes update
+// the authoritative import-job valid/invalid counters.
+message PartyImportValidationProgressedEvent {
+  ImportJob import_job = 1;
+}
+
 message PartyImportValidationCompletedEvent {
   ImportJob import_job = 1;
 }

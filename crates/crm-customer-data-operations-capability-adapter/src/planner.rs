@@ -406,6 +406,46 @@ fn plan_validate_rows(
         rows.push(public_row);
     }
 
+    let valid_rows = rows
+        .iter()
+        .filter(|row| row.status == wire::ImportRowStatus::Valid as i32)
+        .count();
+    let invalid_rows = rows
+        .iter()
+        .filter(|row| row.status == wire::ImportRowStatus::Invalid as i32)
+        .count();
+    let mut progressed_job = job.clone();
+    progressed_job.record_validation_batch(RecordImportValidationBatch {
+        expected_version: current.version,
+        valid_rows: u32::try_from(valid_rows).map_err(|_| invalid_plan())?,
+        invalid_rows: u32::try_from(invalid_rows).map_err(|_| invalid_plan())?,
+        occurred_at_unix_nanos: occurred_at,
+    })?;
+    records.insert(
+        0,
+        RecordMutation::Update {
+            reference: current.reference.clone(),
+            expected_version: current.version,
+            payload: import_job_persisted_payload(&progressed_job)?,
+        },
+    );
+    let public_progressed_job = job_to_wire(&progressed_job)?;
+    events.push(support::event_evidence_with_data_class(
+        request,
+        current.reference.clone(),
+        MODULE_ID,
+        EventSpec {
+            event_type: PARTY_IMPORT_VALIDATION_PROGRESSED_EVENT_TYPE,
+            event_schema_id: PARTY_IMPORT_VALIDATION_PROGRESSED_EVENT_SCHEMA,
+            aggregate_version: progressed_job.version(),
+            previous_version: Some(current.version),
+        },
+        DataClass::Personal,
+        &wire::PartyImportValidationProgressedEvent {
+            import_job: Some(public_progressed_job),
+        },
+    )?);
+
     let output = support::protobuf_payload(
         MODULE_ID,
         VALIDATE_PARTY_IMPORT_ROWS_RESPONSE_SCHEMA,
@@ -436,6 +476,67 @@ fn plan_validate_rows(
         },
         output: Some(output),
     })
+}
+
+fn plan_finalize_validation(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    current: Option<&RecordSnapshot>,
+) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+    let current = current.ok_or_else(invalid_plan)?;
+    let command: wire::FinalizePartyImportValidationRequest =
+        support::decode_request_with_data_class(
+            request,
+            MODULE_ID,
+            crate::FINALIZE_PARTY_IMPORT_VALIDATION_REQUEST_SCHEMA,
+            DataClass::Personal,
+        )?;
+    let requested_job_id = import_job_id_from_ref(command.import_job_ref)?;
+    if requested_job_id.as_str() != current.reference.record_id.as_str() {
+        return Err(invalid_plan());
+    }
+    let mut job = import_job_from_snapshot(current)?;
+    job.finalize_validation(FinalizeImportValidation {
+        expected_version: command.expected_version,
+        occurred_at_unix_nanos: request.context.execution.request_started_at_unix_nanos,
+    })?;
+    let public_job = job_to_wire(&job)?;
+    let output = support::protobuf_payload(
+        MODULE_ID,
+        crate::FINALIZE_PARTY_IMPORT_VALIDATION_RESPONSE_SCHEMA,
+        DataClass::Personal,
+        &wire::FinalizePartyImportValidationResponse {
+            import_job: Some(public_job.clone()),
+        },
+    )?;
+    let aggregate = current.reference.clone();
+    let event = support::event_evidence_with_data_class(
+        request,
+        aggregate.clone(),
+        MODULE_ID,
+        EventSpec {
+            event_type: PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_TYPE,
+            event_schema_id: PARTY_IMPORT_VALIDATION_COMPLETED_EVENT_SCHEMA,
+            aggregate_version: job.version(),
+            previous_version: Some(current.version),
+        },
+        DataClass::Personal,
+        &wire::PartyImportValidationCompletedEvent {
+            import_job: Some(public_job),
+        },
+    )?;
+    single_mutation_plan(
+        definition,
+        request,
+        aggregate.clone(),
+        RecordMutation::Update {
+            reference: aggregate,
+            expected_version: current.version,
+            payload: import_job_persisted_payload(&job)?,
+        },
+        event,
+        output,
+    )
 }
 
 fn plan_start_execution(
@@ -1064,15 +1165,6 @@ fn ensure_definition(
         return Err(invalid_plan());
     }
     Ok(())
-}
-
-fn finalize_requires_composition() -> SdkError {
-    SdkError::new(
-        "CUSTOMER_DATA_IMPORT_FINALIZE_REQUIRES_COMPOSITION",
-        ErrorCategory::Internal,
-        false,
-        "Import validation finalization requires authoritative row-state composition.",
-    )
 }
 
 fn invalid_plan() -> SdkError {

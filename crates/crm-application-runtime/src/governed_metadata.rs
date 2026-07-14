@@ -42,6 +42,16 @@ use crm_customer_accounts_query_adapter::{
     AccountQueryAdapter, QUERY_CAPABILITY_IDS as ACCOUNT_QUERY_CAPABILITY_IDS,
     query_capability_definitions as account_query_capability_definitions,
 };
+use crm_customer_data_operations_capability_adapter::{
+    CustomerDataOperationsCapabilityPlanner,
+    MUTATION_CAPABILITY_IDS as CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS,
+    capability_definitions as customer_data_operations_capability_definitions,
+};
+use crm_customer_data_operations_query_adapter::{
+    CustomerDataOperationsQueryAdapter,
+    QUERY_CAPABILITY_IDS as CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as customer_data_operations_query_capability_definitions,
+};
 use crm_identity_resolution_capability_adapter::{
     CANDIDATE_MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_CANDIDATE_MUTATION_CAPABILITY_IDS,
     IdentityResolutionCapabilityPlanner,
@@ -111,6 +121,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     definitions.extend(party_relationship_capability_definitions()?);
     definitions.extend(consent_capability_definitions()?);
     definitions.extend(identity_resolution_capability_definitions()?);
+    definitions.extend(customer_data_operations_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
@@ -125,6 +136,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(consent_query_capability_definitions()?);
     definitions.extend(identity_resolution_query_capability_definitions()?);
     definitions.extend(identity_resolution_merge_query_capability_definitions()?);
+    definitions.extend(customer_data_operations_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -436,6 +448,7 @@ pub struct ApplicationQueryRouter {
     consents: ConsentQueryAdapter,
     identity_resolution: IdentityResolutionQueryAdapter,
     identity_resolution_merge: IdentityResolutionMergeQueryAdapter,
+    customer_data_operations: CustomerDataOperationsQueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
@@ -450,6 +463,7 @@ impl ApplicationQueryRouter {
         consents: ConsentQueryAdapter,
         identity_resolution: IdentityResolutionQueryAdapter,
         identity_resolution_merge: IdentityResolutionMergeQueryAdapter,
+        customer_data_operations: CustomerDataOperationsQueryAdapter,
         metadata: MetadataQueryAdapter,
     ) -> Self {
         Self {
@@ -462,6 +476,7 @@ impl ApplicationQueryRouter {
             consents,
             identity_resolution,
             identity_resolution_merge,
+            customer_data_operations,
             metadata,
         }
     }
@@ -568,6 +583,7 @@ mod tests {
                 + PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS.len()
                 + CONSENT_MUTATION_CAPABILITY_IDS.len()
                 + IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS.len()
+                + CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS.len()
                 + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
@@ -640,6 +656,7 @@ mod tests {
                 + CONSENT_QUERY_CAPABILITY_IDS.len()
                 + IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS.len()
                 + IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS.len()
+                + CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS.len()
                 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(

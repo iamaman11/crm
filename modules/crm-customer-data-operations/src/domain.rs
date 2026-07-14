@@ -437,6 +437,20 @@ pub struct MarkImportJobValidated {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecordImportValidationBatch {
+    pub expected_version: i64,
+    pub valid_rows: u32,
+    pub invalid_rows: u32,
+    pub occurred_at_unix_nanos: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FinalizeImportValidation {
+    pub expected_version: i64,
+    pub occurred_at_unix_nanos: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StartImportExecution {
     pub expected_version: i64,
     pub occurred_at_unix_nanos: i64,
