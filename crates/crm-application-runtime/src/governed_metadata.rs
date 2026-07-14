@@ -1,6 +1,6 @@
 use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
+    CapabilityAuthorizer, CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     TransactionalCapabilityExecutor,
 };
 use crm_consents_capability_adapter::{
@@ -26,8 +26,8 @@ use crm_contact_points_query_adapter::{
 };
 use crm_core_data::{
     AggregateTarget, CapabilityBatchExecutionPlan, PostgresDataStore,
-    PostgresMetadataCapabilityExecutor, PostgresTransactionalAggregateExecutor, RecordGetQuery,
-    TransactionalAggregatePlanner,
+    PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,
+    PostgresTransactionalAggregateExecutor, RecordGetQuery, TransactionalAggregatePlanner,
 };
 use crm_customer_360_query_adapter::{
     Customer360QueryAdapter, QUERY_CAPABILITY_IDS as CUSTOMER_360_QUERY_CAPABILITY_IDS,
@@ -43,14 +43,20 @@ use crm_customer_accounts_query_adapter::{
     query_capability_definitions as account_query_capability_definitions,
 };
 use crm_customer_data_operations_capability_adapter::{
-    CustomerDataOperationsCapabilityPlanner,
+    CREATE_PARTY_IMPORT_JOB_CAPABILITY, CustomerDataOperationsCapabilityPlanner,
     MUTATION_CAPABILITY_IDS as CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS,
+    VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
     capability_definitions as customer_data_operations_capability_definitions,
 };
 use crm_customer_data_operations_query_adapter::{
     CustomerDataOperationsQueryAdapter,
     QUERY_CAPABILITY_IDS as CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS,
     query_capability_definitions as customer_data_operations_query_capability_definitions,
+};
+use crm_customer_data_operations_source_composition::{
+    CustomerDataOperationsSourceExecutor,
+    SOURCE_MUTATION_CAPABILITY_IDS as CUSTOMER_DATA_OPERATIONS_SOURCE_MUTATION_CAPABILITY_IDS,
+    source_capability_definitions as customer_data_operations_source_capability_definitions,
 };
 use crm_identity_resolution_capability_adapter::{
     CANDIDATE_MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_CANDIDATE_MUTATION_CAPABILITY_IDS,
@@ -121,7 +127,17 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     definitions.extend(party_relationship_capability_definitions()?);
     definitions.extend(consent_capability_definitions()?);
     definitions.extend(identity_resolution_capability_definitions()?);
-    definitions.extend(customer_data_operations_capability_definitions()?);
+    definitions.extend(
+        customer_data_operations_capability_definitions()?
+            .into_iter()
+            .filter(|definition| {
+                !matches!(
+                    definition.capability_id.as_str(),
+                    CREATE_PARTY_IMPORT_JOB_CAPABILITY | VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY
+                )
+            }),
+    );
+    definitions.extend(customer_data_operations_source_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
@@ -225,6 +241,7 @@ pub struct ApplicationCapabilityExecutorRouter {
     consents: ConsentCapabilityExecutor,
     identity_resolution: IdentityResolutionCapabilityExecutor,
     identity_resolution_merge: MergeLineageCapabilityExecutor,
+    customer_data_operations_source: CustomerDataOperationsSourceExecutor,
 }
 
 impl ApplicationCapabilityExecutorRouter {
@@ -232,6 +249,7 @@ impl ApplicationCapabilityExecutorRouter {
         store: PostgresDataStore,
         aggregate: Arc<PostgresTransactionalAggregateExecutor>,
         metadata: Arc<PostgresMetadataCapabilityExecutor>,
+        authorizer: Arc<dyn CapabilityAuthorizer>,
     ) -> Self {
         let consents = ConsentCapabilityExecutor::new(
             Arc::new(PostgresConsentReferenceReader::new(store.clone())),
@@ -247,6 +265,11 @@ impl ApplicationCapabilityExecutorRouter {
             Arc::new(PostgresMergeLineageReferenceReader::new(store.clone())),
             aggregate.clone(),
         );
+        let customer_data_operations_source = CustomerDataOperationsSourceExecutor::new(
+            store.clone(),
+            Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),
+            authorizer,
+        );
         Self {
             store,
             aggregate,
@@ -254,6 +277,7 @@ impl ApplicationCapabilityExecutorRouter {
             consents,
             identity_resolution,
             identity_resolution_merge,
+            customer_data_operations_source,
         }
     }
 }
@@ -268,6 +292,10 @@ impl fmt::Debug for ApplicationCapabilityExecutorRouter {
             .field("consents", &self.consents)
             .field("identity_resolution", &self.identity_resolution)
             .field("identity_resolution_merge", &self.identity_resolution_merge)
+            .field(
+                "customer_data_operations_source",
+                &self.customer_data_operations_source,
+            )
             .finish()
     }
 }
@@ -278,7 +306,12 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
         definition: &'a CapabilityDefinition,
         request: CapabilityRequest,
     ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
-        if METADATA_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+        if CUSTOMER_DATA_OPERATIONS_SOURCE_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.customer_data_operations_source
+                .execute(definition, request)
+        } else if METADATA_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.metadata.execute(definition, request)
         } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.consents.execute(definition, request)

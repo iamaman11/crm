@@ -247,6 +247,7 @@ impl ApplicationRuntime {
                 Arc::new(ApplicationAggregatePlannerRouter),
             )),
             Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
+            authorizer.clone(),
         ));
         let mutation_gateway = Arc::new(CapabilityGateway::new(
             Arc::new(
