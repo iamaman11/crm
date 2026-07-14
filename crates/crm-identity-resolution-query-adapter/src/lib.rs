@@ -6,7 +6,9 @@ use crm_core_data::{
     MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, PostgresDataStore, RecordGetQuery,
     RelatedRecordListQuery,
 };
-use crm_identity_resolution::{DuplicateCandidateCase, DuplicateCandidateCaseStatus, PartyReference};
+use crm_identity_resolution::{
+    DuplicateCandidateCase, DuplicateCandidateCaseStatus, PartyReference,
+};
 use crm_identity_resolution_capability_adapter::{
     MODULE_ID, PARTY_CANDIDATE_RELATIONSHIP_TYPE, PARTY_CANDIDATE_SOURCE_RECORD_TYPE, RECORD_TYPE,
     duplicate_candidate_case_from_snapshot, duplicate_candidate_case_to_wire,
@@ -26,8 +28,7 @@ use std::sync::Arc;
 
 pub const GET_CAPABILITY: &str = "identity_resolution.candidate.get";
 pub const LIST_BY_PARTY_CAPABILITY: &str = "identity_resolution.candidate.list_by_party";
-pub const GET_REQUEST_SCHEMA: &str =
-    "crm.identity_resolution.v1.GetDuplicateCandidateCaseRequest";
+pub const GET_REQUEST_SCHEMA: &str = "crm.identity_resolution.v1.GetDuplicateCandidateCaseRequest";
 pub const GET_RESPONSE_SCHEMA: &str =
     "crm.identity_resolution.v1.GetDuplicateCandidateCaseResponse";
 pub const LIST_BY_PARTY_REQUEST_SCHEMA: &str =
@@ -214,7 +215,10 @@ impl IdentityResolutionQueryAdapter {
         )
     }
 
-    async fn execute_list_by_party(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
+    async fn execute_list_by_party(
+        &self,
+        request: &QueryRequest,
+    ) -> Result<TypedPayload, SdkError> {
         let command: wire::ListDuplicateCandidateCasesByPartyRequest =
             decode_input(request, LIST_BY_PARTY_REQUEST_SCHEMA)?;
         let party_ref = required_party_ref(command.party_ref.as_ref())?;
@@ -226,13 +230,7 @@ impl IdentityResolutionQueryAdapter {
         let binding = cursor_binding(request, &party_ref, status, page_size)?;
         let after_record_id = decode_after(self, &command.cursor, &binding)?;
         let (candidate_cases, next_record_id) = self
-            .collect_candidates(
-                request,
-                &party_ref,
-                status,
-                page_size,
-                after_record_id,
-            )
+            .collect_candidates(request, &party_ref, status, page_size, after_record_id)
             .await?;
         let next_cursor = encode_next(self, &binding, next_record_id.as_ref())?;
 
@@ -432,7 +430,9 @@ fn required_party_ref(value: Option<&customer::PartyRef>) -> Result<PartyReferen
 fn optional_status(value: i32) -> Result<Option<DuplicateCandidateCaseStatus>, SdkError> {
     match wire::DuplicateCandidateCaseStatus::try_from(value) {
         Ok(wire::DuplicateCandidateCaseStatus::Unspecified) => Ok(None),
-        Ok(wire::DuplicateCandidateCaseStatus::Open) => Ok(Some(DuplicateCandidateCaseStatus::Open)),
+        Ok(wire::DuplicateCandidateCaseStatus::Open) => {
+            Ok(Some(DuplicateCandidateCaseStatus::Open))
+        }
         Ok(wire::DuplicateCandidateCaseStatus::Dismissed) => {
             Ok(Some(DuplicateCandidateCaseStatus::Dismissed))
         }
