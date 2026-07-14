@@ -250,12 +250,31 @@ message PartyImportJobCreatedEvent {
   ImportJob import_job = 1;
 }
 
+// One event is emitted for each newly persisted validated or invalid import row.
+message PartyImportRowValidatedEvent {
+  ImportRow import_row = 1;
+}
+
 message PartyImportValidationCompletedEvent {
   ImportJob import_job = 1;
 }
 
 message PartyImportExecutionStartedEvent {
   ImportJob import_job = 1;
+}
+
+// Emitted whenever execution changes authoritative import-row outcome state, including
+// retryable failure and success. Target Party state remains owned by crm.parties.
+message PartyImportRowExecutionUpdatedEvent {
+  ImportRow import_row = 1;
+}
+
+// Emitted whenever the import job advances its durable sequential checkpoint after a
+// successful target result or an explicitly skipped invalid row.
+message PartyImportCheckpointAdvancedEvent {
+  ImportJob import_job = 1;
+  ImportRowRef import_row_ref = 2;
+  bool skipped_invalid = 3;
 }
 
 message PartyImportCompletedEvent {
