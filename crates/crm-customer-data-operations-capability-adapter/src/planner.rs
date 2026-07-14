@@ -399,7 +399,7 @@ fn plan_validate_rows(
         .map(|event| {
             support::audit_intent(
                 request,
-                &event.aggregate,
+                &event.event.aggregate,
                 event.aggregate_version,
                 definition.capability_id.as_str(),
                 &output.bytes,
@@ -908,7 +908,7 @@ fn prepared_party_to_wire(value: &PreparedPartyRow) -> wire::PreparedPartyRow {
 }
 
 fn target_party_id_for_row(
-    columns: &std::collections::HashMap<String, String>,
+    columns: &std::collections::BTreeMap<String, String>,
     mapping: &PartyImportMapping,
     probe: &ImportRow,
     diagnostics: &mut Vec<RowDiagnostic>,
@@ -930,7 +930,7 @@ fn target_party_id_for_row(
 }
 
 fn party_kind_for_row(
-    columns: &std::collections::HashMap<String, String>,
+    columns: &std::collections::BTreeMap<String, String>,
     mapping: &PartyImportMapping,
     diagnostics: &mut Vec<RowDiagnostic>,
 ) -> Result<Option<PartyImportKind>, SdkError> {
@@ -956,7 +956,7 @@ fn party_kind_for_row(
 }
 
 fn required_mapped_value(
-    columns: &std::collections::HashMap<String, String>,
+    columns: &std::collections::BTreeMap<String, String>,
     column: &str,
     missing_code: &str,
     diagnostics: &mut Vec<RowDiagnostic>,
@@ -977,7 +977,7 @@ fn required_mapped_value(
 }
 
 fn optional_mapped_value(
-    columns: &std::collections::HashMap<String, String>,
+    columns: &std::collections::BTreeMap<String, String>,
     column: Option<&str>,
     missing_code: &str,
     diagnostics: &mut Vec<RowDiagnostic>,
