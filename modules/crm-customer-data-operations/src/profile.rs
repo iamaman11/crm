@@ -1,3 +1,8 @@
+//! Immutable source-system identity, parser-profile and source-identifier evidence types.
+//!
+//! These types keep source interpretation and source-system identifiers explicit and prevent
+//! external identifiers from being treated as canonical CRM Party identities.
+
 use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, RecordId, SdkError};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
