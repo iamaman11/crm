@@ -46,18 +46,60 @@ enum PartyImportKind {
   PARTY_IMPORT_KIND_ORGANIZATION = 2;
 }
 
+enum ImportSourceFormat {
+  IMPORT_SOURCE_FORMAT_UNSPECIFIED = 0;
+  IMPORT_SOURCE_FORMAT_DELIMITED_TEXT = 1;
+}
+
+enum ImportTextEncoding {
+  IMPORT_TEXT_ENCODING_UNSPECIFIED = 0;
+  IMPORT_TEXT_ENCODING_UTF8 = 1;
+}
+
+enum ImportHeaderMode {
+  IMPORT_HEADER_MODE_UNSPECIFIED = 0;
+  IMPORT_HEADER_MODE_FIRST_ROW = 1;
+}
+
+// Immutable source interpretation identity. A job binds to one exact parser profile;
+// changing any field requires a new job/source interpretation rather than silently
+// reinterpreting already validated bytes.
+message ImportParserProfile {
+  // Stable semantic parser family, for example "crm.import.delimited-text".
+  string parser_profile_id = 1;
+  // Immutable semantic parser version, for example "1.0.0".
+  string parser_profile_version = 2;
+  ImportSourceFormat format = 3;
+  ImportTextEncoding encoding = 4;
+  // Exact delimiter used by the delimited-text profile. V1 accepts one bounded Unicode scalar.
+  string delimiter = 5;
+  // Exact quote character used by the delimited-text profile. V1 accepts one bounded Unicode scalar.
+  string quote_character = 6;
+  ImportHeaderMode header_mode = 7;
+  // Versioned canonicalization identity used before mapping/row interpretation.
+  string canonicalization_profile_id = 8;
+}
+
 message ImportSourceDescriptor {
   string source_name = 1;
   bytes content_sha256 = 2;
   uint32 row_count = 3;
+  ImportParserProfile parser_profile = 4;
 }
 
-// Immutable v1 mapping. Values are column names, not executable expressions.
+// Immutable v1 mapping. Values are bounded source column names, never executable expressions.
+// Source-system identifiers and canonical CRM Party IDs are deliberately distinct concepts.
 message PartyImportMapping {
-  string party_id_column = 1;
+  // Optional explicit canonical CRM Party ID column. When absent, application composition
+  // derives a deterministic target Party ID from the import job and row identity.
+  optional string target_party_id_column = 1;
   string party_kind_column = 2;
   string display_name_column = 3;
-  string external_row_key_column = 4;
+  // Optional source-system identifier retained only as import-owned evidence; it is never
+  // interpreted as the canonical CRM Party ID.
+  optional string source_external_id_column = 4;
+  // Optional stable source row key used only for deterministic import-row identity.
+  optional string external_row_key_column = 5;
 }
 
 message RowDiagnostic {
@@ -66,6 +108,7 @@ message RowDiagnostic {
 }
 
 message PreparedPartyRow {
+  // Canonical target Party identity prepared for the governed Party create capability.
   crm.customer.v1.PartyRef party_ref = 1;
   PartyImportKind kind = 2;
   string display_name = 3;
@@ -92,15 +135,17 @@ message ImportRow {
   ImportRowRef import_row_ref = 1;
   uint32 row_position = 2;
   string external_row_key_sha256 = 3;
-  ImportRowStatus status = 4;
-  PreparedPartyRow prepared_party = 5;
-  repeated RowDiagnostic diagnostics = 6;
-  uint32 execution_attempts = 7;
-  string last_execution_error_code = 8;
-  crm.customer.v1.PartyRef target_party_ref = 9;
-  crm.core.v1.UnixTime created_at = 10;
-  crm.core.v1.UnixTime updated_at = 11;
-  crm.customer.v1.CustomerResourceVersion resource_version = 12;
+  // Hash of optional source-system identifier evidence. This field is not a Party ID.
+  string source_external_id_sha256 = 4;
+  ImportRowStatus status = 5;
+  PreparedPartyRow prepared_party = 6;
+  repeated RowDiagnostic diagnostics = 7;
+  uint32 execution_attempts = 8;
+  string last_execution_error_code = 9;
+  crm.customer.v1.PartyRef target_party_ref = 10;
+  crm.core.v1.UnixTime created_at = 11;
+  crm.core.v1.UnixTime updated_at = 12;
+  crm.customer.v1.CustomerResourceVersion resource_version = 13;
 }
 
 message CreatePartyImportJobRequest {
@@ -115,7 +160,7 @@ message CreatePartyImportJobResponse {
 }
 
 // One externally parsed source row. Column values are data only and are interpreted
-// solely by the immutable PartyImportMapping attached to the job.
+// solely by the immutable source parser profile and PartyImportMapping attached to the job.
 message PartyImportSourceRow {
   uint32 row_position = 1;
   map<string, string> columns = 2;
