@@ -89,11 +89,11 @@ pub struct AppendImmutableFileChunk {
 
 impl AppendImmutableFileChunk {
     pub fn validate(&self) -> Result<(), SdkError> {
-        if self.bytes.len() > MAXIMUM_FILE_ARTIFACT_CHUNK_BYTES {
+        if self.bytes.is_empty() || self.bytes.len() > MAXIMUM_FILE_ARTIFACT_CHUNK_BYTES {
             return Err(SdkError::invalid_argument(
                 "file_artifact.chunk.bytes",
                 format!(
-                    "File artifact chunk must not exceed {MAXIMUM_FILE_ARTIFACT_CHUNK_BYTES} bytes"
+                    "File artifact chunk must contain between 1 and {MAXIMUM_FILE_ARTIFACT_CHUNK_BYTES} bytes"
                 ),
             ));
         }
@@ -207,11 +207,8 @@ mod tests {
 
     #[test]
     fn rejects_oversized_artifacts_and_chunks() {
-        let artifact_error = validate_expected_size_and_hash(
-            MAXIMUM_FILE_ARTIFACT_BYTES + 1,
-            &[1; 32],
-        )
-        .unwrap_err();
+        let artifact_error =
+            validate_expected_size_and_hash(MAXIMUM_FILE_ARTIFACT_BYTES + 1, &[1; 32]).unwrap_err();
         assert_eq!(artifact_error.code, "INVALID_ARGUMENT");
 
         let chunk = AppendImmutableFileChunk {
@@ -221,6 +218,14 @@ mod tests {
             bytes: vec![0; MAXIMUM_FILE_ARTIFACT_CHUNK_BYTES + 1],
         };
         assert!(chunk.validate().is_err());
+
+        let empty = AppendImmutableFileChunk {
+            file_id: FileId::try_new("file-2").unwrap(),
+            chunk_index: 0,
+            chunk_sha256: [1; 32],
+            bytes: Vec::new(),
+        };
+        assert!(empty.validate().is_err());
     }
 }
 
