@@ -2,21 +2,21 @@ use crate::{
     CANCEL_PARTY_IMPORT_JOB_CAPABILITY, CANCEL_PARTY_IMPORT_JOB_REQUEST_SCHEMA,
     CANCEL_PARTY_IMPORT_JOB_RESPONSE_SCHEMA, CREATE_PARTY_IMPORT_JOB_CAPABILITY,
     CREATE_PARTY_IMPORT_JOB_REQUEST_SCHEMA, CREATE_PARTY_IMPORT_JOB_RESPONSE_SCHEMA,
-    FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY, IMPORT_JOB_RECORD_TYPE, IMPORT_ROW_RECORD_TYPE,
-    MODULE_ID, MUTATION_CAPABILITY_IDS, PARTY_IMPORT_CANCELLED_EVENT_SCHEMA,
-    PARTY_IMPORT_CANCELLED_EVENT_TYPE, PARTY_IMPORT_EXECUTION_STARTED_EVENT_SCHEMA,
-    PARTY_IMPORT_EXECUTION_STARTED_EVENT_TYPE, PARTY_IMPORT_JOB_CREATED_EVENT_SCHEMA,
-    PARTY_IMPORT_JOB_CREATED_EVENT_TYPE, PARTY_IMPORT_ROW_VALIDATED_EVENT_SCHEMA,
-    PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE, START_PARTY_IMPORT_EXECUTION_CAPABILITY,
-    START_PARTY_IMPORT_EXECUTION_REQUEST_SCHEMA, START_PARTY_IMPORT_EXECUTION_RESPONSE_SCHEMA,
-    VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY, VALIDATE_PARTY_IMPORT_ROWS_REQUEST_SCHEMA,
-    VALIDATE_PARTY_IMPORT_ROWS_RESPONSE_SCHEMA,
+    FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY, IMPORT_JOB_RECORD_TYPE,
+    IMPORT_JOB_ROW_RELATIONSHIP_TYPE, IMPORT_ROW_RECORD_TYPE, MODULE_ID, MUTATION_CAPABILITY_IDS,
+    PARTY_IMPORT_CANCELLED_EVENT_SCHEMA, PARTY_IMPORT_CANCELLED_EVENT_TYPE,
+    PARTY_IMPORT_EXECUTION_STARTED_EVENT_SCHEMA, PARTY_IMPORT_EXECUTION_STARTED_EVENT_TYPE,
+    PARTY_IMPORT_JOB_CREATED_EVENT_SCHEMA, PARTY_IMPORT_JOB_CREATED_EVENT_TYPE,
+    PARTY_IMPORT_ROW_VALIDATED_EVENT_SCHEMA, PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE,
+    START_PARTY_IMPORT_EXECUTION_CAPABILITY, START_PARTY_IMPORT_EXECUTION_REQUEST_SCHEMA,
+    START_PARTY_IMPORT_EXECUTION_RESPONSE_SCHEMA, VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
+    VALIDATE_PARTY_IMPORT_ROWS_REQUEST_SCHEMA, VALIDATE_PARTY_IMPORT_ROWS_RESPONSE_SCHEMA,
 };
 use crm_capability_plan_support::{self as support, EventSpec, PersistedPayloadContract};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{
     AggregatePresence, AggregateTarget, BatchMutationPlan, CapabilityBatchExecutionPlan,
-    RecordMutation, TransactionalAggregatePlanner,
+    RecordMutation, RelationshipMutation, TransactionalAggregatePlanner,
 };
 use crm_customer_data_operations::{
     CancelImportJob, CreateImportJob, CreateValidatedImportRow, ExternalPartyIdentifierDigest,
@@ -31,7 +31,9 @@ use crm_customer_data_operations::{
     create_validated_import_row, decode_import_job_state, encode_import_job_state,
     encode_import_row_state, import_job_state_descriptor_hash, import_row_state_descriptor_hash,
 };
-use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, SdkError};
+use crm_module_sdk::{
+    DataClass, ErrorCategory, RecordSnapshot, RelationshipRef, RelationshipType, SdkError,
+};
 use crm_proto_contracts::crm::{
     core::v1 as core, customer::v1 as customer, customer_data_operations::v1 as wire,
 };
@@ -251,6 +253,7 @@ fn plan_validate_rows(
     let mut seen_target_party_ids = BTreeSet::new();
     let mut rows = Vec::with_capacity(command.rows.len());
     let mut records = Vec::with_capacity(command.rows.len());
+    let mut relationships = Vec::with_capacity(command.rows.len());
     let mut events = Vec::with_capacity(command.rows.len());
 
     for source_row in command.rows {
@@ -370,6 +373,21 @@ fn plan_validate_rows(
             reference: aggregate.clone(),
             payload: import_row_persisted_payload(&row)?,
         });
+        let import_row_ref = public_row.import_row_ref.clone().ok_or_else(invalid_plan)?;
+        relationships.push(RelationshipMutation::Link {
+            relationship: RelationshipRef {
+                relationship_type: RelationshipType::try_new(IMPORT_JOB_ROW_RELATIONSHIP_TYPE)
+                    .map_err(|_| invalid_plan())?,
+                source: current.reference.clone(),
+                target: aggregate.clone(),
+            },
+            payload: support::protobuf_payload(
+                MODULE_ID,
+                "crm.customer_data_operations.v1.ImportRowRef",
+                DataClass::Personal,
+                &import_row_ref,
+            )?,
+        });
         events.push(support::event_evidence_with_data_class(
             request,
             aggregate,
@@ -411,7 +429,7 @@ fn plan_validate_rows(
         batch: BatchMutationPlan {
             context: request.context.clone(),
             records,
-            relationships: Vec::new(),
+            relationships,
             events,
             idempotency: support::capability_idempotency(definition, request)?,
             audits,

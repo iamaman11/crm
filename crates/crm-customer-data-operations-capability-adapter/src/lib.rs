@@ -23,8 +23,7 @@ pub const IMPORT_ROW_RECORD_TYPE: &str = "customer_data.import_row";
 pub const IMPORT_JOB_ROW_RELATIONSHIP_TYPE: &str = "customer_data.import_job.row";
 
 pub const CREATE_PARTY_IMPORT_JOB_CAPABILITY: &str = "customer_data.import.party.create";
-pub const VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY: &str =
-    "customer_data.import.party.rows.validate";
+pub const VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY: &str = "customer_data.import.party.rows.validate";
 pub const FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY: &str =
     "customer_data.import.party.validation.finalize";
 pub const START_PARTY_IMPORT_EXECUTION_CAPABILITY: &str =
