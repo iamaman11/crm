@@ -105,6 +105,15 @@ pub fn plan_success(
         target_party_id: target_party_id.clone(),
         occurred_at_unix_nanos,
     })?;
+    let mut row_snapshot = row_after.snapshot();
+    row_snapshot.execution_attempts = row_snapshot.execution_attempts.checked_add(1).ok_or_else(|| {
+        outcome_error(
+            "CUSTOMER_DATA_IMPORT_EXECUTION_ATTEMPTS_EXHAUSTED",
+            ErrorCategory::Conflict,
+            "The import row cannot record another execution attempt.",
+        )
+    })?;
+    row_after = ImportRow::rehydrate(row_snapshot)?;
 
     let expected_job_version = job.version();
     let mut job_after = job.clone();
@@ -233,6 +242,7 @@ mod tests {
         assert_eq!(job.after().succeeded_rows(), 1);
         assert_eq!(row.expected_version(), 1);
         assert_eq!(row.after().status(), ImportRowStatus::Succeeded);
+        assert_eq!(row.after().snapshot().execution_attempts, 1);
         assert_eq!(row.after().version(), 2);
     }
 
