@@ -263,9 +263,14 @@ message PartyImportExecutionStartedEvent {
   ImportJob import_job = 1;
 }
 
-// Emitted whenever execution changes authoritative import-row outcome state, including
-// retryable failure and success. Target Party state remains owned by crm.parties.
-message PartyImportRowExecutionUpdatedEvent {
+// Emitted when the governed target Party capability succeeds for a row and the
+// authoritative import-owned row outcome is persisted as succeeded.
+message PartyImportRowSucceededEvent {
+  ImportRow import_row = 1;
+}
+
+// Emitted when an executable row records bounded retryable execution failure evidence.
+message PartyImportRowFailedEvent {
   ImportRow import_row = 1;
 }
 

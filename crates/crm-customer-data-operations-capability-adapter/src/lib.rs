@@ -21,10 +21,10 @@ use crm_module_sdk::{
 pub const MODULE_ID: &str = "crm.customer-data-operations";
 pub const IMPORT_JOB_RECORD_TYPE: &str = "customer_data.import_job";
 pub const IMPORT_ROW_RECORD_TYPE: &str = "customer_data.import_row";
+pub const IMPORT_JOB_ROW_RELATIONSHIP_TYPE: &str = "customer_data.import_job.row";
 
 pub const CREATE_PARTY_IMPORT_JOB_CAPABILITY: &str = "customer_data.import.party.create";
-pub const VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY: &str =
-    "customer_data.import.party.rows.validate";
+pub const VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY: &str = "customer_data.import.party.rows.validate";
 pub const FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY: &str =
     "customer_data.import.party.validation.finalize";
 pub const START_PARTY_IMPORT_EXECUTION_CAPABILITY: &str =
@@ -72,6 +72,10 @@ pub const PARTY_IMPORT_ROW_SUCCEEDED_EVENT_SCHEMA: &str =
 pub const PARTY_IMPORT_ROW_FAILED_EVENT_TYPE: &str = "customer_data.import.party.row_failed";
 pub const PARTY_IMPORT_ROW_FAILED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportRowFailedEvent";
+pub const PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_TYPE: &str =
+    "customer_data.import.party.checkpoint_advanced";
+pub const PARTY_IMPORT_CHECKPOINT_ADVANCED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyImportCheckpointAdvancedEvent";
 pub const PARTY_IMPORT_COMPLETED_EVENT_TYPE: &str = "customer_data.import.party.completed";
 pub const PARTY_IMPORT_COMPLETED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportCompletedEvent";
