@@ -106,13 +106,17 @@ pub fn plan_success(
         occurred_at_unix_nanos,
     })?;
     let mut row_snapshot = row_after.snapshot();
-    row_snapshot.execution_attempts = row_snapshot.execution_attempts.checked_add(1).ok_or_else(|| {
-        outcome_error(
-            "CUSTOMER_DATA_IMPORT_EXECUTION_ATTEMPTS_EXHAUSTED",
-            ErrorCategory::Conflict,
-            "The import row cannot record another execution attempt.",
-        )
-    })?;
+    row_snapshot.execution_attempts =
+        row_snapshot
+            .execution_attempts
+            .checked_add(1)
+            .ok_or_else(|| {
+                outcome_error(
+                    "CUSTOMER_DATA_IMPORT_EXECUTION_ATTEMPTS_EXHAUSTED",
+                    ErrorCategory::Conflict,
+                    "The import row cannot record another execution attempt.",
+                )
+            })?;
     row_after = ImportRow::rehydrate(row_snapshot)?;
 
     let expected_job_version = job.version();
