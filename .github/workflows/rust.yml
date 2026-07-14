@@ -46,6 +46,7 @@ jobs:
           name: rustfmt-diagnostics
           path: |
             crates/*/src/
+            crates/*/tests/
             modules/*/src/
             services/*/src/
           if-no-files-found: error
