@@ -4,7 +4,14 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - "crates/crm-application-runtime/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "crates/**/*.rs"
+      - "modules/**/Cargo.toml"
+      - "modules/**/*.rs"
+      - "services/**/Cargo.toml"
+      - "services/**/*.rs"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -18,52 +25,31 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-          show-progress: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Add merge-operation bootstrap visibility
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          path = Path("crates/crm-application-runtime/src/runtime.rs")
-          text = path.read_text()
-          replacements = [
-              (
-                  '''use crm_identity_resolution_capability_adapter::{\n    MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,\n};''',
-                  '''use crm_identity_resolution_capability_adapter::{\n    MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,\n    MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,\n};''',
-              ),
-              (
-                  '''                IDENTITY_RESOLUTION_MODULE_ID => upsert_bootstrap_visibility(\n                    visibility_store,\n                    config,\n                    tenant_id,\n                    definition,\n                    BootstrapVisibilityResource {\n                        owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,\n                        resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,\n                    },\n                    identity_resolution_fields(),\n                    expires_at,\n                )?,''',
-                  '''                IDENTITY_RESOLUTION_MODULE_ID => {\n                    upsert_bootstrap_visibility(\n                        visibility_store,\n                        config,\n                        tenant_id,\n                        definition,\n                        BootstrapVisibilityResource {\n                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,\n                            resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,\n                        },\n                        identity_resolution_fields(),\n                        expires_at,\n                    )?;\n                    upsert_bootstrap_visibility(\n                        visibility_store,\n                        config,\n                        tenant_id,\n                        definition,\n                        BootstrapVisibilityResource {\n                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,\n                            resource_type: IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,\n                        },\n                        identity_resolution_merge_fields(),\n                        expires_at,\n                    )?;\n                }''',
-              ),
-              (
-                  '''fn identity_resolution_fields() -> BTreeSet<String> {\n    [\n        "party_pair",\n        "evidence_history",\n        "status",\n        "decision_reason",\n    ]\n    .into_iter()\n    .map(str::to_owned)\n    .collect()\n}\n''',
-                  '''fn identity_resolution_fields() -> BTreeSet<String> {\n    [\n        "party_pair",\n        "evidence_history",\n        "status",\n        "decision_reason",\n    ]\n    .into_iter()\n    .map(str::to_owned)\n    .collect()\n}\n\nfn identity_resolution_merge_fields() -> BTreeSet<String> {\n    [\n        "party_pair",\n        "decision",\n        "survivorship",\n        "status",\n        "unmerge_decision",\n    ]\n    .into_iter()\n    .map(str::to_owned)\n    .collect()\n}\n''',
-              ),
-          ]
-          for old, new in replacements:
-              if text.count(old) != 1:
-                  raise SystemExit(f"runtime bootstrap source shape changed: {old[:80]!r}")
-              text = text.replace(old, new, 1)
-          path.write_text(text)
-          PY
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
           cargo fmt --all
-          cargo clippy -p crm-application-runtime --all-targets --all-features -- -D warnings
-          cargo test -p crm-application-runtime
-      - name: Commit verified bootstrap visibility fix
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-application-runtime/src/runtime.rs
-          git commit -m "Grant merge-operation query visibility at runtime bootstrap"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
