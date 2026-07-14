@@ -7,8 +7,8 @@ use crm_customer_data_operations_execution_composition::{
 };
 use crm_module_sdk::DataClass;
 use crm_parties_capability_adapter::{
-    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA,
-    MODULE_ID as PARTIES_MODULE_ID,
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY,
+    CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA, MODULE_ID as PARTIES_MODULE_ID,
 };
 
 #[test]
@@ -35,7 +35,10 @@ fn public_composition_surface_builds_only_the_exact_governed_party_create_invoca
     assert_eq!(invocation.capability_id.as_str(), PARTY_CREATE_CAPABILITY);
     assert_eq!(invocation.capability_version.as_str(), CONTRACT_VERSION);
     assert_eq!(invocation.input.owner.as_str(), PARTIES_MODULE_ID);
-    assert_eq!(invocation.input.schema_id.as_str(), PARTY_CREATE_REQUEST_SCHEMA);
+    assert_eq!(
+        invocation.input.schema_id.as_str(),
+        PARTY_CREATE_REQUEST_SCHEMA
+    );
     assert_eq!(invocation.input.data_class, DataClass::Personal);
     assert_eq!(
         invocation.input.owner.as_str(),
