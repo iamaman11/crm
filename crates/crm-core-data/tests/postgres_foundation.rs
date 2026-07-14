@@ -241,7 +241,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         count(
             &admin,
             "SELECT count(*) FROM crm.file_artifacts WHERE tenant_id = $1 AND file_id = $2",
-            "tenant-a",
+            "tenant-b",
             &file_id,
         )
         .await,
@@ -251,7 +251,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         count(
             &admin,
             "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND business_transaction_id = $2 AND status = 'completed'",
-            "tenant-a",
+            "tenant-b",
             &transaction_id,
         )
         .await,
@@ -261,7 +261,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         count(
             &admin,
             "SELECT count(*) FROM crm.outbox_events WHERE tenant_id = $1 AND business_transaction_id = $2",
-            "tenant-a",
+            "tenant-b",
             &transaction_id,
         )
         .await,
@@ -271,7 +271,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         count(
             &admin,
             "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2",
-            "tenant-a",
+            "tenant-b",
             &transaction_id,
         )
         .await,
@@ -281,7 +281,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         count(
             &admin,
             "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2 AND expected_outbox_events = 1 AND expected_audit_records = 1 AND expected_idempotency_records = 1",
-            "tenant-a",
+            "tenant-b",
             &transaction_id,
         )
         .await,
@@ -322,7 +322,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         count(
             &admin,
             "SELECT count(*) FROM crm.file_artifacts WHERE tenant_id = $1 AND file_id = $2",
-            "tenant-a",
+            "tenant-b",
             &rollback_file_id,
         )
         .await,
@@ -332,7 +332,7 @@ async fn file_artifact_capability_commits_business_state_and_evidence_atomically
         count(
             &admin,
             "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND business_transaction_id = $2",
-            "tenant-a",
+            "tenant-b",
             &rollback_transaction_id,
         )
         .await,
@@ -370,7 +370,7 @@ fn file_capability_definition() -> CapabilityDefinition {
 }
 
 fn file_capability_request(transaction_id: &str, idempotency_key: &str) -> CapabilityRequest {
-    let mut execution = context("tenant-a", transaction_id, idempotency_key);
+    let mut execution = context("tenant-b", transaction_id, idempotency_key);
     execution.execution.capability_id = CapabilityId::try_new("test.record.mutate").unwrap();
     CapabilityRequest {
         context: execution,
