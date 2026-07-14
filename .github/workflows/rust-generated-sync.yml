@@ -33,23 +33,22 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
-        run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
-          cargo generate-lockfile
-          cargo fmt --all
-      - name: Commit synchronized files when needed
+          components: rustfmt
+      - name: Format Phase 8A.7 Rust sources
+        run: cargo fmt --all
+      - name: Restore permanent workflow and commit formatting
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
+          set -euo pipefail
+          git fetch origin main --depth=1
+          git checkout origin/main -- .github/workflows/rust-generated-sync.yml
+          if git diff --quiet -- crates modules services .github/workflows/rust-generated-sync.yml; then
+            echo "Rust formatting is already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add crates modules services .github/workflows/rust-generated-sync.yml
+          git commit -m "Format Phase 8A.7 planner sources"
           git push origin "HEAD:${HEAD_BRANCH}"
