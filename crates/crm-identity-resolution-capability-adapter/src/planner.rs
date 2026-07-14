@@ -41,8 +41,8 @@ const MERGE_PARTY_LINK_SCHEMA_ID: &str = "crm.identity_resolution.merge.party-li
 const MERGE_PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
 const MERGE_PARTY_LINK_MAXIMUM_BYTES: u64 = 1_024;
 const MERGE_PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
-    63, 48, 239, 6, 128, 145, 231, 99, 49, 72, 104, 141, 41, 175, 121, 83, 80, 180, 43, 52,
-    220, 16, 147, 23, 147, 87, 83, 7, 38, 143, 192, 15,
+    63, 48, 239, 6, 128, 145, 231, 99, 49, 72, 104, 141, 41, 175, 121, 83, 80, 180, 43, 52, 220,
+    16, 147, 23, 147, 87, 83, 7, 38, 143, 192, 15,
 ];
 
 /// Governed Identity Resolution planner that routes candidate-case and merge-lineage
@@ -76,7 +76,8 @@ impl TransactionalAggregatePlanner for IdentityResolutionCapabilityPlanner {
         request: &CapabilityRequest,
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        let mut plan = if MERGE_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+        let mut plan = if MERGE_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
+        {
             crate::MergeLineageCapabilityPlanner.plan(definition, request, current)?
         } else if CANDIDATE_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             owner_planner::IdentityResolutionCapabilityPlanner.plan(definition, request, current)?
@@ -106,9 +107,7 @@ fn add_candidate_party_links(
     for expectation in scope.parties {
         plan.batch.relationships.push(RelationshipMutation::Link {
             relationship: RelationshipRef {
-                relationship_type: configured_relationship_type(
-                    PARTY_CANDIDATE_RELATIONSHIP_TYPE,
-                )?,
+                relationship_type: configured_relationship_type(PARTY_CANDIDATE_RELATIONSHIP_TYPE)?,
                 source: RecordRef {
                     record_type: configured_record_type(PARTY_CANDIDATE_SOURCE_RECORD_TYPE)?,
                     record_id: RecordId::try_new(expectation.party_ref.as_str())

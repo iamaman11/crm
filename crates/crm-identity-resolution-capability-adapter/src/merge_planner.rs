@@ -10,12 +10,12 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_identity_resolution::{
-    CreateMergeOperation, DecisionReference, FieldPath, LineageDecisionReasonCode, MergeOperation,
-    MergeOperationId, MergeOperationStatus, MERGE_OPERATION_STATE_MAXIMUM_BYTES,
-    MERGE_OPERATION_STATE_RETENTION_POLICY_ID, MERGE_OPERATION_STATE_SCHEMA_ID,
-    MERGE_OPERATION_STATE_SCHEMA_VERSION, PartyReference, SourceValueDigest, SurvivorshipSelection,
-    UnmergeMergeOperation, decode_merge_operation_state, encode_merge_operation_state,
-    merge_operation_state_descriptor_hash,
+    CreateMergeOperation, DecisionReference, FieldPath, LineageDecisionReasonCode,
+    MERGE_OPERATION_STATE_MAXIMUM_BYTES, MERGE_OPERATION_STATE_RETENTION_POLICY_ID,
+    MERGE_OPERATION_STATE_SCHEMA_ID, MERGE_OPERATION_STATE_SCHEMA_VERSION, MergeOperation,
+    MergeOperationId, MergeOperationStatus, PartyReference, SourceValueDigest,
+    SurvivorshipSelection, UnmergeMergeOperation, decode_merge_operation_state,
+    encode_merge_operation_state, merge_operation_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, RecordSnapshot, SdkError};
 use crm_proto_contracts::crm::{
@@ -143,7 +143,9 @@ pub fn merge_reference_scope_from_request(
     })
 }
 
-pub fn merge_operation_from_snapshot(snapshot: &RecordSnapshot) -> Result<MergeOperation, SdkError> {
+pub fn merge_operation_from_snapshot(
+    snapshot: &RecordSnapshot,
+) -> Result<MergeOperation, SdkError> {
     let bytes = support::persisted_json_bytes_with_data_class(
         snapshot,
         merge_persisted_contract(),
@@ -185,14 +187,16 @@ pub fn merge_operation_to_wire(operation: &MergeOperation) -> wire::MergeOperati
             MergeOperationStatus::Active => wire::MergeOperationStatus::Active as i32,
             MergeOperationStatus::Unmerged => wire::MergeOperationStatus::Unmerged as i32,
         },
-        unmerge_decision: operation.unmerge_decision().map(|decision| wire::MergeUnmergeDecision {
-            decision_ref: decision.decision_ref().as_str().to_owned(),
-            decided_by_actor_id: decision.decided_by().as_str().to_owned(),
-            reason: decision.reason().as_str().to_owned(),
-            occurred_at: Some(core::UnixTime {
-                unix_nanos: decision.occurred_at_unix_nanos(),
+        unmerge_decision: operation
+            .unmerge_decision()
+            .map(|decision| wire::MergeUnmergeDecision {
+                decision_ref: decision.decision_ref().as_str().to_owned(),
+                decided_by_actor_id: decision.decided_by().as_str().to_owned(),
+                reason: decision.reason().as_str().to_owned(),
+                occurred_at: Some(core::UnixTime {
+                    unix_nanos: decision.occurred_at_unix_nanos(),
+                }),
             }),
-        }),
         resource_version: Some(customer::CustomerResourceVersion {
             version: operation.version(),
             created_at: Some(core::UnixTime {
@@ -430,7 +434,8 @@ fn required_party_ref(
     value: Option<&customer::PartyRef>,
     field: &'static str,
 ) -> Result<PartyReference, SdkError> {
-    let value = value.ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required"))?;
+    let value =
+        value.ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required"))?;
     PartyReference::try_new(value.party_id.clone())
 }
 
@@ -448,8 +453,10 @@ fn ensure_definition(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
 ) -> Result<(), SdkError> {
-    if !matches!(definition.capability_id.as_str(), MERGE_CAPABILITY | UNMERGE_CAPABILITY)
-        || definition.capability_id != request.context.execution.capability_id
+    if !matches!(
+        definition.capability_id.as_str(),
+        MERGE_CAPABILITY | UNMERGE_CAPABILITY
+    ) || definition.capability_id != request.context.execution.capability_id
         || definition.capability_version != request.context.execution.capability_version
     {
         return Err(unsupported_capability());
