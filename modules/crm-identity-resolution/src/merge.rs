@@ -850,9 +850,9 @@ fn normalize_reason_code(value: String) -> Result<String, SdkError> {
     let canonical = value.trim().to_ascii_lowercase();
     if canonical.is_empty()
         || canonical.len() > MAX_REASON_CODE_BYTES
-        || !canonical
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-'))
+        || !canonical.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
     {
         return Err(invalid(
             "IDENTITY_RESOLUTION_UNMERGE_REASON_INVALID",
@@ -924,13 +924,13 @@ mod tests {
     fn create_lineage(chosen_source: SurvivorshipSource) -> PartyMergeLineage {
         let survivor = party("party-a");
         let absorbed = party("party-b");
-        let survivorship = DisplayNameSurvivorship::try_new(
-            chosen_source,
-            "Alpha Person",
-            "Beta Person",
-        )
-        .unwrap();
-        let survivor_post = if survivorship.changes_survivor() { 8 } else { 7 };
+        let survivorship =
+            DisplayNameSurvivorship::try_new(chosen_source, "Alpha Person", "Beta Person").unwrap();
+        let survivor_post = if survivorship.changes_survivor() {
+            8
+        } else {
+            7
+        };
         PartyMergeLineage::create(CreatePartyMergeLineage {
             candidate_case_id: case_for(&survivor, &absorbed),
             candidate_case_version: 3,
@@ -997,7 +997,10 @@ mod tests {
         let changed = create_lineage(SurvivorshipSource::Absorbed);
         assert_eq!(changed.survivor_pre_merge_version(), 7);
         assert_eq!(changed.survivor_post_merge_version(), 8);
-        assert_eq!(changed.display_name_survivorship().chosen_value(), "Beta Person");
+        assert_eq!(
+            changed.display_name_survivorship().chosen_value(),
+            "Beta Person"
+        );
     }
 
     #[test]
@@ -1031,7 +1034,10 @@ mod tests {
                 occurred_at_unix_nanos: 300,
             })
             .unwrap_err();
-        assert_eq!(error.code.as_str(), "IDENTITY_RESOLUTION_MERGE_ALREADY_UNMERGED");
+        assert_eq!(
+            error.code.as_str(),
+            "IDENTITY_RESOLUTION_MERGE_ALREADY_UNMERGED"
+        );
     }
 
     #[test]
