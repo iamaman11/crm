@@ -6,7 +6,9 @@ publish = false
 
 [dependencies]
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-core-data = { path = "../crm-core-data" }
 crm-customer-data-operations = { path = "../../modules/crm-customer-data-operations" }
+crm-customer-data-operations-capability-adapter = { path = "../crm-customer-data-operations-capability-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
