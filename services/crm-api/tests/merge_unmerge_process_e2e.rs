@@ -95,9 +95,33 @@ async fn crm_api_process_proves_approved_reversible_merge_lineage() {
     let party_b = unique_id("merge-party-b");
     let party_c = unique_id("merge-party-c");
     let cross_tenant_party = unique_id("merge-party-cross-tenant");
-    create_party(&mut grpc, &party_create, TENANT_A, &party_a, "Merge Subject A", "merge-create-a").await;
-    create_party(&mut grpc, &party_create, TENANT_A, &party_b, "Merge Subject B", "merge-create-b").await;
-    create_party(&mut grpc, &party_create, TENANT_A, &party_c, "Merge Subject C", "merge-create-c").await;
+    create_party(
+        &mut grpc,
+        &party_create,
+        TENANT_A,
+        &party_a,
+        "Merge Subject A",
+        "merge-create-a",
+    )
+    .await;
+    create_party(
+        &mut grpc,
+        &party_create,
+        TENANT_A,
+        &party_b,
+        "Merge Subject B",
+        "merge-create-b",
+    )
+    .await;
+    create_party(
+        &mut grpc,
+        &party_create,
+        TENANT_A,
+        &party_c,
+        "Merge Subject C",
+        "merge-create-c",
+    )
+    .await;
     create_party(
         &mut grpc,
         &party_create,
@@ -215,25 +239,47 @@ async fn crm_api_process_proves_approved_reversible_merge_lineage() {
     let merged_operation = decode_merge(&merged);
     assert_eq!(operation_id_of(&merged_operation), operation_id);
     assert_eq!(operation_version(&merged_operation), 1);
-    assert_eq!(merged_operation.status, identity::MergeOperationStatus::Active as i32);
+    assert_eq!(
+        merged_operation.status,
+        identity::MergeOperationStatus::Active as i32
+    );
     assert_eq!(merged_operation.decided_by_actor_id, ACTOR);
     assert_eq!(merged_operation.survivorship.len(), 1);
-    assert_evidence_delta(evidence_counts(&admin, TENANT_A).await, baseline, 1, 2, 1, 1);
+    assert_evidence_delta(
+        evidence_counts(&admin, TENANT_A).await,
+        baseline,
+        1,
+        2,
+        1,
+        1,
+    );
 
     let queried = decode_get_merge(
-        query(&mut grpc, &merge_get, get_merge_payload(&merge_get, &operation_id), TENANT_A)
-            .await
-            .expect("query active merge operation"),
+        query(
+            &mut grpc,
+            &merge_get,
+            get_merge_payload(&merge_get, &operation_id),
+            TENANT_A,
+        )
+        .await
+        .expect("query active merge operation"),
     );
     assert_eq!(operation_id_of(&queried), operation_id);
-    assert_eq!(queried.status, identity::MergeOperationStatus::Active as i32);
+    assert_eq!(
+        queried.status,
+        identity::MergeOperationStatus::Active as i32
+    );
 
     for party_id in [&party_c, &party_b] {
         let listed = decode_list_merges(
             query(
                 &mut grpc,
                 &merge_list,
-                list_merges_payload(&merge_list, party_id, identity::MergeOperationStatus::Active),
+                list_merges_payload(
+                    &merge_list,
+                    party_id,
+                    identity::MergeOperationStatus::Active,
+                ),
                 TENANT_A,
             )
             .await
@@ -244,17 +290,32 @@ async fn crm_api_process_proves_approved_reversible_merge_lineage() {
     }
 
     let resolved = decode_resolution(
-        query(&mut grpc, &resolve, resolve_payload(&resolve, &party_c), TENANT_A)
-            .await
-            .expect("resolve source Party to survivor"),
+        query(
+            &mut grpc,
+            &resolve,
+            resolve_payload(&resolve, &party_c),
+            TENANT_A,
+        )
+        .await
+        .expect("resolve source Party to survivor"),
     );
-    assert_eq!(resolved.canonical_party_ref.as_ref().unwrap().party_id, party_b);
     assert_eq!(
-        resolved.party_path.iter().map(|party| party.party_id.as_str()).collect::<Vec<_>>(),
+        resolved.canonical_party_ref.as_ref().unwrap().party_id,
+        party_b
+    );
+    assert_eq!(
+        resolved
+            .party_path
+            .iter()
+            .map(|party| party.party_id.as_str())
+            .collect::<Vec<_>>(),
         vec![party_c.as_str(), party_b.as_str()]
     );
     assert_eq!(resolved.merge_operation_path.len(), 1);
-    assert_eq!(resolved.merge_operation_path[0].merge_operation_id, operation_id);
+    assert_eq!(
+        resolved.merge_operation_path[0].merge_operation_id,
+        operation_id
+    );
 
     let duplicate_source_payload = merge_payload(
         &merge,
@@ -274,7 +335,10 @@ async fn crm_api_process_proves_approved_reversible_merge_lineage() {
     )
     .await
     .expect_err("active redirect source cannot be merged again");
-    assert!(matches!(duplicate_source.code(), Code::Aborted | Code::FailedPrecondition));
+    assert!(matches!(
+        duplicate_source.code(),
+        Code::Aborted | Code::FailedPrecondition
+    ));
 
     let cycle_payload = merge_payload(
         &merge,
@@ -294,8 +358,18 @@ async fn crm_api_process_proves_approved_reversible_merge_lineage() {
     )
     .await
     .expect_err("reverse canonical cycle must be rejected");
-    assert!(matches!(cycle.code(), Code::Aborted | Code::FailedPrecondition));
-    assert_evidence_delta(evidence_counts(&admin, TENANT_A).await, baseline, 1, 2, 1, 1);
+    assert!(matches!(
+        cycle.code(),
+        Code::Aborted | Code::FailedPrecondition
+    ));
+    assert_evidence_delta(
+        evidence_counts(&admin, TENANT_A).await,
+        baseline,
+        1,
+        2,
+        1,
+        1,
+    );
 
     let stale_unmerge = unmerge_payload(&unmerge, &operation_id, 1, 2, 1);
     let stale_unmerge_error = mutate(
@@ -324,48 +398,95 @@ async fn crm_api_process_proves_approved_reversible_merge_lineage() {
     let unmerged_operation = decode_unmerge(&unmerged);
     assert_eq!(operation_id_of(&unmerged_operation), operation_id);
     assert_eq!(operation_version(&unmerged_operation), 2);
-    assert_eq!(unmerged_operation.status, identity::MergeOperationStatus::Unmerged as i32);
+    assert_eq!(
+        unmerged_operation.status,
+        identity::MergeOperationStatus::Unmerged as i32
+    );
     assert!(unmerged_operation.unmerge_decision.is_some());
-    assert_evidence_delta(evidence_counts(&admin, TENANT_A).await, baseline, 1, 2, 0, 2);
+    assert_evidence_delta(
+        evidence_counts(&admin, TENANT_A).await,
+        baseline,
+        1,
+        2,
+        0,
+        2,
+    );
 
     let resolved_after = decode_resolution(
-        query(&mut grpc, &resolve, resolve_payload(&resolve, &party_c), TENANT_A)
-            .await
-            .expect("resolve source Party after unmerge"),
+        query(
+            &mut grpc,
+            &resolve,
+            resolve_payload(&resolve, &party_c),
+            TENANT_A,
+        )
+        .await
+        .expect("resolve source Party after unmerge"),
     );
-    assert_eq!(resolved_after.canonical_party_ref.as_ref().unwrap().party_id, party_c);
+    assert_eq!(
+        resolved_after
+            .canonical_party_ref
+            .as_ref()
+            .unwrap()
+            .party_id,
+        party_c
+    );
     assert_eq!(resolved_after.party_path.len(), 1);
     assert!(resolved_after.merge_operation_path.is_empty());
 
     let queried_unmerged = decode_get_merge(
-        query(&mut grpc, &merge_get, get_merge_payload(&merge_get, &operation_id), TENANT_A)
-            .await
-            .expect("query retained unmerged lineage"),
+        query(
+            &mut grpc,
+            &merge_get,
+            get_merge_payload(&merge_get, &operation_id),
+            TENANT_A,
+        )
+        .await
+        .expect("query retained unmerged lineage"),
     );
-    assert_eq!(queried_unmerged.status, identity::MergeOperationStatus::Unmerged as i32);
+    assert_eq!(
+        queried_unmerged.status,
+        identity::MergeOperationStatus::Unmerged as i32
+    );
 
     let listed_unmerged = decode_list_merges(
         query(
             &mut grpc,
             &merge_list,
-            list_merges_payload(&merge_list, &party_c, identity::MergeOperationStatus::Unmerged),
+            list_merges_payload(
+                &merge_list,
+                &party_c,
+                identity::MergeOperationStatus::Unmerged,
+            ),
             TENANT_A,
         )
         .await
         .expect("list retained unmerged lineage"),
     );
     assert_eq!(listed_unmerged.merge_operations.len(), 1);
-    assert_eq!(operation_id_of(&listed_unmerged.merge_operations[0]), operation_id);
+    assert_eq!(
+        operation_id_of(&listed_unmerged.merge_operations[0]),
+        operation_id
+    );
 
     let party_b_after = decode_party(
-        query(&mut grpc, &party_get, party_get_payload(&party_get, &party_b), TENANT_A)
-            .await
-            .expect("survivor Party remains queryable"),
+        query(
+            &mut grpc,
+            &party_get,
+            party_get_payload(&party_get, &party_b),
+            TENANT_A,
+        )
+        .await
+        .expect("survivor Party remains queryable"),
     );
     let party_c_after = decode_party(
-        query(&mut grpc, &party_get, party_get_payload(&party_get, &party_c), TENANT_A)
-            .await
-            .expect("source Party remains queryable"),
+        query(
+            &mut grpc,
+            &party_get,
+            party_get_payload(&party_get, &party_c),
+            TENANT_A,
+        )
+        .await
+        .expect("source Party remains queryable"),
     );
     assert_eq!(party_version(&party_b_after), 1);
     assert_eq!(party_version(&party_c_after), 1);
@@ -410,7 +531,9 @@ async fn create_party(
         payload(
             definition,
             parties::CreatePartyRequest {
-                party_ref: Some(customer::PartyRef { party_id: party_id.to_owned() }),
+                party_ref: Some(customer::PartyRef {
+                    party_id: party_id.to_owned(),
+                }),
                 kind: parties::PartyKind::Person as i32,
                 display_name: display_name.to_owned(),
             },
@@ -437,15 +560,21 @@ fn merge_payload(
             merge_operation_ref: Some(identity::MergeOperationRef {
                 merge_operation_id: operation_id.to_owned(),
             }),
-            source_party_ref: Some(customer::PartyRef { party_id: source_party.to_owned() }),
+            source_party_ref: Some(customer::PartyRef {
+                party_id: source_party.to_owned(),
+            }),
             source_party_version: source_version,
-            survivor_party_ref: Some(customer::PartyRef { party_id: survivor_party.to_owned() }),
+            survivor_party_ref: Some(customer::PartyRef {
+                party_id: survivor_party.to_owned(),
+            }),
             survivor_party_version: survivor_version,
             decision_ref: format!("review://identity-resolution/{operation_id}/merge"),
             reason: "review.confirmed_duplicate".to_owned(),
             survivorship: vec![identity::SurvivorshipSelection {
                 field_path: "display_name".to_owned(),
-                provenance_party_ref: Some(customer::PartyRef { party_id: survivor_party.to_owned() }),
+                provenance_party_ref: Some(customer::PartyRef {
+                    party_id: survivor_party.to_owned(),
+                }),
                 provenance_party_version: survivor_version,
                 source_value_sha256: vec![0x42; 32],
                 evidence_ref: format!("evidence://identity-resolution/{operation_id}/display-name"),
@@ -495,7 +624,9 @@ fn list_merges_payload(
     payload(
         definition,
         identity::ListMergeOperationsByPartyRequest {
-            party_ref: Some(customer::PartyRef { party_id: party_id.to_owned() }),
+            party_ref: Some(customer::PartyRef {
+                party_id: party_id.to_owned(),
+            }),
             status: status as i32,
             page_size: 10,
             cursor: String::new(),
@@ -507,7 +638,9 @@ fn resolve_payload(definition: &CapabilityDefinition, party_id: &str) -> TypedPa
     payload(
         definition,
         identity::ResolveCanonicalPartyRequest {
-            party_ref: Some(customer::PartyRef { party_id: party_id.to_owned() }),
+            party_ref: Some(customer::PartyRef {
+                party_id: party_id.to_owned(),
+            }),
         },
     )
 }
@@ -516,7 +649,9 @@ fn party_get_payload(definition: &CapabilityDefinition, party_id: &str) -> Typed
     payload(
         definition,
         parties::GetPartyRequest {
-            party_ref: Some(customer::PartyRef { party_id: party_id.to_owned() }),
+            party_ref: Some(customer::PartyRef {
+                party_id: party_id.to_owned(),
+            }),
         },
     )
 }
@@ -565,13 +700,19 @@ async fn mutate(
         input: Some(wire_payload(input)),
         approval,
     });
-    request.metadata_mut().insert("x-tenant-id", tenant_id.parse().unwrap());
-    request.metadata_mut().insert("idempotency-key", idempotency_key.parse().unwrap());
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {TOKEN}").parse().unwrap(),
-    );
-    client.mutate(request).await.map(|response| response.into_inner())
+    request
+        .metadata_mut()
+        .insert("x-tenant-id", tenant_id.parse().unwrap());
+    request
+        .metadata_mut()
+        .insert("idempotency-key", idempotency_key.parse().unwrap());
+    request
+        .metadata_mut()
+        .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
+    client
+        .mutate(request)
+        .await
+        .map(|response| response.into_inner())
 }
 
 async fn query(
@@ -586,12 +727,16 @@ async fn query(
         capability_version: definition.capability_version.as_str().to_owned(),
         input: Some(wire_payload(input)),
     });
-    request.metadata_mut().insert("x-tenant-id", tenant_id.parse().unwrap());
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {TOKEN}").parse().unwrap(),
-    );
-    client.query(request).await.map(|response| response.into_inner())
+    request
+        .metadata_mut()
+        .insert("x-tenant-id", tenant_id.parse().unwrap());
+    request
+        .metadata_mut()
+        .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
+    client
+        .query(request)
+        .await
+        .map(|response| response.into_inner())
 }
 
 fn mutation_definition(capability_id: &str) -> CapabilityDefinition {
@@ -611,7 +756,11 @@ fn query_definition(capability_id: &str) -> CapabilityDefinition {
 }
 
 fn payload<M: Message>(definition: &CapabilityDefinition, message: M) -> TypedPayload {
-    let data_class = *definition.input_contract.allowed_data_classes.first().unwrap();
+    let data_class = *definition
+        .input_contract
+        .allowed_data_classes
+        .first()
+        .unwrap();
     let payload = TypedPayload {
         owner: definition.input_contract.owner.clone(),
         schema_id: definition.input_contract.schema_id.clone(),
@@ -655,21 +804,27 @@ fn data_class_name(data_class: DataClass) -> &'static str {
     }
 }
 
-fn decode_merge(response: &crm_application_runtime::gateway_v1::MutateResponse) -> identity::MergeOperation {
+fn decode_merge(
+    response: &crm_application_runtime::gateway_v1::MutateResponse,
+) -> identity::MergeOperation {
     identity::MergePartyResponse::decode(response.output.as_ref().unwrap().payload.as_slice())
         .unwrap()
         .merge_operation
         .unwrap()
 }
 
-fn decode_unmerge(response: &crm_application_runtime::gateway_v1::MutateResponse) -> identity::MergeOperation {
+fn decode_unmerge(
+    response: &crm_application_runtime::gateway_v1::MutateResponse,
+) -> identity::MergeOperation {
     identity::UnmergePartyResponse::decode(response.output.as_ref().unwrap().payload.as_slice())
         .unwrap()
         .merge_operation
         .unwrap()
 }
 
-fn decode_get_merge(response: crm_application_runtime::gateway_v1::QueryResponse) -> identity::MergeOperation {
+fn decode_get_merge(
+    response: crm_application_runtime::gateway_v1::QueryResponse,
+) -> identity::MergeOperation {
     identity::GetMergeOperationResponse::decode(response.output.unwrap().payload.as_slice())
         .unwrap()
         .merge_operation
@@ -679,8 +834,10 @@ fn decode_get_merge(response: crm_application_runtime::gateway_v1::QueryResponse
 fn decode_list_merges(
     response: crm_application_runtime::gateway_v1::QueryResponse,
 ) -> identity::ListMergeOperationsByPartyResponse {
-    identity::ListMergeOperationsByPartyResponse::decode(response.output.unwrap().payload.as_slice())
-        .unwrap()
+    identity::ListMergeOperationsByPartyResponse::decode(
+        response.output.unwrap().payload.as_slice(),
+    )
+    .unwrap()
 }
 
 fn decode_resolution(
@@ -700,7 +857,12 @@ fn decode_party(response: crm_application_runtime::gateway_v1::QueryResponse) ->
 }
 
 fn operation_id_of(operation: &identity::MergeOperation) -> &str {
-    operation.merge_operation_ref.as_ref().unwrap().merge_operation_id.as_str()
+    operation
+        .merge_operation_ref
+        .as_ref()
+        .unwrap()
+        .merge_operation_id
+        .as_str()
 }
 
 fn operation_version(operation: &identity::MergeOperation) -> i64 {
@@ -740,11 +902,12 @@ async fn evidence_counts(admin: &PgPool, tenant_id: &str) -> EvidenceCounts {
     .fetch_one(admin)
     .await
     .unwrap();
-    let audits = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1")
-        .bind(tenant_id)
-        .fetch_one(admin)
-        .await
-        .unwrap();
+    let audits =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(admin)
+            .await
+            .unwrap();
     let idempotency = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1",
     )
@@ -779,12 +942,21 @@ fn assert_evidence_delta(
     successful_mutations: i64,
 ) {
     assert_eq!(actual.operations, baseline.operations + operations);
-    assert_eq!(actual.lineage_relationships, baseline.lineage_relationships + lineage_relationships);
+    assert_eq!(
+        actual.lineage_relationships,
+        baseline.lineage_relationships + lineage_relationships
+    );
     assert_eq!(actual.redirects, baseline.redirects + redirects);
     assert_eq!(actual.events, baseline.events + successful_mutations);
     assert_eq!(actual.audits, baseline.audits + successful_mutations);
-    assert_eq!(actual.idempotency, baseline.idempotency + successful_mutations);
-    assert_eq!(actual.transactions, baseline.transactions + successful_mutations);
+    assert_eq!(
+        actual.idempotency,
+        baseline.idempotency + successful_mutations
+    );
+    assert_eq!(
+        actual.transactions,
+        baseline.transactions + successful_mutations
+    );
 }
 
 async fn party_record_count(admin: &PgPool, tenant_id: &str) -> i64 {
@@ -805,7 +977,10 @@ fn spawn_crm_api(database_url: &str, http_addr: &str, grpc_addr: &str) -> Child 
         .env("CRM_API_BEARER_TOKEN", TOKEN)
         .env("CRM_API_ACTOR_ID", ACTOR)
         .env("CRM_API_TENANTS", format!("{TENANT_A},{TENANT_B}"))
-        .env("CRM_CURSOR_SIGNING_KEY", "identity-resolution-cursor-signing-key-0123456789abcdef")
+        .env(
+            "CRM_CURSOR_SIGNING_KEY",
+            "identity-resolution-cursor-signing-key-0123456789abcdef",
+        )
         .env("CRM_APPROVAL_SIGNING_KEY", APPROVAL_KEY)
         .env("CRM_BOOTSTRAP_ALLOW_PHASE6", "true")
         .stdout(Stdio::inherit())
@@ -821,12 +996,18 @@ async fn wait_until_ready(client: &reqwest::Client, child: &mut Child, http_addr
         if let Some(status) = child.try_wait().expect("poll crm-api process") {
             panic!("crm-api exited before merge/unmerge acceptance readiness: {status}");
         }
-        if let Ok(response) = client.get(format!("http://{http_addr}/readyz")).send().await
+        if let Ok(response) = client
+            .get(format!("http://{http_addr}/readyz"))
+            .send()
+            .await
             && response.status().is_success()
         {
             return;
         }
-        assert!(Instant::now() < deadline, "merge/unmerge acceptance readiness timed out");
+        assert!(
+            Instant::now() < deadline,
+            "merge/unmerge acceptance readiness timed out"
+        );
         sleep(Duration::from_millis(200)).await;
     }
 }
@@ -839,7 +1020,10 @@ async fn connect_grpc(
         match ApplicationGatewayServiceClient::connect(format!("http://{grpc_addr}")).await {
             Ok(client) => return client,
             Err(error) => {
-                assert!(Instant::now() < deadline, "merge/unmerge gRPC listener timed out: {error}");
+                assert!(
+                    Instant::now() < deadline,
+                    "merge/unmerge gRPC listener timed out: {error}"
+                );
                 sleep(Duration::from_millis(200)).await;
             }
         }
