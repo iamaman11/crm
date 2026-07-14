@@ -93,8 +93,8 @@ fn wire_job_preserves_parser_profile_and_source_system_identity() {
     assert_eq!(profile.delimiter_ascii, u32::from(b','));
     assert_eq!(profile.quote_ascii, u32::from(b'"'));
     assert_eq!(
-        wire.mapping.unwrap().source_external_id_column.as_str(),
-        Some("legacy_customer_id")
+        wire.mapping.unwrap().source_external_id_column,
+        "legacy_customer_id"
     );
 }
 
