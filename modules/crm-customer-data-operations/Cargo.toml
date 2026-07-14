@@ -1,0 +1,11 @@
+[package]
+name = "crm-customer-data-operations"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-module-sdk = { path = "../../crates/crm-module-sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
