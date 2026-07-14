@@ -50,6 +50,7 @@ members = [
   "crates/crm-identity-resolution-query-adapter",
   "crates/crm-customer-data-operations-capability-adapter",
   "crates/crm-customer-data-operations-query-adapter",
+  "crates/crm-customer-data-operations-execution-composition",
   "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
   "crates/crm-sales-activities-link-contract-adapter",
