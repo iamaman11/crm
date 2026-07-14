@@ -10,8 +10,11 @@ on:
       - "crates/**/*.rs"
       - "modules/**/Cargo.toml"
       - "modules/**/*.rs"
+      - "modules/**/module.yaml"
       - "services/**/Cargo.toml"
       - "services/**/*.rs"
+      - "contracts/module-contract-bindings.json"
+      - "proto/**"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -25,7 +28,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,22 +37,109 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.18.0"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
+      - name: Apply machine-fixable maintenance and Phase 8A.6 contract synchronization
         run: |
+          set -euo pipefail
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("contracts/module-contract-bindings.json")
+          data = json.loads(path.read_text())
+          module = next(item for item in data["modules"] if item["module_id"] == "crm.identity-resolution")
+
+          capabilities = [
+              {
+                  "id": "identity_resolution.merge.execute",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.MergeParty",
+                  "request": "crm.identity_resolution.v1.MergePartyRequest",
+                  "response": "crm.identity_resolution.v1.MergePartyResponse",
+              },
+              {
+                  "id": "identity_resolution.merge.unmerge",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.UnmergeParty",
+                  "request": "crm.identity_resolution.v1.UnmergePartyRequest",
+                  "response": "crm.identity_resolution.v1.UnmergePartyResponse",
+              },
+              {
+                  "id": "identity_resolution.merge.get",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.GetMergeOperation",
+                  "request": "crm.identity_resolution.v1.GetMergeOperationRequest",
+                  "response": "crm.identity_resolution.v1.GetMergeOperationResponse",
+              },
+              {
+                  "id": "identity_resolution.merge.list_by_party",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ListMergeOperationsByParty",
+                  "request": "crm.identity_resolution.v1.ListMergeOperationsByPartyRequest",
+                  "response": "crm.identity_resolution.v1.ListMergeOperationsByPartyResponse",
+              },
+              {
+                  "id": "identity_resolution.party.resolve_canonical",
+                  "version": "1.0.0",
+                  "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ResolveCanonicalParty",
+                  "request": "crm.identity_resolution.v1.ResolveCanonicalPartyRequest",
+                  "response": "crm.identity_resolution.v1.ResolveCanonicalPartyResponse",
+              },
+          ]
+          events = [
+              {
+                  "id": "identity_resolution.party.merged",
+                  "version": "1.0.0",
+                  "message": "crm.identity_resolution.v1.PartyMergedEvent",
+              },
+              {
+                  "id": "identity_resolution.party.unmerged",
+                  "version": "1.0.0",
+                  "message": "crm.identity_resolution.v1.PartyUnmergedEvent",
+              },
+          ]
+
+          existing_capabilities = {item["id"]: item for item in module["capabilities"]}
+          for item in capabilities:
+              existing_capabilities[item["id"]] = item
+          ordered_ids = [item["id"] for item in module["capabilities"]]
+          for item in capabilities:
+              if item["id"] not in ordered_ids:
+                  ordered_ids.append(item["id"])
+          module["capabilities"] = [existing_capabilities[item_id] for item_id in ordered_ids]
+
+          existing_events = {item["id"]: item for item in module["events"]}
+          for item in events:
+              existing_events[item["id"]] = item
+          ordered_event_ids = [item["id"] for item in module["events"]]
+          for item in events:
+              if item["id"] not in ordered_event_ids:
+                  ordered_event_ids.append(item["id"])
+          module["events"] = [existing_events[item_id] for item_id in ordered_event_ids]
+
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+          pnpm install --frozen-lockfile
+          pnpm web:generate
       - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts; then
+            echo "Maintenance and contract surfaces are already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates modules services contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts
+          git commit -m "Synchronize Phase 8A.6 generated contract surfaces"
           git push origin "HEAD:${HEAD_BRANCH}"
