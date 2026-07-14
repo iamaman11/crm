@@ -4,7 +4,7 @@ use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::{EventEvidence, RecordMutation};
 use crm_module_sdk::{DataClass, ErrorCategory, SdkError};
 use crm_parties::{
-    ApplyMergeDisplayName, MergeLineageReference, MarkPartyMerged, PARTY_STATE_MAXIMUM_BYTES,
+    ApplyMergeDisplayName, MarkPartyMerged, MergeLineageReference, PARTY_STATE_MAXIMUM_BYTES,
     PARTY_STATE_RETENTION_POLICY_ID, PARTY_STATE_SCHEMA_ID, PARTY_STATE_V2_SCHEMA_VERSION, Party,
     PartyKind, ReactivatePartyFromMerge, encode_party_state_v2, party_state_v2_descriptor_hash,
 };
@@ -16,8 +16,7 @@ pub const MERGE_REDIRECT_APPLIED_EVENT_SCHEMA: &str =
 pub const MERGE_REDIRECT_REMOVED_EVENT_TYPE: &str = "parties.party.merge_redirect_removed";
 pub const MERGE_REDIRECT_REMOVED_EVENT_SCHEMA: &str =
     "crm.parties.v1.PartyMergeRedirectRemovedEvent";
-pub const MERGE_SURVIVORSHIP_UPDATED_EVENT_TYPE: &str =
-    "parties.party.merge_survivorship_updated";
+pub const MERGE_SURVIVORSHIP_UPDATED_EVENT_TYPE: &str = "parties.party.merge_survivorship_updated";
 pub const MERGE_SURVIVORSHIP_UPDATED_EVENT_SCHEMA: &str =
     "crm.parties.v1.PartyMergeSurvivorshipUpdatedEvent";
 pub const MERGE_SURVIVORSHIP_RESTORED_EVENT_TYPE: &str =
@@ -63,7 +62,7 @@ pub fn plan_party_merge_owner_fragment(
     request: &CapabilityRequest,
     input: PlanPartyMergeOwnerFragment<'_>,
 ) -> Result<PartyOwnedMutationFragment, SdkError> {
-    validate_pair(input.survivor, input.absorbed)?;
+    validate_merge_pair(input.survivor, input.absorbed)?;
     let occurred_at = request.context.execution.request_started_at_unix_nanos;
     let mut survivor = input.survivor.clone();
     let mut absorbed = input.absorbed.clone();
@@ -169,7 +168,7 @@ pub fn plan_party_unmerge_owner_fragment(
     request: &CapabilityRequest,
     input: PlanPartyUnmergeOwnerFragment<'_>,
 ) -> Result<PartyOwnedMutationFragment, SdkError> {
-    validate_pair(input.survivor, input.absorbed)?;
+    validate_unmerge_pair(input.survivor, input.absorbed)?;
     let occurred_at = request.context.execution.request_started_at_unix_nanos;
     let mut survivor = input.survivor.clone();
     let mut absorbed = input.absorbed.clone();
@@ -289,7 +288,7 @@ fn party_record_ref(party: &Party) -> Result<crm_module_sdk::RecordRef, SdkError
     )
 }
 
-fn validate_pair(survivor: &Party, absorbed: &Party) -> Result<(), SdkError> {
+fn validate_merge_pair(survivor: &Party, absorbed: &Party) -> Result<(), SdkError> {
     if survivor.party_id() == absorbed.party_id() {
         return Err(invalid_owner_plan(
             "PARTIES_MERGE_SELF_INVALID",
@@ -304,6 +303,22 @@ fn validate_pair(survivor: &Party, absorbed: &Party) -> Result<(), SdkError> {
     }
     require_active(survivor)?;
     require_active(absorbed)
+}
+
+fn validate_unmerge_pair(survivor: &Party, absorbed: &Party) -> Result<(), SdkError> {
+    if survivor.party_id() == absorbed.party_id() {
+        return Err(invalid_owner_plan(
+            "PARTIES_MERGE_SELF_INVALID",
+            "a Party cannot be unmerged from itself",
+        ));
+    }
+    if survivor.kind() != absorbed.kind() {
+        return Err(invalid_owner_plan(
+            "PARTIES_MERGE_KIND_MISMATCH",
+            "Party unmerge requires matching Party kinds",
+        ));
+    }
+    require_active(survivor)
 }
 
 fn require_expected_version(party: &Party, expected_version: i64) -> Result<(), SdkError> {
@@ -378,7 +393,10 @@ mod tests {
         assert_eq!(survivor.version(), 2);
         assert_eq!(absorbed.party_id().as_str(), "party-b");
         assert_eq!(absorbed.version(), 2);
-        assert!(matches!(absorbed.lifecycle(), PartyLifecycle::Merged { .. }));
+        assert!(matches!(
+            absorbed.lifecycle(),
+            PartyLifecycle::Merged { .. }
+        ));
     }
 
     #[test]
@@ -446,7 +464,7 @@ mod tests {
         display_name_survivorship: PartyDisplayNameSurvivorship,
         occurred_at_unix_nanos: i64,
     ) -> Result<(Party, Party, bool), SdkError> {
-        validate_pair(survivor, absorbed)?;
+        validate_merge_pair(survivor, absorbed)?;
         let mut survivor = survivor.clone();
         let mut absorbed = absorbed.clone();
         let survivor_changed = match display_name_survivorship {
@@ -486,7 +504,7 @@ mod tests {
         restore_survivor_display_name: Option<String>,
         occurred_at_unix_nanos: i64,
     ) -> Result<(Party, Party, bool), SdkError> {
-        validate_pair(survivor, absorbed)?;
+        validate_unmerge_pair(survivor, absorbed)?;
         let mut survivor = survivor.clone();
         let mut absorbed = absorbed.clone();
         let survivor_changed = if let Some(display_name) = restore_survivor_display_name {
