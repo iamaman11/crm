@@ -8,7 +8,8 @@
 //!
 //! Duplicate-candidate review state and reversible merge lineage are separate
 //! authoritative records. Merge lineage never deletes Party records or rewrites
-//! downstream references destructively.
+//! downstream references destructively. Canonical Party resolution is derived
+//! only from the current set of active authoritative merge-operation edges.
 
 pub mod domain;
 pub mod merge_lineage;
