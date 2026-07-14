@@ -1,0 +1,156 @@
+name: Phase 8A.7 Runtime Query Wire Once
+
+on:
+  push:
+    branches:
+      - develop/phase8a7-customer-import-jobs
+    paths:
+      - .github/workflows/phase8a7-runtime-query-wire-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a7-customer-import-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Wire import query adapter into production runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-application-runtime/src/runtime.rs')
+          text = path.read_text()
+
+          anchor = '''use crm_customer_accounts_query_adapter::AccountQueryAdapter;
+'''
+          addition = anchor + '''use crm_customer_data_operations_capability_adapter::{
+    IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
+    IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
+    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+};
+use crm_customer_data_operations_query_adapter::{
+    CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
+};
+'''
+          if 'CustomerDataOperationsQueryAdapter' not in text:
+              text = text.replace(anchor, addition)
+
+          adapter_anchor = '''        let identity_resolution_merge_query_adapter = IdentityResolutionMergeQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+'''
+          adapter_replacement = adapter_anchor + '''        let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+'''
+          if 'let customer_data_operations_query_adapter' not in text:
+              text = text.replace(adapter_anchor, adapter_replacement)
+
+          text = text.replace(
+              '            identity_resolution_merge_query_adapter,\n            metadata_query_adapter,',
+              '            identity_resolution_merge_query_adapter,\n            customer_data_operations_query_adapter,\n            metadata_query_adapter,'
+          )
+
+          case_anchor = '''                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
+                        resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
+                    },
+                    party_relationship_fields(),
+                    expires_at,
+                )?,
+'''
+          case_addition = case_anchor + '''                CUSTOMER_DATA_OPERATIONS_MODULE_ID => {
+                    upsert_bootstrap_visibility(
+                        visibility_store,
+                        config,
+                        tenant_id,
+                        definition,
+                        BootstrapVisibilityResource {
+                            owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+                            resource_type: CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
+                        },
+                        customer_data_import_job_fields(),
+                        expires_at,
+                    )?;
+                    if definition.capability_id.as_str() == LIST_IMPORT_ROWS_CAPABILITY {
+                        upsert_bootstrap_visibility(
+                            visibility_store,
+                            config,
+                            tenant_id,
+                            definition,
+                            BootstrapVisibilityResource {
+                                owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+                                resource_type: CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
+                            },
+                            customer_data_import_row_fields(),
+                            expires_at,
+                        )?;
+                    }
+                }
+'''
+          if 'CUSTOMER_DATA_OPERATIONS_MODULE_ID =>' not in text:
+              text = text.replace(case_anchor, case_addition)
+
+          fn_anchor = '''fn customer_360_party_fields() -> BTreeSet<String> {
+'''
+          functions = '''fn customer_data_import_job_fields() -> BTreeSet<String> {
+    ["source", "mapping", "status", "counters", "checkpoint"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn customer_data_import_row_fields() -> BTreeSet<String> {
+    [
+        "row_position",
+        "source_identity",
+        "status",
+        "prepared_party",
+        "diagnostics",
+        "execution",
+        "target_party_ref",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+'''
+          if 'fn customer_data_import_job_fields()' not in text:
+              text = text.replace(fn_anchor, functions + fn_anchor)
+
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          rm .github/workflows/phase8a7-runtime-query-wire-once.yml
+      - name: Commit runtime query wiring and self-remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(phase8a7): wire import queries into production runtime"
+          git push origin HEAD:develop/phase8a7-customer-import-jobs
