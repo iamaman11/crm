@@ -9,22 +9,26 @@ use crm_core_data::{
     MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, PostgresDataStore, RecordGetQuery,
     RelatedRecordListQuery,
 };
-use crm_identity_resolution::{MergeOperation, MergeOperationId, MergeOperationStatus, PartyReference};
+use crm_identity_resolution::{
+    MergeOperation, MergeOperationId, MergeOperationStatus, PartyReference,
+};
 use crm_identity_resolution_capability_adapter::{
     CANONICAL_REDIRECT_PARTY_RECORD_TYPE, CANONICAL_REDIRECT_RELATIONSHIP_TYPE,
     MERGE_OPERATION_RECORD_TYPE, MODULE_ID, PARTY_MERGE_RELATIONSHIP_TYPE,
     PARTY_MERGE_SOURCE_RECORD_TYPE, merge_operation_from_snapshot, merge_operation_to_wire,
 };
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture,
-    RecordId, RecordRef, RecordType, RelationshipType, SdkError, TypedPayload,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordRef, RecordType, RelationshipType, SdkError, TypedPayload,
 };
-use crm_parties_capability_adapter::{MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE};
+use crm_parties_capability_adapter::{
+    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
+};
 use crm_proto_contracts::crm::{customer::v1 as customer, identity_resolution::v1 as wire};
 use crm_query_runtime::{
-    CursorBinding, CursorCodec, CursorContinuation, PageSizePolicy, QueryExecutionResult, QueryExecutor,
-    QueryRequest, QuerySemanticValidator, QueryVisibilityAuthorizer, QueryVisibilityDecision,
-    normalized_filter_hash,
+    CursorBinding, CursorCodec, CursorContinuation, PageSizePolicy, QueryExecutionResult,
+    QueryExecutor, QueryRequest, QuerySemanticValidator, QueryVisibilityAuthorizer,
+    QueryVisibilityDecision, normalized_filter_hash,
 };
 use prost::Message;
 use std::collections::BTreeSet;
@@ -175,7 +179,10 @@ impl IdentityResolutionMergeQueryAdapter {
         )
     }
 
-    async fn execute_list_by_party(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
+    async fn execute_list_by_party(
+        &self,
+        request: &QueryRequest,
+    ) -> Result<TypedPayload, SdkError> {
         let command: wire::ListMergeOperationsByPartyRequest =
             decode_input(request, LIST_BY_PARTY_REQUEST_SCHEMA)?;
         let party_ref = required_party_ref(command.party_ref.as_ref())?;
@@ -233,7 +240,9 @@ impl IdentityResolutionMergeQueryAdapter {
                 );
             };
             if !visited.insert(target.clone()) {
-                return Err(canonical_redirect_corrupt("canonical redirect topology contains a cycle"));
+                return Err(canonical_redirect_corrupt(
+                    "canonical redirect topology contains a cycle",
+                ));
             }
             let operation = self
                 .active_operation_for_edge(request, &current, &target)
@@ -823,7 +832,10 @@ mod tests {
         let definitions = query_capability_definitions().unwrap();
         assert_eq!(definitions.len(), 3);
         assert_eq!(definitions[0].capability_id.as_str(), GET_CAPABILITY);
-        assert_eq!(definitions[1].capability_id.as_str(), LIST_BY_PARTY_CAPABILITY);
+        assert_eq!(
+            definitions[1].capability_id.as_str(),
+            LIST_BY_PARTY_CAPABILITY
+        );
         assert_eq!(
             definitions[2].capability_id.as_str(),
             RESOLVE_CANONICAL_CAPABILITY
