@@ -1,5 +1,6 @@
 name: Phase 8A.7 Format Planner Once
 
+# Retrigger after the latest parallel branch update; self-removes after formatting.
 on:
   push:
     branches:
