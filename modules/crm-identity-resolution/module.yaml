@@ -38,6 +38,10 @@ provides:
       version: "1.0.0"
     - id: identity_resolution.candidate.list_by_party
       version: "1.0.0"
+    - id: identity_resolution.merge.execute
+      version: "1.0.0"
+    - id: identity_resolution.merge.unmerge
+      version: "1.0.0"
   events:
     - id: identity_resolution.candidate.registered
       version: "1.0.0"
@@ -46,6 +50,10 @@ provides:
     - id: identity_resolution.candidate.dismissed
       version: "1.0.0"
     - id: identity_resolution.candidate.confirmed_duplicate
+      version: "1.0.0"
+    - id: identity_resolution.party.merged
+      version: "1.0.0"
+    - id: identity_resolution.party.unmerged
       version: "1.0.0"
   objects:
     - identity_resolution.candidate_case
