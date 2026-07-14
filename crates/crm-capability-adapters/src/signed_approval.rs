@@ -65,10 +65,7 @@ impl CapabilityApprovalVerifier for HmacSha256ApprovalVerifier {
             {
                 return Err(invalid_approval("approval_binding_mismatch"));
             }
-            let expected = hmac_sha256(
-                &self.signing_key,
-                &canonical_approval_bytes(approval),
-            );
+            let expected = hmac_sha256(&self.signing_key, &canonical_approval_bytes(approval));
             let supplied: [u8; HMAC_SHA256_OUTPUT_BYTES] = approval
                 .opaque_proof
                 .as_slice()
@@ -88,16 +85,10 @@ fn canonical_approval_bytes(evidence: &ApprovalEvidence) -> Vec<u8> {
     append_field(&mut output, evidence.approval_id.as_bytes());
     append_field(&mut output, evidence.actor_id.as_str().as_bytes());
     append_field(&mut output, evidence.capability_id.as_str().as_bytes());
-    append_field(
-        &mut output,
-        evidence.capability_version.as_str().as_bytes(),
-    );
+    append_field(&mut output, evidence.capability_version.as_str().as_bytes());
     append_field(&mut output, &evidence.input_hash);
     append_field(&mut output, evidence.policy_version.as_bytes());
-    append_field(
-        &mut output,
-        &evidence.expires_at_unix_nanos.to_be_bytes(),
-    );
+    append_field(&mut output, &evidence.expires_at_unix_nanos.to_be_bytes());
     output
 }
 
@@ -245,7 +236,8 @@ mod tests {
             owner_module_id: ModuleId::try_new("crm.identity-resolution").unwrap(),
             input_contract: PayloadContract {
                 owner: ModuleId::try_new("crm.identity-resolution").unwrap(),
-                schema_id: SchemaId::try_new("crm.identity_resolution.v1.MergePartyRequest").unwrap(),
+                schema_id: SchemaId::try_new("crm.identity_resolution.v1.MergePartyRequest")
+                    .unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 descriptor_hash: [1; 32],
                 allowed_data_classes: vec![DataClass::Personal],
@@ -273,7 +265,8 @@ mod tests {
                     correlation_id: CorrelationId::try_new("correlation-1").unwrap(),
                     causation_id: CausationId::try_new("causation-1").unwrap(),
                     trace_id: TraceId::try_new("trace-1").unwrap(),
-                    capability_id: CapabilityId::try_new("identity_resolution.merge.execute").unwrap(),
+                    capability_id: CapabilityId::try_new("identity_resolution.merge.execute")
+                        .unwrap(),
                     capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
                     idempotency_key: IdempotencyKey::try_new("idem-1").unwrap(),
                     business_transaction_id: BusinessTransactionId::try_new("txn-1").unwrap(),
@@ -283,7 +276,8 @@ mod tests {
             },
             input: TypedPayload {
                 owner: ModuleId::try_new("crm.identity-resolution").unwrap(),
-                schema_id: SchemaId::try_new("crm.identity_resolution.v1.MergePartyRequest").unwrap(),
+                schema_id: SchemaId::try_new("crm.identity_resolution.v1.MergePartyRequest")
+                    .unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 descriptor_hash: [1; 32],
                 data_class: DataClass::Personal,
