@@ -25,7 +25,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,28 +34,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Repair Phase 8A.6 merge-lineage Clippy boundary
+      - name: Apply machine-fixable Rust maintenance
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path("modules/crm-identity-resolution/src/merge_lineage.rs")
-          text = path.read_text()
-          old = "fn normalize_survivorship(selections: &mut Vec<SurvivorshipSelection>) -> Result<(), SdkError> {"
-          new = "fn normalize_survivorship(selections: &mut [SurvivorshipSelection]) -> Result<(), SdkError> {"
-          if text.count(old) != 1:
-              raise SystemExit(f"expected one ptr-arg anchor, found {text.count(old)}")
-          path.write_text(text.replace(old, new, 1))
-          PY
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+          cargo generate-lockfile
           cargo fmt --all
-          cargo clippy -p crm-identity-resolution --all-targets --all-features -- -D warnings
-          cargo test -p crm-identity-resolution
-      - name: Restore permanent workflow and commit verified source fix
+      - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          git show 74ab48427b9dd5a30f0a0637cc52e74bd395b3c7:.github/workflows/rust-generated-sync.yml > .github/workflows/rust-generated-sync.yml
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust maintenance files are already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add modules/crm-identity-resolution/src/merge_lineage.rs .github/workflows/rust-generated-sync.yml
-          git commit -m "fix(identity-resolution): use slice for survivorship normalization"
+          git add Cargo.lock crates modules services
+          git commit -m "Synchronize machine-fixable Rust maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"

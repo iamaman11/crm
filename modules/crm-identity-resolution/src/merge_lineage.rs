@@ -695,7 +695,7 @@ impl CanonicalPartyGraph {
     }
 }
 
-fn normalize_survivorship(selections: &mut Vec<SurvivorshipSelection>) -> Result<(), SdkError> {
+fn normalize_survivorship(selections: &mut [SurvivorshipSelection]) -> Result<(), SdkError> {
     if selections.len() > MAX_SURVIVORSHIP_SELECTIONS {
         return Err(invalid(
             "IDENTITY_RESOLUTION_SURVIVORSHIP_LIMIT_EXCEEDED",
