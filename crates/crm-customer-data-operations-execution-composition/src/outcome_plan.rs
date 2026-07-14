@@ -1,6 +1,6 @@
 use crm_customer_data_operations::{
-    AdvanceImportCheckpoint, CheckpointOutcome, FinishImportJob, ImportJob, ImportRow, ImportRowStatus,
-    MarkImportRowSucceeded, RecordImportRowRetryableFailure, TargetPartyId,
+    AdvanceImportCheckpoint, CheckpointOutcome, FinishImportJob, ImportJob, ImportRow,
+    ImportRowStatus, MarkImportRowSucceeded, RecordImportRowRetryableFailure, TargetPartyId,
 };
 use crm_module_sdk::{ErrorCategory, SdkError};
 
@@ -205,9 +205,9 @@ mod tests {
     use super::*;
     use crm_customer_data_operations::{
         CreateImportJob, CreateValidatedImportRow, ImportJobId, ImportParserProfile,
-        InitialImportRowValidation, MarkImportJobValidated, PartialExecutionPolicy, PartyImportKind,
-        PartyImportMapping, PreparedPartyRow, RowDiagnostic, SourceDescriptor, SourceSystemId,
-        StartImportExecution,
+        InitialImportRowValidation, MarkImportJobValidated, PartialExecutionPolicy,
+        PartyImportKind, PartyImportMapping, PreparedPartyRow, RowDiagnostic, SourceDescriptor,
+        SourceSystemId, StartImportExecution,
     };
 
     #[test]

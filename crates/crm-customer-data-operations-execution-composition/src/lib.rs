@@ -10,6 +10,8 @@
 
 pub mod postgres_reader;
 pub use postgres_reader::*;
+pub mod outcome_plan;
+pub use outcome_plan::*;
 
 use crm_capability_plan_support as support;
 use crm_customer_data_operations::{
