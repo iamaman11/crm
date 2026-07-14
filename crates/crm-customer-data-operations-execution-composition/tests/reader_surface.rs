@@ -5,8 +5,7 @@ use crm_customer_data_operations_execution_composition::{
 };
 
 const _: () = assert!(DEFAULT_EXECUTION_READER_PAGE_SIZE > 0);
-const _: () =
-    assert!(DEFAULT_EXECUTION_READER_PAGE_SIZE <= MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE);
+const _: () = assert!(DEFAULT_EXECUTION_READER_PAGE_SIZE <= MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE);
 
 #[test]
 fn production_reader_implements_the_execution_snapshot_port() {
