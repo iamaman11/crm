@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[lints.clippy]
+# Process-acceptance helpers intentionally pass explicit governed context values.
+# Keep the exception local to the executable/test crate rather than weakening workspace policy.
+too_many_arguments = "allow"
+
 [dependencies]
 crm-application-runtime = { path = "../../crates/crm-application-runtime" }
 
