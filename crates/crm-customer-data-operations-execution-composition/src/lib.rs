@@ -8,6 +8,9 @@
 //! `CapabilityClient`, and delegates import-owned outcome/checkpoint persistence
 //! to a private sink. No public bulk-write or direct Party storage path exists here.
 
+pub mod postgres_reader;
+pub use postgres_reader::*;
+
 use crm_capability_plan_support as support;
 use crm_customer_data_operations::{
     ExecutionPositionIndex, ExecutionRowReference, ImportJob, ImportJobStatus, ImportRow,

@@ -10,8 +10,8 @@ use crm_customer_data_operations_capability_adapter::{
     import_job_from_snapshot, import_row_persisted_contract,
 };
 use crm_module_sdk::{
-    DataClass, ErrorCategory, ModuleId, PortFuture, RecordId, RecordRef, RecordType, RelationshipType,
-    SdkError, TenantId,
+    DataClass, ErrorCategory, ModuleId, PortFuture, RecordId, RecordRef, RecordType,
+    RelationshipType, SdkError, TenantId,
 };
 
 pub const DEFAULT_EXECUTION_READER_PAGE_SIZE: u32 = 1_000;
@@ -91,11 +91,12 @@ impl ImportExecutionSnapshotReader for PostgresImportExecutionSnapshotReader {
                     })
                     .await?;
                 for snapshot in page.records {
-                    let row = decode_import_row_state(support::persisted_json_bytes_with_data_class(
-                        &snapshot,
-                        import_row_persisted_contract(),
-                        DataClass::Personal,
-                    )?)?;
+                    let row =
+                        decode_import_row_state(support::persisted_json_bytes_with_data_class(
+                            &snapshot,
+                            import_row_persisted_contract(),
+                            DataClass::Personal,
+                        )?)?;
                     if row.row_id().as_str() != snapshot.reference.record_id.as_str()
                         || row.version() != snapshot.version
                     {

@@ -642,7 +642,9 @@ name = "crm-customer-data-operations-execution-composition"
 version = "0.1.0"
 dependencies = [
  "crm-capability-plan-support",
+ "crm-core-data",
  "crm-customer-data-operations",
+ "crm-customer-data-operations-capability-adapter",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
