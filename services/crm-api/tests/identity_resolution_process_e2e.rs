@@ -221,7 +221,10 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     assert!(!created_ab.replayed);
     let candidate_ab = decode_register(&created_ab);
     assert_eq!(candidate_version(&candidate_ab), 1);
-    assert_eq!(candidate_ab.status, identity::DuplicateCandidateCaseStatus::Open as i32);
+    assert_eq!(
+        candidate_ab.status,
+        identity::DuplicateCandidateCaseStatus::Open as i32
+    );
     let case_ab = case_id(&candidate_ab).to_owned();
     let left_ab = candidate_ab
         .left_party_ref
@@ -237,7 +240,9 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
         .as_str();
     assert!(left_ab < right_ab, "candidate Party pair must be canonical");
     assert_eq!(
-        [left_ab, right_ab].into_iter().collect::<std::collections::BTreeSet<_>>(),
+        [left_ab, right_ab]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>(),
         [party_a.as_str(), party_b.as_str()]
             .into_iter()
             .collect::<std::collections::BTreeSet<_>>()
@@ -245,7 +250,10 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
 
     let after_ab = evidence_counts(&admin, TENANT_A).await;
     assert_evidence_delta(after_ab, baseline, 1, 2, 1);
-    assert_eq!(relationship_count_for_case(&admin, TENANT_A, &case_ab).await, 2);
+    assert_eq!(
+        relationship_count_for_case(&admin, TENANT_A, &case_ab).await,
+        2
+    );
 
     let replay_ab = mutate(
         &mut grpc,
@@ -259,7 +267,10 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     .expect("replay exact candidate registration");
     assert!(replay_ab.replayed);
     assert_eq!(evidence_counts(&admin, TENANT_A).await, after_ab);
-    assert_eq!(relationship_count_for_case(&admin, TENANT_A, &case_ab).await, 2);
+    assert_eq!(
+        relationship_count_for_case(&admin, TENANT_A, &case_ab).await,
+        2
+    );
 
     let conflicting_replay = mutate(
         &mut grpc,
@@ -310,15 +321,7 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     let created_ac = mutate(
         &mut grpc,
         &register,
-        register_payload(
-            &register,
-            &party_a,
-            1,
-            &party_c,
-            1,
-            8_700,
-            "identity-ac",
-        ),
+        register_payload(&register, &party_a, 1, &party_c, 1, 8_700, "identity-ac"),
         TENANT_A,
         "identity-register-ac",
         true,
@@ -330,7 +333,10 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     assert_ne!(case_ab, case_ac);
     let after_ac = evidence_counts(&admin, TENANT_A).await;
     assert_evidence_delta(after_ac, baseline, 2, 4, 2);
-    assert_eq!(relationship_count_for_case(&admin, TENANT_A, &case_ac).await, 2);
+    assert_eq!(
+        relationship_count_for_case(&admin, TENANT_A, &case_ac).await,
+        2
+    );
 
     let got_ab = query(
         &mut grpc,
@@ -376,13 +382,7 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     let second_page = query(
         &mut grpc,
         &candidate_list,
-        list_candidates_payload(
-            &candidate_list,
-            &party_a,
-            None,
-            1,
-            &first_page.next_cursor,
-        ),
+        list_candidates_payload(&candidate_list, &party_a, None, 1, &first_page.next_cursor),
         TENANT_A,
         true,
     )
@@ -633,8 +633,14 @@ async fn crm_api_process_proves_governed_identity_resolution_without_party_merge
     assert_eq!(party_version(&decode_party(party_a_after)), 2);
     assert_eq!(party_version(&decode_party(party_b_after)), 1);
     assert_eq!(party_record_count(&admin, TENANT_A).await, 3);
-    assert_eq!(relationship_count_for_case(&admin, TENANT_A, &case_ab).await, 2);
-    assert_eq!(relationship_count_for_case(&admin, TENANT_A, &case_ac).await, 2);
+    assert_eq!(
+        relationship_count_for_case(&admin, TENANT_A, &case_ab).await,
+        2
+    );
+    assert_eq!(
+        relationship_count_for_case(&admin, TENANT_A, &case_ac).await,
+        2
+    );
 
     let final_counts = evidence_counts(&admin, TENANT_A).await;
     assert_evidence_delta(final_counts, baseline, 2, 4, 6);
@@ -1148,13 +1154,12 @@ async fn evidence_counts(admin: &PgPool, tenant_id: &str) -> EvidenceCounts {
     .fetch_one(admin)
     .await
     .expect("count Identity Resolution outbox events");
-    let audits = sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1",
-    )
-    .bind(tenant_id)
-    .fetch_one(admin)
-    .await
-    .expect("count audit evidence");
+    let audits =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(admin)
+            .await
+            .expect("count audit evidence");
     let idempotency = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1",
     )
