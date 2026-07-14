@@ -9,12 +9,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 
-pub const MERGE_OPERATION_STATE_SCHEMA_ID: &str =
-    "crm.identity_resolution.merge_operation.state";
+pub const MERGE_OPERATION_STATE_SCHEMA_ID: &str = "crm.identity_resolution.merge_operation.state";
 pub const MERGE_OPERATION_STATE_SCHEMA_VERSION: &str = "1.0.0";
 pub const MERGE_OPERATION_STATE_MAXIMUM_BYTES: u64 = 512 * 1024;
-pub const MERGE_OPERATION_STATE_RETENTION_POLICY_ID: &str =
-    "crm.identity_resolution.merge_lineage";
+pub const MERGE_OPERATION_STATE_RETENTION_POLICY_ID: &str = "crm.identity_resolution.merge_lineage";
 const MERGE_OPERATION_STATE_DESCRIPTOR: &[u8] = b"crm.identity_resolution.merge_operation.state/v1:operation_id,source_party_id,source_party_version,survivor_party_id,survivor_party_version,decision_ref,decided_by,reason,survivorship[field_path,provenance_party_id,provenance_party_version,source_value_sha256,evidence_ref],status,unmerge_decision[decision_ref,decided_by,reason,occurred_at_unix_nanos],created_at_unix_nanos,updated_at_unix_nanos,version";
 
 pub fn merge_operation_state_descriptor_hash() -> [u8; 32] {
@@ -217,9 +215,7 @@ impl From<&MergeOperation> for MergeOperationStateV1 {
                 .map(SurvivorshipSelectionStateV1::from)
                 .collect(),
             status: value.status().into(),
-            unmerge_decision: value
-                .unmerge_decision()
-                .map(UnmergeDecisionStateV1::from),
+            unmerge_decision: value.unmerge_decision().map(UnmergeDecisionStateV1::from),
             created_at_unix_nanos: value.created_at_unix_nanos(),
             updated_at_unix_nanos: value.updated_at_unix_nanos(),
             version: value.version(),
@@ -230,7 +226,11 @@ impl From<&MergeOperation> for MergeOperationStateV1 {
 impl SurvivorshipSelectionStateV1 {
     fn into_domain(self) -> Result<SurvivorshipSelection, SdkError> {
         SurvivorshipSelection::try_new(
-            parse_canonical(self.field_path, FieldPath::try_new, "survivorship field path")?,
+            parse_canonical(
+                self.field_path,
+                FieldPath::try_new,
+                "survivorship field path",
+            )?,
             parse_canonical(
                 self.provenance_party_id,
                 PartyReference::try_new,
@@ -297,9 +297,12 @@ fn validate_rehydrated_shape(
 }
 
 fn parse_actor(raw: String) -> Result<ActorId, SdkError> {
-    let parsed = ActorId::try_new(raw.clone()).map_err(|error| persisted_error(error.to_string()))?;
+    let parsed =
+        ActorId::try_new(raw.clone()).map_err(|error| persisted_error(error.to_string()))?;
     if parsed.as_str() != raw {
-        return Err(persisted_error("persisted actor identifier is not canonical"));
+        return Err(persisted_error(
+            "persisted actor identifier is not canonical",
+        ));
     }
     Ok(parsed)
 }
@@ -417,8 +420,7 @@ mod tests {
             PartyReference::try_new(party_id).unwrap(),
             version,
             SourceValueDigest::sha256(format!("{field}:{party_id}:{version}")),
-            EvidenceReference::try_new(format!("evidence://{field}/{party_id}/{version}"))
-                .unwrap(),
+            EvidenceReference::try_new(format!("evidence://{field}/{party_id}/{version}")).unwrap(),
         )
         .unwrap()
     }
