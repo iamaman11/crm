@@ -1,0 +1,110 @@
+name: Phase 8A.5 Normative Sync Once
+
+on:
+  push:
+    branches:
+      - develop/phase8a5-identity-resolution-duplicate-candidates
+    paths:
+      - ".github/workflows/phase8a5-normative-sync-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a5-identity-resolution-duplicate-candidates
+          fetch-depth: 0
+      - name: Synchronize Phase 8A.5 normative documents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "docs/IMPLEMENTATION_ROADMAP.md",
+              "Current delivery position: Party create/update/get/list/search is production-proven. Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship (#108 / merged PR #109) and Customer 360 (#110 / merged PR #111; final verified head `b3bca41c393577e2da5a84bcbe0309996fbdef90`; merge commit `30ce84c57064134202c03c07a943bcd0859e1ea9`) are merged and production-proven. Phase 8A.4 Consent and Communication Authorization is implementation-complete in #112 / draft PR #113: the pure `crm.consents` owner, immutable grant/deny assertions, irreversible withdrawal, exact purpose/channel/legal-basis/jurisdiction/source/evidence semantics, deterministic fail-closed decision precedence, strict persistence, governed create/withdraw/get/list/authorize contracts, cross-owner Party/Contact Point integrity, authoritative Party-to-Consent access-path relationships, permission-aware disclosure, synchronized contract bindings/browser hashes and fresh-PostgreSQL real `crm-api` acceptance are present. The relation-based implementation passed workspace-wide Clippy/format/lock synchronization and real process acceptance on code head `70b7e94c372a92928bfdbc8a0707ddb9f96f82b6`; generated synchronization produced `131f58c2bc2b83d3777420a0a0e6e32e2d1c22a9`. The final post-documentation unchanged exact-head all-workflow gate remains pending before merge. Identity resolution, merge/unmerge, provenance and privacy lifecycle remain later explicit Phase 8A packets.",
+              "Current delivery position: Party create/update/get/list/search, Account (#101 / merged PR #102), Contact Point (#103 / merged PR #104), Party Relationship (#108 / merged PR #109), Customer 360 (#110 / merged PR #111) and Phase 8A.4 Consent and Communication Authorization (#112 / merged PR #113; final verified head `9e9f86bea82581f3e3d0ff8b6027d3b39e84cfcc`; merge commit `381a9fd5e6eb54918fc43801062957ca4a854486`) are merged and production-proven. Phase 8A.5 Identity Resolution and Duplicate Candidates is now in gate review in #114 / draft PR #115: the pure `crm.identity-resolution` owner, canonical unordered Party-pair identity, deterministic case IDs, immutable explainable evidence snapshots with exact Party source versions, governed register/refresh/dismiss/confirm-duplicate mutations, authoritative Party-to-case relationships, stale-evidence fail-closed composition, permission-aware get/list-by-Party queries with signed cursors, synchronized contract bindings/browser hashes and fresh-PostgreSQL real `crm-api` process acceptance are implemented. `confirmed_duplicate` records a reviewer decision only and does not mutate, merge, delete or alias Party records. Merge/unmerge, provenance and survivorship remain Phase 8A.6. The final unchanged exact-head all-workflow gate remains pending before PR #115 can merge."
+          )
+
+          replace_once("docs/PROJECT_STATUS.md", "Status date: 2026-07-13", "Status date: 2026-07-14")
+          replace_once(
+              "docs/PROJECT_STATUS.md",
+              "- **8A.4 — implementation complete / final gate:** authoritative Consent and Communication Authorization (#112 / draft PR #113);\n- **8A.5 and later:** identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.",
+              "- **8A.4 — complete:** authoritative Consent and Communication Authorization (#112 / merged PR #113; final verified head `9e9f86bea82581f3e3d0ff8b6027d3b39e84cfcc`; merge commit `381a9fd5e6eb54918fc43801062957ca4a854486`);\n- **8A.5 — gate review:** authoritative Identity Resolution duplicate-candidate cases and reviewer decisions without Party merge (#114 / draft PR #115);\n- **8A.6 and later:** governed merge/unmerge, provenance/survivorship, import/export, data quality and privacy lifecycle proof."
+          )
+          replace_once(
+              "docs/PROJECT_STATUS.md",
+              "- independently governed read-only `crm.customer360` composition with deterministic multi-owner contributions, live source authorization/redaction, indexed Party-root lookup and rebuildable freshness-aware views;",
+              "- independently governed read-only `crm.customer360` composition with deterministic multi-owner contributions, live source authorization/redaction, indexed Party-root lookup and rebuildable freshness-aware views;\n- authoritative `crm.identity-resolution` duplicate-candidate cases with canonical unordered Party-pair identity, immutable explainable evidence/version provenance, exact Party-version integrity, authoritative Party-to-case access paths, signed permission-aware queries and terminal reviewer decisions that do not merge Party records;"
+          )
+          replace_once(
+              "docs/PROJECT_STATUS.md",
+              "### Remaining 8A sequence\n\nAfter Customer 360:\n\n1. Consent and communication authorization;\n2. deterministic/explainable duplicate candidates and identity resolution;\n3. governed merge/unmerge, provenance and survivorship;\n4. import/export, data quality, enrichment provenance and privacy lifecycle proof.",
+              "### Remaining 8A sequence\n\nAfter merged Consent and the Phase 8A.5 duplicate-candidate packet:\n\n1. complete the unchanged exact-head gate and merge Phase 8A.5;\n2. deliver governed merge/unmerge, provenance and survivorship in Phase 8A.6;\n3. deliver import/export, data quality, enrichment provenance and privacy lifecycle proof in later explicit packets."
+          )
+          replace_once(
+              "docs/PROJECT_STATUS.md",
+              "The repository currently tracks **seven business modules**:\n\n- `crm.sales` — production Deal vertical slice; broader expert Sales scope remains planned;\n- `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;\n- `crm.parties` — canonical identity owner in expert expansion with production create/update/get/list/search;\n- `crm.customer-accounts` — merged authoritative Account production vertical slice;\n- `crm.contact-points` — merged authoritative Contact Point production vertical slice;\n- `crm.party-relationships` — merged authoritative Party Relationship production vertical slice;\n- `crm.sales-activities-link` — optional independently governed production integration slice.",
+              "The repository currently tracks **nine business modules**:\n\n- `crm.sales` — production Deal vertical slice; broader expert Sales scope remains planned;\n- `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;\n- `crm.parties` — canonical identity owner in expert expansion with production create/update/get/list/search;\n- `crm.customer-accounts` — merged authoritative Account production vertical slice;\n- `crm.contact-points` — merged authoritative Contact Point production vertical slice;\n- `crm.party-relationships` — merged authoritative Party Relationship production vertical slice;\n- `crm.consents` — merged authoritative Consent and Communication Authorization vertical slice;\n- `crm.identity-resolution` — duplicate-candidate and reviewer-decision owner in final gate review, explicitly without Party merge;\n- `crm.sales-activities-link` — optional independently governed production integration slice."
+          )
+          replace_once(
+              "docs/PROJECT_STATUS.md",
+              "1. Confirm the post-documentation exact head of Phase 8A.3c / #108 is fully green and merge PR #109.\n2. Deliver Phase 8A.3d permission-aware rebuildable Customer 360 composition from merged stable owner contracts.\n3. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.\n4. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.\n5. Advance the remaining capability families from `CRM_CAPABILITY_COVERAGE.md` as explicit owner-domain or governed integration packets.\n6. Continue enterprise/security/operational hardening continuously without premature production-completeness claims.",
+              "1. Complete the unchanged exact-head all-workflow gate for Phase 8A.5 / #114 / PR #115 and merge only from that verified SHA.\n2. Deliver Phase 8A.6 governed Party merge/unmerge with immutable lineage, provenance and survivorship.\n3. Continue later 8A packets for import/export, data quality, enrichment provenance and privacy lifecycle proof.\n4. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.\n5. Advance the remaining capability families from `CRM_CAPABILITY_COVERAGE.md` as explicit owner-domain or governed integration packets.\n6. Continue enterprise/security/operational hardening continuously without premature production-completeness claims."
+          )
+
+          replace_once(
+              "docs/MODULE_CATALOG.md",
+              "| `crm.consents` | Authoritative purpose/channel-scoped Consent and Communication Authorization assertions | **Vertical slice** | Immutable grant/deny assertions, governed grant withdrawal, exact authoritative allow/deny decisions, cross-owner Party/Contact Point integrity, authoritative Party access path, signed get/list queries and real PostgreSQL/process acceptance in #112 / PR #113 | Later privacy orchestration and downstream campaign/provider enforcement remain separate governed packets |",
+              "| `crm.consents` | Authoritative purpose/channel-scoped Consent and Communication Authorization assertions | **Vertical slice** | Merged immutable grant/deny assertions, governed grant withdrawal, exact authoritative allow/deny decisions, cross-owner Party/Contact Point integrity, authoritative Party access path, signed get/list queries and real PostgreSQL/process acceptance from #112 / PR #113 | Later privacy orchestration and downstream campaign/provider enforcement remain separate governed packets |\n| `crm.identity-resolution` | Authoritative duplicate-candidate cases, explainable evidence provenance and reviewer decisions | **Vertical slice — gate review** | Canonical unordered Party-pair cases, deterministic IDs, immutable evidence/version provenance, exact Party-version integrity, authoritative Party access paths, governed register/refresh/dismiss/confirm-duplicate, signed permission-aware get/list-by-Party queries and real PostgreSQL/process acceptance in #114 / PR #115 | Party merge/unmerge, reference redirection, immutable merge lineage and survivorship remain Phase 8A.6 |"
+          )
+          replace_once("docs/MODULE_CATALOG.md", "Current owner-module count: **7**.", "Current owner-module count: **8**.")
+          replace_once(
+              "docs/MODULE_CATALOG.md",
+              "Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points, Party Relationships and Consents**. Phase 8A.4 remains at its final exact-head merge gate until PR #113 is verified and merged.",
+              "Production owner vertical slices are **Sales, Activities, Parties, Customer Accounts, Contact Points, Party Relationships and Consents**. `crm.identity-resolution` has a production-complete duplicate-candidate vertical slice in final gate review; its later Party merge/unmerge capability is intentionally not part of Phase 8A.5."
+          )
+          replace_once(
+              "docs/MODULE_CATALOG.md",
+              "Current business-module count: **8** — seven owner modules plus one optional link module. The independently governed `crm.customer360` read-composition module remains tracked separately from this owner/link count.",
+              "Current business-module count: **9** — eight owner modules plus one optional link module. The independently governed `crm.customer360` read-composition module remains tracked separately from this owner/link count."
+          )
+          replace_once(
+              "docs/MODULE_CATALOG.md",
+              "- `crm.consents` — authoritative purpose/channel/legal-basis/jurisdiction/source/evidence assertions and exact communication authorization decisions — **Implemented vertical slice in #112 / PR #113; final exact-head merge gate pending**.\n- Identity Resolution — source identities, matching, survivorship and merge/unmerge lineage — **Planned for 8A.5–8A.6**.",
+              "- `crm.consents` — authoritative purpose/channel/legal-basis/jurisdiction/source/evidence assertions and exact communication authorization decisions — **Merged production vertical slice from #112 / PR #113**.\n- `crm.identity-resolution` — authoritative duplicate-candidate cases, immutable explainable evidence/version provenance and reviewer decisions — **Implemented production vertical slice in #114 / PR #115; final exact-head merge gate pending**.\n- Party merge/unmerge, reference redirection, immutable merge lineage and survivorship — **Planned for Phase 8A.6**."
+          )
+          replace_once(
+              "docs/MODULE_CATALOG.md",
+              "#112 / PR #113 is implementation-complete and awaiting the final unchanged exact-head merge gate.",
+              "#112 / PR #113 completed the unchanged exact-head gate and merged to `main` as `381a9fd5e6eb54918fc43801062957ca4a854486`."
+          )
+          replace_once(
+              "docs/MODULE_CATALOG.md",
+              "## 6. Mandatory commercial lifecycle owner domains",
+              "### Identity Resolution ownership boundary\n\n`crm.identity-resolution` owns canonical unordered duplicate-candidate Party pairs, deterministic candidate-case identity, immutable bounded evidence snapshots with exact authoritative Party source versions, matcher/signal provenance and terminal reviewer decisions. It does **not** own mutable Party attributes and Phase 8A.5 never merges, deletes, aliases or redirects Party records. Application composition validates same-tenant Party existence and exact current versions before registration or evidence refresh, and refuses terminal reviewer decisions when the current evidence snapshot is stale. Registration atomically creates authoritative Party-to-case relationships used by permission-aware get/list-by-Party queries without tenant-wide scans or rebuildable projections. #114 / PR #115 is in final exact-head gate review; merge/unmerge remains Phase 8A.6.\n\n## 6. Mandatory commercial lifecycle owner domains"
+          )
+          replace_once(
+              "docs/MODULE_CATALOG.md",
+              "The final universal CRM will contain substantially more than the current seven business modules.",
+              "The final universal CRM will contain substantially more than the current nine business modules."
+          )
+          PY
+      - name: Remove one-shot workflow and commit
+        run: |
+          rm .github/workflows/phase8a5-normative-sync-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/IMPLEMENTATION_ROADMAP.md docs/PROJECT_STATUS.md docs/MODULE_CATALOG.md .github/workflows/phase8a5-normative-sync-once.yml
+          git commit -m "Synchronize Phase 8A.5 normative delivery status"
+          git push origin HEAD:develop/phase8a5-identity-resolution-duplicate-candidates
