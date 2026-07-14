@@ -21,8 +21,9 @@ pub const IMPORT_EXECUTION_WORKER_CAPABILITY_ID: &str =
 pub const IMPORT_EXECUTION_WORKER_CAPABILITY_VERSION: &str = "1.0.0";
 
 const _: () = assert!(DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE > 0);
-const _: () =
-    assert!(DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE);
+const _: () = assert!(
+    DEFAULT_IMPORT_EXECUTION_SCAN_PAGE_SIZE <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE
+);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportExecutionTenantCycle {
