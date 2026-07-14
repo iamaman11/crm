@@ -6,7 +6,8 @@ use crate::domain::{
 };
 use crate::profile::{
     ExternalPartyIdentifierDigest, ImportCanonicalizationVersion, ImportHeaderMode,
-    ImportParserProfile, ImportParserVersion, ImportSourceFormat, ImportTextEncoding, SourceSystemId,
+    ImportParserProfile, ImportParserVersion, ImportSourceFormat, ImportTextEncoding,
+    SourceSystemId,
 };
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
@@ -155,7 +156,12 @@ struct ImportRowStateV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 enum RowIdentitySourceState {
     Position(u32),
     ExternalKeySha256(String),
@@ -276,7 +282,9 @@ impl TryFrom<SourceDescriptorStateV1> for SourceDescriptor {
             || source.content_sha256() != value.content_sha256
             || source.source_system_id().as_str() != value.source_system_id
         {
-            return Err(persisted_error("persisted source descriptor is not canonical"));
+            return Err(persisted_error(
+                "persisted source descriptor is not canonical",
+            ));
         }
         Ok(source)
     }
@@ -310,7 +318,11 @@ impl TryFrom<ImportParserProfileStateV1> for ImportParserProfile {
         };
         let header_mode = match value.header_mode.as_str() {
             "required-first-row" => ImportHeaderMode::RequiredFirstRow,
-            _ => return Err(persisted_error("persisted parser header mode is unsupported")),
+            _ => {
+                return Err(persisted_error(
+                    "persisted parser header mode is unsupported",
+                ));
+            }
         };
         let parser_version = match value.parser_version.as_str() {
             "csv-v1" => ImportParserVersion::CsvV1,
@@ -321,7 +333,7 @@ impl TryFrom<ImportParserProfileStateV1> for ImportParserProfile {
             _ => {
                 return Err(persisted_error(
                     "persisted parser canonicalization version is unsupported",
-                ))
+                ));
             }
         };
         let profile = ImportParserProfile::try_new(
@@ -372,7 +384,9 @@ impl TryFrom<PartyImportMappingStateV1> for PartyImportMapping {
             || mapping.source_external_id_column() != value.source_external_id_column.as_deref()
             || mapping.external_row_key_column() != value.external_row_key_column.as_deref()
         {
-            return Err(persisted_error("persisted Party import mapping is not canonical"));
+            return Err(persisted_error(
+                "persisted Party import mapping is not canonical",
+            ));
         }
         Ok(mapping)
     }
@@ -490,7 +504,8 @@ impl TryFrom<PreparedPartyStateV1> for PreparedPartyRow {
     type Error = SdkError;
 
     fn try_from(value: PreparedPartyStateV1) -> Result<Self, Self::Error> {
-        let party_id = parse_record_id(value.party_id, TargetPartyId::try_new, "prepared Party ID")?;
+        let party_id =
+            parse_record_id(value.party_id, TargetPartyId::try_new, "prepared Party ID")?;
         PreparedPartyRow::try_new(party_id, value.kind.into(), value.display_name)
             .map_err(|error| persisted_error(error.to_string()))
     }
@@ -682,7 +697,10 @@ mod tests {
         let decoded = decode_import_job_state(&bytes).unwrap();
         assert_eq!(decoded.snapshot(), job.snapshot());
         assert_eq!(decoded.source().source_system_id().as_str(), "legacy-crm");
-        assert_eq!(decoded.source().parser_profile().parser_version(), ImportParserVersion::CsvV1);
+        assert_eq!(
+            decoded.source().parser_profile().parser_version(),
+            ImportParserVersion::CsvV1
+        );
     }
 
     #[test]

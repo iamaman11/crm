@@ -1203,9 +1203,7 @@ fn validate_job_counters(
             }
         }
         ImportJobStatus::Validated => {
-            if validated_total != total_rows
-                || succeeded_rows != 0
-                || checkpoint_row_position != 0
+            if validated_total != total_rows || succeeded_rows != 0 || checkpoint_row_position != 0
             {
                 return Err(invalid_counter(
                     "validated import jobs require complete validation and zero execution counters",
@@ -1600,7 +1598,10 @@ mod tests {
         let first = ImportRow::create(command.clone()).unwrap();
         let second = ImportRow::create(command).unwrap();
         assert_eq!(first.row_id(), second.row_id());
-        assert_eq!(first.target_idempotency_key(), second.target_idempotency_key());
+        assert_eq!(
+            first.target_idempotency_key(),
+            second.target_idempotency_key()
+        );
         assert_eq!(
             first.derived_target_party_id().unwrap(),
             second.derived_target_party_id().unwrap()
