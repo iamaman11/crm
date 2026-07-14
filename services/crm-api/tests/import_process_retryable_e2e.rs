@@ -3,7 +3,7 @@ mod retryable_process {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn crm_api_process_persists_retryable_target_failure_without_advancing_checkpoint_and_recovers()
-    {
+     {
         let Ok(database_url) = std::env::var("DATABASE_URL") else {
             eprintln!(
                 "skipping retryable import process acceptance because DATABASE_URL is absent"
