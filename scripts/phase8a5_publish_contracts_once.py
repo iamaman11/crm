@@ -1,3 +1,4 @@
+# Temporary branch-scoped publication helper; removed by its workflow after success.
 from __future__ import annotations
 
 import json
