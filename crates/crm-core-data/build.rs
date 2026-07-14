@@ -28,29 +28,23 @@ fn main() {
     let mut text = fs::read_to_string(&test_path)
         .unwrap_or_else(|error| panic!("cannot read {}: {error}", test_path.display()));
 
-    let old = r#"    let actor_bootstrap = sqlx::query(
-        "INSERT INTO crm.actors (tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id) \\
-         VALUES ($1, $2, 'service', 'active', $3, $4) \\
-         ON CONFLICT (tenant_id, actor_id) DO NOTHING",
-    )
-    .bind("tenant-b")
-    .bind("actor-b")
-    .bind("Tenant B file artifact acceptance actor")
-    .bind("tx-file-artifact-actor-bootstrap")
-    .execute(&admin)
-    .await;
-    if let Err(error) = actor_bootstrap {
-        let diagnostic = format!("actor_bootstrap_error={error:?}\\n");
-        write_artifact_diagnostic(&diagnostic);
-        panic!("bootstrap isolated file artifact acceptance actor failed: {diagnostic}");
-    }
-"#;
-    let new = "    bootstrap_isolated_file_artifact_actor(&admin).await;\n";
-    assert!(text.contains(old), "actor bootstrap patch anchor is missing");
-    text = text.replacen(old, new, 1);
+    let start_marker = "    let actor_bootstrap = sqlx::query(";
+    let end_marker = "\n\n    let suffix = std::process::id();";
+    let start = text
+        .find(start_marker)
+        .expect("actor bootstrap start marker is missing");
+    let relative_end = text[start..]
+        .find(end_marker)
+        .expect("actor bootstrap end marker is missing");
+    let end = start + relative_end;
+    text.replace_range(
+        start..end,
+        "    bootstrap_isolated_file_artifact_actor(&admin).await;",
+    );
 
-    let anchor = "fn write_artifact_diagnostic(contents: &str) {";
-    let helper = r#"async fn bootstrap_isolated_file_artifact_actor(admin: &PgPool) {
+    let helper_anchor = "fn write_artifact_diagnostic(contents: &str) {";
+    if !text.contains("async fn bootstrap_isolated_file_artifact_actor") {
+        let helper = r#"async fn bootstrap_isolated_file_artifact_actor(admin: &PgPool) {
     let mut transaction = admin
         .begin()
         .await
@@ -92,14 +86,18 @@ fn main() {
 }
 
 "#;
-    assert!(text.contains(anchor), "diagnostic helper anchor is missing");
-    text = text.replacen(anchor, &format!("{helper}{anchor}"), 1);
+        let anchor = text
+            .find(helper_anchor)
+            .expect("diagnostic helper anchor is missing");
+        text.insert_str(anchor, helper);
+    }
+
     fs::write(&test_path, text)
         .unwrap_or_else(|error| panic!("cannot write {}: {error}", test_path.display()));
-
     run(repo, "cargo", &["fmt", "--all"]);
     fs::remove_file(manifest_dir.join("build.rs"))
         .expect("temporary actor bootstrap patch must be removable");
+
     run(repo, "git", &["config", "user.name", "github-actions[bot]"]);
     run(
         repo,
