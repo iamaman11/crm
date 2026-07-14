@@ -1,9 +1,11 @@
 use crm_customer_data_operations::{
-    CreateValidatedImportRow, ImportJobId, InitialImportRowValidation, PartyImportKind,
-    PreparedPartyRow, TargetPartyId, create_validated_import_row,
+    CreateImportJob, CreateValidatedImportRow, ImportJob, ImportJobId, ImportParserProfile,
+    InitialImportRowValidation, MarkImportJobValidated, PartialExecutionPolicy, PartyImportKind,
+    PartyImportMapping, PreparedPartyRow, SourceDescriptor, SourceSystemId, StartImportExecution,
+    TargetPartyId, create_validated_import_row,
 };
 use crm_customer_data_operations_execution_composition::{
-    CONTRACT_VERSION, party_create_invocation,
+    CONTRACT_VERSION, ImportExecutionSnapshot, party_create_invocation,
 };
 use crm_module_sdk::DataClass;
 use crm_parties_capability_adapter::{
@@ -13,22 +15,11 @@ use crm_parties_capability_adapter::{
 
 #[test]
 fn public_composition_surface_builds_only_the_exact_governed_party_create_invocation() {
-    let row = create_validated_import_row(CreateValidatedImportRow {
-        job_id: ImportJobId::try_new("import-job-public-surface-1").unwrap(),
-        row_position: 1,
-        external_row_key: Some("row-1".to_owned()),
-        source_external_id: Some("legacy-1".to_owned()),
-        outcome: InitialImportRowValidation::Valid(
-            PreparedPartyRow::try_new(
-                TargetPartyId::try_new("party-public-surface-1").unwrap(),
-                PartyImportKind::Person,
-                "Ada Lovelace",
-            )
-            .unwrap(),
-        ),
-        occurred_at_unix_nanos: 10,
-    })
-    .unwrap();
+    let row = valid_row(
+        ImportJobId::try_new("import-job-public-surface-1").unwrap(),
+        1,
+        "party-public-surface-1",
+    );
 
     let invocation = party_create_invocation(&row).unwrap();
 
@@ -45,4 +36,75 @@ fn public_composition_surface_builds_only_the_exact_governed_party_create_invoca
         "crm.parties",
         "execution composition must never own or directly persist Party state"
     );
+}
+
+#[test]
+fn execution_snapshot_rejects_an_incomplete_authoritative_row_set_before_target_execution() {
+    let job_id = ImportJobId::try_new("import-job-incomplete-row-set-1").unwrap();
+    let job = executing_job(job_id.clone(), 2);
+    let only_first_row = valid_row(job_id, 1, "party-incomplete-row-set-1");
+
+    let error = ImportExecutionSnapshot::try_new(job, vec![only_first_row]).unwrap_err();
+
+    assert_eq!(
+        error.code,
+        "CUSTOMER_DATA_IMPORT_EXECUTION_ROW_SET_INCOMPLETE"
+    );
+}
+
+fn executing_job(job_id: ImportJobId, total_rows: u32) -> ImportJob {
+    let mut job = ImportJob::create(CreateImportJob {
+        job_id,
+        source: SourceDescriptor::try_new(
+            "customers.csv",
+            "11".repeat(32),
+            total_rows,
+            SourceSystemId::try_new("legacy-crm").unwrap(),
+            ImportParserProfile::csv_v1(b',', b'"').unwrap(),
+        )
+        .unwrap(),
+        mapping: PartyImportMapping::try_new(
+            None,
+            "kind",
+            "display_name",
+            Some("legacy_id".to_owned()),
+            Some("row_key".to_owned()),
+        )
+        .unwrap(),
+        partial_execution_policy: PartialExecutionPolicy::AllValidRows,
+        occurred_at_unix_nanos: 10,
+    })
+    .unwrap();
+    job.mark_validated(MarkImportJobValidated {
+        expected_version: 1,
+        valid_rows: total_rows,
+        invalid_rows: 0,
+        occurred_at_unix_nanos: 20,
+    })
+    .unwrap();
+    job.start_execution(StartImportExecution {
+        expected_version: 2,
+        occurred_at_unix_nanos: 30,
+    })
+    .unwrap();
+    job
+}
+
+fn valid_row(job_id: ImportJobId, row_position: u32, party_id: &str) -> crm_customer_data_operations::ImportRow {
+    create_validated_import_row(CreateValidatedImportRow {
+        job_id,
+        row_position,
+        external_row_key: Some(format!("row-{row_position}")),
+        source_external_id: Some(format!("legacy-{row_position}")),
+        outcome: InitialImportRowValidation::Valid(
+            PreparedPartyRow::try_new(
+                TargetPartyId::try_new(party_id).unwrap(),
+                PartyImportKind::Person,
+                format!("Party {row_position}"),
+            )
+            .unwrap(),
+        ),
+        occurred_at_unix_nanos: 15,
+    })
+    .unwrap()
 }
