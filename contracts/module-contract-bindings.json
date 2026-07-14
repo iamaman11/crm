@@ -372,6 +372,75 @@
       ]
     },
     {
+      "module_id": "crm.identity-resolution",
+      "capabilities": [
+        {
+          "id": "identity_resolution.candidate.register",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.RegisterDuplicateCandidate",
+          "request": "crm.identity_resolution.v1.RegisterDuplicateCandidateRequest",
+          "response": "crm.identity_resolution.v1.RegisterDuplicateCandidateResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.evidence.refresh",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.RefreshDuplicateCandidateEvidence",
+          "request": "crm.identity_resolution.v1.RefreshDuplicateCandidateEvidenceRequest",
+          "response": "crm.identity_resolution.v1.RefreshDuplicateCandidateEvidenceResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.dismiss",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.DismissDuplicateCandidate",
+          "request": "crm.identity_resolution.v1.DismissDuplicateCandidateRequest",
+          "response": "crm.identity_resolution.v1.DismissDuplicateCandidateResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.confirm_duplicate",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ConfirmDuplicateCandidate",
+          "request": "crm.identity_resolution.v1.ConfirmDuplicateCandidateRequest",
+          "response": "crm.identity_resolution.v1.ConfirmDuplicateCandidateResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.get",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.GetDuplicateCandidateCase",
+          "request": "crm.identity_resolution.v1.GetDuplicateCandidateCaseRequest",
+          "response": "crm.identity_resolution.v1.GetDuplicateCandidateCaseResponse"
+        },
+        {
+          "id": "identity_resolution.candidate.list_by_party",
+          "version": "1.0.0",
+          "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ListDuplicateCandidateCasesByParty",
+          "request": "crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyRequest",
+          "response": "crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "identity_resolution.candidate.registered",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.DuplicateCandidateRegisteredEvent"
+        },
+        {
+          "id": "identity_resolution.candidate.evidence_refreshed",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.DuplicateCandidateEvidenceRefreshedEvent"
+        },
+        {
+          "id": "identity_resolution.candidate.dismissed",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.DuplicateCandidateDismissedEvent"
+        },
+        {
+          "id": "identity_resolution.candidate.confirmed_duplicate",
+          "version": "1.0.0",
+          "message": "crm.identity_resolution.v1.DuplicateCandidateConfirmedEvent"
+        }
+      ]
+    },
+    {
       "module_id": "crm.customer360",
       "capabilities": [
         {

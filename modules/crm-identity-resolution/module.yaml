@@ -1,0 +1,78 @@
+schema_version: crm.module/v1
+module_id: crm.identity-resolution
+version: "0.1.0"
+display_name: CRM Identity Resolution
+description: Authoritative duplicate-candidate cases, immutable match evidence and governed reviewer decisions without Party merge or survivorship.
+
+owner:
+  team: customer-platform
+  contact: "crm-owner@example.com"
+  codeowners:
+    - "@iamaman11"
+
+runtime:
+  kind: in_process
+  entrypoint: modules/crm-identity-resolution
+
+platform:
+  minimum_version: "0.1.0"
+
+dependencies:
+  required:
+    - module_id: crm.parties
+      version_range: ">=0.3.0, <1.0.0"
+  optional: []
+  conflicts: []
+
+provides:
+  capabilities:
+    - id: identity_resolution.candidate.register
+      version: "1.0.0"
+    - id: identity_resolution.candidate.evidence.refresh
+      version: "1.0.0"
+    - id: identity_resolution.candidate.dismiss
+      version: "1.0.0"
+    - id: identity_resolution.candidate.confirm_duplicate
+      version: "1.0.0"
+    - id: identity_resolution.candidate.get
+      version: "1.0.0"
+    - id: identity_resolution.candidate.list_by_party
+      version: "1.0.0"
+  events:
+    - id: identity_resolution.candidate.registered
+      version: "1.0.0"
+    - id: identity_resolution.candidate.evidence_refreshed
+      version: "1.0.0"
+    - id: identity_resolution.candidate.dismissed
+      version: "1.0.0"
+    - id: identity_resolution.candidate.confirmed_duplicate
+      version: "1.0.0"
+  objects:
+    - identity_resolution.candidate_case
+  ui_extensions: []
+
+consumes:
+  capabilities: []
+  events: []
+
+storage:
+  record_types:
+    - identity_resolution.candidate_case
+  private_state_namespaces:
+    - crm.identity-resolution.candidate_case
+
+security:
+  data_classes:
+    - internal
+    - confidential
+    - personal
+  network_egress: []
+  secret_handles: []
+
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-identity-resolution/migrations
+  retained_record_types:
+    - identity_resolution.candidate_case

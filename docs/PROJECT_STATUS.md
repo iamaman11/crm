@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-13
+Status date: 2026-07-14
 
 This document is the concise human-readable status page. The normative sequence remains `IMPLEMENTATION_ROADMAP.md`; functional scope completeness is guarded by `CRM_CAPABILITY_COVERAGE.md`; Phase 8 packet sequencing is detailed in `PHASE8_DELIVERY_PLAN.md`; absolute rules remain `SYSTEM_INVARIANTS.md`; implementation grouping follows `DEVELOPMENT_WORKFLOW.md`; multi-agent execution follows `MULTI_AGENT_DEVELOPMENT.md`.
 
@@ -18,8 +18,9 @@ Current Phase 8A execution state:
 - **8A.3b — complete:** authoritative Contact Point lifecycle, verification and preference (#103 / merged PR #104; merge commit `00f41b4bf2bf11dc4a5bb62d9cc1b46c6ad88fd8`);
 - **8A.3c — complete:** authoritative Party Relationship lifecycle and rebuildable hierarchy foundations (#108 / merged PR #109; merge commit `36c238d51a156e3864e2dad0f53762e95e47680d`);
 - **8A.3d — complete:** permission-aware rebuildable Customer 360 composition (#110 / merged PR #111; final verified head `b3bca41c393577e2da5a84bcbe0309996fbdef90`; merge commit `30ce84c57064134202c03c07a943bcd0859e1ea9`);
-- **8A.4 — implementation complete / final gate:** authoritative Consent and Communication Authorization (#112 / draft PR #113);
-- **8A.5 and later:** identity resolution, merge/unmerge, provenance, import/export, data quality and privacy lifecycle proof.
+- **8A.4 — complete:** authoritative Consent and Communication Authorization (#112 / merged PR #113; final verified head `9e9f86bea82581f3e3d0ff8b6027d3b39e84cfcc`; merge commit `381a9fd5e6eb54918fc43801062957ca4a854486`);
+- **8A.5 — gate review:** authoritative Identity Resolution duplicate-candidate cases and reviewer decisions without Party merge (#114 / draft PR #115);
+- **8A.6 and later:** governed merge/unmerge, provenance/survivorship, import/export, data quality and privacy lifecycle proof.
 
 The repository now contains a production-composed modular CRM platform foundation plus the first expert customer-master owner domains:
 
@@ -35,6 +36,7 @@ The repository now contains a production-composed modular CRM platform foundatio
 - canonical Contact Point owner with typed endpoint normalization, verification/preference lifecycle and production Party-reference integrity;
 - authoritative Party Relationship owner with typed directional/reciprocal semantics, temporal lifecycle and a rebuildable cycle-safe hierarchy projection;
 - independently governed read-only `crm.customer360` composition with deterministic multi-owner contributions, live source authorization/redaction, indexed Party-root lookup and rebuildable freshness-aware views;
+- authoritative `crm.identity-resolution` duplicate-candidate cases with canonical unordered Party-pair identity, immutable explainable evidence/version provenance, exact Party-version integrity, authoritative Party-to-case access paths, signed permission-aware queries and terminal reviewer decisions that do not merge Party records;
 - governed event delivery and the optional `crm.sales-activities-link` module;
 - generalized rebuildable projections and tenant/permission-aware search;
 - neutral cross-domain global-search composition that owns projection mapping but no authoritative business state;
@@ -207,18 +209,17 @@ All 11 applicable CI workflows were green together on pre-documentation exact he
 
 ### Remaining 8A sequence
 
-After Customer 360:
+After merged Consent and the Phase 8A.5 duplicate-candidate packet:
 
-1. Consent and communication authorization;
-2. deterministic/explainable duplicate candidates and identity resolution;
-3. governed merge/unmerge, provenance and survivorship;
-4. import/export, data quality, enrichment provenance and privacy lifecycle proof.
+1. complete the unchanged exact-head gate and merge Phase 8A.5;
+2. deliver governed merge/unmerge, provenance and survivorship in Phase 8A.6;
+3. deliver import/export, data quality, enrichment provenance and privacy lifecycle proof in later explicit packets.
 
 ## Product readiness summary
 
 ### Business modules
 
-The repository currently tracks **seven business modules**:
+The repository currently tracks **nine business modules**:
 
 - `crm.sales` — production Deal vertical slice; broader expert Sales scope remains planned;
 - `crm.activities` — production Task vertical slice; broader calendar/productivity scope remains planned;
@@ -226,6 +227,8 @@ The repository currently tracks **seven business modules**:
 - `crm.customer-accounts` — merged authoritative Account production vertical slice;
 - `crm.contact-points` — merged authoritative Contact Point production vertical slice;
 - `crm.party-relationships` — merged authoritative Party Relationship production vertical slice;
+- `crm.consents` — merged authoritative Consent and Communication Authorization vertical slice;
+- `crm.identity-resolution` — duplicate-candidate and reviewer-decision owner in final gate review, explicitly without Party merge;
 - `crm.sales-activities-link` — optional independently governed production integration slice.
 
 The repository also contains the independently governed read-only composition module `crm.customer360`. It is not counted as an authoritative owner module because it owns no customer aggregate or mutable source state; it provides a rebuildable permission-aware Customer 360 query surface over owner contracts.
@@ -263,9 +266,9 @@ Current product-complete expert module count: **0**. A production vertical slice
 
 ## Immediate delivery sequence
 
-1. Confirm the post-documentation exact head of Phase 8A.3c / #108 is fully green and merge PR #109.
-2. Deliver Phase 8A.3d permission-aware rebuildable Customer 360 composition from merged stable owner contracts.
-3. Continue 8A with Consent, Identity Resolution, merge/unmerge, provenance, import/export, data quality and privacy proof.
+1. Complete the unchanged exact-head all-workflow gate for Phase 8A.5 / #114 / PR #115 and merge only from that verified SHA.
+2. Deliver Phase 8A.6 governed Party merge/unmerge with immutable lineage, provenance and survivorship.
+3. Continue later 8A packets for import/export, data quality, enrichment provenance and privacy lifecycle proof.
 4. Continue Phase 8B / #29 commercial lifecycle without absorbing Catalog/Pricing/Order/Contract ownership into Sales.
 5. Advance the remaining capability families from `CRM_CAPABILITY_COVERAGE.md` as explicit owner-domain or governed integration packets.
 6. Continue enterprise/security/operational hardening continuously without premature production-completeness claims.

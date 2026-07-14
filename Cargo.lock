@@ -290,6 +290,9 @@ dependencies = [
  "crm-customer-accounts-capability-adapter",
  "crm-customer-accounts-query-adapter",
  "crm-global-search-composition",
+ "crm-identity-resolution-capability-adapter",
+ "crm-identity-resolution-capability-composition",
+ "crm-identity-resolution-query-adapter",
  "crm-metadata-api-adapter",
  "crm-metadata-query-adapter",
  "crm-module-registry",
@@ -616,6 +619,58 @@ dependencies = [
  "crm-projection-runtime",
  "crm-proto-contracts",
  "crm-search-runtime",
+ "prost",
+]
+
+[[package]]
+name = "crm-identity-resolution"
+version = "0.1.0"
+dependencies = [
+ "crm-module-sdk",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-identity-resolution-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-identity-resolution",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+]
+
+[[package]]
+name = "crm-identity-resolution-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-identity-resolution",
+ "crm-identity-resolution-capability-adapter",
+ "crm-module-sdk",
+ "crm-parties-capability-adapter",
+ "crm-proto-contracts",
+ "tokio",
+]
+
+[[package]]
+name = "crm-identity-resolution-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-identity-resolution",
+ "crm-identity-resolution-capability-adapter",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
  "prost",
 ]
 

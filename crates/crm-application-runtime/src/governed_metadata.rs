@@ -42,6 +42,19 @@ use crm_customer_accounts_query_adapter::{
     AccountQueryAdapter, QUERY_CAPABILITY_IDS as ACCOUNT_QUERY_CAPABILITY_IDS,
     query_capability_definitions as account_query_capability_definitions,
 };
+use crm_identity_resolution_capability_adapter::{
+    IdentityResolutionCapabilityPlanner,
+    MUTATION_CAPABILITY_IDS as IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS,
+    capability_definitions as identity_resolution_capability_definitions,
+};
+use crm_identity_resolution_capability_composition::{
+    IdentityResolutionCapabilityExecutor, PostgresIdentityResolutionReferenceReader,
+};
+use crm_identity_resolution_query_adapter::{
+    IdentityResolutionQueryAdapter,
+    QUERY_CAPABILITY_IDS as IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS,
+    query_capability_definitions as identity_resolution_query_capability_definitions,
+};
 use crm_metadata_api_adapter::{
     METADATA_MUTATION_CAPABILITY_IDS, METADATA_QUERY_CAPABILITY_IDS,
     metadata_mutation_capability_definitions, metadata_query_capability_definitions,
@@ -87,6 +100,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     definitions.extend(contact_point_capability_definitions()?);
     definitions.extend(party_relationship_capability_definitions()?);
     definitions.extend(consent_capability_definitions()?);
+    definitions.extend(identity_resolution_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
@@ -99,6 +113,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(party_relationship_query_capability_definitions()?);
     definitions.extend(customer_360_query_capability_definitions()?);
     definitions.extend(consent_query_capability_definitions()?);
+    definitions.extend(identity_resolution_query_capability_definitions()?);
     definitions.extend(metadata_query_capability_definitions()?);
     Ok(definitions)
 }
@@ -133,6 +148,10 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             PartyRelationshipCapabilityPlanner.target(definition, request)
         } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             ConsentCapabilityPlanner.target(definition, request)
+        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.target(definition, request)
         } else {
             SalesActivitiesCapabilityPlannerRouter.target(definition, request)
         }
@@ -157,6 +176,10 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
             PartyRelationshipCapabilityPlanner.plan(definition, request, current)
         } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             ConsentCapabilityPlanner.plan(definition, request, current)
+        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            IdentityResolutionCapabilityPlanner.plan(definition, request, current)
         } else {
             SalesActivitiesCapabilityPlannerRouter.plan(definition, request, current)
         }
@@ -169,6 +192,7 @@ pub struct ApplicationCapabilityExecutorRouter {
     aggregate: Arc<PostgresTransactionalAggregateExecutor>,
     metadata: Arc<PostgresMetadataCapabilityExecutor>,
     consents: ConsentCapabilityExecutor,
+    identity_resolution: IdentityResolutionCapabilityExecutor,
 }
 
 impl ApplicationCapabilityExecutorRouter {
@@ -181,11 +205,18 @@ impl ApplicationCapabilityExecutorRouter {
             Arc::new(PostgresConsentReferenceReader::new(store.clone())),
             aggregate.clone(),
         );
+        let identity_resolution = IdentityResolutionCapabilityExecutor::new(
+            Arc::new(PostgresIdentityResolutionReferenceReader::new(
+                store.clone(),
+            )),
+            aggregate.clone(),
+        );
         Self {
             store,
             aggregate,
             metadata,
             consents,
+            identity_resolution,
         }
     }
 }
@@ -198,6 +229,7 @@ impl fmt::Debug for ApplicationCapabilityExecutorRouter {
             .field("aggregate", &"PostgresTransactionalAggregateExecutor")
             .field("metadata", &"PostgresMetadataCapabilityExecutor")
             .field("consents", &self.consents)
+            .field("identity_resolution", &self.identity_resolution)
             .finish()
     }
 }
@@ -212,6 +244,10 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
             self.metadata.execute(definition, request)
         } else if CONSENT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.consents.execute(definition, request)
+        } else if IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution.execute(definition, request)
         } else if ACCOUNT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             Box::pin(async move {
                 validate_account_party_references(&self.store, definition, &request).await?;
@@ -376,6 +412,7 @@ pub struct ApplicationQueryRouter {
     party_relationships: PartyRelationshipQueryAdapter,
     customer_360: Customer360QueryAdapter,
     consents: ConsentQueryAdapter,
+    identity_resolution: IdentityResolutionQueryAdapter,
     metadata: MetadataQueryAdapter,
 }
 
@@ -388,6 +425,7 @@ impl ApplicationQueryRouter {
         party_relationships: PartyRelationshipQueryAdapter,
         customer_360: Customer360QueryAdapter,
         consents: ConsentQueryAdapter,
+        identity_resolution: IdentityResolutionQueryAdapter,
         metadata: MetadataQueryAdapter,
     ) -> Self {
         Self {
@@ -398,6 +436,7 @@ impl ApplicationQueryRouter {
             party_relationships,
             customer_360,
             consents,
+            identity_resolution,
             metadata,
         }
     }
@@ -425,6 +464,10 @@ impl QuerySemanticValidator for ApplicationQueryRouter {
             self.customer_360.validate(definition, request)
         } else if CONSENT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.consents.validate(definition, request)
+        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution.validate(definition, request)
         } else {
             self.production.validate(definition, request)
         }
@@ -453,6 +496,10 @@ impl QueryExecutor for ApplicationQueryRouter {
             self.customer_360.execute(definition, request)
         } else if CONSENT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             self.consents.execute(definition, request)
+        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS
+            .contains(&definition.capability_id.as_str())
+        {
+            self.identity_resolution.execute(definition, request)
         } else {
             self.production.execute(definition, request)
         }
@@ -487,6 +534,7 @@ mod tests {
                 + CONTACT_POINT_MUTATION_CAPABILITY_IDS.len()
                 + PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS.len()
                 + CONSENT_MUTATION_CAPABILITY_IDS.len()
+                + IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS.len()
                 + METADATA_MUTATION_CAPABILITY_IDS.len()
         );
         for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
@@ -531,6 +579,13 @@ mod tests {
                     .any(|definition| definition.capability_id.as_str() == coordinate)
             );
         }
+        for coordinate in IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS {
+            assert!(
+                mutations
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
         for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
             assert!(
                 mutations
@@ -550,6 +605,7 @@ mod tests {
                 + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()
                 + CUSTOMER_360_QUERY_CAPABILITY_IDS.len()
                 + CONSENT_QUERY_CAPABILITY_IDS.len()
+                + IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS.len()
                 + METADATA_QUERY_CAPABILITY_IDS.len()
         );
         assert!(
@@ -586,6 +642,13 @@ mod tests {
             );
         }
         for coordinate in CONSENT_QUERY_CAPABILITY_IDS {
+            assert!(
+                queries
+                    .iter()
+                    .any(|definition| definition.capability_id.as_str() == coordinate)
+            );
+        }
+        for coordinate in IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS {
             assert!(
                 queries
                     .iter()

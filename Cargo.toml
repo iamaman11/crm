@@ -44,6 +44,9 @@ members = [
   "crates/crm-consents-capability-adapter",
   "crates/crm-consents-capability-composition",
   "crates/crm-consents-query-adapter",
+  "crates/crm-identity-resolution-capability-adapter",
+  "crates/crm-identity-resolution-capability-composition",
+  "crates/crm-identity-resolution-query-adapter",
   "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
   "crates/crm-sales-activities-link-contract-adapter",
@@ -56,6 +59,7 @@ members = [
   "modules/crm-contact-points",
   "modules/crm-party-relationships",
   "modules/crm-consents",
+  "modules/crm-identity-resolution",
   "services/crm-api",
 ]
 

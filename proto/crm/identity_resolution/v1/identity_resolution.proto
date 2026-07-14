@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package crm.identity_resolution.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+
+// Stable duplicate-candidate case identity owned only by crm.identity-resolution.
+message DuplicateCandidateCaseRef {
+  string case_id = 1;
+}
+
+enum DuplicateCandidateCaseStatus {
+  DUPLICATE_CANDIDATE_CASE_STATUS_UNSPECIFIED = 0;
+  DUPLICATE_CANDIDATE_CASE_STATUS_OPEN = 1;
+  DUPLICATE_CANDIDATE_CASE_STATUS_DISMISSED = 2;
+  DUPLICATE_CANDIDATE_CASE_STATUS_CONFIRMED_DUPLICATE = 3;
+}
+
+message MatchSignal {
+  string kind = 1;
+  string source = 2;
+  string evidence_ref = 3;
+  int32 contribution_basis_points = 4;
+}
+
+message MatchEvidenceSnapshot {
+  crm.customer.v1.PartyRef first_party_ref = 1;
+  int64 first_party_version = 2;
+  crm.customer.v1.PartyRef second_party_ref = 3;
+  int64 second_party_version = 4;
+  string matcher_profile = 5;
+  uint32 score_basis_points = 6;
+  repeated MatchSignal signals = 7;
+  crm.core.v1.UnixTime generated_at = 8;
+}
+
+message DuplicateCandidateCase {
+  DuplicateCandidateCaseRef case_ref = 1;
+  crm.customer.v1.PartyRef left_party_ref = 2;
+  crm.customer.v1.PartyRef right_party_ref = 3;
+  repeated MatchEvidenceSnapshot evidence_history = 4;
+  DuplicateCandidateCaseStatus status = 5;
+  string decision_reason = 6;
+  crm.customer.v1.CustomerResourceVersion resource_version = 7;
+}
+
+message RegisterDuplicateCandidateRequest {
+  MatchEvidenceSnapshot evidence = 1;
+}
+
+message RegisterDuplicateCandidateResponse {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+message RefreshDuplicateCandidateEvidenceRequest {
+  DuplicateCandidateCaseRef case_ref = 1;
+  int64 expected_version = 2;
+  MatchEvidenceSnapshot evidence = 3;
+}
+
+message RefreshDuplicateCandidateEvidenceResponse {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+message DismissDuplicateCandidateRequest {
+  DuplicateCandidateCaseRef case_ref = 1;
+  int64 expected_version = 2;
+  string reason = 3;
+}
+
+message DismissDuplicateCandidateResponse {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+message ConfirmDuplicateCandidateRequest {
+  DuplicateCandidateCaseRef case_ref = 1;
+  int64 expected_version = 2;
+  string reason = 3;
+}
+
+message ConfirmDuplicateCandidateResponse {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+message GetDuplicateCandidateCaseRequest {
+  DuplicateCandidateCaseRef case_ref = 1;
+}
+
+message GetDuplicateCandidateCaseResponse {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+message ListDuplicateCandidateCasesByPartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  DuplicateCandidateCaseStatus status = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+message ListDuplicateCandidateCasesByPartyResponse {
+  repeated DuplicateCandidateCase candidate_cases = 1;
+  string next_cursor = 2;
+}
+
+message DuplicateCandidateRegisteredEvent {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+message DuplicateCandidateEvidenceRefreshedEvent {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+message DuplicateCandidateDismissedEvent {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+message DuplicateCandidateConfirmedEvent {
+  DuplicateCandidateCase candidate_case = 1;
+}
+
+service IdentityResolutionService {
+  rpc RegisterDuplicateCandidate(RegisterDuplicateCandidateRequest) returns (RegisterDuplicateCandidateResponse);
+  rpc RefreshDuplicateCandidateEvidence(RefreshDuplicateCandidateEvidenceRequest) returns (RefreshDuplicateCandidateEvidenceResponse);
+  rpc DismissDuplicateCandidate(DismissDuplicateCandidateRequest) returns (DismissDuplicateCandidateResponse);
+  rpc ConfirmDuplicateCandidate(ConfirmDuplicateCandidateRequest) returns (ConfirmDuplicateCandidateResponse);
+  rpc GetDuplicateCandidateCase(GetDuplicateCandidateCaseRequest) returns (GetDuplicateCandidateCaseResponse);
+  rpc ListDuplicateCandidateCasesByParty(ListDuplicateCandidateCasesByPartyRequest) returns (ListDuplicateCandidateCasesByPartyResponse);
+}

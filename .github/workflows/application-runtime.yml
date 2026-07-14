@@ -192,6 +192,13 @@ jobs:
           /tmp/reset-application-database.sh
           cargo test -p crm-api --test consent_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-consent-process.log
+      - name: Verify Identity Resolution crm-api process lifecycle without Party merge
+        shell: bash
+        run: |
+          set -o pipefail
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test identity_resolution_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-identity-resolution-process.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -216,6 +223,7 @@ jobs:
             database/application-runtime-contact-point-process.log
             database/application-runtime-party-relationship-process.log
             database/application-runtime-consent-process.log
+            database/application-runtime-identity-resolution-process.log
             database/application-runtime-postgres.log
             crates/crm-application-runtime/
             crates/crm-consents-capability-adapter/

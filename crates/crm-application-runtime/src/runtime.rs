@@ -44,6 +44,10 @@ use crm_customer_accounts_capability_adapter::{
 };
 use crm_customer_accounts_query_adapter::AccountQueryAdapter;
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
+use crm_identity_resolution_capability_adapter::{
+    MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
+};
+use crm_identity_resolution_query_adapter::IdentityResolutionQueryAdapter;
 use crm_metadata_api_adapter::METADATA_MODULE_ID;
 use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_registry::ModuleRegistry;
@@ -280,6 +284,13 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let identity_resolution_query_adapter = IdentityResolutionQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -301,6 +312,7 @@ impl ApplicationRuntime {
             party_relationship_query_adapter,
             customer_360_query_adapter,
             consent_query_adapter,
+            identity_resolution_query_adapter,
             metadata_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
@@ -855,6 +867,18 @@ fn bootstrap_application_access(
                     consent_fields(),
                     expires_at,
                 )?,
+                IDENTITY_RESOLUTION_MODULE_ID => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
+                        resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,
+                    },
+                    identity_resolution_fields(),
+                    expires_at,
+                )?,
                 PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
                     visibility_store,
                     config,
@@ -1095,6 +1119,18 @@ fn consent_fields() -> BTreeSet<String> {
         "validity",
         "status",
         "resource_version",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn identity_resolution_fields() -> BTreeSet<String> {
+    [
+        "party_pair",
+        "evidence_history",
+        "status",
+        "decision_reason",
     ]
     .into_iter()
     .map(str::to_owned)
