@@ -11,10 +11,12 @@
 
 pub mod domain;
 pub mod merge;
+pub mod merge_persistence;
 pub mod persistence;
 
 pub use domain::*;
 pub use merge::*;
+pub use merge_persistence::*;
 pub use persistence::*;
 
 pub const MODULE_ID: &str = "crm.identity-resolution";
