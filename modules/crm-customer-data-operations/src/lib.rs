@@ -23,6 +23,7 @@
 pub mod domain;
 pub mod execution;
 pub mod export;
+pub mod export_persistence;
 pub mod persistence;
 pub mod profile;
 pub mod source_parser;
@@ -31,6 +32,7 @@ pub mod validation;
 pub use domain::*;
 pub use execution::*;
 pub use export::*;
+pub use export_persistence::*;
 pub use persistence::*;
 pub use profile::*;
 pub use source_parser::*;
