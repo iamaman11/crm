@@ -12,24 +12,18 @@ message PartyImportSourceArtifactRef {
 
 message PartyImportSourceArtifact {
   PartyImportSourceArtifactRef source_artifact_ref = 1;
-  string source_name = 2;
-  string source_system_id = 3;
-  ImportParserProfile parser_profile = 4;
-  uint64 expected_size_bytes = 5;
-  bytes expected_sha256 = 6;
-  uint64 received_size_bytes = 7;
-  uint64 next_chunk_index = 8;
-  bool finalized = 9;
+  uint64 expected_size_bytes = 2;
+  bytes expected_sha256 = 3;
+  uint64 received_size_bytes = 4;
+  uint64 next_chunk_index = 5;
+  bool finalized = 6;
 }
 
 // Starts an immutable bounded upload. The expected digest and size are frozen before bytes arrive.
 message CreatePartyImportSourceArtifactRequest {
   PartyImportSourceArtifactRef source_artifact_ref = 1;
-  string source_name = 2;
-  string source_system_id = 3;
-  ImportParserProfile parser_profile = 4;
-  uint64 expected_size_bytes = 5;
-  bytes expected_sha256 = 6;
+  uint64 expected_size_bytes = 2;
+  bytes expected_sha256 = 3;
 }
 
 message CreatePartyImportSourceArtifactResponse {
@@ -58,13 +52,16 @@ message FinalizePartyImportSourceArtifactResponse {
   PartyImportSourceArtifact source_artifact = 1;
 }
 
-// Production job creation derives content SHA-256 and row count from the finalized artifact bytes;
-// clients never supply authoritative row_count for this path.
+// Production job creation reads the finalized artifact, parses the exact bytes using the supplied
+// immutable profile, derives row_count server-side and binds the artifact identity into ImportJob.
 message CreatePartyImportJobFromSourceArtifactRequest {
   ImportJobRef import_job_ref = 1;
   PartyImportSourceArtifactRef source_artifact_ref = 2;
-  PartyImportMapping mapping = 3;
-  PartialExecutionPolicy partial_execution_policy = 4;
+  string source_name = 3;
+  string source_system_id = 4;
+  ImportParserProfile parser_profile = 5;
+  PartyImportMapping mapping = 6;
+  PartialExecutionPolicy partial_execution_policy = 7;
 }
 
 message CreatePartyImportJobFromSourceArtifactResponse {
