@@ -46,15 +46,16 @@ pub fn decode_export_execution_outcome_state(
     }
 
     let expected_outcome_id = state.outcome_id.clone();
-    let job_id = ExportJobId::try_new(state.export_job_id)
+    let outcome_kind = state.outcome_kind.clone();
+    let job_id = ExportJobId::try_new(state.export_job_id.clone())
         .map_err(|error| persisted_domain_error("export job ID", error))?;
 
-    let outcome = match state.outcome_kind.as_str() {
+    let outcome = match outcome_kind.as_str() {
         "emitted" => {
             let artifact_chunk_index = state.artifact_chunk_index.ok_or_else(|| {
                 persisted_error("emitted outcome is missing artifact chunk index".to_owned())
             })?;
-            let chunk_sha256 = state.chunk_sha256.ok_or_else(|| {
+            let chunk_sha256 = state.chunk_sha256.clone().ok_or_else(|| {
                 persisted_error("emitted outcome is missing chunk SHA-256".to_owned())
             })?;
             let chunk_size_bytes = state.chunk_size_bytes.ok_or_else(|| {
@@ -70,21 +71,15 @@ pub fn decode_export_execution_outcome_state(
                 state.occurred_at_unix_nanos,
             )
         }
-        "excluded_not_visible" => decode_excluded(
-            state,
-            job_id,
-            PartyExportExclusionReason::NotVisible,
-        ),
-        "excluded_version_changed" => decode_excluded(
-            state,
-            job_id,
-            PartyExportExclusionReason::VersionChanged,
-        ),
-        "excluded_unavailable" => decode_excluded(
-            state,
-            job_id,
-            PartyExportExclusionReason::Unavailable,
-        ),
+        "excluded_not_visible" => {
+            decode_excluded(state, job_id, PartyExportExclusionReason::NotVisible)
+        }
+        "excluded_version_changed" => {
+            decode_excluded(state, job_id, PartyExportExclusionReason::VersionChanged)
+        }
+        "excluded_unavailable" => {
+            decode_excluded(state, job_id, PartyExportExclusionReason::Unavailable)
+        }
         _ => {
             return Err(persisted_error(
                 "export execution outcome kind is unsupported".to_owned(),
@@ -148,41 +143,28 @@ struct ExportExecutionOutcomeStateV1 {
 
 impl From<&PartyExportExecutionOutcome> for ExportExecutionOutcomeStateV1 {
     fn from(outcome: &PartyExportExecutionOutcome) -> Self {
-        let (
-            outcome_kind,
-            artifact_chunk_index,
-            chunk_sha256,
-            chunk_size_bytes,
-        ) = match outcome.kind() {
-            PartyExportExecutionOutcomeKind::Emitted {
-                artifact_chunk_index,
-                chunk_sha256,
-                chunk_size_bytes,
-            } => (
-                "emitted".to_owned(),
-                Some(*artifact_chunk_index),
-                Some(chunk_sha256.clone()),
-                Some(*chunk_size_bytes),
-            ),
-            PartyExportExecutionOutcomeKind::Excluded(PartyExportExclusionReason::NotVisible) => (
-                "excluded_not_visible".to_owned(),
-                None,
-                None,
-                None,
-            ),
-            PartyExportExecutionOutcomeKind::Excluded(PartyExportExclusionReason::VersionChanged) => (
-                "excluded_version_changed".to_owned(),
-                None,
-                None,
-                None,
-            ),
-            PartyExportExecutionOutcomeKind::Excluded(PartyExportExclusionReason::Unavailable) => (
-                "excluded_unavailable".to_owned(),
-                None,
-                None,
-                None,
-            ),
-        };
+        let (outcome_kind, artifact_chunk_index, chunk_sha256, chunk_size_bytes) =
+            match outcome.kind() {
+                PartyExportExecutionOutcomeKind::Emitted {
+                    artifact_chunk_index,
+                    chunk_sha256,
+                    chunk_size_bytes,
+                } => (
+                    "emitted".to_owned(),
+                    Some(*artifact_chunk_index),
+                    Some(chunk_sha256.clone()),
+                    Some(*chunk_size_bytes),
+                ),
+                PartyExportExecutionOutcomeKind::Excluded(
+                    PartyExportExclusionReason::NotVisible,
+                ) => ("excluded_not_visible".to_owned(), None, None, None),
+                PartyExportExecutionOutcomeKind::Excluded(
+                    PartyExportExclusionReason::VersionChanged,
+                ) => ("excluded_version_changed".to_owned(), None, None, None),
+                PartyExportExecutionOutcomeKind::Excluded(
+                    PartyExportExclusionReason::Unavailable,
+                ) => ("excluded_unavailable".to_owned(), None, None, None),
+            };
         Self {
             outcome_id: outcome.outcome_id().as_str().to_owned(),
             export_job_id: outcome.job_id().as_str().to_owned(),
