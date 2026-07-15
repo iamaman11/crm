@@ -105,7 +105,7 @@ impl PostgresPartyExportSelectionSink {
         let current = self
             .store
             .get_record_for_query(&RecordGetQuery {
-                tenant_id: prepared.request.context.tenant_id.clone(),
+                tenant_id: prepared.request.context.execution.tenant_id.clone(),
                 owner_module_id: prepared.definition.owner_module_id.clone(),
                 record_type: target.reference.record_type.clone(),
                 record_id: target.reference.record_id.clone(),
