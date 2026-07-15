@@ -8,9 +8,11 @@ use crm_module_sdk::{ErrorCategory, SdkError};
 /// Proves the exact immutable selection evidence required before an export job may move from
 /// `SELECTING` to `READY`.
 ///
-/// The worker must load the authoritative job, its single immutable boundary, terminal durable
-/// selection progress and every deterministic manifest item `1..N`. This function rejects any
-/// mismatch before producing the only valid summary for the internal selection-finalize capability.
+/// The worker must load the authoritative job, its single immutable boundary, durable selection
+/// progress and every deterministic manifest item `1..N`. Selection is terminal when the governed
+/// Party source is exhausted or the immutable maximum-resource bound has been reached exactly.
+/// This function rejects any mismatch before producing the only valid summary for the internal
+/// selection-finalize capability.
 pub fn prove_party_export_selection_finalization(
     job: &PartyExportJob,
     boundary: &PartyExportSelectionBoundary,
@@ -23,8 +25,6 @@ pub fn prove_party_export_selection_finalization(
         || boundary.export_specification_version_id().as_str()
             != job.specification().version_id().as_str()
         || progress.maximum_resources() != job.specification().scope().maximum_resources()
-        || !progress.source_exhausted()
-        || progress.continuation().is_some()
     {
         return Err(finalization_error());
     }
@@ -33,6 +33,11 @@ pub fn prove_party_export_selection_finalization(
         .next_manifest_position()
         .checked_sub(1)
         .ok_or_else(finalization_error)?;
+    let source_exhausted = progress.source_exhausted() && progress.continuation().is_none();
+    let maximum_reached = selected_resources == progress.maximum_resources();
+    if !source_exhausted && !maximum_reached {
+        return Err(finalization_error());
+    }
     if usize::try_from(selected_resources).map_err(|_| finalization_error())? != items.len() {
         return Err(finalization_error());
     }
@@ -115,6 +120,38 @@ mod tests {
     }
 
     #[test]
+    fn maximum_bound_is_terminal_even_when_source_has_more_records() {
+        let job_id = ExportJobId::try_new("selection-finalization-max-job").unwrap();
+        let mut job = PartyExportJob::create(job_id.clone(), specification(2), 10).unwrap();
+        job.start_or_resume(1, 11).unwrap();
+        let boundary = PartyExportSelectionBoundary::create(
+            job_id.clone(),
+            job.specification().version_id().clone(),
+            11,
+        )
+        .unwrap();
+        let mut progress = PartyExportSelectionProgress::create(job_id.clone(), 2, 11).unwrap();
+        progress
+            .advance(
+                1,
+                2,
+                Some(
+                    crate::PartyExportSourceContinuation::try_new(
+                        "100",
+                        crm_module_sdk::RecordId::try_new("party-2").unwrap(),
+                    )
+                    .unwrap(),
+                ),
+                20,
+            )
+            .unwrap();
+        let items = vec![item(&job_id, 1, "party-1"), item(&job_id, 2, "party-2")];
+        assert!(
+            prove_party_export_selection_finalization(&job, &boundary, &progress, &items).is_ok()
+        );
+    }
+
+    #[test]
     fn rejects_non_terminal_progress_missing_items_and_wrong_boundary() {
         let (job, boundary, progress, items) = selecting_evidence();
         assert!(
@@ -134,7 +171,7 @@ mod tests {
                 1,
                 Some(
                     crate::PartyExportSourceContinuation::try_new(
-                        "2026-07-15T00:00:00Z",
+                        "100",
                         crm_module_sdk::RecordId::try_new("party-1").unwrap(),
                     )
                     .unwrap(),
