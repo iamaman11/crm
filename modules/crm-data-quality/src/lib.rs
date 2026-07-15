@@ -13,7 +13,9 @@ pub mod domain {
 
     include!("domain.rs");
 }
+pub mod definition_persistence;
 
+pub use definition_persistence::*;
 pub use domain::*;
 
 pub const MODULE_ID: &str = "crm.data-quality";
