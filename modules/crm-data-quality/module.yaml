@@ -25,8 +25,14 @@ dependencies:
   conflicts: []
 
 provides:
-  capabilities: []
-  events: []
+  capabilities:
+    - id: data_quality.party.rule_set.publish
+      version: "1.0.0"
+    - id: data_quality.party.rule_set.get
+      version: "1.0.0"
+  events:
+    - id: data_quality.party.rule_set.published
+      version: "1.0.0"
   objects:
     - data_quality.party_rule_set_version
     - data_quality.party_completeness_profile_version
