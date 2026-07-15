@@ -50,8 +50,11 @@ pub fn harden_party_export_start_plan(
         job.specification().version_id().clone(),
         occurred_at_unix_nanos,
     )?;
-    let progress =
-        PartyExportSelectionProgress::create(job.job_id().clone(), occurred_at_unix_nanos)?;
+    let progress = PartyExportSelectionProgress::create(
+        job.job_id().clone(),
+        job.specification().scope().maximum_resources(),
+        occurred_at_unix_nanos,
+    )?;
 
     plan.batch.records.push(RecordMutation::Create {
         reference: export_selection_boundary_record_ref(&boundary)?,
@@ -152,7 +155,12 @@ mod tests {
             100,
         )
         .unwrap();
-        let progress = PartyExportSelectionProgress::create(job_id, 100).unwrap();
+        let progress = PartyExportSelectionProgress::create(
+            job_id,
+            specification.scope().maximum_resources(),
+            100,
+        )
+        .unwrap();
 
         let boundary_reference = export_selection_boundary_record_ref(&boundary).unwrap();
         let boundary_payload = export_selection_boundary_persisted_payload(&boundary).unwrap();
@@ -180,6 +188,7 @@ mod tests {
             progress_reference.record_id.as_str(),
             progress.progress_id().as_str()
         );
+        assert_eq!(progress.maximum_resources(), 10);
         assert_eq!(progress_payload.data_class, DataClass::Personal);
         assert_eq!(
             export_selection_progress_persisted_contract().schema_id,
