@@ -11,7 +11,7 @@ use crm_module_sdk::{
 use crm_parties::PartyKind;
 use crm_parties_capability_adapter::MODULE_ID;
 use crm_proto_contracts::crm::parties::v1 as wire;
-use crm_query_runtime::{QueryExecutionContext, QueryRequest, QueryVisibilityAuthorizer};
+use crm_query_runtime::{QueryExecutionContext, QueryRequest};
 
 pub const MAXIMUM_PARTY_EXPORT_SELECTION_PAGE_SIZE: u32 = 1_000;
 
@@ -142,17 +142,13 @@ impl PartyQueryAdapter {
                 }
 
                 for snapshot in &page.records {
-                    let created_at_unix_nanos = snapshot
-                        .reference
-                        .created_at_unix_nanos
-                        .ok_or_else(export_selection_unavailable)?;
-                    if created_at_unix_nanos > selection_cutoff_unix_nanos {
+                    let party = party_from_snapshot(snapshot)?;
+                    if party.created_at_unix_nanos() > selection_cutoff_unix_nanos {
                         return Ok(PartyExportSelectionPage {
                             candidates,
                             next: None,
                         });
                     }
-                    let party = party_from_snapshot(snapshot)?;
                     if !selection_kind_matches(party.kind(), kind) {
                         continue;
                     }
