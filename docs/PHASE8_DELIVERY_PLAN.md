@@ -96,6 +96,7 @@ Implemented:
 ### 8A.8 — Customer Export Jobs, Artifacts and Reconciliation Evidence — In progress
 
 Issue: #123  
+Draft PR: #130  
 Depends on: completed #120 / merged PR #121
 
 This is the **single active customer-master production packet**.
@@ -106,41 +107,53 @@ This is the **single active customer-master production packet**.
 
 - export-job identity and lifecycle;
 - immutable versioned export specification/profile identity;
-- selected bounded customer-master resource scope;
-- snapshot/watermark or equivalent immutable selection evidence;
+- one immutable Party creation-time selection boundary per job;
+- exact bounded selected-resource manifest evidence;
 - execution checkpoints and resumable evidence;
 - derived export artifact references and lifecycle metadata;
 - selected/emitted/excluded/redacted counts and reconciliation evidence;
 - bounded safe diagnostics.
 
-It must not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution records. Exported bytes are derived artifacts, never a new source of truth.
+It must not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution records as a competing source of truth. Exported bytes are derived artifacts, never authoritative customer state.
 
-#### Contract requirements before broad implementation
+#### Frozen v1 deterministic strategy
 
-The v1 packet must freeze one exact deterministic strategy for:
+The v1 packet uses one exact strategy:
 
-1. export job identity and immutable export-profile/specification identity;
-2. supported bounded resource scopes and output format/profile semantics;
-3. stable snapshot/watermark or equivalent immutable source-selection evidence;
-4. governed owner-domain reads without direct cross-module table access;
-5. live resource authorization and field/data-class filtering before serialization;
-6. staged artifact creation with no partial publication;
-7. exactly-once logical artifact finalization with digest, byte-size, retention and expiry evidence;
-8. deterministic retry/resume after interruption;
-9. reconciliation of selected resources against emitted rows, exclusions and redactions;
-10. tenant isolation and safe non-disclosure.
+1. export job identity and immutable export-profile/specification identity are fixed at creation;
+2. first selection start persists one immutable `selection_cutoff_unix_nanos`;
+3. only Parties with immutable authoritative `created_at_unix_nanos <= cutoff` are eligible;
+4. governed selection uses deterministic `(created_at_unix_nanos ASC, party_id ASC)` ordering and the same job/specification/filter/cutoff after restart;
+5. finalized manifest digest binds the cutoff plus every ordered `PartyRef + resource_version` entry;
+6. no export bytes are produced before manifest finalization;
+7. serialization repeats live authorization and exact resource-version validation;
+8. UTF-8 CSV v1 uses deterministic LF bytes, stable quoting and spreadsheet-formula neutralization;
+9. emitted rows use deterministic artifact chunk identity/hash and checkpoint advances only after the corresponding bytes are durable;
+10. exclusions persist exact durable outcome evidence before checkpoint advancement;
+11. finalized artifact identity is deterministic and completion records exact digest, byte size, retention and reconciliation evidence;
+12. artifact download is separately live-authorized; possession of `file_id` is not authority.
 
 #### Required production layers
 
-- additive versioned public export mutation/query/event contracts;
-- domain model and lifecycle invariants for export jobs and reconciliation evidence;
-- immutable export profile/specification identity;
-- owner-domain query/composition adapters for the selected v1 resource scope;
-- PostgreSQL persistence, FORCE RLS and migrations;
-- staged derived-artifact writer/finalizer using governed file/artifact infrastructure;
-- deterministic checkpoint/replay semantics;
-- permission-aware job/artifact/reconciliation queries with signed cursors where listing is exposed;
-- application-runtime execution worker and restart recovery;
+Already established on the active branch:
+
+- additive versioned public Party export mutation/query/event contracts;
+- export-job domain lifecycle, immutable specification identity and strict persisted state;
+- immutable selection-item identity/persistence and manifest validation;
+- immutable creation-time selection-boundary primitive with boundary-bound manifest digest;
+- deterministic spreadsheet-safe CSV canonicalization with regression tests;
+- public capability/query adapter surfaces and module contract declarations;
+- approval-required production Party export execution by safe default.
+
+Still required before gate review:
+
+- persist the immutable selection cutoff/boundary in the export-job production state and worker outcome path;
+- governed owner-domain selection port exposing only the bounded authoritative creation-time/order data required by export;
+- PostgreSQL persistence, FORCE RLS and migrations for all final export-owned state;
+- staged derived-artifact worker/finalizer using governed file/artifact infrastructure;
+- durable per-position outcome/chunk checkpoint protocol and restart recovery;
+- permission-aware job/artifact/reconciliation queries and live-authorized artifact download;
+- application-runtime worker composition;
 - fresh-PostgreSQL real `crm-api` process acceptance;
 - one unchanged exact final SHA with every applicable workflow green.
 
@@ -148,12 +161,17 @@ The v1 packet must freeze one exact deterministic strategy for:
 
 - export profile/specification validation with unknown-field rejection;
 - same immutable job intent cannot be silently reinterpreted under changed profile semantics;
-- live authorization and field/data-class visibility are repeated during execution;
+- selection crash/restart reuses the exact original cutoff and cannot admit Parties created after it;
+- finalized manifest identity is bound to cutoff plus ordered exact Party references/resource versions;
+- live authorization and field/data-class visibility are repeated during selection, serialization and artifact download;
+- bulk export execution is approval-required by safe default until explicit tenant policy permits a governed lower-friction threshold;
 - no privacy, consent, masking, restriction or legal-hold bypass through export;
 - no direct cross-module authoritative storage reads;
-- no partial artifact publication before finalization;
+- spreadsheet formula-injection regression coverage for CSV text cells;
+- no partial/staged/cancelled artifact publication through the completed download surface;
+- checkpoint never advances before corresponding emitted bytes or exclusion outcome are durable;
+- deterministic recovery from chunk-written/checkpoint-missing and artifact-finalized/job-outcome-missing uncertainty windows;
 - deterministic retry/resume without duplicate logical artifacts;
-- crash/restart acceptance across at least one artifact-finalization uncertainty window;
 - exact artifact digest, byte size and lifecycle evidence;
 - exact selected/emitted/excluded/redacted reconciliation counts;
 - cross-tenant non-disclosure for jobs and artifact references;
@@ -258,23 +276,12 @@ ERP, finance/accounting, payment, tax, telephony, messaging, identity-provider, 
 
 ### Phase 9 — AI-native CRM
 
-AI is an authenticated audited Actor using permission-scoped governed tools. It has no alternate mutation, identity-merge, consent or authorization path.
+AI remains an authenticated audited Actor using permission-scoped governed tools. It has no alternate mutation, consent, identity-resolution or data-export path.
 
 ### Phase 10 — signed marketplace and sandbox
 
-Deliver signed packages, publisher identity, explicit grants, SBOM/provenance checks, sandboxed untrusted execution, quotas, kill switches and safe lifecycle operations.
+Untrusted extensions remain signed, permissioned and sandboxed with explicit capability/data/network/secret grants and lifecycle controls.
 
-### Phase 11 — enterprise and production proof
+### Phase 11 — enterprise security, resilience and production proof
 
-Deliver OIDC/SAML, SCIM, key hierarchy/encryption, legal hold, WORM audit export, backup/PITR/restore, tenant mobility/residency, security testing, SLOs and runbooks.
-
-## 15. Immediate sequence
-
-1. Keep #123 as the single active Phase 8A production packet.
-2. Freeze the 8A.8 export ownership, snapshot, artifact and reconciliation contract.
-3. Deliver 8A.8 through contracts, domain, persistence, runtime composition and fresh-process acceptance.
-4. Deliver #124 -> #125 -> #126.
-5. Close Phase 8A only after the full merged acceptance baseline is proven.
-6. Begin 8B / #29 from the completed customer-master baseline.
-
-No packet is product-complete merely because schemas, manifests or crates exist.
+Enterprise hardening remains continuous and culminates in production evidence for identity federation, provisioning, authorization, encryption, audit export, privacy/legal hold, backup/restore, tenant mobility/residency, security testing, load/chaos testing, SLOs and operational runbooks.

@@ -1,8 +1,8 @@
 schema_version: crm.module/v1
 module_id: crm.customer-data-operations
-version: "0.1.0"
+version: "0.2.0"
 display_name: CRM Customer Data Operations
-description: Governed customer import source artifacts, jobs, parser profiles, mappings, row outcomes and resumable execution coordination without owning customer-master records.
+description: Governed customer import and export jobs, immutable source/specification evidence, resumable execution, derived artifacts and reconciliation without owning customer-master records.
 
 owner:
   team: customer-platform
@@ -48,6 +48,16 @@ provides:
       version: "1.0.0"
     - id: customer_data.import.party.rows.list
       version: "1.0.0"
+    - id: customer_data.export.party.create
+      version: "1.0.0"
+    - id: customer_data.export.party.execution.start
+      version: "1.0.0"
+    - id: customer_data.export.party.cancel
+      version: "1.0.0"
+    - id: customer_data.export.party.get
+      version: "1.0.0"
+    - id: customer_data.export.party.list
+      version: "1.0.0"
   events:
     - id: customer_data.import.party.source.created
       version: "1.0.0"
@@ -75,14 +85,38 @@ provides:
       version: "1.0.0"
     - id: customer_data.import.party.cancelled
       version: "1.0.0"
+    - id: customer_data.export.party.created
+      version: "1.0.0"
+    - id: customer_data.export.party.execution_started
+      version: "1.0.0"
+    - id: customer_data.export.party.selection_progressed
+      version: "1.0.0"
+    - id: customer_data.export.party.selection_completed
+      version: "1.0.0"
+    - id: customer_data.export.party.execution_progressed
+      version: "1.0.0"
+    - id: customer_data.export.party.completed
+      version: "1.0.0"
+    - id: customer_data.export.party.cancelled
+      version: "1.0.0"
   objects:
     - customer_data.import_job
     - customer_data.import_row
+    - customer_data.export_job
+    - customer_data.export_selection_boundary
+    - customer_data.export_selection_progress
+    - customer_data.export_selection_item
+    - customer_data.export_execution_stage
+    - customer_data.export_execution_outcome
   ui_extensions: []
 
 consumes:
   capabilities:
     - id: parties.party.create
+      version: "1.0.0"
+    - id: parties.party.get
+      version: "1.0.0"
+    - id: parties.party.list
       version: "1.0.0"
   events: []
 
@@ -90,10 +124,22 @@ storage:
   record_types:
     - customer_data.import_job
     - customer_data.import_row
+    - customer_data.export_job
+    - customer_data.export_selection_boundary
+    - customer_data.export_selection_progress
+    - customer_data.export_selection_item
+    - customer_data.export_execution_stage
+    - customer_data.export_execution_outcome
   private_state_namespaces:
     - crm.customer-data-operations.import_job
     - crm.customer-data-operations.import_row
     - crm.customer-data-operations.import_source_artifact
+    - crm.customer-data-operations.export_job
+    - crm.customer-data-operations.export_selection_boundary
+    - crm.customer-data-operations.export_selection_progress
+    - crm.customer-data-operations.export_selection_item
+    - crm.customer-data-operations.export_execution_stage
+    - crm.customer-data-operations.export_execution_outcome
 
 security:
   data_classes:
@@ -111,3 +157,9 @@ lifecycle:
   retained_record_types:
     - customer_data.import_job
     - customer_data.import_row
+    - customer_data.export_job
+    - customer_data.export_selection_boundary
+    - customer_data.export_selection_progress
+    - customer_data.export_selection_item
+    - customer_data.export_execution_stage
+    - customer_data.export_execution_outcome

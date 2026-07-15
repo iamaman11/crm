@@ -1,24 +1,41 @@
 #![expect(
     clippy::too_many_arguments,
-    reason = "strict import-job persisted-state validation currently checks one canonical counter state shape; remove this expectation when that helper is refactored to a typed state value"
+    reason = "strict customer-data persisted-state validation currently checks canonical import/export state shapes; remove this expectation when those helpers are refactored to typed state values"
 )]
 
-//! Pure customer-data import coordination domain.
+//! Pure customer-data operations coordination domain.
 //!
-//! This crate owns import job, immutable source/parser/mapping identity, deterministic row identity,
-//! row outcome and resumable checkpoint semantics. It does not own Party records and has no
-//! infrastructure or direct customer-master storage access. Target-owner writes are intentionally
-//! deferred to governed application composition rather than exposed from this pure domain crate.
-//! Its private job and row state is encoded through strict versioned deterministic persistence.
-//! Source-system identifiers remain import-owned evidence and never become canonical Party IDs.
-//! Validation progress and finalization are server-derived, version-checked and durably routed
-//! through the production application capability boundary before target-owner execution begins.
-//! Execution ordering is derived from a complete authoritative source-position index rather than
-//! relationship pagination order. Exact source bytes are interpreted only by the versioned strict
-//! parser profile before any validated row state is planned.
+//! This crate owns governed import/export job identity, immutable source/specification/profile
+//! evidence, deterministic row/work identity, bounded outcomes, reconciliation and resumable
+//! checkpoint semantics. It does not own Party or other customer-master records and has no direct
+//! customer-master storage access. Owner-domain reads and writes are intentionally deferred to
+//! governed application composition rather than exposed from this pure domain crate.
+//!
+//! Import source-system identifiers remain import-owned evidence and never become canonical Party
+//! IDs. Exact source bytes are interpreted only by the versioned strict parser profile before any
+//! validated row state is planned. Import target writes re-enter the exact owner capability path.
+//!
+//! Export jobs bind immutable specification and selection evidence. Exported bytes are derived
+//! artifacts, never authoritative customer state. Selection and serialization must use governed
+//! owner-domain query composition with live authorization; the pure domain owns only lifecycle,
+//! checkpoint, artifact-reference and reconciliation invariants.
 
 pub mod domain;
 pub mod execution;
+pub mod export;
+pub mod export_csv;
+pub mod export_execution_outcome;
+pub mod export_execution_outcome_persistence;
+pub mod export_execution_stage;
+pub mod export_execution_stage_persistence;
+pub mod export_persistence;
+pub mod export_selection;
+pub mod export_selection_boundary;
+pub mod export_selection_boundary_persistence;
+pub mod export_selection_finalize;
+pub mod export_selection_persistence;
+pub mod export_selection_progress;
+pub mod export_selection_progress_persistence;
 pub mod persistence;
 pub mod profile;
 pub mod source_parser;
@@ -26,6 +43,20 @@ pub mod validation;
 
 pub use domain::*;
 pub use execution::*;
+pub use export::*;
+pub use export_csv::*;
+pub use export_execution_outcome::*;
+pub use export_execution_outcome_persistence::*;
+pub use export_execution_stage::*;
+pub use export_execution_stage_persistence::*;
+pub use export_persistence::*;
+pub use export_selection::*;
+pub use export_selection_boundary::*;
+pub use export_selection_boundary_persistence::*;
+pub use export_selection_finalize::*;
+pub use export_selection_persistence::*;
+pub use export_selection_progress::*;
+pub use export_selection_progress_persistence::*;
 pub use persistence::*;
 pub use profile::*;
 pub use source_parser::*;

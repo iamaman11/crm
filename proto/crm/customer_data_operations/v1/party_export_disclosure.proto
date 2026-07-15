@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package crm.customer_data_operations.v1;
+
+import "crm/customer_data_operations/v1/party_export.proto";
+
+// Dedicated disclosure request. The caller supplies only the export-job identity; artifact identity
+// is resolved from authoritative completed job evidence and is never accepted as bearer authority.
+message DownloadPartyExportArtifactRequest {
+  ExportJobRef export_job_ref = 1;
+}

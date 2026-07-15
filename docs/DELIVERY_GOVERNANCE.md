@@ -39,12 +39,13 @@ For a strict dependency chain, only one production packet is the active implemen
 
 For the current customer-master lane the authoritative sequence is:
 
-1. **8A.7 / #120** — Customer Import Jobs and Resumable Execution — active.
-2. **8A.8 / #123** — Customer Export Jobs, Artifacts and Reconciliation Evidence.
-3. **8A.9 / #124** — Customer Data Quality Rules, Completeness and Stewardship.
-4. **8A.10 / #125** — Governed Customer Enrichment and Provenance.
-5. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
-6. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
+1. **8A.8 / #123 / PR #130** — Customer Export Jobs, Artifacts and Reconciliation Evidence — active.
+2. **8A.9 / #124** — Customer Data Quality Rules, Completeness and Stewardship.
+3. **8A.10 / #125** — Governed Customer Enrichment and Provenance.
+4. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
+5. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
+
+Phase 8A.7 / #120 is merged and complete through PR #121. It is a prerequisite baseline, not an active delivery path.
 
 Parallel work is allowed only when ownership boundaries and dependencies are explicit and the work cannot invalidate the exact candidate of another packet.
 
@@ -118,13 +119,14 @@ The following claims are distinct and must not be conflated:
 
 ## 10. Current control baseline
 
-As of 2026-07-14:
+As of 2026-07-15:
 
 - Phases 0.1–7 are complete.
 - Phase 8A is active.
 - Phase 8A.6 is merged and complete through PR #119 / merge commit `d5cb4502ad0c49158e0789d8749dc09160da7895`.
-- Phase 8A.7 / #120 / PR #121 is the single active customer-master production packet.
+- Phase 8A.7 is merged and complete through PR #121 / merge commit `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
+- Phase 8A.8 / #123 / PR #130 is the single active customer-master production packet.
 - PR #118 is superseded by merged PR #119 and must not remain an active delivery path.
-- Follow-on customer-master packets are #123, #124, #125 and #126 in that order, subject to explicit dependency updates if architecture review requires a justified change.
+- Follow-on customer-master packets are #124, #125 and #126 in that order, followed by Phase 8A closure and Phase 8B / #29.
 
 This baseline must be updated whenever the active packet or merged completion state changes.

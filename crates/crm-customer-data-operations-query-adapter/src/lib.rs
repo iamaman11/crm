@@ -1,5 +1,14 @@
 #![forbid(unsafe_code)]
 
+mod artifact_download;
+pub use artifact_download::*;
+
+mod export_query;
+pub use export_query::{
+    EXPORT_QUERY_CAPABILITY_IDS, GET_EXPORT_JOB_CAPABILITY, LIST_EXPORT_JOBS_CAPABILITY,
+    PartyExportQueryAdapter, export_query_capability_definitions,
+};
+
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_core_data::{
@@ -43,10 +52,18 @@ pub const LIST_IMPORT_ROWS_REQUEST_SCHEMA: &str =
 pub const LIST_IMPORT_ROWS_RESPONSE_SCHEMA: &str =
     "crm.customer_data_operations.v1.ListPartyImportRowsResponse";
 
-pub const QUERY_CAPABILITY_IDS: [&str; 3] = [
+pub const IMPORT_QUERY_CAPABILITY_IDS: [&str; 3] = [
     GET_IMPORT_JOB_CAPABILITY,
     LIST_IMPORT_JOBS_CAPABILITY,
     LIST_IMPORT_ROWS_CAPABILITY,
+];
+
+pub const QUERY_CAPABILITY_IDS: [&str; 5] = [
+    GET_IMPORT_JOB_CAPABILITY,
+    LIST_IMPORT_JOBS_CAPABILITY,
+    LIST_IMPORT_ROWS_CAPABILITY,
+    GET_EXPORT_JOB_CAPABILITY,
+    LIST_EXPORT_JOBS_CAPABILITY,
 ];
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -60,6 +77,7 @@ pub struct CustomerDataOperationsQueryAdapter {
     cursor_codec: CursorCodec,
     visibility: Arc<dyn QueryVisibilityAuthorizer>,
     page_policy: PageSizePolicy,
+    export: PartyExportQueryAdapter,
 }
 
 impl std::fmt::Debug for CustomerDataOperationsQueryAdapter {
@@ -86,20 +104,25 @@ impl CustomerDataOperationsQueryAdapter {
         }
         .validate()
         .map_err(cursor_error)?;
+        let export =
+            PartyExportQueryAdapter::new(store.clone(), cursor_codec.clone(), visibility.clone())?;
         Ok(Self {
             store,
             cursor_codec,
             visibility,
             page_policy,
+            export,
         })
     }
 }
 
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    QUERY_CAPABILITY_IDS
+    let mut definitions = IMPORT_QUERY_CAPABILITY_IDS
         .iter()
         .map(|capability_id| query_capability_definition(capability_id))
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    definitions.extend(export_query_capability_definitions()?);
+    Ok(definitions)
 }
 
 pub fn query_capability_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkError> {
@@ -185,6 +208,10 @@ impl QuerySemanticValidator for CustomerDataOperationsQueryAdapter {
                     )?;
                     let _ = decode_row_after(self, &command.cursor, &binding)?;
                 }
+                GET_EXPORT_JOB_CAPABILITY | LIST_EXPORT_JOBS_CAPABILITY => {
+                    self.export
+                        .validate_request(definition.capability_id.as_str(), request)?;
+                }
                 _ => return Err(unsupported_query()),
             }
             Ok(())
@@ -203,6 +230,11 @@ impl QueryExecutor for CustomerDataOperationsQueryAdapter {
                 GET_IMPORT_JOB_CAPABILITY => self.execute_get_job(&request).await?,
                 LIST_IMPORT_JOBS_CAPABILITY => self.execute_list_jobs(&request).await?,
                 LIST_IMPORT_ROWS_CAPABILITY => self.execute_list_rows(&request).await?,
+                GET_EXPORT_JOB_CAPABILITY | LIST_EXPORT_JOBS_CAPABILITY => {
+                    self.export
+                        .execute_request(definition.capability_id.as_str(), &request)
+                        .await?
+                }
                 _ => return Err(unsupported_query()),
             };
             Ok(QueryExecutionResult { output })
@@ -928,9 +960,9 @@ mod tests {
     }
 
     #[test]
-    fn publishes_three_personal_read_only_queries() {
+    fn publishes_five_personal_read_only_queries() {
         let definitions = query_capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 3);
+        assert_eq!(definitions.len(), 5);
         assert_eq!(
             definitions
                 .iter()

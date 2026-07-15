@@ -1,0 +1,318 @@
+syntax = "proto3";
+
+package crm.customer_data_operations.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+import "crm/parties/v1/party.proto";
+
+// Stable export-job identity owned only by crm.customer-data-operations.
+message ExportJobRef {
+  string export_job_id = 1;
+}
+
+enum PartyExportJobStatus {
+  PARTY_EXPORT_JOB_STATUS_UNSPECIFIED = 0;
+  PARTY_EXPORT_JOB_STATUS_CREATED = 1;
+  PARTY_EXPORT_JOB_STATUS_SELECTING = 2;
+  PARTY_EXPORT_JOB_STATUS_READY = 3;
+  PARTY_EXPORT_JOB_STATUS_EXECUTING = 4;
+  PARTY_EXPORT_JOB_STATUS_COMPLETED = 5;
+  PARTY_EXPORT_JOB_STATUS_FAILED_RETRYABLE = 6;
+  PARTY_EXPORT_JOB_STATUS_CANCELLED = 7;
+}
+
+enum PartyExportFormat {
+  PARTY_EXPORT_FORMAT_UNSPECIFIED = 0;
+  PARTY_EXPORT_FORMAT_CSV_UTF8 = 1;
+}
+
+enum PartyExportProfileVersion {
+  PARTY_EXPORT_PROFILE_VERSION_UNSPECIFIED = 0;
+  PARTY_EXPORT_PROFILE_VERSION_V1 = 1;
+}
+
+enum PartyExportCanonicalizationVersion {
+  PARTY_EXPORT_CANONICALIZATION_VERSION_UNSPECIFIED = 0;
+  PARTY_EXPORT_CANONICALIZATION_VERSION_V1 = 1;
+}
+
+// Exact allowlisted Party fields. Export never exposes private aggregate persistence.
+enum PartyExportField {
+  PARTY_EXPORT_FIELD_UNSPECIFIED = 0;
+  PARTY_EXPORT_FIELD_PARTY_ID = 1;
+  PARTY_EXPORT_FIELD_KIND = 2;
+  PARTY_EXPORT_FIELD_DISPLAY_NAME = 3;
+  PARTY_EXPORT_FIELD_RESOURCE_VERSION = 4;
+}
+
+// Immutable bounded Party selection scope.
+message PartyExportScope {
+  optional crm.parties.v1.PartyKind kind = 1;
+  // Hard upper bound for the immutable selection manifest.
+  uint32 maximum_resources = 2;
+}
+
+// Immutable semantic export profile. Changing any field requires a new specification identity.
+message PartyExportProfile {
+  PartyExportProfileVersion profile_version = 1;
+  PartyExportFormat format = 2;
+  PartyExportCanonicalizationVersion canonicalization_version = 3;
+  repeated PartyExportField fields = 4;
+  string retention_policy_id = 5;
+}
+
+message PartyExportSpecification {
+  PartyExportScope scope = 1;
+  PartyExportProfile profile = 2;
+}
+
+// Public immutable selection evidence. Exact Party refs/versions remain export-owned internal
+// manifest evidence and are not exposed as a bulk discovery bypass.
+message PartyExportSelectionSummary {
+  bytes manifest_sha256 = 1;
+  uint32 selected_resources = 2;
+}
+
+message PartyExportArtifact {
+  string file_id = 1;
+  string media_type = 2;
+  bytes content_sha256 = 3;
+  uint64 size_bytes = 4;
+  string retention_policy_id = 5;
+}
+
+message PartyExportReconciliation {
+  uint32 selected_resources = 1;
+  uint32 emitted_rows = 2;
+  uint32 excluded_not_visible = 3;
+  uint32 excluded_version_changed = 4;
+  uint32 excluded_unavailable = 5;
+  uint32 redacted_fields = 6;
+}
+
+message PartyExportJob {
+  ExportJobRef export_job_ref = 1;
+  PartyExportSpecification specification = 2;
+  string export_specification_version_id = 3;
+  PartyExportJobStatus status = 4;
+  PartyExportSelectionSummary selection = 5;
+  uint32 checkpoint_manifest_position = 6;
+  uint32 execution_attempts = 7;
+  string last_execution_error_code = 8;
+  PartyExportArtifact artifact = 9;
+  PartyExportReconciliation reconciliation = 10;
+  crm.core.v1.UnixTime created_at = 11;
+  crm.core.v1.UnixTime updated_at = 12;
+  crm.customer.v1.CustomerResourceVersion resource_version = 13;
+}
+
+message CreatePartyExportJobRequest {
+  ExportJobRef export_job_ref = 1;
+  PartyExportSpecification specification = 2;
+}
+
+message CreatePartyExportJobResponse {
+  PartyExportJob export_job = 1;
+}
+
+// Starts or resumes governed background selection/export execution for the same immutable job
+// intent. The worker owns internal selection and checkpoint outcomes.
+message StartPartyExportExecutionRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_version = 2;
+}
+
+message StartPartyExportExecutionResponse {
+  PartyExportJob export_job = 1;
+}
+
+message CancelPartyExportJobRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_version = 2;
+}
+
+message CancelPartyExportJobResponse {
+  PartyExportJob export_job = 1;
+}
+
+message GetPartyExportJobRequest {
+  ExportJobRef export_job_ref = 1;
+}
+
+message GetPartyExportJobResponse {
+  PartyExportJob export_job = 1;
+}
+
+message ListPartyExportJobsRequest {
+  PartyExportJobStatus status = 1;
+  int32 page_size = 2;
+  string cursor = 3;
+}
+
+message ListPartyExportJobsResponse {
+  repeated PartyExportJob export_jobs = 1;
+  string next_cursor = 2;
+}
+
+// Worker-private selection candidate. It is never registered as a public query response.
+message PartyExportSelectionCandidate {
+  crm.customer.v1.PartyRef party_ref = 1;
+  crm.customer.v1.CustomerResourceVersion resource_version = 2;
+}
+
+// Opaque continuation owned by the Party query/storage boundary. Customer-data operations stores it
+// only as resumable coordination evidence and must not reinterpret its sort value.
+message PartyExportSourceContinuation {
+  string sort_value = 1;
+  string record_id = 2;
+}
+
+// Worker-only capability input. The capability atomically creates exact manifest items and advances
+// the export-owned selection progress record. It is intentionally absent from the public service.
+message InternalCommitPartyExportSelectionPageRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_progress_version = 2;
+  repeated PartyExportSelectionCandidate candidates = 3;
+  PartyExportSourceContinuation source_after = 4;
+  bool source_exhausted = 5;
+}
+
+message InternalCommitPartyExportSelectionPageResponse {
+  uint32 committed_items = 1;
+  uint32 next_manifest_position = 2;
+  int64 progress_version = 3;
+  bool source_exhausted = 4;
+}
+
+message PartyExportSelectionProgressedEvent {
+  ExportJobRef export_job_ref = 1;
+  uint32 committed_items = 2;
+  uint32 next_manifest_position = 3;
+  int64 progress_version = 4;
+  bool source_exhausted = 5;
+}
+
+// Worker-only finalize input. The worker computes the digest from authoritative boundary + persisted
+// ordered manifest evidence before invoking this capability. The capability moves the job to READY
+// only after the source scan is durably exhausted and the count/digest evidence is exact.
+message InternalFinalizePartyExportSelectionRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_job_version = 2;
+  int64 expected_progress_version = 3;
+  bytes manifest_sha256 = 4;
+  uint32 selected_resources = 5;
+}
+
+message InternalFinalizePartyExportSelectionResponse {
+  PartyExportJob export_job = 1;
+}
+
+// Worker-private execution exclusion reasons. They intentionally match the exact bounded
+// reconciliation buckets and are never exposed as a generic error channel.
+enum PartyExportExecutionExclusionReason {
+  PARTY_EXPORT_EXECUTION_EXCLUSION_REASON_UNSPECIFIED = 0;
+  PARTY_EXPORT_EXECUTION_EXCLUSION_REASON_NOT_VISIBLE = 1;
+  PARTY_EXPORT_EXECUTION_EXCLUSION_REASON_VERSION_CHANGED = 2;
+  PARTY_EXPORT_EXECUTION_EXCLUSION_REASON_UNAVAILABLE = 3;
+}
+
+message InternalStagePartyExportEmittedRow {
+  bytes row_utf8 = 1;
+  uint32 redacted_fields = 2;
+}
+
+// Persists immutable already-authorized output intent before any artifact bytes are published.
+// Exact replay is required; the staged row is derived output evidence, not authoritative Party state.
+message InternalStagePartyExportExecutionRequest {
+  ExportJobRef export_job_ref = 1;
+  uint32 manifest_position = 2;
+  oneof result {
+    InternalStagePartyExportEmittedRow emitted = 3;
+    PartyExportExecutionExclusionReason exclusion_reason = 4;
+  }
+}
+
+message InternalStagePartyExportExecutionResponse {
+  uint32 manifest_position = 1;
+}
+
+// Durable outbox evidence that one exact execution position was staged before artifact publication.
+// The event intentionally omits staged CSV bytes and exposes only the export-owned job/position identity.
+message PartyExportExecutionStagedEvent {
+  ExportJobRef export_job_ref = 1;
+  uint32 manifest_position = 2;
+}
+
+message InternalPartyExportEmittedOutcome {
+  uint32 artifact_chunk_index = 1;
+  bytes chunk_sha256 = 2;
+  uint64 chunk_size_bytes = 3;
+  uint32 redacted_fields = 4;
+}
+
+// Commits exactly one durable per-position execution outcome and advances the export checkpoint in
+// the same transaction. For emitted rows the file-artifact chunk must already be durably accepted.
+message InternalCommitPartyExportExecutionOutcomeRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_job_version = 2;
+  uint32 manifest_position = 3;
+  oneof result {
+    InternalPartyExportEmittedOutcome emitted = 4;
+    PartyExportExecutionExclusionReason exclusion_reason = 5;
+  }
+}
+
+message InternalCommitPartyExportExecutionOutcomeResponse {
+  PartyExportJob export_job = 1;
+}
+
+// Commits the missing final export-owned completion evidence after the immutable file artifact has
+// already finalized successfully. Exact replay must resolve to the same artifact and reconciliation.
+message InternalCompletePartyExportExecutionRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_job_version = 2;
+  PartyExportArtifact artifact = 3;
+  PartyExportReconciliation reconciliation = 4;
+}
+
+message InternalCompletePartyExportExecutionResponse {
+  PartyExportJob export_job = 1;
+}
+
+message PartyExportExecutionProgressedEvent {
+  PartyExportJob export_job = 1;
+  uint32 manifest_position = 2;
+}
+
+message PartyExportJobCreatedEvent {
+  PartyExportJob export_job = 1;
+}
+
+message PartyExportSelectionCompletedEvent {
+  PartyExportJob export_job = 1;
+}
+
+message PartyExportExecutionStartedEvent {
+  PartyExportJob export_job = 1;
+}
+
+message PartyExportFailedRetryableEvent {
+  PartyExportJob export_job = 1;
+}
+
+message PartyExportCompletedEvent {
+  PartyExportJob export_job = 1;
+}
+
+message PartyExportCancelledEvent {
+  PartyExportJob export_job = 1;
+}
+
+service CustomerDataExportService {
+  rpc CreatePartyExportJob(CreatePartyExportJobRequest) returns (CreatePartyExportJobResponse);
+  rpc StartPartyExportExecution(StartPartyExportExecutionRequest) returns (StartPartyExportExecutionResponse);
+  rpc CancelPartyExportJob(CancelPartyExportJobRequest) returns (CancelPartyExportJobResponse);
+  rpc GetPartyExportJob(GetPartyExportJobRequest) returns (GetPartyExportJobResponse);
+  rpc ListPartyExportJobs(ListPartyExportJobsRequest) returns (ListPartyExportJobsResponse);
+}

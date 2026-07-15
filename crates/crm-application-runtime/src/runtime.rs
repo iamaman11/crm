@@ -1,9 +1,10 @@
 use crate::{
     ApplicationAggregatePlannerRouter, ApplicationCapabilityExecutorRouter, ApplicationConfig,
     ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,
-    ProcessIdentitySource, SystemClock, application_capability_catalog,
-    application_mutation_definitions, application_query_capability_catalog,
-    application_query_definitions,
+    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService, ProcessIdentitySource,
+    SystemClock, application_capability_catalog, application_mutation_definitions,
+    application_query_capability_catalog, application_query_definitions,
+    bootstrap_export_selection_worker_access,
 };
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -32,8 +33,8 @@ use crm_contact_points_capability_adapter::{
 };
 use crm_contact_points_query_adapter::ContactPointQueryAdapter;
 use crm_core_data::{
-    PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,
-    PostgresTransactionalAggregateExecutor,
+    PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,
+    PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,
 };
 use crm_core_events::EventHistoryRequest;
 use crm_customer_360_composition::Customer360ProjectionWorker;
@@ -48,14 +49,18 @@ use crm_customer_data_operations_capability_adapter::{
     IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
     IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
     MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+    internal_export_selection_capability_definitions,
 };
 use crm_customer_data_operations_execution_composition::{
-    IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyImportExecutionCoordinator, PartyImportExecutionWorker,
+    EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyExportSelectionWorker,
+    PartyImportExecutionCoordinator, PartyImportExecutionWorker,
     PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,
+    PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink,
     internal_capability_definitions,
 };
 use crm_customer_data_operations_query_adapter::{
     CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
+    PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_identity_resolution_capability_adapter::{
@@ -127,6 +132,8 @@ pub struct ApplicationComponents {
     pub customer_360_worker: Arc<Customer360ProjectionWorker>,
     pub search_worker: Arc<GlobalSearchWorker>,
     pub import_execution_worker: Arc<PartyImportExecutionWorker>,
+    pub export_selection_worker: Arc<PartyExportSelectionWorker>,
+    pub export_artifact_download: Arc<PartyExportArtifactDownloadService>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -214,8 +221,16 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let internal_export_selection_definitions =
+            internal_export_selection_capability_definitions()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let artifact_download_definition = artifact_download_capability_definition()
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let import_execution_worker_actor_id =
             ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_selection_worker_actor_id =
+            ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         if config.bootstrap_allow_phase6 {
             bootstrap_application_access(
@@ -233,6 +248,16 @@ impl ApplicationRuntime {
                 &mutation_definitions,
                 &internal_import_outcome_definitions,
                 &import_execution_worker_actor_id,
+            )?;
+            bootstrap_export_selection_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &query_definitions,
+                &artifact_download_definition,
+                &internal_export_selection_definitions,
+                &export_selection_worker_actor_id,
             )?;
         }
 
@@ -292,6 +317,10 @@ impl ApplicationRuntime {
             visibility_store,
             Arc::clone(&clock),
         ));
+        let artifact_download_resolver = Arc::new(PartyExportArtifactDownloadResolver::new(
+            store.clone(),
+            visibility_authorizer.clone(),
+        ));
         let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
             .try_into()
             .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
@@ -309,6 +338,33 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_party_query_adapter = PartyQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_selection_source = Arc::new(GovernedPartyExportSelectionSource::new(
+            Arc::new(export_party_query_adapter),
+            authorizer.clone(),
+        ));
+        let export_selection_reader =
+            Arc::new(PostgresPartyExportSelectionReader::new(store.clone()));
+        let export_selection_sink = Arc::new(PostgresPartyExportSelectionSink::new(
+            store.clone(),
+            authorizer.clone(),
+        ));
+        let export_selection_worker = Arc::new(
+            PartyExportSelectionWorker::new(
+                store.clone(),
+                export_selection_reader,
+                export_selection_sink,
+                export_selection_source,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
         let account_query_adapter = AccountQueryAdapter::new(
             store.clone(),
             CursorCodec::new(cursor_key)
@@ -392,7 +448,7 @@ impl ApplicationRuntime {
                     .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             ),
             query_router.clone(),
-            authorizer,
+            authorizer.clone(),
             query_router,
         ));
 
@@ -406,12 +462,22 @@ impl ApplicationRuntime {
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             Arc::clone(&mutation_gateway),
         );
-        let query_ingress = QueryIngress::new(
-            authenticator,
-            QueryContextResolver::new(Arc::clone(&clock), random, timeout_policy)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            query_gateway,
+        let query_context_resolver =
+            QueryContextResolver::new(Arc::clone(&clock), Arc::clone(&random), timeout_policy)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_artifact_download = Arc::new(
+            PartyExportArtifactDownloadService::new(
+                authenticator.clone(),
+                query_context_resolver.clone(),
+                authorizer.clone(),
+                artifact_download_resolver,
+                Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),
+                store.clone(),
+                config.export_retention_policies.clone(),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
+        let query_ingress = QueryIngress::new(authenticator, query_context_resolver, query_gateway);
 
         let link_processor = Arc::new(
             SalesActivitiesLinkEventProcessor::new(
@@ -447,6 +513,8 @@ impl ApplicationRuntime {
             customer_360_worker,
             search_worker,
             import_execution_worker,
+            export_selection_worker,
+            export_artifact_download,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
             last_worker_error: Arc::new(Mutex::new(None)),
@@ -591,6 +659,8 @@ async fn run_http_server(
     components: Arc<ApplicationComponents>,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), ApplicationRuntimeError> {
+    let download_router =
+        crate::export_artifact_download_router(Arc::clone(&components.export_artifact_download));
     let router = Router::new()
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
@@ -602,7 +672,8 @@ async fn run_http_server(
             "/v1/queries/{owner_module_id}/{capability_id}/{capability_version}",
             post(query),
         )
-        .with_state(HttpState { components });
+        .with_state(HttpState { components })
+        .merge(download_router);
     axum::serve(listener, router)
         .with_graceful_shutdown(async move {
             let _ = shutdown.wait_for(|value| *value).await;
@@ -797,6 +868,11 @@ async fn run_background_cycle(
     for tenant_id in &components.tenant_ids {
         components
             .import_execution_worker
+            .run_tenant_cycle(tenant_id.clone())
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+        components
+            .export_selection_worker
             .run_tenant_cycle(tenant_id.clone())
             .await
             .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
