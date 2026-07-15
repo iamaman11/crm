@@ -1,0 +1,152 @@
+name: Phase 8A.8 One-shot Runtime Wire
+
+on:
+  push:
+    branches:
+      - develop/phase8a8-customer-export-jobs
+
+permissions:
+  contents: write
+
+jobs:
+  wire-and-self-delete:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Wire production export selection runtime
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("crates/crm-application-runtime/src/runtime.rs")
+          text = path.read_text()
+
+          def replace_one(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one runtime snippet, found {count}: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_one(
+              """    ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,\n    ProcessIdentitySource, SystemClock, application_capability_catalog,\n""",
+              """    ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,\n    GovernedPartyExportSelectionSource, ProcessIdentitySource, SystemClock,\n    application_capability_catalog,\n""",
+          )
+          replace_one(
+              """use crm_customer_data_operations_capability_adapter::{\n    IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,\n    IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,\n    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,\n};\n""",
+              """use crm_customer_data_operations_capability_adapter::{\n    IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,\n    IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,\n    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,\n    internal_export_selection_capability_definitions,\n};\n""",
+          )
+          replace_one(
+              """use crm_customer_data_operations_execution_composition::{\n    IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyImportExecutionCoordinator, PartyImportExecutionWorker,\n    PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,\n    internal_capability_definitions,\n};\n""",
+              """use crm_customer_data_operations_execution_composition::{\n    EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID,\n    PartyExportSelectionWorker, PartyImportExecutionCoordinator, PartyImportExecutionWorker,\n    PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,\n    PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink,\n    internal_capability_definitions,\n};\n""",
+          )
+          replace_one(
+              "use crm_parties_query_adapter::PartyQueryAdapter;\n",
+              """use crm_parties_query_adapter::{\n    LIST_CAPABILITY as PARTY_LIST_QUERY_CAPABILITY, PartyQueryAdapter,\n};\n""",
+          )
+          replace_one(
+              """    pub search_worker: Arc<GlobalSearchWorker>,\n    pub import_execution_worker: Arc<PartyImportExecutionWorker>,\n    readiness: Arc<AtomicBool>,\n""",
+              """    pub search_worker: Arc<GlobalSearchWorker>,\n    pub import_execution_worker: Arc<PartyImportExecutionWorker>,\n    pub export_selection_worker: Arc<PartyExportSelectionWorker>,\n    readiness: Arc<AtomicBool>,\n""",
+          )
+          replace_one(
+              """        let internal_import_outcome_definitions = internal_capability_definitions()\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let import_execution_worker_actor_id =\n            ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n""",
+              """        let internal_import_outcome_definitions = internal_capability_definitions()\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let internal_export_selection_definitions = internal_export_selection_capability_definitions()\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let import_execution_worker_actor_id =\n            ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let export_selection_worker_actor_id =\n            ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n""",
+          )
+          replace_one(
+              """            bootstrap_import_execution_worker_access(\n                &config,\n                now,\n                &authorization_store,\n                &mutation_definitions,\n                &internal_import_outcome_definitions,\n                &import_execution_worker_actor_id,\n            )?;\n""",
+              """            bootstrap_import_execution_worker_access(\n                &config,\n                now,\n                &authorization_store,\n                &mutation_definitions,\n                &internal_import_outcome_definitions,\n                &import_execution_worker_actor_id,\n            )?;\n            bootstrap_export_selection_worker_access(\n                &config,\n                now,\n                &authorization_store,\n                &visibility_store,\n                &query_definitions,\n                &internal_export_selection_definitions,\n                &export_selection_worker_actor_id,\n            )?;\n""",
+          )
+          replace_one(
+              """        let party_query_adapter = PartyQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let account_query_adapter = AccountQueryAdapter::new(\n""",
+              """        let party_query_adapter = PartyQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let export_party_query_adapter = PartyQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let export_selection_source = Arc::new(GovernedPartyExportSelectionSource::new(\n            Arc::new(export_party_query_adapter),\n            authorizer.clone(),\n        ));\n        let export_selection_reader =\n            Arc::new(PostgresPartyExportSelectionReader::new(store.clone()));\n        let export_selection_sink = Arc::new(PostgresPartyExportSelectionSink::new(\n            store.clone(),\n            authorizer.clone(),\n        ));\n        let export_selection_worker = Arc::new(\n            PartyExportSelectionWorker::new(\n                store.clone(),\n                export_selection_reader,\n                export_selection_sink,\n                export_selection_source,\n                Arc::clone(&clock),\n            )\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n        );\n        let account_query_adapter = AccountQueryAdapter::new(\n""",
+          )
+          replace_one(
+              """            query_router.clone(),\n            authorizer,\n            query_router,\n""",
+              """            query_router.clone(),\n            authorizer.clone(),\n            query_router,\n""",
+          )
+          replace_one(
+              """            search_worker,\n            import_execution_worker,\n            readiness: Arc::new(AtomicBool::new(false)),\n""",
+              """            search_worker,\n            import_execution_worker,\n            export_selection_worker,\n            readiness: Arc::new(AtomicBool::new(false)),\n""",
+          )
+          replace_one(
+              """        components\n            .import_execution_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        scan_link_events(components, tenant_id.clone()).await?;\n""",
+              """        components\n            .import_execution_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        components\n            .export_selection_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        scan_link_events(components, tenant_id.clone()).await?;\n""",
+          )
+          marker = "fn bootstrap_import_execution_worker_access(\n"
+          if text.count(marker) != 1:
+              raise SystemExit("bootstrap import worker marker is not unique")
+          export_bootstrap = r'''fn bootstrap_export_selection_worker_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    visibility_store: &LiveQueryVisibilityStore,
+    query_definitions: &[CapabilityDefinition],
+    internal_definitions: &[CapabilityDefinition],
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    let party_list = query_definitions
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+                && definition.capability_id.as_str() == PARTY_LIST_QUERY_CAPABILITY
+        })
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party list capability is missing from the production query catalog".to_owned(),
+            )
+        })?;
+    for tenant_id in &config.tenant_ids {
+        for definition in std::iter::once(party_list).chain(internal_definitions.iter()) {
+            authorization_store
+                .upsert(AuthorizationGrant {
+                    tenant_id: tenant_id.clone(),
+                    actor_id: worker_actor_id.clone(),
+                    policy_id: definition.authorization_policy_id.clone(),
+                    capability_id: definition.capability_id.clone(),
+                    capability_version: definition.capability_version.clone(),
+                    owner_module_id: definition.owner_module_id.clone(),
+                    policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                    expires_at_unix_nanos: Some(expires_at),
+                })
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        }
+        visibility_store
+            .upsert(QueryVisibilityGrant {
+                tenant_id: tenant_id.clone(),
+                actor_id: worker_actor_id.clone(),
+                capability_id: party_list.capability_id.clone(),
+                capability_version: party_list.capability_version.clone(),
+                owner_module_id: ModuleId::try_new(PARTIES_MODULE_ID)
+                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                record_type: RecordType::try_new(PARTY_RECORD_TYPE)
+                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                record_id: None,
+                allowed_fields: party_fields(),
+                policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                expires_at_unix_nanos: Some(expires_at),
+            })
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+    }
+    Ok(())
+}
+
+'''
+          text = text.replace(marker, export_bootstrap + marker, 1)
+          path.write_text(text)
+      - name: Format and remove one-shot workflow
+        run: |
+          cargo fmt --all
+          rm .github/workflows/phase8a8-one-shot-runtime-wire.yml
+      - name: Commit runtime wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Wire Phase 8A.8 export selection runtime"
+          git push origin HEAD:develop/phase8a8-customer-export-jobs
