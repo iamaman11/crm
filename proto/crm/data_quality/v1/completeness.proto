@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+import "crm/data_quality/v1/reference.proto";
+
+message PartyCompletenessProfileVersionRef {
+  string completeness_profile_version_id = 1;
+}
+
+enum PartyCompletenessSemanticVersion {
+  PARTY_COMPLETENESS_SEMANTIC_VERSION_UNSPECIFIED = 0;
+  PARTY_COMPLETENESS_SEMANTIC_VERSION_V1 = 1;
+}
+
+message PartyCompletenessComponent {
+  string component_key = 1;
+  string rule_key = 2;
+  uint32 weight_basis_points = 3;
+}
+
+message PartyCompletenessProfileDefinition {
+  PartyCompletenessSemanticVersion completeness_semantic_version = 1;
+  PartyRuleSetVersionRef rule_set_version_ref = 2;
+  repeated PartyCompletenessComponent components = 3;
+}
+
+message PartyCompletenessProfileVersion {
+  PartyCompletenessProfileVersionRef completeness_profile_version_ref = 1;
+  PartyCompletenessProfileDefinition definition = 2;
+  crm.core.v1.UnixTime published_at = 3;
+  crm.customer.v1.CustomerResourceVersion resource_version = 4;
+}
+
+message PublishPartyCompletenessProfileVersionRequest {
+  PartyCompletenessProfileDefinition definition = 1;
+}
+
+message PublishPartyCompletenessProfileVersionResponse {
+  PartyCompletenessProfileVersion completeness_profile_version = 1;
+}
+
+message GetPartyCompletenessProfileVersionRequest {
+  PartyCompletenessProfileVersionRef completeness_profile_version_ref = 1;
+}
+
+message GetPartyCompletenessProfileVersionResponse {
+  PartyCompletenessProfileVersion completeness_profile_version = 1;
+}
+
+message PartyCompletenessProfileVersionPublishedEvent {
+  PartyCompletenessProfileVersion completeness_profile_version = 1;
+}
