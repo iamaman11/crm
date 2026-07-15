@@ -39,7 +39,7 @@ For a strict dependency chain, only one production packet is the active implemen
 
 For the current customer-master lane the authoritative sequence is:
 
-1. **8A.8 / #123** — Customer Export Jobs, Artifacts and Reconciliation Evidence — active.
+1. **8A.8 / #123 / PR #130** — Customer Export Jobs, Artifacts and Reconciliation Evidence — active.
 2. **8A.9 / #124** — Customer Data Quality Rules, Completeness and Stewardship.
 3. **8A.10 / #125** — Governed Customer Enrichment and Provenance.
 4. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
