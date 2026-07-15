@@ -43,6 +43,10 @@ pub const INTERNAL_COMPLETE_PARTY_EXPORT_EXECUTION_REQUEST_SCHEMA: &str =
 pub const INTERNAL_COMPLETE_PARTY_EXPORT_EXECUTION_RESPONSE_SCHEMA: &str =
     "crm.customer_data_operations.v1.InternalCompletePartyExportExecutionResponse";
 
+pub const PARTY_EXPORT_EXECUTION_STAGED_EVENT_TYPE: &str =
+    "customer_data.export.party.execution_staged";
+pub const PARTY_EXPORT_EXECUTION_STAGED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyExportExecutionStagedEvent";
 pub const PARTY_EXPORT_EXECUTION_PROGRESSED_EVENT_TYPE: &str =
     "customer_data.export.party.execution_progressed";
 pub const PARTY_EXPORT_EXECUTION_PROGRESSED_EVENT_SCHEMA: &str =
@@ -227,6 +231,24 @@ fn plan_stage_execution(
             manifest_position: stage.manifest_position(),
         },
     )?;
+    let event = support::event_evidence_with_data_class(
+        request,
+        stage_ref.clone(),
+        MODULE_ID,
+        EventSpec {
+            event_type: PARTY_EXPORT_EXECUTION_STAGED_EVENT_TYPE,
+            event_schema_id: PARTY_EXPORT_EXECUTION_STAGED_EVENT_SCHEMA,
+            aggregate_version: 1,
+            previous_version: None,
+        },
+        DataClass::Personal,
+        &wire::PartyExportExecutionStagedEvent {
+            export_job_ref: Some(wire::ExportJobRef {
+                export_job_id: stage.job_id().as_str().to_owned(),
+            }),
+            manifest_position: stage.manifest_position(),
+        },
+    )?;
     let audit = support::audit_intent(
         request,
         &stage_ref,
@@ -242,7 +264,7 @@ fn plan_stage_execution(
                 payload: export_execution_stage_persisted_payload(&stage)?,
             }],
             relationships: Vec::new(),
-            events: Vec::new(),
+            events: vec![event],
             idempotency: support::capability_idempotency(definition, request)?,
             audits: vec![audit],
         },
