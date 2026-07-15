@@ -29,10 +29,7 @@ impl std::fmt::Debug for GovernedPartyExportSelectionSource {
 }
 
 impl GovernedPartyExportSelectionSource {
-    pub fn new(
-        adapter: Arc<PartyQueryAdapter>,
-        authorizer: Arc<dyn QueryAuthorizer>,
-    ) -> Self {
+    pub fn new(adapter: Arc<PartyQueryAdapter>, authorizer: Arc<dyn QueryAuthorizer>) -> Self {
         Self {
             adapter,
             authorizer,
@@ -109,12 +106,12 @@ impl PartyExportSelectionSource for GovernedPartyExportSelectionSource {
                         resource_version: candidate.resource_version,
                     })
                     .collect(),
-                next: page.next.map(|continuation| {
-                    PartyExportSelectionSourceContinuation {
+                next: page
+                    .next
+                    .map(|continuation| PartyExportSelectionSourceContinuation {
                         sort_value: continuation.sort_value,
                         record_id: continuation.record_id,
-                    }
-                }),
+                    }),
             })
         })
     }
