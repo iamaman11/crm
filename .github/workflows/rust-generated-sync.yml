@@ -43,28 +43,6 @@ jobs:
       - name: Synchronize generated client contract hashes
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
-      - name: Fix verified retention test annotations
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path("crates/crm-application-runtime/src/export_artifact_download.rs")
-          text = path.read_text()
-          old = '''    #[test]
-
-    #[test]
-    fn retention_expiry_is_exact_and_unknown_policies_fail_closed()'''
-          new = '''    #[test]
-    fn retention_expiry_is_exact_and_unknown_policies_fail_closed()'''
-          if text.count(old) != 1:
-              raise SystemExit("expected duplicate retention test annotation anchor exactly once")
-          text = text.replace(old, new, 1)
-          old = '''    fn disclosure_definition_is_job_bound_high_risk_read()'''
-          new = '''    #[test]
-    fn disclosure_definition_is_job_bound_high_risk_read()'''
-          if text.count(old) != 1:
-              raise SystemExit("expected disclosure contract test anchor exactly once")
-          path.write_text(text.replace(old, new, 1))
-          PY
       - name: Commit generated Rust and contract artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
