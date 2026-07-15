@@ -8,8 +8,8 @@ use crm_data_quality_capability_adapter::{
     MODULE_ID, party_rule_set_from_snapshot, party_rule_set_to_wire,
 };
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture,
-    RecordId, RecordType, SdkError, TypedPayload,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordType, SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::data_quality::v1 as wire;
 use crm_query_runtime::{
@@ -42,10 +42,7 @@ impl std::fmt::Debug for DataQualityQueryAdapter {
 }
 
 impl DataQualityQueryAdapter {
-    pub fn new(
-        store: PostgresDataStore,
-        visibility: Arc<dyn QueryVisibilityAuthorizer>,
-    ) -> Self {
+    pub fn new(store: PostgresDataStore, visibility: Arc<dyn QueryVisibilityAuthorizer>) -> Self {
         Self { store, visibility }
     }
 
@@ -168,7 +165,8 @@ fn decode_input<T: Message + Default>(request: &QueryRequest) -> Result<T, SdkEr
     if payload.owner.as_str() != MODULE_ID
         || payload.schema_id.as_str() != GET_PARTY_RULE_SET_REQUEST_SCHEMA
         || payload.schema_version.as_str() != support::CONTRACT_VERSION
-        || payload.descriptor_hash != support::message_descriptor_hash(GET_PARTY_RULE_SET_REQUEST_SCHEMA)
+        || payload.descriptor_hash
+            != support::message_descriptor_hash(GET_PARTY_RULE_SET_REQUEST_SCHEMA)
         || payload.data_class != DataClass::Confidential
         || payload.encoding != PayloadEncoding::Protobuf
         || payload.maximum_size_bytes > support::MAX_PROTOBUF_BYTES
