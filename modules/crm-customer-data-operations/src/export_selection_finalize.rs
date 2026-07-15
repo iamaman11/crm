@@ -63,8 +63,8 @@ fn finalization_error() -> SdkError {
 mod tests {
     use super::*;
     use crate::{
-        ExportJobId, PartyExportField, PartyExportProfile, PartyExportScope, PartyExportSpecification,
-        SelectedPartyId,
+        ExportJobId, PartyExportField, PartyExportProfile, PartyExportScope,
+        PartyExportSpecification, SelectedPartyId,
     };
 
     fn specification(maximum_resources: u32) -> PartyExportSpecification {
