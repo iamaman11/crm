@@ -57,6 +57,12 @@ jobs:
           query_lib = Path("crates/crm-customer-data-operations-query-adapter/src/lib.rs")
           replace_exact(query_lib, "mod export_query;\n", "mod artifact_download;\npub use artifact_download::*;\n\nmod export_query;\n")
 
+          service = Path("crates/crm-application-runtime/src/export_artifact_download.rs")
+          replace_exact(service, "use crm_query_runtime::{QueryAuthorizer, QueryRequest};\nuse std::collections::BTreeMap;\n", "use crm_query_runtime::{QueryAuthorizer, QueryRequest};\nuse sha2::{Digest, Sha256};\nuse std::collections::BTreeMap;\n")
+          replace_exact(service, "        || metadata.retention_policy_id.as_str() != evidence.retention_policy_id\n", "        || metadata.retention_policy_id.as_str() != evidence.retention_policy_id.as_str()\n")
+          replace_exact(service, "    let category = match error {\n", "    let category = match &error {\n")
+          replace_exact(service, "        audit_record_id: format!(\"export-artifact-disclosure-{}\", request.context.request_id),\n", "        audit_record_id: format!(\n            \"export-artifact-disclosure-{}\",\n            hex(&Sha256::digest(request.context.request_id.as_str().as_bytes())),\n        ),\n")
+
           runtime = Path("crates/crm-application-runtime/src/runtime.rs")
           replace_exact(runtime, "    GovernedPartyExportSelectionSource, ProcessIdentitySource, SystemClock,\n", "    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService, ProcessIdentitySource,\n    SystemClock,\n")
           replace_exact(runtime, "    PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,\n    PostgresTransactionalAggregateExecutor,\n", "    PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,\n    PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,\n")
