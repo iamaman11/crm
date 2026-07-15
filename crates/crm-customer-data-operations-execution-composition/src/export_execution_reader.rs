@@ -177,19 +177,35 @@ mod tests {
     }
 
     #[test]
-    fn outcome_lookup_identity_is_independent_of_emitted_or_excluded_kind() {
+    fn outcome_lookup_identity_is_kind_independent_and_position_scoped() {
         let job_id = ExportJobId::try_new("execution-reader-identity-job").unwrap();
         let emitted =
             PartyExportExecutionOutcome::emitted(job_id.clone(), 1, 1, "11".repeat(32), 12, 0, 100)
                 .unwrap();
         let excluded = PartyExportExecutionOutcome::excluded(
-            job_id,
+            job_id.clone(),
             1,
             PartyExportExclusionReason::Unavailable,
             101,
         )
         .unwrap();
+        let next_position = PartyExportExecutionOutcome::excluded(
+            job_id,
+            2,
+            PartyExportExclusionReason::Unavailable,
+            102,
+        )
+        .unwrap();
+        let other_job = PartyExportExecutionOutcome::excluded(
+            ExportJobId::try_new("execution-reader-other-job").unwrap(),
+            1,
+            PartyExportExclusionReason::Unavailable,
+            103,
+        )
+        .unwrap();
 
         assert_eq!(emitted.outcome_id(), excluded.outcome_id());
+        assert_ne!(emitted.outcome_id(), next_position.outcome_id());
+        assert_ne!(emitted.outcome_id(), other_job.outcome_id());
     }
 }
