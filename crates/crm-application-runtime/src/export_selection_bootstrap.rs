@@ -4,7 +4,9 @@ use crm_capability_adapters::{
 };
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::{ActorId, ModuleId, RecordType};
-use crm_parties_capability_adapter::{MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE};
+use crm_parties_capability_adapter::{
+    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
+};
 use crm_parties_query_adapter::LIST_CAPABILITY as PARTY_LIST_QUERY_CAPABILITY;
 use std::collections::BTreeSet;
 
@@ -21,7 +23,9 @@ pub(crate) fn bootstrap_export_selection_worker_access(
     worker_actor_id: &ActorId,
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = now_unix_nanos.checked_add(LIFETIME_NANOS).ok_or_else(|| {
-        ApplicationRuntimeError::Assembly("export selection worker grant expiry overflow".to_owned())
+        ApplicationRuntimeError::Assembly(
+            "export selection worker grant expiry overflow".to_owned(),
+        )
     })?;
     let party_list = query_definitions
         .iter()

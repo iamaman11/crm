@@ -4,6 +4,7 @@ use crate::{
     GovernedPartyExportSelectionSource, ProcessIdentitySource, SystemClock,
     application_capability_catalog, application_mutation_definitions,
     application_query_capability_catalog, application_query_definitions,
+    bootstrap_export_selection_worker_access,
 };
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
