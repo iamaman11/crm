@@ -71,6 +71,7 @@ impl PartyExportSourceContinuation {
 pub struct PartyExportSelectionProgress {
     progress_id: PartyExportSelectionProgressId,
     job_id: ExportJobId,
+    maximum_resources: u32,
     next_manifest_position: u32,
     continuation: Option<PartyExportSourceContinuation>,
     source_exhausted: bool,
@@ -80,11 +81,17 @@ pub struct PartyExportSelectionProgress {
 }
 
 impl PartyExportSelectionProgress {
-    pub fn create(job_id: ExportJobId, occurred_at_unix_nanos: i64) -> Result<Self, SdkError> {
+    pub fn create(
+        job_id: ExportJobId,
+        maximum_resources: u32,
+        occurred_at_unix_nanos: i64,
+    ) -> Result<Self, SdkError> {
+        validate_maximum_resources(maximum_resources)?;
         validate_time(occurred_at_unix_nanos)?;
         Ok(Self {
             progress_id: PartyExportSelectionProgressId::for_job(&job_id)?,
             job_id,
+            maximum_resources,
             next_manifest_position: 1,
             continuation: None,
             source_exhausted: false,
@@ -96,6 +103,7 @@ impl PartyExportSelectionProgress {
 
     pub(crate) fn rehydrate(
         job_id: ExportJobId,
+        maximum_resources: u32,
         next_manifest_position: u32,
         continuation: Option<PartyExportSourceContinuation>,
         source_exhausted: bool,
@@ -103,10 +111,18 @@ impl PartyExportSelectionProgress {
         updated_at_unix_nanos: i64,
         version: i64,
     ) -> Result<Self, SdkError> {
+        validate_maximum_resources(maximum_resources)?;
         validate_time(created_at_unix_nanos)?;
         validate_time(updated_at_unix_nanos)?;
+        let selected_resources = next_manifest_position.checked_sub(1).ok_or_else(|| {
+            conflict(
+                "CUSTOMER_DATA_EXPORT_SELECTION_PROGRESS_STATE_INVALID",
+                "Stored export selection progress is inconsistent.",
+            )
+        })?;
         if updated_at_unix_nanos < created_at_unix_nanos
             || next_manifest_position == 0
+            || selected_resources > maximum_resources
             || version <= 0
             || (source_exhausted && continuation.is_some())
         {
@@ -136,6 +152,7 @@ impl PartyExportSelectionProgress {
         Ok(Self {
             progress_id: PartyExportSelectionProgressId::for_job(&job_id)?,
             job_id,
+            maximum_resources,
             next_manifest_position,
             continuation,
             source_exhausted,
@@ -174,7 +191,7 @@ impl PartyExportSelectionProgress {
             ));
         }
 
-        self.next_manifest_position = self
+        let next_manifest_position = self
             .next_manifest_position
             .checked_add(committed_items)
             .ok_or_else(|| {
@@ -183,6 +200,20 @@ impl PartyExportSelectionProgress {
                     "The export selection cannot advance another manifest position.",
                 )
             })?;
+        let selected_resources = next_manifest_position.checked_sub(1).ok_or_else(|| {
+            conflict(
+                "CUSTOMER_DATA_EXPORT_SELECTION_POSITION_EXHAUSTED",
+                "The export selection cannot advance another manifest position.",
+            )
+        })?;
+        if selected_resources > self.maximum_resources {
+            return Err(conflict(
+                "CUSTOMER_DATA_EXPORT_SELECTION_MAXIMUM_RESOURCES_EXCEEDED",
+                "The export selection cannot exceed its immutable maximum resource bound.",
+            ));
+        }
+
+        self.next_manifest_position = next_manifest_position;
         self.source_exhausted = continuation.is_none();
         self.continuation = continuation;
         self.version = self.version.checked_add(1).ok_or_else(|| {
@@ -201,6 +232,10 @@ impl PartyExportSelectionProgress {
 
     pub fn job_id(&self) -> &ExportJobId {
         &self.job_id
+    }
+
+    pub const fn maximum_resources(&self) -> u32 {
+        self.maximum_resources
     }
 
     pub const fn next_manifest_position(&self) -> u32 {
@@ -236,6 +271,18 @@ impl PartyExportSelectionProgress {
                 "The export selection progress version is stale.",
             ))
         }
+    }
+}
+
+fn validate_maximum_resources(value: u32) -> Result<(), SdkError> {
+    if value == 0 {
+        Err(invalid(
+            "CUSTOMER_DATA_EXPORT_SELECTION_MAXIMUM_RESOURCES_INVALID",
+            "customer_data.export.selection_progress.maximum_resources",
+            "selection maximum resources must be positive",
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -287,15 +334,17 @@ mod tests {
     #[test]
     fn progress_identity_is_deterministic_per_job() {
         let job_id = ExportJobId::try_new("selection-progress-job").unwrap();
-        let first = PartyExportSelectionProgress::create(job_id.clone(), 10).unwrap();
-        let replay = PartyExportSelectionProgress::create(job_id, 10).unwrap();
+        let first = PartyExportSelectionProgress::create(job_id.clone(), 10, 10).unwrap();
+        let replay = PartyExportSelectionProgress::create(job_id, 10, 10).unwrap();
         assert_eq!(first.progress_id(), replay.progress_id());
+        assert_eq!(first.maximum_resources(), 10);
     }
 
     #[test]
     fn advances_manifest_position_and_opaque_source_continuation() {
         let mut progress = PartyExportSelectionProgress::create(
             ExportJobId::try_new("selection-progress-advance").unwrap(),
+            10,
             10,
         )
         .unwrap();
@@ -317,13 +366,17 @@ mod tests {
         let mut progress = PartyExportSelectionProgress::create(
             ExportJobId::try_new("selection-progress-empty-pages").unwrap(),
             10,
+            10,
         )
         .unwrap();
         progress
             .advance(
                 1,
                 0,
-                Some(continuation("2026-07-15T00:00:00Z", "party-hidden")),
+                Some(continuation(
+                    "2026-07-15T00:00:00Z",
+                    "party-hidden",
+                )),
                 20,
             )
             .unwrap();
@@ -337,6 +390,7 @@ mod tests {
         let job_id = ExportJobId::try_new("selection-progress-rehydrate").unwrap();
         let restored = PartyExportSelectionProgress::rehydrate(
             job_id.clone(),
+            1_000,
             301,
             Some(continuation("2026-07-15T00:00:00Z", "party-300")),
             false,
@@ -346,15 +400,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(restored.job_id(), &job_id);
+        assert_eq!(restored.maximum_resources(), 1_000);
         assert_eq!(restored.next_manifest_position(), 301);
         assert_eq!(restored.version(), 7);
         assert!(!restored.source_exhausted());
     }
 
     #[test]
-    fn rejects_stale_repeated_cursor_and_advance_after_source_exhaustion() {
+    fn rejects_bound_overflow_stale_cursor_and_advance_after_source_exhaustion() {
         let mut progress = PartyExportSelectionProgress::create(
             ExportJobId::try_new("selection-progress-conflict").unwrap(),
+            1,
             10,
         )
         .unwrap();
@@ -362,6 +418,7 @@ mod tests {
         let next = continuation("2026-07-15T00:00:00Z", "party-hidden");
         progress.advance(1, 0, Some(next.clone()), 20).unwrap();
         assert!(progress.advance(2, 0, Some(next), 30).is_err());
+        assert!(progress.advance(2, 2, None, 30).is_err());
         progress.advance(2, 1, None, 30).unwrap();
         assert!(progress.advance(3, 1, None, 40).is_err());
     }
