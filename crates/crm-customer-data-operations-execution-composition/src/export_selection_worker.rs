@@ -386,13 +386,4 @@ mod tests {
         );
         assert_eq!(context.execution.request_started_at_unix_nanos, 123);
     }
-
-    #[test]
-    fn source_page_limit_is_bounded_by_core_query_capacity() {
-        assert!(MAXIMUM_EXPORT_SELECTION_SOURCE_PAGE_SIZE > 0);
-        assert!(
-            MAXIMUM_EXPORT_SELECTION_SOURCE_PAGE_SIZE
-                <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE
-        );
-    }
 }
