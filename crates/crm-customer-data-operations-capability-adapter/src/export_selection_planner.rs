@@ -51,8 +51,8 @@ pub const INTERNAL_EXPORT_SELECTION_CAPABILITY_IDS: [&str; 2] = [
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PartyExportSelectionOutcomePlanner;
 
-pub fn internal_export_selection_capability_definitions(
-) -> Result<Vec<CapabilityDefinition>, SdkError> {
+pub fn internal_export_selection_capability_definitions()
+-> Result<Vec<CapabilityDefinition>, SdkError> {
     INTERNAL_EXPORT_SELECTION_CAPABILITY_IDS
         .into_iter()
         .map(internal_export_selection_capability_definition)
@@ -171,7 +171,8 @@ fn plan_commit_selection_page(
         return Err(stored_state_invalid());
     }
 
-    let continuation = source_continuation_from_wire(command.source_after, command.source_exhausted)?;
+    let continuation =
+        source_continuation_from_wire(command.source_after, command.source_exhausted)?;
     let occurred_at = request.context.execution.request_started_at_unix_nanos;
     let first_position = progress.next_manifest_position();
     let committed_items = u32::try_from(command.candidates.len()).map_err(|_| invalid_plan())?;
@@ -179,7 +180,9 @@ fn plan_commit_selection_page(
 
     for (index, candidate) in command.candidates.into_iter().enumerate() {
         let offset = u32::try_from(index).map_err(|_| invalid_plan())?;
-        let position = first_position.checked_add(offset).ok_or_else(invalid_plan)?;
+        let position = first_position
+            .checked_add(offset)
+            .ok_or_else(invalid_plan)?;
         let party_ref = candidate.party_ref.ok_or_else(|| {
             SdkError::invalid_argument(
                 "customer_data.export.selection.candidate.party_ref",
