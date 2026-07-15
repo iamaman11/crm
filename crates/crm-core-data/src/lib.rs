@@ -2,6 +2,7 @@
 
 pub mod aggregate_executor;
 mod audit;
+mod audited_read;
 pub mod capability_executor;
 mod metadata_capability_executor;
 mod metadata_query_store;
@@ -22,6 +23,7 @@ mod search_store;
 
 pub use aggregate_executor::*;
 pub use audit::AuditIntent;
+pub use audited_read::*;
 pub use capability_executor::*;
 pub use crm_core_files::{
     AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactMetadata,
