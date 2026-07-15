@@ -1,4 +1,4 @@
-use crm_application_runtime::{GovernedPartyExportSelectionSource, ApplicationComponents};
+use crm_application_runtime::{ApplicationComponents, GovernedPartyExportSelectionSource};
 use crm_customer_data_operations_execution_composition::PartyExportSelectionWorker;
 
 fn assert_send_sync<T: Send + Sync>() {}

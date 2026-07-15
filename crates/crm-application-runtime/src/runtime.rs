@@ -79,9 +79,7 @@ use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
     RECORD_TYPE as PARTY_RECORD_TYPE,
 };
-use crm_parties_query_adapter::{
-    LIST_CAPABILITY as PARTY_LIST_QUERY_CAPABILITY, PartyQueryAdapter,
-};
+use crm_parties_query_adapter::PartyQueryAdapter;
 use crm_party_relationships_capability_adapter::{
     MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID, RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
 };
