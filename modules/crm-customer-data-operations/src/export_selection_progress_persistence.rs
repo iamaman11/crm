@@ -19,13 +19,12 @@ pub fn export_selection_progress_state_descriptor_hash() -> [u8; 32] {
 pub fn encode_export_selection_progress_state(
     progress: &PartyExportSelectionProgress,
 ) -> Result<Vec<u8>, SdkError> {
-    let bytes = serde_json::to_vec(&ExportSelectionProgressStateV1::from(progress)).map_err(
-        |error| {
+    let bytes =
+        serde_json::to_vec(&ExportSelectionProgressStateV1::from(progress)).map_err(|error| {
             persisted_error(format!(
                 "export selection progress serialization failed: {error}"
             ))
-        },
-    )?;
+        })?;
     validate_size(&bytes)?;
     Ok(bytes)
 }
@@ -35,7 +34,9 @@ pub fn decode_export_selection_progress_state(
 ) -> Result<PartyExportSelectionProgress, SdkError> {
     validate_size(bytes)?;
     let state: ExportSelectionProgressStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!("export selection progress JSON is invalid: {error}"))
+        persisted_error(format!(
+            "export selection progress JSON is invalid: {error}"
+        ))
     })?;
     let expected_progress_id = state.progress_id.clone();
     let job_id = ExportJobId::try_new(state.export_job_id)
@@ -195,7 +196,10 @@ mod tests {
             )
             .unwrap();
         let bytes = encode_export_selection_progress_state(&advanced).unwrap();
-        assert_eq!(decode_export_selection_progress_state(&bytes).unwrap(), advanced);
+        assert_eq!(
+            decode_export_selection_progress_state(&bytes).unwrap(),
+            advanced
+        );
     }
 
     #[test]
