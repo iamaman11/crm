@@ -1,11 +1,12 @@
 use crm_module_sdk::{ActorId, TenantId};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::error::Error;
 use std::fmt;
 use std::net::SocketAddr;
 
 const MINIMUM_SECRET_BYTES: usize = 32;
+const NANOS_PER_SECOND: u64 = 1_000_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplicationConfig {
@@ -24,6 +25,7 @@ pub struct ApplicationConfig {
     pub query_scan_multiplier: u32,
     pub maximum_connections: u32,
     pub bootstrap_allow_phase6: bool,
+    pub export_retention_policies: BTreeMap<String, u64>,
 }
 
 impl ApplicationConfig {
@@ -45,6 +47,9 @@ impl ApplicationConfig {
             query_scan_multiplier: parse_or_default("CRM_QUERY_SCAN_MULTIPLIER", "4")?,
             maximum_connections: parse_or_default("CRM_DATABASE_MAX_CONNECTIONS", "16")?,
             bootstrap_allow_phase6: parse_bool("CRM_BOOTSTRAP_ALLOW_PHASE6", false)?,
+            export_retention_policies: parse_retention_policies(
+                env::var("CRM_EXPORT_RETENTION_POLICIES").ok().as_deref(),
+            )?,
         };
         config.validate()?;
         Ok(config)
@@ -64,6 +69,16 @@ impl ApplicationConfig {
             || self.query_default_page_size > self.query_maximum_page_size
             || self.query_scan_multiplier == 0
             || self.maximum_connections == 0
+            || self.export_retention_policies.iter().any(|(policy_id, seconds)| {
+                policy_id.is_empty()
+                    || policy_id.chars().any(char::is_control)
+                    || *seconds == 0
+                    || seconds.checked_mul(NANOS_PER_SECOND).is_none()
+                    || seconds
+                        .checked_mul(NANOS_PER_SECOND)
+                        .and_then(|value| i64::try_from(value).ok())
+                        .is_none()
+            })
         {
             return Err(ApplicationConfigError::Invalid("application configuration"));
         }
@@ -146,6 +161,41 @@ fn parse_tenants(value: &str) -> Result<BTreeSet<TenantId>, ApplicationConfigErr
     Ok(tenants)
 }
 
+fn parse_retention_policies(
+    value: Option<&str>,
+) -> Result<BTreeMap<String, u64>, ApplicationConfigError> {
+    let Some(value) = value else {
+        return Ok(BTreeMap::new());
+    };
+    let mut policies = BTreeMap::new();
+    for entry in value.split(',').map(str::trim).filter(|entry| !entry.is_empty()) {
+        let (policy_id, seconds) = entry
+            .split_once('=')
+            .ok_or(ApplicationConfigError::Invalid(
+                "CRM_EXPORT_RETENTION_POLICIES",
+            ))?;
+        let policy_id = policy_id.trim();
+        let seconds = seconds
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| ApplicationConfigError::Invalid("CRM_EXPORT_RETENTION_POLICIES"))?;
+        if policy_id.is_empty()
+            || policy_id.chars().any(char::is_control)
+            || seconds == 0
+            || seconds
+                .checked_mul(NANOS_PER_SECOND)
+                .and_then(|value| i64::try_from(value).ok())
+                .is_none()
+            || policies.insert(policy_id.to_owned(), seconds).is_some()
+        {
+            return Err(ApplicationConfigError::Invalid(
+                "CRM_EXPORT_RETENTION_POLICIES",
+            ));
+        }
+    }
+    Ok(policies)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +209,17 @@ mod tests {
         let mut config = valid_config();
         config.cursor_signing_key = vec![1; 31];
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn retention_policy_configuration_is_explicit_and_bounded() {
+        assert_eq!(
+            parse_retention_policies(Some("standard=3600,short=60")).unwrap(),
+            BTreeMap::from([("short".to_owned(), 60), ("standard".to_owned(), 3600)])
+        );
+        assert!(parse_retention_policies(Some("standard=0")).is_err());
+        assert!(parse_retention_policies(Some("standard=60,standard=120")).is_err());
+        assert!(parse_retention_policies(Some("missing-separator")).is_err());
     }
 
     fn valid_config() -> ApplicationConfig {
@@ -178,6 +239,7 @@ mod tests {
             query_scan_multiplier: 4,
             maximum_connections: 16,
             bootstrap_allow_phase6: false,
+            export_retention_policies: BTreeMap::from([("standard".to_owned(), 3_600)]),
         }
     }
 }
