@@ -35,6 +35,15 @@ impl GovernedPartyExportExecutionSource {
     }
 }
 
+pub(crate) const fn export_execution_source_kind(
+    kind: PartyExportExecutionKind,
+) -> PartyExportExecutionSourceKind {
+    match kind {
+        PartyExportExecutionKind::Person => PartyExportExecutionSourceKind::Person,
+        PartyExportExecutionKind::Organization => PartyExportExecutionSourceKind::Organization,
+    }
+}
+
 impl PartyExportExecutionSource for GovernedPartyExportExecutionSource {
     fn get<'a>(
         &'a self,
@@ -91,12 +100,9 @@ impl PartyExportExecutionSource for GovernedPartyExportExecutionSource {
                     allowed_fields,
                 } => PartyExportExecutionSourceResult::Visible {
                     party_id,
-                    kind: allowed_fields.contains("kind").then_some(match kind {
-                        PartyExportExecutionKind::Person => PartyExportExecutionSourceKind::Person,
-                        PartyExportExecutionKind::Organization => {
-                            PartyExportExecutionSourceKind::Organization
-                        }
-                    }),
+                    kind: allowed_fields
+                        .contains("kind")
+                        .then_some(export_execution_source_kind(kind)),
                     display_name: allowed_fields
                         .contains("display_name")
                         .then_some(display_name),
@@ -112,6 +118,18 @@ mod tests {
     use super::*;
 
     fn assert_send_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn execution_kind_mapping_is_closed_and_exact() {
+        assert_eq!(
+            export_execution_source_kind(PartyExportExecutionKind::Person),
+            PartyExportExecutionSourceKind::Person
+        );
+        assert_eq!(
+            export_execution_source_kind(PartyExportExecutionKind::Organization),
+            PartyExportExecutionSourceKind::Organization
+        );
+    }
 
     #[test]
     fn governed_execution_source_is_thread_safe() {
