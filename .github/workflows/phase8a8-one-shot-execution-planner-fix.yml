@@ -1,8 +1,0 @@
-name: Obsolete Phase 8A.8 Execution Planner Fix
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo obsolete
