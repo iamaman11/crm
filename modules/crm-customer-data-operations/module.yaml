@@ -102,6 +102,10 @@ consumes:
   capabilities:
     - id: parties.party.create
       version: "1.0.0"
+    - id: parties.party.get
+      version: "1.0.0"
+    - id: parties.party.list
+      version: "1.0.0"
   events: []
 
 storage:
