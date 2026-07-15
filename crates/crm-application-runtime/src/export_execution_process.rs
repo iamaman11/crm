@@ -28,6 +28,8 @@ const EXPORT_EXECUTION_INTERVAL: Duration = Duration::from_secs(1);
 /// Selection remains in the primary application background cycle. Execution is isolated here so
 /// artifact assembly, immutable file publication and durable per-position checkpointing can fail
 /// the process closed without weakening the health semantics of unrelated projection workers.
+/// The process supervisor treats an execution-lane error as a process-fatal readiness failure;
+/// `crm-api` therefore cannot remain serving as healthy while governed export execution is broken.
 #[derive(Clone)]
 pub struct PartyExportExecutionProcess {
     worker: Arc<PartyExportExecutionWorker>,
