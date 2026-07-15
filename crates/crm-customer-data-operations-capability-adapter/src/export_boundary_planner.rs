@@ -3,20 +3,16 @@ use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{CapabilityBatchExecutionPlan, RecordMutation};
 use crm_customer_data_operations::{
     EXPORT_SELECTION_BOUNDARY_STATE_MAXIMUM_BYTES,
-    EXPORT_SELECTION_BOUNDARY_STATE_RETENTION_POLICY_ID,
-    EXPORT_SELECTION_BOUNDARY_STATE_SCHEMA_ID,
+    EXPORT_SELECTION_BOUNDARY_STATE_RETENTION_POLICY_ID, EXPORT_SELECTION_BOUNDARY_STATE_SCHEMA_ID,
     EXPORT_SELECTION_BOUNDARY_STATE_SCHEMA_VERSION, PartyExportJobStatus,
     PartyExportSelectionBoundary, encode_export_selection_boundary_state,
     export_selection_boundary_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, RecordSnapshot, SdkError};
 
-use crate::{
-    MODULE_ID, START_PARTY_EXPORT_EXECUTION_CAPABILITY, export_job_from_snapshot,
-};
+use crate::{MODULE_ID, START_PARTY_EXPORT_EXECUTION_CAPABILITY, export_job_from_snapshot};
 
-pub const EXPORT_SELECTION_BOUNDARY_RECORD_TYPE: &str =
-    "customer_data.export_selection_boundary";
+pub const EXPORT_SELECTION_BOUNDARY_RECORD_TYPE: &str = "customer_data.export_selection_boundary";
 
 /// Adds the immutable selection boundary to the first public Party-export execution start.
 ///
@@ -113,8 +109,14 @@ mod tests {
         let boundary = boundary();
         let reference = export_selection_boundary_record_ref(&boundary).unwrap();
         let payload = export_selection_boundary_persisted_payload(&boundary).unwrap();
-        assert_eq!(reference.record_type.as_str(), EXPORT_SELECTION_BOUNDARY_RECORD_TYPE);
-        assert_eq!(reference.record_id.as_str(), boundary.boundary_id().as_str());
+        assert_eq!(
+            reference.record_type.as_str(),
+            EXPORT_SELECTION_BOUNDARY_RECORD_TYPE
+        );
+        assert_eq!(
+            reference.record_id.as_str(),
+            boundary.boundary_id().as_str()
+        );
         assert_eq!(payload.data_class, DataClass::Personal);
         assert_eq!(
             export_selection_boundary_persisted_contract().schema_id,

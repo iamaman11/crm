@@ -23,11 +23,12 @@ pub fn export_execution_outcome_state_descriptor_hash() -> [u8; 32] {
 pub fn encode_export_execution_outcome_state(
     outcome: &PartyExportExecutionOutcome,
 ) -> Result<Vec<u8>, SdkError> {
-    let bytes = serde_json::to_vec(&ExportExecutionOutcomeStateV1::from(outcome)).map_err(|error| {
-        persisted_error(format!(
-            "export execution outcome serialization failed: {error}"
-        ))
-    })?;
+    let bytes =
+        serde_json::to_vec(&ExportExecutionOutcomeStateV1::from(outcome)).map_err(|error| {
+            persisted_error(format!(
+                "export execution outcome serialization failed: {error}"
+            ))
+        })?;
     validate_size(&bytes)?;
     Ok(bytes)
 }

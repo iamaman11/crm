@@ -12,8 +12,7 @@ use crate::{
 use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
 use sha2::{Digest, Sha256};
 
-pub const PARTY_EXPORT_SELECTION_BOUNDARY_VERSION_V1: &str =
-    "party-export-selection-boundary/v1";
+pub const PARTY_EXPORT_SELECTION_BOUNDARY_VERSION_V1: &str = "party-export-selection-boundary/v1";
 
 const SELECTION_BOUNDARY_ID_DOMAIN: &[u8] =
     b"crm.customer-data-operations.party-export-selection-boundary/v1";
@@ -101,8 +100,7 @@ impl PartyExportSelectionBoundary {
         export_specification_version_id: &ExportSpecificationVersionId,
         selection_cutoff_unix_nanos: i64,
     ) -> Result<(), SdkError> {
-        if self.export_specification_version_id.as_str()
-            == export_specification_version_id.as_str()
+        if self.export_specification_version_id.as_str() == export_specification_version_id.as_str()
             && self.selection_cutoff_unix_nanos == selection_cutoff_unix_nanos
         {
             Ok(())
@@ -144,7 +142,10 @@ pub fn bounded_party_export_selection_manifest_sha256(
     hash_part(&mut hasher, boundary.boundary_id().as_str().as_bytes());
     hash_part(
         &mut hasher,
-        boundary.export_specification_version_id().as_str().as_bytes(),
+        boundary
+            .export_specification_version_id()
+            .as_str()
+            .as_bytes(),
     );
     hash_part(
         &mut hasher,
@@ -209,12 +210,9 @@ mod tests {
             100,
         )
         .unwrap();
-        let conflicting_definition = PartyExportSelectionBoundary::create(
-            job_id,
-            specification_version("retention-b"),
-            101,
-        )
-        .unwrap();
+        let conflicting_definition =
+            PartyExportSelectionBoundary::create(job_id, specification_version("retention-b"), 101)
+                .unwrap();
         assert_eq!(first.boundary_id(), conflicting_definition.boundary_id());
         assert_ne!(first, conflicting_definition);
     }
@@ -289,12 +287,9 @@ mod tests {
             100,
         )
         .unwrap();
-        let second = PartyExportSelectionBoundary::create(
-            job_id,
-            specification_version("retention-a"),
-            101,
-        )
-        .unwrap();
+        let second =
+            PartyExportSelectionBoundary::create(job_id, specification_version("retention-a"), 101)
+                .unwrap();
         assert_eq!(first.boundary_id(), second.boundary_id());
         assert_ne!(
             bounded_party_export_selection_manifest_sha256(&first, &items).unwrap(),

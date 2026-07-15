@@ -220,7 +220,9 @@ pub fn reconcile_durable_party_export_outcomes(
                     .checked_add(1)
                     .ok_or_else(execution_state_error)?;
             }
-            PartyExportExecutionOutcomeKind::Excluded(PartyExportExclusionReason::VersionChanged) => {
+            PartyExportExecutionOutcomeKind::Excluded(
+                PartyExportExclusionReason::VersionChanged,
+            ) => {
                 excluded_version_changed = excluded_version_changed
                     .checked_add(1)
                     .ok_or_else(execution_state_error)?;
@@ -347,7 +349,11 @@ mod tests {
         ExportJobId::try_new("export-execution-outcome-job").unwrap()
     }
 
-    fn emitted(job_id: &ExportJobId, position: u32, chunk_index: u32) -> PartyExportExecutionOutcome {
+    fn emitted(
+        job_id: &ExportJobId,
+        position: u32,
+        chunk_index: u32,
+    ) -> PartyExportExecutionOutcome {
         PartyExportExecutionOutcome::emitted(
             job_id.clone(),
             position,
@@ -381,7 +387,10 @@ mod tests {
             )
             .unwrap(),
         ];
-        assert_eq!(durable_party_export_checkpoint(&job_id, &outcomes).unwrap(), 2);
+        assert_eq!(
+            durable_party_export_checkpoint(&job_id, &outcomes).unwrap(),
+            2
+        );
     }
 
     #[test]
@@ -433,20 +442,11 @@ mod tests {
     fn emitted_outcome_rejects_header_chunk_zero_and_invalid_digest() {
         let job_id = job_id();
         assert!(
-            PartyExportExecutionOutcome::emitted(
-                job_id.clone(),
-                1,
-                0,
-                "11".repeat(32),
-                1,
-                0,
-                1,
-            )
-            .is_err()
+            PartyExportExecutionOutcome::emitted(job_id.clone(), 1, 0, "11".repeat(32), 1, 0, 1,)
+                .is_err()
         );
         assert!(
-            PartyExportExecutionOutcome::emitted(job_id, 1, 1, "not-a-digest", 1, 0, 1)
-                .is_err()
+            PartyExportExecutionOutcome::emitted(job_id, 1, 1, "not-a-digest", 1, 0, 1).is_err()
         );
     }
 }

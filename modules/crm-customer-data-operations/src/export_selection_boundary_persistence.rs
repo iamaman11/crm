@@ -1,6 +1,4 @@
-use crate::{
-    ExportJobId, ExportSpecificationVersionId, PartyExportSelectionBoundary,
-};
+use crate::{ExportJobId, ExportSpecificationVersionId, PartyExportSelectionBoundary};
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -22,13 +20,12 @@ pub fn export_selection_boundary_state_descriptor_hash() -> [u8; 32] {
 pub fn encode_export_selection_boundary_state(
     boundary: &PartyExportSelectionBoundary,
 ) -> Result<Vec<u8>, SdkError> {
-    let bytes = serde_json::to_vec(&ExportSelectionBoundaryStateV1::from(boundary)).map_err(
-        |error| {
+    let bytes =
+        serde_json::to_vec(&ExportSelectionBoundaryStateV1::from(boundary)).map_err(|error| {
             persisted_error(format!(
                 "export selection boundary serialization failed: {error}"
             ))
-        },
-    )?;
+        })?;
     validate_size(&bytes)?;
     Ok(bytes)
 }
@@ -44,7 +41,9 @@ pub fn decode_export_selection_boundary_state(
 ) -> Result<PartyExportSelectionBoundary, SdkError> {
     validate_size(bytes)?;
     let state: ExportSelectionBoundaryStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!("export selection boundary JSON is invalid: {error}"))
+        persisted_error(format!(
+            "export selection boundary JSON is invalid: {error}"
+        ))
     })?;
     if state.version != PERSISTED_STATE_VERSION
         || state.export_job_id != expected_job_id.as_str()
@@ -148,14 +147,14 @@ mod tests {
         )
         .unwrap();
         let bytes = encode_export_selection_boundary_state(&boundary).unwrap();
-        let decoded = decode_export_selection_boundary_state(
-            &bytes,
-            &job_id,
-            specification.version_id(),
-        )
-        .unwrap();
+        let decoded =
+            decode_export_selection_boundary_state(&bytes, &job_id, specification.version_id())
+                .unwrap();
         assert_eq!(decoded, boundary);
-        assert_eq!(encode_export_selection_boundary_state(&decoded).unwrap(), bytes);
+        assert_eq!(
+            encode_export_selection_boundary_state(&decoded).unwrap(),
+            bytes
+        );
     }
 
     #[test]
@@ -194,12 +193,8 @@ mod tests {
 
         let other_job = ExportJobId::try_new("export-boundary-other-job").unwrap();
         assert!(
-            decode_export_selection_boundary_state(
-                &bytes,
-                &other_job,
-                specification.version_id(),
-            )
-            .is_err()
+            decode_export_selection_boundary_state(&bytes, &other_job, specification.version_id(),)
+                .is_err()
         );
     }
 
