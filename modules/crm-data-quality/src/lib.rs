@@ -7,7 +7,12 @@
 //! remain owned by `crm.parties`; application composition supplies only the
 //! exact governed source evidence required by the frozen evaluator vocabulary.
 
-pub mod domain;
+pub mod domain {
+    #[cfg(test)]
+    use std::collections::BTreeSet;
+
+    include!("domain.rs");
+}
 
 pub use domain::*;
 
