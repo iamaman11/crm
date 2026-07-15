@@ -169,7 +169,7 @@ fn decode_input<T: Message + Default>(request: &QueryRequest) -> Result<T, SdkEr
             != support::message_descriptor_hash(GET_PARTY_RULE_SET_REQUEST_SCHEMA)
         || payload.data_class != DataClass::Confidential
         || payload.encoding != PayloadEncoding::Protobuf
-        || payload.maximum_size_bytes > support::MAX_PROTOBUF_BYTES
+        || payload.maximum_size_bytes != support::MAX_PROTOBUF_BYTES
         || payload.validate().is_err()
     {
         return Err(SdkError::new(
