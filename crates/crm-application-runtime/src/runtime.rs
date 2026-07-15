@@ -440,7 +440,7 @@ impl ApplicationRuntime {
                     .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             ),
             query_router.clone(),
-            authorizer,
+            authorizer.clone(),
             query_router,
         ));
 
@@ -495,6 +495,7 @@ impl ApplicationRuntime {
             customer_360_worker,
             search_worker,
             import_execution_worker,
+            export_selection_worker,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
             last_worker_error: Arc::new(Mutex::new(None)),
@@ -845,6 +846,11 @@ async fn run_background_cycle(
     for tenant_id in &components.tenant_ids {
         components
             .import_execution_worker
+            .run_tenant_cycle(tenant_id.clone())
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+        components
+            .export_selection_worker
             .run_tenant_cycle(tenant_id.clone())
             .await
             .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
