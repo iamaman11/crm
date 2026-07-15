@@ -1,14 +1,11 @@
 #![forbid(unsafe_code)]
 
-#[path = "../src/export_selection_source.rs"]
-mod export_selection_source;
-
+use crm_application_runtime::GovernedPartyExportSelectionSource;
 use crm_customer_data_operations_execution_composition::{
     PartyExportSelectionSource, PartyExportSelectionSourceContinuation,
     PartyExportSelectionSourceKind,
 };
 use crm_module_sdk::RecordId;
-use export_selection_source::GovernedPartyExportSelectionSource;
 
 fn assert_source_contract<T: PartyExportSelectionSource>() {}
 
