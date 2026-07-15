@@ -10,7 +10,7 @@ pub const EXPORT_SELECTION_PROGRESS_STATE_MAXIMUM_BYTES: u64 = 16 * 1024;
 pub const EXPORT_SELECTION_PROGRESS_STATE_RETENTION_POLICY_ID: &str =
     "crm.customer_data.export_selection_progress";
 
-const EXPORT_SELECTION_PROGRESS_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.export_selection_progress.state/v1:progress_id,export_job_id,next_manifest_position,source_after_sort_value,source_after_record_id,source_exhausted,created_at_unix_nanos,updated_at_unix_nanos,version";
+const EXPORT_SELECTION_PROGRESS_STATE_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.export_selection_progress.state/v1:progress_id,export_job_id,maximum_resources,next_manifest_position,source_after_sort_value,source_after_record_id,source_exhausted,created_at_unix_nanos,updated_at_unix_nanos,version";
 
 pub fn export_selection_progress_state_descriptor_hash() -> [u8; 32] {
     Sha256::digest(EXPORT_SELECTION_PROGRESS_STATE_DESCRIPTOR).into()
@@ -60,6 +60,7 @@ pub fn decode_export_selection_progress_state(
 
     let progress = PartyExportSelectionProgress::rehydrate(
         job_id,
+        state.maximum_resources,
         state.next_manifest_position,
         continuation,
         state.source_exhausted,
@@ -88,6 +89,7 @@ pub fn decode_export_selection_progress_state(
 struct ExportSelectionProgressStateV1 {
     progress_id: String,
     export_job_id: String,
+    maximum_resources: u32,
     next_manifest_position: u32,
     source_after_sort_value: Option<String>,
     source_after_record_id: Option<String>,
@@ -111,6 +113,7 @@ impl From<&PartyExportSelectionProgress> for ExportSelectionProgressStateV1 {
         Self {
             progress_id: progress.progress_id().as_str().to_owned(),
             export_job_id: progress.job_id().as_str().to_owned(),
+            maximum_resources: progress.maximum_resources(),
             next_manifest_position: progress.next_manifest_position(),
             source_after_sort_value,
             source_after_record_id,
@@ -154,6 +157,7 @@ mod tests {
         let initial = PartyExportSelectionProgress::create(
             ExportJobId::try_new("selection-progress-persistence-initial").unwrap(),
             10,
+            10,
         )
         .unwrap();
         let initial_bytes = encode_export_selection_progress_state(&initial).unwrap();
@@ -164,6 +168,7 @@ mod tests {
 
         let mut advanced = PartyExportSelectionProgress::create(
             ExportJobId::try_new("selection-progress-persistence-advanced").unwrap(),
+            10,
             10,
         )
         .unwrap();
@@ -207,6 +212,7 @@ mod tests {
         let progress = PartyExportSelectionProgress::create(
             ExportJobId::try_new("selection-progress-persistence-tamper").unwrap(),
             10,
+            10,
         )
         .unwrap();
         let bytes = encode_export_selection_progress_state(&progress).unwrap();
@@ -219,6 +225,12 @@ mod tests {
 
         let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         value["progress_id"] = serde_json::json!("cdo-export-selection-progress-tampered");
+        assert!(
+            decode_export_selection_progress_state(&serde_json::to_vec(&value).unwrap()).is_err()
+        );
+
+        let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        value["maximum_resources"] = serde_json::json!(0);
         assert!(
             decode_export_selection_progress_state(&serde_json::to_vec(&value).unwrap()).is_err()
         );
