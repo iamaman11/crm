@@ -114,7 +114,18 @@ pub const MUTATION_CAPABILITY_IDS: [&str; 8] = [
 
 pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = import_capability_definitions()?;
-    definitions.extend(export_capability_definitions()?);
+    let mut export_definitions = export_capability_definitions()?;
+
+    // Bulk export is a high-risk disclosure operation. The production catalog fails closed by
+    // requiring approval for execution until a tenant-specific policy layer explicitly introduces a
+    // governed lower-friction threshold. Creating or cancelling a job remains approval-free.
+    for definition in &mut export_definitions {
+        if definition.capability_id.as_str() == START_PARTY_EXPORT_EXECUTION_CAPABILITY {
+            definition.requires_approval = true;
+        }
+    }
+
+    definitions.extend(export_definitions);
     Ok(definitions)
 }
 
@@ -261,7 +272,11 @@ mod tests {
             );
             assert!(definition.mutation);
             assert!(definition.requires_idempotency);
-            assert!(!definition.requires_approval);
+            if capability_id == START_PARTY_EXPORT_EXECUTION_CAPABILITY {
+                assert!(definition.requires_approval);
+            } else {
+                assert!(!definition.requires_approval);
+            }
         }
         assert_eq!(definitions[3].risk, CapabilityRisk::High);
         assert_eq!(definitions[6].risk, CapabilityRisk::High);
