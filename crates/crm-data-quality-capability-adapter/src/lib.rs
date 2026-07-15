@@ -8,12 +8,16 @@
 
 mod rule_set_planner;
 
-pub use rule_set_planner::*;
+pub use rule_set_planner::{
+    DataQualityRuleSetCapabilityPlanner, party_rule_set_from_definition,
+    party_rule_set_persisted_contract, party_rule_set_persisted_payload, party_rule_set_to_wire,
+};
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
+use crm_data_quality::PartyRuleSetVersion;
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, SdkError,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordSnapshot, SdkError,
 };
 
 pub const MODULE_ID: &str = crm_data_quality::MODULE_ID;
@@ -25,6 +29,24 @@ pub const PUBLISH_PARTY_RULE_SET_RESPONSE_SCHEMA: &str =
 pub const PARTY_RULE_SET_PUBLISHED_EVENT_TYPE: &str = "data_quality.party.rule_set.published";
 pub const PARTY_RULE_SET_PUBLISHED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.PartyRuleSetVersionPublishedEvent";
+
+pub fn party_rule_set_from_snapshot(
+    snapshot: &RecordSnapshot,
+) -> Result<PartyRuleSetVersion, SdkError> {
+    if snapshot.version != 1 {
+        return Err(SdkError::new(
+            "DATA_QUALITY_PERSISTED_STATE_INVALID",
+            ErrorCategory::Internal,
+            false,
+            "The persisted Data Quality state is invalid.",
+        )
+        .with_internal_reference(format!(
+            "immutable Party rule-set version record has unexpected aggregate version {}",
+            snapshot.version
+        )));
+    }
+    rule_set_planner::party_rule_set_from_snapshot(snapshot)
+}
 
 pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![capability_definition()?])
