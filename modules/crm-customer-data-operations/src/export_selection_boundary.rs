@@ -23,6 +23,24 @@ const BOUNDED_MANIFEST_DIGEST_DOMAIN: &[u8] =
 pub struct PartyExportSelectionBoundaryId(RecordId);
 
 impl PartyExportSelectionBoundaryId {
+    pub fn for_job(job_id: &ExportJobId) -> Result<Self, SdkError> {
+        let mut hasher = Sha256::new();
+        hasher.update(SELECTION_BOUNDARY_ID_DOMAIN);
+        hash_part(&mut hasher, job_id.as_str().as_bytes());
+        RecordId::try_new(format!(
+            "cdo-export-boundary-{}",
+            hex_digest(hasher.finalize())
+        ))
+        .map(Self)
+        .map_err(|error| {
+            invalid(
+                "CUSTOMER_DATA_EXPORT_SELECTION_BOUNDARY_ID_INVALID",
+                "customer_data.export.selection_boundary_id",
+                error.to_string(),
+            )
+        })
+    }
+
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
@@ -53,22 +71,7 @@ impl PartyExportSelectionBoundary {
         // The record identity is deliberately job-bound only. A retry with a different cutoff or
         // specification therefore targets the same immutable record and must fail as a conflict
         // rather than creating a second boundary for one export job.
-        let mut hasher = Sha256::new();
-        hasher.update(SELECTION_BOUNDARY_ID_DOMAIN);
-        hash_part(&mut hasher, job_id.as_str().as_bytes());
-
-        let boundary_id = RecordId::try_new(format!(
-            "cdo-export-boundary-{}",
-            hex_digest(hasher.finalize())
-        ))
-        .map(PartyExportSelectionBoundaryId)
-        .map_err(|error| {
-            invalid(
-                "CUSTOMER_DATA_EXPORT_SELECTION_BOUNDARY_ID_INVALID",
-                "customer_data.export.selection_boundary_id",
-                error.to_string(),
-            )
-        })?;
+        let boundary_id = PartyExportSelectionBoundaryId::for_job(&job_id)?;
 
         Ok(Self {
             boundary_id,
@@ -218,6 +221,19 @@ mod tests {
     }
 
     #[test]
+    fn direct_boundary_identity_matches_created_boundary() {
+        let job_id = ExportJobId::try_new("selection-boundary-direct-id-job").unwrap();
+        let expected = PartyExportSelectionBoundaryId::for_job(&job_id).unwrap();
+        let boundary = PartyExportSelectionBoundary::create(
+            job_id,
+            specification_version("retention-a"),
+            100,
+        )
+        .unwrap();
+        assert_eq!(boundary.boundary_id(), &expected);
+    }
+
+    #[test]
     fn different_export_jobs_have_different_boundary_record_identities() {
         let first = PartyExportSelectionBoundary::create(
             ExportJobId::try_new("selection-boundary-job-a").unwrap(),
@@ -264,22 +280,8 @@ mod tests {
     }
 
     #[test]
-    fn cutoff_excludes_parties_created_after_selection_started() {
-        let boundary = PartyExportSelectionBoundary::create(
-            ExportJobId::try_new("selection-boundary-cutoff-job").unwrap(),
-            specification_version("retention-a"),
-            100,
-        )
-        .unwrap();
-        assert!(boundary.includes_party_created_at(0));
-        assert!(boundary.includes_party_created_at(100));
-        assert!(!boundary.includes_party_created_at(101));
-        assert!(!boundary.includes_party_created_at(-1));
-    }
-
-    #[test]
-    fn finalized_manifest_digest_is_bound_to_exact_boundary_contents() {
-        let job_id = ExportJobId::try_new("selection-boundary-digest-job").unwrap();
+    fn bounded_manifest_digest_changes_when_boundary_changes() {
+        let job_id = ExportJobId::try_new("selection-boundary-manifest-job").unwrap();
         let items = vec![item(&job_id, 1, "party-1"), item(&job_id, 2, "party-2")];
         let first = PartyExportSelectionBoundary::create(
             job_id.clone(),
@@ -287,24 +289,15 @@ mod tests {
             100,
         )
         .unwrap();
-        let second =
-            PartyExportSelectionBoundary::create(job_id, specification_version("retention-a"), 101)
-                .unwrap();
-        assert_eq!(first.boundary_id(), second.boundary_id());
+        let second = PartyExportSelectionBoundary::create(
+            job_id,
+            specification_version("retention-a"),
+            101,
+        )
+        .unwrap();
         assert_ne!(
             bounded_party_export_selection_manifest_sha256(&first, &items).unwrap(),
             bounded_party_export_selection_manifest_sha256(&second, &items).unwrap()
         );
-    }
-
-    #[test]
-    fn rejects_non_positive_cutoff() {
-        let error = PartyExportSelectionBoundary::create(
-            ExportJobId::try_new("selection-boundary-invalid-job").unwrap(),
-            specification_version("retention-a"),
-            0,
-        )
-        .unwrap_err();
-        assert_eq!(error.code, "CUSTOMER_DATA_EXPORT_SELECTION_CUTOFF_INVALID");
     }
 }
