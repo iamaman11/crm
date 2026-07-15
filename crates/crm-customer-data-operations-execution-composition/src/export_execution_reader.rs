@@ -1,4 +1,3 @@
-use crm_capability_plan_support as support;
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_customer_data_operations::{
     ExportJobId, PartyExportExclusionReason, PartyExportExecutionOutcome,
@@ -6,11 +5,10 @@ use crm_customer_data_operations::{
 };
 use crm_customer_data_operations_capability_adapter::{
     EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE, MODULE_ID,
-    export_execution_outcome_from_snapshot, export_execution_outcome_persisted_contract,
-    export_execution_stage_from_snapshot, export_execution_stage_persisted_contract,
+    export_execution_outcome_from_snapshot, export_execution_stage_from_snapshot,
 };
 use crm_module_sdk::{
-    DataClass, ErrorCategory, ModuleId, PortFuture, RecordId, RecordType, SdkError, TenantId,
+    ErrorCategory, ModuleId, PortFuture, RecordId, RecordType, SdkError, TenantId,
 };
 
 #[derive(Debug, Clone)]
@@ -142,6 +140,10 @@ fn configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_customer_data_operations_capability_adapter::{
+        export_execution_outcome_persisted_contract, export_execution_stage_persisted_contract,
+    };
+    use crm_module_sdk::DataClass;
 
     #[test]
     fn exact_stage_and_outcome_record_contracts_are_personal() {
