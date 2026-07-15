@@ -12,6 +12,11 @@ on:
       - "modules/**/*.rs"
       - "services/**/Cargo.toml"
       - "services/**/*.rs"
+      - "proto/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "packages/client/src/contract_hashes.ts"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -25,7 +30,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,22 +39,33 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.18.0"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "11.12.0"
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply machine-fixable Rust and contract maintenance
         run: |
           cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
             -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
+          pnpm web:generate
       - name: Commit synchronized files when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
+          if git diff --quiet -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts; then
+            echo "Rust maintenance and generated contract hashes are already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates modules services
-          git commit -m "Synchronize machine-fixable Rust maintenance"
+          git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts
+          git commit -m "Synchronize machine-fixable Rust and contract maintenance"
           git push origin "HEAD:${HEAD_BRANCH}"
