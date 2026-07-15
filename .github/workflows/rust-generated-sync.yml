@@ -43,6 +43,24 @@ jobs:
       - name: Synchronize generated client contract hashes
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
+      - name: Apply verified disclosure header assertion patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("services/crm-api/tests/export_process_e2e.rs")
+          text = path.read_text()
+          replacements = {
+              'headers.get(reqwest::header::CONTENT_LENGTH).unwrap(),\n        artifact.size_bytes.to_string()': 'headers\n            .get(reqwest::header::CONTENT_LENGTH)\n            .unwrap()\n            .to_str()\n            .unwrap(),\n        artifact.size_bytes.to_string().as_str()',
+              'headers.get(reqwest::header::ETAG).unwrap(),\n        format!("\\\"sha256-{expected_sha256}\\\"")': 'headers.get(reqwest::header::ETAG).unwrap().to_str().unwrap(),\n        format!("\\\"sha256-{expected_sha256}\\\"").as_str()',
+              'headers.get("x-content-sha256").unwrap(),\n        expected_sha256': 'headers.get("x-content-sha256").unwrap().to_str().unwrap(),\n        expected_sha256.as_str()',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"expected disclosure header assertion anchor missing: {old!r}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
       - name: Commit generated Rust and contract artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
