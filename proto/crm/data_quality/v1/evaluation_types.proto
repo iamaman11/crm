@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+import "crm/data_quality/v1/completeness.proto";
+import "crm/data_quality/v1/reference.proto";
+
+message PartyEvaluationJobRef {
+  string evaluation_job_id = 1;
+}
+
+enum PartyEvaluationJobStatus {
+  PARTY_EVALUATION_JOB_STATUS_UNSPECIFIED = 0;
+  PARTY_EVALUATION_JOB_STATUS_CREATED = 1;
+  PARTY_EVALUATION_JOB_STATUS_STAGED = 2;
+  PARTY_EVALUATION_JOB_STATUS_COMPLETED = 3;
+}
+
+message PartyEvaluationJob {
+  PartyEvaluationJobRef evaluation_job_ref = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  PartyRuleSetVersionRef rule_set_version_ref = 3;
+  PartyCompletenessProfileVersionRef completeness_profile_version_ref = 4;
+  PartyEvaluationJobStatus status = 5;
+  crm.customer.v1.CustomerResourceVersion evaluated_party_resource_version = 6;
+  uint32 evaluated_rules = 7;
+  uint32 failed_rules = 8;
+  crm.core.v1.UnixTime created_at = 9;
+  crm.core.v1.UnixTime updated_at = 10;
+  crm.customer.v1.CustomerResourceVersion resource_version = 11;
+}
