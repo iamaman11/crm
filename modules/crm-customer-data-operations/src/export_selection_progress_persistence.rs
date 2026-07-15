@@ -131,8 +131,8 @@ fn validate_size(bytes: &[u8]) -> Result<(), SdkError> {
     Ok(())
 }
 
-fn persisted_domain_error(context: &str, error: SdkError) -> SdkError {
-    persisted_error(format!("{context}: {}: {}", error.code, error.safe_message))
+fn persisted_domain_error(context: &str, error: impl std::fmt::Display) -> SdkError {
+    persisted_error(format!("{context}: {error}"))
 }
 
 fn persisted_error(detail: String) -> SdkError {
