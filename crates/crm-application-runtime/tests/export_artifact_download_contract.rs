@@ -4,6 +4,7 @@ use crm_application_runtime::{
     PartyExportArtifactDownloadRequest, PartyExportArtifactDownloadResult,
     PartyExportArtifactDownloadService,
 };
+use crm_capability_runtime::CapabilityRisk;
 use crm_customer_data_operations_query_adapter::{
     DOWNLOAD_EXPORT_ARTIFACT_CAPABILITY, artifact_download_capability_definition,
 };
@@ -28,6 +29,7 @@ fn disclosure_capability_remains_dedicated_high_risk_read_only_surface() {
         definition.authorization_policy_id,
         DOWNLOAD_EXPORT_ARTIFACT_CAPABILITY
     );
+    assert_eq!(definition.risk, CapabilityRisk::High);
     assert!(!definition.mutation);
     assert!(!definition.requires_idempotency);
     assert!(!definition.requires_approval);
