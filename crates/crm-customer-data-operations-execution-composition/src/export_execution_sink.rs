@@ -3,8 +3,8 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityAuthorizer, CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{BatchError, PostgresDataStore, RecordGetQuery, TransactionalAggregatePlanner};
 use crm_customer_data_operations::{
-    ExportJobId, PartyExportArtifactEvidence, PartyExportExclusionReason, PartyExportExecutionStage,
-    PartyExportJob, PartyExportReconciliation,
+    ExportJobId, PartyExportArtifactEvidence, PartyExportExclusionReason,
+    PartyExportExecutionStage, PartyExportJob, PartyExportReconciliation,
 };
 use crm_customer_data_operations_capability_adapter::{
     INTERNAL_COMMIT_PARTY_EXPORT_EXECUTION_OUTCOME_CAPABILITY,
@@ -166,7 +166,8 @@ impl PostgresPartyExportExecutionSink {
                 expected_job_version: job.version(),
                 artifact: Some(wire::PartyExportArtifact {
                     file_id: artifact.file_id().as_str().to_owned(),
-                    media_type: crm_customer_data_operations::PARTY_EXPORT_CSV_MEDIA_TYPE.to_owned(),
+                    media_type: crm_customer_data_operations::PARTY_EXPORT_CSV_MEDIA_TYPE
+                        .to_owned(),
                     content_sha256: decode_sha256(artifact.content_sha256())?.to_vec(),
                     size_bytes: artifact.size_bytes(),
                     retention_policy_id: artifact.retention_policy_id().to_owned(),
@@ -245,7 +246,10 @@ fn prepare_internal_request<M: prost::Message>(
     let input = support::protobuf_payload(MODULE_ID, schema_id, DataClass::Personal, command)?;
     let input_hash = semantic_input_hash(&input);
     let request = internal_request(base_context, &definition, input, input_hash)?;
-    Ok(PreparedInternalExecutionRequest { definition, request })
+    Ok(PreparedInternalExecutionRequest {
+        definition,
+        request,
+    })
 }
 
 fn internal_request(

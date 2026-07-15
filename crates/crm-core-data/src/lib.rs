@@ -24,8 +24,8 @@ pub use aggregate_executor::*;
 pub use audit::AuditIntent;
 pub use capability_executor::*;
 pub use crm_core_files::{
-    AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactMetadata, FileArtifactStatus,
-    ImmutableFileArtifactStore,
+    AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactMetadata,
+    FileArtifactStatus, ImmutableFileArtifactStore,
 };
 pub use crm_module_sdk::RecordSnapshot;
 pub use metadata_capability_executor::*;

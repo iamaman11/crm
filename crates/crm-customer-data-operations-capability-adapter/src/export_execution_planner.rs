@@ -5,8 +5,9 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_customer_data_operations::{
-    PartyExportArtifactEvidence, PartyExportExclusionReason, PartyExportExecutionOutcome,
-    PartyExportExecutionStage, PartyExportJobStatus, PartyExportReconciliation,
+    ExportJobId, PartyExportArtifactEvidence, PartyExportExclusionReason,
+    PartyExportExecutionOutcome, PartyExportExecutionStage, PartyExportJobStatus,
+    PartyExportReconciliation,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, FileId, ModuleId, RecordSnapshot,
@@ -16,11 +17,10 @@ use crm_proto_contracts::crm::customer_data_operations::v1 as wire;
 use prost::Message;
 
 use crate::{
-    EXPORT_JOB_RECORD_TYPE, MODULE_ID, PARTY_EXPORT_COMPLETED_EVENT_SCHEMA,
-    PARTY_EXPORT_COMPLETED_EVENT_TYPE, export_execution_outcome_persisted_payload,
+    EXPORT_JOB_RECORD_TYPE, MODULE_ID, export_execution_outcome_persisted_payload,
     export_execution_outcome_record_ref, export_execution_stage_persisted_payload,
-    export_execution_stage_record_ref, export_job_from_snapshot, export_job_id_from_ref,
-    export_job_persisted_payload, export_job_record_ref, export_job_to_wire,
+    export_execution_stage_record_ref, export_job_from_snapshot, export_job_persisted_payload,
+    export_job_to_wire,
 };
 
 pub const INTERNAL_STAGE_PARTY_EXPORT_EXECUTION_CAPABILITY: &str =
@@ -47,6 +47,9 @@ pub const PARTY_EXPORT_EXECUTION_PROGRESSED_EVENT_TYPE: &str =
     "customer_data.export.party.execution_progressed";
 pub const PARTY_EXPORT_EXECUTION_PROGRESSED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyExportExecutionProgressedEvent";
+pub const PARTY_EXPORT_COMPLETED_EVENT_TYPE: &str = "customer_data.export.party.completed";
+pub const PARTY_EXPORT_COMPLETED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyExportCompletedEvent";
 
 pub const INTERNAL_EXPORT_EXECUTION_CAPABILITY_IDS: [&str; 3] = [
     INTERNAL_STAGE_PARTY_EXPORT_EXECUTION_CAPABILITY,
@@ -364,7 +367,7 @@ fn plan_complete_execution(
         ));
     }
     let artifact = PartyExportArtifactEvidence::try_new(
-        FileId::try_new(artifact.file_id).map_err(configured)?,
+        configured(FileId::try_new(artifact.file_id))?,
         bytes_to_sha256_hex(&artifact.content_sha256)?,
         artifact.size_bytes,
         artifact.retention_policy_id,
@@ -433,6 +436,24 @@ fn plan_complete_execution(
         },
         output: Some(output),
     })
+}
+
+fn export_job_id_from_ref(value: Option<wire::ExportJobRef>) -> Result<ExportJobId, SdkError> {
+    let value = value.ok_or_else(|| {
+        SdkError::invalid_argument(
+            "customer_data.export.export_job_ref",
+            "Party export job reference is required",
+        )
+    })?;
+    ExportJobId::try_new(value.export_job_id)
+}
+
+fn export_job_record_ref(job_id: &ExportJobId) -> Result<crm_module_sdk::RecordRef, SdkError> {
+    support::record_ref(
+        EXPORT_JOB_RECORD_TYPE,
+        job_id.as_str(),
+        "customer_data.export.export_job_id",
+    )
 }
 
 fn ensure_job_identity(

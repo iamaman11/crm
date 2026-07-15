@@ -9,11 +9,11 @@ use crm_core_files::{
     ImmutableFileArtifactStore,
 };
 use crm_customer_data_operations::{
-    ExportJobId, PartyExportArtifactEvidence, PartyExportExecutionOutcomeKind,
-    PartyExportExecutionStage, PartyExportExecutionStageKind, PartyExportExclusionReason,
-    PartyExportField, PartyExportJobStatus, PartyExportSelectionItem,
-    canonical_party_export_csv_record, reconcile_durable_party_export_outcomes,
-    PARTY_EXPORT_CSV_MEDIA_TYPE,
+    ExportJobId, PARTY_EXPORT_CSV_MEDIA_TYPE, PartyExportArtifactEvidence,
+    PartyExportExclusionReason, PartyExportExecutionOutcomeKind, PartyExportExecutionStage,
+    PartyExportExecutionStageKind, PartyExportField, PartyExportJobStatus,
+    PartyExportSelectionItem, canonical_party_export_csv_record,
+    reconcile_durable_party_export_outcomes,
 };
 use crm_customer_data_operations_capability_adapter::{
     EXPORT_JOB_RECORD_TYPE, MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
@@ -22,8 +22,8 @@ use crm_customer_data_operations_capability_adapter::{
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, Clock,
     CorrelationId, DataClass, ExecutionContext, FileId, IdempotencyKey, ModuleExecutionContext,
-    ModuleId, PortFuture, RecordId, RecordType, RequestId, RetentionPolicyId, SchemaVersion, SdkError,
-    TenantId, TraceId,
+    ModuleId, PortFuture, RecordId, RecordType, RequestId, RetentionPolicyId, SchemaVersion,
+    SdkError, TenantId, TraceId,
 };
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -334,19 +334,16 @@ impl PartyExportExecutionWorker {
                 }
 
                 let finalized = match metadata.status {
-                    FileArtifactStatus::Uploading => self
-                        .file_store
-                        .finalize(&context, &blueprint.file_id)
-                        .await?,
+                    FileArtifactStatus::Uploading => {
+                        self.file_store
+                            .finalize(&context, &blueprint.file_id)
+                            .await?
+                    }
                     FileArtifactStatus::Finalized => metadata,
                 };
                 let outcomes = self
                     .execution_reader
-                    .load_outcomes(
-                        &tenant_id,
-                        job.job_id(),
-                        selection.selected_resources(),
-                    )
+                    .load_outcomes(&tenant_id, job.job_id(), selection.selected_resources())
                     .await?;
                 let reconciliation = reconcile_durable_party_export_outcomes(
                     job.job_id(),
@@ -526,9 +523,8 @@ async fn load_outcome_prefix(
     job_id: &ExportJobId,
     checkpoint: u32,
 ) -> Result<Vec<crm_customer_data_operations::PartyExportExecutionOutcome>, SdkError> {
-    let mut outcomes = Vec::with_capacity(
-        usize::try_from(checkpoint).map_err(|_| worker_state_invalid())?,
-    );
+    let mut outcomes =
+        Vec::with_capacity(usize::try_from(checkpoint).map_err(|_| worker_state_invalid())?);
     for position in 1..=checkpoint {
         outcomes.push(
             reader

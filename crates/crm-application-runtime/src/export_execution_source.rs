@@ -29,7 +29,10 @@ impl std::fmt::Debug for GovernedPartyExportExecutionSource {
 
 impl GovernedPartyExportExecutionSource {
     pub fn new(adapter: Arc<PartyQueryAdapter>, authorizer: Arc<dyn QueryAuthorizer>) -> Self {
-        Self { adapter, authorizer }
+        Self {
+            adapter,
+            authorizer,
+        }
     }
 }
 
@@ -72,11 +75,15 @@ impl PartyExportExecutionSource for GovernedPartyExportExecutionSource {
                 )
                 .await?;
             Ok(match read {
-                PartyExportExecutionRead::NotVisible => PartyExportExecutionSourceResult::NotVisible,
+                PartyExportExecutionRead::NotVisible => {
+                    PartyExportExecutionSourceResult::NotVisible
+                }
                 PartyExportExecutionRead::VersionChanged => {
                     PartyExportExecutionSourceResult::VersionChanged
                 }
-                PartyExportExecutionRead::Unavailable => PartyExportExecutionSourceResult::Unavailable,
+                PartyExportExecutionRead::Unavailable => {
+                    PartyExportExecutionSourceResult::Unavailable
+                }
                 PartyExportExecutionRead::Visible {
                     party_id,
                     kind,
