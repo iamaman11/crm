@@ -2,9 +2,9 @@ use crm_core_data::RecordQueryContinuation;
 use crm_customer_data_operations_execution_composition::{
     PartyExportSelectionSource, PartyExportSelectionSourceCandidate,
     PartyExportSelectionSourceContinuation, PartyExportSelectionSourceKind,
-    PartyExportSelectionSourcePage,
+    PartyExportSelectionSourcePage, PartyExportSelectionSourceRequest,
 };
-use crm_module_sdk::{ActorId, ErrorCategory, PortFuture, SdkError, TenantId};
+use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
 use crm_parties_query_adapter::{
     LIST_CAPABILITY as PARTY_LIST_CAPABILITY, PartyExportSelectionKind, PartyQueryAdapter,
     export_selection_query_request, query_capability_definition,
@@ -40,17 +40,10 @@ impl GovernedPartyExportSelectionSource {
 impl PartyExportSelectionSource for GovernedPartyExportSelectionSource {
     fn list_page<'a>(
         &'a self,
-        tenant_id: &'a TenantId,
-        actor_id: &'a ActorId,
-        job_id: &'a str,
-        selection_cutoff_unix_nanos: i64,
-        kind: Option<PartyExportSelectionSourceKind>,
-        page_size: u32,
-        after: Option<PartyExportSelectionSourceContinuation>,
-        request_started_at_unix_nanos: i64,
+        source_request: PartyExportSelectionSourceRequest<'a>,
     ) -> PortFuture<'a, Result<PartyExportSelectionSourcePage, SdkError>> {
         Box::pin(async move {
-            let party_kind = match kind {
+            let party_kind = match source_request.kind {
                 None => None,
                 Some(PartyExportSelectionSourceKind::Person) => {
                     Some(PartyExportSelectionKind::Person)
@@ -60,11 +53,11 @@ impl PartyExportSelectionSource for GovernedPartyExportSelectionSource {
                 }
             };
             let request = export_selection_query_request(
-                tenant_id,
-                actor_id,
-                job_id,
+                source_request.tenant_id,
+                source_request.actor_id,
+                source_request.job_id,
                 party_kind,
-                request_started_at_unix_nanos,
+                source_request.request_started_at_unix_nanos,
             )?;
             let definition = query_capability_definition(PARTY_LIST_CAPABILITY)?;
             let authorization = self.authorizer.authorize(&definition, &request).await?;
@@ -83,17 +76,19 @@ impl PartyExportSelectionSource for GovernedPartyExportSelectionSource {
                 )));
             }
 
-            let after = after.map(|continuation| RecordQueryContinuation {
-                sort_value: continuation.sort_value,
-                record_id: continuation.record_id,
-            });
+            let after = source_request
+                .after
+                .map(|continuation| RecordQueryContinuation {
+                    sort_value: continuation.sort_value,
+                    record_id: continuation.record_id,
+                });
             let page = self
                 .adapter
                 .list_for_export_selection(
                     &request,
-                    selection_cutoff_unix_nanos,
+                    source_request.selection_cutoff_unix_nanos,
                     party_kind,
-                    page_size,
+                    source_request.page_size,
                     after,
                 )
                 .await?;
