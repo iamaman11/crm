@@ -3,7 +3,7 @@ use crm_capability_adapters::LiveCapabilityAuthorizer;
 use crm_capability_runtime::CapabilityAuthorizer;
 use crm_core_data::RecordQueryContinuation;
 use crm_customer_data_operations_execution_composition::{
-    PartyExportExecutionSource, PartyExportExecutionSourceKind, PartyExportExecutionSourceRequest,
+    PartyExportExecutionSource, PartyExportExecutionSourceRequest,
     PartyExportExecutionSourceResult, PartyExportSelectionExecutionSource,
     PartyExportSelectionSource, PartyExportSelectionSourceCandidate,
     PartyExportSelectionSourceContinuation, PartyExportSelectionSourceKind,
