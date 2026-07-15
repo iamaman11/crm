@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+message PartyRuleSetVersionRef {
+  string rule_set_version_id = 1;
+}
