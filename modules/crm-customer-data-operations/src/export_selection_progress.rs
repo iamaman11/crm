@@ -373,10 +373,7 @@ mod tests {
             .advance(
                 1,
                 0,
-                Some(continuation(
-                    "2026-07-15T00:00:00Z",
-                    "party-hidden",
-                )),
+                Some(continuation("2026-07-15T00:00:00Z", "party-hidden")),
                 20,
             )
             .unwrap();
