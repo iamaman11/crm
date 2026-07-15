@@ -101,7 +101,8 @@ impl PartyExportSelectionBoundary {
         export_specification_version_id: &ExportSpecificationVersionId,
         selection_cutoff_unix_nanos: i64,
     ) -> Result<(), SdkError> {
-        if self.export_specification_version_id == *export_specification_version_id
+        if self.export_specification_version_id.as_str()
+            == export_specification_version_id.as_str()
             && self.selection_cutoff_unix_nanos == selection_cutoff_unix_nanos
         {
             Ok(())
