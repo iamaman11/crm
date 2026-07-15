@@ -4,6 +4,7 @@
 //! interpreted as formulas are neutralized before ordinary CSV quoting. These rules are part of the
 //! versioned export canonicalization contract and must never change in place after publication.
 
+use crm_module_sdk::SdkError;
 use sha2::{Digest, Sha256};
 
 pub const PARTY_EXPORT_CANONICALIZATION_V1: &str = "party-export-csv/v1";
@@ -22,6 +23,15 @@ pub fn encode_party_export_csv_record(cells: &[&str]) -> Vec<u8> {
     }
     output.push('\n');
     output.into_bytes()
+}
+
+/// Encodes owned canonical cell values without changing their ordering or bytes.
+///
+/// Execution composition builds row values as owned strings after live field authorization. This
+/// bounded adapter keeps that worker path on the same immutable v1 CSV canonicalization function.
+pub fn canonical_party_export_csv_record(cells: &[String]) -> Result<Vec<u8>, SdkError> {
+    let borrowed = cells.iter().map(String::as_str).collect::<Vec<_>>();
+    Ok(encode_party_export_csv_record(&borrowed))
 }
 
 /// Encodes one CSV cell after deterministic spreadsheet-formula neutralization.
@@ -97,6 +107,15 @@ mod tests {
         assert_eq!(bytes, b"party_id,display_name\n");
         assert!(!bytes.starts_with(&[0xEF, 0xBB, 0xBF]));
         assert!(!bytes.windows(2).any(|window| window == b"\r\n"));
+    }
+
+    #[test]
+    fn owned_cells_use_the_same_canonical_record_encoding() {
+        let cells = vec!["party-1".to_owned(), "Ada Lovelace".to_owned()];
+        assert_eq!(
+            canonical_party_export_csv_record(&cells).unwrap(),
+            encode_party_export_csv_record(&["party-1", "Ada Lovelace"])
+        );
     }
 
     #[test]
