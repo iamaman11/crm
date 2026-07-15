@@ -208,6 +208,76 @@ message InternalFinalizePartyExportSelectionResponse {
   PartyExportJob export_job = 1;
 }
 
+// Worker-private execution exclusion reasons. They intentionally match the exact bounded
+// reconciliation buckets and are never exposed as a generic error channel.
+enum PartyExportExecutionExclusionReason {
+  PARTY_EXPORT_EXECUTION_EXCLUSION_REASON_UNSPECIFIED = 0;
+  PARTY_EXPORT_EXECUTION_EXCLUSION_REASON_NOT_VISIBLE = 1;
+  PARTY_EXPORT_EXECUTION_EXCLUSION_REASON_VERSION_CHANGED = 2;
+  PARTY_EXPORT_EXECUTION_EXCLUSION_REASON_UNAVAILABLE = 3;
+}
+
+message InternalStagePartyExportEmittedRow {
+  bytes row_utf8 = 1;
+  uint32 redacted_fields = 2;
+}
+
+// Persists immutable already-authorized output intent before any artifact bytes are published.
+// Exact replay is required; the staged row is derived output evidence, not authoritative Party state.
+message InternalStagePartyExportExecutionRequest {
+  ExportJobRef export_job_ref = 1;
+  uint32 manifest_position = 2;
+  oneof result {
+    InternalStagePartyExportEmittedRow emitted = 3;
+    PartyExportExecutionExclusionReason exclusion_reason = 4;
+  }
+}
+
+message InternalStagePartyExportExecutionResponse {
+  uint32 manifest_position = 1;
+}
+
+message InternalPartyExportEmittedOutcome {
+  uint32 artifact_chunk_index = 1;
+  bytes chunk_sha256 = 2;
+  uint64 chunk_size_bytes = 3;
+  uint32 redacted_fields = 4;
+}
+
+// Commits exactly one durable per-position execution outcome and advances the export checkpoint in
+// the same transaction. For emitted rows the file-artifact chunk must already be durably accepted.
+message InternalCommitPartyExportExecutionOutcomeRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_job_version = 2;
+  uint32 manifest_position = 3;
+  oneof result {
+    InternalPartyExportEmittedOutcome emitted = 4;
+    PartyExportExecutionExclusionReason exclusion_reason = 5;
+  }
+}
+
+message InternalCommitPartyExportExecutionOutcomeResponse {
+  PartyExportJob export_job = 1;
+}
+
+// Commits the missing final export-owned completion evidence after the immutable file artifact has
+// already finalized successfully. Exact replay must resolve to the same artifact and reconciliation.
+message InternalCompletePartyExportExecutionRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_job_version = 2;
+  PartyExportArtifact artifact = 3;
+  PartyExportReconciliation reconciliation = 4;
+}
+
+message InternalCompletePartyExportExecutionResponse {
+  PartyExportJob export_job = 1;
+}
+
+message PartyExportExecutionProgressedEvent {
+  PartyExportJob export_job = 1;
+  uint32 manifest_position = 2;
+}
+
 message PartyExportJobCreatedEvent {
   PartyExportJob export_job = 1;
 }
