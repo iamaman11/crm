@@ -253,12 +253,13 @@ impl PartyExportSelectionWorker {
                         }),
                     })
                     .collect();
-                let source_after = result.next.map(|continuation| {
-                    export_wire::PartyExportSourceContinuation {
-                        sort_value: continuation.sort_value().to_owned(),
-                        record_id: continuation.record_id().as_str().to_owned(),
-                    }
-                });
+                let source_after =
+                    result
+                        .next
+                        .map(|continuation| export_wire::PartyExportSourceContinuation {
+                            sort_value: continuation.sort_value().to_owned(),
+                            record_id: continuation.record_id().as_str().to_owned(),
+                        });
                 self.sink
                     .commit_page(
                         &context,
@@ -340,13 +341,8 @@ mod tests {
     fn worker_context_uses_private_export_selection_identity() {
         let tenant_id = TenantId::try_new("tenant-export-selection-worker-test").unwrap();
         let actor_id = ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID).unwrap();
-        let context = worker_context(
-            &tenant_id,
-            &actor_id,
-            "export-selection-job-test",
-            123,
-        )
-        .unwrap();
+        let context =
+            worker_context(&tenant_id, &actor_id, "export-selection-job-test", 123).unwrap();
         assert_eq!(context.execution.tenant_id, tenant_id);
         assert_eq!(context.execution.actor_id, actor_id);
         assert_eq!(
