@@ -243,12 +243,16 @@ impl PartyExportSelectionWorker {
                     return Err(worker_state_unavailable());
                 }
 
-                let kind = job.specification().scope().kind_filter().map(|kind| match kind {
-                    PartyExportKindFilter::Person => PartyExportSelectionSourceKind::Person,
-                    PartyExportKindFilter::Organization => {
-                        PartyExportSelectionSourceKind::Organization
-                    }
-                });
+                let kind = job
+                    .specification()
+                    .scope()
+                    .kind_filter()
+                    .map(|kind| match kind {
+                        PartyExportKindFilter::Person => PartyExportSelectionSourceKind::Person,
+                        PartyExportKindFilter::Organization => {
+                            PartyExportSelectionSourceKind::Organization
+                        }
+                    });
                 let after = evidence.progress.continuation().map(|continuation| {
                     PartyExportSelectionSourceContinuation {
                         sort_value: continuation.sort_value().to_owned(),
