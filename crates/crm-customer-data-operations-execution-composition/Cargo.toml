@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[lints.clippy]
+# The execution sink keeps exact immutable artifact evidence explicit at the authorization boundary.
+# Keep this exception local to the composition crate instead of weakening workspace-wide policy.
+too_many_arguments = "allow"
+
 [dependencies]
 crm-capability-adapters = { path = "../crm-capability-adapters" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
