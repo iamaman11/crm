@@ -1,0 +1,54 @@
+name: Phase 8A.8 Execution Surface Cleanup
+on:
+  push:
+    branches: [develop/phase8a8-customer-export-jobs]
+permissions:
+  contents: write
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - name: Expose execution modules and remove stale one-shot workflows
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('crates/crm-customer-data-operations-execution-composition/src/lib.rs')
+          s=p.read_text()
+          prefix='''pub mod export_execution_reader;
+pub use export_execution_reader::*;
+pub mod export_execution_sink;
+pub use export_execution_sink::*;
+pub mod export_execution_source;
+pub use export_execution_source::*;
+pub mod export_execution_worker;
+pub use export_execution_worker::*;
+'''
+          if 'pub mod export_execution_reader;' not in s:
+              s=s.replace('pub mod postgres_reader;', prefix+'pub mod postgres_reader;', 1)
+          p.write_text(s)
+
+          p=Path('crates/crm-application-runtime/src/lib.rs')
+          s=p.read_text()
+          if 'mod export_execution_source;' not in s:
+              s=s.replace('mod export_selection_bootstrap;', 'mod export_execution_source;\nmod export_selection_bootstrap;', 1)
+          if 'pub use export_execution_source::*;' not in s:
+              s=s.replace('pub use config::*;', 'pub use config::*;\npub use export_execution_source::*;', 1)
+          p.write_text(s)
+
+          for stale in [
+              Path('.github/workflows/phase8a8-one-shot-execution-planner-fix.yml'),
+              Path('.github/workflows/phase8a8-one-shot-outcome-id.yml'),
+          ]:
+              if stale.exists(): stale.unlink()
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --all
+      - run: rm .github/workflows/phase8a8-one-shot-execution-surface-cleanup.yml
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A && git commit -m 'Expose Phase 8A.8 execution surfaces and clean temporary workflows' && git push origin HEAD:develop/phase8a8-customer-export-jobs
