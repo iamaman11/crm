@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+import "crm/data_quality/v1/quality_types.proto";
+import "crm/data_quality/v1/reference.proto";
+
+message DataQualityFindingRef {
+  string finding_id = 1;
+}
+
+message DataQualityFindingObservationRef {
+  string finding_observation_id = 1;
+}
+
+enum DataQualityFindingStatus {
+  DATA_QUALITY_FINDING_STATUS_UNSPECIFIED = 0;
+  DATA_QUALITY_FINDING_STATUS_OPEN = 1;
+  DATA_QUALITY_FINDING_STATUS_ACKNOWLEDGED = 2;
+  DATA_QUALITY_FINDING_STATUS_WAIVED = 3;
+  DATA_QUALITY_FINDING_STATUS_REMEDIATED = 4;
+}
+
+message DataQualityFindingObservation {
+  DataQualityFindingObservationRef finding_observation_ref = 1;
+  DataQualityFindingRef finding_ref = 2;
+  crm.customer.v1.PartyRef party_ref = 3;
+  PartyRuleSetVersionRef rule_set_version_ref = 4;
+  string rule_key = 5;
+  crm.customer.v1.CustomerResourceVersion evaluated_party_resource_version = 6;
+  string reason_code = 7;
+  crm.core.v1.UnixTime observed_at = 8;
+}
+
+message DataQualityFinding {
+  DataQualityFindingRef finding_ref = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  PartyRuleSetVersionRef rule_set_version_ref = 3;
+  string rule_key = 4;
+  QualitySeverity severity = 5;
+  DataQualityFindingStatus status = 6;
+  DataQualityFindingObservationRef current_observation_ref = 7;
+  crm.customer.v1.CustomerResourceVersion evaluated_party_resource_version = 8;
+  optional string assigned_actor_id = 9;
+  optional string waiver_reason = 10;
+  crm.core.v1.UnixTime created_at = 11;
+  crm.core.v1.UnixTime updated_at = 12;
+  crm.customer.v1.CustomerResourceVersion resource_version = 13;
+}
