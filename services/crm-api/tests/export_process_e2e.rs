@@ -35,7 +35,6 @@ const EXPORT_CREATE: &str = "customer_data.export.party.create";
 const EXPORT_START: &str = "customer_data.export.party.execution.start";
 const EXPORT_GET: &str = "customer_data.export.party.get";
 
-const EXPORT_JOB_RECORD_TYPE: &str = "customer_data.export_job";
 const EXPORT_OUTCOME_RECORD_TYPE: &str = "customer_data.export_execution_outcome";
 const CUSTOMER_DATA_OPERATIONS_MODULE_ID: &str = "crm.customer-data-operations";
 const EXPORT_COMPLETED_EVENT_TYPE: &str = "customer_data.export.party.completed";
@@ -460,6 +459,7 @@ async fn install_completion_delay_trigger(admin: &PgPool, job_id: &str, file_id:
               job_id text PRIMARY KEY,
               file_id text NOT NULL
             );
+            GRANT SELECT ON crm.test_export_completion_delay_target TO crm_app_test;
             TRUNCATE TABLE crm.test_export_completion_delay_target;
             CREATE OR REPLACE FUNCTION crm.test_delay_export_completion_update()
             RETURNS trigger
