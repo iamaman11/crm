@@ -1,0 +1,204 @@
+name: Phase 8A.8 Execution Runtime Wiring
+on:
+  push:
+    branches: [develop/phase8a8-customer-export-jobs]
+permissions:
+  contents: write
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - name: Wire governed export execution worker
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('crates/crm-application-runtime/src/runtime.rs')
+          s = p.read_text()
+          def r(old, new):
+              global s
+              if s.count(old) != 1:
+                  raise SystemExit(f'runtime anchor mismatch: {old[:80]!r} count={s.count(old)}')
+              s = s.replace(old, new, 1)
+
+          r('''    GovernedPartyExportSelectionSource, ProcessIdentitySource, SystemClock,
+    application_capability_catalog, application_mutation_definitions,
+    application_query_capability_catalog, application_query_definitions,
+    bootstrap_export_selection_worker_access,
+''','''    GovernedPartyExportExecutionSource, GovernedPartyExportSelectionSource,
+    ProcessIdentitySource, SystemClock, application_capability_catalog,
+    application_mutation_definitions, application_query_capability_catalog,
+    application_query_definitions, bootstrap_export_execution_worker_access,
+    bootstrap_export_selection_worker_access,
+''')
+          r('''    PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,
+    PostgresTransactionalAggregateExecutor,
+''','''    PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,
+    PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,
+''')
+          r('''    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+    internal_export_selection_capability_definitions,
+''','''    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+    internal_export_execution_capability_definitions, internal_export_selection_capability_definitions,
+''')
+          r('''    EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyExportSelectionWorker,
+    PartyImportExecutionCoordinator, PartyImportExecutionWorker,
+    PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,
+    PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink,
+    internal_capability_definitions,
+''','''    EXPORT_EXECUTION_WORKER_ACTOR_ID, EXPORT_SELECTION_WORKER_ACTOR_ID,
+    IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyExportExecutionWorker, PartyExportSelectionWorker,
+    PartyImportExecutionCoordinator, PartyImportExecutionWorker,
+    PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,
+    PostgresPartyExportExecutionReader, PostgresPartyExportExecutionSink,
+    PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink,
+    internal_capability_definitions,
+''')
+          r('''    pub import_execution_worker: Arc<PartyImportExecutionWorker>,
+    pub export_selection_worker: Arc<PartyExportSelectionWorker>,
+''','''    pub import_execution_worker: Arc<PartyImportExecutionWorker>,
+    pub export_selection_worker: Arc<PartyExportSelectionWorker>,
+    pub export_execution_worker: Arc<PartyExportExecutionWorker>,
+''')
+          r('''        let internal_export_selection_definitions =
+            internal_export_selection_capability_definitions()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+''','''        let internal_export_selection_definitions =
+            internal_export_selection_capability_definitions()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let internal_export_execution_definitions =
+            internal_export_execution_capability_definitions()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+''')
+          r('''        let export_selection_worker_actor_id =
+            ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+''','''        let export_selection_worker_actor_id =
+            ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_execution_worker_actor_id =
+            ActorId::try_new(EXPORT_EXECUTION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+''')
+          r('''            bootstrap_export_selection_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &query_definitions,
+                &internal_export_selection_definitions,
+                &export_selection_worker_actor_id,
+            )?;
+''','''            bootstrap_export_selection_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &query_definitions,
+                &internal_export_selection_definitions,
+                &export_selection_worker_actor_id,
+            )?;
+            bootstrap_export_execution_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &query_definitions,
+                &internal_export_execution_definitions,
+                &export_execution_worker_actor_id,
+            )?;
+''')
+          r('''        let export_selection_worker = Arc::new(
+            PartyExportSelectionWorker::new(
+                store.clone(),
+                export_selection_reader,
+                export_selection_sink,
+                export_selection_source,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
+''','''        let export_selection_worker = Arc::new(
+            PartyExportSelectionWorker::new(
+                store.clone(),
+                Arc::clone(&export_selection_reader),
+                export_selection_sink,
+                export_selection_source,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
+        let execution_party_query_adapter = PartyQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_execution_source = Arc::new(GovernedPartyExportExecutionSource::new(
+            Arc::new(execution_party_query_adapter),
+            authorizer.clone(),
+        ));
+        let export_execution_reader =
+            Arc::new(PostgresPartyExportExecutionReader::new(store.clone()));
+        let export_execution_sink = Arc::new(PostgresPartyExportExecutionSink::new(
+            store.clone(),
+            authorizer.clone(),
+        ));
+        let export_file_store = Arc::new(PostgresImmutableFileArtifactStore::new(store.clone()));
+        let export_execution_worker = Arc::new(
+            PartyExportExecutionWorker::new(
+                store.clone(),
+                export_selection_reader,
+                export_execution_reader,
+                export_execution_sink,
+                export_execution_source,
+                export_file_store,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
+''')
+          r('''            import_execution_worker,
+            export_selection_worker,
+            readiness: Arc::new(AtomicBool::new(false)),
+''','''            import_execution_worker,
+            export_selection_worker,
+            export_execution_worker,
+            readiness: Arc::new(AtomicBool::new(false)),
+''')
+          r('''        components
+            .export_selection_worker
+            .run_tenant_cycle(tenant_id.clone())
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+        scan_link_events(components, tenant_id.clone()).await?;
+''','''        components
+            .export_selection_worker
+            .run_tenant_cycle(tenant_id.clone())
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+        components
+            .export_execution_worker
+            .run_tenant_cycle(tenant_id.clone())
+            .await
+            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+        scan_link_events(components, tenant_id.clone()).await?;
+''')
+          p.write_text(s)
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all
+      - run: rm .github/workflows/phase8a8-one-shot-execution-runtime-wiring.yml
+      - run: git diff --check
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Wire Phase 8A.8 export execution worker into application runtime"
+          git push origin HEAD:develop/phase8a8-customer-export-jobs
