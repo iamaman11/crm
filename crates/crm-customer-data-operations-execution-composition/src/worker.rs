@@ -1,3 +1,14 @@
+#[path = "export_selection_reader.rs"]
+mod export_selection_reader;
+#[path = "export_selection_sink.rs"]
+mod export_selection_sink;
+#[path = "export_selection_worker.rs"]
+mod export_selection_worker;
+
+pub use export_selection_reader::*;
+pub use export_selection_sink::*;
+pub use export_selection_worker::*;
+
 use crate::{ImportExecutionSnapshotReader, PartyImportExecutionCoordinator};
 use crm_core_data::{PostgresDataStore, RecordListQuery, RecordQueryContinuation, RecordQuerySort};
 use crm_customer_data_operations::ImportJobStatus;
