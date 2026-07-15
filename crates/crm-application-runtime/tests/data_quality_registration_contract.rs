@@ -22,7 +22,10 @@ fn application_runtime_registers_exactly_one_party_rule_set_publication_coordina
         .definition(&capability_id, &capability_version)
         .expect("Data Quality publication capability in production application catalog");
 
-    assert_eq!(definition.capability_id.as_str(), PUBLISH_PARTY_RULE_SET_CAPABILITY);
+    assert_eq!(
+        definition.capability_id.as_str(),
+        PUBLISH_PARTY_RULE_SET_CAPABILITY
+    );
     assert!(definition.mutation);
     assert!(definition.requires_idempotency);
 }
