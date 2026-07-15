@@ -8,6 +8,7 @@
 //! published composition/adapters.
 
 mod config;
+mod export_selection_bootstrap;
 mod export_selection_source;
 mod gateway_grpc;
 mod governed_metadata;
@@ -16,6 +17,7 @@ mod process;
 mod runtime;
 
 pub use config::*;
+pub(crate) use export_selection_bootstrap::bootstrap_export_selection_worker_access;
 pub use export_selection_source::*;
 pub use gateway_grpc::*;
 pub use governed_metadata::*;
