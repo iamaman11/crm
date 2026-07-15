@@ -49,17 +49,22 @@ Issue #123 and draft PR #130 form the single active customer-master production p
 The export packet must deliver a governed derived-data path rather than a generic database dump surface. Its required production boundary includes:
 
 - immutable versioned export specification/profile identity;
-- explicit bounded customer-master resource scope;
-- deterministic snapshot or equivalent immutable selection evidence;
-- live authorization, resource visibility and field/data-class filtering during execution;
+- one immutable Party creation-time cutoff for stable selection across restart;
+- deterministic manifest identity bound to cutoff plus exact Party references/resource versions;
+- live authorization, resource visibility and field/data-class filtering during execution and artifact disclosure;
 - owner-domain reads through governed interfaces rather than cross-module table bypass;
-- staged derived artifacts with exactly-once logical finalization;
+- deterministic spreadsheet-safe UTF-8 CSV canonicalization;
+- staged derived artifacts with deterministic chunk replay and exactly-once logical finalization;
+- checkpoint advancement only after corresponding bytes or exclusion outcomes are durable;
 - artifact digest, byte-size, retention and expiry metadata;
 - deterministic retry/resume and crash/restart behavior;
 - exact selected/emitted/excluded/redacted counts and reconciliation evidence;
+- approval-required Party export execution in the production combined capability catalog;
 - tenant isolation and safe non-disclosure;
 - fresh-PostgreSQL real `crm-api` process acceptance;
 - one unchanged exact candidate SHA with every applicable gate green.
+
+The active branch now includes the frozen hardened architecture, export contracts/domain/persistence foundations, deterministic selection evidence, an immutable selection-boundary primitive, spreadsheet-safe CSV canonicalization, governed Party read dependencies and safe-default approval for production Party export execution.
 
 Exported bytes are derived artifacts. They do not become authoritative customer-master state and they must not bypass consent, privacy restriction, legal hold, masking or authorization policy.
 
@@ -146,9 +151,9 @@ See `DELIVERY_GOVERNANCE.md` for the normative control rules.
 ## Immediate next actions
 
 1. Keep #123 / PR #130 as the single active Phase 8A production packet.
-2. Enforce the frozen 8A.8 ownership, immutable selection-boundary, artifact-finalization and reconciliation contract in production code.
-3. Complete governed Party selection/serialization composition, crash-safe staged artifact execution and bulk-export security policy.
-4. Add persistence/migration/RLS coverage and fresh-PostgreSQL real `crm-api` process acceptance.
-5. Reach one unchanged exact candidate SHA with every applicable workflow green before leaving draft state.
-6. Continue sequentially through #124, #125 and #126.
-7. Close Phase 8A only after its full acceptance baseline is merged, then begin Phase 8B / #29 from the stable completed customer-master baseline while enterprise/security/operational hardening continues continuously.
+2. Persist the immutable selection cutoff/boundary into the export-job production state and worker outcome path.
+3. Implement governed Party selection/serialization composition with deterministic creation-time ordering and same-cutoff restart.
+4. Implement crash-safe staged artifact chunks, durable per-position outcomes/checkpoints and live-authorized artifact download.
+5. Add final PostgreSQL migrations/RLS and fresh-PostgreSQL real `crm-api` process acceptance for selection, authorization, reconciliation and both required crash windows.
+6. Reach one unchanged exact candidate SHA with every applicable workflow green before leaving draft state.
+7. Continue sequentially through #124, #125 and #126, close Phase 8A only after its full acceptance baseline is merged, then begin Phase 8B / #29.
