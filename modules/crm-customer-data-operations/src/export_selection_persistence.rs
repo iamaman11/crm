@@ -1,6 +1,4 @@
-use crate::{
-    ExportJobId, PartyExportSelectionItem, SelectedPartyId,
-};
+use crate::{ExportJobId, PartyExportSelectionItem, SelectedPartyId};
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -99,10 +97,7 @@ fn validate_size(bytes: &[u8]) -> Result<(), SdkError> {
 }
 
 fn persisted_domain_error(context: &str, error: SdkError) -> SdkError {
-    persisted_error(format!(
-        "{context}: {}: {}",
-        error.code, error.safe_message
-    ))
+    persisted_error(format!("{context}: {}: {}", error.code, error.safe_message))
 }
 
 fn persisted_error(detail: String) -> SdkError {
@@ -140,7 +135,10 @@ mod tests {
         assert_eq!(decoded.manifest_position(), item.manifest_position());
         assert_eq!(decoded.party_id(), item.party_id());
         assert_eq!(decoded.party_resource_version(), 17);
-        assert_eq!(encode_export_selection_item_state(&decoded).unwrap(), encoded);
+        assert_eq!(
+            encode_export_selection_item_state(&decoded).unwrap(),
+            encoded
+        );
     }
 
     #[test]
@@ -148,15 +146,11 @@ mod tests {
         let bytes = encode_export_selection_item_state(&item()).unwrap();
         let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         value["unknown"] = serde_json::json!(true);
-        assert!(
-            decode_export_selection_item_state(&serde_json::to_vec(&value).unwrap()).is_err()
-        );
+        assert!(decode_export_selection_item_state(&serde_json::to_vec(&value).unwrap()).is_err());
 
         let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         value["item_id"] = serde_json::json!("cdo-export-selection-tampered");
-        assert!(
-            decode_export_selection_item_state(&serde_json::to_vec(&value).unwrap()).is_err()
-        );
+        assert!(decode_export_selection_item_state(&serde_json::to_vec(&value).unwrap()).is_err());
     }
 
     #[test]

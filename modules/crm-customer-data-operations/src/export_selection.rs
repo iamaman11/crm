@@ -173,9 +173,7 @@ fn validate_manifest_position(value: u32) -> Result<(), SdkError> {
         return Err(invalid(
             "CUSTOMER_DATA_EXPORT_SELECTION_POSITION_INVALID",
             "customer_data.export.selection.manifest_position",
-            format!(
-                "manifest position must be between 1 and {MAX_PARTY_EXPORT_SELECTION_ITEMS}"
-            ),
+            format!("manifest position must be between 1 and {MAX_PARTY_EXPORT_SELECTION_ITEMS}"),
         ));
     }
     Ok(())
@@ -205,11 +203,7 @@ fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
     output
 }
 
-fn invalid(
-    code: &'static str,
-    field: &'static str,
-    message: impl Into<String>,
-) -> SdkError {
+fn invalid(code: &'static str, field: &'static str, message: impl Into<String>) -> SdkError {
     let mut error = SdkError::invalid_argument(field, message.into());
     error.code = code.to_owned();
     error
@@ -219,7 +213,12 @@ fn invalid(
 mod tests {
     use super::*;
 
-    fn item(job_id: &ExportJobId, position: u32, party_id: &str, version: i64) -> PartyExportSelectionItem {
+    fn item(
+        job_id: &ExportJobId,
+        position: u32,
+        party_id: &str,
+        version: i64,
+    ) -> PartyExportSelectionItem {
         PartyExportSelectionItem::create(
             job_id.clone(),
             position,
@@ -257,18 +256,12 @@ mod tests {
         let job_id = ExportJobId::try_new("export-selection-job-invalid").unwrap();
         let other_job = ExportJobId::try_new("export-selection-job-other").unwrap();
         assert!(
-            party_export_selection_manifest_sha256(
-                &job_id,
-                &[item(&job_id, 2, "party-2", 1)]
-            )
-            .is_err()
+            party_export_selection_manifest_sha256(&job_id, &[item(&job_id, 2, "party-2", 1)])
+                .is_err()
         );
         assert!(
-            party_export_selection_manifest_sha256(
-                &job_id,
-                &[item(&other_job, 1, "party-1", 1)]
-            )
-            .is_err()
+            party_export_selection_manifest_sha256(&job_id, &[item(&other_job, 1, "party-1", 1)])
+                .is_err()
         );
         assert!(
             party_export_selection_manifest_sha256(

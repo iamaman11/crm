@@ -31,10 +31,8 @@ pub const LIST_EXPORT_JOBS_REQUEST_SCHEMA: &str =
 pub const LIST_EXPORT_JOBS_RESPONSE_SCHEMA: &str =
     "crm.customer_data_operations.v1.ListPartyExportJobsResponse";
 
-pub const EXPORT_QUERY_CAPABILITY_IDS: [&str; 2] = [
-    GET_EXPORT_JOB_CAPABILITY,
-    LIST_EXPORT_JOBS_CAPABILITY,
-];
+pub const EXPORT_QUERY_CAPABILITY_IDS: [&str; 2] =
+    [GET_EXPORT_JOB_CAPABILITY, LIST_EXPORT_JOBS_CAPABILITY];
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAXIMUM_PAGE_SIZE: u32 = 200;
