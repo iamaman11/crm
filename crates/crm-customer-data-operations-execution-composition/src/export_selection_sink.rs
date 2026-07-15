@@ -111,11 +111,7 @@ impl PostgresPartyExportSelectionSink {
                 record_id: target.reference.record_id.clone(),
             })
             .await?;
-        let plan = planner.plan(
-            &prepared.definition,
-            &prepared.request,
-            current.as_ref(),
-        )?;
+        let plan = planner.plan(&prepared.definition, &prepared.request, current.as_ref())?;
 
         let decision = self
             .authorizer
