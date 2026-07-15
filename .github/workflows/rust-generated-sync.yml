@@ -50,14 +50,18 @@ jobs:
 
           path = Path("services/crm-api/tests/export_process_e2e.rs")
           text = path.read_text()
-          replacements = {
-              'headers.get(reqwest::header::CONTENT_LENGTH).unwrap(),\n        artifact.size_bytes.to_string()': 'headers\n            .get(reqwest::header::CONTENT_LENGTH)\n            .unwrap()\n            .to_str()\n            .unwrap(),\n        artifact.size_bytes.to_string().as_str()',
-              'headers.get(reqwest::header::ETAG).unwrap(),\n        format!("\\\"sha256-{expected_sha256}\\\"")': 'headers.get(reqwest::header::ETAG).unwrap().to_str().unwrap(),\n        format!("\\\"sha256-{expected_sha256}\\\"").as_str()',
-              'headers.get("x-content-sha256").unwrap(),\n        expected_sha256': 'headers.get("x-content-sha256").unwrap().to_str().unwrap(),\n        expected_sha256.as_str()',
-          }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f"expected disclosure header assertion anchor missing: {old!r}")
+          replacements = [
+              ('headers.get(reqwest::header::CONTENT_LENGTH).unwrap(),', 'headers.get(reqwest::header::CONTENT_LENGTH).unwrap().to_str().unwrap(),'),
+              ('artifact.size_bytes.to_string()\n    );', 'artifact.size_bytes.to_string().as_str()\n    );'),
+              ('headers.get(reqwest::header::ETAG).unwrap(),', 'headers.get(reqwest::header::ETAG).unwrap().to_str().unwrap(),'),
+              ('format!("\\\"sha256-{expected_sha256}\\\"")\n    );', 'format!("\\\"sha256-{expected_sha256}\\\"").as_str()\n    );'),
+              ('headers.get("x-content-sha256").unwrap(),', 'headers.get("x-content-sha256").unwrap().to_str().unwrap(),'),
+              ('expected_sha256);', 'expected_sha256.as_str());'),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one disclosure assertion token {old!r}, found {count}")
               text = text.replace(old, new, 1)
           path.write_text(text)
           PY
