@@ -139,20 +139,44 @@ fn configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crm_customer_data_operations::{
+        ExportJobId, PartyExportExclusionReason, PartyExportExecutionOutcome,
+        PartyExportExecutionStage,
+    };
     use crm_customer_data_operations_capability_adapter::{
-        export_execution_outcome_persisted_contract, export_execution_stage_persisted_contract,
+        export_execution_outcome_persisted_payload, export_execution_stage_persisted_payload,
     };
     use crm_module_sdk::DataClass;
 
     #[test]
-    fn exact_stage_and_outcome_record_contracts_are_personal() {
+    fn exact_stage_and_outcome_persisted_payloads_are_personal() {
+        let job_id = ExportJobId::try_new("execution-reader-contract-job").unwrap();
+        let stage = PartyExportExecutionStage::emitted(
+            job_id.clone(),
+            1,
+            "party-1\n".to_owned(),
+            0,
+            100,
+        )
+        .unwrap();
+        let outcome = PartyExportExecutionOutcome::excluded(
+            job_id,
+            1,
+            PartyExportExclusionReason::Unavailable,
+            100,
+        )
+        .unwrap();
+
         assert_eq!(
-            export_execution_stage_persisted_contract().data_class,
+            export_execution_stage_persisted_payload(&stage)
+                .unwrap()
+                .data_class,
             DataClass::Personal
         );
         assert_eq!(
-            export_execution_outcome_persisted_contract().data_class,
+            export_execution_outcome_persisted_payload(&outcome)
+                .unwrap()
+                .data_class,
             DataClass::Personal
         );
     }
