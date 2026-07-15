@@ -1,7 +1,8 @@
 use crate::{
     ApplicationAggregatePlannerRouter, ApplicationCapabilityExecutorRouter, ApplicationConfig,
     ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,
-    GovernedPartyExportSelectionSource, ProcessIdentitySource, SystemClock,
+    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService, ProcessIdentitySource,
+    SystemClock,
     application_capability_catalog, application_mutation_definitions,
     application_query_capability_catalog, application_query_definitions,
     bootstrap_export_selection_worker_access,
@@ -33,8 +34,8 @@ use crm_contact_points_capability_adapter::{
 };
 use crm_contact_points_query_adapter::ContactPointQueryAdapter;
 use crm_core_data::{
-    PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,
-    PostgresTransactionalAggregateExecutor,
+    PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,
+    PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,
 };
 use crm_core_events::EventHistoryRequest;
 use crm_customer_360_composition::Customer360ProjectionWorker;
@@ -60,6 +61,7 @@ use crm_customer_data_operations_execution_composition::{
 };
 use crm_customer_data_operations_query_adapter::{
     CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
+    PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_identity_resolution_capability_adapter::{
@@ -132,6 +134,7 @@ pub struct ApplicationComponents {
     pub search_worker: Arc<GlobalSearchWorker>,
     pub import_execution_worker: Arc<PartyImportExecutionWorker>,
     pub export_selection_worker: Arc<PartyExportSelectionWorker>,
+    pub export_artifact_download: Arc<PartyExportArtifactDownloadService>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -222,6 +225,8 @@ impl ApplicationRuntime {
         let internal_export_selection_definitions =
             internal_export_selection_capability_definitions()
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let artifact_download_definition = artifact_download_capability_definition()
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let import_execution_worker_actor_id =
             ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
@@ -251,6 +256,7 @@ impl ApplicationRuntime {
                 &authorization_store,
                 &visibility_store,
                 &query_definitions,
+                &artifact_download_definition,
                 &internal_export_selection_definitions,
                 &export_selection_worker_actor_id,
             )?;
@@ -311,6 +317,10 @@ impl ApplicationRuntime {
         let visibility_authorizer = Arc::new(LiveQueryVisibilityAuthorizer::new(
             visibility_store,
             Arc::clone(&clock),
+        ));
+        let artifact_download_resolver = Arc::new(PartyExportArtifactDownloadResolver::new(
+            store.clone(),
+            visibility_authorizer.clone(),
         ));
         let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
             .try_into()
@@ -453,12 +463,24 @@ impl ApplicationRuntime {
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             Arc::clone(&mutation_gateway),
         );
-        let query_ingress = QueryIngress::new(
-            authenticator,
-            QueryContextResolver::new(Arc::clone(&clock), random, timeout_policy)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            query_gateway,
+        let query_context_resolver = QueryContextResolver::new(
+            Arc::clone(&clock),
+            Arc::clone(&random),
+            timeout_policy,
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_artifact_download = Arc::new(
+            PartyExportArtifactDownloadService::new(
+                authenticator.clone(),
+                query_context_resolver.clone(),
+                authorizer.clone(),
+                artifact_download_resolver,
+                Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),
+                store.clone(),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
+        let query_ingress = QueryIngress::new(authenticator, query_context_resolver, query_gateway);
 
         let link_processor = Arc::new(
             SalesActivitiesLinkEventProcessor::new(
@@ -495,6 +517,7 @@ impl ApplicationRuntime {
             search_worker,
             import_execution_worker,
             export_selection_worker,
+            export_artifact_download,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
             last_worker_error: Arc::new(Mutex::new(None)),
@@ -639,6 +662,9 @@ async fn run_http_server(
     components: Arc<ApplicationComponents>,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), ApplicationRuntimeError> {
+    let download_router = crate::export_artifact_download_router(Arc::clone(
+        &components.export_artifact_download,
+    ));
     let router = Router::new()
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
@@ -650,7 +676,8 @@ async fn run_http_server(
             "/v1/queries/{owner_module_id}/{capability_id}/{capability_version}",
             post(query),
         )
-        .with_state(HttpState { components });
+        .with_state(HttpState { components })
+        .merge(download_router);
     axum::serve(listener, router)
         .with_graceful_shutdown(async move {
             let _ = shutdown.wait_for(|value| *value).await;

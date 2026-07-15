@@ -17,6 +17,7 @@ use crm_module_sdk::{
     ModuleExecutionContext, ModuleId, SdkError,
 };
 use crm_query_runtime::{QueryAuthorizer, QueryRequest};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -140,7 +141,10 @@ impl PartyExportArtifactDownloadService {
         authentication_id: String,
         requested_export_job_id: String,
     ) -> Result<PartyExportArtifactDownloadResult, SdkError> {
-        let decision = self.authorizer.authorize(&self.definition, &request).await?;
+        let decision = self
+            .authorizer
+            .authorize(&self.definition, &request)
+            .await?;
         if !decision.allowed {
             return Err(SdkError::new(
                 "CUSTOMER_DATA_EXPORT_ARTIFACT_DOWNLOAD_PERMISSION_DENIED",
@@ -178,10 +182,7 @@ impl PartyExportArtifactDownloadService {
             &evidence.retention_policy_id,
         )?;
         self.store
-            .record_audited_read(&AuditedReadPlan {
-                context,
-                audit,
-            })
+            .record_audited_read(&AuditedReadPlan { context, audit })
             .await
             .map_err(database_error_to_sdk)?;
 
@@ -194,7 +195,9 @@ impl PartyExportArtifactDownloadService {
     }
 }
 
-fn disclosure_execution_context(request: &QueryRequest) -> Result<ModuleExecutionContext, SdkError> {
+fn disclosure_execution_context(
+    request: &QueryRequest,
+) -> Result<ModuleExecutionContext, SdkError> {
     let request_identity = request.context.request_id.as_str().to_owned();
     Ok(ModuleExecutionContext {
         module_id: ModuleId::try_new(MODULE_ID).map_err(identifier_error)?,
@@ -203,7 +206,8 @@ fn disclosure_execution_context(request: &QueryRequest) -> Result<ModuleExecutio
             actor_id: request.context.actor_id.clone(),
             request_id: request.context.request_id.clone(),
             correlation_id: request.context.correlation_id.clone(),
-            causation_id: CausationId::try_new(request_identity.clone()).map_err(identifier_error)?,
+            causation_id: CausationId::try_new(request_identity.clone())
+                .map_err(identifier_error)?,
             trace_id: request.context.trace_id.clone(),
             capability_id: request.context.capability_id.clone(),
             capability_version: request.context.capability_version.clone(),
@@ -225,7 +229,7 @@ fn validate_finalized_artifact(
         || metadata.owner_module_id.as_str() != MODULE_ID
         || metadata.media_type != evidence.media_type
         || metadata.data_class != DataClass::Personal
-        || metadata.retention_policy_id.as_str() != evidence.retention_policy_id
+        || metadata.retention_policy_id.as_str() != evidence.retention_policy_id.as_str()
         || metadata.expected_size_bytes != evidence.size_bytes
         || metadata.received_size_bytes != evidence.size_bytes
         || metadata.expected_sha256 != evidence.content_sha256
@@ -270,7 +274,10 @@ fn disclosure_audit_intent(
     envelope.insert("export_job_id", export_job_id.to_owned());
     envelope.insert("export_job_version", export_job_version.to_string());
     envelope.insert("file_id", file_id.to_owned());
-    envelope.insert("operation", "customer_data.export.artifact.disclose".to_owned());
+    envelope.insert(
+        "operation",
+        "customer_data.export.artifact.disclose".to_owned(),
+    );
     envelope.insert("request_hash", hex(&request.input_hash));
     envelope.insert("retention_policy_id", retention_policy_id.to_owned());
     envelope.insert("size_bytes", size_bytes.to_string());
@@ -284,16 +291,17 @@ fn disclosure_audit_intent(
         )
     })?;
     Ok(AuditIntent {
-        audit_record_id: format!("export-artifact-disclosure-{}", request.context.request_id),
+        audit_record_id: format!(
+            "export-artifact-disclosure-{}",
+            hex(&Sha256::digest(request.context.request_id.as_str().as_bytes())),
+        ),
         canonicalization_profile: "crm.cjson/v1".to_owned(),
         canonical_envelope,
         occurred_at_unix_nanos: request.context.request_started_at_unix_nanos,
     })
 }
 
-fn authentication_error(
-    error: crm_capability_ingress::AuthenticationError,
-) -> SdkError {
+fn authentication_error(error: crm_capability_ingress::AuthenticationError) -> SdkError {
     SdkError::new(
         error.code(),
         ErrorCategory::Authentication,
@@ -303,8 +311,10 @@ fn authentication_error(
 }
 
 fn context_error(error: crm_capability_ingress::ContextResolutionError) -> SdkError {
-    let category = match error {
-        crm_capability_ingress::ContextResolutionError::TenantForbidden => ErrorCategory::Authorization,
+    let category = match &error {
+        crm_capability_ingress::ContextResolutionError::TenantForbidden => {
+            ErrorCategory::Authorization
+        }
         crm_capability_ingress::ContextResolutionError::ClockInvalid
         | crm_capability_ingress::ContextResolutionError::IdentityGenerationUnavailable => {
             ErrorCategory::Unavailable
@@ -368,7 +378,10 @@ mod tests {
     fn disclosure_definition_is_job_bound_high_risk_read() {
         let definition = artifact_download_capability_definition().unwrap();
         assert!(!definition.mutation);
-        assert_eq!(definition.risk, crm_capability_runtime::CapabilityRisk::High);
+        assert_eq!(
+            definition.risk,
+            crm_capability_runtime::CapabilityRisk::High
+        );
         assert!(definition.output_contract.is_none());
     }
 }

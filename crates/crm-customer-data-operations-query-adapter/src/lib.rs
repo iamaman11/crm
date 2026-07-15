@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+mod artifact_download;
+pub use artifact_download::*;
+
 mod export_query;
 pub use export_query::{
     EXPORT_QUERY_CAPABILITY_IDS, GET_EXPORT_JOB_CAPABILITY, LIST_EXPORT_JOBS_CAPABILITY,

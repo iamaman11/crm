@@ -4,7 +4,7 @@ use crate::{
 };
 use axum::body::Body;
 use axum::extract::{Path, State};
-use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -87,8 +87,7 @@ fn success_response(result: PartyExportArtifactDownloadResult) -> Response {
     );
     headers.insert(
         header::CONTENT_LENGTH,
-        HeaderValue::from_str(&content_length)
-            .expect("content length must be a valid HTTP header"),
+        HeaderValue::from_str(&content_length).expect("content length must be a valid HTTP header"),
     );
     headers.insert(
         header::CONTENT_DISPOSITION,
@@ -105,8 +104,7 @@ fn success_response(result: PartyExportArtifactDownloadResult) -> Response {
     );
     headers.insert(
         "x-content-sha256",
-        HeaderValue::from_str(&content_sha256)
-            .expect("SHA-256 digest must be a valid HTTP header"),
+        HeaderValue::from_str(&content_sha256).expect("SHA-256 digest must be a valid HTTP header"),
     );
     headers.insert(
         "x-content-type-options",
