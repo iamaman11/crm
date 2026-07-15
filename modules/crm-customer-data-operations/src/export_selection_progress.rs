@@ -94,6 +94,57 @@ impl PartyExportSelectionProgress {
         })
     }
 
+    pub(crate) fn rehydrate(
+        job_id: ExportJobId,
+        next_manifest_position: u32,
+        continuation: Option<PartyExportSourceContinuation>,
+        source_exhausted: bool,
+        created_at_unix_nanos: i64,
+        updated_at_unix_nanos: i64,
+        version: i64,
+    ) -> Result<Self, SdkError> {
+        validate_time(created_at_unix_nanos)?;
+        validate_time(updated_at_unix_nanos)?;
+        if updated_at_unix_nanos < created_at_unix_nanos
+            || next_manifest_position == 0
+            || version <= 0
+            || (source_exhausted && continuation.is_some())
+        {
+            return Err(conflict(
+                "CUSTOMER_DATA_EXPORT_SELECTION_PROGRESS_STATE_INVALID",
+                "Stored export selection progress is inconsistent.",
+            ));
+        }
+        if version == 1
+            && (next_manifest_position != 1
+                || continuation.is_some()
+                || source_exhausted
+                || updated_at_unix_nanos != created_at_unix_nanos)
+        {
+            return Err(conflict(
+                "CUSTOMER_DATA_EXPORT_SELECTION_PROGRESS_STATE_INVALID",
+                "Stored export selection progress is inconsistent.",
+            ));
+        }
+        if version > 1 && !source_exhausted && continuation.is_none() {
+            return Err(conflict(
+                "CUSTOMER_DATA_EXPORT_SELECTION_PROGRESS_STATE_INVALID",
+                "Stored export selection progress is inconsistent.",
+            ));
+        }
+
+        Ok(Self {
+            progress_id: PartyExportSelectionProgressId::for_job(&job_id)?,
+            job_id,
+            next_manifest_position,
+            continuation,
+            source_exhausted,
+            created_at_unix_nanos,
+            updated_at_unix_nanos,
+            version,
+        })
+    }
+
     pub fn advance(
         &mut self,
         expected_version: i64,
@@ -116,10 +167,7 @@ impl PartyExportSelectionProgress {
                 "selection progress time cannot move backwards",
             ));
         }
-        if committed_items == 0
-            && continuation.is_some()
-            && continuation == self.continuation
-        {
+        if committed_items == 0 && continuation.is_some() && continuation == self.continuation {
             return Err(conflict(
                 "CUSTOMER_DATA_EXPORT_SELECTION_PROGRESS_NOOP",
                 "Selection progress must commit items, advance the source cursor or finish the source scan.",
@@ -275,16 +323,32 @@ mod tests {
             .advance(
                 1,
                 0,
-                Some(continuation(
-                    "2026-07-15T00:00:00Z",
-                    "party-hidden",
-                )),
+                Some(continuation("2026-07-15T00:00:00Z", "party-hidden")),
                 20,
             )
             .unwrap();
         progress.advance(2, 0, None, 30).unwrap();
         assert!(progress.source_exhausted());
         assert_eq!(progress.next_manifest_position(), 1);
+    }
+
+    #[test]
+    fn rehydrates_arbitrary_page_version_with_exact_invariants() {
+        let job_id = ExportJobId::try_new("selection-progress-rehydrate").unwrap();
+        let restored = PartyExportSelectionProgress::rehydrate(
+            job_id.clone(),
+            301,
+            Some(continuation("2026-07-15T00:00:00Z", "party-300")),
+            false,
+            10,
+            50,
+            7,
+        )
+        .unwrap();
+        assert_eq!(restored.job_id(), &job_id);
+        assert_eq!(restored.next_manifest_position(), 301);
+        assert_eq!(restored.version(), 7);
+        assert!(!restored.source_exhausted());
     }
 
     #[test]
