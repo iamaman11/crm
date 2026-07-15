@@ -4,16 +4,21 @@
 //!
 //! Party remains the authoritative customer identity owner. Import target execution must invoke the
 //! existing Party capability rather than reading or writing Party storage directly. Export owns only
-//! its job/specification/selection/artifact/reconciliation evidence and must read Party data through
-//! governed query composition rather than direct Party storage access.
+//! its job/specification/selection-boundary/manifest/execution-outcome/artifact/reconciliation
+//! evidence and must read Party data through governed query composition rather than direct Party
+//! storage access.
 //!
 //! Public import/export mutation planners may atomically mutate only customer-data-operation-owned
-//! records. Background worker-only selection, checkpoint and completion outcomes remain separate
-//! internal capability/composition responsibilities and must not leak into public mutation catalogs.
+//! records. The production combined planner additionally fixes the immutable export selection cutoff
+//! in the same transaction as the first export start. Background worker-only selection, checkpoint
+//! and completion outcomes remain separate internal capability/composition responsibilities and must
+//! not leak into public mutation catalogs.
 
+mod export_boundary_planner;
 mod export_planner;
 mod planner;
 
+pub use export_boundary_planner::*;
 pub use export_planner::*;
 pub use planner::*;
 
@@ -221,7 +226,8 @@ impl TransactionalAggregatePlanner for CustomerDataOperationsCapabilityPlanner {
         if IMPORT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             CustomerDataImportCapabilityPlanner.plan(definition, request, current)
         } else if EXPORT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
-            PartyExportCapabilityPlanner.plan(definition, request, current)
+            let plan = PartyExportCapabilityPlanner.plan(definition, request, current)?;
+            harden_party_export_start_plan(definition, request, current, plan)
         } else {
             Err(routing_error())
         }
