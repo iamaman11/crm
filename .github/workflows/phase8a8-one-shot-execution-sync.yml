@@ -1,0 +1,32 @@
+name: Phase 8A.8 Execution Sync
+on:
+  push:
+    branches: [develop/phase8a8-customer-export-jobs]
+permissions:
+  contents: write
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - name: Expose execution planner modules
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('crates/crm-customer-data-operations-capability-adapter/src/lib.rs')
+          s=p.read_text()
+          s=s.replace('mod export_boundary_planner;\nmod export_execution_stage_support;', 'mod export_boundary_planner;\nmod export_execution_outcome_support;\nmod export_execution_planner;\nmod export_execution_stage_support;', 1)
+          s=s.replace('pub use export_boundary_planner::*;\npub use export_execution_stage_support::*;', 'pub use export_boundary_planner::*;\npub use export_execution_outcome_support::*;\npub use export_execution_planner::*;\npub use export_execution_stage_support::*;', 1)
+          p.write_text(s)
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --all
+      - run: cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
+      - run: rm .github/workflows/phase8a8-one-shot-execution-sync.yml
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A && git commit -m 'Sync Phase 8A.8 execution contracts and formatting' && git push origin HEAD:develop/phase8a8-customer-export-jobs
