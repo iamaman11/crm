@@ -453,42 +453,53 @@ async fn remove_outcome_delay_trigger(admin: &PgPool) {
 }
 
 async fn install_completion_delay_trigger(admin: &PgPool, job_id: &str, file_id: &str) {
-    assert!(!job_id.contains('\''));
-    assert!(!file_id.contains('\''));
-    let sql = format!(
-        r#"
-        CREATE OR REPLACE FUNCTION crm.test_delay_export_completion_update()
-        RETURNS trigger
-        LANGUAGE plpgsql
-        AS $$
-        BEGIN
-          IF NEW.record_id = '{job_id}'
-             AND EXISTS (
-               SELECT 1
-                 FROM crm.file_artifacts
-                WHERE tenant_id = NEW.tenant_id
-                  AND file_id = '{file_id}'
-                  AND owner_module_id = 'crm.customer-data-operations'
-                  AND status = 'finalized'
-             )
-          THEN
-            PERFORM pg_sleep(30);
-          END IF;
-          RETURN NEW;
-        END;
-        $$;
-        DROP TRIGGER IF EXISTS test_delay_export_completion_update ON crm.records;
-        CREATE TRIGGER test_delay_export_completion_update
-        BEFORE UPDATE ON crm.records
-        FOR EACH ROW
-        WHEN (OLD.record_type = 'customer_data.export_job')
-        EXECUTE FUNCTION crm.test_delay_export_completion_update();
-        "#
-    );
     admin
-        .execute(sqlx::raw_sql(&sql))
+        .execute(sqlx::raw_sql(
+            r#"
+            CREATE TABLE IF NOT EXISTS crm.test_export_completion_delay_target (
+              job_id text PRIMARY KEY,
+              file_id text NOT NULL
+            );
+            TRUNCATE TABLE crm.test_export_completion_delay_target;
+            CREATE OR REPLACE FUNCTION crm.test_delay_export_completion_update()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+              IF EXISTS (
+                SELECT 1
+                  FROM crm.test_export_completion_delay_target AS target
+                  JOIN crm.file_artifacts AS artifact
+                    ON artifact.tenant_id = NEW.tenant_id
+                   AND artifact.file_id = target.file_id
+                   AND artifact.owner_module_id = 'crm.customer-data-operations'
+                   AND artifact.status = 'finalized'
+                 WHERE target.job_id = NEW.record_id
+              )
+              THEN
+                PERFORM pg_sleep(30);
+              END IF;
+              RETURN NEW;
+            END;
+            $$;
+            DROP TRIGGER IF EXISTS test_delay_export_completion_update ON crm.records;
+            CREATE TRIGGER test_delay_export_completion_update
+            BEFORE UPDATE ON crm.records
+            FOR EACH ROW
+            WHEN (OLD.record_type = 'customer_data.export_job')
+            EXECUTE FUNCTION crm.test_delay_export_completion_update();
+            "#,
+        ))
         .await
         .expect("install export completion crash-window trigger");
+    sqlx::query(
+        "INSERT INTO crm.test_export_completion_delay_target (job_id, file_id) VALUES ($1, $2)",
+    )
+    .bind(job_id)
+    .bind(file_id)
+    .execute(admin)
+    .await
+    .expect("bind exact export completion crash-window target");
 }
 
 async fn remove_completion_delay_trigger(admin: &PgPool) {
@@ -497,6 +508,7 @@ async fn remove_completion_delay_trigger(admin: &PgPool) {
             r#"
             DROP TRIGGER IF EXISTS test_delay_export_completion_update ON crm.records;
             DROP FUNCTION IF EXISTS crm.test_delay_export_completion_update();
+            DROP TABLE IF EXISTS crm.test_export_completion_delay_target;
             "#,
         ))
         .await
