@@ -4,11 +4,12 @@ use crm_customer_data_operations::{
     PartialExecutionPolicy, PartyImportMapping, SourceDescriptor, SourceSystemId,
 };
 use crm_customer_data_operations_capability_adapter::{
-    CANCEL_PARTY_IMPORT_JOB_CAPABILITY, CREATE_PARTY_IMPORT_JOB_CAPABILITY,
+    CANCEL_PARTY_EXPORT_JOB_CAPABILITY, CANCEL_PARTY_IMPORT_JOB_CAPABILITY,
+    CREATE_PARTY_EXPORT_JOB_CAPABILITY, CREATE_PARTY_IMPORT_JOB_CAPABILITY,
     FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY, IMPORT_JOB_RECORD_TYPE, IMPORT_ROW_RECORD_TYPE,
-    START_PARTY_IMPORT_EXECUTION_CAPABILITY, VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
-    capability_definitions, import_job_persisted_contract, import_row_persisted_contract,
-    import_row_to_wire, job_to_wire,
+    START_PARTY_EXPORT_EXECUTION_CAPABILITY, START_PARTY_IMPORT_EXECUTION_CAPABILITY,
+    VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY, capability_definitions, import_job_persisted_contract,
+    import_row_persisted_contract, import_row_to_wire, job_to_wire,
 };
 
 fn source() -> SourceDescriptor {
@@ -49,6 +50,9 @@ fn publishes_exact_governed_mutation_surface() {
             FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY,
             START_PARTY_IMPORT_EXECUTION_CAPABILITY,
             CANCEL_PARTY_IMPORT_JOB_CAPABILITY,
+            CREATE_PARTY_EXPORT_JOB_CAPABILITY,
+            START_PARTY_EXPORT_EXECUTION_CAPABILITY,
+            CANCEL_PARTY_EXPORT_JOB_CAPABILITY,
         ]
     );
     assert!(definitions.iter().all(|definition| definition.mutation));
@@ -58,6 +62,7 @@ fn publishes_exact_governed_mutation_surface() {
             .all(|definition| definition.requires_idempotency)
     );
     assert_eq!(definitions[3].risk, CapabilityRisk::High);
+    assert_eq!(definitions[6].risk, CapabilityRisk::High);
 }
 
 #[test]
