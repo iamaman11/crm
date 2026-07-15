@@ -9,10 +9,9 @@ use crm_customer_data_operations_execution_composition::{
     PartyExportSelectionSourcePage, PartyExportSelectionSourceRequest,
 };
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
-use crm_parties::PartyKind;
 use crm_parties_query_adapter::{
     GET_CAPABILITY as PARTY_GET_CAPABILITY, LIST_CAPABILITY as PARTY_LIST_CAPABILITY,
-    PartyExportExecutionRead, PartyExportSelectionKind, PartyQueryAdapter,
+    PartyExportExecutionKind, PartyExportExecutionRead, PartyExportSelectionKind, PartyQueryAdapter,
     export_execution_query_request, export_selection_query_request, query_capability_definition,
 };
 use crm_query_runtime::QueryAuthorizer;
@@ -186,8 +185,10 @@ impl PartyExportExecutionSource for GovernedPartyExportSelectionSource {
                 } => PartyExportExecutionSourceResult::Visible {
                     party_id,
                     kind: allowed_fields.contains("kind").then_some(match kind {
-                        PartyKind::Person => PartyExportExecutionSourceKind::Person,
-                        PartyKind::Organization => PartyExportExecutionSourceKind::Organization,
+                        PartyExportExecutionKind::Person => PartyExportExecutionSourceKind::Person,
+                        PartyExportExecutionKind::Organization => {
+                            PartyExportExecutionSourceKind::Organization
+                        }
                     }),
                     display_name: allowed_fields
                         .contains("display_name")
