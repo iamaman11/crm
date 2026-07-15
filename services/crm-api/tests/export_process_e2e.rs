@@ -34,6 +34,7 @@ const PARTY_CREATE: &str = "parties.party.create";
 const EXPORT_CREATE: &str = "customer_data.export.party.create";
 const EXPORT_START: &str = "customer_data.export.party.execution.start";
 const EXPORT_GET: &str = "customer_data.export.party.get";
+const EXPORT_ARTIFACT_DOWNLOAD_CAPABILITY: &str = "customer_data.export.party.artifact.download";
 
 const EXPORT_OUTCOME_RECORD_TYPE: &str = "customer_data.export_execution_outcome";
 const CUSTOMER_DATA_OPERATIONS_MODULE_ID: &str = "crm.customer-data-operations";
@@ -159,6 +160,14 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     );
     assert_eq!(outcome_record_count(&admin).await, 1);
     assert_eq!(completed_event_count(&admin).await, 1);
+    verify_artifact_disclosure(
+        &http,
+        &http_addr,
+        &first_job_id,
+        &completed_first,
+        &admin,
+    )
+    .await;
 
     // Crash window 2: the immutable artifact has finalized in its own committed transaction, while
     // the export-job completion transaction is deliberately blocked. Restart must reuse the same
@@ -413,6 +422,61 @@ fn expected_artifact_file_id(job_id: &str, job: &cdo::PartyExportJob) -> String 
     format!("cdo-export-artifact-{}", hex(&hasher.finalize()))
 }
 
+async fn verify_artifact_disclosure(
+    http: &reqwest::Client,
+    http_addr: &str,
+    job_id: &str,
+    job: &cdo::PartyExportJob,
+    admin: &PgPool,
+) {
+    let url = format!("http://{http_addr}/v1/customer-data/exports/{job_id}/artifact");
+    let audit_before = disclosure_audit_count(admin).await;
+
+    let unauthenticated = http
+        .get(&url)
+        .header("x-tenant-id", TENANT)
+        .send()
+        .await
+        .expect("request unauthenticated export artifact disclosure");
+    assert_eq!(unauthenticated.status(), reqwest::StatusCode::UNAUTHORIZED);
+    assert_eq!(disclosure_audit_count(admin).await, audit_before);
+
+    let forbidden_tenant = http
+        .get(&url)
+        .bearer_auth(TOKEN)
+        .header("x-tenant-id", "tenant-b")
+        .send()
+        .await
+        .expect("request cross-tenant export artifact disclosure");
+    assert_eq!(forbidden_tenant.status(), reqwest::StatusCode::FORBIDDEN);
+    assert_eq!(disclosure_audit_count(admin).await, audit_before);
+
+    let request_id = unique_id("export-artifact-disclosure");
+    let response = http
+        .get(&url)
+        .bearer_auth(TOKEN)
+        .header("x-tenant-id", TENANT)
+        .header("x-request-id", request_id)
+        .send()
+        .await
+        .expect("download governed Party export artifact");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let headers = response.headers().clone();
+    let artifact = job.artifact.as_ref().expect("completed export artifact evidence");
+    let expected_sha256 = hex(&artifact.content_sha256);
+    assert_eq!(headers.get(reqwest::header::CONTENT_TYPE).unwrap(), "text/csv; charset=utf-8");
+    assert_eq!(headers.get(reqwest::header::CONTENT_LENGTH).unwrap(), artifact.size_bytes.to_string());
+    assert_eq!(headers.get(reqwest::header::CACHE_CONTROL).unwrap(), "private, no-store");
+    assert_eq!(headers.get(reqwest::header::ETAG).unwrap(), format!("\"sha256-{expected_sha256}\""));
+    assert_eq!(headers.get("x-content-sha256").unwrap(), expected_sha256);
+    assert_eq!(headers.get("x-content-type-options").unwrap(), "nosniff");
+    let bytes = response.bytes().await.expect("read governed Party export bytes");
+    assert_eq!(bytes.len() as u64, artifact.size_bytes);
+    assert_eq!(Sha256::digest(&bytes).as_slice(), artifact.content_sha256.as_slice());
+    assert!(bytes.starts_with(b"party_id,"));
+    assert_eq!(disclosure_audit_count(admin).await, audit_before + 1);
+}
+
 async fn install_outcome_delay_trigger(admin: &PgPool) {
     admin
         .execute(sqlx::raw_sql(
@@ -604,6 +668,17 @@ async fn outcome_record_count(admin: &PgPool) -> i64 {
     .fetch_one(admin)
     .await
     .expect("count export execution outcomes")
+}
+
+async fn disclosure_audit_count(admin: &PgPool) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND capability_id = $2",
+    )
+    .bind(TENANT)
+    .bind(EXPORT_ARTIFACT_DOWNLOAD_CAPABILITY)
+    .fetch_one(admin)
+    .await
+    .expect("count export artifact disclosure audits")
 }
 
 async fn completed_event_count(admin: &PgPool) -> i64 {
