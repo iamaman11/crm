@@ -3,8 +3,8 @@ use crate::{
     CANCEL_PARTY_IMPORT_JOB_RESPONSE_SCHEMA, CREATE_PARTY_IMPORT_JOB_CAPABILITY,
     CREATE_PARTY_IMPORT_JOB_REQUEST_SCHEMA, CREATE_PARTY_IMPORT_JOB_RESPONSE_SCHEMA,
     FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY, IMPORT_JOB_RECORD_TYPE,
-    IMPORT_JOB_ROW_RELATIONSHIP_TYPE, IMPORT_ROW_RECORD_TYPE, MODULE_ID, MUTATION_CAPABILITY_IDS,
-    PARTY_IMPORT_CANCELLED_EVENT_SCHEMA, PARTY_IMPORT_CANCELLED_EVENT_TYPE,
+    IMPORT_JOB_ROW_RELATIONSHIP_TYPE, IMPORT_MUTATION_CAPABILITY_IDS, IMPORT_ROW_RECORD_TYPE,
+    MODULE_ID, PARTY_IMPORT_CANCELLED_EVENT_SCHEMA, PARTY_IMPORT_CANCELLED_EVENT_TYPE,
     PARTY_IMPORT_EXECUTION_STARTED_EVENT_SCHEMA, PARTY_IMPORT_EXECUTION_STARTED_EVENT_TYPE,
     PARTY_IMPORT_JOB_CREATED_EVENT_SCHEMA, PARTY_IMPORT_JOB_CREATED_EVENT_TYPE,
     PARTY_IMPORT_ROW_VALIDATED_EVENT_SCHEMA, PARTY_IMPORT_ROW_VALIDATED_EVENT_TYPE,
@@ -46,9 +46,9 @@ use std::fmt::Write as _;
 const MAX_VALIDATION_BATCH_ROWS: usize = 500;
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct CustomerDataOperationsCapabilityPlanner;
+pub struct CustomerDataImportCapabilityPlanner;
 
-impl TransactionalAggregatePlanner for CustomerDataOperationsCapabilityPlanner {
+impl TransactionalAggregatePlanner for CustomerDataImportCapabilityPlanner {
     fn target(
         &self,
         definition: &CapabilityDefinition,
@@ -1163,7 +1163,7 @@ fn ensure_definition(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
 ) -> Result<(), SdkError> {
-    if !MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
+    if !IMPORT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         || definition.owner_module_id.as_str() != MODULE_ID
         || definition.capability_id.as_str() != request.context.execution.capability_id.as_str()
     {

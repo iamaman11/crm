@@ -19,9 +19,7 @@ pub use planner::*;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilityRisk};
-use crm_core_data::{
-    AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner,
-};
+use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordSnapshot, SdkError,
 };
