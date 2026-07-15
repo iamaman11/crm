@@ -89,6 +89,14 @@ provides:
       version: "1.0.0"
     - id: customer_data.export.party.execution_started
       version: "1.0.0"
+    - id: customer_data.export.party.selection_progressed
+      version: "1.0.0"
+    - id: customer_data.export.party.selection_completed
+      version: "1.0.0"
+    - id: customer_data.export.party.execution_progressed
+      version: "1.0.0"
+    - id: customer_data.export.party.completed
+      version: "1.0.0"
     - id: customer_data.export.party.cancelled
       version: "1.0.0"
   objects:
