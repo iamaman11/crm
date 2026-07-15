@@ -370,7 +370,9 @@ fn artifact_expires_at_unix_nanos(
     completed_at_unix_nanos: i64,
     policies: &BTreeMap<String, u64>,
 ) -> Result<i64, SdkError> {
-    let seconds = policies.get(policy_id).ok_or_else(retention_policy_unavailable)?;
+    let seconds = policies
+        .get(policy_id)
+        .ok_or_else(retention_policy_unavailable)?;
     let duration_nanos = seconds
         .checked_mul(1_000_000_000)
         .and_then(|value| i64::try_from(value).ok())
