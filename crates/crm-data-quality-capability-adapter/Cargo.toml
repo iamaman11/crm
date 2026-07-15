@@ -11,3 +11,4 @@ crm-core-data = { path = "../crm-core-data" }
 crm-data-quality = { path = "../../modules/crm-data-quality" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
+prost = "0.14"
