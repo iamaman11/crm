@@ -34,18 +34,33 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply machine-fixable Rust maintenance
+      - name: Synchronize lockfile and canonical formatting
         run: |
-          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
-            -W unused-imports -W dead-code
           cargo generate-lockfile
           cargo fmt --all
-      - name: Commit synchronized files when needed
+      - name: Commit lockfile and formatting when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
           if git diff --quiet -- Cargo.lock crates modules services; then
-            echo "Rust maintenance files are already synchronized."
+            echo "Rust lockfile and formatting are already synchronized."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add Cargo.lock crates modules services
+            git commit -m "Synchronize Rust lockfile and formatting"
+            git push origin "HEAD:${HEAD_BRANCH}"
+          fi
+      - name: Apply machine-fixable Clippy maintenance
+        run: |
+          cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code
+      - name: Commit Clippy fixes when needed
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- Cargo.lock crates modules services; then
+            echo "Rust Clippy maintenance is already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
