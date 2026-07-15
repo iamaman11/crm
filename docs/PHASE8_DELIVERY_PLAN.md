@@ -93,97 +93,111 @@ Implemented:
 - tenant non-disclosure, field visibility and signed-cursor tamper rejection;
 - all applicable exact-head workflows green before merge.
 
-### 8A.8 — Customer Export Jobs, Artifacts and Reconciliation Evidence — In progress
+### 8A.8 — Customer Export Jobs, Artifacts and Reconciliation Evidence — Complete
 
-Issue: #123  
-Draft PR: #130  
-Depends on: completed #120 / merged PR #121
+Delivered by #123 / PR #130.  
+Merge commit: `0e7f9889362533446cc65d95dcf7969a60086a57`.
 
-This is the **single active customer-master production packet**.
+Implemented:
+
+- immutable versioned Party export specifications with bounded maximum resource count;
+- atomic first-start creation of one immutable creation-time selection boundary and durable progress;
+- restart-safe opaque keyset continuation and deterministic Party creation ordering;
+- deterministic manifest items bound to exact `PartyRef + resource_version` evidence and an exact boundary-bound manifest digest;
+- governed Party selection/execution reads with separate top-level authorization and per-resource/field visibility;
+- deterministic exclusion of not-visible, version-changed or unavailable selected resources;
+- deterministic spreadsheet-safe UTF-8 CSV canonicalization;
+- approval-required production Party export execution;
+- deterministic staged artifact chunks and per-manifest-position outcome identities;
+- checkpoint advancement only from a contiguous durable outcome prefix;
+- exact reconciliation `selected = emitted + excluded_not_visible + excluded_version_changed + excluded_unavailable`;
+- deterministic immutable artifact identity, chunk/hash/size evidence and replay-safe finalization;
+- recovery from chunk-written/outcome-checkpoint-missing and artifact-finalized/completion-missing crash windows without duplicate logical artifacts;
+- live-authorized, per-resource-visible, retention-aware, integrity-verified and audited artifact disclosure;
+- rejection of unauthenticated, cross-tenant, cancelled/not-ready and expired artifact disclosure;
+- fresh-PostgreSQL real `crm-api` process acceptance;
+- all 14 applicable workflows green together on unchanged human-authored candidate `f219d9b418ed07a9328bb44d36cfb9f321ad9be3` before merge.
+
+Exported bytes remain derived artifacts and never become authoritative customer-master state.
+
+### 8A.9 — Customer Data Quality Rules, Completeness and Stewardship — Ready
+
+Issue: #124  
+Depends on: completed #123 / merged PR #130 (`0e7f9889362533446cc65d95dcf7969a60086a57`)
+
+This is the **next customer-master production packet**. It becomes **In progress** only when its implementation branch/draft PR is created from the synchronized post-8A.8 `main` baseline.
 
 #### Ownership boundary
 
-`crm.customer-data-operations` may own only:
+Introduce a distinct `crm.data-quality` owner/coordinator for long-lived quality-governance state.
 
-- export-job identity and lifecycle;
-- immutable versioned export specification/profile identity;
-- one immutable Party creation-time selection boundary per job;
-- exact bounded selected-resource manifest evidence;
-- execution checkpoints and resumable evidence;
-- derived export artifact references and lifecycle metadata;
-- selected/emitted/excluded/redacted counts and reconciliation evidence;
-- bounded safe diagnostics.
+`crm.data-quality` may own only:
 
-It must not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution records as a competing source of truth. Exported bytes are derived artifacts, never authoritative customer state.
+- immutable/versioned quality rule-set definitions;
+- immutable/versioned completeness-profile definitions;
+- deterministic evaluation-run identity plus bounded checkpoint/retry evidence where asynchronous evaluation is required;
+- quality finding identity, exact evaluated owner/resource/resource-version evidence, rule version, severity and lifecycle;
+- completeness result identity, exact component lineage and deterministic score evidence;
+- stewardship case/queue assignment, triage status and remediation-attempt evidence;
+- bounded safe diagnostics and reconciliation counters.
 
-#### Frozen v1 deterministic strategy
+It must not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution state. It does not own import/export artifacts, enrichment-provider payloads or a generic enterprise workflow engine.
 
-The v1 packet uses one exact strategy:
+Authoritative values are read only through governed owner/query composition ports with tenant/RLS and live authorization. No direct cross-module table reads or writes are permitted. Remediation may change owner state only by invoking an exact governed owner capability with normal authorization, optimistic concurrency, idempotency, approval and audit semantics.
 
-1. export job identity and immutable export-profile/specification identity are fixed at creation;
-2. first selection start persists one immutable `selection_cutoff_unix_nanos`;
-3. only Parties with immutable authoritative `created_at_unix_nanos <= cutoff` are eligible;
-4. governed selection uses deterministic `(created_at_unix_nanos ASC, party_id ASC)` ordering and the same job/specification/filter/cutoff after restart;
-5. finalized manifest digest binds the cutoff plus every ordered `PartyRef + resource_version` entry;
-6. no export bytes are produced before manifest finalization;
-7. serialization repeats live authorization and exact resource-version validation;
-8. UTF-8 CSV v1 uses deterministic LF bytes, stable quoting and spreadsheet-formula neutralization;
-9. emitted rows use deterministic artifact chunk identity/hash and checkpoint advances only after the corresponding bytes are durable;
-10. exclusions persist exact durable outcome evidence before checkpoint advancement;
-11. finalized artifact identity is deterministic and completion records exact digest, byte size, retention and reconciliation evidence;
-12. artifact download is separately live-authorized; possession of `file_id` is not authority.
+#### Frozen safety strategy
 
-#### Required production layers
+Before public contract publication, the first v1 architecture must preserve these rules:
 
-Already established on the active branch:
+1. published rule/evaluator versions are immutable and cannot be silently reinterpreted;
+2. rule execution uses a bounded declarative vocabulary or exact built-in evaluator identities;
+3. arbitrary SQL, user code/scripts, filesystem access, arbitrary network access and unbounded expressions are forbidden;
+4. every finding and completeness result binds exact authoritative owner/resource/resource-version evidence;
+5. stale findings are not silently treated as current after the authoritative resource version changes;
+6. deterministic reevaluation must not create duplicate logical current findings;
+7. historical evaluation/finding evidence is retained when status becomes acknowledged, remediated, waived or stale/superseded;
+8. completeness uses deterministic integer/fixed-point semantics with exact component lineage and reconciliation;
+9. stewardship assignment/triage/remediation uses optimistic concurrency and bounded lifecycle transitions;
+10. remediation results are separate evidence and cannot rewrite the original evaluation truth;
+11. search, Customer 360 and projections may assist discovery but are not authoritative quality evidence without exact authoritative source-version lineage;
+12. process restart/retry cannot duplicate findings, assignments or owner side effects.
 
-- additive versioned public Party export mutation/query/event contracts;
-- export-job domain lifecycle, immutable specification identity and strict persisted state;
-- immutable selection-item identity/persistence and manifest validation;
-- immutable creation-time selection-boundary primitive with boundary-bound manifest digest;
-- deterministic spreadsheet-safe CSV canonicalization with regression tests;
-- public capability/query adapter surfaces and module contract declarations;
-- approval-required production Party export execution by safe default.
+#### Initial production vertical slice
 
-Still required before gate review:
+The first v1 implementation proves the architecture against canonical Party quality before broadening to additional customer-master owners. The contract must remain additively extensible without introducing a generic untyped record dump or executable rule surface.
 
-- persist the immutable selection cutoff/boundary in the export-job production state and worker outcome path;
-- governed owner-domain selection port exposing only the bounded authoritative creation-time/order data required by export;
-- PostgreSQL persistence, FORCE RLS and migrations for all final export-owned state;
-- staged derived-artifact worker/finalizer using governed file/artifact infrastructure;
-- durable per-position outcome/chunk checkpoint protocol and restart recovery;
-- permission-aware job/artifact/reconciliation queries and live-authorized artifact download;
-- application-runtime worker composition;
-- fresh-PostgreSQL real `crm-api` process acceptance;
-- one unchanged exact final SHA with every applicable workflow green.
+The implementation branch must freeze before public contract publication:
+
+- exact Party evaluator/rule kinds included in v1;
+- deterministic rule-set/version identity;
+- deterministic finding identity and reevaluation semantics;
+- completeness profile component and score canonicalization;
+- authoritative Party read port and source-version binding;
+- stewardship lifecycle and exact remediation capability boundary;
+- event/outbox model and replay semantics;
+- persistence, FORCE RLS, migration rollback/reapply and retention behavior;
+- application-runtime worker scheduling, fairness, retry and readiness behavior;
+- fresh-PostgreSQL real `crm-api` process acceptance.
 
 #### Non-negotiable acceptance gates
 
-- export profile/specification validation with unknown-field rejection;
-- same immutable job intent cannot be silently reinterpreted under changed profile semantics;
-- selection crash/restart reuses the exact original cutoff and cannot admit Parties created after it;
-- finalized manifest identity is bound to cutoff plus ordered exact Party references/resource versions;
-- live authorization and field/data-class visibility are repeated during selection, serialization and artifact download;
-- bulk export execution is approval-required by safe default until explicit tenant policy permits a governed lower-friction threshold;
-- no privacy, consent, masking, restriction or legal-hold bypass through export;
-- no direct cross-module authoritative storage reads;
-- spreadsheet formula-injection regression coverage for CSV text cells;
-- no partial/staged/cancelled artifact publication through the completed download surface;
-- checkpoint never advances before corresponding emitted bytes or exclusion outcome are durable;
-- deterministic recovery from chunk-written/checkpoint-missing and artifact-finalized/job-outcome-missing uncertainty windows;
-- deterministic retry/resume without duplicate logical artifacts;
-- exact artifact digest, byte size and lifecycle evidence;
-- exact selected/emitted/excluded/redacted reconciliation counts;
-- cross-tenant non-disclosure for jobs and artifact references;
-- migration clean apply, rollback and reapply;
+- deterministic rule evaluation and exact replay;
+- published rule versions cannot be reinterpreted silently;
+- no arbitrary code/SQL/network/filesystem execution path;
+- no direct cross-owner storage mutation or read bypass;
+- every finding/completeness result binds exact authoritative source-version evidence;
+- stale source-version/remediation conflict proof;
+- deterministic reevaluation without duplicate logical current findings;
+- historical finding/evaluation evidence retained across lifecycle changes;
+- permission-aware field/resource disclosure and cross-tenant non-disclosure;
+- exact completeness score/component reconciliation;
+- stewardship assignment and lifecycle concurrency proof;
+- remediation invokes only exact governed owner capabilities and preserves normal authorization/idempotency/audit behavior;
+- process restart/retry without duplicate findings, assignments or owner side effects;
+- bounded scans, batches, payloads and per-tenant operational limits;
+- migration clean apply, reverse rollback and reapply;
+- fresh-PostgreSQL real `crm-api` process acceptance;
 - Contract, Governance, Rust, Database, Application Runtime and every other applicable workflow green on one unchanged final SHA.
-
-### 8A.9 — Customer Data Quality Rules, Completeness and Stewardship — Planned
-
-Issue: #124  
-Depends on: #123
-
-Deliver versioned deterministic quality rules, explainable findings tied to exact resource/version evidence, completeness indicators and stewardship workflows. Remediation may mutate authoritative state only through exact owner capabilities.
 
 ### 8A.10 — Governed Customer Enrichment and Provenance — Planned
 
