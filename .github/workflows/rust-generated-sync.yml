@@ -43,6 +43,142 @@ jobs:
       - name: Synchronize generated client contract hashes
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
+      - name: Apply verified export retention enforcement patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one anchor in {path}: {old[:120]!r}; found {count}")
+              path.write_text(text.replace(old, new, 1))
+
+          service = Path("crates/crm-application-runtime/src/export_artifact_download.rs")
+          replace_once(
+              service,
+              "    store: PostgresDataStore,\n    definition: CapabilityDefinition,\n",
+              "    store: PostgresDataStore,\n    retention_policies: BTreeMap<String, u64>,\n    definition: CapabilityDefinition,\n",
+          )
+          replace_once(
+              service,
+              "        file_store: Arc<PostgresImmutableFileArtifactStore>,\n        store: PostgresDataStore,\n    ) -> Result<Self, SdkError> {\n",
+              "        file_store: Arc<PostgresImmutableFileArtifactStore>,\n        store: PostgresDataStore,\n        retention_policies: BTreeMap<String, u64>,\n    ) -> Result<Self, SdkError> {\n        validate_retention_policies(&retention_policies)?;\n",
+          )
+          replace_once(
+              service,
+              "            file_store,\n            store,\n            definition: artifact_download_capability_definition()?,\n",
+              "            file_store,\n            store,\n            retention_policies,\n            definition: artifact_download_capability_definition()?,\n",
+          )
+          replace_once(
+              service,
+              "        if evidence.export_job_id != requested_export_job_id {\n            return Err(integrity_error(\"resolved export job identity changed\"));\n        }\n        let context = disclosure_execution_context(&request)?;\n",
+              "        if evidence.export_job_id != requested_export_job_id {\n            return Err(integrity_error(\"resolved export job identity changed\"));\n        }\n        let expires_at_unix_nanos = artifact_expires_at_unix_nanos(\n            &evidence.retention_policy_id,\n            evidence.completed_at_unix_nanos,\n            &self.retention_policies,\n        )?;\n        if request.context.request_started_at_unix_nanos >= expires_at_unix_nanos {\n            return Err(artifact_expired());\n        }\n        let context = disclosure_execution_context(&request)?;\n",
+          )
+          replace_once(
+              service,
+              "            evidence.size_bytes,\n            &evidence.retention_policy_id,\n        )?;\n",
+              "            evidence.size_bytes,\n            &evidence.retention_policy_id,\n            expires_at_unix_nanos,\n        )?;\n",
+          )
+          replace_once(
+              service,
+              "    retention_policy_id: &str,\n) -> Result<AuditIntent, SdkError> {\n",
+              "    retention_policy_id: &str,\n    expires_at_unix_nanos: i64,\n) -> Result<AuditIntent, SdkError> {\n",
+          )
+          replace_once(
+              service,
+              "    envelope.insert(\"export_job_version\", export_job_version.to_string());\n    envelope.insert(\"file_id\", file_id.to_owned());\n",
+              "    envelope.insert(\"export_job_version\", export_job_version.to_string());\n    envelope.insert(\"expires_at_unix_nanos\", expires_at_unix_nanos.to_string());\n    envelope.insert(\"file_id\", file_id.to_owned());\n",
+          )
+          helper = '''fn validate_retention_policies(policies: &BTreeMap<String, u64>) -> Result<(), SdkError> {
+              for (policy_id, seconds) in policies {
+                  if policy_id.is_empty()
+                      || policy_id.chars().any(char::is_control)
+                      || *seconds == 0
+                      || seconds
+                          .checked_mul(1_000_000_000)
+                          .and_then(|value| i64::try_from(value).ok())
+                          .is_none()
+                  {
+                      return Err(retention_configuration_error());
+                  }
+              }
+              Ok(())
+          }
+
+          fn artifact_expires_at_unix_nanos(
+              policy_id: &str,
+              completed_at_unix_nanos: i64,
+              policies: &BTreeMap<String, u64>,
+          ) -> Result<i64, SdkError> {
+              let seconds = policies.get(policy_id).ok_or_else(retention_policy_unavailable)?;
+              let duration_nanos = seconds
+                  .checked_mul(1_000_000_000)
+                  .and_then(|value| i64::try_from(value).ok())
+                  .ok_or_else(retention_configuration_error)?;
+              completed_at_unix_nanos
+                  .checked_add(duration_nanos)
+                  .ok_or_else(retention_configuration_error)
+          }
+
+          fn artifact_expired() -> SdkError {
+              SdkError::new(
+                  "CUSTOMER_DATA_EXPORT_ARTIFACT_EXPIRED",
+                  ErrorCategory::NotFound,
+                  false,
+                  "The requested export artifact is unavailable.",
+              )
+          }
+
+          fn retention_policy_unavailable() -> SdkError {
+              SdkError::new(
+                  "CUSTOMER_DATA_EXPORT_RETENTION_POLICY_UNAVAILABLE",
+                  ErrorCategory::Internal,
+                  false,
+                  "The export artifact retention policy is not configured.",
+              )
+          }
+
+          fn retention_configuration_error() -> SdkError {
+              SdkError::new(
+                  "CUSTOMER_DATA_EXPORT_RETENTION_CONFIGURATION_INVALID",
+                  ErrorCategory::Internal,
+                  false,
+                  "The export artifact retention policy configuration is invalid.",
+              )
+          }
+
+          '''
+          replace_once(service, "fn download_timeout() -> SdkError {\n", helper + "fn download_timeout() -> SdkError {\n")
+          test = '''
+              #[test]
+              fn retention_expiry_is_exact_and_unknown_policies_fail_closed() {
+                  let policies = BTreeMap::from([("standard".to_owned(), 60)]);
+                  assert_eq!(
+                      artifact_expires_at_unix_nanos("standard", 1_000_000_000, &policies).unwrap(),
+                      61_000_000_000
+                  );
+                  assert!(artifact_expires_at_unix_nanos("unknown", 1, &policies).is_err());
+                  assert!(artifact_expires_at_unix_nanos("standard", i64::MAX, &policies).is_err());
+              }
+          '''
+          replace_once(service, "    fn disclosure_definition_is_job_bound_high_risk_read() {\n", test + "\n    fn disclosure_definition_is_job_bound_high_risk_read() {\n")
+
+          runtime = Path("crates/crm-application-runtime/src/runtime.rs")
+          replace_once(
+              runtime,
+              "                Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),\n                store.clone(),\n            )\n",
+              "                Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),\n                store.clone(),\n                config.export_retention_policies.clone(),\n            )\n",
+          )
+
+          e2e = Path("services/crm-api/tests/export_process_e2e.rs")
+          replace_once(
+              e2e,
+              '        .env("CRM_APPROVAL_SIGNING_KEY", APPROVAL_KEY)\n        .env("CRM_BOOTSTRAP_ALLOW_PHASE6", "true")\n',
+              '        .env("CRM_APPROVAL_SIGNING_KEY", APPROVAL_KEY)\n        .env("CRM_EXPORT_RETENTION_POLICIES", "standard=3600,expired=1")\n        .env("CRM_BOOTSTRAP_ALLOW_PHASE6", "true")\n',
+          )
+          PY
       - name: Commit generated Rust and contract artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
