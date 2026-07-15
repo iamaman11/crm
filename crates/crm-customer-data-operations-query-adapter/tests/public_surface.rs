@@ -1,11 +1,11 @@
 use crm_customer_data_operations_query_adapter::{
-    GET_IMPORT_JOB_CAPABILITY, LIST_IMPORT_JOBS_CAPABILITY, LIST_IMPORT_ROWS_CAPABILITY,
-    query_capability_definitions,
+    GET_EXPORT_JOB_CAPABILITY, GET_IMPORT_JOB_CAPABILITY, LIST_EXPORT_JOBS_CAPABILITY,
+    LIST_IMPORT_JOBS_CAPABILITY, LIST_IMPORT_ROWS_CAPABILITY, query_capability_definitions,
 };
 use crm_module_sdk::DataClass;
 
 #[test]
-fn publishes_exact_permission_aware_import_query_surface() {
+fn publishes_exact_permission_aware_customer_data_query_surface() {
     let definitions = query_capability_definitions().expect("query definitions must be valid");
     let capability_ids = definitions
         .iter()
@@ -18,6 +18,8 @@ fn publishes_exact_permission_aware_import_query_surface() {
             GET_IMPORT_JOB_CAPABILITY,
             LIST_IMPORT_JOBS_CAPABILITY,
             LIST_IMPORT_ROWS_CAPABILITY,
+            GET_EXPORT_JOB_CAPABILITY,
+            LIST_EXPORT_JOBS_CAPABILITY,
         ]
     );
     assert!(definitions.iter().all(|definition| !definition.mutation));
