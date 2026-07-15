@@ -31,7 +31,10 @@ provides:
     - data_quality.party_rule_set_version
     - data_quality.party_completeness_profile_version
     - data_quality.party_evaluation_job
+    - data_quality.party_evaluation_input
+    - data_quality.rule_outcome
     - data_quality.finding
+    - data_quality.finding_observation
     - data_quality.party_completeness_result
     - data_quality.remediation_attempt
   ui_extensions: []
