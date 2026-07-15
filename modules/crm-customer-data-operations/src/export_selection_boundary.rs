@@ -224,12 +224,9 @@ mod tests {
     fn direct_boundary_identity_matches_created_boundary() {
         let job_id = ExportJobId::try_new("selection-boundary-direct-id-job").unwrap();
         let expected = PartyExportSelectionBoundaryId::for_job(&job_id).unwrap();
-        let boundary = PartyExportSelectionBoundary::create(
-            job_id,
-            specification_version("retention-a"),
-            100,
-        )
-        .unwrap();
+        let boundary =
+            PartyExportSelectionBoundary::create(job_id, specification_version("retention-a"), 100)
+                .unwrap();
         assert_eq!(boundary.boundary_id(), &expected);
     }
 
@@ -289,12 +286,9 @@ mod tests {
             100,
         )
         .unwrap();
-        let second = PartyExportSelectionBoundary::create(
-            job_id,
-            specification_version("retention-a"),
-            101,
-        )
-        .unwrap();
+        let second =
+            PartyExportSelectionBoundary::create(job_id, specification_version("retention-a"), 101)
+                .unwrap();
         assert_ne!(
             bounded_party_export_selection_manifest_sha256(&first, &items).unwrap(),
             bounded_party_export_selection_manifest_sha256(&second, &items).unwrap()
