@@ -240,7 +240,10 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
         resource_version(&created_cancelled),
     )
     .await;
-    assert_eq!(cancelled.status, cdo::PartyExportJobStatus::Cancelled as i32);
+    assert_eq!(
+        cancelled.status,
+        cdo::PartyExportJobStatus::Cancelled as i32
+    );
     assert_artifact_disclosure_rejected(
         &http,
         &http_addr,
@@ -251,13 +254,8 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     .await;
 
     let expired_job_id = unique_id("export-expired-disclosure-job");
-    let created_expired = create_export_job_with_policy(
-        &mut grpc,
-        &export_create,
-        &expired_job_id,
-        "expired",
-    )
-    .await;
+    let created_expired =
+        create_export_job_with_policy(&mut grpc, &export_create, &expired_job_id, "expired").await;
     let _selecting_expired = start_export(
         &mut grpc,
         &export_start,
