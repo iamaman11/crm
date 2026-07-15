@@ -11,6 +11,12 @@ use crm_proto_contracts::crm::{customer::v1 as customer, parties::v1 as wire};
 use crm_query_runtime::{QueryExecutionContext, QueryRequest, normalized_filter_hash};
 use std::collections::BTreeSet;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartyExportExecutionKind {
+    Person,
+    Organization,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PartyExportExecutionRead {
     NotVisible,
@@ -18,7 +24,7 @@ pub enum PartyExportExecutionRead {
     Unavailable,
     Visible {
         party_id: RecordId,
-        kind: PartyKind,
+        kind: PartyExportExecutionKind,
         display_name: String,
         resource_version: i64,
         allowed_fields: BTreeSet<String>,
@@ -103,9 +109,13 @@ impl PartyQueryAdapter {
                 return Ok(PartyExportExecutionRead::VersionChanged);
             }
             let party = party_from_snapshot(&snapshot)?;
+            let kind = match party.kind() {
+                PartyKind::Person => PartyExportExecutionKind::Person,
+                PartyKind::Organization => PartyExportExecutionKind::Organization,
+            };
             Ok(PartyExportExecutionRead::Visible {
                 party_id: snapshot.reference.record_id,
-                kind: party.kind(),
+                kind,
                 display_name: party.display_name().to_owned(),
                 resource_version: snapshot.version,
                 allowed_fields: visibility.allowed_fields,
