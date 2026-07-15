@@ -43,6 +43,36 @@ jobs:
       - name: Synchronize generated client contract hashes
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
+      - name: Apply targeted Phase 8A.8 acceptance maintenance
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("services/crm-api/tests/export_process_e2e.rs")
+          text = path.read_text()
+
+          unused = 'const EXPORT_JOB_RECORD_TYPE: &str = "customer_data.export_job";\n'
+          text = text.replace(unused, "", 1)
+
+          grant = "GRANT SELECT ON crm.test_export_completion_delay_target TO crm_app_test;"
+          anchor = """            CREATE TABLE IF NOT EXISTS crm.test_export_completion_delay_target (
+                        job_id text PRIMARY KEY,
+                        file_id text NOT NULL
+                      );
+                      TRUNCATE TABLE crm.test_export_completion_delay_target;"""
+          replacement = """            CREATE TABLE IF NOT EXISTS crm.test_export_completion_delay_target (
+                        job_id text PRIMARY KEY,
+                        file_id text NOT NULL
+                      );
+                      GRANT SELECT ON crm.test_export_completion_delay_target TO crm_app_test;
+                      TRUNCATE TABLE crm.test_export_completion_delay_target;"""
+          if grant not in text:
+              if anchor not in text:
+                  raise SystemExit("expected export completion delay target anchor is missing")
+              text = text.replace(anchor, replacement, 1)
+
+          path.write_text(text)
+          PY
       - name: Commit generated Rust and contract artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
