@@ -1,8 +1,6 @@
 use crate::{PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink};
 use crm_core_data::{PostgresDataStore, RecordListQuery, RecordQueryContinuation, RecordQuerySort};
-use crm_customer_data_operations::{
-    ExportJobId, PartyExportJobStatus, PartyExportKindFilter, PartyExportSourceContinuation,
-};
+use crm_customer_data_operations::{PartyExportJobStatus, PartyExportKindFilter};
 use crm_customer_data_operations_capability_adapter::{
     EXPORT_JOB_RECORD_TYPE, MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
     export_job_from_snapshot,
@@ -32,6 +30,30 @@ const _: () = assert!(
 );
 const _: () = assert!(MAXIMUM_EXPORT_SELECTION_SOURCE_PAGE_SIZE > 0);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartyExportSelectionSourceKind {
+    Person,
+    Organization,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartyExportSelectionSourceContinuation {
+    pub sort_value: String,
+    pub record_id: RecordId,
+}
+
+#[derive(Debug, Clone)]
+pub struct PartyExportSelectionSourceRequest<'a> {
+    pub tenant_id: &'a TenantId,
+    pub actor_id: &'a ActorId,
+    pub job_id: &'a str,
+    pub selection_cutoff_unix_nanos: i64,
+    pub kind: Option<PartyExportSelectionSourceKind>,
+    pub page_size: u32,
+    pub after: Option<PartyExportSelectionSourceContinuation>,
+    pub request_started_at_unix_nanos: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartyExportSelectionSourceCandidate {
     pub party_id: RecordId,
@@ -41,7 +63,7 @@ pub struct PartyExportSelectionSourceCandidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartyExportSelectionSourcePage {
     pub candidates: Vec<PartyExportSelectionSourceCandidate>,
-    pub next: Option<PartyExportSourceContinuation>,
+    pub next: Option<PartyExportSelectionSourceContinuation>,
 }
 
 /// Worker-private governed Party selection source.
@@ -52,14 +74,7 @@ pub struct PartyExportSelectionSourcePage {
 pub trait PartyExportSelectionSource: Send + Sync {
     fn list_page<'a>(
         &'a self,
-        tenant_id: &'a TenantId,
-        actor_id: &'a ActorId,
-        job_id: &'a ExportJobId,
-        selection_cutoff_unix_nanos: i64,
-        kind: Option<PartyExportKindFilter>,
-        page_size: u32,
-        after: Option<PartyExportSourceContinuation>,
-        request_started_at_unix_nanos: i64,
+        request: PartyExportSelectionSourceRequest<'a>,
     ) -> PortFuture<'a, Result<PartyExportSelectionSourcePage, SdkError>>;
 }
 
@@ -228,18 +243,32 @@ impl PartyExportSelectionWorker {
                     return Err(worker_state_unavailable());
                 }
 
+                let kind = job.specification().scope().kind_filter().map(|kind| match kind {
+                    PartyExportKindFilter::Person => PartyExportSelectionSourceKind::Person,
+                    PartyExportKindFilter::Organization => {
+                        PartyExportSelectionSourceKind::Organization
+                    }
+                });
+                let after = evidence.progress.continuation().map(|continuation| {
+                    PartyExportSelectionSourceContinuation {
+                        sort_value: continuation.sort_value().to_owned(),
+                        record_id: continuation.record_id().clone(),
+                    }
+                });
                 let result = self
                     .source
-                    .list_page(
-                        &tenant_id,
-                        &self.actor_id,
-                        job.job_id(),
-                        evidence.boundary.selection_cutoff_unix_nanos(),
-                        job.specification().scope().kind_filter(),
-                        selection_page_size,
-                        evidence.progress.continuation().cloned(),
-                        now_unix_nanos,
-                    )
+                    .list_page(PartyExportSelectionSourceRequest {
+                        tenant_id: &tenant_id,
+                        actor_id: &self.actor_id,
+                        job_id: job.job_id().as_str(),
+                        selection_cutoff_unix_nanos: evidence
+                            .boundary
+                            .selection_cutoff_unix_nanos(),
+                        kind,
+                        page_size: selection_page_size,
+                        after,
+                        request_started_at_unix_nanos: now_unix_nanos,
+                    })
                     .await?;
                 let candidates = result
                     .candidates
@@ -259,8 +288,8 @@ impl PartyExportSelectionWorker {
                     result
                         .next
                         .map(|continuation| export_wire::PartyExportSourceContinuation {
-                            sort_value: continuation.sort_value().to_owned(),
-                            record_id: continuation.record_id().as_str().to_owned(),
+                            sort_value: continuation.sort_value,
+                            record_id: continuation.record_id.as_str().to_owned(),
                         });
                 self.sink
                     .commit_page(
