@@ -11,8 +11,9 @@ use crm_customer_data_operations_execution_composition::{
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
 use crm_parties_query_adapter::{
     GET_CAPABILITY as PARTY_GET_CAPABILITY, LIST_CAPABILITY as PARTY_LIST_CAPABILITY,
-    PartyExportExecutionKind, PartyExportExecutionRead, PartyExportSelectionKind, PartyQueryAdapter,
-    export_execution_query_request, export_selection_query_request, query_capability_definition,
+    PartyExportExecutionKind, PartyExportExecutionRead, PartyExportSelectionKind,
+    PartyQueryAdapter, export_execution_query_request, export_selection_query_request,
+    query_capability_definition,
 };
 use crm_query_runtime::QueryAuthorizer;
 use std::sync::Arc;
