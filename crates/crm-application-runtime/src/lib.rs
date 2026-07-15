@@ -8,6 +8,7 @@
 //! published composition/adapters.
 
 mod config;
+mod export_artifact_download;
 mod export_execution_source;
 mod export_selection_bootstrap;
 mod export_selection_source;
@@ -18,6 +19,7 @@ mod process;
 mod runtime;
 
 pub use config::*;
+pub use export_artifact_download::*;
 pub use export_execution_source::*;
 pub(crate) use export_selection_bootstrap::bootstrap_export_selection_worker_access;
 pub use export_selection_source::*;
