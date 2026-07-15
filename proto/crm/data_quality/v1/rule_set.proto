@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package crm.data_quality.v1;
 
-import "crm/core/v1/common.proto";
-import "crm/customer/v1/reference.proto";
 import "crm/data_quality/v1/quality_types.proto";
 import "crm/data_quality/v1/reference.proto";
 
@@ -15,8 +13,7 @@ message PartyRuleSetDefinition {
 message PartyRuleSetVersion {
   PartyRuleSetVersionRef rule_set_version_ref = 1;
   PartyRuleSetDefinition definition = 2;
-  crm.core.v1.UnixTime published_at = 3;
-  crm.customer.v1.CustomerResourceVersion resource_version = 4;
+  reserved 3, 4;
 }
 
 message PublishPartyRuleSetVersionRequest {
