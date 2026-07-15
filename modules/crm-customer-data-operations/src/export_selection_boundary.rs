@@ -1,15 +1,15 @@
 //! Immutable selection-boundary evidence for Party export.
 //!
-//! The boundary freezes the newest Party creation time eligible for one export job. Selection may
-//! resume across process crashes, but it must always use the same cutoff and deterministic owner-side
-//! ordering. The finalized manifest digest is additionally bound to this boundary so the same list
-//! of Party references under a different cutoff is not the same export intent.
+//! Every export job has exactly one deterministic selection-boundary record identity. The boundary
+//! freezes the newest Party creation time eligible for that job. Selection may resume across process
+//! crashes, but it must always use the same specification, cutoff and deterministic owner-side
+//! ordering. The finalized manifest digest is additionally bound to the exact immutable boundary.
 
 use crate::{
     ExportJobId, ExportSpecificationVersionId, PartyExportSelectionItem,
     party_export_selection_manifest_sha256,
 };
-use crm_module_sdk::{RecordId, SdkError};
+use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
 use sha2::{Digest, Sha256};
 
 pub const PARTY_EXPORT_SELECTION_BOUNDARY_VERSION_V1: &str =
@@ -51,14 +51,12 @@ impl PartyExportSelectionBoundary {
             ));
         }
 
+        // The record identity is deliberately job-bound only. A retry with a different cutoff or
+        // specification therefore targets the same immutable record and must fail as a conflict
+        // rather than creating a second boundary for one export job.
         let mut hasher = Sha256::new();
         hasher.update(SELECTION_BOUNDARY_ID_DOMAIN);
         hash_part(&mut hasher, job_id.as_str().as_bytes());
-        hash_part(
-            &mut hasher,
-            export_specification_version_id.as_str().as_bytes(),
-        );
-        hash_part(&mut hasher, &selection_cutoff_unix_nanos.to_be_bytes());
 
         let boundary_id = RecordId::try_new(format!(
             "cdo-export-boundary-{}",
@@ -97,6 +95,26 @@ impl PartyExportSelectionBoundary {
         self.selection_cutoff_unix_nanos
     }
 
+    /// Verifies that an attempted replay is exactly the already-frozen boundary definition.
+    pub fn require_exact_replay(
+        &self,
+        export_specification_version_id: &ExportSpecificationVersionId,
+        selection_cutoff_unix_nanos: i64,
+    ) -> Result<(), SdkError> {
+        if self.export_specification_version_id == *export_specification_version_id
+            && self.selection_cutoff_unix_nanos == selection_cutoff_unix_nanos
+        {
+            Ok(())
+        } else {
+            Err(SdkError::new(
+                "CUSTOMER_DATA_EXPORT_SELECTION_BOUNDARY_CONFLICT",
+                ErrorCategory::Conflict,
+                false,
+                "The export job already has a different immutable selection boundary.",
+            ))
+        }
+    }
+
     /// Returns whether an authoritative Party creation timestamp belongs to this immutable export
     /// population. Party creation time is immutable owner state; updates after the cutoff do not
     /// change membership and are handled later by exact resource-version validation.
@@ -109,7 +127,7 @@ impl PartyExportSelectionBoundary {
 /// Produces the authoritative v1 manifest digest for a finalized Party export selection.
 ///
 /// The existing manifest validator proves contiguous positions, one job identity and unique Party
-/// references. This wrapper additionally binds the digest to the immutable selection boundary.
+/// references. This wrapper additionally binds the digest to the exact immutable boundary contents.
 pub fn bounded_party_export_selection_manifest_sha256(
     boundary: &PartyExportSelectionBoundary,
     items: &[PartyExportSelectionItem],
@@ -182,42 +200,68 @@ mod tests {
     }
 
     #[test]
-    fn boundary_identity_is_stable_for_exact_job_specification_and_cutoff() {
+    fn boundary_record_identity_is_unique_and_stable_per_export_job() {
         let job_id = ExportJobId::try_new("selection-boundary-job").unwrap();
-        let specification_version = specification_version("retention-a");
-        let first = PartyExportSelectionBoundary::create(
-            job_id.clone(),
-            specification_version.clone(),
-            100,
-        )
-        .unwrap();
-        let replay = PartyExportSelectionBoundary::create(job_id, specification_version, 100).unwrap();
-        assert_eq!(first, replay);
-    }
-
-    #[test]
-    fn different_cutoff_or_specification_changes_boundary_identity() {
-        let job_id = ExportJobId::try_new("selection-boundary-change-job").unwrap();
         let first = PartyExportSelectionBoundary::create(
             job_id.clone(),
             specification_version("retention-a"),
             100,
         )
         .unwrap();
-        let different_cutoff = PartyExportSelectionBoundary::create(
-            job_id.clone(),
-            specification_version("retention-a"),
+        let conflicting_definition = PartyExportSelectionBoundary::create(
+            job_id,
+            specification_version("retention-b"),
             101,
         )
         .unwrap();
-        let different_specification = PartyExportSelectionBoundary::create(
-            job_id,
-            specification_version("retention-b"),
+        assert_eq!(first.boundary_id(), conflicting_definition.boundary_id());
+        assert_ne!(first, conflicting_definition);
+    }
+
+    #[test]
+    fn different_export_jobs_have_different_boundary_record_identities() {
+        let first = PartyExportSelectionBoundary::create(
+            ExportJobId::try_new("selection-boundary-job-a").unwrap(),
+            specification_version("retention-a"),
             100,
         )
         .unwrap();
-        assert_ne!(first.boundary_id(), different_cutoff.boundary_id());
-        assert_ne!(first.boundary_id(), different_specification.boundary_id());
+        let second = PartyExportSelectionBoundary::create(
+            ExportJobId::try_new("selection-boundary-job-b").unwrap(),
+            specification_version("retention-a"),
+            100,
+        )
+        .unwrap();
+        assert_ne!(first.boundary_id(), second.boundary_id());
+    }
+
+    #[test]
+    fn exact_replay_accepts_same_definition_and_rejects_changed_cutoff_or_specification() {
+        let boundary = PartyExportSelectionBoundary::create(
+            ExportJobId::try_new("selection-boundary-replay-job").unwrap(),
+            specification_version("retention-a"),
+            100,
+        )
+        .unwrap();
+        assert!(
+            boundary
+                .require_exact_replay(&specification_version("retention-a"), 100)
+                .is_ok()
+        );
+        assert_eq!(
+            boundary
+                .require_exact_replay(&specification_version("retention-a"), 101)
+                .unwrap_err()
+                .code,
+            "CUSTOMER_DATA_EXPORT_SELECTION_BOUNDARY_CONFLICT"
+        );
+        assert_eq!(
+            boundary
+                .require_exact_replay(&specification_version("retention-b"), 100)
+                .unwrap_err()
+                .code,
+            "CUSTOMER_DATA_EXPORT_SELECTION_BOUNDARY_CONFLICT"
+        );
     }
 
     #[test]
@@ -235,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn finalized_manifest_digest_is_bound_to_selection_cutoff() {
+    fn finalized_manifest_digest_is_bound_to_exact_boundary_contents() {
         let job_id = ExportJobId::try_new("selection-boundary-digest-job").unwrap();
         let items = vec![item(&job_id, 1, "party-1"), item(&job_id, 2, "party-2")];
         let first = PartyExportSelectionBoundary::create(
@@ -250,6 +294,7 @@ mod tests {
             101,
         )
         .unwrap();
+        assert_eq!(first.boundary_id(), second.boundary_id());
         assert_ne!(
             bounded_party_export_selection_manifest_sha256(&first, &items).unwrap(),
             bounded_party_export_selection_manifest_sha256(&second, &items).unwrap()
