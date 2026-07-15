@@ -39,12 +39,8 @@ pub fn export_execution_query_request(
             party_id: party_id.as_str().to_owned(),
         }),
     };
-    let input = support::protobuf_payload(
-        MODULE_ID,
-        GET_REQUEST_SCHEMA,
-        DataClass::Personal,
-        &command,
-    )?;
+    let input =
+        support::protobuf_payload(MODULE_ID, GET_REQUEST_SCHEMA, DataClass::Personal, &command)?;
     let input_hash = normalized_filter_hash([("party_id", party_id.as_str().as_bytes())]);
     Ok(QueryRequest {
         owner_module_id: ModuleId::try_new(MODULE_ID).map_err(config_error)?,
