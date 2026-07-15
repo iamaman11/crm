@@ -1,6 +1,6 @@
 use super::{
-    LIST_CAPABILITY, LIST_REQUEST_SCHEMA, PartyQueryAdapter, party_filter_hash, party_from_snapshot,
-    party_record_type,
+    LIST_CAPABILITY, LIST_REQUEST_SCHEMA, PartyQueryAdapter, party_filter_hash,
+    party_from_snapshot, party_record_type,
 };
 use crm_capability_plan_support as support;
 use crm_core_data::{RecordListQuery, RecordQueryContinuation, RecordQuerySort};
@@ -11,9 +11,7 @@ use crm_module_sdk::{
 use crm_parties::PartyKind;
 use crm_parties_capability_adapter::MODULE_ID;
 use crm_proto_contracts::crm::parties::v1 as wire;
-use crm_query_runtime::{
-    QueryExecutionContext, QueryRequest, QueryVisibilityAuthorizer,
-};
+use crm_query_runtime::{QueryExecutionContext, QueryRequest, QueryVisibilityAuthorizer};
 
 pub const MAXIMUM_PARTY_EXPORT_SELECTION_PAGE_SIZE: u32 = 1_000;
 
@@ -50,9 +48,7 @@ pub fn export_selection_query_request(
     let kind = match kind {
         None => None,
         Some(PartyExportSelectionKind::Person) => Some(wire::PartyKind::Person as i32),
-        Some(PartyExportSelectionKind::Organization) => {
-            Some(wire::PartyKind::Organization as i32)
-        }
+        Some(PartyExportSelectionKind::Organization) => Some(wire::PartyKind::Organization as i32),
     };
     let command = wire::ListPartiesRequest {
         page: None,
@@ -75,7 +71,8 @@ pub fn export_selection_query_request(
             correlation_id: CorrelationId::try_new(request_identity)
                 .map_err(selection_config_error)?,
             trace_id: TraceId::try_new(request_identity).map_err(selection_config_error)?,
-            capability_id: CapabilityId::try_new(LIST_CAPABILITY).map_err(selection_config_error)?,
+            capability_id: CapabilityId::try_new(LIST_CAPABILITY)
+                .map_err(selection_config_error)?,
             capability_version: CapabilityVersion::try_new(support::CONTRACT_VERSION)
                 .map_err(selection_config_error)?,
             schema_version: SchemaVersion::try_new(support::CONTRACT_VERSION)
