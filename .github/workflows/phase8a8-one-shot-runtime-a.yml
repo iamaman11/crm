@@ -1,0 +1,83 @@
+name: Phase 8A.8 One-shot Runtime A
+
+on:
+  push:
+    branches:
+      - develop/phase8a8-customer-export-jobs
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-self-delete:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Wire export selection runtime declarations
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("crates/crm-application-runtime/src/runtime.rs")
+          text = path.read_text()
+          def repl(old, new, label):
+              global text
+              if text.count(old) != 1:
+                  raise SystemExit(f"{label}: anchor count={text.count(old)}")
+              text = text.replace(old, new, 1)
+          repl(
+              "ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,\n    ProcessIdentitySource, SystemClock, application_capability_catalog,",
+              "ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,\n    GovernedPartyExportSelectionSource, ProcessIdentitySource, SystemClock,\n    application_capability_catalog,",
+              "crate import",
+          )
+          repl(
+              "IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,\n    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,",
+              "IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,\n    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,\n    internal_export_selection_capability_definitions,",
+              "capability import",
+          )
+          repl(
+              "IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyImportExecutionCoordinator, PartyImportExecutionWorker,\n    PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,\n    internal_capability_definitions,",
+              "EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID,\n    PartyExportSelectionWorker, PartyImportExecutionCoordinator, PartyImportExecutionWorker,\n    PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,\n    PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink,\n    internal_capability_definitions,",
+              "execution imports",
+          )
+          repl(
+              "use crm_parties_query_adapter::PartyQueryAdapter;",
+              "use crm_parties_query_adapter::{\n    LIST_CAPABILITY as PARTY_LIST_QUERY_CAPABILITY, PartyQueryAdapter,\n};",
+              "Party query import",
+          )
+          repl(
+              "pub import_execution_worker: Arc<PartyImportExecutionWorker>,\n    readiness:",
+              "pub import_execution_worker: Arc<PartyImportExecutionWorker>,\n    pub export_selection_worker: Arc<PartyExportSelectionWorker>,\n    readiness:",
+              "components field",
+          )
+          repl(
+              "let internal_import_outcome_definitions = internal_capability_definitions()\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let import_execution_worker_actor_id =",
+              "let internal_import_outcome_definitions = internal_capability_definitions()\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let internal_export_selection_definitions =\n            internal_export_selection_capability_definitions()\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let import_execution_worker_actor_id =",
+              "definitions",
+          )
+          repl(
+              "ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        if config.bootstrap_allow_phase6 {",
+              "ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let export_selection_worker_actor_id = ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID)\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        if config.bootstrap_allow_phase6 {",
+              "worker actor",
+          )
+          repl(
+              "&import_execution_worker_actor_id,\n            )?;\n        }",
+              "&import_execution_worker_actor_id,\n            )?;\n            bootstrap_export_selection_worker_access(\n                &config,\n                now,\n                &authorization_store,\n                &visibility_store,\n                &query_definitions,\n                &internal_export_selection_definitions,\n                &export_selection_worker_actor_id,\n            )?;\n        }",
+              "bootstrap call",
+          )
+          path.write_text(text)
+      - name: Format and self-delete
+        run: |
+          cargo fmt --all
+          rm .github/workflows/phase8a8-one-shot-runtime-a.yml
+      - name: Commit runtime declarations
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Wire Phase 8A.8 export selection runtime declarations"
+          git push origin HEAD:develop/phase8a8-customer-export-jobs
