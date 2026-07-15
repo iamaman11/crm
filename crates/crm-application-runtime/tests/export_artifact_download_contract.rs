@@ -24,6 +24,10 @@ fn disclosure_capability_remains_dedicated_high_risk_read_only_surface() {
         definition.capability_id.as_str(),
         DOWNLOAD_EXPORT_ARTIFACT_CAPABILITY
     );
+    assert_eq!(
+        definition.authorization_policy_id,
+        DOWNLOAD_EXPORT_ARTIFACT_CAPABILITY
+    );
     assert!(!definition.mutation);
     assert!(!definition.requires_idempotency);
     assert!(!definition.requires_approval);
