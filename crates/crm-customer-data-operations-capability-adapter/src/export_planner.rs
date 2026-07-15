@@ -5,10 +5,10 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_customer_data_operations::{
-    EXPORT_JOB_STATE_MAXIMUM_BYTES, EXPORT_JOB_STATE_RETENTION_POLICY_ID, EXPORT_JOB_STATE_SCHEMA_ID,
-    EXPORT_JOB_STATE_SCHEMA_VERSION, ExportJobId, PartyExportField, PartyExportJob,
-    PartyExportJobStatus, PartyExportKindFilter, PartyExportProfile, PartyExportScope,
-    PartyExportSpecification, decode_export_job_state, encode_export_job_state,
+    EXPORT_JOB_STATE_MAXIMUM_BYTES, EXPORT_JOB_STATE_RETENTION_POLICY_ID,
+    EXPORT_JOB_STATE_SCHEMA_ID, EXPORT_JOB_STATE_SCHEMA_VERSION, ExportJobId, PartyExportField,
+    PartyExportJob, PartyExportJobStatus, PartyExportKindFilter, PartyExportProfile,
+    PartyExportScope, PartyExportSpecification, decode_export_job_state, encode_export_job_state,
     export_job_state_descriptor_hash,
 };
 use crm_module_sdk::{
@@ -70,9 +70,7 @@ pub fn export_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
         .collect()
 }
 
-pub fn export_capability_definition(
-    capability_id: &str,
-) -> Result<CapabilityDefinition, SdkError> {
+pub fn export_capability_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkError> {
     let (input_schema, output_schema, risk) = match capability_id {
         CREATE_PARTY_EXPORT_JOB_CAPABILITY => (
             CREATE_PARTY_EXPORT_JOB_REQUEST_SCHEMA,
@@ -123,30 +121,24 @@ impl TransactionalAggregatePlanner for PartyExportCapabilityPlanner {
         ensure_definition(definition, request)?;
         let (job_id, presence) = match definition.capability_id.as_str() {
             CREATE_PARTY_EXPORT_JOB_CAPABILITY => {
-                let command: wire::CreatePartyExportJobRequest = decode_request(
-                    request,
-                    CREATE_PARTY_EXPORT_JOB_REQUEST_SCHEMA,
-                )?;
+                let command: wire::CreatePartyExportJobRequest =
+                    decode_request(request, CREATE_PARTY_EXPORT_JOB_REQUEST_SCHEMA)?;
                 (
                     export_job_id_from_ref(command.export_job_ref)?,
                     AggregatePresence::MustBeAbsent,
                 )
             }
             START_PARTY_EXPORT_EXECUTION_CAPABILITY => {
-                let command: wire::StartPartyExportExecutionRequest = decode_request(
-                    request,
-                    START_PARTY_EXPORT_EXECUTION_REQUEST_SCHEMA,
-                )?;
+                let command: wire::StartPartyExportExecutionRequest =
+                    decode_request(request, START_PARTY_EXPORT_EXECUTION_REQUEST_SCHEMA)?;
                 (
                     export_job_id_from_ref(command.export_job_ref)?,
                     AggregatePresence::MustExist,
                 )
             }
             CANCEL_PARTY_EXPORT_JOB_CAPABILITY => {
-                let command: wire::CancelPartyExportJobRequest = decode_request(
-                    request,
-                    CANCEL_PARTY_EXPORT_JOB_REQUEST_SCHEMA,
-                )?;
+                let command: wire::CancelPartyExportJobRequest =
+                    decode_request(request, CANCEL_PARTY_EXPORT_JOB_REQUEST_SCHEMA)?;
                 (
                     export_job_id_from_ref(command.export_job_ref)?,
                     AggregatePresence::MustExist,
@@ -410,14 +402,19 @@ pub fn export_job_to_wire(job: &PartyExportJob) -> Result<wire::PartyExportJob, 
         specification: Some(specification_to_wire(job.specification())),
         export_specification_version_id: job.specification().version_id().as_str().to_owned(),
         status: status_to_wire(job.status()) as i32,
-        selection: job.selection().map(|selection| wire::PartyExportSelectionSummary {
-            manifest_sha256: sha256_hex_to_bytes(selection.manifest_sha256())
-                .expect("validated selection SHA-256 must decode"),
-            selected_resources: selection.selected_resources(),
-        }),
+        selection: job
+            .selection()
+            .map(|selection| wire::PartyExportSelectionSummary {
+                manifest_sha256: sha256_hex_to_bytes(selection.manifest_sha256())
+                    .expect("validated selection SHA-256 must decode"),
+                selected_resources: selection.selected_resources(),
+            }),
         checkpoint_manifest_position: job.checkpoint_manifest_position(),
         execution_attempts: job.execution_attempts(),
-        last_execution_error_code: job.last_execution_error_code().unwrap_or_default().to_owned(),
+        last_execution_error_code: job
+            .last_execution_error_code()
+            .unwrap_or_default()
+            .to_owned(),
         artifact: job.artifact().map(|artifact| wire::PartyExportArtifact {
             file_id: artifact.file_id().as_str().to_owned(),
             media_type: PARTY_EXPORT_MEDIA_TYPE.to_owned(),
@@ -426,13 +423,15 @@ pub fn export_job_to_wire(job: &PartyExportJob) -> Result<wire::PartyExportJob, 
             size_bytes: artifact.size_bytes(),
             retention_policy_id: artifact.retention_policy_id().to_owned(),
         }),
-        reconciliation: job.reconciliation().map(|reconciliation| wire::PartyExportReconciliation {
-            selected_resources: reconciliation.selected_resources(),
-            emitted_rows: reconciliation.emitted_rows(),
-            excluded_not_visible: reconciliation.excluded_not_visible(),
-            excluded_version_changed: reconciliation.excluded_version_changed(),
-            excluded_unavailable: reconciliation.excluded_unavailable(),
-            redacted_fields: reconciliation.redacted_fields(),
+        reconciliation: job.reconciliation().map(|reconciliation| {
+            wire::PartyExportReconciliation {
+                selected_resources: reconciliation.selected_resources(),
+                emitted_rows: reconciliation.emitted_rows(),
+                excluded_not_visible: reconciliation.excluded_not_visible(),
+                excluded_version_changed: reconciliation.excluded_version_changed(),
+                excluded_unavailable: reconciliation.excluded_unavailable(),
+                redacted_fields: reconciliation.redacted_fields(),
+            }
         }),
         created_at: Some(core::UnixTime {
             unix_nanos: job.created_at_unix_nanos(),
@@ -531,7 +530,9 @@ fn specification_from_wire(
     PartyExportSpecification::try_new(scope, profile)
 }
 
-fn specification_to_wire(specification: &PartyExportSpecification) -> wire::PartyExportSpecification {
+fn specification_to_wire(
+    specification: &PartyExportSpecification,
+) -> wire::PartyExportSpecification {
     wire::PartyExportSpecification {
         scope: Some(wire::PartyExportScope {
             kind: specification.scope().kind_filter().map(|kind| match kind {
@@ -552,7 +553,9 @@ fn specification_to_wire(specification: &PartyExportSpecification) -> wire::Part
                     PartyExportField::PartyId => wire::PartyExportField::PartyId as i32,
                     PartyExportField::Kind => wire::PartyExportField::Kind as i32,
                     PartyExportField::DisplayName => wire::PartyExportField::DisplayName as i32,
-                    PartyExportField::ResourceVersion => wire::PartyExportField::ResourceVersion as i32,
+                    PartyExportField::ResourceVersion => {
+                        wire::PartyExportField::ResourceVersion as i32
+                    }
                 })
                 .collect(),
             retention_policy_id: specification.profile().retention_policy_id().to_owned(),
@@ -582,9 +585,7 @@ fn export_job_id_from_ref(value: Option<wire::ExportJobRef>) -> Result<ExportJob
     ExportJobId::try_new(value.export_job_id)
 }
 
-fn export_job_record_ref(
-    job_id: &ExportJobId,
-) -> Result<crm_module_sdk::RecordRef, SdkError> {
+fn export_job_record_ref(job_id: &ExportJobId) -> Result<crm_module_sdk::RecordRef, SdkError> {
     support::record_ref(
         EXPORT_JOB_RECORD_TYPE,
         job_id.as_str(),
@@ -677,7 +678,10 @@ mod tests {
         for (definition, capability_id) in definitions.iter().zip(EXPORT_MUTATION_CAPABILITY_IDS) {
             assert_eq!(definition.capability_id.as_str(), capability_id);
             assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-            assert_eq!(definition.capability_version.as_str(), support::CONTRACT_VERSION);
+            assert_eq!(
+                definition.capability_version.as_str(),
+                support::CONTRACT_VERSION
+            );
             assert_eq!(
                 definition.input_contract.allowed_data_classes,
                 vec![DataClass::Personal]

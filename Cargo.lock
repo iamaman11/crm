@@ -639,6 +639,7 @@ dependencies = [
  "crm-customer-data-operations",
  "crm-module-sdk",
  "crm-proto-contracts",
+ "prost",
 ]
 
 [[package]]
