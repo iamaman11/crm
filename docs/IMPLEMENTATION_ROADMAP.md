@@ -108,13 +108,13 @@ Completed packets:
 - **8A.5** — Identity Resolution duplicate-candidate cases and reviewer decisions (#114 / PR #115).
 - **8A.6** — reversible merge/unmerge, immutable lineage, provenance and survivorship (#116 / PR #119; merge `d5cb4502ad0c49158e0789d8749dc09160da7895`).
 - **8A.7** — governed immutable import sources, exact server-side parsing/validation, resumable Party import execution, retry recovery and crash/restart process acceptance (#120 / PR #121; merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`).
+- **8A.8** — governed Party export jobs, immutable selection/manifests, deterministic artifacts, exact reconciliation, both execution crash-window recoveries and live-authorized audited artifact disclosure (#123 / PR #130; merge `0e7f9889362533446cc65d95dcf7969a60086a57`).
 
 Active and planned sequence:
 
-1. **8A.8 / #123 / PR #130 — In progress:** Customer Export Jobs, Artifacts and Reconciliation Evidence. This is the single active customer-master production packet.
-2. **8A.9 / #124 — Planned:** Customer Data Quality Rules, Completeness and Stewardship.
-3. **8A.10 / #125 — Planned:** Governed Customer Enrichment and Provenance.
-4. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
+1. **8A.9 / #124 — Ready:** Customer Data Quality Rules, Completeness and Stewardship. This is the next customer-master production packet.
+2. **8A.10 / #125 — Planned:** Governed Customer Enrichment and Provenance.
+3. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
 Phase 8A is complete only when the customer-master acceptance baseline covers:
 
@@ -128,27 +128,27 @@ Phase 8A is complete only when the customer-master acceptance baseline covers:
 - privacy access/export/restriction/deletion/legal-hold interaction proof;
 - tenant isolation, migrations, compatibility, process acceptance and performance appropriate to the maturity claim.
 
-#### Active 8A.8 contract boundary
+#### Ready 8A.9 contract boundary
 
-The customer-data-operations module may own export-job lifecycle, immutable export specification/profile identity, immutable selection-boundary/manifest evidence, resumable checkpoints, derived artifact references and reconciliation evidence. It must not own or copy authoritative mutable customer-master records as a competing source of truth.
+The next packet introduces a distinct `crm.data-quality` owner/coordinator for long-lived quality-governance state. It may own immutable/versioned quality rule sets and completeness profiles, exact source-version-bound findings and completeness results, stewardship lifecycle/assignment evidence and bounded evaluation coordination evidence.
 
-The 8A.8 production packet must prove:
+It must not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution values. Authoritative values are read only through governed owner/query composition ports, and remediation may change owner state only through an exact governed owner capability with normal authorization, optimistic concurrency, idempotency, approval and audit semantics.
 
-- immutable bounded export specifications and resource scope;
-- one immutable Party creation-time selection cutoff fixed when selection first starts;
-- deterministic owner-side selection ordering and retry against the same cutoff so newly created Parties cannot enter after a crash;
-- finalized manifest digest bound to the exact cutoff plus ordered Party references/resource versions;
-- live authorization and field/data-class filtering during selection, serialization and artifact download;
-- governed owner-domain reads rather than direct cross-module table access;
-- deterministic spreadsheet-safe UTF-8 CSV canonicalization with formula-injection regression coverage;
-- staged derived-artifact writing with deterministic chunk identity and exactly-once logical finalization;
-- checkpoint advancement only after corresponding emitted bytes or exclusion outcome are durable;
-- recovery from chunk-written/checkpoint-missing and artifact-finalized/job-outcome-missing crash windows;
-- artifact digest, byte-size, retention and expiry metadata;
-- deterministic retry/resume without duplicate logical artifacts;
-- exact selected/emitted/excluded/redacted reconciliation counts;
-- approval-required Party export execution by safe default;
-- tenant isolation and safe non-disclosure;
+The 8A.9 production packet must prove:
+
+- immutable published rule/evaluator semantics and deterministic replay;
+- a bounded declarative or exact built-in evaluator vocabulary with no arbitrary SQL, user code, filesystem or arbitrary network execution;
+- exact owner/resource/resource-version evidence for every finding and completeness result;
+- deterministic logical finding identity and reevaluation without duplicate current findings;
+- explicit historical lifecycle for current, acknowledged, remediated, waived and stale/superseded evidence without deleting evaluation history;
+- deterministic integer/fixed-point completeness scoring with exact component lineage and reconciliation;
+- permission-aware finding, completeness and stewardship disclosure;
+- stewardship assignment and remediation with optimistic concurrency;
+- stale source-version/remediation conflict proof;
+- no direct cross-owner storage reads or writes;
+- bounded scans, batches, payloads and per-tenant operational limits;
+- process restart/retry without duplicate findings, assignments or owner side effects;
+- migration clean apply, reverse rollback and reapply;
 - fresh-PostgreSQL real `crm-api` process acceptance;
 - one unchanged exact final SHA with all applicable gates green.
 
@@ -204,15 +204,17 @@ Enterprise claims require automated and operational evidence, not configuration 
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Keep #123 / PR #130 as the single active Phase 8A customer-master production packet.
-2. Persist the immutable selection cutoff/boundary into the export-job production state and worker outcome path.
-3. Deliver governed Party selection/serialization composition, staged artifact execution, download authorization and fresh-process acceptance.
-4. Reach one unchanged exact-head final gate across every applicable workflow before leaving draft state.
-5. Deliver #124, #125 and #126 in dependency order.
-6. Close Phase 8A only after its full merged acceptance baseline is proven.
-7. Begin Phase 8B / #29 from the completed customer-master baseline.
-8. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
-9. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
+1. Merge the documentation/governance synchronization that records completed 8A.8 and the Ready 8A.9 baseline.
+2. Start #124 from the synchronized post-8A.8 `main` baseline as the single active customer-master production packet.
+3. Freeze the first Party-focused v1 rule/evaluator vocabulary, deterministic rule/finding/completeness identities and stewardship/remediation boundaries before publishing public contracts.
+4. Deliver the pure `crm.data-quality` owner model, strict deterministic persistence and governed Party read/evaluation composition without direct cross-owner storage access.
+5. Prove deterministic reevaluation, stale-version handling, permission-aware disclosure, stewardship lifecycle, governed remediation and restart-safe process behavior on fresh PostgreSQL.
+6. Reach one unchanged exact-head final gate across every applicable workflow before 8A.9 leaves Gate review.
+7. Deliver #125 and #126 in dependency order.
+8. Close Phase 8A only after its full merged acceptance baseline is proven.
+9. Begin Phase 8B / #29 from the completed customer-master baseline.
+10. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
+11. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
 
 ## 11. Documentation hygiene
 
