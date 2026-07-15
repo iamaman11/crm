@@ -1,3 +1,4 @@
+use crate::export_execution_source_kind;
 use crm_capability_adapters::LiveCapabilityAuthorizer;
 use crm_capability_runtime::CapabilityAuthorizer;
 use crm_core_data::RecordQueryContinuation;
@@ -11,9 +12,8 @@ use crm_customer_data_operations_execution_composition::{
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
 use crm_parties_query_adapter::{
     GET_CAPABILITY as PARTY_GET_CAPABILITY, LIST_CAPABILITY as PARTY_LIST_CAPABILITY,
-    PartyExportExecutionKind, PartyExportExecutionRead, PartyExportSelectionKind,
-    PartyQueryAdapter, export_execution_query_request, export_selection_query_request,
-    query_capability_definition,
+    PartyExportExecutionRead, PartyExportSelectionKind, PartyQueryAdapter,
+    export_execution_query_request, export_selection_query_request, query_capability_definition,
 };
 use crm_query_runtime::QueryAuthorizer;
 use std::sync::Arc;
@@ -185,12 +185,9 @@ impl PartyExportExecutionSource for GovernedPartyExportSelectionSource {
                     allowed_fields,
                 } => PartyExportExecutionSourceResult::Visible {
                     party_id,
-                    kind: allowed_fields.contains("kind").then_some(match kind {
-                        PartyExportExecutionKind::Person => PartyExportExecutionSourceKind::Person,
-                        PartyExportExecutionKind::Organization => {
-                            PartyExportExecutionSourceKind::Organization
-                        }
-                    }),
+                    kind: allowed_fields
+                        .contains("kind")
+                        .then_some(export_execution_source_kind(kind)),
                     display_name: allowed_fields
                         .contains("display_name")
                         .then_some(display_name),
