@@ -69,16 +69,19 @@ impl ApplicationConfig {
             || self.query_default_page_size > self.query_maximum_page_size
             || self.query_scan_multiplier == 0
             || self.maximum_connections == 0
-            || self.export_retention_policies.iter().any(|(policy_id, seconds)| {
-                policy_id.is_empty()
-                    || policy_id.chars().any(char::is_control)
-                    || *seconds == 0
-                    || seconds.checked_mul(NANOS_PER_SECOND).is_none()
-                    || seconds
-                        .checked_mul(NANOS_PER_SECOND)
-                        .and_then(|value| i64::try_from(value).ok())
-                        .is_none()
-            })
+            || self
+                .export_retention_policies
+                .iter()
+                .any(|(policy_id, seconds)| {
+                    policy_id.is_empty()
+                        || policy_id.chars().any(char::is_control)
+                        || *seconds == 0
+                        || seconds.checked_mul(NANOS_PER_SECOND).is_none()
+                        || seconds
+                            .checked_mul(NANOS_PER_SECOND)
+                            .and_then(|value| i64::try_from(value).ok())
+                            .is_none()
+                })
         {
             return Err(ApplicationConfigError::Invalid("application configuration"));
         }
@@ -168,7 +171,11 @@ fn parse_retention_policies(
         return Ok(BTreeMap::new());
     };
     let mut policies = BTreeMap::new();
-    for entry in value.split(',').map(str::trim).filter(|entry| !entry.is_empty()) {
+    for entry in value
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+    {
         let (policy_id, seconds) = entry
             .split_once('=')
             .ok_or(ApplicationConfigError::Invalid(
