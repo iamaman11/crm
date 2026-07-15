@@ -1,6 +1,4 @@
-use crate::{
-    ExportJobId, PartyExportSelectionProgress, PartyExportSourceContinuation,
-};
+use crate::{ExportJobId, PartyExportSelectionProgress, PartyExportSourceContinuation};
 use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -39,65 +37,39 @@ pub fn decode_export_selection_progress_state(
     let state: ExportSelectionProgressStateV1 = serde_json::from_slice(bytes).map_err(|error| {
         persisted_error(format!("export selection progress JSON is invalid: {error}"))
     })?;
+    let expected_progress_id = state.progress_id.clone();
     let job_id = ExportJobId::try_new(state.export_job_id)
         .map_err(|error| persisted_domain_error("export job ID", error))?;
-    let mut progress = PartyExportSelectionProgress::create(job_id, state.created_at_unix_nanos)
-        .map_err(|error| persisted_domain_error("export selection progress", error))?;
-    if progress.progress_id().as_str() != state.progress_id {
-        return Err(persisted_error(
-            "export selection progress deterministic identity is inconsistent".to_owned(),
-        ));
-    }
-
-    if state.version < 1 {
-        return Err(persisted_error(
-            "export selection progress version is invalid".to_owned(),
-        ));
-    }
-    if state.version > 1 {
-        let continuation = match (state.source_after_sort_value, state.source_after_record_id) {
-            (Some(sort_value), Some(record_id)) => Some(
-                PartyExportSourceContinuation::try_new(
-                    sort_value,
-                    RecordId::try_new(record_id)
-                        .map_err(|error| persisted_domain_error("source continuation ID", error))?,
-                )
-                .map_err(|error| persisted_domain_error("source continuation", error))?,
-            ),
-            (None, None) => None,
-            _ => {
-                return Err(persisted_error(
-                    "export selection progress continuation is incomplete".to_owned(),
-                ));
-            }
-        };
-        let committed_items = state
-            .next_manifest_position
-            .checked_sub(1)
-            .ok_or_else(|| persisted_error("next manifest position is invalid".to_owned()))?;
-        progress
-            .advance(
-                1,
-                committed_items,
-                continuation,
-                state.updated_at_unix_nanos,
+    let continuation = match (state.source_after_sort_value, state.source_after_record_id) {
+        (Some(sort_value), Some(record_id)) => Some(
+            PartyExportSourceContinuation::try_new(
+                sort_value,
+                RecordId::try_new(record_id)
+                    .map_err(|error| persisted_domain_error("source continuation ID", error))?,
             )
-            .map_err(|error| persisted_domain_error("export selection progress", error))?;
-        if state.version != 2 {
+            .map_err(|error| persisted_domain_error("source continuation", error))?,
+        ),
+        (None, None) => None,
+        _ => {
             return Err(persisted_error(
-                "export selection progress persisted version cannot be reconstructed canonically"
-                    .to_owned(),
+                "export selection progress continuation is incomplete".to_owned(),
             ));
         }
-    }
+    };
 
-    if progress.next_manifest_position() != state.next_manifest_position
-        || progress.source_exhausted() != state.source_exhausted
-        || progress.updated_at_unix_nanos() != state.updated_at_unix_nanos
-        || progress.version() != state.version
-    {
+    let progress = PartyExportSelectionProgress::rehydrate(
+        job_id,
+        state.next_manifest_position,
+        continuation,
+        state.source_exhausted,
+        state.created_at_unix_nanos,
+        state.updated_at_unix_nanos,
+        state.version,
+    )
+    .map_err(|error| persisted_domain_error("export selection progress", error))?;
+    if progress.progress_id().as_str() != expected_progress_id {
         return Err(persisted_error(
-            "export selection progress state is inconsistent".to_owned(),
+            "export selection progress deterministic identity is inconsistent".to_owned(),
         ));
     }
 
@@ -177,7 +149,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn round_trips_initial_and_advanced_progress() {
+    fn round_trips_initial_advanced_and_multi_page_progress() {
         let initial = PartyExportSelectionProgress::create(
             ExportJobId::try_new("selection-progress-persistence-initial").unwrap(),
             10,
@@ -208,12 +180,26 @@ mod tests {
                 20,
             )
             .unwrap();
+        advanced
+            .advance(
+                2,
+                2,
+                Some(
+                    PartyExportSourceContinuation::try_new(
+                        "2026-07-15T00:01:00Z",
+                        RecordId::try_new("party-5").unwrap(),
+                    )
+                    .unwrap(),
+                ),
+                30,
+            )
+            .unwrap();
         let bytes = encode_export_selection_progress_state(&advanced).unwrap();
         assert_eq!(decode_export_selection_progress_state(&bytes).unwrap(), advanced);
     }
 
     #[test]
-    fn rejects_unknown_fields_and_tampered_identity() {
+    fn rejects_unknown_fields_tampered_identity_and_incomplete_continuation() {
         let progress = PartyExportSelectionProgress::create(
             ExportJobId::try_new("selection-progress-persistence-tamper").unwrap(),
             10,
@@ -229,6 +215,13 @@ mod tests {
 
         let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         value["progress_id"] = serde_json::json!("cdo-export-selection-progress-tampered");
+        assert!(
+            decode_export_selection_progress_state(&serde_json::to_vec(&value).unwrap()).is_err()
+        );
+
+        let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        value["version"] = serde_json::json!(2);
+        value["source_after_sort_value"] = serde_json::json!("2026-07-15T00:00:00Z");
         assert!(
             decode_export_selection_progress_state(&serde_json::to_vec(&value).unwrap()).is_err()
         );
