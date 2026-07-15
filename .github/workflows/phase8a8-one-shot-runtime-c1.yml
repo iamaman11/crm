@@ -1,0 +1,30 @@
+name: Phase 8A.8 Runtime C1
+on:
+  push:
+    branches: [develop/phase8a8-customer-export-jobs]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - name: Insert export selection worker assembly
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('crates/crm-application-runtime/src/runtime.rs'); s=p.read_text()
+          a='''        let account_query_adapter = AccountQueryAdapter::new(\n'''
+          if s.count(a)!=1: raise SystemExit(f'anchor={s.count(a)}')
+          x='''        let export_party_query_adapter = PartyQueryAdapter::new(\n            store.clone(),\n            CursorCodec::new(cursor_key)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            visibility_authorizer.clone(),\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let export_selection_source = Arc::new(GovernedPartyExportSelectionSource::new(\n            Arc::new(export_party_query_adapter),\n            authorizer.clone(),\n        ));\n        let export_selection_reader =\n            Arc::new(PostgresPartyExportSelectionReader::new(store.clone()));\n        let export_selection_sink = Arc::new(PostgresPartyExportSelectionSink::new(\n            store.clone(), authorizer.clone(),\n        ));\n        let export_selection_worker = Arc::new(\n            PartyExportSelectionWorker::new(\n                store.clone(), export_selection_reader, export_selection_sink,\n                export_selection_source, Arc::clone(&clock),\n            )\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n        );\n'''
+          p.write_text(s.replace(a,x+a,1))
+      - run: cargo fmt --all
+      - run: rm .github/workflows/phase8a8-one-shot-runtime-c1.yml
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A && git commit -m 'Assemble Phase 8A.8 export selection worker' && git push origin HEAD:develop/phase8a8-customer-export-jobs
