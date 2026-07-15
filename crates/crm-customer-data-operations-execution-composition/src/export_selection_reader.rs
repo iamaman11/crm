@@ -159,7 +159,8 @@ impl PostgresPartyExportSelectionReader {
         tenant_id: &'a TenantId,
         job: &'a PartyExportJob,
         evidence: &'a PartyExportSelectionEvidence,
-    ) -> PortFuture<'a, Result<crm_customer_data_operations::PartyExportSelectionSummary, SdkError>> {
+    ) -> PortFuture<'a, Result<crm_customer_data_operations::PartyExportSelectionSummary, SdkError>>
+    {
         Box::pin(async move {
             let items = self
                 .load_manifest(tenant_id, job, &evidence.progress)
