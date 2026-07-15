@@ -160,14 +160,7 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     );
     assert_eq!(outcome_record_count(&admin).await, 1);
     assert_eq!(completed_event_count(&admin).await, 1);
-    verify_artifact_disclosure(
-        &http,
-        &http_addr,
-        &first_job_id,
-        &completed_first,
-        &admin,
-    )
-    .await;
+    verify_artifact_disclosure(&http, &http_addr, &first_job_id, &completed_first, &admin).await;
 
     // Crash window 2: the immutable artifact has finalized in its own committed transaction, while
     // the export-job completion transaction is deliberately blocked. Restart must reuse the same
@@ -462,17 +455,38 @@ async fn verify_artifact_disclosure(
         .expect("download governed Party export artifact");
     assert_eq!(response.status(), reqwest::StatusCode::OK);
     let headers = response.headers().clone();
-    let artifact = job.artifact.as_ref().expect("completed export artifact evidence");
+    let artifact = job
+        .artifact
+        .as_ref()
+        .expect("completed export artifact evidence");
     let expected_sha256 = hex(&artifact.content_sha256);
-    assert_eq!(headers.get(reqwest::header::CONTENT_TYPE).unwrap(), "text/csv; charset=utf-8");
-    assert_eq!(headers.get(reqwest::header::CONTENT_LENGTH).unwrap(), artifact.size_bytes.to_string());
-    assert_eq!(headers.get(reqwest::header::CACHE_CONTROL).unwrap(), "private, no-store");
-    assert_eq!(headers.get(reqwest::header::ETAG).unwrap(), format!("\"sha256-{expected_sha256}\""));
+    assert_eq!(
+        headers.get(reqwest::header::CONTENT_TYPE).unwrap(),
+        "text/csv; charset=utf-8"
+    );
+    assert_eq!(
+        headers.get(reqwest::header::CONTENT_LENGTH).unwrap(),
+        artifact.size_bytes.to_string()
+    );
+    assert_eq!(
+        headers.get(reqwest::header::CACHE_CONTROL).unwrap(),
+        "private, no-store"
+    );
+    assert_eq!(
+        headers.get(reqwest::header::ETAG).unwrap(),
+        format!("\"sha256-{expected_sha256}\"")
+    );
     assert_eq!(headers.get("x-content-sha256").unwrap(), expected_sha256);
     assert_eq!(headers.get("x-content-type-options").unwrap(), "nosniff");
-    let bytes = response.bytes().await.expect("read governed Party export bytes");
+    let bytes = response
+        .bytes()
+        .await
+        .expect("read governed Party export bytes");
     assert_eq!(bytes.len() as u64, artifact.size_bytes);
-    assert_eq!(Sha256::digest(&bytes).as_slice(), artifact.content_sha256.as_slice());
+    assert_eq!(
+        Sha256::digest(&bytes).as_slice(),
+        artifact.content_sha256.as_slice()
+    );
     assert!(bytes.starts_with(b"party_id,"));
     assert_eq!(disclosure_audit_count(admin).await, audit_before + 1);
 }
