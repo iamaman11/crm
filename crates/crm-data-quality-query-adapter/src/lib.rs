@@ -8,8 +8,8 @@ use crm_data_quality_capability_adapter::{
     MODULE_ID, party_rule_set_from_snapshot, party_rule_set_to_wire,
 };
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PortFuture, RecordId,
-    RecordType, SdkError, TypedPayload,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture,
+    RecordId, RecordType, SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::data_quality::v1 as wire;
 use crm_query_runtime::{
@@ -164,12 +164,31 @@ impl QueryExecutor for DataQualityQueryAdapter {
 }
 
 fn decode_input<T: Message + Default>(request: &QueryRequest) -> Result<T, SdkError> {
-    support::decode_query_input_with_data_class(
-        request,
-        MODULE_ID,
-        GET_PARTY_RULE_SET_REQUEST_SCHEMA,
-        DataClass::Confidential,
-    )
+    let payload = &request.input;
+    if payload.owner.as_str() != MODULE_ID
+        || payload.schema_id.as_str() != GET_PARTY_RULE_SET_REQUEST_SCHEMA
+        || payload.schema_version.as_str() != support::CONTRACT_VERSION
+        || payload.descriptor_hash != support::message_descriptor_hash(GET_PARTY_RULE_SET_REQUEST_SCHEMA)
+        || payload.data_class != DataClass::Confidential
+        || payload.encoding != PayloadEncoding::Protobuf
+        || payload.maximum_size_bytes > support::MAX_PROTOBUF_BYTES
+        || payload.validate().is_err()
+    {
+        return Err(SdkError::new(
+            "DATA_QUALITY_QUERY_INPUT_CONTRACT_MISMATCH",
+            ErrorCategory::InvalidArgument,
+            false,
+            "The Data Quality query input does not match the required contract.",
+        ));
+    }
+    T::decode(payload.bytes.as_slice()).map_err(|_| {
+        SdkError::new(
+            "DATA_QUALITY_QUERY_INPUT_PROTOBUF_INVALID",
+            ErrorCategory::InvalidArgument,
+            false,
+            "The Data Quality query input is not valid Protobuf.",
+        )
+    })
 }
 
 fn required_rule_set_ref(
