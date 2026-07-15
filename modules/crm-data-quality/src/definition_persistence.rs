@@ -11,8 +11,7 @@ pub const PARTY_RULE_SET_VERSION_STATE_SCHEMA_ID: &str =
     "crm.data-quality.party_rule_set_version.state";
 pub const PARTY_RULE_SET_VERSION_STATE_SCHEMA_VERSION: &str = "1.0.0";
 pub const PARTY_RULE_SET_VERSION_STATE_MAXIMUM_BYTES: u64 = 256 * 1024;
-pub const PARTY_RULE_SET_VERSION_STATE_RETENTION_POLICY_ID: &str =
-    "crm.data_quality.definition";
+pub const PARTY_RULE_SET_VERSION_STATE_RETENTION_POLICY_ID: &str = "crm.data_quality.definition";
 
 pub const PARTY_COMPLETENESS_PROFILE_VERSION_STATE_SCHEMA_ID: &str =
     "crm.data-quality.party_completeness_profile_version.state";
@@ -35,11 +34,12 @@ pub fn party_completeness_profile_version_state_descriptor_hash() -> [u8; 32] {
 pub fn encode_party_rule_set_version_state(
     rule_set: &PartyRuleSetVersion,
 ) -> Result<Vec<u8>, SdkError> {
-    let bytes = serde_json::to_vec(&PartyRuleSetVersionStateV1::from(rule_set)).map_err(|error| {
-        persisted_error(format!(
-            "Party rule-set version state serialization failed: {error}"
-        ))
-    })?;
+    let bytes =
+        serde_json::to_vec(&PartyRuleSetVersionStateV1::from(rule_set)).map_err(|error| {
+            persisted_error(format!(
+                "Party rule-set version state serialization failed: {error}"
+            ))
+        })?;
     validate_size(
         &bytes,
         PARTY_RULE_SET_VERSION_STATE_MAXIMUM_BYTES,
@@ -84,13 +84,12 @@ pub fn decode_party_rule_set_version_state(bytes: &[u8]) -> Result<PartyRuleSetV
 pub fn encode_party_completeness_profile_version_state(
     profile: &PartyCompletenessProfileVersion,
 ) -> Result<Vec<u8>, SdkError> {
-    let bytes = serde_json::to_vec(&PartyCompletenessProfileVersionStateV1::from(profile)).map_err(
-        |error| {
+    let bytes = serde_json::to_vec(&PartyCompletenessProfileVersionStateV1::from(profile))
+        .map_err(|error| {
             persisted_error(format!(
                 "Party completeness-profile version state serialization failed: {error}"
             ))
-        },
-    )?;
+        })?;
     validate_size(
         &bytes,
         PARTY_COMPLETENESS_PROFILE_VERSION_STATE_MAXIMUM_BYTES,
@@ -170,12 +169,8 @@ enum QualitySeverityState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "parameters", rename_all = "snake_case")]
 enum PartyQualityEvaluatorStateV1 {
-    DisplayNameMinUtf8Bytes {
-        minimum_utf8_bytes: u32,
-    },
-    DisplayNamePlaceholderExactAsciiCasefold {
-        placeholder_tokens: Vec<String>,
-    },
+    DisplayNameMinUtf8Bytes { minimum_utf8_bytes: u32 },
+    DisplayNamePlaceholderExactAsciiCasefold { placeholder_tokens: Vec<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -441,8 +436,8 @@ mod tests {
     #[test]
     fn rule_set_state_rejects_unknown_fields() {
         let rule_set = rule_set();
-        let encoded = String::from_utf8(encode_party_rule_set_version_state(&rule_set).unwrap())
-            .unwrap();
+        let encoded =
+            String::from_utf8(encode_party_rule_set_version_state(&rule_set).unwrap()).unwrap();
         let injected = encoded.replacen('{', "{\"unknown\":true,", 1);
         assert!(decode_party_rule_set_version_state(injected.as_bytes()).is_err());
     }
@@ -469,11 +464,13 @@ mod tests {
         let profile = profile(&rule_set);
         let mut forged = PartyCompletenessProfileVersionStateV1::from(&profile);
         forged.version_id.push('x');
-        assert!(decode_party_completeness_profile_version_state(
-            &serde_json::to_vec(&forged).unwrap(),
-            &rule_set
-        )
-        .is_err());
+        assert!(
+            decode_party_completeness_profile_version_state(
+                &serde_json::to_vec(&forged).unwrap(),
+                &rule_set
+            )
+            .is_err()
+        );
 
         let other_rule_set = PartyRuleSetVersion::publish(vec![
             PartyQualityRule::try_new(
@@ -487,8 +484,6 @@ mod tests {
         ])
         .unwrap();
         let bytes = encode_party_completeness_profile_version_state(&profile).unwrap();
-        assert!(
-            decode_party_completeness_profile_version_state(&bytes, &other_rule_set).is_err()
-        );
+        assert!(decode_party_completeness_profile_version_state(&bytes, &other_rule_set).is_err());
     }
 }
