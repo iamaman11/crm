@@ -1,0 +1,158 @@
+name: Phase 8A.8 One-shot Runtime B
+
+on:
+  push:
+    branches:
+      - develop/phase8a8-customer-export-jobs
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-self-delete:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Wire export selection runtime assembly
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("crates/crm-application-runtime/src/runtime.rs")
+          text = path.read_text()
+          def repl(old, new, label):
+              global text
+              if text.count(old) != 1:
+                  raise SystemExit(f"{label}: anchor count={text.count(old)}")
+              text = text.replace(old, new, 1)
+          party = '''        let party_query_adapter = PartyQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+'''
+          assembly = party + '''        let export_party_query_adapter = PartyQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_selection_source = Arc::new(GovernedPartyExportSelectionSource::new(
+            Arc::new(export_party_query_adapter),
+            authorizer.clone(),
+        ));
+        let export_selection_reader =
+            Arc::new(PostgresPartyExportSelectionReader::new(store.clone()));
+        let export_selection_sink = Arc::new(PostgresPartyExportSelectionSink::new(
+            store.clone(),
+            authorizer.clone(),
+        ));
+        let export_selection_worker = Arc::new(
+            PartyExportSelectionWorker::new(
+                store.clone(),
+                export_selection_reader,
+                export_selection_sink,
+                export_selection_source,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
+'''
+          if text.count(party) != 1:
+              raise SystemExit(f"Party assembly anchor count={text.count(party)}")
+          text = text.replace(party, assembly, 1)
+          repl(
+              "query_router.clone(),\n            authorizer,\n            query_router,",
+              "query_router.clone(),\n            authorizer.clone(),\n            query_router,",
+              "query authorizer clone",
+          )
+          repl(
+              "search_worker,\n            import_execution_worker,\n            readiness:",
+              "search_worker,\n            import_execution_worker,\n            export_selection_worker,\n            readiness:",
+              "components initializer",
+          )
+          repl(
+              "components\n            .import_execution_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        scan_link_events",
+              "components\n            .import_execution_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        components\n            .export_selection_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        scan_link_events",
+              "background cycle",
+          )
+          marker = "fn bootstrap_import_execution_worker_access(\n"
+          if text.count(marker) != 1:
+              raise SystemExit(f"bootstrap marker count={text.count(marker)}")
+          bootstrap = '''fn bootstrap_export_selection_worker_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    visibility_store: &LiveQueryVisibilityStore,
+    query_definitions: &[CapabilityDefinition],
+    internal_definitions: &[CapabilityDefinition],
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    let party_list = query_definitions
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+                && definition.capability_id.as_str() == PARTY_LIST_QUERY_CAPABILITY
+        })
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party list capability is missing from the production query catalog".to_owned(),
+            )
+        })?;
+    for tenant_id in &config.tenant_ids {
+        for definition in std::iter::once(party_list).chain(internal_definitions.iter()) {
+            authorization_store
+                .upsert(AuthorizationGrant {
+                    tenant_id: tenant_id.clone(),
+                    actor_id: worker_actor_id.clone(),
+                    policy_id: definition.authorization_policy_id.clone(),
+                    capability_id: definition.capability_id.clone(),
+                    capability_version: definition.capability_version.clone(),
+                    owner_module_id: definition.owner_module_id.clone(),
+                    policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                    expires_at_unix_nanos: Some(expires_at),
+                })
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        }
+        visibility_store
+            .upsert(QueryVisibilityGrant {
+                tenant_id: tenant_id.clone(),
+                actor_id: worker_actor_id.clone(),
+                capability_id: party_list.capability_id.clone(),
+                capability_version: party_list.capability_version.clone(),
+                owner_module_id: ModuleId::try_new(PARTIES_MODULE_ID)
+                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                record_type: RecordType::try_new(PARTY_RECORD_TYPE)
+                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                record_id: None,
+                allowed_fields: party_fields(),
+                policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                expires_at_unix_nanos: Some(expires_at),
+            })
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+    }
+    Ok(())
+}
+
+'''
+          text = text.replace(marker, bootstrap + marker, 1)
+          path.write_text(text)
+      - name: Format and self-delete
+        run: |
+          cargo fmt --all
+          rm .github/workflows/phase8a8-one-shot-runtime-b.yml
+      - name: Commit runtime assembly
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Wire Phase 8A.8 export selection runtime assembly"
+          git push origin HEAD:develop/phase8a8-customer-export-jobs
