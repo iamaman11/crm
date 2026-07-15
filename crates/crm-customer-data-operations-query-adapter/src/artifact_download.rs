@@ -23,6 +23,7 @@ pub const DOWNLOAD_EXPORT_ARTIFACT_REQUEST_SCHEMA: &str =
 pub struct PartyExportArtifactDownloadEvidence {
     pub export_job_id: String,
     pub export_job_version: i64,
+    pub completed_at_unix_nanos: i64,
     pub file_id: FileId,
     pub media_type: &'static str,
     pub content_sha256: [u8; 32],
@@ -95,6 +96,7 @@ impl PartyExportArtifactDownloadResolver {
         Ok(PartyExportArtifactDownloadEvidence {
             export_job_id,
             export_job_version: job.version(),
+            completed_at_unix_nanos: job.updated_at_unix_nanos(),
             file_id: artifact.file_id().clone(),
             media_type: "text/csv; charset=utf-8",
             content_sha256: decode_sha256(artifact.content_sha256())?,
