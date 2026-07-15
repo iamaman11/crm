@@ -100,8 +100,34 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          : > database/export-process-runtime-health.log
+          (
+            while true; do
+              while IFS= read -r port; do
+                [ -z "${port}" ] && continue
+                {
+                  echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) port=${port} ==="
+                  curl --max-time 1 --silent --show-error --include \
+                    "http://127.0.0.1:${port}/readyz" || true
+                  echo
+                } >> database/export-process-runtime-health.log 2>&1
+              done < <(
+                ss -H -ltnp 2>/dev/null \
+                  | awk '/crm-api/ { address=$4; sub(/^.*:/, "", address); print address }' \
+                  | sort -u
+              )
+              sleep 1
+            done
+          ) &
+          health_probe_pid=$!
+          trap 'kill "${health_probe_pid}" 2>/dev/null || true' EXIT
+
           cargo test -p crm-api --test export_process_e2e -- --nocapture \
             2>&1 | tee database/export-process-runtime.log
+          test_status=${PIPESTATUS[0]}
+          kill "${health_probe_pid}" 2>/dev/null || true
+          wait "${health_probe_pid}" 2>/dev/null || true
+          exit "${test_status}"
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -155,6 +181,7 @@ jobs:
           name: export-process-runtime-diagnostics
           path: |
             database/export-process-runtime.log
+            database/export-process-runtime-health.log
             database/export-process-runtime-state.log
             database/export-process-runtime-postgres.log
             services/crm-api/tests/export_process_e2e.rs
