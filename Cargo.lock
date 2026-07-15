@@ -691,6 +691,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-data-quality"
+version = "0.1.0"
+dependencies = [
+ "crm-module-sdk",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "crm-global-search-composition"
 version = "0.1.0"
 dependencies = [

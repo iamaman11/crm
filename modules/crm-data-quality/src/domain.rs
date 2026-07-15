@@ -309,9 +309,7 @@ impl PartyRuleSetVersion {
             return Err(invalid(
                 "DATA_QUALITY_RULE_SET_SIZE_INVALID",
                 "rule_set.rules",
-                format!(
-                    "rule count must be in the inclusive range 1..={MAX_RULES_PER_RULE_SET}"
-                ),
+                format!("rule count must be in the inclusive range 1..={MAX_RULES_PER_RULE_SET}"),
             ));
         }
 
@@ -332,10 +330,8 @@ impl PartyRuleSetVersion {
             evaluator_semantic_version: EVALUATOR_SEMANTIC_VERSION,
             rules: &rules,
         };
-        let version_id = PartyRuleSetVersionId::from_digest(&canonical_digest(
-            RULE_SET_ID_DOMAIN,
-            &canonical,
-        ));
+        let version_id =
+            PartyRuleSetVersionId::from_digest(&canonical_digest(RULE_SET_ID_DOMAIN, &canonical));
 
         Ok(Self { version_id, rules })
     }
@@ -414,9 +410,7 @@ impl PartyCompletenessComponent {
             return Err(invalid(
                 "DATA_QUALITY_COMPLETENESS_WEIGHT_INVALID",
                 "component.weight_basis_points",
-                format!(
-                    "component weight must be in the inclusive range 1..={TOTAL_BASIS_POINTS}"
-                ),
+                format!("component weight must be in the inclusive range 1..={TOTAL_BASIS_POINTS}"),
             ));
         }
         Ok(Self {
@@ -496,21 +490,21 @@ impl PartyCompletenessProfileVersion {
         }
 
         let total_weight = components.iter().try_fold(0_u32, |total, component| {
-            total.checked_add(component.weight_basis_points).ok_or_else(|| {
-                invalid(
-                    "DATA_QUALITY_COMPLETENESS_WEIGHT_OVERFLOW",
-                    "completeness_profile.components",
-                    "component weights overflowed the supported integer range",
-                )
-            })
+            total
+                .checked_add(component.weight_basis_points)
+                .ok_or_else(|| {
+                    invalid(
+                        "DATA_QUALITY_COMPLETENESS_WEIGHT_OVERFLOW",
+                        "completeness_profile.components",
+                        "component weights overflowed the supported integer range",
+                    )
+                })
         })?;
         if total_weight != TOTAL_BASIS_POINTS {
             return Err(invalid(
                 "DATA_QUALITY_COMPLETENESS_WEIGHT_TOTAL_INVALID",
                 "completeness_profile.components",
-                format!(
-                    "component weights must sum exactly to {TOTAL_BASIS_POINTS} basis points"
-                ),
+                format!("component weights must sum exactly to {TOTAL_BASIS_POINTS} basis points"),
             ));
         }
 
@@ -656,9 +650,9 @@ fn canonical_key(value: String, field: &'static str) -> Result<String, SdkError>
     if value.is_empty()
         || value.len() > MAX_CANONICAL_KEY_BYTES
         || !value.is_ascii()
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-'))
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
         || !value
             .as_bytes()
             .first()
@@ -709,7 +703,11 @@ fn canonical_text(
     code: &'static str,
 ) -> Result<String, SdkError> {
     if value.chars().any(char::is_control) {
-        return Err(invalid(code, field, "text must not contain control characters"));
+        return Err(invalid(
+            code,
+            field,
+            "text must not contain control characters",
+        ));
     }
     let canonical = value.split_whitespace().collect::<Vec<_>>().join(" ");
     if canonical.is_empty() || canonical.len() > maximum_bytes {
@@ -836,8 +834,10 @@ mod tests {
 
     #[test]
     fn changed_evaluator_semantics_change_rule_set_identity() {
-        let first = PartyRuleSetVersion::publish(vec![minimum_rule("display_name.minimum", 4)]).unwrap();
-        let second = PartyRuleSetVersion::publish(vec![minimum_rule("display_name.minimum", 5)]).unwrap();
+        let first =
+            PartyRuleSetVersion::publish(vec![minimum_rule("display_name.minimum", 4)]).unwrap();
+        let second =
+            PartyRuleSetVersion::publish(vec![minimum_rule("display_name.minimum", 5)]).unwrap();
         assert_ne!(first.version_id(), second.version_id());
     }
 
@@ -865,21 +865,30 @@ mod tests {
     #[test]
     fn v1_evaluators_are_exact_and_deterministic() {
         let rules = rule_set();
-        let placeholder = PartyQualityInput::try_new(EvaluatedPartyKind::Person, "Unknown").unwrap();
+        let placeholder =
+            PartyQualityInput::try_new(EvaluatedPartyKind::Person, "Unknown").unwrap();
         let short = PartyQualityInput::try_new(EvaluatedPartyKind::Organization, "Acme").unwrap();
-        let non_ascii = PartyQualityInput::try_new(EvaluatedPartyKind::Person, "Неизвестно").unwrap();
+        let non_ascii =
+            PartyQualityInput::try_new(EvaluatedPartyKind::Person, "Неизвестно").unwrap();
 
         let placeholder_outcomes = rules.evaluate(&placeholder);
         assert_eq!(placeholder_outcomes.len(), 2);
         assert!(
             placeholder_outcomes
                 .iter()
-                .any(|outcome| outcome.rule_key().as_str() == "display_name.placeholder"
-                    && !outcome.passed()
-                    && outcome.reason_code() == "DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER")
+                .any(
+                    |outcome| outcome.rule_key().as_str() == "display_name.placeholder"
+                        && !outcome.passed()
+                        && outcome.reason_code() == "DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER"
+                )
         );
 
-        assert!(rules.evaluate(&short).iter().all(PartyRuleEvaluation::passed));
+        assert!(
+            rules
+                .evaluate(&short)
+                .iter()
+                .all(PartyRuleEvaluation::passed)
+        );
         assert!(
             rules
                 .evaluate(&non_ascii)
@@ -954,24 +963,28 @@ mod tests {
         assert!(
             PartyCompletenessProfileVersion::publish(
                 &rules,
-                vec![PartyCompletenessComponent::try_new(
-                    component_key("name.minimum"),
-                    key("display_name.minimum"),
-                    9_999,
-                )
-                .unwrap()],
+                vec![
+                    PartyCompletenessComponent::try_new(
+                        component_key("name.minimum"),
+                        key("display_name.minimum"),
+                        9_999,
+                    )
+                    .unwrap()
+                ],
             )
             .is_err()
         );
         assert!(
             PartyCompletenessProfileVersion::publish(
                 &rules,
-                vec![PartyCompletenessComponent::try_new(
-                    component_key("unknown"),
-                    key("unknown.rule"),
-                    10_000,
-                )
-                .unwrap()],
+                vec![
+                    PartyCompletenessComponent::try_new(
+                        component_key("unknown"),
+                        key("unknown.rule"),
+                        10_000,
+                    )
+                    .unwrap()
+                ],
             )
             .is_err()
         );
@@ -1015,7 +1028,9 @@ mod tests {
 
     #[test]
     fn canonical_party_input_rejects_noncanonical_or_invalid_display_name() {
-        assert!(PartyQualityInput::try_new(EvaluatedPartyKind::Person, "  Ada  Lovelace ").is_err());
+        assert!(
+            PartyQualityInput::try_new(EvaluatedPartyKind::Person, "  Ada  Lovelace ").is_err()
+        );
         assert!(PartyQualityInput::try_new(EvaluatedPartyKind::Person, "").is_err());
         assert!(PartyQualityInput::try_new(EvaluatedPartyKind::Person, "Ada\nLovelace").is_err());
     }
