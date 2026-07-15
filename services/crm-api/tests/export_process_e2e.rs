@@ -465,7 +465,11 @@ async fn verify_artifact_disclosure(
         "text/csv; charset=utf-8"
     );
     assert_eq!(
-        headers.get(reqwest::header::CONTENT_LENGTH).unwrap().to_str().unwrap(),
+        headers
+            .get(reqwest::header::CONTENT_LENGTH)
+            .unwrap()
+            .to_str()
+            .unwrap(),
         artifact.size_bytes.to_string().as_str()
     );
     assert_eq!(
@@ -473,10 +477,17 @@ async fn verify_artifact_disclosure(
         "private, no-store"
     );
     assert_eq!(
-        headers.get(reqwest::header::ETAG).unwrap().to_str().unwrap(),
+        headers
+            .get(reqwest::header::ETAG)
+            .unwrap()
+            .to_str()
+            .unwrap(),
         format!("\"sha256-{expected_sha256}\"").as_str()
     );
-    assert_eq!(headers.get("x-content-sha256").unwrap().to_str().unwrap(), expected_sha256.as_str());
+    assert_eq!(
+        headers.get("x-content-sha256").unwrap().to_str().unwrap(),
+        expected_sha256.as_str()
+    );
     assert_eq!(headers.get("x-content-type-options").unwrap(), "nosniff");
     let bytes = response
         .bytes()
