@@ -151,7 +151,8 @@ fn validate_download_request(request: &QueryRequest) -> Result<(), SdkError> {
         || payload.owner.as_str() != MODULE_ID
         || payload.schema_id.as_str() != DOWNLOAD_EXPORT_ARTIFACT_REQUEST_SCHEMA
         || payload.schema_version.as_str() != support::CONTRACT_VERSION
-        || payload.descriptor_hash != support::message_descriptor_hash(DOWNLOAD_EXPORT_ARTIFACT_REQUEST_SCHEMA)
+        || payload.descriptor_hash
+            != support::message_descriptor_hash(DOWNLOAD_EXPORT_ARTIFACT_REQUEST_SCHEMA)
         || payload.data_class != DataClass::Personal
         || payload.encoding != PayloadEncoding::Protobuf
         || payload.maximum_size_bytes > support::MAX_PROTOBUF_BYTES
@@ -244,8 +245,8 @@ mod tests {
         assert_eq!(definition.risk, CapabilityRisk::High);
         assert!(definition.output_contract.is_none());
         let payload = artifact_download_request_payload("export-job-1").unwrap();
-        let command = wire::DownloadPartyExportArtifactRequest::decode(payload.bytes.as_slice())
-            .unwrap();
+        let command =
+            wire::DownloadPartyExportArtifactRequest::decode(payload.bytes.as_slice()).unwrap();
         assert_eq!(
             command.export_job_ref.unwrap().export_job_id,
             "export-job-1"

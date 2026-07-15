@@ -293,7 +293,9 @@ fn disclosure_audit_intent(
     Ok(AuditIntent {
         audit_record_id: format!(
             "export-artifact-disclosure-{}",
-            hex(&Sha256::digest(request.context.request_id.as_str().as_bytes())),
+            hex(&Sha256::digest(
+                request.context.request_id.as_str().as_bytes()
+            )),
         ),
         canonicalization_profile: "crm.cjson/v1".to_owned(),
         canonical_envelope,

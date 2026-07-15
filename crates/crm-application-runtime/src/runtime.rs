@@ -2,8 +2,7 @@ use crate::{
     ApplicationAggregatePlannerRouter, ApplicationCapabilityExecutorRouter, ApplicationConfig,
     ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,
     GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService, ProcessIdentitySource,
-    SystemClock,
-    application_capability_catalog, application_mutation_definitions,
+    SystemClock, application_capability_catalog, application_mutation_definitions,
     application_query_capability_catalog, application_query_definitions,
     bootstrap_export_selection_worker_access,
 };
@@ -463,12 +462,9 @@ impl ApplicationRuntime {
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             Arc::clone(&mutation_gateway),
         );
-        let query_context_resolver = QueryContextResolver::new(
-            Arc::clone(&clock),
-            Arc::clone(&random),
-            timeout_policy,
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let query_context_resolver =
+            QueryContextResolver::new(Arc::clone(&clock), Arc::clone(&random), timeout_policy)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let export_artifact_download = Arc::new(
             PartyExportArtifactDownloadService::new(
                 authenticator.clone(),
@@ -662,9 +658,8 @@ async fn run_http_server(
     components: Arc<ApplicationComponents>,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), ApplicationRuntimeError> {
-    let download_router = crate::export_artifact_download_router(Arc::clone(
-        &components.export_artifact_download,
-    ));
+    let download_router =
+        crate::export_artifact_download_router(Arc::clone(&components.export_artifact_download));
     let router = Router::new()
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
