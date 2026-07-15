@@ -3,9 +3,10 @@ use crm_capability_runtime::CapabilityAuthorizer;
 use crm_core_data::RecordQueryContinuation;
 use crm_customer_data_operations_execution_composition::{
     PartyExportExecutionSource, PartyExportExecutionSourceKind, PartyExportExecutionSourceRequest,
-    PartyExportExecutionSourceResult, PartyExportSelectionExecutionSource, PartyExportSelectionSource,
-    PartyExportSelectionSourceCandidate, PartyExportSelectionSourceContinuation,
-    PartyExportSelectionSourceKind, PartyExportSelectionSourcePage, PartyExportSelectionSourceRequest,
+    PartyExportExecutionSourceResult, PartyExportSelectionExecutionSource,
+    PartyExportSelectionSource, PartyExportSelectionSourceCandidate,
+    PartyExportSelectionSourceContinuation, PartyExportSelectionSourceKind,
+    PartyExportSelectionSourcePage, PartyExportSelectionSourceRequest,
 };
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
 use crm_parties::PartyKind;
@@ -167,7 +168,9 @@ impl PartyExportExecutionSource for GovernedPartyExportSelectionSource {
                 )
                 .await?;
             Ok(match read {
-                PartyExportExecutionRead::NotVisible => PartyExportExecutionSourceResult::NotVisible,
+                PartyExportExecutionRead::NotVisible => {
+                    PartyExportExecutionSourceResult::NotVisible
+                }
                 PartyExportExecutionRead::VersionChanged => {
                     PartyExportExecutionSourceResult::VersionChanged
                 }
