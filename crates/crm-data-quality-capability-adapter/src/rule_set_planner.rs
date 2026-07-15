@@ -174,13 +174,12 @@ pub fn party_rule_set_from_snapshot(
     if snapshot.reference.record_type.as_str() != PARTY_RULE_SET_VERSION_RECORD_TYPE {
         return Err(invalid_plan());
     }
-    let contract = party_rule_set_persisted_contract();
-    support::validate_persisted_payload(
-        &snapshot.payload,
-        &contract,
+    let bytes = support::persisted_json_bytes_with_data_class(
+        snapshot,
+        party_rule_set_persisted_contract(),
         DataClass::Confidential,
     )?;
-    let rule_set = decode_party_rule_set_version_state(snapshot.payload.bytes.as_slice())?;
+    let rule_set = decode_party_rule_set_version_state(bytes)?;
     if snapshot.reference.record_id.as_str() != rule_set.version_id().as_str() {
         return Err(invalid_plan());
     }
