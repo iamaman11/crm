@@ -130,18 +130,24 @@ Phase 8A is complete only when the customer-master acceptance baseline covers:
 
 #### Active 8A.8 contract boundary
 
-The customer-data-operations module may own export-job lifecycle, immutable export specification/profile identity, selection/snapshot evidence, resumable checkpoints, derived artifact references and reconciliation evidence. It must not own or copy authoritative mutable customer-master records.
+The customer-data-operations module may own export-job lifecycle, immutable export specification/profile identity, immutable selection-boundary/manifest evidence, resumable checkpoints, derived artifact references and reconciliation evidence. It must not own or copy authoritative mutable customer-master records as a competing source of truth.
 
 The 8A.8 production packet must prove:
 
 - immutable bounded export specifications and resource scope;
-- deterministic snapshot/watermark or equivalent immutable selection evidence;
-- live authorization and field/data-class filtering during execution;
+- one immutable Party creation-time selection cutoff fixed when selection first starts;
+- deterministic owner-side selection ordering and retry against the same cutoff so newly created Parties cannot enter after a crash;
+- finalized manifest digest bound to the exact cutoff plus ordered Party references/resource versions;
+- live authorization and field/data-class filtering during selection, serialization and artifact download;
 - governed owner-domain reads rather than direct cross-module table access;
-- staged derived-artifact writing and exactly-once logical finalization;
+- deterministic spreadsheet-safe UTF-8 CSV canonicalization with formula-injection regression coverage;
+- staged derived-artifact writing with deterministic chunk identity and exactly-once logical finalization;
+- checkpoint advancement only after corresponding emitted bytes or exclusion outcome are durable;
+- recovery from chunk-written/checkpoint-missing and artifact-finalized/job-outcome-missing crash windows;
 - artifact digest, byte-size, retention and expiry metadata;
-- deterministic retry/resume across process interruption;
+- deterministic retry/resume without duplicate logical artifacts;
 - exact selected/emitted/excluded/redacted reconciliation counts;
+- approval-required bulk export by safe default until explicit tenant policy permits a governed lower-friction threshold;
 - tenant isolation and safe non-disclosure;
 - fresh-PostgreSQL real `crm-api` process acceptance;
 - one unchanged exact final SHA with all applicable gates green.
@@ -198,14 +204,15 @@ Enterprise claims require automated and operational evidence, not configuration 
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Keep #123 as the single active Phase 8A customer-master production packet.
-2. Freeze the 8A.8 export ownership, snapshot, artifact and reconciliation contract before broad implementation.
-3. Deliver 8A.8 through contracts, domain, persistence, runtime composition and fresh-process acceptance.
-4. Deliver #124, #125 and #126 in dependency order.
-5. Close Phase 8A only after its full merged acceptance baseline is proven.
-6. Begin Phase 8B / #29 from the completed customer-master baseline.
-7. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
-8. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
+1. Keep #123 / PR #130 as the single active Phase 8A customer-master production packet.
+2. Enforce the frozen 8A.8 ownership, immutable selection-boundary, artifact/checkpoint and reconciliation contract in production code.
+3. Deliver governed Party selection/serialization composition, staged artifact execution, download authorization and fresh-process acceptance.
+4. Reach one unchanged exact-head final gate across every applicable workflow before leaving draft state.
+5. Deliver #124, #125 and #126 in dependency order.
+6. Close Phase 8A only after its full merged acceptance baseline is proven.
+7. Begin Phase 8B / #29 from the completed customer-master baseline.
+8. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
+9. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
 
 ## 11. Documentation hygiene
 
