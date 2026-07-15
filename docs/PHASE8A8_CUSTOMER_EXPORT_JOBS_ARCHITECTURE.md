@@ -198,7 +198,7 @@ Export is not an authorization bypass.
 
 The worker must repeat live authorization during selection and again before serialization. The export path must honor current field visibility, tenant isolation and any privacy/consent/restriction policy exposed through governed owner/query boundaries.
 
-Starting a bulk export is a high-risk operation. Production composition must apply an explicit tenant-configurable export policy using resource count, requested fields/data classes and actor privileges. Until a tenant policy explicitly permits a lower-friction threshold, the safe default is approval-required execution for bulk export.
+Starting Party export execution is published through the production combined capability catalog as a high-risk, approval-required operation. This is the safe default. A future tenant-configurable lower-friction threshold may be introduced only as an explicit governed policy change; it must not silently weaken the published execution boundary.
 
 Possession of a `file_id` is never sufficient to download an export artifact. Every download must re-check the authenticated actor, tenant, completed export-job visibility, artifact relationship, current export/download authorization and artifact expiry/retention state immediately before disclosure. Download itself produces traceable audit evidence.
 
@@ -240,7 +240,7 @@ Before #123 may leave draft state, the merged candidate must prove:
 - deterministic retry/resume without duplicate logical artifacts;
 - crash after artifact finalization but before job completion, followed by restart recovery;
 - exact reconciliation invariant and artifact metadata;
-- bulk-export approval/policy enforcement;
+- approval-required Party export execution in the production capability catalog;
 - live authorization on artifact download and rejection of staged/cancelled/expired artifacts;
 - cross-tenant non-disclosure;
 - migration clean apply, rollback and reapply;
