@@ -1,7 +1,7 @@
 use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, SdkError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 const RULE_SET_ID_DOMAIN: &[u8] = b"crm.data-quality.party-rule-set-version/v1";
 const COMPLETENESS_PROFILE_ID_DOMAIN: &[u8] =
