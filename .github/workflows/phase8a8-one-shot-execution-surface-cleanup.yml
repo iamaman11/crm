@@ -1,4 +1,4 @@
-name: Phase 8A.8 Execution Surface Cleanup
+name: Phase 8A.8 Execution Planner Sync
 on:
   push:
     branches: [develop/phase8a8-customer-export-jobs]
@@ -13,43 +13,68 @@ jobs:
         with:
           ref: develop/phase8a8-customer-export-jobs
           fetch-depth: 0
-      - name: Expose execution modules and remove stale one-shot workflows
+      - name: Repair exact execution planner compile mismatches
         shell: python
         run: |
           from pathlib import Path
-          p=Path('crates/crm-customer-data-operations-execution-composition/src/lib.rs')
-          s=p.read_text()
-          prefix='''pub mod export_execution_reader;
-pub use export_execution_reader::*;
-pub mod export_execution_sink;
-pub use export_execution_sink::*;
-pub mod export_execution_source;
-pub use export_execution_source::*;
-pub mod export_execution_worker;
-pub use export_execution_worker::*;
-'''
-          if 'pub mod export_execution_reader;' not in s:
-              s=s.replace('pub mod postgres_reader;', prefix+'pub mod postgres_reader;', 1)
-          p.write_text(s)
+          p = Path('crates/crm-customer-data-operations-capability-adapter/src/export_execution_planner.rs')
+          s = p.read_text()
+          replacements = [
+              (
+                  '    PartyExportArtifactEvidence, PartyExportExclusionReason, PartyExportExecutionOutcome,\n    PartyExportExecutionStage, PartyExportJobStatus, PartyExportReconciliation,\n',
+                  '    ExportJobId, PartyExportArtifactEvidence, PartyExportExclusionReason,\n    PartyExportExecutionOutcome, PartyExportExecutionStage, PartyExportJobStatus,\n    PartyExportReconciliation,\n',
+              ),
+              (
+                  '    EXPORT_JOB_RECORD_TYPE, MODULE_ID, PARTY_EXPORT_COMPLETED_EVENT_SCHEMA,\n    PARTY_EXPORT_COMPLETED_EVENT_TYPE, export_execution_outcome_persisted_payload,\n    export_execution_outcome_record_ref, export_execution_stage_persisted_payload,\n    export_execution_stage_record_ref, export_job_from_snapshot, export_job_id_from_ref,\n    export_job_persisted_payload, export_job_record_ref, export_job_to_wire,\n',
+                  '    EXPORT_JOB_RECORD_TYPE, MODULE_ID, export_execution_outcome_persisted_payload,\n    export_execution_outcome_record_ref, export_execution_stage_persisted_payload,\n    export_execution_stage_record_ref, export_job_from_snapshot, export_job_persisted_payload,\n    export_job_to_wire,\n',
+              ),
+              (
+                  'pub const PARTY_EXPORT_EXECUTION_PROGRESSED_EVENT_SCHEMA: &str =\n    "crm.customer_data_operations.v1.PartyExportExecutionProgressedEvent";\n',
+                  'pub const PARTY_EXPORT_EXECUTION_PROGRESSED_EVENT_SCHEMA: &str =\n    "crm.customer_data_operations.v1.PartyExportExecutionProgressedEvent";\npub const PARTY_EXPORT_COMPLETED_EVENT_TYPE: &str = "customer_data.export.party.completed";\npub const PARTY_EXPORT_COMPLETED_EVENT_SCHEMA: &str =\n    "crm.customer_data_operations.v1.PartyExportCompletedEvent";\n',
+              ),
+              (
+                  '        FileId::try_new(artifact.file_id).map_err(configured)?,\n',
+                  '        configured(FileId::try_new(artifact.file_id))?,\n',
+              ),
+          ]
+          for old, new in replacements:
+              if s.count(old) != 1:
+                  raise SystemExit(f'expected exactly one planner anchor, found {s.count(old)}')
+              s = s.replace(old, new, 1)
+          anchor = 'fn ensure_job_identity(\n'
+          if s.count(anchor) != 1:
+              raise SystemExit('execution planner helper anchor mismatch')
+          helpers = '''fn export_job_id_from_ref(value: Option<wire::ExportJobRef>) -> Result<ExportJobId, SdkError> {
+              let value = value.ok_or_else(|| {
+                  SdkError::invalid_argument(
+                      "customer_data.export.export_job_ref",
+                      "Party export job reference is required",
+                  )
+              })?;
+              ExportJobId::try_new(value.export_job_id)
+          }
 
-          p=Path('crates/crm-application-runtime/src/lib.rs')
-          s=p.read_text()
-          if 'mod export_execution_source;' not in s:
-              s=s.replace('mod export_selection_bootstrap;', 'mod export_execution_source;\nmod export_selection_bootstrap;', 1)
-          if 'pub use export_execution_source::*;' not in s:
-              s=s.replace('pub use config::*;', 'pub use config::*;\npub use export_execution_source::*;', 1)
-          p.write_text(s)
+          fn export_job_record_ref(job_id: &ExportJobId) -> Result<crm_module_sdk::RecordRef, SdkError> {
+              support::record_ref(
+                  EXPORT_JOB_RECORD_TYPE,
+                  job_id.as_str(),
+                  "customer_data.export.export_job_id",
+              )
+          }
 
-          for stale in [
-              Path('.github/workflows/phase8a8-one-shot-execution-planner-fix.yml'),
-              Path('.github/workflows/phase8a8-one-shot-outcome-id.yml'),
-          ]:
-              if stale.exists(): stale.unlink()
+          '''
+          s = s.replace(anchor, helpers + anchor, 1)
+          p.write_text(s)
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
       - run: cargo generate-lockfile
       - run: cargo fmt --all
       - run: rm .github/workflows/phase8a8-one-shot-execution-surface-cleanup.yml
+      - run: git diff --check
       - run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A && git commit -m 'Expose Phase 8A.8 execution surfaces and sync lockfile' && git push origin HEAD:develop/phase8a8-customer-export-jobs
+          git add -A
+          git commit -m "Repair Phase 8A.8 execution planner and sync Rust maintenance"
+          git push origin HEAD:develop/phase8a8-customer-export-jobs
