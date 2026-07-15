@@ -62,7 +62,8 @@ impl PartyQueryAdapter {
                 .store
                 .list_records_for_query(&RecordListQuery {
                     tenant_id: request.context.tenant_id.clone(),
-                    owner_module_id: ModuleId::try_new(MODULE_ID).map_err(selection_config_error)?,
+                    owner_module_id: ModuleId::try_new(MODULE_ID)
+                        .map_err(selection_config_error)?,
                     record_type: party_record_type()?,
                     page_size: u32::try_from(remaining)
                         .map_err(|_| export_selection_unavailable())?,
