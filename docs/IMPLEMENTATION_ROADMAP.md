@@ -111,7 +111,7 @@ Completed packets:
 
 Active and planned sequence:
 
-1. **8A.8 / #123 — In progress:** Customer Export Jobs, Artifacts and Reconciliation Evidence. This is the single active customer-master production packet.
+1. **8A.8 / #123 / PR #130 — In progress:** Customer Export Jobs, Artifacts and Reconciliation Evidence. This is the single active customer-master production packet.
 2. **8A.9 / #124 — Planned:** Customer Data Quality Rules, Completeness and Stewardship.
 3. **8A.10 / #125 — Planned:** Governed Customer Enrichment and Provenance.
 4. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
@@ -147,7 +147,7 @@ The 8A.8 production packet must prove:
 - artifact digest, byte-size, retention and expiry metadata;
 - deterministic retry/resume without duplicate logical artifacts;
 - exact selected/emitted/excluded/redacted reconciliation counts;
-- approval-required bulk export by safe default until explicit tenant policy permits a governed lower-friction threshold;
+- approval-required Party export execution by safe default;
 - tenant isolation and safe non-disclosure;
 - fresh-PostgreSQL real `crm-api` process acceptance;
 - one unchanged exact final SHA with all applicable gates green.
@@ -205,7 +205,7 @@ Enterprise claims require automated and operational evidence, not configuration 
 ## 10. Immediate authoritative delivery sequence
 
 1. Keep #123 / PR #130 as the single active Phase 8A customer-master production packet.
-2. Enforce the frozen 8A.8 ownership, immutable selection-boundary, artifact/checkpoint and reconciliation contract in production code.
+2. Persist the immutable selection cutoff/boundary into the export-job production state and worker outcome path.
 3. Deliver governed Party selection/serialization composition, staged artifact execution, download authorization and fresh-process acceptance.
 4. Reach one unchanged exact-head final gate across every applicable workflow before leaving draft state.
 5. Deliver #124, #125 and #126 in dependency order.
