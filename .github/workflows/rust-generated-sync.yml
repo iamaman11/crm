@@ -43,6 +43,37 @@ jobs:
       - name: Synchronize generated client contract hashes
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
+      - name: Apply verified lightweight header error patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-application-runtime/src/export_artifact_download_http.rs")
+          text = path.read_text()
+          text = text.replace("Err(response) => return response,", "Err(()) => return invalid_request(),")
+          old = '''fn optional_header(headers: &HeaderMap, name: &'static str) -> Result<Option<String>, Response> {
+              headers
+                  .get(name)
+                  .map(|value| {
+                      value
+                          .to_str()
+                          .map(str::to_owned)
+                          .map_err(|_| invalid_request())
+                  })
+                  .transpose()
+          }
+          '''
+          new = '''fn optional_header(headers: &HeaderMap, name: &'static str) -> Result<Option<String>, ()> {
+              headers
+                  .get(name)
+                  .map(|value| value.to_str().map(str::to_owned).map_err(|_| ()))
+                  .transpose()
+          }
+          '''
+          if old not in text:
+              raise SystemExit("expected optional_header anchor is missing")
+          path.write_text(text.replace(old, new, 1))
+          PY
       - name: Commit generated Rust and contract artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
