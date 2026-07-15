@@ -13,10 +13,56 @@ jobs:
         with:
           ref: develop/phase8a8-customer-export-jobs
           fetch-depth: 0
-      - name: Wire governed export execution worker
+      - name: Repair execution evidence load and wire governed export worker
         shell: python
         run: |
           from pathlib import Path
+
+          worker_path = Path('crates/crm-customer-data-operations-execution-composition/src/export_execution_worker.rs')
+          worker = worker_path.read_text()
+          old_worker = '''                let selection = job.selection().ok_or_else(worker_state_invalid)?;
+                let manifest = self
+                    .selection_reader
+                    .load_manifest(
+                        &tenant_id,
+                        &job,
+                        &crm_customer_data_operations::PartyExportSelectionProgress::rehydrate(
+                            job.job_id().clone(),
+                            job.specification().scope().maximum_resources(),
+                            selection.selected_resources().saturating_add(1),
+                            None,
+                            true,
+                            i64::from(selection.selected_resources()).saturating_add(1),
+                        )?,
+                    )
+                    .await?;
+'''
+          new_worker = '''                let selection = job.selection().ok_or_else(worker_state_invalid)?;
+                let selection_evidence = self
+                    .selection_reader
+                    .load_evidence(&tenant_id, &job)
+                    .await?;
+                let selected_from_progress = selection_evidence
+                    .progress
+                    .next_manifest_position()
+                    .checked_sub(1)
+                    .ok_or_else(worker_state_invalid)?;
+                if selected_from_progress != selection.selected_resources()
+                    || (!selection_evidence.progress.source_exhausted()
+                        && selected_from_progress
+                            != selection_evidence.progress.maximum_resources())
+                {
+                    return Err(worker_state_invalid());
+                }
+                let manifest = self
+                    .selection_reader
+                    .load_manifest(&tenant_id, &job, &selection_evidence.progress)
+                    .await?;
+'''
+          if worker.count(old_worker) != 1:
+              raise SystemExit(f'execution evidence-load anchor mismatch: {worker.count(old_worker)}')
+          worker_path.write_text(worker.replace(old_worker, new_worker, 1))
+
           p = Path('crates/crm-application-runtime/src/runtime.rs')
           s = p.read_text()
           def r(old, new):
@@ -43,7 +89,8 @@ jobs:
           r('''    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
     internal_export_selection_capability_definitions,
 ''','''    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-    internal_export_execution_capability_definitions, internal_export_selection_capability_definitions,
+    internal_export_execution_capability_definitions,
+    internal_export_selection_capability_definitions,
 ''')
           r('''    EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyExportSelectionWorker,
     PartyImportExecutionCoordinator, PartyImportExecutionWorker,
