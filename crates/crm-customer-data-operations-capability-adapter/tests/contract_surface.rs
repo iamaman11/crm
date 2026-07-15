@@ -63,6 +63,13 @@ fn publishes_exact_governed_mutation_surface() {
     );
     assert_eq!(definitions[3].risk, CapabilityRisk::High);
     assert_eq!(definitions[6].risk, CapabilityRisk::High);
+    assert!(definitions[6].requires_approval);
+    assert!(
+        definitions
+            .iter()
+            .enumerate()
+            .all(|(index, definition)| index == 6 || !definition.requires_approval)
+    );
 }
 
 #[test]
