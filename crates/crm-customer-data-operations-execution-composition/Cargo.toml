@@ -13,7 +13,9 @@ crm-customer-data-operations = { path = "../../modules/crm-customer-data-operati
 crm-customer-data-operations-capability-adapter = { path = "../crm-customer-data-operations-capability-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-query-runtime = { path = "../crm-query-runtime" }
 prost = "0.14"
 
 [dev-dependencies]
