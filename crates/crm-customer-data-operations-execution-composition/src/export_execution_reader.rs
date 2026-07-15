@@ -175,4 +175,28 @@ mod tests {
             DataClass::Personal
         );
     }
+
+    #[test]
+    fn outcome_lookup_identity_is_independent_of_emitted_or_excluded_kind() {
+        let job_id = ExportJobId::try_new("execution-reader-identity-job").unwrap();
+        let emitted = PartyExportExecutionOutcome::emitted(
+            job_id.clone(),
+            1,
+            1,
+            "11".repeat(32),
+            12,
+            0,
+            100,
+        )
+        .unwrap();
+        let excluded = PartyExportExecutionOutcome::excluded(
+            job_id,
+            1,
+            PartyExportExclusionReason::Unavailable,
+            101,
+        )
+        .unwrap();
+
+        assert_eq!(emitted.outcome_id(), excluded.outcome_id());
+    }
 }
