@@ -710,6 +710,7 @@ dependencies = [
  "crm-data-quality",
  "crm-module-sdk",
  "crm-proto-contracts",
+ "prost",
 ]
 
 [[package]]
