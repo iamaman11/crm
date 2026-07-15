@@ -1,7 +1,8 @@
 use crm_customer_data_operations_capability_adapter::{
     INTERNAL_COMMIT_PARTY_EXPORT_SELECTION_PAGE_CAPABILITY,
     INTERNAL_EXPORT_SELECTION_CAPABILITY_IDS, INTERNAL_FINALIZE_PARTY_EXPORT_SELECTION_CAPABILITY,
-    MUTATION_CAPABILITY_IDS, capability_definitions, internal_export_selection_capability_definitions,
+    MUTATION_CAPABILITY_IDS, capability_definitions,
+    internal_export_selection_capability_definitions,
 };
 
 #[test]
@@ -26,8 +27,6 @@ fn worker_selection_capabilities_are_versioned_but_absent_from_public_mutation_c
         INTERNAL_EXPORT_SELECTION_CAPABILITY_IDS
     );
     assert!(internal_definitions.iter().all(|definition| {
-        definition.mutation
-            && definition.requires_idempotency
-            && !definition.requires_approval
+        definition.mutation && definition.requires_idempotency && !definition.requires_approval
     }));
 }
