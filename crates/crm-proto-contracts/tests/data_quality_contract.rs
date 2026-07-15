@@ -8,11 +8,13 @@ fn party_rule_set_contract_round_trip_is_typed() {
         rules: vec![data_quality::PartyQualityRule {
             rule_key: "display_name.minimum".to_owned(),
             severity: data_quality::QualitySeverity::Warning as i32,
-            evaluator: Some(data_quality::party_quality_rule::Evaluator::DisplayNameMinUtf8Bytes(
-                data_quality::PartyDisplayNameMinUtf8BytesEvaluator {
-                    minimum_utf8_bytes: 4,
-                },
-            )),
+            evaluator: Some(
+                data_quality::party_quality_rule::Evaluator::DisplayNameMinUtf8Bytes(
+                    data_quality::PartyDisplayNameMinUtf8BytesEvaluator {
+                        minimum_utf8_bytes: 4,
+                    },
+                ),
+            ),
             title: "Display name length".to_owned(),
             remediation_guidance: "Replace the display name with a meaningful customer name."
                 .to_owned(),
