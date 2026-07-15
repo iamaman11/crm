@@ -43,39 +43,6 @@ jobs:
       - name: Synchronize generated client contract hashes
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
-      - name: Apply verified export disclosure composition patch
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def replace_exact(path: Path, old: str, new: str) -> None:
-              text = path.read_text()
-              if old not in text:
-                  raise SystemExit(f"expected patch anchor missing in {path}: {old[:120]!r}")
-              path.write_text(text.replace(old, new, 1))
-
-          query_lib = Path("crates/crm-customer-data-operations-query-adapter/src/lib.rs")
-          replace_exact(query_lib, "mod export_query;\n", "mod artifact_download;\npub use artifact_download::*;\n\nmod export_query;\n")
-
-          service = Path("crates/crm-application-runtime/src/export_artifact_download.rs")
-          replace_exact(service, "use crm_query_runtime::{QueryAuthorizer, QueryRequest};\nuse std::collections::BTreeMap;\n", "use crm_query_runtime::{QueryAuthorizer, QueryRequest};\nuse sha2::{Digest, Sha256};\nuse std::collections::BTreeMap;\n")
-          replace_exact(service, "        || metadata.retention_policy_id.as_str() != evidence.retention_policy_id\n", "        || metadata.retention_policy_id.as_str() != evidence.retention_policy_id.as_str()\n")
-          replace_exact(service, "    let category = match error {\n", "    let category = match &error {\n")
-          replace_exact(service, "        audit_record_id: format!(\"export-artifact-disclosure-{}\", request.context.request_id),\n", "        audit_record_id: format!(\n            \"export-artifact-disclosure-{}\",\n            hex(&Sha256::digest(request.context.request_id.as_str().as_bytes())),\n        ),\n")
-
-          runtime = Path("crates/crm-application-runtime/src/runtime.rs")
-          replace_exact(runtime, "    GovernedPartyExportSelectionSource, ProcessIdentitySource, SystemClock,\n", "    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService, ProcessIdentitySource,\n    SystemClock,\n")
-          replace_exact(runtime, "    PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,\n    PostgresTransactionalAggregateExecutor,\n", "    PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,\n    PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,\n")
-          replace_exact(runtime, "use crm_customer_data_operations_query_adapter::{\n    CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,\n};\n", "use crm_customer_data_operations_query_adapter::{\n    CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,\n    PartyExportArtifactDownloadResolver, artifact_download_capability_definition,\n};\n")
-          replace_exact(runtime, "    pub import_execution_worker: Arc<PartyImportExecutionWorker>,\n    pub export_selection_worker: Arc<PartyExportSelectionWorker>,\n", "    pub import_execution_worker: Arc<PartyImportExecutionWorker>,\n    pub export_selection_worker: Arc<PartyExportSelectionWorker>,\n    pub export_artifact_download: Arc<PartyExportArtifactDownloadService>,\n")
-          replace_exact(runtime, "        let internal_export_selection_definitions =\n            internal_export_selection_capability_definitions()\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let import_execution_worker_actor_id =\n", "        let internal_export_selection_definitions =\n            internal_export_selection_capability_definitions()\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let artifact_download_definition = artifact_download_capability_definition()\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let import_execution_worker_actor_id =\n")
-          replace_exact(runtime, "                &query_definitions,\n                &internal_export_selection_definitions,\n                &export_selection_worker_actor_id,\n", "                &query_definitions,\n                &artifact_download_definition,\n                &internal_export_selection_definitions,\n                &export_selection_worker_actor_id,\n")
-          replace_exact(runtime, "        let cursor_key: [u8; 32] = config.cursor_signing_key[..32]\n", "        let artifact_download_resolver = Arc::new(PartyExportArtifactDownloadResolver::new(\n            store.clone(),\n            visibility_authorizer.clone(),\n        ));\n        let cursor_key: [u8; 32] = config.cursor_signing_key[..32]\n")
-          replace_exact(runtime, "        let query_ingress = QueryIngress::new(\n            authenticator,\n            QueryContextResolver::new(Arc::clone(&clock), random, timeout_policy)\n                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n            query_gateway,\n        );\n", "        let query_context_resolver = QueryContextResolver::new(\n            Arc::clone(&clock),\n            Arc::clone(&random),\n            timeout_policy,\n        )\n        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n        let export_artifact_download = Arc::new(\n            PartyExportArtifactDownloadService::new(\n                authenticator.clone(),\n                query_context_resolver.clone(),\n                authorizer.clone(),\n                artifact_download_resolver,\n                Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),\n                store.clone(),\n            )\n            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,\n        );\n        let query_ingress = QueryIngress::new(authenticator, query_context_resolver, query_gateway);\n")
-          replace_exact(runtime, "            import_execution_worker,\n            export_selection_worker,\n            readiness: Arc::new(AtomicBool::new(false)),\n", "            import_execution_worker,\n            export_selection_worker,\n            export_artifact_download,\n            readiness: Arc::new(AtomicBool::new(false)),\n")
-          replace_exact(runtime, "    let router = Router::new()\n", "    let download_router = crate::export_artifact_download_router(Arc::clone(\n        &components.export_artifact_download,\n    ));\n    let router = Router::new()\n")
-          replace_exact(runtime, "        .with_state(HttpState { components });\n", "        .with_state(HttpState { components })\n        .merge(download_router);\n")
-          PY
       - name: Commit generated Rust and contract artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
