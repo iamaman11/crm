@@ -14,7 +14,19 @@ fn rule_set_publication_remains_exact_confidential_idempotent_surface() {
         PUBLISH_PARTY_RULE_SET_CAPABILITY
     );
     assert_eq!(
+        definition.authorization_policy_id,
+        PUBLISH_PARTY_RULE_SET_CAPABILITY
+    );
+    assert_eq!(
         definition.input_contract.allowed_data_classes,
+        vec![DataClass::Confidential]
+    );
+    assert_eq!(
+        definition
+            .output_contract
+            .as_ref()
+            .unwrap()
+            .allowed_data_classes,
         vec![DataClass::Confidential]
     );
     assert_eq!(definition.risk, CapabilityRisk::Medium);
