@@ -31,7 +31,7 @@ Current Phase 8A execution baseline:
 - **8A.5 — Complete:** explainable Identity Resolution duplicate candidates and reviewer decisions (#114 / PR #115).
 - **8A.6 — Complete:** approval-required reversible merge/unmerge, immutable lineage, survivorship provenance and canonical Party resolution (#116 / PR #119; merge `d5cb4502ad0c49158e0789d8749dc09160da7895`).
 - **8A.7 — Complete:** governed immutable source artifacts, server-side import parsing/validation, resumable Party import execution, retry recovery and crash/restart process proof (#120 / PR #121; merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`).
-- **8A.8 — In progress:** Customer Export Jobs, Artifacts and Reconciliation Evidence (#123).
+- **8A.8 — In progress:** Customer Export Jobs, Artifacts and Reconciliation Evidence (#123 / PR #130).
 - **8A.9 — Planned:** Customer Data Quality Rules, Completeness and Stewardship (#124).
 - **8A.10 — Planned:** Governed Customer Enrichment and Provenance (#125).
 - **8A.11 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold (#126).
@@ -44,7 +44,7 @@ A later packet may have architecture preparation, but it is not the active produ
 
 ## Active packet — Phase 8A.8
 
-Issue #123 is the single active customer-master production packet.
+Issue #123 and draft PR #130 form the single active customer-master production packet.
 
 The export packet must deliver a governed derived-data path rather than a generic database dump surface. Its required production boundary includes:
 
@@ -145,10 +145,10 @@ See `DELIVERY_GOVERNANCE.md` for the normative control rules.
 
 ## Immediate next actions
 
-1. Synchronize merged 8A.7 status across roadmap, Phase 8 plan, module catalog and issues.
-2. Keep #123 as the single active Phase 8A production packet.
-3. Freeze the 8A.8 ownership, snapshot, artifact and reconciliation contract before broad implementation.
-4. Deliver 8A.8 in coherent vertical slices through contracts, domain, persistence, runtime composition and fresh-process acceptance.
-5. Continue sequentially through #124, #125 and #126.
-6. Close Phase 8A only after its full acceptance baseline is merged.
-7. Begin Phase 8B / #29 from the stable completed customer-master baseline while enterprise/security/operational hardening continues continuously.
+1. Keep #123 / PR #130 as the single active Phase 8A production packet.
+2. Enforce the frozen 8A.8 ownership, immutable selection-boundary, artifact-finalization and reconciliation contract in production code.
+3. Complete governed Party selection/serialization composition, crash-safe staged artifact execution and bulk-export security policy.
+4. Add persistence/migration/RLS coverage and fresh-PostgreSQL real `crm-api` process acceptance.
+5. Reach one unchanged exact candidate SHA with every applicable workflow green before leaving draft state.
+6. Continue sequentially through #124, #125 and #126.
+7. Close Phase 8A only after its full acceptance baseline is merged, then begin Phase 8B / #29 from the stable completed customer-master baseline while enterprise/security/operational hardening continues continuously.
