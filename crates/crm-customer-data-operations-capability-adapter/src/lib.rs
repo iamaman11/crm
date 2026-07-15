@@ -16,10 +16,12 @@
 
 mod export_boundary_planner;
 mod export_planner;
+mod export_selection_planner;
 mod planner;
 
 pub use export_boundary_planner::*;
 pub use export_planner::*;
+pub use export_selection_planner::*;
 pub use planner::*;
 
 use crm_capability_plan_support as support;
