@@ -1,9 +1,9 @@
 use crate::{
     ApplicationAggregatePlannerRouter, ApplicationCapabilityExecutorRouter, ApplicationConfig,
     ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,
-    ProcessIdentitySource, SystemClock, application_capability_catalog,
-    application_mutation_definitions, application_query_capability_catalog,
-    application_query_definitions,
+    GovernedPartyExportSelectionSource, ProcessIdentitySource, SystemClock,
+    application_capability_catalog, application_mutation_definitions,
+    application_query_capability_catalog, application_query_definitions,
 };
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -48,10 +48,13 @@ use crm_customer_data_operations_capability_adapter::{
     IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
     IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
     MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+    internal_export_selection_capability_definitions,
 };
 use crm_customer_data_operations_execution_composition::{
-    IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyImportExecutionCoordinator, PartyImportExecutionWorker,
+    EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyExportSelectionWorker,
+    PartyImportExecutionCoordinator, PartyImportExecutionWorker,
     PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,
+    PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink,
     internal_capability_definitions,
 };
 use crm_customer_data_operations_query_adapter::{
@@ -75,7 +78,9 @@ use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
     RECORD_TYPE as PARTY_RECORD_TYPE,
 };
-use crm_parties_query_adapter::PartyQueryAdapter;
+use crm_parties_query_adapter::{
+    LIST_CAPABILITY as PARTY_LIST_QUERY_CAPABILITY, PartyQueryAdapter,
+};
 use crm_party_relationships_capability_adapter::{
     MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID, RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
 };
@@ -127,6 +132,7 @@ pub struct ApplicationComponents {
     pub customer_360_worker: Arc<Customer360ProjectionWorker>,
     pub search_worker: Arc<GlobalSearchWorker>,
     pub import_execution_worker: Arc<PartyImportExecutionWorker>,
+    pub export_selection_worker: Arc<PartyExportSelectionWorker>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -214,8 +220,14 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let internal_export_selection_definitions =
+            internal_export_selection_capability_definitions()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let import_execution_worker_actor_id =
             ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_selection_worker_actor_id =
+            ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         if config.bootstrap_allow_phase6 {
             bootstrap_application_access(
@@ -233,6 +245,15 @@ impl ApplicationRuntime {
                 &mutation_definitions,
                 &internal_import_outcome_definitions,
                 &import_execution_worker_actor_id,
+            )?;
+            bootstrap_export_selection_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &query_definitions,
+                &internal_export_selection_definitions,
+                &export_selection_worker_actor_id,
             )?;
         }
 
