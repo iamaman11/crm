@@ -88,7 +88,10 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     // commit one outcome/checkpoint without duplicate bytes.
     let first_job_id = unique_id("export-chunk-replay-job");
     let created_first = create_export_job(&mut grpc, &export_create, &first_job_id).await;
-    assert_eq!(created_first.status, cdo::PartyExportJobStatus::Created as i32);
+    assert_eq!(
+        created_first.status,
+        cdo::PartyExportJobStatus::Created as i32
+    );
     let selecting_first = start_export(
         &mut grpc,
         &export_start,
@@ -151,7 +154,10 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     .await;
     assert_completed_single_party_export(&completed_first, &first_file_id);
     assert_eq!(artifact_chunk_count(&admin, &first_file_id).await, 2);
-    assert_eq!(distinct_artifact_chunk_count(&admin, &first_file_id).await, 2);
+    assert_eq!(
+        distinct_artifact_chunk_count(&admin, &first_file_id).await,
+        2
+    );
     assert_eq!(outcome_record_count(&admin).await, 1);
     assert_eq!(completed_event_count(&admin).await, 1);
 
@@ -215,7 +221,10 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     assert_eq!(completed_event_count(&admin).await, 2);
 
     send_sigint(&child).await;
-    let status = child.wait().await.expect("wait for export acceptance crm-api");
+    let status = child
+        .wait()
+        .await
+        .expect("wait for export acceptance crm-api");
     assert!(status.success(), "crm-api exited unsuccessfully: {status}");
 }
 
@@ -267,7 +276,8 @@ async fn create_export_job(
                     profile: Some(cdo::PartyExportProfile {
                         profile_version: cdo::PartyExportProfileVersion::V1 as i32,
                         format: cdo::PartyExportFormat::CsvUtf8 as i32,
-                        canonicalization_version: cdo::PartyExportCanonicalizationVersion::V1 as i32,
+                        canonicalization_version: cdo::PartyExportCanonicalizationVersion::V1
+                            as i32,
                         fields: vec![
                             cdo::PartyExportField::PartyId as i32,
                             cdo::PartyExportField::Kind as i32,
@@ -347,10 +357,11 @@ async fn wait_for_export_status(
         )
         .await
         .expect("query Party export job through production gateway");
-        let job = cdo::GetPartyExportJobResponse::decode(response.output.unwrap().payload.as_slice())
-            .expect("decode Party export get response")
-            .export_job
-            .expect("queried Party export job");
+        let job =
+            cdo::GetPartyExportJobResponse::decode(response.output.unwrap().payload.as_slice())
+                .expect("decode Party export get response")
+                .export_job
+                .expect("queried Party export job");
         if job.status == expected_status as i32 {
             return job;
         }
@@ -398,10 +409,7 @@ fn expected_artifact_file_id(job_id: &str, job: &cdo::PartyExportJob) -> String 
     let mut hasher = Sha256::new();
     hasher.update(ARTIFACT_ID_DOMAIN);
     hash_part(&mut hasher, job_id.as_bytes());
-    hash_part(
-        &mut hasher,
-        job.export_specification_version_id.as_bytes(),
-    );
+    hash_part(&mut hasher, job.export_specification_version_id.as_bytes());
     hash_part(&mut hasher, manifest_sha256.as_bytes());
     format!("cdo-export-artifact-{}", hex(&hasher.finalize()))
 }
@@ -807,12 +815,17 @@ async fn connect_grpc(
 }
 
 async fn force_kill(child: &mut Child) {
-    child.kill().await.expect("force-kill export acceptance crm-api");
+    child
+        .kill()
+        .await
+        .expect("force-kill export acceptance crm-api");
     let _ = child.wait().await;
 }
 
 async fn send_sigint(child: &Child) {
-    let pid = child.id().expect("running export acceptance crm-api has a PID");
+    let pid = child
+        .id()
+        .expect("running export acceptance crm-api has a PID");
     let status = Command::new("kill")
         .arg("-INT")
         .arg(pid.to_string())
