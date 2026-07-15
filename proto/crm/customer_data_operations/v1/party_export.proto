@@ -237,6 +237,13 @@ message InternalStagePartyExportExecutionResponse {
   uint32 manifest_position = 1;
 }
 
+// Durable outbox evidence that one exact execution position was staged before artifact publication.
+// The event intentionally omits staged CSV bytes and exposes only the export-owned job/position identity.
+message PartyExportExecutionStagedEvent {
+  ExportJobRef export_job_ref = 1;
+  uint32 manifest_position = 2;
+}
+
 message InternalPartyExportEmittedOutcome {
   uint32 artifact_chunk_index = 1;
   bytes chunk_sha256 = 2;
