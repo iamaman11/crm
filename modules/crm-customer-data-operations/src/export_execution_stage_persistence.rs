@@ -1,5 +1,6 @@
 use crate::{
-    ExportJobId, PartyExportExclusionReason, PartyExportExecutionStage, PartyExportExecutionStageKind,
+    ExportJobId, PartyExportExclusionReason, PartyExportExecutionStage,
+    PartyExportExecutionStageKind,
 };
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
@@ -66,11 +67,15 @@ pub fn decode_export_execution_stage_state(
                 _ => return Err(persisted_error("execution stage row hash is inconsistent")),
             }
         }
-        "excluded_not_visible" => decode_excluded(state, job_id, PartyExportExclusionReason::NotVisible)?,
+        "excluded_not_visible" => {
+            decode_excluded(state, job_id, PartyExportExclusionReason::NotVisible)?
+        }
         "excluded_version_changed" => {
             decode_excluded(state, job_id, PartyExportExclusionReason::VersionChanged)?
         }
-        "excluded_unavailable" => decode_excluded(state, job_id, PartyExportExclusionReason::Unavailable)?,
+        "excluded_unavailable" => {
+            decode_excluded(state, job_id, PartyExportExclusionReason::Unavailable)?
+        }
         _ => return Err(persisted_error("unsupported execution stage kind")),
     };
     if stage.stage_id().as_str() != expected_stage_id {
@@ -156,7 +161,9 @@ impl From<&PartyExportExecutionStage> for StageStateV1 {
 
 fn validate_size(bytes: &[u8]) -> Result<(), SdkError> {
     if bytes.len() as u64 > EXPORT_EXECUTION_STAGE_STATE_MAXIMUM_BYTES {
-        return Err(persisted_error("execution stage state exceeds maximum size"));
+        return Err(persisted_error(
+            "execution stage state exceeds maximum size",
+        ));
     }
     Ok(())
 }
@@ -203,7 +210,10 @@ mod tests {
             let bytes = encode_export_execution_stage_state(&stage).unwrap();
             let decoded = decode_export_execution_stage_state(&bytes).unwrap();
             assert_eq!(decoded, stage);
-            assert_eq!(encode_export_execution_stage_state(&decoded).unwrap(), bytes);
+            assert_eq!(
+                encode_export_execution_stage_state(&decoded).unwrap(),
+                bytes
+            );
         }
     }
 

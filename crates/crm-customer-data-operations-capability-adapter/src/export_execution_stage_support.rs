@@ -1,9 +1,10 @@
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_customer_data_operations::{
     EXPORT_EXECUTION_STAGE_STATE_MAXIMUM_BYTES, EXPORT_EXECUTION_STAGE_STATE_RETENTION_POLICY_ID,
-    EXPORT_EXECUTION_STAGE_STATE_SCHEMA_ID, EXPORT_EXECUTION_STAGE_STATE_SCHEMA_VERSION, ExportJobId,
-    PartyExportExecutionStage, PartyExportExecutionStageId, decode_export_execution_stage_state,
-    encode_export_execution_stage_state, export_execution_stage_state_descriptor_hash,
+    EXPORT_EXECUTION_STAGE_STATE_SCHEMA_ID, EXPORT_EXECUTION_STAGE_STATE_SCHEMA_VERSION,
+    ExportJobId, PartyExportExecutionStage, PartyExportExecutionStageId,
+    decode_export_execution_stage_state, encode_export_execution_stage_state,
+    export_execution_stage_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, RecordSnapshot, SdkError};
 
@@ -53,11 +54,12 @@ pub fn export_execution_stage_record_ref_for_job_position(
 pub fn export_execution_stage_from_snapshot(
     snapshot: &RecordSnapshot,
 ) -> Result<PartyExportExecutionStage, SdkError> {
-    let stage = decode_export_execution_stage_state(support::persisted_json_bytes_with_data_class(
-        snapshot,
-        export_execution_stage_persisted_contract(),
-        DataClass::Personal,
-    )?)?;
+    let stage =
+        decode_export_execution_stage_state(support::persisted_json_bytes_with_data_class(
+            snapshot,
+            export_execution_stage_persisted_contract(),
+            DataClass::Personal,
+        )?)?;
     let expected = export_execution_stage_record_ref(&stage)?;
     if snapshot.reference != expected {
         return Err(support::stored_data_error(
@@ -83,7 +85,10 @@ mod tests {
         .unwrap();
         let reference = export_execution_stage_record_ref(&stage).unwrap();
         let payload = export_execution_stage_persisted_payload(&stage).unwrap();
-        assert_eq!(reference.record_type.as_str(), EXPORT_EXECUTION_STAGE_RECORD_TYPE);
+        assert_eq!(
+            reference.record_type.as_str(),
+            EXPORT_EXECUTION_STAGE_RECORD_TYPE
+        );
         assert_eq!(payload.data_class, DataClass::Personal);
         assert_eq!(
             export_execution_stage_persisted_contract().schema_id,

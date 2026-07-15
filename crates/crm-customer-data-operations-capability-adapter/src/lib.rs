@@ -15,12 +15,16 @@
 //! not leak into public mutation catalogs.
 
 mod export_boundary_planner;
+mod export_execution_outcome_support;
+mod export_execution_planner;
 mod export_execution_stage_support;
 mod export_planner;
 mod export_selection_planner;
 mod planner;
 
 pub use export_boundary_planner::*;
+pub use export_execution_outcome_support::*;
+pub use export_execution_planner::*;
 pub use export_execution_stage_support::*;
 pub use export_planner::*;
 pub use export_selection_planner::*;

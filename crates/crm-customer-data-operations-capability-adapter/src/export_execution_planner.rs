@@ -493,9 +493,8 @@ fn ensure_definition(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
 ) -> Result<(), SdkError> {
-    let expected = internal_export_execution_capability_definition(
-        definition.capability_id.as_str(),
-    )?;
+    let expected =
+        internal_export_execution_capability_definition(definition.capability_id.as_str())?;
     if definition != &expected
         || request.context.module_id != definition.owner_module_id
         || request.context.execution.capability_id != definition.capability_id

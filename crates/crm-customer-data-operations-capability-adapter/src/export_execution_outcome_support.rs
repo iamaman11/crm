@@ -1,9 +1,10 @@
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_customer_data_operations::{
-    EXPORT_EXECUTION_OUTCOME_STATE_MAXIMUM_BYTES, EXPORT_EXECUTION_OUTCOME_STATE_RETENTION_POLICY_ID,
-    EXPORT_EXECUTION_OUTCOME_STATE_SCHEMA_ID, EXPORT_EXECUTION_OUTCOME_STATE_SCHEMA_VERSION,
-    PartyExportExecutionOutcome, decode_export_execution_outcome_state,
-    encode_export_execution_outcome_state, export_execution_outcome_state_descriptor_hash,
+    EXPORT_EXECUTION_OUTCOME_STATE_MAXIMUM_BYTES,
+    EXPORT_EXECUTION_OUTCOME_STATE_RETENTION_POLICY_ID, EXPORT_EXECUTION_OUTCOME_STATE_SCHEMA_ID,
+    EXPORT_EXECUTION_OUTCOME_STATE_SCHEMA_VERSION, PartyExportExecutionOutcome,
+    decode_export_execution_outcome_state, encode_export_execution_outcome_state,
+    export_execution_outcome_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, RecordSnapshot, SdkError};
 
@@ -45,13 +46,12 @@ pub fn export_execution_outcome_record_ref(
 pub fn export_execution_outcome_from_snapshot(
     snapshot: &RecordSnapshot,
 ) -> Result<PartyExportExecutionOutcome, SdkError> {
-    let outcome = decode_export_execution_outcome_state(
-        support::persisted_json_bytes_with_data_class(
+    let outcome =
+        decode_export_execution_outcome_state(support::persisted_json_bytes_with_data_class(
             snapshot,
             export_execution_outcome_persisted_contract(),
             DataClass::Personal,
-        )?,
-    )?;
+        )?)?;
     let expected = export_execution_outcome_record_ref(&outcome)?;
     if snapshot.reference != expected {
         return Err(support::stored_data_error(
@@ -80,7 +80,10 @@ mod tests {
         .unwrap();
         let reference = export_execution_outcome_record_ref(&outcome).unwrap();
         let payload = export_execution_outcome_persisted_payload(&outcome).unwrap();
-        assert_eq!(reference.record_type.as_str(), EXPORT_EXECUTION_OUTCOME_RECORD_TYPE);
+        assert_eq!(
+            reference.record_type.as_str(),
+            EXPORT_EXECUTION_OUTCOME_RECORD_TYPE
+        );
         assert_eq!(payload.data_class, DataClass::Personal);
     }
 }

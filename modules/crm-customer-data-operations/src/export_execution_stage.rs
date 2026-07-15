@@ -26,7 +26,12 @@ impl PartyExportExecutionStageId {
             hex_digest(hasher.finalize())
         ))
         .map(Self)
-        .map_err(|error| invalid("CUSTOMER_DATA_EXPORT_EXECUTION_STAGE_ID_INVALID", error.to_string()))
+        .map_err(|error| {
+            invalid(
+                "CUSTOMER_DATA_EXPORT_EXECUTION_STAGE_ID_INVALID",
+                error.to_string(),
+            )
+        })
     }
 
     pub fn as_str(&self) -> &str {
@@ -200,7 +205,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(stage.stage_id(), replay.stage_id());
-        assert!(matches!(stage.kind(), PartyExportExecutionStageKind::Emitted { .. }));
+        assert!(matches!(
+            stage.kind(),
+            PartyExportExecutionStageKind::Emitted { .. }
+        ));
     }
 
     #[test]
