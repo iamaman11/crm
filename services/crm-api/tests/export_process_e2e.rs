@@ -33,6 +33,7 @@ const APPROVAL_KEY: &str = "export-process-approval-signing-key-0123456789abcdef
 const PARTY_CREATE: &str = "parties.party.create";
 const EXPORT_CREATE: &str = "customer_data.export.party.create";
 const EXPORT_START: &str = "customer_data.export.party.execution.start";
+const EXPORT_CANCEL: &str = "customer_data.export.party.cancel";
 const EXPORT_GET: &str = "customer_data.export.party.get";
 const EXPORT_ARTIFACT_DOWNLOAD_CAPABILITY: &str = "customer_data.export.party.artifact.download";
 
@@ -74,6 +75,7 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     let party_create = mutation_definition(PARTY_CREATE);
     let export_create = mutation_definition(EXPORT_CREATE);
     let export_start = mutation_definition(EXPORT_START);
+    let export_cancel = mutation_definition(EXPORT_CANCEL);
     let export_get = query_definition(EXPORT_GET);
 
     let mut child = spawn_crm_api(&database_url, &http_addr, &grpc_addr);
@@ -136,6 +138,14 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     let first_file_id = expected_artifact_file_id(&first_job_id, &ready_first);
     wait_for_artifact_chunk_count(&admin, &first_file_id, 2).await;
     assert_eq!(outcome_record_count(&admin).await, 0);
+    assert_artifact_disclosure_rejected(
+        &http,
+        &http_addr,
+        &first_job_id,
+        reqwest::StatusCode::CONFLICT,
+        &admin,
+    )
+    .await;
 
     force_kill(&mut child).await;
     remove_outcome_delay_trigger(&admin).await;
@@ -221,6 +231,81 @@ async fn crm_api_process_recovers_both_party_export_execution_crash_windows() {
     assert_eq!(artifact_status(&admin, &second_file_id).await, "finalized");
     assert_eq!(completed_event_count(&admin).await, 2);
 
+    let cancelled_job_id = unique_id("export-cancelled-disclosure-job");
+    let created_cancelled = create_export_job(&mut grpc, &export_create, &cancelled_job_id).await;
+    let cancelled = cancel_export(
+        &mut grpc,
+        &export_cancel,
+        &cancelled_job_id,
+        resource_version(&created_cancelled),
+    )
+    .await;
+    assert_eq!(cancelled.status, cdo::PartyExportJobStatus::Cancelled as i32);
+    assert_artifact_disclosure_rejected(
+        &http,
+        &http_addr,
+        &cancelled_job_id,
+        reqwest::StatusCode::CONFLICT,
+        &admin,
+    )
+    .await;
+
+    let expired_job_id = unique_id("export-expired-disclosure-job");
+    let created_expired = create_export_job_with_policy(
+        &mut grpc,
+        &export_create,
+        &expired_job_id,
+        "expired",
+    )
+    .await;
+    let _selecting_expired = start_export(
+        &mut grpc,
+        &export_start,
+        &expired_job_id,
+        resource_version(&created_expired),
+        "export-expired-selection-start",
+    )
+    .await;
+    let ready_expired = wait_for_export_status(
+        &mut grpc,
+        &export_get,
+        &expired_job_id,
+        cdo::PartyExportJobStatus::Ready,
+    )
+    .await;
+    let _executing_expired = start_export(
+        &mut grpc,
+        &export_start,
+        &expired_job_id,
+        resource_version(&ready_expired),
+        "export-expired-execution-start",
+    )
+    .await;
+    let completed_expired = wait_for_export_status(
+        &mut grpc,
+        &export_get,
+        &expired_job_id,
+        cdo::PartyExportJobStatus::Completed,
+    )
+    .await;
+    assert_eq!(
+        completed_expired
+            .artifact
+            .as_ref()
+            .expect("expired export artifact evidence")
+            .retention_policy_id,
+        "expired"
+    );
+    sleep(Duration::from_millis(1_200)).await;
+    assert_artifact_disclosure_rejected(
+        &http,
+        &http_addr,
+        &expired_job_id,
+        reqwest::StatusCode::NOT_FOUND,
+        &admin,
+    )
+    .await;
+
     send_sigint(&child).await;
     let status = child
         .wait()
@@ -260,6 +345,15 @@ async fn create_export_job(
     definition: &CapabilityDefinition,
     job_id: &str,
 ) -> cdo::PartyExportJob {
+    create_export_job_with_policy(client, definition, job_id, "standard").await
+}
+
+async fn create_export_job_with_policy(
+    client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
+    definition: &CapabilityDefinition,
+    job_id: &str,
+    retention_policy_id: &str,
+) -> cdo::PartyExportJob {
     let response = mutate(
         client,
         definition,
@@ -285,7 +379,7 @@ async fn create_export_job(
                             cdo::PartyExportField::DisplayName as i32,
                             cdo::PartyExportField::ResourceVersion as i32,
                         ],
-                        retention_policy_id: "standard".to_owned(),
+                        retention_policy_id: retention_policy_id.to_owned(),
                     }),
                 }),
             },
@@ -300,6 +394,36 @@ async fn create_export_job(
         .expect("decode create Party export response")
         .export_job
         .expect("created Party export job")
+}
+
+async fn cancel_export(
+    client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
+    definition: &CapabilityDefinition,
+    job_id: &str,
+    expected_version: i64,
+) -> cdo::PartyExportJob {
+    let response = mutate(
+        client,
+        definition,
+        payload(
+            definition,
+            cdo::CancelPartyExportJobRequest {
+                export_job_ref: Some(cdo::ExportJobRef {
+                    export_job_id: job_id.to_owned(),
+                }),
+                expected_version,
+            },
+        ),
+        TENANT,
+        &unique_id("export-cancel-job"),
+        None,
+    )
+    .await
+    .expect("cancel Party export through production gateway");
+    cdo::CancelPartyExportJobResponse::decode(response.output.unwrap().payload.as_slice())
+        .expect("decode cancel Party export response")
+        .export_job
+        .expect("cancelled Party export job")
 }
 
 async fn start_export(
@@ -413,6 +537,28 @@ fn expected_artifact_file_id(job_id: &str, job: &cdo::PartyExportJob) -> String 
     hash_part(&mut hasher, job.export_specification_version_id.as_bytes());
     hash_part(&mut hasher, manifest_sha256.as_bytes());
     format!("cdo-export-artifact-{}", hex(&hasher.finalize()))
+}
+
+async fn assert_artifact_disclosure_rejected(
+    http: &reqwest::Client,
+    http_addr: &str,
+    job_id: &str,
+    expected_status: reqwest::StatusCode,
+    admin: &PgPool,
+) {
+    let audit_before = disclosure_audit_count(admin).await;
+    let response = http
+        .get(format!(
+            "http://{http_addr}/v1/customer-data/exports/{job_id}/artifact"
+        ))
+        .bearer_auth(TOKEN)
+        .header("x-tenant-id", TENANT)
+        .header("x-request-id", unique_id("export-artifact-rejection"))
+        .send()
+        .await
+        .expect("request rejected Party export artifact disclosure");
+    assert_eq!(response.status(), expected_status);
+    assert_eq!(disclosure_audit_count(admin).await, audit_before);
 }
 
 async fn verify_artifact_disclosure(
