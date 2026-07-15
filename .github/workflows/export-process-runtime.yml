@@ -107,6 +107,40 @@ jobs:
         shell: bash
         run: |
           set +e
+          {
+            echo "=== file_artifacts ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, file_id, owner_module_id, status,
+                     next_chunk_index, received_size_bytes, expected_size_bytes,
+                     encode(expected_sha256, 'hex') AS expected_sha256
+                FROM crm.file_artifacts
+               ORDER BY tenant_id, file_id;
+            "
+            echo "=== file_artifact_chunks ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, file_id, chunk_index, chunk_size_bytes,
+                     encode(chunk_sha256, 'hex') AS chunk_sha256
+                FROM crm.file_artifact_chunks
+               ORDER BY tenant_id, file_id, chunk_index;
+            "
+            echo "=== customer-data records ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, owner_module_id, record_type, record_id, version,
+                     created_at, updated_at, deleted_at
+                FROM crm.records
+               WHERE owner_module_id = 'crm.customer-data-operations'
+               ORDER BY tenant_id, record_type, record_id;
+            "
+            echo "=== export outbox events ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, event_type, aggregate_type, aggregate_id,
+                     aggregate_version, occurred_at
+                FROM crm.outbox_events
+               WHERE event_type LIKE 'customer_data.export.%'
+               ORDER BY tenant_id, occurred_at, aggregate_id;
+            "
+          } > database/export-process-runtime-state.log 2>&1
+
           postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
           if [ -n "${postgres_container}" ]; then
             docker logs "${postgres_container}" > database/export-process-runtime-postgres.log 2>&1
@@ -121,6 +155,7 @@ jobs:
           name: export-process-runtime-diagnostics
           path: |
             database/export-process-runtime.log
+            database/export-process-runtime-state.log
             database/export-process-runtime-postgres.log
             services/crm-api/tests/export_process_e2e.rs
             database/tests/0013_customer_data_export_adapter.sql
