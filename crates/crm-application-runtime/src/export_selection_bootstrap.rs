@@ -29,6 +29,7 @@ pub(crate) fn bootstrap_export_selection_worker_access(
     authorization_store: &LiveAuthorizationStore,
     visibility_store: &LiveQueryVisibilityStore,
     query_definitions: &[CapabilityDefinition],
+    artifact_download_definition: &CapabilityDefinition,
     internal_definitions: &[CapabilityDefinition],
     worker_actor_id: &ActorId,
 ) -> Result<(), ApplicationRuntimeError> {
@@ -59,6 +60,13 @@ pub(crate) fn bootstrap_export_selection_worker_access(
         LIST_EXPORT_JOBS_CAPABILITY,
         "Party export list",
     )?;
+    if artifact_download_definition.owner_module_id.as_str() != CUSTOMER_DATA_OPERATIONS_MODULE_ID
+        || artifact_download_definition.mutation
+    {
+        return Err(ApplicationRuntimeError::Assembly(
+            "Party export artifact disclosure capability is invalid".to_owned(),
+        ));
+    }
     let execution_definitions = internal_export_execution_capability_definitions()
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
     let execution_actor_id = ActorId::try_new(EXPORT_EXECUTION_WORKER_ACTOR_ID)
@@ -98,6 +106,24 @@ pub(crate) fn bootstrap_export_selection_worker_access(
             PARTIES_MODULE_ID,
             PARTY_RECORD_TYPE,
             ["kind", "display_name"],
+            expires_at,
+        )?;
+
+        grant_capabilities(
+            authorization_store,
+            tenant_id,
+            &config.actor_id,
+            std::iter::once(artifact_download_definition),
+            expires_at,
+        )?;
+        grant_visibility(
+            visibility_store,
+            tenant_id,
+            &config.actor_id,
+            artifact_download_definition,
+            CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+            EXPORT_JOB_RECORD_TYPE,
+            ["artifact"],
             expires_at,
         )?;
 
