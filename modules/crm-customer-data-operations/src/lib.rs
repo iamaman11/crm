@@ -23,6 +23,7 @@
 pub mod domain;
 pub mod execution;
 pub mod export;
+pub mod export_csv;
 pub mod export_persistence;
 pub mod export_selection;
 pub mod export_selection_persistence;
@@ -34,6 +35,7 @@ pub mod validation;
 pub use domain::*;
 pub use execution::*;
 pub use export::*;
+pub use export_csv::*;
 pub use export_persistence::*;
 pub use export_selection::*;
 pub use export_selection_persistence::*;
