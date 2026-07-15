@@ -18,9 +18,12 @@ pub use export_planner::*;
 pub use planner::*;
 
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
+use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilityRisk};
+use crm_core_data::{
+    AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner,
+};
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, SdkError,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordSnapshot, SdkError,
 };
 
 pub const MODULE_ID: &str = "crm.customer-data-operations";
@@ -92,7 +95,7 @@ pub const PARTY_IMPORT_CANCELLED_EVENT_TYPE: &str = "customer_data.import.party.
 pub const PARTY_IMPORT_CANCELLED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyImportCancelledEvent";
 
-pub const MUTATION_CAPABILITY_IDS: [&str; 5] = [
+pub const IMPORT_MUTATION_CAPABILITY_IDS: [&str; 5] = [
     CREATE_PARTY_IMPORT_JOB_CAPABILITY,
     VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
     FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY,
@@ -100,8 +103,25 @@ pub const MUTATION_CAPABILITY_IDS: [&str; 5] = [
     CANCEL_PARTY_IMPORT_JOB_CAPABILITY,
 ];
 
+pub const MUTATION_CAPABILITY_IDS: [&str; 8] = [
+    CREATE_PARTY_IMPORT_JOB_CAPABILITY,
+    VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
+    FINALIZE_PARTY_IMPORT_VALIDATION_CAPABILITY,
+    START_PARTY_IMPORT_EXECUTION_CAPABILITY,
+    CANCEL_PARTY_IMPORT_JOB_CAPABILITY,
+    CREATE_PARTY_EXPORT_JOB_CAPABILITY,
+    START_PARTY_EXPORT_EXECUTION_CAPABILITY,
+    CANCEL_PARTY_EXPORT_JOB_CAPABILITY,
+];
+
 pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    MUTATION_CAPABILITY_IDS
+    let mut definitions = import_capability_definitions()?;
+    definitions.extend(export_capability_definitions()?);
+    Ok(definitions)
+}
+
+pub fn import_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    IMPORT_MUTATION_CAPABILITY_IDS
         .into_iter()
         .map(capability_definition)
         .collect()
@@ -165,6 +185,40 @@ pub fn capability_definition(capability_id: &str) -> Result<CapabilityDefinition
     })
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct CustomerDataOperationsCapabilityPlanner;
+
+impl TransactionalAggregatePlanner for CustomerDataOperationsCapabilityPlanner {
+    fn target(
+        &self,
+        definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+    ) -> Result<AggregateTarget, SdkError> {
+        if IMPORT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            CustomerDataImportCapabilityPlanner.target(definition, request)
+        } else if EXPORT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            PartyExportCapabilityPlanner.target(definition, request)
+        } else {
+            Err(routing_error())
+        }
+    }
+
+    fn plan(
+        &self,
+        definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+        current: Option<&RecordSnapshot>,
+    ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+        if IMPORT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            CustomerDataImportCapabilityPlanner.plan(definition, request, current)
+        } else if EXPORT_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            PartyExportCapabilityPlanner.plan(definition, request, current)
+        } else {
+            Err(routing_error())
+        }
+    }
+}
+
 fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
     value.map_err(|error| {
         configuration_error(
@@ -179,14 +233,23 @@ fn configuration_error(code: &'static str, safe_message: &'static str) -> SdkErr
     SdkError::new(code, ErrorCategory::Internal, false, safe_message)
 }
 
+fn routing_error() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_DATA_OPERATION_CAPABILITY_UNSUPPORTED",
+        ErrorCategory::Internal,
+        false,
+        "The customer-data operation capability is not configured.",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn publishes_exact_import_mutation_coordinates() {
+    fn publishes_exact_customer_data_mutation_coordinates() {
         let definitions = capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 5);
+        assert_eq!(definitions.len(), 8);
         for (definition, capability_id) in definitions.iter().zip(MUTATION_CAPABILITY_IDS) {
             assert_eq!(definition.capability_id.as_str(), capability_id);
             assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
@@ -203,10 +266,11 @@ mod tests {
             assert!(!definition.requires_approval);
         }
         assert_eq!(definitions[3].risk, CapabilityRisk::High);
+        assert_eq!(definitions[6].risk, CapabilityRisk::High);
     }
 
     #[test]
-    fn rejects_unknown_import_mutation_coordinate() {
+    fn import_definition_rejects_unknown_import_coordinate() {
         let error = capability_definition("customer_data.import.party.destroy").unwrap_err();
         assert_eq!(error.code, "CUSTOMER_DATA_IMPORT_CAPABILITY_UNSUPPORTED");
     }
