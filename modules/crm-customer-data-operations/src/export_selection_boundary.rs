@@ -9,7 +9,7 @@ use crate::{
     ExportJobId, ExportSpecificationVersionId, PartyExportSelectionItem,
     party_export_selection_manifest_sha256,
 };
-use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
+use crm_module_sdk::{RecordId, SdkError};
 use sha2::{Digest, Sha256};
 
 pub const PARTY_EXPORT_SELECTION_BOUNDARY_VERSION_V1: &str =
@@ -162,15 +162,9 @@ mod tests {
     use crate::{PartyExportSelectionItem, SelectedPartyId};
 
     fn specification_version(value: &str) -> ExportSpecificationVersionId {
-        // Selection-boundary code must accept only the already-validated deterministic
-        // specification identity. Tests obtain one through the public Party-export domain API.
         let specification = crate::PartyExportSpecification::try_new(
             crate::PartyExportScope::try_new(None, 10).unwrap(),
-            crate::PartyExportProfile::v1(
-                vec![crate::PartyExportField::PartyId],
-                value,
-            )
-            .unwrap(),
+            crate::PartyExportProfile::v1(vec![crate::PartyExportField::PartyId], value).unwrap(),
         )
         .unwrap();
         specification.version_id().clone()
