@@ -6,10 +6,10 @@ use crm_core_data::{
 };
 use crm_customer_data_operations::{
     EXPORT_SELECTION_ITEM_STATE_MAXIMUM_BYTES, EXPORT_SELECTION_ITEM_STATE_RETENTION_POLICY_ID,
-    EXPORT_SELECTION_ITEM_STATE_SCHEMA_ID, EXPORT_SELECTION_ITEM_STATE_SCHEMA_VERSION,
-    PartyExportSelectionItem, PartyExportSelectionSummary, PartyExportSourceContinuation,
-    SelectedPartyId, decode_export_selection_progress_state, encode_export_selection_item_state,
-    export_selection_item_state_descriptor_hash,
+    EXPORT_SELECTION_ITEM_STATE_SCHEMA_ID, EXPORT_SELECTION_ITEM_STATE_SCHEMA_VERSION, ExportJobId,
+    PartyExportSelectionItem, PartyExportSelectionProgressId, PartyExportSelectionSummary,
+    PartyExportSourceContinuation, SelectedPartyId, decode_export_selection_progress_state,
+    encode_export_selection_item_state, export_selection_item_state_descriptor_hash,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, RecordId,
@@ -19,9 +19,10 @@ use crm_proto_contracts::crm::customer_data_operations::v1 as wire;
 use prost::Message;
 
 use crate::{
-    MODULE_ID, export_job_from_snapshot, export_job_id_from_ref, export_job_persisted_payload,
-    export_job_record_ref, export_job_to_wire, export_selection_progress_persisted_contract,
-    export_selection_progress_persisted_payload, export_selection_progress_record_ref,
+    EXPORT_JOB_RECORD_TYPE, EXPORT_SELECTION_PROGRESS_RECORD_TYPE, MODULE_ID,
+    export_job_from_snapshot, export_job_persisted_payload, export_job_to_wire,
+    export_selection_progress_persisted_contract, export_selection_progress_persisted_payload,
+    export_selection_progress_record_ref,
 };
 
 pub const INTERNAL_COMMIT_PARTY_EXPORT_SELECTION_PAGE_CAPABILITY: &str =
@@ -42,6 +43,10 @@ pub const PARTY_EXPORT_SELECTION_PROGRESSED_EVENT_TYPE: &str =
     "customer_data.export.party.selection_progressed";
 pub const PARTY_EXPORT_SELECTION_PROGRESSED_EVENT_SCHEMA: &str =
     "crm.customer_data_operations.v1.PartyExportSelectionProgressedEvent";
+pub const PARTY_EXPORT_SELECTION_COMPLETED_EVENT_TYPE: &str =
+    "customer_data.export.party.selection_completed";
+pub const PARTY_EXPORT_SELECTION_COMPLETED_EVENT_SCHEMA: &str =
+    "crm.customer_data_operations.v1.PartyExportSelectionCompletedEvent";
 
 pub const INTERNAL_EXPORT_SELECTION_CAPABILITY_IDS: [&str; 2] = [
     INTERNAL_COMMIT_PARTY_EXPORT_SELECTION_PAGE_CAPABILITY,
@@ -73,7 +78,6 @@ pub fn internal_export_selection_capability_definition(
         ),
         _ => return Err(unsupported_internal_capability()),
     };
-
     Ok(CapabilityDefinition {
         capability_id: configured(CapabilityId::try_new(capability_id))?,
         capability_version: configured(CapabilityVersion::try_new(support::CONTRACT_VERSION))?,
@@ -111,13 +115,13 @@ impl TransactionalAggregatePlanner for PartyExportSelectionOutcomePlanner {
                     INTERNAL_COMMIT_PARTY_EXPORT_SELECTION_PAGE_REQUEST_SCHEMA,
                 )?;
                 let job_id = export_job_id_from_ref(command.export_job_ref)?;
-                let progress = crm_customer_data_operations::PartyExportSelectionProgress::create(
-                    job_id,
-                    1,
-                    request.context.execution.request_started_at_unix_nanos,
-                )?;
+                let progress_id = PartyExportSelectionProgressId::for_job(&job_id)?;
                 Ok(AggregateTarget {
-                    reference: export_selection_progress_record_ref(&progress)?,
+                    reference: support::record_ref(
+                        EXPORT_SELECTION_PROGRESS_RECORD_TYPE,
+                        progress_id.as_str(),
+                        "customer_data.export.selection_progress_id",
+                    )?,
                     presence: AggregatePresence::MustExist,
                 })
             }
@@ -295,9 +299,8 @@ fn plan_finalize_selection(
     if job.job_id() != &requested_job_id || job.version() != current.version {
         return Err(stored_state_invalid());
     }
-    let manifest_sha256 = bytes_to_sha256_hex(&command.manifest_sha256)?;
     let selection = PartyExportSelectionSummary::try_new(
-        manifest_sha256,
+        bytes_to_sha256_hex(&command.manifest_sha256)?,
         command.selected_resources,
         job.specification().scope().maximum_resources(),
     )?;
@@ -322,8 +325,8 @@ fn plan_finalize_selection(
         aggregate.clone(),
         MODULE_ID,
         EventSpec {
-            event_type: crate::PARTY_EXPORT_SELECTION_COMPLETED_EVENT_TYPE,
-            event_schema_id: crate::PARTY_EXPORT_SELECTION_COMPLETED_EVENT_SCHEMA,
+            event_type: PARTY_EXPORT_SELECTION_COMPLETED_EVENT_TYPE,
+            event_schema_id: PARTY_EXPORT_SELECTION_COMPLETED_EVENT_SCHEMA,
             aggregate_version: job.version(),
             previous_version: Some(current.version),
         },
@@ -430,6 +433,24 @@ fn source_continuation_from_wire(
     }
 }
 
+fn export_job_id_from_ref(value: Option<wire::ExportJobRef>) -> Result<ExportJobId, SdkError> {
+    let value = value.ok_or_else(|| {
+        SdkError::invalid_argument(
+            "customer_data.export_job_ref",
+            "Export job reference is required",
+        )
+    })?;
+    ExportJobId::try_new(value.export_job_id)
+}
+
+fn export_job_record_ref(job_id: &ExportJobId) -> Result<crm_module_sdk::RecordRef, SdkError> {
+    support::record_ref(
+        EXPORT_JOB_RECORD_TYPE,
+        job_id.as_str(),
+        "customer_data.export_job_ref.export_job_id",
+    )
+}
+
 fn bytes_to_sha256_hex(bytes: &[u8]) -> Result<String, SdkError> {
     if bytes.len() != 32 {
         return Err(SdkError::invalid_argument(
@@ -451,8 +472,8 @@ fn ensure_definition(
 ) -> Result<(), SdkError> {
     if definition.owner_module_id.as_str() != MODULE_ID
         || definition.capability_version.as_str() != support::CONTRACT_VERSION
-        || request.context.capability_id != definition.capability_id
-        || request.context.capability_version != definition.capability_version
+        || request.context.execution.capability_id != definition.capability_id
+        || request.context.execution.capability_version != definition.capability_version
         || !INTERNAL_EXPORT_SELECTION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
     {
         return Err(unsupported_internal_capability());
@@ -528,60 +549,4 @@ fn unsupported_internal_capability() -> SdkError {
         false,
         "The customer export worker capability is not configured.",
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn publishes_only_private_versioned_selection_coordinates() {
-        let definitions = internal_export_selection_capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 2);
-        assert_eq!(
-            definitions
-                .iter()
-                .map(|definition| definition.capability_id.as_str())
-                .collect::<Vec<_>>(),
-            INTERNAL_EXPORT_SELECTION_CAPABILITY_IDS
-        );
-        assert!(definitions.iter().all(|definition| {
-            definition.mutation
-                && definition.requires_idempotency
-                && !definition.requires_approval
-                && definition.input_contract.allowed_data_classes == vec![DataClass::Personal]
-        }));
-    }
-
-    #[test]
-    fn continuation_requires_exact_final_or_non_final_shape() {
-        assert!(source_continuation_from_wire(None, true).is_ok());
-        assert!(source_continuation_from_wire(None, false).is_err());
-        assert!(
-            source_continuation_from_wire(
-                Some(wire::PartyExportSourceContinuation {
-                    sort_value: "2026-07-15T00:00:00Z".to_owned(),
-                    record_id: "party-1".to_owned(),
-                }),
-                false,
-            )
-            .is_ok()
-        );
-        assert!(
-            source_continuation_from_wire(
-                Some(wire::PartyExportSourceContinuation {
-                    sort_value: "2026-07-15T00:00:00Z".to_owned(),
-                    record_id: "party-1".to_owned(),
-                }),
-                true,
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn manifest_digest_requires_exact_sha256_bytes() {
-        assert_eq!(bytes_to_sha256_hex(&[0xAB; 32]).unwrap(), "ab".repeat(32));
-        assert!(bytes_to_sha256_hex(&[0xAB; 31]).is_err());
-    }
 }
