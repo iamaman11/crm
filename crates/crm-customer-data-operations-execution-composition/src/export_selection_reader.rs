@@ -1,8 +1,8 @@
 use crm_capability_plan_support as support;
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_customer_data_operations::{
-    ExportJobId, PartyExportJob, PartyExportSelectionBoundary, PartyExportSelectionItem,
-    PartyExportSelectionItemId, PartyExportSelectionProgress, PartyExportSelectionProgressId,
+    PartyExportJob, PartyExportSelectionBoundary, PartyExportSelectionItem, PartyExportSelectionItemId,
+    PartyExportSelectionProgress, PartyExportSelectionProgressId,
     decode_export_selection_boundary_state, decode_export_selection_item_state,
     decode_export_selection_progress_state, prove_party_export_selection_finalization,
 };
@@ -63,6 +63,8 @@ impl PostgresPartyExportSelectionReader {
                     export_selection_boundary_persisted_contract(),
                     DataClass::Personal,
                 )?,
+                job.job_id(),
+                job.specification().version_id(),
             )?;
 
             let progress_id = PartyExportSelectionProgressId::for_job(job.job_id())?;
@@ -210,6 +212,7 @@ fn configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_customer_data_operations::ExportJobId;
 
     #[test]
     fn deterministic_progress_and_manifest_ids_are_job_bound() {
