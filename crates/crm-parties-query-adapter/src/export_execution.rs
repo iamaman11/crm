@@ -1,16 +1,14 @@
 use super::{GET_CAPABILITY, GET_REQUEST_SCHEMA, PartyQueryAdapter, party_record_type};
 use crm_capability_plan_support as support;
-use crm_core_data::{RecordGetQuery, RecordId};
+use crm_core_data::RecordGetQuery;
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ErrorCategory, ModuleId,
-    RequestId, SchemaVersion, SdkError, TenantId, TraceId,
+    RecordId, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
 };
 use crm_parties::PartyKind;
 use crm_parties_capability_adapter::{MODULE_ID, party_from_snapshot};
 use crm_proto_contracts::crm::{customer::v1 as customer, parties::v1 as wire};
-use crm_query_runtime::{
-    QueryExecutionContext, QueryRequest, QueryVisibilityAuthorizer, normalized_filter_hash,
-};
+use crm_query_runtime::{QueryExecutionContext, QueryRequest, normalized_filter_hash};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
