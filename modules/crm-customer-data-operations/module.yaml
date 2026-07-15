@@ -96,6 +96,7 @@ provides:
     - customer_data.import_row
     - customer_data.export_job
     - customer_data.export_selection_item
+    - customer_data.export_execution_outcome
   ui_extensions: []
 
 consumes:
@@ -114,12 +115,14 @@ storage:
     - customer_data.import_row
     - customer_data.export_job
     - customer_data.export_selection_item
+    - customer_data.export_execution_outcome
   private_state_namespaces:
     - crm.customer-data-operations.import_job
     - crm.customer-data-operations.import_row
     - crm.customer-data-operations.import_source_artifact
     - crm.customer-data-operations.export_job
     - crm.customer-data-operations.export_selection_item
+    - crm.customer-data-operations.export_execution_outcome
 
 security:
   data_classes:
@@ -139,3 +142,4 @@ lifecycle:
     - customer_data.import_row
     - customer_data.export_job
     - customer_data.export_selection_item
+    - customer_data.export_execution_outcome
