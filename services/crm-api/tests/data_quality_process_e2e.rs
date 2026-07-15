@@ -117,7 +117,10 @@ async fn crm_api_process_publishes_content_addressed_party_rule_sets_idempotentl
     let changed_version_id = rule_set_version_id(&changed);
     assert_ne!(changed_version_id, first_version_id);
     assert_eq!(rule_set_record_count(&admin).await, 2);
-    assert_eq!(rule_set_record_version(&admin, &changed_version_id).await, 1);
+    assert_eq!(
+        rule_set_record_version(&admin, &changed_version_id).await,
+        1
+    );
     assert_eq!(published_event_count(&admin).await, 2);
     assert_eq!(publication_audit_count(&admin).await, 2);
 
@@ -148,7 +151,11 @@ async fn publish_rule_set(
     )
     .await?;
     data_quality::PublishPartyRuleSetVersionResponse::decode(
-        response.output.expect("rule-set publication output").payload.as_slice(),
+        response
+            .output
+            .expect("rule-set publication output")
+            .payload
+            .as_slice(),
     )
     .map_err(|error| Status::internal(format!("decode Party rule-set response: {error}")))
 }
@@ -379,7 +386,10 @@ fn spawn_crm_api(database_url: &str, http_addr: &str, grpc_addr: &str) -> Child 
 async fn wait_until_ready(client: &reqwest::Client, child: &mut Child, http_addr: &str) {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if let Some(status) = child.try_wait().expect("poll Data Quality acceptance crm-api") {
+        if let Some(status) = child
+            .try_wait()
+            .expect("poll Data Quality acceptance crm-api")
+        {
             panic!("crm-api exited before Data Quality acceptance readiness: {status}");
         }
         if let Ok(response) = client
