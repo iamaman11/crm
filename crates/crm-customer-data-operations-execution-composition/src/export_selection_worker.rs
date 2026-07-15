@@ -1,32 +1,26 @@
 use crate::{PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink};
-use crm_capability_adapters::semantic_input_hash;
-use crm_capability_plan_support as support;
 use crm_core_data::{PostgresDataStore, RecordListQuery, RecordQueryContinuation, RecordQuerySort};
-use crm_customer_data_operations::{PartyExportJobStatus, PartyExportKindFilter};
+use crm_customer_data_operations::{
+    ExportJobId, PartyExportJobStatus, PartyExportKindFilter, PartyExportSourceContinuation,
+};
 use crm_customer_data_operations_capability_adapter::{
     EXPORT_JOB_RECORD_TYPE, MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
     export_job_from_snapshot,
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, Clock,
-    CorrelationId, DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
-    PortFuture, RecordId, RecordType, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
-};
-use crm_parties_capability_adapter::MODULE_ID as PARTIES_MODULE_ID;
-use crm_parties_query_adapter::{
-    LIST_CAPABILITY as PARTY_LIST_CAPABILITY, LIST_REQUEST_SCHEMA as PARTY_LIST_REQUEST_SCHEMA,
-    MAXIMUM_PARTY_EXPORT_SELECTION_PAGE_SIZE, PartyExportSelectionKind, PartyQueryAdapter,
+    CorrelationId, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PortFuture,
+    RecordId, RecordType, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
 };
 use crm_proto_contracts::crm::{
     customer::v1 as customer, customer_data_operations::v1 as export_wire,
-    parties::v1 as parties_wire,
 };
-use crm_query_runtime::{QueryExecutionContext, QueryRequest};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
 pub const DEFAULT_EXPORT_SELECTION_SCAN_PAGE_SIZE: u32 = 100;
+pub const MAXIMUM_EXPORT_SELECTION_SOURCE_PAGE_SIZE: u32 = 1_000;
 pub const EXPORT_SELECTION_WORKER_ACTOR_ID: &str = "crm-api-export-selection-worker";
 pub const EXPORT_SELECTION_WORKER_CAPABILITY_ID: &str =
     "customer_data.export.party.internal.selection_cycle";
@@ -36,6 +30,38 @@ const _: () = assert!(DEFAULT_EXPORT_SELECTION_SCAN_PAGE_SIZE > 0);
 const _: () = assert!(
     DEFAULT_EXPORT_SELECTION_SCAN_PAGE_SIZE <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE
 );
+const _: () = assert!(MAXIMUM_EXPORT_SELECTION_SOURCE_PAGE_SIZE > 0);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartyExportSelectionSourceCandidate {
+    pub party_id: RecordId,
+    pub resource_version: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartyExportSelectionSourcePage {
+    pub candidates: Vec<PartyExportSelectionSourceCandidate>,
+    pub next: Option<PartyExportSourceContinuation>,
+}
+
+/// Worker-private governed Party selection source.
+///
+/// The execution-composition crate intentionally knows nothing about the concrete Party query
+/// adapter. Production runtime composition supplies an implementation that re-enters the Party-owned
+/// governed query path with tenant/RLS isolation and live visibility checks.
+pub trait PartyExportSelectionSource: Send + Sync {
+    fn list_page<'a>(
+        &'a self,
+        tenant_id: &'a TenantId,
+        actor_id: &'a ActorId,
+        job_id: &'a ExportJobId,
+        selection_cutoff_unix_nanos: i64,
+        kind: Option<PartyExportKindFilter>,
+        page_size: u32,
+        after: Option<PartyExportSourceContinuation>,
+        request_started_at_unix_nanos: i64,
+    ) -> PortFuture<'a, Result<PartyExportSelectionSourcePage, SdkError>>;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportSelectionTenantCycle {
@@ -50,7 +76,7 @@ pub struct PartyExportSelectionWorker {
     store: PostgresDataStore,
     reader: Arc<PostgresPartyExportSelectionReader>,
     sink: Arc<PostgresPartyExportSelectionSink>,
-    parties: Arc<PartyQueryAdapter>,
+    source: Arc<dyn PartyExportSelectionSource>,
     clock: Arc<dyn Clock>,
     actor_id: ActorId,
     page_size: u32,
@@ -64,7 +90,7 @@ impl fmt::Debug for PartyExportSelectionWorker {
             .field("store", &self.store)
             .field("reader", &self.reader)
             .field("sink", &self.sink)
-            .field("parties", &"PartyQueryAdapter")
+            .field("source", &"dyn PartyExportSelectionSource")
             .field("clock", &"dyn Clock")
             .field("actor_id", &self.actor_id)
             .field("page_size", &self.page_size)
@@ -77,14 +103,14 @@ impl PartyExportSelectionWorker {
         store: PostgresDataStore,
         reader: Arc<PostgresPartyExportSelectionReader>,
         sink: Arc<PostgresPartyExportSelectionSink>,
-        parties: Arc<PartyQueryAdapter>,
+        source: Arc<dyn PartyExportSelectionSource>,
         clock: Arc<dyn Clock>,
     ) -> Result<Self, SdkError> {
         Self::try_with_page_size(
             store,
             reader,
             sink,
-            parties,
+            source,
             clock,
             ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID).map_err(configuration_error)?,
             DEFAULT_EXPORT_SELECTION_SCAN_PAGE_SIZE,
@@ -95,7 +121,7 @@ impl PartyExportSelectionWorker {
         store: PostgresDataStore,
         reader: Arc<PostgresPartyExportSelectionReader>,
         sink: Arc<PostgresPartyExportSelectionSink>,
-        parties: Arc<PartyQueryAdapter>,
+        source: Arc<dyn PartyExportSelectionSource>,
         clock: Arc<dyn Clock>,
         actor_id: ActorId,
         page_size: u32,
@@ -110,7 +136,7 @@ impl PartyExportSelectionWorker {
             store,
             reader,
             sink,
-            parties,
+            source,
             clock,
             actor_id,
             page_size,
@@ -197,35 +223,22 @@ impl PartyExportSelectionWorker {
                     .maximum_resources()
                     .checked_sub(selected_resources)
                     .ok_or_else(worker_state_unavailable)?;
-                let selection_page_size = remaining.min(MAXIMUM_PARTY_EXPORT_SELECTION_PAGE_SIZE);
+                let selection_page_size = remaining.min(MAXIMUM_EXPORT_SELECTION_SOURCE_PAGE_SIZE);
                 if selection_page_size == 0 {
                     return Err(worker_state_unavailable());
                 }
-                let query = party_selection_query(
-                    &tenant_id,
-                    &self.actor_id,
-                    &job,
-                    now_unix_nanos,
-                )?;
-                let after = evidence
-                    .progress
-                    .continuation()
-                    .map(|continuation| {
-                        Ok(RecordQueryContinuation {
-                            sort_value: continuation.sort_value().to_owned(),
-                            record_id: RecordId::try_new(continuation.record_id().as_str())
-                                .map_err(configuration_error)?,
-                        })
-                    })
-                    .transpose()?;
+
                 let result = self
-                    .parties
-                    .list_for_export_selection(
-                        &query,
+                    .source
+                    .list_page(
+                        &tenant_id,
+                        &self.actor_id,
+                        job.job_id(),
                         evidence.boundary.selection_cutoff_unix_nanos(),
-                        selection_kind(job.specification().scope().kind_filter()),
+                        job.specification().scope().kind_filter(),
                         selection_page_size,
-                        after,
+                        evidence.progress.continuation().cloned(),
+                        now_unix_nanos,
                     )
                     .await?;
                 let candidates = result
@@ -242,8 +255,8 @@ impl PartyExportSelectionWorker {
                     .collect();
                 let source_after = result.next.map(|continuation| {
                     export_wire::PartyExportSourceContinuation {
-                        sort_value: continuation.sort_value,
-                        record_id: continuation.record_id.as_str().to_owned(),
+                        sort_value: continuation.sort_value().to_owned(),
+                        record_id: continuation.record_id().as_str().to_owned(),
                     }
                 });
                 self.sink
@@ -265,62 +278,6 @@ impl PartyExportSelectionWorker {
                 has_more: next_cursor.is_some(),
             })
         })
-    }
-}
-
-fn party_selection_query(
-    tenant_id: &TenantId,
-    actor_id: &ActorId,
-    job: &crm_customer_data_operations::PartyExportJob,
-    now_unix_nanos: i64,
-) -> Result<QueryRequest, SdkError> {
-    let kind = match job.specification().scope().kind_filter() {
-        None => None,
-        Some(PartyExportKindFilter::Person) => Some(parties_wire::PartyKind::Person as i32),
-        Some(PartyExportKindFilter::Organization) => {
-            Some(parties_wire::PartyKind::Organization as i32)
-        }
-    };
-    let input = support::protobuf_payload(
-        PARTIES_MODULE_ID,
-        PARTY_LIST_REQUEST_SCHEMA,
-        DataClass::Personal,
-        &parties_wire::ListPartiesRequest {
-            page: None,
-            kind,
-            sort: parties_wire::PartySort::Unspecified as i32,
-        },
-    )?;
-    let input_hash = semantic_input_hash(&input);
-    Ok(QueryRequest {
-        owner_module_id: ModuleId::try_new(PARTIES_MODULE_ID).map_err(configuration_error)?,
-        context: QueryExecutionContext {
-            tenant_id: tenant_id.clone(),
-            actor_id: actor_id.clone(),
-            request_id: RequestId::try_new(job.job_id().as_str()).map_err(configuration_error)?,
-            correlation_id: CorrelationId::try_new(job.job_id().as_str())
-                .map_err(configuration_error)?,
-            trace_id: TraceId::try_new(job.job_id().as_str()).map_err(configuration_error)?,
-            capability_id: CapabilityId::try_new(PARTY_LIST_CAPABILITY)
-                .map_err(configuration_error)?,
-            capability_version: CapabilityVersion::try_new(
-                EXPORT_SELECTION_WORKER_CAPABILITY_VERSION,
-            )
-            .map_err(configuration_error)?,
-            schema_version: SchemaVersion::try_new(EXPORT_SELECTION_WORKER_CAPABILITY_VERSION)
-                .map_err(configuration_error)?,
-            request_started_at_unix_nanos: now_unix_nanos,
-        },
-        input,
-        input_hash,
-    })
-}
-
-fn selection_kind(filter: Option<PartyExportKindFilter>) -> Option<PartyExportSelectionKind> {
-    match filter {
-        None => None,
-        Some(PartyExportKindFilter::Person) => Some(PartyExportSelectionKind::Person),
-        Some(PartyExportKindFilter::Organization) => Some(PartyExportSelectionKind::Organization),
     }
 }
 
@@ -400,15 +357,11 @@ mod tests {
     }
 
     #[test]
-    fn kind_mapping_is_exact() {
-        assert_eq!(selection_kind(None), None);
-        assert_eq!(
-            selection_kind(Some(PartyExportKindFilter::Person)),
-            Some(PartyExportSelectionKind::Person)
-        );
-        assert_eq!(
-            selection_kind(Some(PartyExportKindFilter::Organization)),
-            Some(PartyExportSelectionKind::Organization)
+    fn source_page_limit_is_bounded_by_core_query_capacity() {
+        assert!(MAXIMUM_EXPORT_SELECTION_SOURCE_PAGE_SIZE > 0);
+        assert!(
+            MAXIMUM_EXPORT_SELECTION_SOURCE_PAGE_SIZE
+                <= crm_core_data::MAXIMUM_RECORD_QUERY_PAGE_SIZE
         );
     }
 }
