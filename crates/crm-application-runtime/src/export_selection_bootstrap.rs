@@ -3,8 +3,14 @@ use crm_capability_adapters::{
     AuthorizationGrant, LiveAuthorizationStore, LiveQueryVisibilityStore, QueryVisibilityGrant,
 };
 use crm_capability_runtime::CapabilityDefinition;
-use crm_customer_data_operations_capability_adapter::internal_export_execution_capability_definitions;
+use crm_customer_data_operations_capability_adapter::{
+    EXPORT_JOB_RECORD_TYPE, MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+    internal_export_execution_capability_definitions,
+};
 use crm_customer_data_operations_execution_composition::EXPORT_EXECUTION_WORKER_ACTOR_ID;
+use crm_customer_data_operations_query_adapter::{
+    GET_EXPORT_JOB_CAPABILITY, LIST_EXPORT_JOBS_CAPABILITY,
+};
 use crm_module_sdk::{ActorId, ModuleId, RecordType};
 use crm_parties_capability_adapter::{
     MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
@@ -29,8 +35,30 @@ pub(crate) fn bootstrap_export_selection_worker_access(
     let expires_at = now_unix_nanos.checked_add(LIFETIME_NANOS).ok_or_else(|| {
         ApplicationRuntimeError::Assembly("export worker grant expiry overflow".to_owned())
     })?;
-    let party_list = find_party_query(query_definitions, PARTY_LIST_QUERY_CAPABILITY, "list")?;
-    let party_get = find_party_query(query_definitions, PARTY_GET_QUERY_CAPABILITY, "get")?;
+    let party_list = find_query(
+        query_definitions,
+        PARTIES_MODULE_ID,
+        PARTY_LIST_QUERY_CAPABILITY,
+        "Party list",
+    )?;
+    let party_get = find_query(
+        query_definitions,
+        PARTIES_MODULE_ID,
+        PARTY_GET_QUERY_CAPABILITY,
+        "Party get",
+    )?;
+    let export_get = find_query(
+        query_definitions,
+        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+        GET_EXPORT_JOB_CAPABILITY,
+        "Party export get",
+    )?;
+    let export_list = find_query(
+        query_definitions,
+        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+        LIST_EXPORT_JOBS_CAPABILITY,
+        "Party export list",
+    )?;
     let execution_definitions = internal_export_execution_capability_definitions()
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
     let execution_actor_id = ActorId::try_new(EXPORT_EXECUTION_WORKER_ACTOR_ID)
@@ -49,6 +77,9 @@ pub(crate) fn bootstrap_export_selection_worker_access(
             tenant_id,
             worker_actor_id,
             party_list,
+            PARTIES_MODULE_ID,
+            PARTY_RECORD_TYPE,
+            ["kind", "display_name"],
             expires_at,
         )?;
 
@@ -64,26 +95,51 @@ pub(crate) fn bootstrap_export_selection_worker_access(
             tenant_id,
             &execution_actor_id,
             party_get,
+            PARTIES_MODULE_ID,
+            PARTY_RECORD_TYPE,
+            ["kind", "display_name"],
             expires_at,
         )?;
+
+        for definition in [export_get, export_list] {
+            grant_visibility(
+                visibility_store,
+                tenant_id,
+                &config.actor_id,
+                definition,
+                CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+                EXPORT_JOB_RECORD_TYPE,
+                [
+                    "specification",
+                    "status",
+                    "selection",
+                    "checkpoint",
+                    "execution",
+                    "artifact",
+                    "reconciliation",
+                ],
+                expires_at,
+            )?;
+        }
     }
     Ok(())
 }
 
-fn find_party_query<'a>(
+fn find_query<'a>(
     query_definitions: &'a [CapabilityDefinition],
+    owner_module_id: &str,
     capability_id: &str,
     name: &str,
 ) -> Result<&'a CapabilityDefinition, ApplicationRuntimeError> {
     query_definitions
         .iter()
         .find(|definition| {
-            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+            definition.owner_module_id.as_str() == owner_module_id
                 && definition.capability_id.as_str() == capability_id
         })
         .ok_or_else(|| {
             ApplicationRuntimeError::Assembly(format!(
-                "Party {name} capability is missing from the production query catalog"
+                "{name} capability is missing from the production query catalog"
             ))
         })
 }
@@ -112,11 +168,15 @@ fn grant_capabilities<'a>(
     Ok(())
 }
 
-fn grant_visibility(
+#[allow(clippy::too_many_arguments)]
+fn grant_visibility<const N: usize>(
     visibility_store: &LiveQueryVisibilityStore,
     tenant_id: &crm_module_sdk::TenantId,
     actor_id: &ActorId,
     definition: &CapabilityDefinition,
+    owner_module_id: &str,
+    record_type: &str,
+    allowed_fields: [&str; N],
     expires_at_unix_nanos: i64,
 ) -> Result<(), ApplicationRuntimeError> {
     visibility_store
@@ -125,12 +185,12 @@ fn grant_visibility(
             actor_id: actor_id.clone(),
             capability_id: definition.capability_id.clone(),
             capability_version: definition.capability_version.clone(),
-            owner_module_id: ModuleId::try_new(PARTIES_MODULE_ID)
+            owner_module_id: ModuleId::try_new(owner_module_id)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            record_type: RecordType::try_new(PARTY_RECORD_TYPE)
+            record_type: RecordType::try_new(record_type)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             record_id: None,
-            allowed_fields: ["kind", "display_name"]
+            allowed_fields: allowed_fields
                 .into_iter()
                 .map(str::to_owned)
                 .collect::<BTreeSet<_>>(),
