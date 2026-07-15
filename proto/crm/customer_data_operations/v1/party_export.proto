@@ -155,6 +155,59 @@ message ListPartyExportJobsResponse {
   string next_cursor = 2;
 }
 
+// Worker-private selection candidate. It is never registered as a public query response.
+message PartyExportSelectionCandidate {
+  crm.customer.v1.PartyRef party_ref = 1;
+  crm.customer.v1.CustomerResourceVersion resource_version = 2;
+}
+
+// Opaque continuation owned by the Party query/storage boundary. Customer-data operations stores it
+// only as resumable coordination evidence and must not reinterpret its sort value.
+message PartyExportSourceContinuation {
+  string sort_value = 1;
+  string record_id = 2;
+}
+
+// Worker-only capability input. The capability atomically creates exact manifest items and advances
+// the export-owned selection progress record. It is intentionally absent from the public service.
+message InternalCommitPartyExportSelectionPageRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_progress_version = 2;
+  repeated PartyExportSelectionCandidate candidates = 3;
+  PartyExportSourceContinuation source_after = 4;
+  bool source_exhausted = 5;
+}
+
+message InternalCommitPartyExportSelectionPageResponse {
+  uint32 committed_items = 1;
+  uint32 next_manifest_position = 2;
+  int64 progress_version = 3;
+  bool source_exhausted = 4;
+}
+
+message PartyExportSelectionProgressedEvent {
+  ExportJobRef export_job_ref = 1;
+  uint32 committed_items = 2;
+  uint32 next_manifest_position = 3;
+  int64 progress_version = 4;
+  bool source_exhausted = 5;
+}
+
+// Worker-only finalize input. The worker computes the digest from authoritative boundary + persisted
+// ordered manifest evidence before invoking this capability. The capability moves the job to READY
+// only after the source scan is durably exhausted and the count/digest evidence is exact.
+message InternalFinalizePartyExportSelectionRequest {
+  ExportJobRef export_job_ref = 1;
+  int64 expected_job_version = 2;
+  int64 expected_progress_version = 3;
+  bytes manifest_sha256 = 4;
+  uint32 selected_resources = 5;
+}
+
+message InternalFinalizePartyExportSelectionResponse {
+  PartyExportJob export_job = 1;
+}
+
 message PartyExportJobCreatedEvent {
   PartyExportJob export_job = 1;
 }
