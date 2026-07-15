@@ -98,6 +98,7 @@ provides:
     - customer_data.export_selection_boundary
     - customer_data.export_selection_progress
     - customer_data.export_selection_item
+    - customer_data.export_execution_stage
     - customer_data.export_execution_outcome
   ui_extensions: []
 
@@ -119,6 +120,7 @@ storage:
     - customer_data.export_selection_boundary
     - customer_data.export_selection_progress
     - customer_data.export_selection_item
+    - customer_data.export_execution_stage
     - customer_data.export_execution_outcome
   private_state_namespaces:
     - crm.customer-data-operations.import_job
@@ -128,6 +130,7 @@ storage:
     - crm.customer-data-operations.export_selection_boundary
     - crm.customer-data-operations.export_selection_progress
     - crm.customer-data-operations.export_selection_item
+    - crm.customer-data-operations.export_execution_stage
     - crm.customer-data-operations.export_execution_outcome
 
 security:
@@ -150,4 +153,5 @@ lifecycle:
     - customer_data.export_selection_boundary
     - customer_data.export_selection_progress
     - customer_data.export_selection_item
+    - customer_data.export_execution_stage
     - customer_data.export_execution_outcome
