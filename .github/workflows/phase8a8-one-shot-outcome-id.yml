@@ -1,80 +1,8 @@
-name: Phase 8A.8 Outcome ID Helper
+name: Obsolete Phase 8A.8 Outcome ID Helper
 on:
-  push:
-    branches: [develop/phase8a8-customer-export-jobs]
-permissions:
-  contents: write
+  workflow_dispatch:
 jobs:
-  patch:
-    if: github.actor != 'github-actions[bot]'
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: develop/phase8a8-customer-export-jobs
-          fetch-depth: 0
-      - name: Expose deterministic execution outcome ID
-        shell: python
-        run: |
-          from pathlib import Path
-          p=Path('modules/crm-customer-data-operations/src/export_execution_outcome.rs')
-          s=p.read_text()
-          old='''impl PartyExportExecutionOutcomeId {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-'''
-          new='''impl PartyExportExecutionOutcomeId {
-    pub fn for_job_position(
-        job_id: &ExportJobId,
-        manifest_position: u32,
-    ) -> Result<Self, SdkError> {
-        validate_manifest_position(manifest_position)?;
-        let mut hasher = Sha256::new();
-        hasher.update(EXECUTION_OUTCOME_ID_DOMAIN);
-        hash_part(&mut hasher, job_id.as_str().as_bytes());
-        hash_part(&mut hasher, &manifest_position.to_be_bytes());
-        RecordId::try_new(format!(
-            "cdo-export-outcome-{}",
-            hex_digest(hasher.finalize())
-        ))
-        .map(Self)
-        .map_err(|error| {
-            invalid(
-                "CUSTOMER_DATA_EXPORT_EXECUTION_OUTCOME_ID_INVALID",
-                "customer_data.export.execution.outcome_id",
-                error.to_string(),
-            )
-        })
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-'''
-          if s.count(old)!=1: raise SystemExit(f'impl anchor={s.count(old)}')
-          s=s.replace(old,new,1)
-          old2='''        validate_manifest_position(manifest_position)?;
-        if occurred_at_unix_nanos <= 0 {
-'''
-          new2='''        let outcome_id = PartyExportExecutionOutcomeId::for_job_position(
-            &job_id,
-            manifest_position,
-        )?;
-        if occurred_at_unix_nanos <= 0 {
-'''
-          if s.count(old2)!=1: raise SystemExit(f'create validation anchor={s.count(old2)}')
-          s=s.replace(old2,new2,1)
-          start=s.index('        let mut hasher = Sha256::new();', s.index('fn create('))
-          end=s.index('\n\n        Ok(Self {', start)
-          s=s[:start]+s[end+2:]
-          p.write_text(s)
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --all
-      - run: rm .github/workflows/phase8a8-one-shot-outcome-id.yml
-      - run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A && git commit -m 'Expose deterministic Party export execution outcome identity' && git push origin HEAD:develop/phase8a8-customer-export-jobs
+      - run: echo obsolete
