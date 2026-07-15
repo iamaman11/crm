@@ -1,0 +1,35 @@
+name: Phase 8A.8 Runtime C2
+on:
+  push:
+    branches: [develop/phase8a8-customer-export-jobs]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - name: Finish export selection worker composition
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('crates/crm-application-runtime/src/runtime.rs'); s=p.read_text()
+          pairs=[
+            ('query_router.clone(),\n            authorizer,\n            query_router,','query_router.clone(),\n            authorizer.clone(),\n            query_router,'),
+            ('search_worker,\n            import_execution_worker,\n            readiness:','search_worker,\n            import_execution_worker,\n            export_selection_worker,\n            readiness:'),
+            ('components\n            .import_execution_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        scan_link_events','components\n            .import_execution_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        components\n            .export_selection_worker\n            .run_tenant_cycle(tenant_id.clone())\n            .await\n            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;\n        scan_link_events')]
+          for old,new in pairs:
+              if s.count(old)!=1: raise SystemExit(f'anchor={s.count(old)} {old[:30]}')
+              s=s.replace(old,new,1)
+          p.write_text(s)
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --all
+      - run: rm .github/workflows/phase8a8-one-shot-runtime-c2.yml
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A && git commit -m 'Complete Phase 8A.8 worker composition' && git push origin HEAD:develop/phase8a8-customer-export-jobs
