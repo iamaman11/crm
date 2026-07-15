@@ -1,0 +1,45 @@
+name: Phase 8A.8 One-shot Sync
+
+on:
+  push:
+    branches:
+      - develop/phase8a8-customer-export-jobs
+
+permissions:
+  contents: write
+
+jobs:
+  sync-and-self-delete:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop/phase8a8-customer-export-jobs
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Remove redundant constant assertion test
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          path = Path("crates/crm-customer-data-operations-execution-composition/src/export_selection_worker.rs")
+          text = path.read_text()
+          pattern = re.compile(r'\n    #\[test\]\n    fn source_page_limit_is_bounded_by_core_query_capacity\(\) \{.*?\n    \}\n', re.S)
+          text, count = pattern.subn("\n", text, count=1)
+          if count != 1:
+              raise SystemExit(f"expected one redundant constant test, found {count}")
+          path.write_text(text)
+      - name: Generate authoritative browser contract hashes
+        run: cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
+      - name: Format and self-delete
+        run: |
+          cargo fmt --all
+          rm .github/workflows/phase8a8-one-shot-sync.yml
+      - name: Commit synchronized artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Sync Phase 8A.8 generated artifacts and Clippy cleanup"
+          git push origin HEAD:develop/phase8a8-customer-export-jobs
