@@ -1,4 +1,5 @@
 use crm_proto_contracts::crm::{customer::v1 as customer, data_quality::v1 as data_quality};
+use crm_proto_contracts::message_descriptor_hash;
 use prost::Message;
 
 #[test]
@@ -88,4 +89,16 @@ fn stewardship_contract_binds_current_observation_and_expected_version() {
         data_quality::AcknowledgeDataQualityFindingRequest::decode(bytes.as_slice()).unwrap(),
         request
     );
+}
+
+#[test]
+fn data_quality_descriptor_identities_are_stable_and_distinct() {
+    let rule_set = message_descriptor_hash("crm.data_quality.v1.PartyRuleSetDefinition");
+    let evaluation = message_descriptor_hash("crm.data_quality.v1.RequestPartyEvaluationRequest");
+
+    assert_eq!(
+        rule_set,
+        message_descriptor_hash("crm.data_quality.v1.PartyRuleSetDefinition")
+    );
+    assert_ne!(rule_set, evaluation);
 }
