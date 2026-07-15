@@ -330,6 +330,33 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_party_query_adapter = PartyQueryAdapter::new(
+            store.clone(),
+            CursorCodec::new(cursor_key)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+            visibility_authorizer.clone(),
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let export_selection_source = Arc::new(GovernedPartyExportSelectionSource::new(
+            Arc::new(export_party_query_adapter),
+            authorizer.clone(),
+        ));
+        let export_selection_reader =
+            Arc::new(PostgresPartyExportSelectionReader::new(store.clone()));
+        let export_selection_sink = Arc::new(PostgresPartyExportSelectionSink::new(
+            store.clone(),
+            authorizer.clone(),
+        ));
+        let export_selection_worker = Arc::new(
+            PartyExportSelectionWorker::new(
+                store.clone(),
+                export_selection_reader,
+                export_selection_sink,
+                export_selection_source,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
         let account_query_adapter = AccountQueryAdapter::new(
             store.clone(),
             CursorCodec::new(cursor_key)
