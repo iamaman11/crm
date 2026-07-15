@@ -370,9 +370,7 @@ fn artifact_expires_at_unix_nanos(
     completed_at_unix_nanos: i64,
     policies: &BTreeMap<String, u64>,
 ) -> Result<i64, SdkError> {
-    let seconds = policies
-        .get(policy_id)
-        .ok_or_else(retention_policy_unavailable)?;
+    let seconds = policies.get(policy_id).ok_or_else(retention_policy_unavailable)?;
     let duration_nanos = seconds
         .checked_mul(1_000_000_000)
         .and_then(|value| i64::try_from(value).ok())
@@ -452,7 +450,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[test]
     fn retention_expiry_is_exact_and_unknown_policies_fail_closed() {
         let policies = BTreeMap::from([("standard".to_owned(), 60)]);
         assert_eq!(
@@ -463,6 +460,7 @@ mod tests {
         assert!(artifact_expires_at_unix_nanos("standard", i64::MAX, &policies).is_err());
     }
 
+    #[test]
     fn disclosure_definition_is_job_bound_high_risk_read() {
         let definition = artifact_download_capability_definition().unwrap();
         assert!(!definition.mutation);
