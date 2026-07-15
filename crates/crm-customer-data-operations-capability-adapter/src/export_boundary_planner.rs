@@ -50,7 +50,8 @@ pub fn harden_party_export_start_plan(
         job.specification().version_id().clone(),
         occurred_at_unix_nanos,
     )?;
-    let progress = PartyExportSelectionProgress::create(job.job_id().clone(), occurred_at_unix_nanos)?;
+    let progress =
+        PartyExportSelectionProgress::create(job.job_id().clone(), occurred_at_unix_nanos)?;
 
     plan.batch.records.push(RecordMutation::Create {
         reference: export_selection_boundary_record_ref(&boundary)?,
