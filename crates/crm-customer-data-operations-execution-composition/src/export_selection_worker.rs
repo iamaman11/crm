@@ -250,6 +250,8 @@ impl PartyExportSelectionWorker {
                         }),
                         resource_version: Some(customer::CustomerResourceVersion {
                             version: candidate.resource_version,
+                            created_at: None,
+                            updated_at: None,
                         }),
                     })
                     .collect();
