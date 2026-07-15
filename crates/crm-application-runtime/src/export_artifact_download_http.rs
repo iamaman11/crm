@@ -30,23 +30,23 @@ async fn download_export_artifact(
 ) -> Response {
     let authorization = match optional_header(&headers, "authorization") {
         Ok(value) => value.unwrap_or_default(),
-        Err(response) => return response,
+        Err(()) => return invalid_request(),
     };
     let tenant_id = match optional_header(&headers, "x-tenant-id") {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(()) => return invalid_request(),
     };
     let request_id = match optional_header(&headers, "x-request-id") {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(()) => return invalid_request(),
     };
     let correlation_id = match optional_header(&headers, "x-correlation-id") {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(()) => return invalid_request(),
     };
     let trace_id = match optional_header(&headers, "x-trace-id") {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(()) => return invalid_request(),
     };
     let timeout_millis = match optional_header(&headers, "x-timeout-ms") {
         Ok(Some(value)) => match value.parse::<u64>() {
@@ -54,7 +54,7 @@ async fn download_export_artifact(
             Err(_) => return invalid_request(),
         },
         Ok(None) => None,
-        Err(response) => return response,
+        Err(()) => return invalid_request(),
     };
 
     match service
@@ -127,15 +127,10 @@ fn error_response(error: SdkError) -> Response {
     (status, Json(json!({"error": "request_failed"}))).into_response()
 }
 
-fn optional_header(headers: &HeaderMap, name: &'static str) -> Result<Option<String>, Response> {
+fn optional_header(headers: &HeaderMap, name: &'static str) -> Result<Option<String>, ()> {
     headers
         .get(name)
-        .map(|value| {
-            value
-                .to_str()
-                .map(str::to_owned)
-                .map_err(|_| invalid_request())
-        })
+        .map(|value| value.to_str().map(str::to_owned).map_err(|_| ()))
         .transpose()
 }
 
