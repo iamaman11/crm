@@ -39,13 +39,12 @@ For a strict dependency chain, only one production packet is the active implemen
 
 For the current customer-master lane the authoritative sequence is:
 
-1. **8A.8 / #123 / PR #130** — Customer Export Jobs, Artifacts and Reconciliation Evidence — active.
-2. **8A.9 / #124** — Customer Data Quality Rules, Completeness and Stewardship.
-3. **8A.10 / #125** — Governed Customer Enrichment and Provenance.
-4. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
-5. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
-
-Phase 8A.7 / #120 is merged and complete through PR #121. It is a prerequisite baseline, not an active delivery path.
+1. **8A.7 / #120 / PR #121** — Customer Import Jobs and Resumable Execution — **Complete**.
+2. **8A.8 / #123 / PR #130** — Customer Export Jobs, Artifacts and Reconciliation Evidence — **Complete**.
+3. **8A.9 / #124** — Customer Data Quality Rules, Completeness and Stewardship — **Ready** and next in the lane.
+4. **8A.10 / #125** — Governed Customer Enrichment and Provenance — **Planned**.
+5. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **Planned**.
+6. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
 
 Parallel work is allowed only when ownership boundaries and dependencies are explicit and the work cannot invalidate the exact candidate of another packet.
 
@@ -125,8 +124,10 @@ As of 2026-07-15:
 - Phase 8A is active.
 - Phase 8A.6 is merged and complete through PR #119 / merge commit `d5cb4502ad0c49158e0789d8749dc09160da7895`.
 - Phase 8A.7 is merged and complete through PR #121 / merge commit `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
-- Phase 8A.8 / #123 / PR #130 is the single active customer-master production packet.
-- PR #118 is superseded by merged PR #119 and must not remain an active delivery path.
-- Follow-on customer-master packets are #124, #125 and #126 in that order, followed by Phase 8A closure and Phase 8B / #29.
+- Phase 8A.8 is merged and complete through PR #130 / merge commit `0e7f9889362533446cc65d95dcf7969a60086a57`.
+- Phase 8A.9 / #124 is **Ready** and is the next customer-master production packet.
+- The intended 8A.9 ownership boundary is a distinct `crm.data-quality` module for versioned rules, findings, completeness evidence and stewardship lifecycle. It does not own authoritative customer values and remediation must re-enter exact owner capabilities.
+- PR #118 remains superseded by merged PR #119 and is not an active delivery path.
+- Follow-on customer-master packets are #125 and #126 in that order, followed by Phase 8A closure and Phase 8B / #29.
 
 This baseline must be updated whenever the active packet or merged completion state changes.
