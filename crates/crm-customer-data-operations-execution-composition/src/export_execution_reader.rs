@@ -151,14 +151,9 @@ mod tests {
     #[test]
     fn exact_stage_and_outcome_persisted_payloads_are_personal() {
         let job_id = ExportJobId::try_new("execution-reader-contract-job").unwrap();
-        let stage = PartyExportExecutionStage::emitted(
-            job_id.clone(),
-            1,
-            "party-1\n".to_owned(),
-            0,
-            100,
-        )
-        .unwrap();
+        let stage =
+            PartyExportExecutionStage::emitted(job_id.clone(), 1, "party-1\n".to_owned(), 0, 100)
+                .unwrap();
         let outcome = PartyExportExecutionOutcome::excluded(
             job_id,
             1,
