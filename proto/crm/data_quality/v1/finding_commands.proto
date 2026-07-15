@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/data_quality/v1/finding_types.proto";
+import "crm/data_quality/v1/quality_types.proto";
+
+message GetDataQualityFindingRequest {
+  DataQualityFindingRef finding_ref = 1;
+}
+
+message GetDataQualityFindingResponse {
+  DataQualityFinding finding = 1;
+  DataQualityFindingObservation current_observation = 2;
+}
+
+message ListDataQualityFindingsByPartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  optional DataQualityFindingStatus status = 2;
+  optional QualitySeverity severity = 3;
+  int32 page_size = 4;
+  string cursor = 5;
+}
+
+message ListDataQualityFindingsByPartyResponse {
+  repeated DataQualityFinding findings = 1;
+  string next_cursor = 2;
+}
+
+message ListAssignedDataQualityFindingsRequest {
+  optional string assigned_actor_id = 1;
+  optional DataQualityFindingStatus status = 2;
+  optional QualitySeverity severity = 3;
+  int32 page_size = 4;
+  string cursor = 5;
+}
+
+message ListAssignedDataQualityFindingsResponse {
+  repeated DataQualityFinding findings = 1;
+  string next_cursor = 2;
+}
+
+message AssignDataQualityFindingRequest {
+  DataQualityFindingRef finding_ref = 1;
+  int64 expected_version = 2;
+  optional string assigned_actor_id = 3;
+}
+
+message AssignDataQualityFindingResponse {
+  DataQualityFinding finding = 1;
+}
+
+message AcknowledgeDataQualityFindingRequest {
+  DataQualityFindingRef finding_ref = 1;
+  DataQualityFindingObservationRef expected_current_observation_ref = 2;
+  int64 expected_version = 3;
+}
+
+message AcknowledgeDataQualityFindingResponse {
+  DataQualityFinding finding = 1;
+}
+
+message WaiveDataQualityFindingRequest {
+  DataQualityFindingRef finding_ref = 1;
+  DataQualityFindingObservationRef expected_current_observation_ref = 2;
+  int64 expected_version = 3;
+  string reason = 4;
+}
+
+message WaiveDataQualityFindingResponse {
+  DataQualityFinding finding = 1;
+}
+
+message DataQualityFindingOpenedEvent {
+  DataQualityFinding finding = 1;
+  DataQualityFindingObservation observation = 2;
+}
+
+message DataQualityFindingObservedEvent {
+  DataQualityFinding finding = 1;
+  DataQualityFindingObservation observation = 2;
+}
+
+message DataQualityFindingStatusChangedEvent {
+  DataQualityFinding finding = 1;
+}
+
+message DataQualityFindingAssignmentChangedEvent {
+  DataQualityFinding finding = 1;
+}
