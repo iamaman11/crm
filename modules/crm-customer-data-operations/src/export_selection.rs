@@ -13,7 +13,11 @@ const SELECTION_MANIFEST_DIGEST_DOMAIN: &[u8] =
 pub struct PartyExportSelectionItemId(RecordId);
 
 impl PartyExportSelectionItemId {
-    fn derive(job_id: &ExportJobId, manifest_position: u32) -> Result<Self, SdkError> {
+    pub fn for_job_position(
+        job_id: &ExportJobId,
+        manifest_position: u32,
+    ) -> Result<Self, SdkError> {
+        validate_manifest_position(manifest_position)?;
         let mut hasher = Sha256::new();
         hasher.update(SELECTION_ITEM_ID_DOMAIN);
         hash_part(&mut hasher, job_id.as_str().as_bytes());
@@ -75,7 +79,6 @@ impl PartyExportSelectionItem {
         party_resource_version: i64,
         occurred_at_unix_nanos: i64,
     ) -> Result<Self, SdkError> {
-        validate_manifest_position(manifest_position)?;
         if party_resource_version <= 0 {
             return Err(invalid(
                 "CUSTOMER_DATA_EXPORT_SELECTED_PARTY_VERSION_INVALID",
@@ -90,7 +93,7 @@ impl PartyExportSelectionItem {
                 "selection item timestamp must be positive Unix nanoseconds",
             ));
         }
-        let item_id = PartyExportSelectionItemId::derive(&job_id, manifest_position)?;
+        let item_id = PartyExportSelectionItemId::for_job_position(&job_id, manifest_position)?;
         Ok(Self {
             item_id,
             job_id,
@@ -156,7 +159,8 @@ pub fn party_export_selection_manifest_sha256(
         if item.job_id() != job_id || item.manifest_position() != expected_position {
             return Err(manifest_error());
         }
-        let expected_item_id = PartyExportSelectionItemId::derive(job_id, expected_position)?;
+        let expected_item_id =
+            PartyExportSelectionItemId::for_job_position(job_id, expected_position)?;
         if item.item_id() != &expected_item_id || !seen_parties.insert(item.party_id().as_str()) {
             return Err(manifest_error());
         }
@@ -235,6 +239,10 @@ mod tests {
         let first = item(&job_id, 1, "party-1", 7);
         let replay = item(&job_id, 1, "party-1", 7);
         assert_eq!(first.item_id(), replay.item_id());
+        assert_eq!(
+            first.item_id(),
+            &PartyExportSelectionItemId::for_job_position(&job_id, 1).unwrap()
+        );
         assert_eq!(first.version(), 1);
     }
 
@@ -277,8 +285,8 @@ mod tests {
 
     #[test]
     fn empty_manifest_has_stable_job_bound_digest() {
-        let first = ExportJobId::try_new("export-selection-empty-a").unwrap();
-        let second = ExportJobId::try_new("export-selection-empty-b").unwrap();
+        let first = ExportJobId::try_new("selection-empty-a").unwrap();
+        let second = ExportJobId::try_new("selection-empty-b").unwrap();
         assert_ne!(
             party_export_selection_manifest_sha256(&first, &[]).unwrap(),
             party_export_selection_manifest_sha256(&second, &[]).unwrap()
