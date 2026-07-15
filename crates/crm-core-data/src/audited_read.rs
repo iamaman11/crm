@@ -20,13 +20,13 @@ impl PostgresDataStore {
     /// Atomically appends one tamper-evident audit record for a governed read/disclosure.
     ///
     /// Read operations intentionally produce no outbox event and no idempotency claim. The
-    /// mutation completion-marker table requires exactly one idempotency record and therefore is
-    /// not a valid evidence model for read-only capabilities. The audit-chain head and audit row
-    /// are advanced atomically in this transaction before the caller releases protected bytes.
+    /// business-transaction marker records exactly those expected evidence counts, including zero
+    /// idempotency rows, so audit foreign-key integrity and transaction completeness remain explicit.
     pub async fn record_audited_read(&self, plan: &AuditedReadPlan) -> Result<(), DataError> {
         plan.validate()?;
         let mut transaction = self.pool().begin().await?;
         bind_execution_context(&mut transaction, &plan.context).await?;
+        insert_completion_marker(&mut transaction, &plan.context).await?;
         let materialized = materialize_audit_chain(
             &mut transaction,
             &plan.context,
@@ -61,6 +61,33 @@ async fn bind_execution_context(
     .bind(context.execution.capability_id.as_str())
     .bind(context.execution.capability_version.as_str())
     .bind(context.execution.business_transaction_id.as_str())
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+async fn insert_completion_marker(
+    transaction: &mut Transaction<'_, Postgres>,
+    context: &ModuleExecutionContext,
+) -> Result<(), DataError> {
+    sqlx::query(
+        r#"
+        INSERT INTO crm.business_transactions (
+          tenant_id, business_transaction_id, actor_id, request_id,
+          correlation_id, trace_id, capability_id, capability_version,
+          expected_outbox_events, expected_audit_records, expected_idempotency_records
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 1, 0)
+        "#,
+    )
+    .bind(context.execution.tenant_id.as_str())
+    .bind(context.execution.business_transaction_id.as_str())
+    .bind(context.execution.actor_id.as_str())
+    .bind(context.execution.request_id.as_str())
+    .bind(context.execution.correlation_id.as_str())
+    .bind(context.execution.trace_id.as_str())
+    .bind(context.execution.capability_id.as_str())
+    .bind(context.execution.capability_version.as_str())
     .execute(&mut **transaction)
     .await?;
     Ok(())
