@@ -46,9 +46,10 @@ pub use export_execution_worker::*;
           ]:
               if stale.exists(): stale.unlink()
       - uses: dtolnay/rust-toolchain@stable
+      - run: cargo generate-lockfile
       - run: cargo fmt --all
       - run: rm .github/workflows/phase8a8-one-shot-execution-surface-cleanup.yml
       - run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A && git commit -m 'Expose Phase 8A.8 execution surfaces and clean temporary workflows' && git push origin HEAD:develop/phase8a8-customer-export-jobs
+          git add -A && git commit -m 'Expose Phase 8A.8 execution surfaces and sync lockfile' && git push origin HEAD:develop/phase8a8-customer-export-jobs
