@@ -197,8 +197,8 @@ impl PartyExportExecutionWorker {
                     }
 
                     let now = self.clock.now_unix_nanos();
-                    let party_id = RecordId::try_new(item.party_id().as_str())
-                        .map_err(configuration_error)?;
+                    let party_id =
+                        RecordId::try_new(item.party_id().as_str()).map_err(configuration_error)?;
                     let source = self
                         .source
                         .get(PartyExportExecutionSourceRequest {
@@ -326,8 +326,8 @@ impl PartyExportExecutionWorker {
                                     },
                                 )
                                 .await?;
-                            let chunk_size_bytes =
-                                u64::try_from(row_utf8.len()).map_err(|_| worker_state_invalid())?;
+                            let chunk_size_bytes = u64::try_from(row_utf8.len())
+                                .map_err(|_| worker_state_invalid())?;
                             self.sink
                                 .commit_emitted(
                                     &outcome_context,

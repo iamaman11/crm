@@ -1,12 +1,13 @@
 use crate::{
-    PartyExportExecutionSource, PartyExportExecutionSourceRequest, PartyExportExecutionSourceResult,
-    PartyExportExecutionWorker, PostgresPartyExportExecutionReader, PostgresPartyExportExecutionSink,
+    PartyExportExecutionSource, PartyExportExecutionSourceRequest,
+    PartyExportExecutionSourceResult, PartyExportExecutionWorker,
+    PostgresPartyExportExecutionReader, PostgresPartyExportExecutionSink,
     PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink,
 };
 use crm_capability_runtime::CapabilityAuthorizer;
 use crm_core_data::{
-    PostgresDataStore, PostgresImmutableFileArtifactStore, RecordListQuery, RecordQueryContinuation,
-    RecordQuerySort,
+    PostgresDataStore, PostgresImmutableFileArtifactStore, RecordListQuery,
+    RecordQueryContinuation, RecordQuerySort,
 };
 use crm_customer_data_operations::{PartyExportJobStatus, PartyExportKindFilter};
 use crm_customer_data_operations_capability_adapter::{
@@ -183,9 +184,10 @@ impl PartyExportSelectionWorker {
             store.clone(),
             source.capability_authorizer(),
         ));
-        let execution_source: Arc<dyn PartyExportExecutionSource> = Arc::new(ExecutionSourceBridge {
-            source: Arc::clone(&source),
-        });
+        let execution_source: Arc<dyn PartyExportExecutionSource> =
+            Arc::new(ExecutionSourceBridge {
+                source: Arc::clone(&source),
+            });
         let file_store = Arc::new(PostgresImmutableFileArtifactStore::new(store.clone()));
         let execution_worker = Arc::new(PartyExportExecutionWorker::new(
             store.clone(),
@@ -365,9 +367,7 @@ impl PartyExportSelectionWorker {
             // The production background loop already invokes this worker for every tenant. Running the
             // exact execution worker here keeps the runtime assembly unchanged while preserving a
             // distinct execution actor, authorization grants, evidence reader/sink and scan cursor.
-            self.execution_worker
-                .run_tenant_cycle(tenant_id)
-                .await?;
+            self.execution_worker.run_tenant_cycle(tenant_id).await?;
 
             Ok(ExportSelectionTenantCycle {
                 scanned_jobs,

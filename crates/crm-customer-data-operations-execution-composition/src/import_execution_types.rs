@@ -103,9 +103,17 @@ pub trait ImportExecutionOutcomeSink: Send + Sync {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutionCycleOutcome {
     Completed,
-    SkippedInvalid { row_position: u32 },
-    PartySucceeded { row_position: u32, party_id: String },
-    RetryableFailureRecorded { row_position: u32, error_code: String },
+    SkippedInvalid {
+        row_position: u32,
+    },
+    PartySucceeded {
+        row_position: u32,
+        party_id: String,
+    },
+    RetryableFailureRecorded {
+        row_position: u32,
+        error_code: String,
+    },
 }
 
 pub(crate) fn validate_partial_execution_policy(
@@ -113,7 +121,8 @@ pub(crate) fn validate_partial_execution_policy(
     row: &ImportRow,
 ) -> Result<(), SdkError> {
     if row.status() == ImportRowStatus::Invalid
-        && snapshot.job().snapshot().partial_execution_policy != PartialExecutionPolicy::AllValidRows
+        && snapshot.job().snapshot().partial_execution_policy
+            != PartialExecutionPolicy::AllValidRows
     {
         return Err(execution_error(
             "CUSTOMER_DATA_IMPORT_EXECUTION_INVALID_ROW_POLICY_CONFLICT",
@@ -124,6 +133,10 @@ pub(crate) fn validate_partial_execution_policy(
     Ok(())
 }
 
-fn execution_error(code: &'static str, category: ErrorCategory, safe_message: &'static str) -> SdkError {
+fn execution_error(
+    code: &'static str,
+    category: ErrorCategory,
+    safe_message: &'static str,
+) -> SdkError {
     SdkError::new(code, category, false, safe_message)
 }

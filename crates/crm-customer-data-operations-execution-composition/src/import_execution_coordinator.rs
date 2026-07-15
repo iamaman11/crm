@@ -41,7 +41,10 @@ impl PartyImportExecutionCoordinator {
         target_client: Arc<dyn CapabilityClient>,
         outcomes: Arc<dyn ImportExecutionOutcomeSink>,
     ) -> Self {
-        Self { target_client, outcomes }
+        Self {
+            target_client,
+            outcomes,
+        }
     }
 
     pub fn execute_next<'a>(
@@ -59,7 +62,9 @@ impl PartyImportExecutionCoordinator {
             match row.status() {
                 ImportRowStatus::Invalid => {
                     validate_partial_execution_policy(snapshot, row)?;
-                    self.outcomes.skip_invalid(context, snapshot.job(), row).await?;
+                    self.outcomes
+                        .skip_invalid(context, snapshot.job(), row)
+                        .await?;
                     Ok(ExecutionCycleOutcome::SkippedInvalid {
                         row_position: row.row_position(),
                     })
