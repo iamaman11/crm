@@ -1,5 +1,6 @@
 use crate::governed_metadata::{
     ApplicationAggregatePlannerRouter as BaseApplicationAggregatePlannerRouter,
+    application_capability_catalog as base_application_capability_catalog,
     application_mutation_definitions as base_application_mutation_definitions,
 };
 use crm_capability_adapters::CapabilityCatalog;
@@ -19,6 +20,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
 }
 
 pub fn application_capability_catalog() -> Result<CapabilityCatalog, SdkError> {
+    base_application_capability_catalog()?;
     CapabilityCatalog::new(application_mutation_definitions()?).map_err(catalog_error)
 }
 
@@ -65,6 +67,7 @@ fn catalog_error(error: impl fmt::Display) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_module_sdk::{CapabilityId, CapabilityVersion};
 
     #[test]
     fn application_mutation_catalog_adds_exact_data_quality_publication_coordinate() {
