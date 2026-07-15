@@ -9,7 +9,9 @@ use crm_data_quality_capability_adapter::{
     DataQualityRuleSetCapabilityPlanner, PUBLISH_PARTY_RULE_SET_CAPABILITY,
     capability_definitions as data_quality_capability_definitions,
 };
-use crm_module_sdk::{ErrorCategory, RecordSnapshot, SdkError};
+use crm_module_sdk::{
+    CapabilityId, CapabilityVersion, ErrorCategory, RecordSnapshot, SdkError,
+};
 use std::fmt;
 
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
@@ -78,10 +80,12 @@ mod tests {
                 .count(),
             1
         );
+        let capability_id = CapabilityId::try_new(PUBLISH_PARTY_RULE_SET_CAPABILITY).unwrap();
+        let capability_version = CapabilityVersion::try_new("1.0.0").unwrap();
         assert_eq!(
             application_capability_catalog()
                 .unwrap()
-                .definition(PUBLISH_PARTY_RULE_SET_CAPABILITY, "1.0.0")
+                .definition(&capability_id, &capability_version)
                 .unwrap()
                 .capability_id
                 .as_str(),
