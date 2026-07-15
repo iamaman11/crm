@@ -4,6 +4,8 @@
 //! interpreted as formulas are neutralized before ordinary CSV quoting. These rules are part of the
 //! versioned export canonicalization contract and must never change in place after publication.
 
+use sha2::{Digest, Sha256};
+
 pub const PARTY_EXPORT_CANONICALIZATION_V1: &str = "party-export-csv/v1";
 pub const PARTY_EXPORT_CSV_MEDIA_TYPE: &str = "text/csv; charset=utf-8";
 
@@ -39,6 +41,32 @@ pub fn encode_party_export_csv_cell(value: &str) -> String {
     } else {
         neutralized
     }
+}
+
+/// Returns the exact SHA-256 digest of deterministic export bytes.
+pub fn party_export_sha256(bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(bytes).into()
+}
+
+/// Domain-separated deterministic SHA-256 over length-prefixed parts.
+pub fn party_export_hash_parts(domain: &[u8], parts: &[&[u8]]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(domain);
+    for part in parts {
+        hasher.update((part.len() as u64).to_be_bytes());
+        hasher.update(part);
+    }
+    hasher.finalize().into()
+}
+
+/// Lowercase hexadecimal encoding used by immutable export digest evidence.
+pub fn party_export_hex(bytes: &[u8]) -> String {
+    let mut value = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        write!(&mut value, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    value
 }
 
 fn neutralize_spreadsheet_formula(value: &str) -> String {
@@ -123,5 +151,15 @@ mod tests {
             encode_party_export_csv_record(&cells),
             encode_party_export_csv_record(&cells)
         );
+    }
+
+    #[test]
+    fn deterministic_hash_helpers_are_domain_separated() {
+        assert_eq!(party_export_sha256(b"abc"), party_export_sha256(b"abc"));
+        assert_ne!(
+            party_export_hash_parts(b"domain-a", &[b"abc"]),
+            party_export_hash_parts(b"domain-b", &[b"abc"])
+        );
+        assert_eq!(party_export_hex(&[0xab, 0xcd]), "abcd");
     }
 }
