@@ -1,7 +1,5 @@
 use crm_capability_runtime::CapabilityRisk;
-use crm_data_quality_query_adapter::{
-    GET_PARTY_RULE_SET_CAPABILITY, query_capability_definition,
-};
+use crm_data_quality_query_adapter::{GET_PARTY_RULE_SET_CAPABILITY, query_capability_definition};
 use crm_module_sdk::DataClass;
 
 #[test]
