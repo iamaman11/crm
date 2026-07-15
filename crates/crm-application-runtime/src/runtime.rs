@@ -473,6 +473,7 @@ impl ApplicationRuntime {
                 artifact_download_resolver,
                 Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),
                 store.clone(),
+                config.export_retention_policies.clone(),
             )
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );

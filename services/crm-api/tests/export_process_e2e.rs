@@ -878,6 +878,7 @@ fn spawn_crm_api(database_url: &str, http_addr: &str, grpc_addr: &str) -> Child 
             "export-process-cursor-signing-key-0123456789abcdef",
         )
         .env("CRM_APPROVAL_SIGNING_KEY", APPROVAL_KEY)
+        .env("CRM_EXPORT_RETENTION_POLICIES", "standard=3600,expired=1")
         .env("CRM_BOOTSTRAP_ALLOW_PHASE6", "true")
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

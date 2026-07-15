@@ -49,6 +49,7 @@ pub struct PartyExportArtifactDownloadService {
     resolver: Arc<PartyExportArtifactDownloadResolver>,
     file_store: Arc<PostgresImmutableFileArtifactStore>,
     store: PostgresDataStore,
+    retention_policies: BTreeMap<String, u64>,
     definition: CapabilityDefinition,
 }
 
@@ -74,7 +75,9 @@ impl PartyExportArtifactDownloadService {
         resolver: Arc<PartyExportArtifactDownloadResolver>,
         file_store: Arc<PostgresImmutableFileArtifactStore>,
         store: PostgresDataStore,
+        retention_policies: BTreeMap<String, u64>,
     ) -> Result<Self, SdkError> {
+        validate_retention_policies(&retention_policies)?;
         Ok(Self {
             authenticator,
             context_resolver,
@@ -82,6 +85,7 @@ impl PartyExportArtifactDownloadService {
             resolver,
             file_store,
             store,
+            retention_policies,
             definition: artifact_download_capability_definition()?,
         })
     }
@@ -162,6 +166,14 @@ impl PartyExportArtifactDownloadService {
         if evidence.export_job_id != requested_export_job_id {
             return Err(integrity_error("resolved export job identity changed"));
         }
+        let expires_at_unix_nanos = artifact_expires_at_unix_nanos(
+            &evidence.retention_policy_id,
+            evidence.completed_at_unix_nanos,
+            &self.retention_policies,
+        )?;
+        if request.context.request_started_at_unix_nanos >= expires_at_unix_nanos {
+            return Err(artifact_expired());
+        }
         let context = disclosure_execution_context(&request)?;
         let finalized = self
             .file_store
@@ -180,6 +192,7 @@ impl PartyExportArtifactDownloadService {
             &evidence.content_sha256,
             evidence.size_bytes,
             &evidence.retention_policy_id,
+            expires_at_unix_nanos,
         )?;
         self.store
             .record_audited_read(&AuditedReadPlan { context, audit })
@@ -254,6 +267,7 @@ fn disclosure_audit_intent(
     content_sha256: &[u8; 32],
     size_bytes: u64,
     retention_policy_id: &str,
+    expires_at_unix_nanos: i64,
 ) -> Result<AuditIntent, SdkError> {
     let mut envelope = BTreeMap::new();
     envelope.insert("actor_id", request.context.actor_id.as_str().to_owned());
@@ -273,6 +287,7 @@ fn disclosure_audit_intent(
     envelope.insert("content_sha256", hex(content_sha256));
     envelope.insert("export_job_id", export_job_id.to_owned());
     envelope.insert("export_job_version", export_job_version.to_string());
+    envelope.insert("expires_at_unix_nanos", expires_at_unix_nanos.to_string());
     envelope.insert("file_id", file_id.to_owned());
     envelope.insert(
         "operation",
@@ -334,6 +349,64 @@ fn context_error(error: crm_capability_ingress::ContextResolutionError) -> SdkEr
     )
 }
 
+fn validate_retention_policies(policies: &BTreeMap<String, u64>) -> Result<(), SdkError> {
+    for (policy_id, seconds) in policies {
+        if policy_id.is_empty()
+            || policy_id.chars().any(char::is_control)
+            || *seconds == 0
+            || seconds
+                .checked_mul(1_000_000_000)
+                .and_then(|value| i64::try_from(value).ok())
+                .is_none()
+        {
+            return Err(retention_configuration_error());
+        }
+    }
+    Ok(())
+}
+
+fn artifact_expires_at_unix_nanos(
+    policy_id: &str,
+    completed_at_unix_nanos: i64,
+    policies: &BTreeMap<String, u64>,
+) -> Result<i64, SdkError> {
+    let seconds = policies.get(policy_id).ok_or_else(retention_policy_unavailable)?;
+    let duration_nanos = seconds
+        .checked_mul(1_000_000_000)
+        .and_then(|value| i64::try_from(value).ok())
+        .ok_or_else(retention_configuration_error)?;
+    completed_at_unix_nanos
+        .checked_add(duration_nanos)
+        .ok_or_else(retention_configuration_error)
+}
+
+fn artifact_expired() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_DATA_EXPORT_ARTIFACT_EXPIRED",
+        ErrorCategory::NotFound,
+        false,
+        "The requested export artifact is unavailable.",
+    )
+}
+
+fn retention_policy_unavailable() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_DATA_EXPORT_RETENTION_POLICY_UNAVAILABLE",
+        ErrorCategory::Internal,
+        false,
+        "The export artifact retention policy is not configured.",
+    )
+}
+
+fn retention_configuration_error() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_DATA_EXPORT_RETENTION_CONFIGURATION_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The export artifact retention policy configuration is invalid.",
+    )
+}
+
 fn download_timeout() -> SdkError {
     SdkError::new(
         "CUSTOMER_DATA_EXPORT_ARTIFACT_DOWNLOAD_TIMEOUT",
@@ -377,6 +450,18 @@ mod tests {
     use super::*;
 
     #[test]
+
+    #[test]
+    fn retention_expiry_is_exact_and_unknown_policies_fail_closed() {
+        let policies = BTreeMap::from([("standard".to_owned(), 60)]);
+        assert_eq!(
+            artifact_expires_at_unix_nanos("standard", 1_000_000_000, &policies).unwrap(),
+            61_000_000_000
+        );
+        assert!(artifact_expires_at_unix_nanos("unknown", 1, &policies).is_err());
+        assert!(artifact_expires_at_unix_nanos("standard", i64::MAX, &policies).is_err());
+    }
+
     fn disclosure_definition_is_job_bound_high_risk_read() {
         let definition = artifact_download_capability_definition().unwrap();
         assert!(!definition.mutation);
