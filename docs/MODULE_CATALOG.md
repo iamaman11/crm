@@ -51,7 +51,7 @@ Only merged `main` state is counted here. Active PR work must not inflate implem
 | `crm.party-relationships` | Typed temporal Party-to-Party relationships | **Vertical slice** | Create/update/get/list plus rebuildable hierarchy foundation | Additional governed relationship semantics where justified |
 | `crm.consents` | Purpose/channel-scoped Consent and Communication Authorization | **Vertical slice** | Immutable assertions, grant withdrawal and exact communication-authorization decisions | Broader privacy orchestration and downstream campaign/provider enforcement |
 | `crm.identity-resolution` | Duplicate candidates, merge lineage, survivorship provenance and canonical Party resolution | **Expert expansion** | Duplicate-candidate/reviewer-decision slice plus approval-required reversible merge/unmerge and canonical resolution | Further integration with data quality, enrichment and privacy lifecycle packets |
-| `crm.customer-data-operations` | Governed customer-data operation jobs and evidence; not customer-master record ownership | **Vertical slice** | Immutable import source artifacts, server-side parsing/validation, true dry run, resumable Party execution, retry recovery, crash/restart idempotency, job/row queries and fresh-process acceptance | Export jobs/artifacts/reconciliation (#123), data quality (#124), enrichment (#125) and privacy-lifecycle coordination (#126) |
+| `crm.customer-data-operations` | Governed customer-data import/export jobs and evidence; not customer-master record ownership | **Expert expansion** | Immutable import sources and parsing/validation, resumable Party import/retry recovery, governed Party export selection/manifests, deterministic artifacts/reconciliation, both export crash-window recoveries and live-authorized audited artifact disclosure | Additional resource-type import/export profiles and later privacy-lifecycle interactions where explicitly coordinated |
 
 Current implemented authoritative/coordination module count: **9**.
 
@@ -109,17 +109,31 @@ Owns governed customer-data operation aggregates and evidence only:
 
 - import/export job lifecycle;
 - immutable source/specification/profile/mapping identity;
-- deterministic row/work identity;
+- deterministic row/work/manifest identity;
 - validation/execution outcomes;
 - resumable checkpoints and counters;
-- derived artifact references and reconciliation evidence where implemented;
+- derived artifact references and exact reconciliation evidence;
 - bounded safe diagnostics.
 
-It does not own Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution records. Target mutations must invoke exact governed owner capabilities; export reads must use governed owner-domain query/composition boundaries rather than direct cross-module storage bypass.
+It does not own Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution records. Target mutations invoke exact governed owner capabilities; export selection/execution reads use governed owner-domain query/composition boundaries rather than direct cross-module storage bypass; artifact disclosure repeats live authorization and retention/integrity checks.
 
 ### `crm.customer360`
 
 Owns only rebuildable read composition and permission-aware assembly.
+
+### Planned `crm.data-quality`
+
+Phase 8A.9 / #124 plans a distinct owner/coordinator for long-lived quality-governance state. It is **not counted as implemented until merged `main` contains a qualifying runtime module**.
+
+Intended ownership:
+
+- immutable/versioned quality rule sets and completeness profiles;
+- exact source-version-bound quality findings and completeness results;
+- deterministic evaluation coordination evidence where required;
+- stewardship case/queue assignment, triage and remediation-attempt evidence;
+- bounded safe diagnostics and reconciliation counters.
+
+It will not own authoritative customer values. Authoritative values remain with their existing owner modules; quality evaluation reads them through governed boundaries and remediation re-enters exact owner capabilities.
 
 ## 7. Phase 8A packet accounting
 
@@ -132,41 +146,43 @@ Completed:
 - 8A.5 — Identity Resolution duplicate candidates.
 - 8A.6 — reversible merge/unmerge, provenance and survivorship through PR #119.
 - 8A.7 — Customer Import Jobs and Resumable Execution through PR #121 / merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
+- 8A.8 — Customer Export Jobs, Artifacts and Reconciliation Evidence through PR #130 / merge `0e7f9889362533446cc65d95dcf7969a60086a57`.
 
-Active:
+Ready:
 
-- 8A.8 / #123 — Customer Export Jobs, Artifacts and Reconciliation Evidence.
+- 8A.9 / #124 — Customer Data Quality Rules, Completeness and Stewardship.
 
 Planned:
 
-- 8A.9 / #124 — Customer Data Quality Rules, Completeness and Stewardship.
 - 8A.10 / #125 — Governed Customer Enrichment and Provenance.
 - 8A.11 / #126 — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
-## 8. Active `crm.customer-data-operations` expansion — Phase 8A.8
+## 8. Planned `crm.data-quality` owner — Phase 8A.9
 
-The next production expansion must add governed export without turning the module into a generic dump service.
+The next production packet introduces a dedicated quality-governance module only because the state has a distinct long-lived ownership boundary that does not fit customer import/export jobs or any authoritative customer-value owner.
 
 Allowed ownership:
 
-- export-job identity and lifecycle;
-- immutable export specification/profile identity;
-- selected bounded resource scope;
-- snapshot/watermark or equivalent immutable selection evidence;
-- resumable execution checkpoints;
-- staged/finalized derived artifact references;
-- artifact digest, byte-size, retention and expiry evidence;
-- selected/emitted/excluded/redacted reconciliation counts;
-- bounded safe failure evidence.
+- immutable/versioned rule-set and completeness-profile definitions;
+- deterministic evaluation-run/checkpoint evidence where needed;
+- exact rule/source-version-bound findings;
+- deterministic completeness results and component lineage;
+- stewardship assignment, triage and remediation-attempt evidence;
+- bounded safe diagnostics and reconciliation counters.
 
 Required boundaries:
 
-- authoritative customer records remain owned by their existing modules;
-- live authorization and field/data-class visibility are repeated during export execution;
-- no direct cross-module storage bypass;
-- no partial artifact publication before finalization;
-- retry/resume cannot publish duplicate logical artifacts or inconsistent counts;
-- privacy, consent, masking, restriction and legal-hold policy cannot be bypassed.
+- no ownership of mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution values;
+- no generic arbitrary-code, SQL, filesystem or arbitrary-network rule execution surface;
+- no direct cross-module storage reads or writes;
+- published evaluator/rule versions are immutable;
+- every finding/completeness result binds exact authoritative resource-version evidence;
+- stale findings cannot silently remain current after owner-version changes;
+- remediation invokes only exact governed owner capabilities;
+- permission-aware disclosure, FORCE RLS, tenant isolation and bounded execution are mandatory;
+- process restart/retry cannot duplicate logical findings, assignments or owner side effects.
+
+The module count remains unchanged until this planned module is actually merged with the required production vertical slice.
 
 ## 9. Mandatory commercial lifecycle owner domains
 
