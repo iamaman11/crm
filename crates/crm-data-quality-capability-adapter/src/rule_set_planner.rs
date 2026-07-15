@@ -186,7 +186,9 @@ pub fn party_rule_set_from_snapshot(
     Ok(rule_set)
 }
 
-fn party_quality_rule_from_wire(value: wire::PartyQualityRule) -> Result<PartyQualityRule, SdkError> {
+fn party_quality_rule_from_wire(
+    value: wire::PartyQualityRule,
+) -> Result<PartyQualityRule, SdkError> {
     let severity = match wire::QualitySeverity::try_from(value.severity) {
         Ok(wire::QualitySeverity::Info) => QualitySeverity::Info,
         Ok(wire::QualitySeverity::Warning) => QualitySeverity::Warning,
@@ -340,8 +342,7 @@ mod tests {
                 ),
             ),
             title: "Placeholder display name".to_owned(),
-            remediation_guidance: "Replace the placeholder with the real customer name."
-                .to_owned(),
+            remediation_guidance: "Replace the placeholder with the real customer name.".to_owned(),
         }
     }
 
@@ -359,7 +360,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(first.version_id(), second.version_id());
-        assert_eq!(party_rule_set_to_wire(&first), party_rule_set_to_wire(&second));
+        assert_eq!(
+            party_rule_set_to_wire(&first),
+            party_rule_set_to_wire(&second)
+        );
     }
 
     #[test]

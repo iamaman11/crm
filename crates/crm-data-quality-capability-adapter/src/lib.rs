@@ -12,7 +12,9 @@ pub use rule_set_planner::*;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
-use crm_module_sdk::{CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, SdkError};
+use crm_module_sdk::{
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, SdkError,
+};
 
 pub const MODULE_ID: &str = crm_data_quality::MODULE_ID;
 pub const PUBLISH_PARTY_RULE_SET_CAPABILITY: &str = "data_quality.party.rule_set.publish";
@@ -53,9 +55,7 @@ pub fn capability_definition() -> Result<CapabilityDefinition, SdkError> {
 }
 
 fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
-    value.map_err(|error| {
-        configuration_error().with_internal_reference(error.to_string())
-    })
+    value.map_err(|error| configuration_error().with_internal_reference(error.to_string()))
 }
 
 fn configuration_error() -> SdkError {

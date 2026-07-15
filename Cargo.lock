@@ -701,6 +701,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-data-quality-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-data-quality",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+]
+
+[[package]]
 name = "crm-global-search-composition"
 version = "0.1.0"
 dependencies = [
