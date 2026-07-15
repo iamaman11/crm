@@ -1,10 +1,11 @@
 use crm_capability_plan_support as support;
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_customer_data_operations::{
-    PartyExportJob, PartyExportSelectionBoundary, PartyExportSelectionItem,
-    PartyExportSelectionItemId, PartyExportSelectionProgress, PartyExportSelectionProgressId,
-    decode_export_selection_boundary_state, decode_export_selection_item_state,
-    decode_export_selection_progress_state, prove_party_export_selection_finalization,
+    PartyExportJob, PartyExportSelectionBoundary, PartyExportSelectionBoundaryId,
+    PartyExportSelectionItem, PartyExportSelectionItemId, PartyExportSelectionProgress,
+    PartyExportSelectionProgressId, decode_export_selection_boundary_state,
+    decode_export_selection_item_state, decode_export_selection_progress_state,
+    prove_party_export_selection_finalization,
 };
 use crm_customer_data_operations_capability_adapter::{
     EXPORT_SELECTION_BOUNDARY_RECORD_TYPE, EXPORT_SELECTION_PROGRESS_RECORD_TYPE, MODULE_ID,
@@ -40,11 +41,7 @@ impl PostgresPartyExportSelectionReader {
     ) -> PortFuture<'a, Result<PartyExportSelectionEvidence, SdkError>> {
         Box::pin(async move {
             let owner_module_id = module_id()?;
-            let boundary_identity = PartyExportSelectionBoundary::create(
-                job.job_id().clone(),
-                job.specification().version_id().clone(),
-                1,
-            )?;
+            let boundary_id = PartyExportSelectionBoundaryId::for_job(job.job_id())?;
             let boundary_snapshot = self
                 .store
                 .get_record_for_query(&RecordGetQuery {
@@ -52,7 +49,7 @@ impl PostgresPartyExportSelectionReader {
                     owner_module_id: owner_module_id.clone(),
                     record_type: RecordType::try_new(EXPORT_SELECTION_BOUNDARY_RECORD_TYPE)
                         .map_err(configuration_error)?,
-                    record_id: RecordId::try_new(boundary_identity.boundary_id().as_str())
+                    record_id: RecordId::try_new(boundary_id.as_str())
                         .map_err(configuration_error)?,
                 })
                 .await?
