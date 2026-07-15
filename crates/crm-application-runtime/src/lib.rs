@@ -8,6 +8,7 @@
 //! published composition/adapters.
 
 mod config;
+mod export_selection_source;
 mod gateway_grpc;
 mod governed_metadata;
 mod platform;
@@ -15,6 +16,7 @@ mod process;
 mod runtime;
 
 pub use config::*;
+pub use export_selection_source::*;
 pub use gateway_grpc::*;
 pub use governed_metadata::*;
 pub use platform::*;
