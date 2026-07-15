@@ -73,9 +73,18 @@ mod tests {
 
     #[test]
     fn quotes_commas_quotes_and_line_breaks_deterministically() {
-        assert_eq!(encode_party_export_csv_cell("Northwind, Ltd"), "\"Northwind, Ltd\"");
-        assert_eq!(encode_party_export_csv_cell("Ada \"Countess\""), "\"Ada \"\"Countess\"\"\"");
-        assert_eq!(encode_party_export_csv_cell("line1\nline2"), "\"line1\nline2\"");
+        assert_eq!(
+            encode_party_export_csv_cell("Northwind, Ltd"),
+            "\"Northwind, Ltd\""
+        );
+        assert_eq!(
+            encode_party_export_csv_cell("Ada \"Countess\""),
+            "\"Ada \"\"Countess\"\"\""
+        );
+        assert_eq!(
+            encode_party_export_csv_cell("line1\nline2"),
+            "\"line1\nline2\""
+        );
     }
 
     #[test]
@@ -88,9 +97,12 @@ mod tests {
             "   =CMD()",
         ] {
             let encoded = encode_party_export_csv_cell(dangerous);
-            assert!(encoded.contains('\''));
-            let unquoted = encoded.trim_matches('"');
-            assert!(unquoted.starts_with('\''));
+            let first_payload_character = encoded
+                .trim_start_matches('"')
+                .chars()
+                .next()
+                .expect("encoded dangerous cell must not be empty");
+            assert_eq!(first_payload_character, '\'');
         }
     }
 
@@ -98,7 +110,10 @@ mod tests {
     fn leaves_safe_text_unchanged_before_ordinary_csv_escaping() {
         assert_eq!(encode_party_export_csv_cell("Ada Lovelace"), "Ada Lovelace");
         assert_eq!(encode_party_export_csv_cell("1"), "1");
-        assert_eq!(encode_party_export_csv_cell("party-01J00000000000000000000000"), "party-01J00000000000000000000000");
+        assert_eq!(
+            encode_party_export_csv_cell("party-01J00000000000000000000000"),
+            "party-01J00000000000000000000000"
+        );
     }
 
     #[test]
