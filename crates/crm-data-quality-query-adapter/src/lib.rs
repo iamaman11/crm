@@ -179,10 +179,7 @@ impl DataQualityQueryAdapter {
 }
 
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    Ok(vec![
-        rule_set_query_capability_definition()?,
-        completeness_profile_query_capability_definition()?,
-    ])
+    Ok(vec![rule_set_query_capability_definition()?])
 }
 
 pub fn query_capability_definition() -> Result<CapabilityDefinition, SdkError> {
@@ -421,21 +418,26 @@ fn configuration_error() -> SdkError {
 mod tests {
     use super::*;
 
+    fn assert_read_only_definition(definition: &CapabilityDefinition, expected_capability: &str) {
+        assert_eq!(definition.capability_id.as_str(), expected_capability);
+        assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
+        assert_eq!(
+            definition.input_contract.allowed_data_classes,
+            vec![DataClass::Confidential]
+        );
+        assert_eq!(definition.risk, CapabilityRisk::Low);
+        assert!(!definition.mutation);
+        assert!(!definition.requires_idempotency);
+        assert!(!definition.requires_approval);
+    }
+
     #[test]
-    fn immutable_definition_queries_are_exact_confidential_read_only_surfaces() {
+    fn rule_set_query_is_publicly_registered_and_profile_query_remains_standalone() {
         let definitions = query_capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 2);
-        for (definition, expected_capability) in definitions.iter().zip(QUERY_CAPABILITY_IDS) {
-            assert_eq!(definition.capability_id.as_str(), *expected_capability);
-            assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-            assert_eq!(
-                definition.input_contract.allowed_data_classes,
-                vec![DataClass::Confidential]
-            );
-            assert_eq!(definition.risk, CapabilityRisk::Low);
-            assert!(!definition.mutation);
-            assert!(!definition.requires_idempotency);
-            assert!(!definition.requires_approval);
-        }
+        assert_eq!(definitions.len(), 1);
+        assert_read_only_definition(&definitions[0], GET_PARTY_RULE_SET_CAPABILITY);
+
+        let profile = completeness_profile_query_capability_definition().unwrap();
+        assert_read_only_definition(&profile, GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY);
     }
 }
