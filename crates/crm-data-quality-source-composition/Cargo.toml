@@ -10,4 +10,4 @@ crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-query-runtime = { path = "../crm-query-runtime" }
-prost = "0.13"
+prost = "0.14"
