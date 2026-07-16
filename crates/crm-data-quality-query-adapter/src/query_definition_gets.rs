@@ -1,22 +1,21 @@
 impl DataQualityQueryAdapter {
     pub fn new(
         store: PostgresDataStore,
+        cursor_codec: CursorCodec,
         visibility: Arc<dyn QueryVisibilityAuthorizer>,
-    ) -> Self {
-        let cursor_codec = CursorCodec::new(process_cursor_key())
-            .expect("the Data Quality cursor key is exactly 32 bytes");
+    ) -> Result<Self, SdkError> {
         let page_policy = PageSizePolicy {
             default_size: DEFAULT_PAGE_SIZE,
             maximum_size: MAXIMUM_PAGE_SIZE,
         }
         .validate()
-        .expect("the static Data Quality page policy is valid");
-        Self {
+        .map_err(cursor_error)?;
+        Ok(Self {
             store,
             cursor_codec,
             visibility,
             page_policy,
-        }
+        })
     }
 
     async fn execute_get_party_rule_set(
@@ -86,7 +85,11 @@ impl DataQualityQueryAdapter {
             )
             .await?;
         let visibility = self
-            .visible_or(&rule_set_snapshot, request, completeness_profile_not_found)
+            .visible_or(
+                &rule_set_snapshot,
+                request,
+                completeness_profile_not_found,
+            )
             .await?;
         let rule_set = party_rule_set_from_snapshot(&rule_set_snapshot)?;
         let profile = party_completeness_profile_from_immutable_snapshot(&snapshot, &rule_set)?;
