@@ -1,15 +1,14 @@
 use crm_data_quality::{
-    ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent,
-    PartyCompletenessProfileVersion, PartyQualityEvaluator, PartyQualityInput, PartyQualityRule,
-    PartyRuleSetVersion, QualitySeverity, RuleKey, decode_party_completeness_profile_version_state,
+    ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent, PartyCompletenessProfileVersion,
+    PartyQualityEvaluator, PartyQualityInput, PartyQualityRule, PartyRuleSetVersion,
+    QualitySeverity, RuleKey, decode_party_completeness_profile_version_state,
     decode_party_rule_set_version_state, encode_party_completeness_profile_version_state,
     encode_party_rule_set_version_state,
 };
 
 const EXPECTED_RULE_SET_VERSION_ID: &str =
     "dq-party-rule-set-b40f7aecbc7fc18101d674e5d941a9fc6dfdf9c1d0827565c7f32a670c894036";
-const EXPECTED_COMPLETENESS_PROFILE_VERSION_ID: &str =
-    "dq-party-completeness-profile-79ee0692769de52723abe5b51330e3f3dc366ddb626223f9087853e443bfefe5";
+const EXPECTED_COMPLETENESS_PROFILE_VERSION_ID: &str = "dq-party-completeness-profile-79ee0692769de52723abe5b51330e3f3dc366ddb626223f9087853e443bfefe5";
 
 fn rule_key(value: &str) -> RuleKey {
     RuleKey::try_new(value).expect("valid regression rule key")
@@ -23,8 +22,7 @@ fn minimum_rule() -> PartyQualityRule {
     PartyQualityRule::try_new(
         rule_key("display_name.minimum"),
         QualitySeverity::Warning,
-        PartyQualityEvaluator::display_name_min_utf8_bytes(4)
-            .expect("valid minimum evaluator"),
+        PartyQualityEvaluator::display_name_min_utf8_bytes(4).expect("valid minimum evaluator"),
         "Display name length",
         "Replace the display name with a meaningful customer name.",
     )
