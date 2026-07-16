@@ -54,7 +54,10 @@ fn staged_job_records_materialized_outcome_counts_without_crossing_completion_bo
     assert_eq!(materialized.updated_at(), input.captured_at());
 
     let bytes = encode_party_evaluation_job_state(&materialized).unwrap();
-    assert_eq!(decode_party_evaluation_job_state(&bytes).unwrap(), materialized);
+    assert_eq!(
+        decode_party_evaluation_job_state(&bytes).unwrap(),
+        materialized
+    );
     assert!(
         staged
             .record_materialized_outcomes(0, 0, input.captured_at())

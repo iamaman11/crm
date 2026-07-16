@@ -13,13 +13,13 @@ use crm_core_data::{
 };
 use crm_data_quality::{
     PARTY_COMPLETENESS_RESULT_RECORD_TYPE, PARTY_COMPLETENESS_RESULT_STATE_MAXIMUM_BYTES,
-    PARTY_COMPLETENESS_RESULT_STATE_RETENTION_POLICY_ID,
-    PARTY_COMPLETENESS_RESULT_STATE_SCHEMA_ID, PARTY_COMPLETENESS_RESULT_STATE_SCHEMA_VERSION,
-    RULE_OUTCOME_RECORD_TYPE, RULE_OUTCOME_STATE_MAXIMUM_BYTES,
-    RULE_OUTCOME_STATE_RETENTION_POLICY_ID, RULE_OUTCOME_STATE_SCHEMA_ID,
-    RULE_OUTCOME_STATE_SCHEMA_VERSION, PartyCompletenessProfileVersion, PartyCompletenessResult,
-    PartyEvaluationInputSnapshot, PartyEvaluationJobStatus, PartyQualityInput, PartyRuleOutcome,
-    PartyRuleSetVersion, encode_party_completeness_result_state, encode_rule_outcome_state,
+    PARTY_COMPLETENESS_RESULT_STATE_RETENTION_POLICY_ID, PARTY_COMPLETENESS_RESULT_STATE_SCHEMA_ID,
+    PARTY_COMPLETENESS_RESULT_STATE_SCHEMA_VERSION, PartyCompletenessProfileVersion,
+    PartyCompletenessResult, PartyEvaluationInputSnapshot, PartyEvaluationJobStatus,
+    PartyQualityInput, PartyRuleOutcome, PartyRuleSetVersion, RULE_OUTCOME_RECORD_TYPE,
+    RULE_OUTCOME_STATE_MAXIMUM_BYTES, RULE_OUTCOME_STATE_RETENTION_POLICY_ID,
+    RULE_OUTCOME_STATE_SCHEMA_ID, RULE_OUTCOME_STATE_SCHEMA_VERSION,
+    encode_party_completeness_result_state, encode_rule_outcome_state,
     party_completeness_result_state_descriptor_hash, rule_outcome_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordSnapshot, SdkError};
@@ -88,7 +88,8 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
         }
         if self.input.job_id() != job.job_id()
             || self.input.party_id() != job.party_id()
-            || self.input.party_resource_version() != job.party_resource_version().unwrap_or_default()
+            || self.input.party_resource_version()
+                != job.party_resource_version().unwrap_or_default()
             || self.input.captured_at() != job.updated_at()
             || self.rule_set.version_id().as_str() != job.rule_set_version_id()
             || self.profile.version_id().as_str() != job.profile_version_id()
@@ -98,16 +99,20 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
             ));
         }
 
-        let quality_input = PartyQualityInput::try_new(self.input.kind(), self.input.display_name())?;
+        let quality_input =
+            PartyQualityInput::try_new(self.input.kind(), self.input.display_name())?;
         let evaluations = self.rule_set.evaluate(&quality_input);
         let evaluated_rules = u32::try_from(evaluations.len())
             .map_err(|_| invalid_plan("evaluation rule count overflowed"))?;
         let outcomes = evaluations
             .iter()
-            .map(|evaluation| PartyRuleOutcome::evaluate(&job, evaluation, self.input.captured_at()))
+            .map(|evaluation| {
+                PartyRuleOutcome::evaluate(&job, evaluation, self.input.captured_at())
+            })
             .collect::<Result<Vec<_>, _>>()?;
-        let failed_rules = u32::try_from(outcomes.iter().filter(|outcome| !outcome.passed()).count())
-            .map_err(|_| invalid_plan("failed evaluation rule count overflowed"))?;
+        let failed_rules =
+            u32::try_from(outcomes.iter().filter(|outcome| !outcome.passed()).count())
+                .map_err(|_| invalid_plan("failed evaluation rule count overflowed"))?;
         let completeness = PartyCompletenessResult::compute(
             &job,
             &self.profile,

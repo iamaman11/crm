@@ -174,8 +174,8 @@ pub fn evaluation_stage_capability_definition() -> Result<CapabilityDefinition, 
     )
 }
 
-pub fn evaluation_materialization_capability_definition(
-) -> Result<CapabilityDefinition, SdkError> {
+pub fn evaluation_materialization_capability_definition() -> Result<CapabilityDefinition, SdkError>
+{
     mutation_definition(
         MATERIALIZE_PARTY_EVALUATION_CAPABILITY,
         MATERIALIZE_PARTY_EVALUATION_REQUEST_SCHEMA,

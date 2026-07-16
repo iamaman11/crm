@@ -92,15 +92,7 @@ impl PartyEvaluationStageWorker {
         actor_id: ActorId,
         page_size: u32,
     ) -> Result<Self, SdkError> {
-        Self::build(
-            store,
-            source,
-            stage_sink,
-            None,
-            clock,
-            actor_id,
-            page_size,
-        )
+        Self::build(store, source, stage_sink, None, clock, actor_id, page_size)
     }
 
     fn build(
@@ -229,15 +221,8 @@ impl PartyEvaluationStageWorker {
                             job.job_id().as_str(),
                             now,
                         )?;
-                        sink.materialize(
-                            &context,
-                            &job,
-                            record.version,
-                            rule_set,
-                            profile,
-                            input,
-                        )
-                        .await?;
+                        sink.materialize(&context, &job, record.version, rule_set, profile, input)
+                            .await?;
                         materialized_jobs = materialized_jobs.saturating_add(1);
                     }
                     PartyEvaluationJobStatus::Staged | PartyEvaluationJobStatus::Completed => {}

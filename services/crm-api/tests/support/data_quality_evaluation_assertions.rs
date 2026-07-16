@@ -95,7 +95,10 @@ pub async fn assert_materialized_evidence(
     assert_eq!(result_json["canonicalization_profile"], "crm.cjson/v1");
     assert_eq!(result_json["job_id"], expected.job_id);
     assert_eq!(result_json["party_id"], expected.party_id);
-    assert_eq!(result_json["party_resource_version"], expected.party_version);
+    assert_eq!(
+        result_json["party_resource_version"],
+        expected.party_version
+    );
     assert_eq!(result_json["profile_version_id"], expected.profile_id);
     assert_eq!(result_json["score_basis_points"], 10_000);
     assert_eq!(

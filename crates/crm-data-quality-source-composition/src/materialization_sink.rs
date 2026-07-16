@@ -9,8 +9,8 @@ use crm_data_quality::{
     PartyRuleSetVersion,
 };
 use crm_data_quality_capability_adapter::{
-    MATERIALIZE_PARTY_EVALUATION_REQUEST_SCHEMA, MODULE_ID,
-    DataQualityEvaluationMaterializationPlanner, evaluation_materialization_capability_definition,
+    DataQualityEvaluationMaterializationPlanner, MATERIALIZE_PARTY_EVALUATION_REQUEST_SCHEMA,
+    MODULE_ID, evaluation_materialization_capability_definition,
 };
 use crm_module_sdk::{
     BusinessTransactionId, DataClass, ErrorCategory, IdempotencyKey, ModuleExecutionContext,
@@ -57,7 +57,8 @@ impl PostgresPartyEvaluationMaterializationSink {
                 &command,
             )?;
             let input_hash = semantic_input_hash(&input);
-            let request = bind_materialization_request(base_context, &definition, input, input_hash)?;
+            let request =
+                bind_materialization_request(base_context, &definition, input, input_hash)?;
             let decision = self.authorizer.authorize(&definition, &request).await?;
             if !decision.allowed {
                 return Err(SdkError::new(
