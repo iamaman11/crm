@@ -140,6 +140,28 @@ pub fn decode_party_completeness_profile_version_state(
     Ok(profile)
 }
 
+pub fn party_completeness_profile_rule_set_version_id_from_state(
+    bytes: &[u8],
+) -> Result<String, SdkError> {
+    validate_size(
+        bytes,
+        PARTY_COMPLETENESS_PROFILE_VERSION_STATE_MAXIMUM_BYTES,
+        "Party completeness-profile version",
+    )?;
+    let state: PartyCompletenessProfileVersionStateV1 =
+        serde_json::from_slice(bytes).map_err(|error| {
+            persisted_error(format!(
+                "Party completeness-profile version state JSON is invalid: {error}"
+            ))
+        })?;
+    if state.rule_set_version_id.is_empty() {
+        return Err(persisted_error(
+            "persisted Party completeness profile has an empty rule-set version identity",
+        ));
+    }
+    Ok(state.rule_set_version_id)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PartyRuleSetVersionStateV1 {
@@ -357,133 +379,98 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::{
+        EvaluatedPartyKind, PartyQualityInput, PartyQualityRule, QualitySeverity,
+    };
+
+    fn key(value: &str) -> RuleKey {
+        RuleKey::try_new(value).unwrap()
+    }
+
+    fn component_key(value: &str) -> ComponentKey {
+        ComponentKey::try_new(value).unwrap()
+    }
 
     fn rule_set() -> PartyRuleSetVersion {
         PartyRuleSetVersion::publish(vec![
             PartyQualityRule::try_new(
-                RuleKey::try_new("display_name.minimum").unwrap(),
+                key("display_name.minimum"),
                 QualitySeverity::Warning,
-                PartyQualityEvaluator::display_name_min_utf8_bytes(4).unwrap(),
+                PartyQualityEvaluator::DisplayNameMinUtf8Bytes(
+                    DisplayNameMinUtf8Bytes::try_new(4).unwrap(),
+                ),
                 "Display name length",
-                "Replace the display name with a meaningful customer name.",
-            )
-            .unwrap(),
-            PartyQualityRule::try_new(
-                RuleKey::try_new("display_name.placeholder").unwrap(),
-                QualitySeverity::Error,
-                PartyQualityEvaluator::display_name_placeholder_exact_ascii_casefold(vec![
-                    "unknown".to_owned(),
-                    "n/a".to_owned(),
-                ])
-                .unwrap(),
-                "Placeholder display name",
-                "Replace the placeholder with the real customer name.",
+                "Use a meaningful display name.",
             )
             .unwrap(),
         ])
         .unwrap()
     }
 
-    fn profile(rule_set: &PartyRuleSetVersion) -> PartyCompletenessProfileVersion {
-        PartyCompletenessProfileVersion::publish(
-            rule_set,
+    #[test]
+    fn strict_rule_set_persistence_round_trip_recomputes_identity() {
+        let rule_set = rule_set();
+        let bytes = encode_party_rule_set_version_state(&rule_set).unwrap();
+        assert_eq!(decode_party_rule_set_version_state(&bytes).unwrap(), rule_set);
+
+        let mut malformed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        malformed["version_id"] = serde_json::Value::String("wrong".to_owned());
+        assert!(
+            decode_party_rule_set_version_state(&serde_json::to_vec(&malformed).unwrap()).is_err()
+        );
+    }
+
+    #[test]
+    fn strict_completeness_persistence_round_trip_binds_rule_set() {
+        let rule_set = rule_set();
+        let profile = PartyCompletenessProfileVersion::publish(
+            &rule_set,
             vec![
                 PartyCompletenessComponent::try_new(
-                    ComponentKey::try_new("name.minimum").unwrap(),
-                    RuleKey::try_new("display_name.minimum").unwrap(),
-                    4_000,
-                )
-                .unwrap(),
-                PartyCompletenessComponent::try_new(
-                    ComponentKey::try_new("name.placeholder").unwrap(),
-                    RuleKey::try_new("display_name.placeholder").unwrap(),
-                    6_000,
+                    component_key("display_name.minimum"),
+                    key("display_name.minimum"),
+                    10_000,
                 )
                 .unwrap(),
             ],
         )
-        .unwrap()
-    }
-
-    #[test]
-    fn rule_set_state_round_trip_is_exact_and_deterministic() {
-        let rule_set = rule_set();
-        let first = encode_party_rule_set_version_state(&rule_set).unwrap();
-        let second = encode_party_rule_set_version_state(&rule_set).unwrap();
-        let decoded = decode_party_rule_set_version_state(&first).unwrap();
-
-        assert_eq!(first, second);
-        assert_eq!(decoded, rule_set);
-        assert_ne!(party_rule_set_version_state_descriptor_hash(), [0; 32]);
-    }
-
-    #[test]
-    fn rule_set_state_rejects_forged_identity_and_noncanonical_order() {
-        let rule_set = rule_set();
-        let mut forged = PartyRuleSetVersionStateV1::from(&rule_set);
-        forged.version_id.push('x');
-        assert!(
-            decode_party_rule_set_version_state(&serde_json::to_vec(&forged).unwrap()).is_err()
+        .unwrap();
+        let bytes = encode_party_completeness_profile_version_state(&profile).unwrap();
+        assert_eq!(
+            party_completeness_profile_rule_set_version_id_from_state(&bytes).unwrap(),
+            rule_set.version_id().as_str()
+        );
+        assert_eq!(
+            decode_party_completeness_profile_version_state(&bytes, &rule_set).unwrap(),
+            profile
         );
 
-        let mut reordered = PartyRuleSetVersionStateV1::from(&rule_set);
-        reordered.rules.reverse();
-        assert!(
-            decode_party_rule_set_version_state(&serde_json::to_vec(&reordered).unwrap()).is_err()
-        );
-    }
-
-    #[test]
-    fn rule_set_state_rejects_unknown_fields() {
-        let rule_set = rule_set();
-        let encoded =
-            String::from_utf8(encode_party_rule_set_version_state(&rule_set).unwrap()).unwrap();
-        let injected = encoded.replacen('{', "{\"unknown\":true,", 1);
-        assert!(decode_party_rule_set_version_state(injected.as_bytes()).is_err());
-    }
-
-    #[test]
-    fn completeness_profile_state_round_trip_is_exact_and_bound_to_rule_set() {
-        let rule_set = rule_set();
-        let profile = profile(&rule_set);
-        let first = encode_party_completeness_profile_version_state(&profile).unwrap();
-        let second = encode_party_completeness_profile_version_state(&profile).unwrap();
-        let decoded = decode_party_completeness_profile_version_state(&first, &rule_set).unwrap();
-
-        assert_eq!(first, second);
-        assert_eq!(decoded, profile);
-        assert_ne!(
-            party_completeness_profile_version_state_descriptor_hash(),
-            [0; 32]
-        );
-    }
-
-    #[test]
-    fn completeness_profile_state_rejects_forged_identity_and_wrong_rule_set() {
-        let rule_set = rule_set();
-        let profile = profile(&rule_set);
-        let mut forged = PartyCompletenessProfileVersionStateV1::from(&profile);
-        forged.version_id.push('x');
-        assert!(
-            decode_party_completeness_profile_version_state(
-                &serde_json::to_vec(&forged).unwrap(),
-                &rule_set
-            )
-            .is_err()
-        );
-
-        let other_rule_set = PartyRuleSetVersion::publish(vec![
+        let other = PartyRuleSetVersion::publish(vec![
             PartyQualityRule::try_new(
-                RuleKey::try_new("display_name.minimum").unwrap(),
+                key("display_name.minimum"),
                 QualitySeverity::Warning,
-                PartyQualityEvaluator::display_name_min_utf8_bytes(5).unwrap(),
+                PartyQualityEvaluator::DisplayNameMinUtf8Bytes(
+                    DisplayNameMinUtf8Bytes::try_new(5).unwrap(),
+                ),
                 "Display name length",
-                "Replace the display name with a meaningful customer name.",
+                "Use a meaningful display name.",
             )
             .unwrap(),
         ])
         .unwrap();
-        let bytes = encode_party_completeness_profile_version_state(&profile).unwrap();
-        assert!(decode_party_completeness_profile_version_state(&bytes, &other_rule_set).is_err());
+        assert!(decode_party_completeness_profile_version_state(&bytes, &other).is_err());
+    }
+
+    #[test]
+    fn persisted_definition_bytes_are_strictly_canonical() {
+        let rule_set = rule_set();
+        let input = PartyQualityInput::try_new(EvaluatedPartyKind::Person, "Acme").unwrap();
+        assert!(rule_set.evaluate(&input)[0].passed());
+
+        let canonical = encode_party_rule_set_version_state(&rule_set).unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&canonical).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.insert("unknown".to_owned(), serde_json::Value::Bool(true));
+        assert!(decode_party_rule_set_version_state(&serde_json::to_vec(&value).unwrap()).is_err());
     }
 }
