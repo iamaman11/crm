@@ -10,6 +10,8 @@ mod completeness_profile_planner;
 mod evaluation_job_planner;
 mod evaluation_materialization_planner;
 mod evaluation_stage_planner;
+mod finding_stewardship_planner;
+mod finding_wire;
 mod rule_set_planner;
 
 pub use completeness_profile_planner::{
@@ -39,6 +41,10 @@ pub use evaluation_stage_planner::{
     DataQualityEvaluationStagePlanner, party_evaluation_input_persisted_contract,
     party_evaluation_input_persisted_payload, party_evaluation_input_record_ref,
 };
+pub use finding_stewardship_planner::{
+    DataQualityFindingStewardshipPlanner, party_finding_from_snapshot,
+};
+pub use finding_wire::party_finding_to_wire;
 pub use rule_set_planner::{
     DataQualityRuleSetCapabilityPlanner, party_rule_set_from_definition,
     party_rule_set_persisted_contract, party_rule_set_persisted_payload, party_rule_set_to_wire,
@@ -88,6 +94,29 @@ pub const PARTY_EVALUATION_REQUESTED_EVENT_TYPE: &str = "data_quality.party.eval
 pub const PARTY_EVALUATION_REQUESTED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.PartyEvaluationRequestedEvent";
 
+pub const ASSIGN_FINDING_CAPABILITY: &str = "data_quality.finding.assign";
+pub const ASSIGN_FINDING_REQUEST_SCHEMA: &str =
+    "crm.data_quality.v1.AssignDataQualityFindingRequest";
+pub const ASSIGN_FINDING_RESPONSE_SCHEMA: &str =
+    "crm.data_quality.v1.AssignDataQualityFindingResponse";
+pub const ACKNOWLEDGE_FINDING_CAPABILITY: &str = "data_quality.finding.acknowledge";
+pub const ACKNOWLEDGE_FINDING_REQUEST_SCHEMA: &str =
+    "crm.data_quality.v1.AcknowledgeDataQualityFindingRequest";
+pub const ACKNOWLEDGE_FINDING_RESPONSE_SCHEMA: &str =
+    "crm.data_quality.v1.AcknowledgeDataQualityFindingResponse";
+pub const WAIVE_FINDING_CAPABILITY: &str = "data_quality.finding.waive";
+pub const WAIVE_FINDING_REQUEST_SCHEMA: &str =
+    "crm.data_quality.v1.WaiveDataQualityFindingRequest";
+pub const WAIVE_FINDING_RESPONSE_SCHEMA: &str =
+    "crm.data_quality.v1.WaiveDataQualityFindingResponse";
+pub const FINDING_STATUS_CHANGED_EVENT_TYPE: &str = "data_quality.finding.status_changed";
+pub const FINDING_STATUS_CHANGED_EVENT_SCHEMA: &str =
+    "crm.data_quality.v1.DataQualityFindingStatusChangedEvent";
+pub const FINDING_ASSIGNMENT_CHANGED_EVENT_TYPE: &str =
+    "data_quality.finding.assignment_changed";
+pub const FINDING_ASSIGNMENT_CHANGED_EVENT_SCHEMA: &str =
+    "crm.data_quality.v1.DataQualityFindingAssignmentChangedEvent";
+
 pub const STAGE_PARTY_EVALUATION_INPUT_CAPABILITY: &str =
     "data_quality.party.evaluation.internal.stage";
 pub const STAGE_PARTY_EVALUATION_INPUT_REQUEST_SCHEMA: &str =
@@ -113,6 +142,9 @@ pub const MUTATION_CAPABILITY_IDS: &[&str] = &[
     PUBLISH_PARTY_RULE_SET_CAPABILITY,
     PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
     REQUEST_PARTY_EVALUATION_CAPABILITY,
+    ASSIGN_FINDING_CAPABILITY,
+    ACKNOWLEDGE_FINDING_CAPABILITY,
+    WAIVE_FINDING_CAPABILITY,
 ];
 
 pub fn party_rule_set_from_snapshot(
@@ -135,6 +167,9 @@ pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
         rule_set_capability_definition()?,
         completeness_profile_capability_definition()?,
         evaluation_request_capability_definition()?,
+        finding_assign_capability_definition()?,
+        finding_acknowledge_capability_definition()?,
+        finding_waive_capability_definition()?,
     ])
 }
 
@@ -165,6 +200,33 @@ pub fn evaluation_request_capability_definition() -> Result<CapabilityDefinition
         REQUEST_PARTY_EVALUATION_CAPABILITY,
         REQUEST_PARTY_EVALUATION_REQUEST_SCHEMA,
         REQUEST_PARTY_EVALUATION_RESPONSE_SCHEMA,
+        DataClass::Personal,
+    )
+}
+
+pub fn finding_assign_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        ASSIGN_FINDING_CAPABILITY,
+        ASSIGN_FINDING_REQUEST_SCHEMA,
+        ASSIGN_FINDING_RESPONSE_SCHEMA,
+        DataClass::Personal,
+    )
+}
+
+pub fn finding_acknowledge_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        ACKNOWLEDGE_FINDING_CAPABILITY,
+        ACKNOWLEDGE_FINDING_REQUEST_SCHEMA,
+        ACKNOWLEDGE_FINDING_RESPONSE_SCHEMA,
+        DataClass::Personal,
+    )
+}
+
+pub fn finding_waive_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        WAIVE_FINDING_CAPABILITY,
+        WAIVE_FINDING_REQUEST_SCHEMA,
+        WAIVE_FINDING_RESPONSE_SCHEMA,
         DataClass::Personal,
     )
 }
@@ -257,10 +319,15 @@ mod tests {
                 definition.capability_version.as_str(),
                 support::CONTRACT_VERSION
             );
-            let expected_class = if *expected_capability == REQUEST_PARTY_EVALUATION_CAPABILITY {
-                DataClass::Personal
-            } else {
+            let expected_class = if [
+                PUBLISH_PARTY_RULE_SET_CAPABILITY,
+                PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+            ]
+            .contains(expected_capability)
+            {
                 DataClass::Confidential
+            } else {
+                DataClass::Personal
             };
             assert_eq!(
                 definition.input_contract.allowed_data_classes,
