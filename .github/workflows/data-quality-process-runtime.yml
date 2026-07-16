@@ -124,6 +124,7 @@ jobs:
           run_process_test data_quality_completeness_profile_process_e2e
           run_process_test data_quality_field_redaction_process_e2e
           run_process_test data_quality_party_source_process_e2e
+          run_process_test data_quality_evaluation_stage_process_e2e
 
           kill "${health_probe_pid}" 2>/dev/null || true
           wait "${health_probe_pid}" 2>/dev/null || true
@@ -182,6 +183,8 @@ jobs:
             services/crm-api/tests/data_quality_completeness_profile_process_e2e.rs
             services/crm-api/tests/data_quality_field_redaction_process_e2e.rs
             services/crm-api/tests/data_quality_party_source_process_e2e.rs
+            services/crm-api/tests/data_quality_evaluation_stage_process_e2e.rs
+            services/crm-api/tests/support/data_quality_evaluation_*.rs
             database/tests/0014_data_quality_adapter.sql
             database/tests/0015_data_quality_completeness_profile_adapter.sql
             scripts/prepare_data_quality_process_database.sh
