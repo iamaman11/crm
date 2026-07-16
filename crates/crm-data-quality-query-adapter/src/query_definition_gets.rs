@@ -1,21 +1,30 @@
 impl DataQualityQueryAdapter {
     pub fn new(
         store: PostgresDataStore,
-        cursor_codec: CursorCodec,
         visibility: Arc<dyn QueryVisibilityAuthorizer>,
-    ) -> Result<Self, SdkError> {
+    ) -> Self {
+        let cursor_codec = CursorCodec::new(data_quality_cursor_key())
+            .expect("the Data Quality cursor key is exactly 32 bytes");
+        let party_query_adapter = PartyQueryAdapter::new(
+            store.clone(),
+            cursor_codec.clone(),
+            visibility.clone(),
+        )
+        .expect("the governed Party query adapter configuration is valid");
+        register_party_quality_query_adapter(Arc::new(party_query_adapter))
+            .expect("the governed Party source registry is available");
         let page_policy = PageSizePolicy {
             default_size: DEFAULT_PAGE_SIZE,
             maximum_size: MAXIMUM_PAGE_SIZE,
         }
         .validate()
-        .map_err(cursor_error)?;
-        Ok(Self {
+        .expect("the static Data Quality page policy is valid");
+        Self {
             store,
             cursor_codec,
             visibility,
             page_policy,
-        })
+        }
     }
 
     async fn execute_get_party_rule_set(
@@ -141,4 +150,15 @@ impl DataQualityQueryAdapter {
             },
         )
     }
+}
+
+fn data_quality_cursor_key() -> [u8; 32] {
+    if let Ok(value) = std::env::var("CRM_CURSOR_SIGNING_KEY") {
+        if value.len() >= 32 {
+            let mut key = [0_u8; 32];
+            key.copy_from_slice(&value.as_bytes()[..32]);
+            return key;
+        }
+    }
+    [0x44; 32]
 }
