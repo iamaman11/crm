@@ -1,4 +1,4 @@
-use crm_module_sdk::{RecordRef, RecordType};
+use crm_module_sdk::RecordRef;
 use std::collections::BTreeSet;
 
 impl DataQualityQueryAdapter {
@@ -149,5 +149,3 @@ fn apply_deployment_hidden_fields(
         }
     }
 }
-
-fn _assert_record_type_send_sync(_: &RecordType) {}
