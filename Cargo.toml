@@ -4,6 +4,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "crates/crm-canonical-json",
   "crates/crm-core-contracts",
   "crates/crm-core-data",
   "crates/crm-core-events",
