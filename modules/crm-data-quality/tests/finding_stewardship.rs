@@ -1,8 +1,8 @@
 use crm_data_quality::{
     ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent, PartyCompletenessProfileVersion,
-    PartyEvaluationJob, PartyFinding, PartyFindingObservation, PartyFindingStatus, PartyQualityEvaluator,
-    PartyQualityInput, PartyQualityRule, PartyRuleOutcome, PartyRuleSetVersion, QualitySeverity,
-    RuleKey, decode_finding_state, encode_finding_state,
+    PartyEvaluationJob, PartyFinding, PartyFindingObservation, PartyFindingStatus,
+    PartyQualityEvaluator, PartyQualityInput, PartyQualityRule, PartyRuleOutcome,
+    PartyRuleSetVersion, QualitySeverity, RuleKey, decode_finding_state, encode_finding_state,
 };
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, TenantId};
 
@@ -18,7 +18,9 @@ fn assignment_acknowledgement_and_waiver_bind_exact_current_evidence() {
     assert_eq!(assigned.current_observation_id(), observation_id);
     assert_eq!(assigned.assigned_actor_id().unwrap().as_str(), "steward-1");
 
-    let stale = assigned.acknowledge("different-observation", 104).unwrap_err();
+    let stale = assigned
+        .acknowledge("different-observation", 104)
+        .unwrap_err();
     assert_eq!(stale.category, ErrorCategory::Conflict);
 
     let acknowledged = assigned.acknowledge(&observation_id, 104).unwrap();
@@ -49,14 +51,14 @@ fn stewardship_rejects_invalid_reason_time_and_remediated_state() {
     assert!(finding.waive(&observation_id, " padded ", 103).is_err());
     assert!(finding.assign(None, 99).is_err());
 
-    let (rule_set, profile, staged, input) = evaluation_fixture("Meaningful Name", 8, 200);
+    let (rule_set, _profile, staged, input) =
+        evaluation_fixture("Meaningful Name", 8, 200);
     let evaluation = rule_set.evaluate(&input).into_iter().next().unwrap();
     let passing = PartyRuleOutcome::evaluate(&staged, &evaluation, 201).unwrap();
     let remediated = finding.apply_passing_outcome(&passing).unwrap();
     assert_eq!(remediated.status(), PartyFindingStatus::Remediated);
     assert!(remediated.assign(None, 202).is_err());
     assert!(remediated.acknowledge(&observation_id, 202).is_err());
-    drop(profile);
 }
 
 fn open_finding() -> PartyFinding {
