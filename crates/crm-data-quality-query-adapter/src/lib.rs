@@ -4,12 +4,14 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_data_quality::{
-    PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE, PARTY_RULE_SET_VERSION_RECORD_TYPE,
+    PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE, PARTY_EVALUATION_JOB_RECORD_TYPE,
+    PARTY_RULE_SET_VERSION_RECORD_TYPE,
 };
 use crm_data_quality_capability_adapter::{
     MODULE_ID, completeness_profile_rule_set_version_id_from_snapshot,
     party_completeness_profile_from_immutable_snapshot, party_completeness_profile_to_wire,
-    party_rule_set_from_snapshot, party_rule_set_to_wire,
+    party_evaluation_job_from_snapshot, party_evaluation_job_to_wire, party_rule_set_from_snapshot,
+    party_rule_set_to_wire,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
@@ -36,9 +38,16 @@ pub const GET_PARTY_COMPLETENESS_PROFILE_REQUEST_SCHEMA: &str =
 pub const GET_PARTY_COMPLETENESS_PROFILE_RESPONSE_SCHEMA: &str =
     "crm.data_quality.v1.GetPartyCompletenessProfileVersionResponse";
 
+pub const GET_PARTY_EVALUATION_JOB_CAPABILITY: &str = "data_quality.party.evaluation.get";
+pub const GET_PARTY_EVALUATION_JOB_REQUEST_SCHEMA: &str =
+    "crm.data_quality.v1.GetPartyEvaluationJobRequest";
+pub const GET_PARTY_EVALUATION_JOB_RESPONSE_SCHEMA: &str =
+    "crm.data_quality.v1.GetPartyEvaluationJobResponse";
+
 pub const QUERY_CAPABILITY_IDS: &[&str] = &[
     GET_PARTY_RULE_SET_CAPABILITY,
     GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+    GET_PARTY_EVALUATION_JOB_CAPABILITY,
 ];
 
 #[derive(Clone)]
@@ -69,6 +78,7 @@ impl DataQualityQueryAdapter {
         let command: wire::GetPartyRuleSetVersionRequest = decode_input(
             request,
             GET_PARTY_RULE_SET_REQUEST_SCHEMA,
+            DataClass::Confidential,
             "DATA_QUALITY_RULE_SET_QUERY_INPUT",
         )?;
         let version_ref = required_rule_set_ref(command.rule_set_version_ref)?;
@@ -112,6 +122,7 @@ impl DataQualityQueryAdapter {
         let command: wire::GetPartyCompletenessProfileVersionRequest = decode_input(
             request,
             GET_PARTY_COMPLETENESS_PROFILE_REQUEST_SCHEMA,
+            DataClass::Confidential,
             "DATA_QUALITY_COMPLETENESS_PROFILE_QUERY_INPUT",
         )?;
         let version_ref =
@@ -136,10 +147,6 @@ impl DataQualityQueryAdapter {
             )
             .await?;
 
-        // Profile disclosure inherits the exact referenced immutable rule-set visibility,
-        // but remains capability-specific because the live visibility key includes the
-        // profile-get capability coordinate. This avoids an independent ACL drifting
-        // away from the profile's mandatory same-owner rule-set binding.
         let visibility = self
             .visibility
             .authorize_visibility(request, &rule_set_snapshot.reference)
@@ -162,6 +169,76 @@ impl DataQualityQueryAdapter {
             DataClass::Confidential,
             &wire::GetPartyCompletenessProfileVersionResponse {
                 completeness_profile_version: Some(output),
+            },
+        )
+    }
+
+    async fn execute_get_party_evaluation_job(
+        &self,
+        request: &QueryRequest,
+    ) -> Result<TypedPayload, SdkError> {
+        let command: wire::GetPartyEvaluationJobRequest = decode_input(
+            request,
+            GET_PARTY_EVALUATION_JOB_REQUEST_SCHEMA,
+            DataClass::Personal,
+            "DATA_QUALITY_EVALUATION_QUERY_INPUT",
+        )?;
+        let job_ref = required_evaluation_job_ref(command.evaluation_job_ref)?;
+        let snapshot = self
+            .load_snapshot(
+                request,
+                PARTY_EVALUATION_JOB_RECORD_TYPE,
+                job_ref.evaluation_job_id,
+                evaluation_job_not_found,
+            )
+            .await?;
+        let visibility = self
+            .visibility
+            .authorize_visibility(request, &snapshot.reference)
+            .await?;
+        if !visibility.resource_visible {
+            return Err(evaluation_job_not_found());
+        }
+
+        let job = party_evaluation_job_from_snapshot(&snapshot)?;
+        let mut output = party_evaluation_job_to_wire(&job, snapshot.version);
+        if !visibility.allows_field("party_ref") {
+            output.party_ref = None;
+        }
+        if !visibility.allows_field("rule_set_version_ref") {
+            output.rule_set_version_ref = None;
+        }
+        if !visibility.allows_field("completeness_profile_version_ref") {
+            output.completeness_profile_version_ref = None;
+        }
+        if !visibility.allows_field("status") {
+            output.status = wire::PartyEvaluationJobStatus::Unspecified as i32;
+        }
+        if !visibility.allows_field("evaluated_party_resource_version") {
+            output.evaluated_party_resource_version = None;
+        }
+        if !visibility.allows_field("evaluated_rules") {
+            output.evaluated_rules = 0;
+        }
+        if !visibility.allows_field("failed_rules") {
+            output.failed_rules = 0;
+        }
+        if !visibility.allows_field("created_at") {
+            output.created_at = None;
+        }
+        if !visibility.allows_field("updated_at") {
+            output.updated_at = None;
+        }
+        if !visibility.allows_field("resource_version") {
+            output.resource_version = None;
+        }
+
+        support::protobuf_payload(
+            MODULE_ID,
+            GET_PARTY_EVALUATION_JOB_RESPONSE_SCHEMA,
+            DataClass::Personal,
+            &wire::GetPartyEvaluationJobResponse {
+                evaluation_job: Some(output),
             },
         )
     }
@@ -196,6 +273,7 @@ pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkEr
     Ok(vec![
         rule_set_query_capability_definition()?,
         completeness_profile_query_capability_definition()?,
+        evaluation_job_query_capability_definition()?,
     ])
 }
 
@@ -208,6 +286,7 @@ pub fn rule_set_query_capability_definition() -> Result<CapabilityDefinition, Sd
         GET_PARTY_RULE_SET_CAPABILITY,
         GET_PARTY_RULE_SET_REQUEST_SCHEMA,
         GET_PARTY_RULE_SET_RESPONSE_SCHEMA,
+        DataClass::Confidential,
     )
 }
 
@@ -217,6 +296,16 @@ pub fn completeness_profile_query_capability_definition() -> Result<CapabilityDe
         GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
         GET_PARTY_COMPLETENESS_PROFILE_REQUEST_SCHEMA,
         GET_PARTY_COMPLETENESS_PROFILE_RESPONSE_SCHEMA,
+        DataClass::Confidential,
+    )
+}
+
+pub fn evaluation_job_query_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    query_definition(
+        GET_PARTY_EVALUATION_JOB_CAPABILITY,
+        GET_PARTY_EVALUATION_JOB_REQUEST_SCHEMA,
+        GET_PARTY_EVALUATION_JOB_RESPONSE_SCHEMA,
+        DataClass::Personal,
     )
 }
 
@@ -224,6 +313,7 @@ fn query_definition(
     capability_id: &'static str,
     input_schema: &'static str,
     output_schema: &'static str,
+    data_class: DataClass,
 ) -> Result<CapabilityDefinition, SdkError> {
     Ok(CapabilityDefinition {
         capability_id: support::configured_identifier(CapabilityId::try_new(capability_id))?,
@@ -231,15 +321,11 @@ fn query_definition(
             support::CONTRACT_VERSION,
         ))?,
         owner_module_id: support::configured_identifier(ModuleId::try_new(MODULE_ID))?,
-        input_contract: support::protobuf_contract(
-            MODULE_ID,
-            input_schema,
-            vec![DataClass::Confidential],
-        )?,
+        input_contract: support::protobuf_contract(MODULE_ID, input_schema, vec![data_class])?,
         output_contract: Some(support::protobuf_contract(
             MODULE_ID,
             output_schema,
-            vec![DataClass::Confidential],
+            vec![data_class],
         )?),
         risk: CapabilityRisk::Low,
         mutation: false,
@@ -263,6 +349,7 @@ impl QuerySemanticValidator for DataQualityQueryAdapter {
                     let command: wire::GetPartyRuleSetVersionRequest = decode_input(
                         request,
                         GET_PARTY_RULE_SET_REQUEST_SCHEMA,
+                        DataClass::Confidential,
                         "DATA_QUALITY_RULE_SET_QUERY_INPUT",
                     )?;
                     validate_record_id(
@@ -274,6 +361,7 @@ impl QuerySemanticValidator for DataQualityQueryAdapter {
                     let command: wire::GetPartyCompletenessProfileVersionRequest = decode_input(
                         request,
                         GET_PARTY_COMPLETENESS_PROFILE_REQUEST_SCHEMA,
+                        DataClass::Confidential,
                         "DATA_QUALITY_COMPLETENESS_PROFILE_QUERY_INPUT",
                     )?;
                     validate_record_id(
@@ -282,6 +370,18 @@ impl QuerySemanticValidator for DataQualityQueryAdapter {
                         )?
                         .completeness_profile_version_id,
                         "data_quality.party_completeness_profile.completeness_profile_version_ref.completeness_profile_version_id",
+                    )
+                }
+                GET_PARTY_EVALUATION_JOB_CAPABILITY => {
+                    let command: wire::GetPartyEvaluationJobRequest = decode_input(
+                        request,
+                        GET_PARTY_EVALUATION_JOB_REQUEST_SCHEMA,
+                        DataClass::Personal,
+                        "DATA_QUALITY_EVALUATION_QUERY_INPUT",
+                    )?;
+                    validate_record_id(
+                        required_evaluation_job_ref(command.evaluation_job_ref)?.evaluation_job_id,
+                        "data_quality.party_evaluation.evaluation_job_ref.evaluation_job_id",
                     )
                 }
                 _ => Err(unsupported_query()),
@@ -304,6 +404,9 @@ impl QueryExecutor for DataQualityQueryAdapter {
                     self.execute_get_party_completeness_profile(&request)
                         .await?
                 }
+                GET_PARTY_EVALUATION_JOB_CAPABILITY => {
+                    self.execute_get_party_evaluation_job(&request).await?
+                }
                 _ => return Err(unsupported_query()),
             };
             Ok(QueryExecutionResult { output })
@@ -314,6 +417,7 @@ impl QueryExecutor for DataQualityQueryAdapter {
 fn decode_input<T: Message + Default>(
     request: &QueryRequest,
     schema_id: &'static str,
+    data_class: DataClass,
     code_prefix: &'static str,
 ) -> Result<T, SdkError> {
     let payload = &request.input;
@@ -321,7 +425,7 @@ fn decode_input<T: Message + Default>(
         || payload.schema_id.as_str() != schema_id
         || payload.schema_version.as_str() != support::CONTRACT_VERSION
         || payload.descriptor_hash != support::message_descriptor_hash(schema_id)
-        || payload.data_class != DataClass::Confidential
+        || payload.data_class != data_class
         || payload.encoding != PayloadEncoding::Protobuf
         || payload.maximum_size_bytes != support::MAX_PROTOBUF_BYTES
         || payload.validate().is_err()
@@ -365,10 +469,21 @@ fn required_completeness_profile_ref(
     })
 }
 
+fn required_evaluation_job_ref(
+    value: Option<wire::PartyEvaluationJobRef>,
+) -> Result<wire::PartyEvaluationJobRef, SdkError> {
+    value.ok_or_else(|| {
+        SdkError::invalid_argument(
+            "data_quality.party_evaluation.evaluation_job_ref",
+            "Party evaluation job reference is required",
+        )
+    })
+}
+
 fn validate_record_id(value: String, field: &'static str) -> Result<(), SdkError> {
     RecordId::try_new(value)
         .map(|_| ())
-        .map_err(|_| SdkError::invalid_argument(field, "Data Quality version reference is invalid"))
+        .map_err(|_| SdkError::invalid_argument(field, "Data Quality record reference is invalid"))
 }
 
 fn ensure_definition(definition: &CapabilityDefinition) -> Result<(), SdkError> {
@@ -399,6 +514,15 @@ fn completeness_profile_not_found() -> SdkError {
         ErrorCategory::NotFound,
         false,
         "The requested Party completeness-profile version was not found.",
+    )
+}
+
+fn evaluation_job_not_found() -> SdkError {
+    SdkError::new(
+        "DATA_QUALITY_PARTY_EVALUATION_NOT_FOUND",
+        ErrorCategory::NotFound,
+        false,
+        "The requested Party evaluation job was not found.",
     )
 }
 
@@ -434,12 +558,24 @@ fn configuration_error() -> SdkError {
 mod tests {
     use super::*;
 
-    fn assert_read_only_definition(definition: &CapabilityDefinition, expected_capability: &str) {
+    fn assert_read_only_definition(
+        definition: &CapabilityDefinition,
+        expected_capability: &str,
+        expected_data_class: DataClass,
+    ) {
         assert_eq!(definition.capability_id.as_str(), expected_capability);
         assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
         assert_eq!(
             definition.input_contract.allowed_data_classes,
-            vec![DataClass::Confidential]
+            vec![expected_data_class]
+        );
+        assert_eq!(
+            definition
+                .output_contract
+                .as_ref()
+                .expect("Data Quality query output contract")
+                .allowed_data_classes,
+            vec![expected_data_class]
         );
         assert_eq!(definition.risk, CapabilityRisk::Low);
         assert!(!definition.mutation);
@@ -448,11 +584,24 @@ mod tests {
     }
 
     #[test]
-    fn both_immutable_definition_queries_are_publicly_registered() {
+    fn definition_and_evaluation_queries_are_publicly_registered() {
         let definitions = query_capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 2);
-        assert_read_only_definition(&definitions[0], GET_PARTY_RULE_SET_CAPABILITY);
-        assert_read_only_definition(&definitions[1], GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY);
+        assert_eq!(definitions.len(), 3);
+        assert_read_only_definition(
+            &definitions[0],
+            GET_PARTY_RULE_SET_CAPABILITY,
+            DataClass::Confidential,
+        );
+        assert_read_only_definition(
+            &definitions[1],
+            GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+            DataClass::Confidential,
+        );
+        assert_read_only_definition(
+            &definitions[2],
+            GET_PARTY_EVALUATION_JOB_CAPABILITY,
+            DataClass::Personal,
+        );
     }
 
     #[test]

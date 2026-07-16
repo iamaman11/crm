@@ -82,16 +82,21 @@ mod tests {
     use crm_capability_runtime::CapabilityRisk;
     use crm_data_quality_capability_adapter::MODULE_ID;
     use crm_data_quality_query_adapter::{
-        GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY, GET_PARTY_RULE_SET_CAPABILITY,
+        GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY, GET_PARTY_EVALUATION_JOB_CAPABILITY,
+        GET_PARTY_RULE_SET_CAPABILITY,
     };
     use crm_module_sdk::DataClass;
 
     #[test]
     fn application_query_catalog_adds_exact_data_quality_definition_coordinates() {
         let definitions = application_query_definitions().unwrap();
-        for capability in [
-            GET_PARTY_RULE_SET_CAPABILITY,
-            GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+        for (capability, expected_class) in [
+            (GET_PARTY_RULE_SET_CAPABILITY, DataClass::Confidential),
+            (
+                GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+                DataClass::Confidential,
+            ),
+            (GET_PARTY_EVALUATION_JOB_CAPABILITY, DataClass::Personal),
         ] {
             let matches = definitions
                 .iter()
@@ -105,7 +110,7 @@ mod tests {
             assert_eq!(definition.risk, CapabilityRisk::Low);
             assert_eq!(
                 definition.input_contract.allowed_data_classes,
-                vec![DataClass::Confidential]
+                vec![expected_class]
             );
             assert_eq!(
                 definition
@@ -113,7 +118,7 @@ mod tests {
                     .as_ref()
                     .expect("Data Quality query output contract")
                     .allowed_data_classes,
-                vec![DataClass::Confidential]
+                vec![expected_class]
             );
             assert!(!definition.mutation);
             assert!(!definition.requires_idempotency);
