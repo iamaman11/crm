@@ -8,9 +8,12 @@ use crm_core_data::{
     RecordGetQuery,
 };
 use crm_data_quality_capability_adapter::{
-    DataQualityCompletenessProfileCapabilityPlanner, MODULE_ID, PARTY_RULE_SET_VERSION_RECORD_TYPE,
-    PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
-    completeness_profile_reference_scope_from_request, party_rule_set_from_snapshot,
+    DataQualityCompletenessProfileCapabilityPlanner, DataQualityEvaluationJobCapabilityPlanner,
+    MODULE_ID, PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE,
+    PARTY_RULE_SET_VERSION_RECORD_TYPE, PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+    REQUEST_PARTY_EVALUATION_CAPABILITY, completeness_profile_reference_scope_from_request,
+    evaluation_reference_scope_from_request, party_completeness_profile_from_immutable_snapshot,
+    party_rule_set_from_snapshot,
 };
 use crm_module_sdk::{ErrorCategory, ModuleId, PortFuture, RecordId, RecordType, SdkError};
 use std::fmt;
@@ -55,36 +58,79 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
         definition: &'a CapabilityDefinition,
         request: CapabilityRequest,
     ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
-        if definition.capability_id.as_str() != PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY {
-            return self.base.execute(definition, request);
+        match definition.capability_id.as_str() {
+            PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY => Box::pin(async move {
+                let scope = completeness_profile_reference_scope_from_request(&request)?;
+                let snapshot = self
+                    .store
+                    .get_record_for_query(&RecordGetQuery {
+                        tenant_id: request.context.execution.tenant_id.clone(),
+                        owner_module_id: module_id()?,
+                        record_type: record_type(PARTY_RULE_SET_VERSION_RECORD_TYPE)?,
+                        record_id: RecordId::try_new(scope.rule_set_version_id)
+                            .map_err(|_| rule_set_unavailable())?,
+                    })
+                    .await?
+                    .ok_or_else(rule_set_unavailable)?;
+                let rule_set = party_rule_set_from_snapshot(&snapshot)?;
+                PostgresTransactionalAggregateExecutor::new(
+                    self.store.clone(),
+                    Arc::new(DataQualityCompletenessProfileCapabilityPlanner::new(
+                        rule_set,
+                    )),
+                )
+                .execute(definition, request)
+                .await
+            }),
+            REQUEST_PARTY_EVALUATION_CAPABILITY => Box::pin(async move {
+                let scope = evaluation_reference_scope_from_request(&request)?;
+                let rule_set_snapshot = self
+                    .store
+                    .get_record_for_query(&RecordGetQuery {
+                        tenant_id: request.context.execution.tenant_id.clone(),
+                        owner_module_id: module_id()?,
+                        record_type: record_type(PARTY_RULE_SET_VERSION_RECORD_TYPE)?,
+                        record_id: scope.rule_set_version_id,
+                    })
+                    .await?
+                    .ok_or_else(evaluation_definitions_unavailable)?;
+                let rule_set = party_rule_set_from_snapshot(&rule_set_snapshot)?;
+                let profile_snapshot = self
+                    .store
+                    .get_record_for_query(&RecordGetQuery {
+                        tenant_id: request.context.execution.tenant_id.clone(),
+                        owner_module_id: module_id()?,
+                        record_type: record_type(
+                            PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE,
+                        )?,
+                        record_id: scope.profile_version_id,
+                    })
+                    .await?
+                    .ok_or_else(evaluation_definitions_unavailable)?;
+                let profile = party_completeness_profile_from_immutable_snapshot(
+                    &profile_snapshot,
+                    &rule_set,
+                )?;
+                PostgresTransactionalAggregateExecutor::new(
+                    self.store.clone(),
+                    Arc::new(DataQualityEvaluationJobCapabilityPlanner::new(
+                        rule_set, profile,
+                    )?),
+                )
+                .execute(definition, request)
+                .await
+            }),
+            _ => self.base.execute(definition, request),
         }
-
-        Box::pin(async move {
-            let scope = completeness_profile_reference_scope_from_request(&request)?;
-            let snapshot = self
-                .store
-                .get_record_for_query(&RecordGetQuery {
-                    tenant_id: request.context.execution.tenant_id.clone(),
-                    owner_module_id: ModuleId::try_new(MODULE_ID)
-                        .map_err(reference_configuration_error)?,
-                    record_type: RecordType::try_new(PARTY_RULE_SET_VERSION_RECORD_TYPE)
-                        .map_err(reference_configuration_error)?,
-                    record_id: RecordId::try_new(scope.rule_set_version_id)
-                        .map_err(|_| rule_set_unavailable())?,
-                })
-                .await?
-                .ok_or_else(rule_set_unavailable)?;
-            let rule_set = party_rule_set_from_snapshot(&snapshot)?;
-            PostgresTransactionalAggregateExecutor::new(
-                self.store.clone(),
-                Arc::new(DataQualityCompletenessProfileCapabilityPlanner::new(
-                    rule_set,
-                )),
-            )
-            .execute(definition, request)
-            .await
-        })
     }
+}
+
+fn module_id() -> Result<ModuleId, SdkError> {
+    ModuleId::try_new(MODULE_ID).map_err(reference_configuration_error)
+}
+
+fn record_type(value: &str) -> Result<RecordType, SdkError> {
+    RecordType::try_new(value).map_err(reference_configuration_error)
 }
 
 fn rule_set_unavailable() -> SdkError {
@@ -93,6 +139,15 @@ fn rule_set_unavailable() -> SdkError {
         ErrorCategory::InvalidArgument,
         false,
         "The referenced Party rule-set version is unavailable.",
+    )
+}
+
+fn evaluation_definitions_unavailable() -> SdkError {
+    SdkError::new(
+        "DATA_QUALITY_EVALUATION_DEFINITIONS_UNAVAILABLE",
+        ErrorCategory::InvalidArgument,
+        false,
+        "The referenced Party evaluation definitions are unavailable.",
     )
 }
 
