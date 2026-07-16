@@ -184,15 +184,13 @@ fn apply_command(
         ACKNOWLEDGE_FINDING_CAPABILITY => {
             let command: wire::AcknowledgeDataQualityFindingRequest =
                 decode(request, ACKNOWLEDGE_FINDING_REQUEST_SCHEMA)?;
-            let observation_id =
-                required_observation_id(command.expected_current_observation_ref)?;
+            let observation_id = required_observation_id(command.expected_current_observation_ref)?;
             finding.acknowledge(&observation_id, now)
         }
         WAIVE_FINDING_CAPABILITY => {
             let command: wire::WaiveDataQualityFindingRequest =
                 decode(request, WAIVE_FINDING_REQUEST_SCHEMA)?;
-            let observation_id =
-                required_observation_id(command.expected_current_observation_ref)?;
+            let observation_id = required_observation_id(command.expected_current_observation_ref)?;
             finding.waive(&observation_id, command.reason, now)
         }
         _ => Err(unsupported()),
@@ -207,7 +205,9 @@ pub fn party_finding_from_snapshot(snapshot: &RecordSnapshot) -> Result<PartyFin
     )?;
     let finding = decode_finding_state(bytes)?;
     if snapshot.version <= 0 || finding.finding_id() != snapshot.reference.record_id.as_str() {
-        return Err(invalid_plan("persisted finding identity or version is invalid"));
+        return Err(invalid_plan(
+            "persisted finding identity or version is invalid",
+        ));
     }
     Ok(finding)
 }
@@ -251,13 +251,11 @@ fn expected_version(
             ASSIGN_FINDING_REQUEST_SCHEMA,
         )?
         .expected_version),
-        ACKNOWLEDGE_FINDING_CAPABILITY => {
-            Ok(decode::<wire::AcknowledgeDataQualityFindingRequest>(
-                request,
-                ACKNOWLEDGE_FINDING_REQUEST_SCHEMA,
-            )?
-            .expected_version)
-        }
+        ACKNOWLEDGE_FINDING_CAPABILITY => Ok(decode::<wire::AcknowledgeDataQualityFindingRequest>(
+            request,
+            ACKNOWLEDGE_FINDING_REQUEST_SCHEMA,
+        )?
+        .expected_version),
         WAIVE_FINDING_CAPABILITY => Ok(decode::<wire::WaiveDataQualityFindingRequest>(
             request,
             WAIVE_FINDING_REQUEST_SCHEMA,
@@ -271,21 +269,11 @@ fn decode<T: prost::Message + Default>(
     request: &CapabilityRequest,
     schema: &'static str,
 ) -> Result<T, SdkError> {
-    support::decode_request_with_data_class(
-        request,
-        MODULE_ID,
-        schema,
-        DataClass::Personal,
-    )
+    support::decode_request_with_data_class(request, MODULE_ID, schema, DataClass::Personal)
 }
 
 fn required_finding_id(value: Option<wire::DataQualityFindingRef>) -> Result<RecordId, SdkError> {
-    RecordId::try_new(
-        value
-            .ok_or_else(|| missing("finding_ref"))?
-            .finding_id,
-    )
-    .map_err(|error| {
+    RecordId::try_new(value.ok_or_else(|| missing("finding_ref"))?.finding_id).map_err(|error| {
         SdkError::invalid_argument("data_quality.finding_ref.finding_id", error.to_string())
     })
 }

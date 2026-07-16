@@ -1,10 +1,10 @@
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
-use crm_module_sdk::{CapabilityId, CapabilityVersion, DataClass, ModuleId, SdkError};
 pub use crm_data_quality::{
     PartyDisplayNameRemediationAttempt, PartyDisplayNameRemediationIdentity, PartyFinding,
     PartyQualityEvaluator,
 };
+use crm_module_sdk::{CapabilityId, CapabilityVersion, DataClass, ModuleId, SdkError};
 
 use crate::MODULE_ID;
 
@@ -15,8 +15,7 @@ pub const REMEDIATE_PARTY_DISPLAY_NAME_REQUEST_SCHEMA: &str =
     "crm.data_quality.v1.RemediatePartyDisplayNameRequest";
 pub const REMEDIATE_PARTY_DISPLAY_NAME_RESPONSE_SCHEMA: &str =
     "crm.data_quality.v1.RemediatePartyDisplayNameResponse";
-pub const PARTY_REMEDIATION_COMPLETED_EVENT_TYPE: &str =
-    "data_quality.party.remediation.completed";
+pub const PARTY_REMEDIATION_COMPLETED_EVENT_TYPE: &str = "data_quality.party.remediation.completed";
 pub const PARTY_REMEDIATION_COMPLETED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.PartyDisplayNameRemediationCompletedEvent";
 

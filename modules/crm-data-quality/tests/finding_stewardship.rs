@@ -51,8 +51,7 @@ fn stewardship_rejects_invalid_reason_time_and_remediated_state() {
     assert!(finding.waive(&observation_id, " padded ", 103).is_err());
     assert!(finding.assign(None, 99).is_err());
 
-    let (rule_set, _profile, staged, input) =
-        evaluation_fixture("Meaningful Name", 8, 200);
+    let (rule_set, _profile, staged, input) = evaluation_fixture("Meaningful Name", 8, 200);
     let evaluation = rule_set.evaluate(&input).into_iter().next().unwrap();
     let passing = PartyRuleOutcome::evaluate(&staged, &evaluation, 201).unwrap();
     let remediated = finding.apply_passing_outcome(&passing).unwrap();

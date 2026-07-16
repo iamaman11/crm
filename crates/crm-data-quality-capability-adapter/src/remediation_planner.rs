@@ -10,13 +10,15 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_data_quality::{
-    REMEDIATION_ATTEMPT_RECORD_TYPE, REMEDIATION_ATTEMPT_STATE_MAXIMUM_BYTES,
-    REMEDIATION_ATTEMPT_STATE_RETENTION_POLICY_ID, REMEDIATION_ATTEMPT_STATE_SCHEMA_ID,
-    REMEDIATION_ATTEMPT_STATE_SCHEMA_VERSION, PartyDisplayNameRemediationAttempt,
+    PartyDisplayNameRemediationAttempt, REMEDIATION_ATTEMPT_RECORD_TYPE,
+    REMEDIATION_ATTEMPT_STATE_MAXIMUM_BYTES, REMEDIATION_ATTEMPT_STATE_RETENTION_POLICY_ID,
+    REMEDIATION_ATTEMPT_STATE_SCHEMA_ID, REMEDIATION_ATTEMPT_STATE_SCHEMA_VERSION,
     encode_remediation_attempt_state, remediation_attempt_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, SdkError};
-use crm_proto_contracts::crm::{core::v1 as core, customer::v1 as customer, data_quality::v1 as wire};
+use crm_proto_contracts::crm::{
+    core::v1 as core, customer::v1 as customer, data_quality::v1 as wire,
+};
 
 #[derive(Debug, Clone)]
 pub struct DataQualityRemediationCompletionPlanner {

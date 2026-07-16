@@ -4,11 +4,7 @@ use crm_module_sdk::{ActorId, ErrorCategory, SdkError};
 const MAX_WAIVER_REASON_BYTES: usize = 512;
 
 impl PartyFinding {
-    pub fn assign(
-        &self,
-        assigned_actor_id: Option<ActorId>,
-        now: i64,
-    ) -> Result<Self, SdkError> {
+    pub fn assign(&self, assigned_actor_id: Option<ActorId>, now: i64) -> Result<Self, SdkError> {
         self.ensure_stewardship_time(now)?;
         self.ensure_active_for_stewardship()?;
         self.rebuild(

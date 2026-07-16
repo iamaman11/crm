@@ -4,7 +4,9 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 static PARTY_QUERY_ADAPTER: OnceLock<RwLock<Option<Arc<PartyQueryAdapter>>>> = OnceLock::new();
 
-pub fn register_party_quality_query_adapter(adapter: Arc<PartyQueryAdapter>) -> Result<(), SdkError> {
+pub fn register_party_quality_query_adapter(
+    adapter: Arc<PartyQueryAdapter>,
+) -> Result<(), SdkError> {
     let registry = PARTY_QUERY_ADAPTER.get_or_init(|| RwLock::new(None));
     let mut current = registry.write().map_err(|_| registry_error())?;
     *current = Some(adapter);

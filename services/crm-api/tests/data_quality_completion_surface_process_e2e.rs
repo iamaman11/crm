@@ -15,14 +15,10 @@ mod data_quality_evaluation_registry;
 #[path = "support/data_quality_evaluation_worker.rs"]
 mod data_quality_evaluation_worker;
 
-use crm_core_data::{
-    PostgresDataStore, RecordGetQuery, RecordListQuery, RecordQuerySort,
-};
+use crm_core_data::{PostgresDataStore, RecordGetQuery, RecordListQuery, RecordQuerySort};
 use crm_data_quality::{decode_finding_state, decode_remediation_attempt_state};
 use crm_module_sdk::{ModuleId, RecordId, RecordType, TenantId};
-use crm_proto_contracts::crm::{
-    customer::v1 as customer, data_quality::v1 as data_quality,
-};
+use crm_proto_contracts::crm::{customer::v1 as customer, data_quality::v1 as data_quality};
 use data_quality_evaluation_actor::provision_worker_actor;
 use data_quality_evaluation_fixture::{TENANT, profile_input, rule_set_input, unique_id};
 use data_quality_evaluation_gateway::{
@@ -61,7 +57,9 @@ const REMEDIATE: &str = "data_quality.party.display_name.remediate";
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn completion_surfaces_stewardship_and_remediation_recover_without_duplicates() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping Data Quality completion-surface process proof because DATABASE_URL is absent");
+        eprintln!(
+            "skipping Data Quality completion-surface process proof because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -325,7 +323,10 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
         &database_url,
         &[
             ("CRM_API_TENANTS", &format!("{TENANT},{OTHER_TENANT}")),
-            ("CRM_DATA_QUALITY_REMEDIATION_FAIL_AFTER_TARGET_ONCE", "true"),
+            (
+                "CRM_DATA_QUALITY_REMEDIATION_FAIL_AFTER_TARGET_ONCE",
+                "true",
+            ),
         ],
     )
     .await;
@@ -335,21 +336,16 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
             finding_id: evidence_b.finding_id.clone(),
         }),
         expected_finding_version: 2,
-        expected_current_observation_ref: Some(
-            data_quality::DataQualityFindingObservationRef {
-                finding_observation_id: evidence_b.observation_id.clone(),
-            },
-        ),
+        expected_current_observation_ref: Some(data_quality::DataQualityFindingObservationRef {
+            finding_observation_id: evidence_b.observation_id.clone(),
+        }),
         expected_party_resource_version: party_b_version,
         display_name: "Grace Hopper".to_owned(),
     };
     let deferred = mutate(
         &mut failpoint_api.client,
         &mutation_definition(REMEDIATE),
-        payload(
-            &mutation_definition(REMEDIATE),
-            remediation_request.clone(),
-        ),
+        payload(&mutation_definition(REMEDIATE), remediation_request.clone()),
         &remediation_key,
     )
     .await
@@ -425,7 +421,12 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
         crm_data_quality::PartyFindingStatus::Remediated
     );
     assert_eq!(remediated_snapshot.version, 3);
-    assert!(remediated_snapshot.finding.remediated_by_rule_outcome_id().is_some());
+    assert!(
+        remediated_snapshot
+            .finding
+            .remediated_by_rule_outcome_id()
+            .is_some()
+    );
     assert_eq!(record_count(&admin, OBSERVATION_TYPE).await, 2);
     assert_force_rls_completion_records(
         &admin,
@@ -451,10 +452,7 @@ async fn run_worker_until_idle(database_url: &str) {
             .run_tenant_cycle(tenant.clone())
             .await
             .expect("run Data Quality completion-surface worker cycle");
-        if result.staged_jobs == 0
-            && result.materialized_jobs == 0
-            && result.deferred_jobs == 0
-        {
+        if result.staged_jobs == 0 && result.materialized_jobs == 0 && result.deferred_jobs == 0 {
             break;
         }
     }
@@ -540,7 +538,11 @@ async fn get_evaluation(
     .await
     .expect("query completed Party evaluation");
     data_quality::GetPartyEvaluationJobResponse::decode(
-        response.output.expect("evaluation query output").payload.as_slice(),
+        response
+            .output
+            .expect("evaluation query output")
+            .payload
+            .as_slice(),
     )
     .expect("decode evaluation query response")
     .evaluation_job
@@ -567,7 +569,11 @@ async fn get_finding(
     .await
     .expect("query Data Quality finding");
     data_quality::GetDataQualityFindingResponse::decode(
-        response.output.expect("finding query output").payload.as_slice(),
+        response
+            .output
+            .expect("finding query output")
+            .payload
+            .as_slice(),
     )
     .expect("decode finding query response")
 }
@@ -627,7 +633,11 @@ async fn list_by_party(
     .await
     .expect("list Party findings");
     data_quality::ListDataQualityFindingsByPartyResponse::decode(
-        response.output.expect("finding list output").payload.as_slice(),
+        response
+            .output
+            .expect("finding list output")
+            .payload
+            .as_slice(),
     )
     .expect("decode finding list")
 }
@@ -690,7 +700,11 @@ async fn assign_finding(
     .await
     .expect("assign Data Quality finding");
     data_quality::AssignDataQualityFindingResponse::decode(
-        response.output.expect("assignment output").payload.as_slice(),
+        response
+            .output
+            .expect("assignment output")
+            .payload
+            .as_slice(),
     )
     .expect("decode finding assignment")
     .finding
@@ -727,7 +741,11 @@ async fn acknowledge_finding(
     .await
     .expect("acknowledge Data Quality finding");
     data_quality::AcknowledgeDataQualityFindingResponse::decode(
-        response.output.expect("acknowledgement output").payload.as_slice(),
+        response
+            .output
+            .expect("acknowledgement output")
+            .payload
+            .as_slice(),
     )
     .expect("decode finding acknowledgement")
     .finding
@@ -783,7 +801,11 @@ async fn remediate(
         .await
         .expect("recover Party display-name remediation");
     data_quality::RemediatePartyDisplayNameResponse::decode(
-        response.output.expect("remediation output").payload.as_slice(),
+        response
+            .output
+            .expect("remediation output")
+            .payload
+            .as_slice(),
     )
     .expect("decode remediation response")
 }
@@ -888,14 +910,8 @@ async fn assert_force_rls_completion_records(
         (ATTEMPT_TYPE, attempt_id),
     ] {
         assert_eq!(
-            app_role_record_count(
-                &application,
-                OTHER_TENANT,
-                TENANT,
-                record_type,
-                record_id,
-            )
-            .await,
+            app_role_record_count(&application, OTHER_TENANT, TENANT, record_type, record_id,)
+                .await,
             0,
             "FORCE RLS must hide tenant A completion records under tenant B context"
         );
@@ -905,11 +921,14 @@ async fn assert_force_rls_completion_records(
             "application role must see completion record under owning tenant context"
         );
     }
-    let persisted_attempt = list_records(&PostgresDataStore::connect(database_url).await.unwrap(), ATTEMPT_TYPE)
-        .await
-        .into_iter()
-        .find(|(record_id, _)| record_id == attempt_id)
-        .expect("persisted remediation attempt");
+    let persisted_attempt = list_records(
+        &PostgresDataStore::connect(database_url).await.unwrap(),
+        ATTEMPT_TYPE,
+    )
+    .await
+    .into_iter()
+    .find(|(record_id, _)| record_id == attempt_id)
+    .expect("persisted remediation attempt");
     let attempt_bytes = serde_json::to_vec(&persisted_attempt.1).unwrap();
     decode_remediation_attempt_state(&attempt_bytes)
         .expect("strict remediation attempt persisted state");

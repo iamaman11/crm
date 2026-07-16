@@ -1,6 +1,4 @@
-use crate::{
-    EvaluatedPartyKind, PartyFinding, PartyQualityInput, derived_identity::derived_id,
-};
+use crate::{EvaluatedPartyKind, PartyFinding, PartyQualityInput, derived_identity::derived_id};
 use crm_module_sdk::{ErrorCategory, IdempotencyKey, RecordId, SdkError, TenantId};
 
 const ATTEMPT_ID_DOMAIN: &[u8] = b"crm.data-quality.party-display-name-remediation-attempt/v1";
@@ -78,9 +76,15 @@ impl PartyDisplayNameRemediationIdentity {
         })
     }
 
-    pub fn attempt_id(&self) -> &str { &self.attempt_id }
-    pub fn caller_idempotency_key(&self) -> &IdempotencyKey { &self.caller_idempotency_key }
-    pub fn target_idempotency_key(&self) -> &IdempotencyKey { &self.target_idempotency_key }
+    pub fn attempt_id(&self) -> &str {
+        &self.attempt_id
+    }
+    pub fn caller_idempotency_key(&self) -> &IdempotencyKey {
+        &self.caller_idempotency_key
+    }
+    pub fn target_idempotency_key(&self) -> &IdempotencyKey {
+        &self.target_idempotency_key
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,7 +146,9 @@ impl PartyDisplayNameRemediationAttempt {
         })
     }
 
-    pub(crate) fn restore(state: PartyDisplayNameRemediationAttemptRestore) -> Result<Self, SdkError> {
+    pub(crate) fn restore(
+        state: PartyDisplayNameRemediationAttemptRestore,
+    ) -> Result<Self, SdkError> {
         validate_display_name(&state.requested_display_name)?;
         if state.finding_id.is_empty()
             || state.observation_id.is_empty()
@@ -151,7 +157,9 @@ impl PartyDisplayNameRemediationAttempt {
             || state.updated_party_version <= state.expected_party_version
             || state.completed_at < 0
         {
-            return Err(invalid("persisted remediation attempt invariants are invalid"));
+            return Err(invalid(
+                "persisted remediation attempt invariants are invalid",
+            ));
         }
         let identity = PartyDisplayNameRemediationIdentity::derive_raw(
             &state.tenant_id,
@@ -183,18 +191,42 @@ impl PartyDisplayNameRemediationAttempt {
         })
     }
 
-    pub fn tenant_id(&self) -> &TenantId { &self.tenant_id }
-    pub fn attempt_id(&self) -> &str { &self.attempt_id }
-    pub fn caller_idempotency_key(&self) -> &IdempotencyKey { &self.caller_idempotency_key }
-    pub fn finding_id(&self) -> &str { &self.finding_id }
-    pub const fn expected_finding_version(&self) -> i64 { self.expected_finding_version }
-    pub fn observation_id(&self) -> &str { &self.observation_id }
-    pub fn party_id(&self) -> &RecordId { &self.party_id }
-    pub const fn expected_party_version(&self) -> i64 { self.expected_party_version }
-    pub fn requested_display_name(&self) -> &str { &self.requested_display_name }
-    pub fn target_idempotency_key(&self) -> &IdempotencyKey { &self.target_idempotency_key }
-    pub const fn updated_party_version(&self) -> i64 { self.updated_party_version }
-    pub const fn completed_at(&self) -> i64 { self.completed_at }
+    pub fn tenant_id(&self) -> &TenantId {
+        &self.tenant_id
+    }
+    pub fn attempt_id(&self) -> &str {
+        &self.attempt_id
+    }
+    pub fn caller_idempotency_key(&self) -> &IdempotencyKey {
+        &self.caller_idempotency_key
+    }
+    pub fn finding_id(&self) -> &str {
+        &self.finding_id
+    }
+    pub const fn expected_finding_version(&self) -> i64 {
+        self.expected_finding_version
+    }
+    pub fn observation_id(&self) -> &str {
+        &self.observation_id
+    }
+    pub fn party_id(&self) -> &RecordId {
+        &self.party_id
+    }
+    pub const fn expected_party_version(&self) -> i64 {
+        self.expected_party_version
+    }
+    pub fn requested_display_name(&self) -> &str {
+        &self.requested_display_name
+    }
+    pub fn target_idempotency_key(&self) -> &IdempotencyKey {
+        &self.target_idempotency_key
+    }
+    pub const fn updated_party_version(&self) -> i64 {
+        self.updated_party_version
+    }
+    pub const fn completed_at(&self) -> i64 {
+        self.completed_at
+    }
 }
 
 pub(crate) struct PartyDisplayNameRemediationAttemptRestore {

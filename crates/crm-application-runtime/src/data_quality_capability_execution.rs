@@ -38,8 +38,8 @@ use crm_proto_contracts::crm::{data_quality::v1 as data_quality, parties::v1 as 
 use crm_query_runtime::QueryAuthorizer;
 use prost::Message;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 static REMEDIATION_FAILPOINT_USED: AtomicBool = AtomicBool::new(false);
 
@@ -109,8 +109,7 @@ impl ApplicationCapabilityExecutorRouter {
         let observation_id =
             required_observation_id(command.expected_current_observation_ref.as_ref())?;
         if observation_id.as_str() != finding.current_observation_id()
-            || command.expected_party_resource_version
-                != finding.evaluated_party_resource_version()
+            || command.expected_party_resource_version != finding.evaluated_party_resource_version()
         {
             return Err(remediation_evidence_conflict());
         }
@@ -182,14 +181,15 @@ impl ApplicationCapabilityExecutorRouter {
             &target_request,
         )
         .await?;
-        let target_result = self.base.execute(&target_definition, target_request).await?;
+        let target_result = self
+            .base
+            .execute(&target_definition, target_request)
+            .await?;
         let updated_party = decode_updated_party(target_result)?;
         let updated_version = updated_party
             .resource_version
             .as_ref()
-            .ok_or_else(|| {
-                remediation_target_contract_invalid("updated Party version is missing")
-            })?
+            .ok_or_else(|| remediation_target_contract_invalid("updated Party version is missing"))?
             .version;
 
         if fail_after_target_once() {
@@ -319,9 +319,7 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
                     .get_record_for_query(&RecordGetQuery {
                         tenant_id: request.context.execution.tenant_id.clone(),
                         owner_module_id: module_id()?,
-                        record_type: record_type(
-                            PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE,
-                        )?,
+                        record_type: record_type(PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE)?,
                         record_id: scope.profile_version_id,
                     })
                     .await?

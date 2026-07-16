@@ -9,11 +9,9 @@ fn remediation_request_binds_exact_finding_observation_and_party_versions() {
             finding_id: "dq-finding-1".to_owned(),
         }),
         expected_finding_version: 4,
-        expected_current_observation_ref: Some(
-            data_quality::DataQualityFindingObservationRef {
-                finding_observation_id: "dq-observation-1".to_owned(),
-            },
-        ),
+        expected_current_observation_ref: Some(data_quality::DataQualityFindingObservationRef {
+            finding_observation_id: "dq-observation-1".to_owned(),
+        }),
         expected_party_resource_version: 7,
         display_name: "Ada Lovelace".to_owned(),
     };
@@ -61,10 +59,8 @@ fn remediation_response_carries_owner_party_and_durable_attempt_evidence() {
 
 #[test]
 fn remediation_descriptor_identity_is_stable_and_distinct() {
-    let request =
-        message_descriptor_hash("crm.data_quality.v1.RemediatePartyDisplayNameRequest");
-    let attempt =
-        message_descriptor_hash("crm.data_quality.v1.PartyDisplayNameRemediationAttempt");
+    let request = message_descriptor_hash("crm.data_quality.v1.RemediatePartyDisplayNameRequest");
+    let attempt = message_descriptor_hash("crm.data_quality.v1.PartyDisplayNameRemediationAttempt");
     assert_eq!(
         request,
         message_descriptor_hash("crm.data_quality.v1.RemediatePartyDisplayNameRequest")

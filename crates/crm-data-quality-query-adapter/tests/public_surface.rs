@@ -13,16 +13,35 @@ fn data_quality_queries_remain_exact_classified_read_only_surfaces() {
     assert_eq!(definitions.len(), 7);
     for (capability, expected_class) in [
         (GET_PARTY_RULE_SET_CAPABILITY, DataClass::Confidential),
-        (GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY, DataClass::Confidential),
+        (
+            GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+            DataClass::Confidential,
+        ),
         (GET_PARTY_EVALUATION_JOB_CAPABILITY, DataClass::Personal),
         (GET_FINDING_CAPABILITY, DataClass::Personal),
         (LIST_FINDINGS_BY_PARTY_CAPABILITY, DataClass::Personal),
         (LIST_ASSIGNED_FINDINGS_CAPABILITY, DataClass::Personal),
-        (GET_PARTY_COMPLETENESS_RESULT_CAPABILITY, DataClass::Personal),
+        (
+            GET_PARTY_COMPLETENESS_RESULT_CAPABILITY,
+            DataClass::Personal,
+        ),
     ] {
-        let definition = definitions.iter().find(|definition| definition.capability_id.as_str() == capability).expect("registered Data Quality query capability");
-        assert_eq!(definition.input_contract.allowed_data_classes, vec![expected_class]);
-        assert_eq!(definition.output_contract.as_ref().expect("Data Quality query output contract").allowed_data_classes, vec![expected_class]);
+        let definition = definitions
+            .iter()
+            .find(|definition| definition.capability_id.as_str() == capability)
+            .expect("registered Data Quality query capability");
+        assert_eq!(
+            definition.input_contract.allowed_data_classes,
+            vec![expected_class]
+        );
+        assert_eq!(
+            definition
+                .output_contract
+                .as_ref()
+                .expect("Data Quality query output contract")
+                .allowed_data_classes,
+            vec![expected_class]
+        );
         assert_eq!(definition.risk, CapabilityRisk::Low);
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);

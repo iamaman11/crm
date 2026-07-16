@@ -3,10 +3,7 @@ use crm_proto_contracts::crm::{
     core::v1 as core, customer::v1 as customer, data_quality::v1 as wire,
 };
 
-pub fn party_finding_to_wire(
-    finding: &PartyFinding,
-    version: i64,
-) -> wire::DataQualityFinding {
+pub fn party_finding_to_wire(finding: &PartyFinding, version: i64) -> wire::DataQualityFinding {
     wire::DataQualityFinding {
         finding_ref: Some(wire::DataQualityFindingRef {
             finding_id: finding.finding_id().to_owned(),

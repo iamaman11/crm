@@ -113,15 +113,13 @@ pub const ACKNOWLEDGE_FINDING_REQUEST_SCHEMA: &str =
 pub const ACKNOWLEDGE_FINDING_RESPONSE_SCHEMA: &str =
     "crm.data_quality.v1.AcknowledgeDataQualityFindingResponse";
 pub const WAIVE_FINDING_CAPABILITY: &str = "data_quality.finding.waive";
-pub const WAIVE_FINDING_REQUEST_SCHEMA: &str =
-    "crm.data_quality.v1.WaiveDataQualityFindingRequest";
+pub const WAIVE_FINDING_REQUEST_SCHEMA: &str = "crm.data_quality.v1.WaiveDataQualityFindingRequest";
 pub const WAIVE_FINDING_RESPONSE_SCHEMA: &str =
     "crm.data_quality.v1.WaiveDataQualityFindingResponse";
 pub const FINDING_STATUS_CHANGED_EVENT_TYPE: &str = "data_quality.finding.status_changed";
 pub const FINDING_STATUS_CHANGED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.DataQualityFindingStatusChangedEvent";
-pub const FINDING_ASSIGNMENT_CHANGED_EVENT_TYPE: &str =
-    "data_quality.finding.assignment_changed";
+pub const FINDING_ASSIGNMENT_CHANGED_EVENT_TYPE: &str = "data_quality.finding.assignment_changed";
 pub const FINDING_ASSIGNMENT_CHANGED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.DataQualityFindingAssignmentChangedEvent";
 
@@ -325,7 +323,10 @@ mod tests {
         for (definition, expected_capability) in definitions.iter().zip(MUTATION_CAPABILITY_IDS) {
             assert_eq!(definition.capability_id.as_str(), *expected_capability);
             assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-            assert_eq!(definition.capability_version.as_str(), support::CONTRACT_VERSION);
+            assert_eq!(
+                definition.capability_version.as_str(),
+                support::CONTRACT_VERSION
+            );
             let expected_class = if [
                 PUBLISH_PARTY_RULE_SET_CAPABILITY,
                 PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
@@ -336,7 +337,10 @@ mod tests {
             } else {
                 DataClass::Personal
             };
-            assert_eq!(definition.input_contract.allowed_data_classes, vec![expected_class]);
+            assert_eq!(
+                definition.input_contract.allowed_data_classes,
+                vec![expected_class]
+            );
             let expected_risk = if *expected_capability == REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY {
                 CapabilityRisk::High
             } else {
@@ -355,7 +359,10 @@ mod tests {
             evaluation_stage_capability_definition().unwrap(),
             evaluation_materialization_capability_definition().unwrap(),
         ] {
-            assert_eq!(definition.input_contract.allowed_data_classes, vec![DataClass::Personal]);
+            assert_eq!(
+                definition.input_contract.allowed_data_classes,
+                vec![DataClass::Personal]
+            );
             assert!(!MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()));
         }
     }
