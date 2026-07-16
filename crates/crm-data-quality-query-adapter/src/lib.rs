@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+mod party_source_registry;
+pub use party_source_registry::{
+    register_party_quality_query_adapter, registered_party_quality_query_adapter,
+};
+
 include!("query_support.rs");
 include!("query_definition_gets.rs");
 include!("query_finding_get.rs");
