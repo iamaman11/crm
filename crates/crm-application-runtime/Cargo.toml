@@ -13,6 +13,7 @@ too_many_arguments = "allow"
 axum = "0.8"
 crm-capability-adapters = { path = "../crm-capability-adapters" }
 crm-capability-ingress = { path = "../crm-capability-ingress" }
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-consents-capability-adapter = { path = "../crm-consents-capability-adapter" }
 crm-consents-capability-composition = { path = "../crm-consents-capability-composition" }
@@ -31,6 +32,7 @@ crm-customer-data-operations-query-adapter = { path = "../crm-customer-data-oper
 crm-customer-data-operations-source-composition = { path = "../crm-customer-data-operations-source-composition" }
 crm-data-quality-capability-adapter = { path = "../crm-data-quality-capability-adapter" }
 crm-data-quality-query-adapter = { path = "../crm-data-quality-query-adapter" }
+crm-data-quality-source-composition = { path = "../crm-data-quality-source-composition" }
 crm-global-search-composition = { path = "../crm-global-search-composition" }
 crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
 crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }
@@ -46,6 +48,7 @@ crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
 crm-party-relationships-capability-adapter = { path = "../crm-party-relationships-capability-adapter" }
 crm-party-relationships-projection = { path = "../crm-party-relationships-projection" }
 crm-party-relationships-query-adapter = { path = "../crm-party-relationships-query-adapter" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-query-runtime = { path = "../crm-query-runtime" }
 crm-sales-activities-capability-composition = { path = "../crm-sales-activities-capability-composition" }
 crm-sales-activities-link = { path = "../../modules/crm-sales-activities-link" }
