@@ -90,9 +90,10 @@ impl DataQualityQueryAdapter {
 
         let rule_set = party_rule_set_from_snapshot(&snapshot)?;
         let mut output = party_rule_set_to_wire(&rule_set);
-        if !visibility.allows_field("definition") {
-            output.definition = None;
-        }
+        apply_definition_visibility(
+            &mut output.definition,
+            visibility.allows_field("definition"),
+        );
 
         support::protobuf_payload(
             MODULE_ID,
@@ -150,9 +151,10 @@ impl DataQualityQueryAdapter {
         let rule_set = party_rule_set_from_snapshot(&rule_set_snapshot)?;
         let profile = party_completeness_profile_from_immutable_snapshot(&snapshot, &rule_set)?;
         let mut output = party_completeness_profile_to_wire(&profile);
-        if !visibility.allows_field("definition") {
-            output.definition = None;
-        }
+        apply_definition_visibility(
+            &mut output.definition,
+            visibility.allows_field("definition"),
+        );
 
         support::protobuf_payload(
             MODULE_ID,
@@ -181,6 +183,12 @@ impl DataQualityQueryAdapter {
             })
             .await?
             .ok_or_else(missing)
+    }
+}
+
+fn apply_definition_visibility<T>(definition: &mut Option<T>, definition_visible: bool) {
+    if !definition_visible {
+        *definition = None;
     }
 }
 
@@ -445,5 +453,16 @@ mod tests {
         assert_eq!(definitions.len(), 2);
         assert_read_only_definition(&definitions[0], GET_PARTY_RULE_SET_CAPABILITY);
         assert_read_only_definition(&definitions[1], GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY);
+    }
+
+    #[test]
+    fn field_visibility_redacts_definition_without_hiding_resource_identity() {
+        let mut hidden = Some("governed-definition");
+        apply_definition_visibility(&mut hidden, false);
+        assert!(hidden.is_none());
+
+        let mut visible = Some("governed-definition");
+        apply_definition_visibility(&mut visible, true);
+        assert_eq!(visible, Some("governed-definition"));
     }
 }
