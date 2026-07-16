@@ -55,10 +55,7 @@ impl FieldVisibilityCeiling {
             let owner_module_id = parts.next().ok_or_else(invalid_field_ceiling)?;
             let record_type = parts.next().ok_or_else(invalid_field_ceiling)?;
             let field = parts.next().ok_or_else(invalid_field_ceiling)?;
-            if parts.next().is_some()
-                || field.is_empty()
-                || field.chars().any(char::is_control)
-            {
+            if parts.next().is_some() || field.is_empty() || field.chars().any(char::is_control) {
                 return Err(invalid_field_ceiling());
             }
             let key = FieldCeilingKey {
@@ -69,7 +66,10 @@ impl FieldVisibilityCeiling {
                 record_type: RecordType::try_new(record_type)
                     .map_err(|_| invalid_field_ceiling())?,
             };
-            hidden_fields.entry(key).or_default().insert(field.to_owned());
+            hidden_fields
+                .entry(key)
+                .or_default()
+                .insert(field.to_owned());
         }
         Ok(Self { hidden_fields })
     }
@@ -209,10 +209,8 @@ impl LiveQueryVisibilityStore {
         }
         grant.validate()?;
         if self.field_ceiling.apply(&mut grant) {
-            grant.policy_version = format!(
-                "{}+{FIELD_CEILING_POLICY_VERSION}",
-                grant.policy_version
-            );
+            grant.policy_version =
+                format!("{}+{FIELD_CEILING_POLICY_VERSION}", grant.policy_version);
         }
         let mut state = self
             .state
@@ -374,10 +372,9 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_ceiling_can_hide_fields_without_hiding_the_resource() {
-        let ceiling = FieldVisibilityCeiling::parse(Some(
-            "sales.deal.get|crm.sales|sales.deal|amount",
-        ))
-        .unwrap();
+        let ceiling =
+            FieldVisibilityCeiling::parse(Some("sales.deal.get|crm.sales|sales.deal|amount"))
+                .unwrap();
         let store = LiveQueryVisibilityStore::with_field_ceiling(ceiling);
         store
             .upsert(grant(
@@ -385,8 +382,7 @@ mod tests {
                 BTreeSet::from(["name".to_owned(), "amount".to_owned()]),
             ))
             .unwrap();
-        let authorizer =
-            LiveQueryVisibilityAuthorizer::new(store, Arc::new(FixedClock::new(100)));
+        let authorizer = LiveQueryVisibilityAuthorizer::new(store, Arc::new(FixedClock::new(100)));
         let decision = authorizer
             .authorize_visibility(&request(), &resource("deal-1"))
             .await
@@ -394,7 +390,11 @@ mod tests {
         assert!(decision.resource_visible);
         assert!(decision.allows_field("name"));
         assert!(!decision.allows_field("amount"));
-        assert!(decision.policy_version.contains(FIELD_CEILING_POLICY_VERSION));
+        assert!(
+            decision
+                .policy_version
+                .contains(FIELD_CEILING_POLICY_VERSION)
+        );
     }
 
     #[test]
