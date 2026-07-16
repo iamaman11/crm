@@ -19,8 +19,8 @@ pub const PARTY_EVALUATION_INPUT_STATE_MAXIMUM_BYTES: u64 = 16 * 1024;
 pub const PARTY_EVALUATION_INPUT_STATE_RETENTION_POLICY_ID: &str =
     "crm.data_quality.evaluation_input";
 
-const PARTY_EVALUATION_JOB_STATE_DESCRIPTOR: &[u8] = b"crm.data-quality.party_evaluation_job.state/v1:job_id,party_id,rule_set_version_id,profile_version_id,status,party_resource_version,evaluated_rules,failed_rules,created_at,updated_at";
-const PARTY_EVALUATION_INPUT_STATE_DESCRIPTOR: &[u8] = b"crm.data-quality.party_evaluation_input.state/v1:job_id,party_id,kind,display_name,party_resource_version,captured_at";
+const PARTY_EVALUATION_JOB_STATE_DESCRIPTOR: &[u8] = b"crm.data-quality.party_evaluation_job.state/v1:job_id,party_id,rule_set_version_id,profile_version_id,status,party_resource_version,evaluated_rules,failed_rules,created_at_decimal,updated_at_decimal";
+const PARTY_EVALUATION_INPUT_STATE_DESCRIPTOR: &[u8] = b"crm.data-quality.party_evaluation_input.state/v1:job_id,party_id,kind,display_name,party_resource_version,captured_at_decimal";
 
 pub fn party_evaluation_job_state_descriptor_hash() -> [u8; 32] {
     Sha256::digest(PARTY_EVALUATION_JOB_STATE_DESCRIPTOR).into()
@@ -104,8 +104,8 @@ struct PartyEvaluationJobStateV1 {
     party_resource_version: Option<i64>,
     evaluated_rules: u32,
     failed_rules: u32,
-    created_at: i64,
-    updated_at: i64,
+    created_at: String,
+    updated_at: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,7 +124,7 @@ struct PartyEvaluationInputStateV1 {
     kind: EvaluatedPartyKind,
     display_name: String,
     party_resource_version: i64,
-    captured_at: i64,
+    captured_at: String,
 }
 
 impl From<&PartyEvaluationJob> for PartyEvaluationJobStateV1 {
@@ -138,8 +138,8 @@ impl From<&PartyEvaluationJob> for PartyEvaluationJobStateV1 {
             party_resource_version: job.party_resource_version(),
             evaluated_rules: job.evaluated_rules(),
             failed_rules: job.failed_rules(),
-            created_at: job.created_at(),
-            updated_at: job.updated_at(),
+            created_at: job.created_at().to_string(),
+            updated_at: job.updated_at().to_string(),
         }
     }
 }
@@ -155,8 +155,8 @@ impl PartyEvaluationJobStateV1 {
             self.party_resource_version,
             self.evaluated_rules,
             self.failed_rules,
-            self.created_at,
-            self.updated_at,
+            decimal_i64(self.created_at, "created_at")?,
+            decimal_i64(self.updated_at, "updated_at")?,
         )
         .map_err(|error| persisted_domain_error("Party evaluation job", error))
     }
@@ -190,7 +190,7 @@ impl From<&PartyEvaluationInputSnapshot> for PartyEvaluationInputStateV1 {
             kind: input.kind(),
             display_name: input.display_name().to_owned(),
             party_resource_version: input.party_resource_version(),
-            captured_at: input.captured_at(),
+            captured_at: input.captured_at().to_string(),
         }
     }
 }
@@ -203,7 +203,7 @@ impl PartyEvaluationInputStateV1 {
             self.kind,
             self.display_name,
             self.party_resource_version,
-            self.captured_at,
+            decimal_i64(self.captured_at, "captured_at")?,
         )
         .map_err(|error| persisted_domain_error("Party evaluation input", error))
     }
@@ -212,6 +212,18 @@ impl PartyEvaluationInputStateV1 {
 fn record_id(value: String, label: &str) -> Result<RecordId, SdkError> {
     RecordId::try_new(value)
         .map_err(|error| persisted_error(format!("persisted {label} identity is invalid: {error}")))
+}
+
+fn decimal_i64(value: String, field: &str) -> Result<i64, SdkError> {
+    let parsed = value.parse::<i64>().map_err(|error| {
+        persisted_error(format!("persisted {field} decimal is invalid: {error}"))
+    })?;
+    if parsed.to_string() != value {
+        return Err(persisted_error(format!(
+            "persisted {field} decimal is not canonical"
+        )));
+    }
+    Ok(parsed)
 }
 
 fn validate_size(bytes: &[u8], maximum_bytes: u64, label: &str) -> Result<(), SdkError> {
