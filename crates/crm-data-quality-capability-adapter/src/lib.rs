@@ -12,6 +12,8 @@ mod evaluation_materialization_planner;
 mod evaluation_stage_planner;
 mod finding_stewardship_planner;
 mod finding_wire;
+mod remediation_planner;
+mod remediation_registration;
 mod rule_set_planner;
 
 pub use completeness_profile_planner::{
@@ -45,6 +47,12 @@ pub use finding_stewardship_planner::{
     DataQualityFindingStewardshipPlanner, party_finding_from_snapshot,
 };
 pub use finding_wire::party_finding_to_wire;
+pub use remediation_planner::{
+    DataQualityRemediationCompletionPlanner, remediation_attempt_persisted_contract,
+    remediation_attempt_persisted_payload, remediation_attempt_record_ref,
+    remediation_attempt_to_wire,
+};
+pub use remediation_registration::*;
 pub use rule_set_planner::{
     DataQualityRuleSetCapabilityPlanner, party_rule_set_from_definition,
     party_rule_set_persisted_contract, party_rule_set_persisted_payload, party_rule_set_to_wire,
@@ -145,6 +153,7 @@ pub const MUTATION_CAPABILITY_IDS: &[&str] = &[
     ASSIGN_FINDING_CAPABILITY,
     ACKNOWLEDGE_FINDING_CAPABILITY,
     WAIVE_FINDING_CAPABILITY,
+    REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY,
 ];
 
 pub fn party_rule_set_from_snapshot(
@@ -170,6 +179,7 @@ pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
         finding_assign_capability_definition()?,
         finding_acknowledge_capability_definition()?,
         finding_waive_capability_definition()?,
+        remediation_capability_definition()?,
     ])
 }
 
@@ -315,10 +325,7 @@ mod tests {
         for (definition, expected_capability) in definitions.iter().zip(MUTATION_CAPABILITY_IDS) {
             assert_eq!(definition.capability_id.as_str(), *expected_capability);
             assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-            assert_eq!(
-                definition.capability_version.as_str(),
-                support::CONTRACT_VERSION
-            );
+            assert_eq!(definition.capability_version.as_str(), support::CONTRACT_VERSION);
             let expected_class = if [
                 PUBLISH_PARTY_RULE_SET_CAPABILITY,
                 PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
@@ -329,11 +336,13 @@ mod tests {
             } else {
                 DataClass::Personal
             };
-            assert_eq!(
-                definition.input_contract.allowed_data_classes,
-                vec![expected_class]
-            );
-            assert_eq!(definition.risk, CapabilityRisk::Medium);
+            assert_eq!(definition.input_contract.allowed_data_classes, vec![expected_class]);
+            let expected_risk = if *expected_capability == REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY {
+                CapabilityRisk::High
+            } else {
+                CapabilityRisk::Medium
+            };
+            assert_eq!(definition.risk, expected_risk);
             assert!(definition.mutation);
             assert!(definition.requires_idempotency);
             assert!(!definition.requires_approval);
@@ -346,10 +355,7 @@ mod tests {
             evaluation_stage_capability_definition().unwrap(),
             evaluation_materialization_capability_definition().unwrap(),
         ] {
-            assert_eq!(
-                definition.input_contract.allowed_data_classes,
-                vec![DataClass::Personal]
-            );
+            assert_eq!(definition.input_contract.allowed_data_classes, vec![DataClass::Personal]);
             assert!(!MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()));
         }
     }
