@@ -2,11 +2,12 @@
 
 //! Governed mutation adapter for the authoritative Data Quality owner domain.
 //!
-//! The first production slices publish immutable content-addressed Party
-//! rule-set and completeness-profile versions. Evaluation and Party remediation
-//! remain separate later composition layers.
+//! Immutable definitions and durable Party evaluation jobs remain owned by
+//! `crm.data-quality`. Governed Party source reads are supplied separately by
+//! application composition and never by direct cross-owner storage access.
 
 mod completeness_profile_planner;
+mod evaluation_job_planner;
 mod rule_set_planner;
 
 pub use completeness_profile_planner::{
@@ -15,6 +16,12 @@ pub use completeness_profile_planner::{
     completeness_profile_rule_set_version_id_from_snapshot,
     party_completeness_profile_from_definition, party_completeness_profile_persisted_contract,
     party_completeness_profile_persisted_payload, party_completeness_profile_to_wire,
+};
+pub use evaluation_job_planner::{
+    DataQualityEvaluationJobCapabilityPlanner, EvaluationReferenceScope,
+    evaluation_reference_scope_from_request, party_evaluation_job_from_snapshot,
+    party_evaluation_job_persisted_contract, party_evaluation_job_persisted_payload,
+    party_evaluation_job_to_wire,
 };
 pub use rule_set_planner::{
     DataQualityRuleSetCapabilityPlanner, party_rule_set_from_definition,
@@ -33,6 +40,9 @@ pub const PARTY_RULE_SET_VERSION_RECORD_TYPE: &str =
     crm_data_quality::PARTY_RULE_SET_VERSION_RECORD_TYPE;
 pub const PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE: &str =
     crm_data_quality::PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE;
+pub const PARTY_EVALUATION_JOB_RECORD_TYPE: &str =
+    crm_data_quality::PARTY_EVALUATION_JOB_RECORD_TYPE;
+
 pub const PUBLISH_PARTY_RULE_SET_CAPABILITY: &str = "data_quality.party.rule_set.publish";
 pub const PUBLISH_PARTY_RULE_SET_REQUEST_SCHEMA: &str =
     "crm.data_quality.v1.PublishPartyRuleSetVersionRequest";
@@ -53,9 +63,20 @@ pub const PARTY_COMPLETENESS_PROFILE_PUBLISHED_EVENT_TYPE: &str =
 pub const PARTY_COMPLETENESS_PROFILE_PUBLISHED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.PartyCompletenessProfileVersionPublishedEvent";
 
+pub const REQUEST_PARTY_EVALUATION_CAPABILITY: &str = "data_quality.party.evaluation.request";
+pub const REQUEST_PARTY_EVALUATION_REQUEST_SCHEMA: &str =
+    "crm.data_quality.v1.RequestPartyEvaluationRequest";
+pub const REQUEST_PARTY_EVALUATION_RESPONSE_SCHEMA: &str =
+    "crm.data_quality.v1.RequestPartyEvaluationResponse";
+pub const PARTY_EVALUATION_REQUESTED_EVENT_TYPE: &str =
+    "data_quality.party.evaluation.requested";
+pub const PARTY_EVALUATION_REQUESTED_EVENT_SCHEMA: &str =
+    "crm.data_quality.v1.PartyEvaluationRequestedEvent";
+
 pub const MUTATION_CAPABILITY_IDS: &[&str] = &[
     PUBLISH_PARTY_RULE_SET_CAPABILITY,
     PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+    REQUEST_PARTY_EVALUATION_CAPABILITY,
 ];
 
 pub fn party_rule_set_from_snapshot(
@@ -77,6 +98,7 @@ pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![
         rule_set_capability_definition()?,
         completeness_profile_capability_definition()?,
+        evaluation_request_capability_definition()?,
     ])
 }
 
@@ -89,6 +111,7 @@ pub fn rule_set_capability_definition() -> Result<CapabilityDefinition, SdkError
         PUBLISH_PARTY_RULE_SET_CAPABILITY,
         PUBLISH_PARTY_RULE_SET_REQUEST_SCHEMA,
         PUBLISH_PARTY_RULE_SET_RESPONSE_SCHEMA,
+        DataClass::Confidential,
     )
 }
 
@@ -97,6 +120,16 @@ pub fn completeness_profile_capability_definition() -> Result<CapabilityDefiniti
         PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
         PUBLISH_PARTY_COMPLETENESS_PROFILE_REQUEST_SCHEMA,
         PUBLISH_PARTY_COMPLETENESS_PROFILE_RESPONSE_SCHEMA,
+        DataClass::Confidential,
+    )
+}
+
+pub fn evaluation_request_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        REQUEST_PARTY_EVALUATION_CAPABILITY,
+        REQUEST_PARTY_EVALUATION_REQUEST_SCHEMA,
+        REQUEST_PARTY_EVALUATION_RESPONSE_SCHEMA,
+        DataClass::Personal,
     )
 }
 
@@ -104,20 +137,17 @@ fn mutation_definition(
     capability_id: &'static str,
     input_schema: &'static str,
     output_schema: &'static str,
+    data_class: DataClass,
 ) -> Result<CapabilityDefinition, SdkError> {
     Ok(CapabilityDefinition {
         capability_id: configured(CapabilityId::try_new(capability_id))?,
         capability_version: configured(CapabilityVersion::try_new(support::CONTRACT_VERSION))?,
         owner_module_id: configured(ModuleId::try_new(MODULE_ID))?,
-        input_contract: support::protobuf_contract(
-            MODULE_ID,
-            input_schema,
-            vec![DataClass::Confidential],
-        )?,
+        input_contract: support::protobuf_contract(MODULE_ID, input_schema, vec![data_class])?,
         output_contract: Some(support::protobuf_contract(
             MODULE_ID,
             output_schema,
-            vec![DataClass::Confidential],
+            vec![data_class],
         )?),
         risk: CapabilityRisk::Medium,
         mutation: true,
@@ -162,9 +192,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn immutable_definition_publications_are_exact_confidential_idempotent_mutations() {
+    fn mutation_catalog_has_exact_coordinates_and_data_classification() {
         let definitions = capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 2);
+        assert_eq!(definitions.len(), MUTATION_CAPABILITY_IDS.len());
         for (definition, expected_capability) in definitions.iter().zip(MUTATION_CAPABILITY_IDS) {
             assert_eq!(definition.capability_id.as_str(), *expected_capability);
             assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
@@ -172,9 +202,14 @@ mod tests {
                 definition.capability_version.as_str(),
                 support::CONTRACT_VERSION
             );
+            let expected_class = if *expected_capability == REQUEST_PARTY_EVALUATION_CAPABILITY {
+                DataClass::Personal
+            } else {
+                DataClass::Confidential
+            };
             assert_eq!(
                 definition.input_contract.allowed_data_classes,
-                vec![DataClass::Confidential]
+                vec![expected_class]
             );
             assert_eq!(definition.risk, CapabilityRisk::Medium);
             assert!(definition.mutation);
