@@ -62,14 +62,6 @@ pub async fn publish_profile(
     .expect("published completeness-profile version")
 }
 
-pub async fn create_party(
-    client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    party_id: &str,
-    key: &str,
-) -> parties::Party {
-    create_party_with_display_name(client, party_id, "Ada Lovelace", key).await
-}
-
 pub async fn create_party_with_display_name(
     client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
     party_id: &str,
