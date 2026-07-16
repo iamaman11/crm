@@ -25,6 +25,14 @@ use crm_proto_contracts::crm::data_quality::v1 as wire;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+type CurrentFindings = BTreeMap<String, ExistingPartyFinding>;
+type CurrentObservations = BTreeMap<String, ExistingPartyFindingObservation>;
+
+struct CurrentFindingEvidence {
+    findings: CurrentFindings,
+    observations: CurrentObservations,
+}
+
 #[derive(Clone)]
 pub struct PostgresPartyEvaluationMaterializationSink {
     store: PostgresDataStore,
@@ -79,15 +87,15 @@ impl PostgresPartyEvaluationMaterializationSink {
                     decision.decision_id, decision.reason_code, decision.policy_version
                 )));
             }
-            let (current_findings, current_observations) = self
+            let evidence = self
                 .load_current_finding_evidence(&request, job, &rule_set, &input)
                 .await?;
             let planner = Arc::new(DataQualityEvaluationMaterializationPlanner::new(
                 rule_set,
                 profile,
                 input,
-                current_findings,
-                current_observations,
+                evidence.findings,
+                evidence.observations,
             )?);
             PostgresTransactionalAggregateExecutor::new(self.store.clone(), planner)
                 .execute(&definition, request)
@@ -102,13 +110,7 @@ impl PostgresPartyEvaluationMaterializationSink {
         job: &PartyEvaluationJob,
         rule_set: &PartyRuleSetVersion,
         input: &PartyEvaluationInputSnapshot,
-    ) -> Result<
-        (
-            BTreeMap<String, ExistingPartyFinding>,
-            BTreeMap<String, ExistingPartyFindingObservation>,
-        ),
-        SdkError,
-    > {
+    ) -> Result<CurrentFindingEvidence, SdkError> {
         let quality_input = PartyQualityInput::try_new(input.kind(), input.display_name())?;
         let evaluations = rule_set.evaluate(&quality_input);
         let outcomes = evaluations
@@ -169,7 +171,10 @@ impl PostgresPartyEvaluationMaterializationSink {
                 );
             }
         }
-        Ok((findings, observations))
+        Ok(CurrentFindingEvidence {
+            findings,
+            observations,
+        })
     }
 
     async fn load_optional_record(

@@ -95,7 +95,10 @@ pub async fn assert_materialized_evidence(
         assert_eq!(json["party_id"], expected.party_id);
         assert_eq!(json["party_resource_version"], expected.party_version);
         assert_eq!(json["rule_set_version_id"], expected.rule_set_id);
-        if json["passed"] == false {
+        if !json["passed"]
+            .as_bool()
+            .expect("materialized rule outcome pass state")
+        {
             failed = failed.saturating_add(1);
         }
     }
