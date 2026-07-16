@@ -282,11 +282,10 @@ impl QueryExecutor for DataQualityQueryAdapter {
         Box::pin(async move {
             ensure_definition(definition)?;
             let output = match definition.capability_id.as_str() {
-                GET_PARTY_RULE_SET_CAPABILITY => {
-                    self.execute_get_party_rule_set(&request).await?
-                }
+                GET_PARTY_RULE_SET_CAPABILITY => self.execute_get_party_rule_set(&request).await?,
                 GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY => {
-                    self.execute_get_party_completeness_profile(&request).await?
+                    self.execute_get_party_completeness_profile(&request)
+                        .await?
                 }
                 _ => return Err(unsupported_query()),
             };

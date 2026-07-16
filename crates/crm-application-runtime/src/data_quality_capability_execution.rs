@@ -8,13 +8,11 @@ use crm_core_data::{
     RecordGetQuery,
 };
 use crm_data_quality_capability_adapter::{
-    DataQualityCompletenessProfileCapabilityPlanner, MODULE_ID,
-    PARTY_RULE_SET_VERSION_RECORD_TYPE, PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+    DataQualityCompletenessProfileCapabilityPlanner, MODULE_ID, PARTY_RULE_SET_VERSION_RECORD_TYPE,
+    PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
     completeness_profile_reference_scope_from_request, party_rule_set_from_snapshot,
 };
-use crm_module_sdk::{
-    ErrorCategory, ModuleId, PortFuture, RecordId, RecordType, SdkError,
-};
+use crm_module_sdk::{ErrorCategory, ModuleId, PortFuture, RecordId, RecordType, SdkError};
 use std::fmt;
 use std::sync::Arc;
 
@@ -79,7 +77,9 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
             let rule_set = party_rule_set_from_snapshot(&snapshot)?;
             PostgresTransactionalAggregateExecutor::new(
                 self.store.clone(),
-                Arc::new(DataQualityCompletenessProfileCapabilityPlanner::new(rule_set)),
+                Arc::new(DataQualityCompletenessProfileCapabilityPlanner::new(
+                    rule_set,
+                )),
             )
             .execute(definition, request)
             .await

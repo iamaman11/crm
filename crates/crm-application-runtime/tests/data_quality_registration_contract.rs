@@ -1,8 +1,7 @@
 use crm_application_runtime::{application_capability_catalog, application_mutation_definitions};
 use crm_capability_runtime::CapabilityRisk;
 use crm_data_quality_capability_adapter::{
-    MODULE_ID, PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
-    PUBLISH_PARTY_RULE_SET_CAPABILITY,
+    MODULE_ID, PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY, PUBLISH_PARTY_RULE_SET_CAPABILITY,
 };
 use crm_module_sdk::{CapabilityId, CapabilityVersion};
 

@@ -379,9 +379,7 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
-        EvaluatedPartyKind, PartyQualityInput, PartyQualityRule, QualitySeverity,
-    };
+    use crate::domain::{EvaluatedPartyKind, PartyQualityInput, PartyQualityRule, QualitySeverity};
 
     fn key(value: &str) -> RuleKey {
         RuleKey::try_new(value).unwrap()
@@ -411,7 +409,10 @@ mod tests {
     fn strict_rule_set_persistence_round_trip_recomputes_identity() {
         let rule_set = rule_set();
         let bytes = encode_party_rule_set_version_state(&rule_set).unwrap();
-        assert_eq!(decode_party_rule_set_version_state(&bytes).unwrap(), rule_set);
+        assert_eq!(
+            decode_party_rule_set_version_state(&bytes).unwrap(),
+            rule_set
+        );
 
         let mut malformed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         malformed["version_id"] = serde_json::Value::String("wrong".to_owned());
