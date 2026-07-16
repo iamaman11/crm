@@ -84,7 +84,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
-      - name: Verify immutable Party rule-set publication through real crm-api
+      - name: Verify immutable Party rule-set publication and query through real crm-api
         shell: bash
         run: |
           set -o pipefail
@@ -110,8 +110,10 @@ jobs:
           health_probe_pid=$!
           trap 'kill "${health_probe_pid}" 2>/dev/null || true' EXIT
 
-          cargo test -p crm-api --test data_quality_process_e2e -- --nocapture \
-            2>&1 | tee database/data-quality-process-runtime.log
+          cargo test -p crm-api \
+            --test data_quality_process_e2e \
+            --test data_quality_query_process_e2e \
+            -- --nocapture 2>&1 | tee database/data-quality-process-runtime.log
           test_status=${PIPESTATUS[0]}
           kill "${health_probe_pid}" 2>/dev/null || true
           wait "${health_probe_pid}" 2>/dev/null || true
@@ -166,8 +168,11 @@ jobs:
             database/data-quality-process-runtime-state.log
             database/data-quality-process-runtime-postgres.log
             services/crm-api/tests/data_quality_process_e2e.rs
+            services/crm-api/tests/data_quality_query_process_e2e.rs
             database/tests/0014_data_quality_adapter.sql
             crates/crm-data-quality-capability-adapter/
+            crates/crm-data-quality-query-adapter/
             crates/crm-application-runtime/src/data_quality_registration.rs
+            crates/crm-application-runtime/src/data_quality_query_registration.rs
           if-no-files-found: error
           retention-days: 7
