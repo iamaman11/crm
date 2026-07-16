@@ -6,6 +6,7 @@
 //! then executes the normal Party query adapter. Tenant/RLS and live resource and
 //! field visibility therefore remain owned by the Party query boundary.
 
+mod materialization_sink;
 mod staging_command;
 mod staging_context;
 mod staging_execute;
@@ -14,6 +15,7 @@ pub mod staging_sink;
 pub mod worker;
 mod worker_context;
 
+pub use materialization_sink::*;
 pub use staging_sink::*;
 pub use worker::*;
 pub use worker_context::{EVALUATION_WORKER_ACTOR_ID, EVALUATION_WORKER_CAPABILITY_VERSION};
@@ -195,5 +197,6 @@ mod tests {
         );
         assert_send_sync::<GovernedPartyQualitySource>();
         assert_send_sync::<PartyEvaluationStageWorker>();
+        assert_send_sync::<PostgresPartyEvaluationMaterializationSink>();
     }
 }

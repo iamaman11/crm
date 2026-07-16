@@ -1,4 +1,6 @@
-use super::data_quality_evaluation_fixture::{INTERNAL_STAGE, TENANT, WORKER_ACTOR};
+use super::data_quality_evaluation_fixture::{
+    INTERNAL_MATERIALIZE, INTERNAL_STAGE, TENANT, WORKER_ACTOR,
+};
 use crm_application_runtime::SystemClock;
 use crm_capability_adapters::{
     AuthorizationGrant, LiveAuthorizationStore, LiveCapabilityAuthorizer,
@@ -8,7 +10,7 @@ use crm_capability_runtime::CapabilityAuthorizer;
 use crm_core_data::PostgresDataStore;
 use crm_data_quality_source_composition::{
     GovernedPartyQualitySource, PartyEvaluationStageWorker, PartyQualitySource,
-    PostgresPartyEvaluationStageSink,
+    PostgresPartyEvaluationMaterializationSink, PostgresPartyEvaluationStageSink,
 };
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, Clock, ModuleId, RecordType, TenantId,
@@ -52,18 +54,26 @@ pub async fn build_evaluation_worker(database_url: &str) -> EvaluationWorkerRunt
             expires_at_unix_nanos: Some(expires_at),
         })
         .expect("grant worker Party GET authorization");
-    authorization_store
-        .upsert(AuthorizationGrant {
-            tenant_id: tenant_id.clone(),
-            actor_id: actor_id.clone(),
-            policy_id: INTERNAL_STAGE.to_owned(),
-            capability_id: CapabilityId::try_new(INTERNAL_STAGE).unwrap(),
-            capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
-            owner_module_id: ModuleId::try_new("crm.data-quality").unwrap(),
-            policy_version: "data-quality-evaluation-stage/v1".to_owned(),
-            expires_at_unix_nanos: Some(expires_at),
-        })
-        .expect("grant worker evaluation stage authorization");
+    for (capability_id, policy_version) in [
+        (INTERNAL_STAGE, "data-quality-evaluation-stage/v1"),
+        (
+            INTERNAL_MATERIALIZE,
+            "data-quality-evaluation-materialization/v1",
+        ),
+    ] {
+        authorization_store
+            .upsert(AuthorizationGrant {
+                tenant_id: tenant_id.clone(),
+                actor_id: actor_id.clone(),
+                policy_id: capability_id.to_owned(),
+                capability_id: CapabilityId::try_new(capability_id).unwrap(),
+                capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
+                owner_module_id: ModuleId::try_new("crm.data-quality").unwrap(),
+                policy_version: policy_version.to_owned(),
+                expires_at_unix_nanos: Some(expires_at),
+            })
+            .expect("grant worker internal evaluation authorization");
+    }
     let live_authorizer = Arc::new(LiveCapabilityAuthorizer::new(
         authorization_store,
         Arc::clone(&clock),
@@ -102,11 +112,21 @@ pub async fn build_evaluation_worker(database_url: &str) -> EvaluationWorkerRunt
         party_adapter,
         query_authorizer,
     ));
-    let sink = Arc::new(PostgresPartyEvaluationStageSink::new(
+    let stage_sink = Arc::new(PostgresPartyEvaluationStageSink::new(
+        store.clone(),
+        Arc::clone(&capability_authorizer),
+    ));
+    let materialization_sink = Arc::new(PostgresPartyEvaluationMaterializationSink::new(
         store.clone(),
         capability_authorizer,
     ));
-    let worker = PartyEvaluationStageWorker::new(store.clone(), source, sink, clock)
-        .expect("construct evaluation staging worker");
+    let worker = PartyEvaluationStageWorker::new_with_materialization(
+        store.clone(),
+        source,
+        stage_sink,
+        materialization_sink,
+        clock,
+    )
+    .expect("construct evaluation worker");
     EvaluationWorkerRuntime { store, worker }
 }

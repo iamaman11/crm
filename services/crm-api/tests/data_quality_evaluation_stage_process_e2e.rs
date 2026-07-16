@@ -23,7 +23,8 @@ use crm_module_sdk::TenantId;
 use crm_proto_contracts::crm::data_quality::v1 as data_quality;
 use data_quality_evaluation_actor::provision_worker_actor;
 use data_quality_evaluation_assertions::{
-    ExpectedEvaluationEvidence, assert_restart_unchanged, assert_staged_evidence,
+    ExpectedEvaluationEvidence, assert_materialized_evidence, assert_restart_unchanged,
+    assert_staged_evidence,
 };
 use data_quality_evaluation_fixture::{TENANT, profile_input, rule_set_input, unique_id};
 use data_quality_evaluation_operations::{
@@ -36,9 +37,9 @@ use data_quality_evaluation_worker::build_evaluation_worker;
 use sqlx::PgPool;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn evaluation_job_stages_exact_party_input_and_restarts_without_duplicates() {
+async fn evaluation_job_materializes_exact_outcomes_and_restarts_without_duplicates() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping evaluation staging process proof because DATABASE_URL is absent");
+        eprintln!("skipping evaluation materialization process proof because DATABASE_URL is absent");
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -109,8 +110,9 @@ async fn evaluation_job_stages_exact_party_input_and_restarts_without_duplicates
         .await
         .expect("stage evaluation input through governed worker");
     assert_eq!(first.staged_jobs, 1);
+    assert_eq!(first.materialized_jobs, 0);
     assert_eq!(first.deferred_jobs, 0);
-    let stable = assert_staged_evidence(
+    assert_staged_evidence(
         &runtime.store,
         &admin,
         ExpectedEvaluationEvidence {
@@ -124,13 +126,37 @@ async fn evaluation_job_stages_exact_party_input_and_restarts_without_duplicates
     .await;
     drop(runtime);
 
-    let restarted = build_evaluation_worker(&database_url).await;
-    let second = restarted
+    let materializer = build_evaluation_worker(&database_url).await;
+    let second = materializer
         .worker
         .run_tenant_cycle(TenantId::try_new(TENANT).unwrap())
         .await
-        .expect("restart evaluation staging worker");
+        .expect("materialize deterministic evaluation outcomes after restart");
     assert_eq!(second.staged_jobs, 0);
+    assert_eq!(second.materialized_jobs, 1);
     assert_eq!(second.deferred_jobs, 0);
+    let stable = assert_materialized_evidence(
+        &materializer.store,
+        &admin,
+        ExpectedEvaluationEvidence {
+            job_id: &job_id,
+            party_id: &party_id,
+            rule_set_id: &rule_set_id,
+            profile_id: &profile_id,
+            party_version,
+        },
+    )
+    .await;
+    drop(materializer);
+
+    let restarted = build_evaluation_worker(&database_url).await;
+    let third = restarted
+        .worker
+        .run_tenant_cycle(TenantId::try_new(TENANT).unwrap())
+        .await
+        .expect("restart materialized evaluation worker");
+    assert_eq!(third.staged_jobs, 0);
+    assert_eq!(third.materialized_jobs, 0);
+    assert_eq!(third.deferred_jobs, 0);
     assert_restart_unchanged(&restarted.store, &admin, &job_id, stable).await;
 }

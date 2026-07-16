@@ -73,6 +73,25 @@ fn evaluation_request_binds_party_rule_set_and_profile_refs() {
 }
 
 #[test]
+fn internal_materialization_contract_returns_exact_durable_refs() {
+    let response = data_quality::MaterializePartyEvaluationResponse {
+        evaluation_job: None,
+        rule_outcome_refs: vec![data_quality::PartyRuleOutcomeRef {
+            rule_outcome_id: "dq-rule-outcome-example".to_owned(),
+        }],
+        completeness_result_ref: Some(data_quality::PartyCompletenessResultRef {
+            completeness_result_id: "dq-completeness-result-example".to_owned(),
+        }),
+    };
+
+    let bytes = response.encode_to_vec();
+    assert_eq!(
+        data_quality::MaterializePartyEvaluationResponse::decode(bytes.as_slice()).unwrap(),
+        response
+    );
+}
+
+#[test]
 fn stewardship_contract_binds_current_observation_and_expected_version() {
     let request = data_quality::AcknowledgeDataQualityFindingRequest {
         finding_ref: Some(data_quality::DataQualityFindingRef {

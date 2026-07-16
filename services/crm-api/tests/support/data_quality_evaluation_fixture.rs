@@ -10,6 +10,7 @@ pub const PUBLISH_PROFILE: &str = "data_quality.party.completeness_profile.publi
 pub const REQUEST_EVALUATION: &str = "data_quality.party.evaluation.request";
 pub const PARTY_CREATE: &str = "parties.party.create";
 pub const INTERNAL_STAGE: &str = "data_quality.party.evaluation.internal.stage";
+pub const INTERNAL_MATERIALIZE: &str = "data_quality.party.evaluation.internal.materialize";
 pub const WORKER_ACTOR: &str = "crm-api-data-quality-evaluation-worker";
 
 pub fn rule_set_input() -> data_quality::PartyRuleSetDefinition {

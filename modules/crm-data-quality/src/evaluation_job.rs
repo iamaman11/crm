@@ -69,11 +69,11 @@ impl PartyEvaluationJob {
             }
             PartyEvaluationJobStatus::Staged => {
                 party_resource_version.is_some_and(|value| value > 0)
-                    && evaluated_rules == 0
-                    && failed_rules == 0
+                    && failed_rules <= evaluated_rules
             }
             PartyEvaluationJobStatus::Completed => {
                 party_resource_version.is_some_and(|value| value > 0)
+                    && evaluated_rules > 0
                     && failed_rules <= evaluated_rules
             }
         };
@@ -130,6 +130,31 @@ impl PartyEvaluationJob {
         ))
     }
 
+    pub fn record_materialized_outcomes(
+        &self,
+        evaluated_rules: u32,
+        failed_rules: u32,
+        now: i64,
+    ) -> Result<Self, SdkError> {
+        if self.status != PartyEvaluationJobStatus::Staged
+            || self.party_resource_version.is_none()
+            || self.evaluated_rules != 0
+            || self.failed_rules != 0
+            || evaluated_rules == 0
+            || failed_rules > evaluated_rules
+            || now < self.updated_at
+        {
+            return Err(invalid(
+                "evaluation outcomes cannot be recorded for this job",
+            ));
+        }
+        let mut materialized = self.clone();
+        materialized.evaluated_rules = evaluated_rules;
+        materialized.failed_rules = failed_rules;
+        materialized.updated_at = now;
+        Ok(materialized)
+    }
+
     pub fn job_id(&self) -> &RecordId {
         &self.job_id
     }
@@ -160,6 +185,10 @@ impl PartyEvaluationJob {
 
     pub const fn failed_rules(&self) -> u32 {
         self.failed_rules
+    }
+
+    pub const fn outcomes_materialized(&self) -> bool {
+        self.evaluated_rules > 0
     }
 
     pub const fn created_at(&self) -> i64 {

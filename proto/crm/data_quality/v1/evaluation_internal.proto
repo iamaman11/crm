@@ -22,3 +22,28 @@ message StagePartyEvaluationInputResponse {
 message PartyEvaluationStagedEvent {
   PartyEvaluationJob evaluation_job = 1;
 }
+
+message PartyRuleOutcomeRef {
+  string rule_outcome_id = 1;
+}
+
+message PartyCompletenessResultRef {
+  string completeness_result_id = 1;
+}
+
+message MaterializePartyEvaluationRequest {
+  PartyEvaluationJobRef evaluation_job_ref = 1;
+  int64 expected_job_version = 2;
+}
+
+message MaterializePartyEvaluationResponse {
+  PartyEvaluationJob evaluation_job = 1;
+  repeated PartyRuleOutcomeRef rule_outcome_refs = 2;
+  PartyCompletenessResultRef completeness_result_ref = 3;
+}
+
+message PartyEvaluationMaterializedEvent {
+  PartyEvaluationJob evaluation_job = 1;
+  repeated PartyRuleOutcomeRef rule_outcome_refs = 2;
+  PartyCompletenessResultRef completeness_result_ref = 3;
+}

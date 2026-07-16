@@ -8,6 +8,7 @@
 
 mod completeness_profile_planner;
 mod evaluation_job_planner;
+mod evaluation_materialization_planner;
 mod evaluation_stage_planner;
 mod rule_set_planner;
 
@@ -23,6 +24,12 @@ pub use evaluation_job_planner::{
     evaluation_reference_scope_from_request, party_evaluation_job_from_snapshot,
     party_evaluation_job_persisted_contract, party_evaluation_job_persisted_payload,
     party_evaluation_job_to_wire,
+};
+pub use evaluation_materialization_planner::{
+    DataQualityEvaluationMaterializationPlanner, party_completeness_result_persisted_contract,
+    party_completeness_result_persisted_payload, party_completeness_result_record_ref,
+    party_rule_outcome_persisted_contract, party_rule_outcome_persisted_payload,
+    party_rule_outcome_record_ref,
 };
 pub use evaluation_stage_planner::{
     DataQualityEvaluationStagePlanner, party_evaluation_input_persisted_contract,
@@ -86,6 +93,17 @@ pub const STAGE_PARTY_EVALUATION_INPUT_RESPONSE_SCHEMA: &str =
 pub const PARTY_EVALUATION_STAGED_EVENT_TYPE: &str = "data_quality.party.evaluation.staged";
 pub const PARTY_EVALUATION_STAGED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.PartyEvaluationStagedEvent";
+
+pub const MATERIALIZE_PARTY_EVALUATION_CAPABILITY: &str =
+    "data_quality.party.evaluation.internal.materialize";
+pub const MATERIALIZE_PARTY_EVALUATION_REQUEST_SCHEMA: &str =
+    "crm.data_quality.v1.MaterializePartyEvaluationRequest";
+pub const MATERIALIZE_PARTY_EVALUATION_RESPONSE_SCHEMA: &str =
+    "crm.data_quality.v1.MaterializePartyEvaluationResponse";
+pub const PARTY_EVALUATION_MATERIALIZED_EVENT_TYPE: &str =
+    "data_quality.party.evaluation.materialized";
+pub const PARTY_EVALUATION_MATERIALIZED_EVENT_SCHEMA: &str =
+    "crm.data_quality.v1.PartyEvaluationMaterializedEvent";
 
 pub const MUTATION_CAPABILITY_IDS: &[&str] = &[
     PUBLISH_PARTY_RULE_SET_CAPABILITY,
@@ -152,6 +170,16 @@ pub fn evaluation_stage_capability_definition() -> Result<CapabilityDefinition, 
         STAGE_PARTY_EVALUATION_INPUT_CAPABILITY,
         STAGE_PARTY_EVALUATION_INPUT_REQUEST_SCHEMA,
         STAGE_PARTY_EVALUATION_INPUT_RESPONSE_SCHEMA,
+        DataClass::Personal,
+    )
+}
+
+pub fn evaluation_materialization_capability_definition(
+) -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        MATERIALIZE_PARTY_EVALUATION_CAPABILITY,
+        MATERIALIZE_PARTY_EVALUATION_REQUEST_SCHEMA,
+        MATERIALIZE_PARTY_EVALUATION_RESPONSE_SCHEMA,
         DataClass::Personal,
     )
 }
@@ -242,16 +270,16 @@ mod tests {
     }
 
     #[test]
-    fn internal_stage_definition_is_personal_and_not_publicly_catalogued() {
-        let definition = evaluation_stage_capability_definition().unwrap();
-        assert_eq!(
-            definition.capability_id.as_str(),
-            STAGE_PARTY_EVALUATION_INPUT_CAPABILITY
-        );
-        assert_eq!(
-            definition.input_contract.allowed_data_classes,
-            vec![DataClass::Personal]
-        );
-        assert!(!MUTATION_CAPABILITY_IDS.contains(&STAGE_PARTY_EVALUATION_INPUT_CAPABILITY));
+    fn internal_evaluation_definitions_are_personal_and_not_publicly_catalogued() {
+        for definition in [
+            evaluation_stage_capability_definition().unwrap(),
+            evaluation_materialization_capability_definition().unwrap(),
+        ] {
+            assert_eq!(
+                definition.input_contract.allowed_data_classes,
+                vec![DataClass::Personal]
+            );
+            assert!(!MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()));
+        }
     }
 }
