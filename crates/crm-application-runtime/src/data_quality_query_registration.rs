@@ -92,12 +92,23 @@ mod tests {
 
         let definition = matches[0];
         assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
+        assert_eq!(
+            definition.authorization_policy_id,
+            GET_PARTY_RULE_SET_CAPABILITY
+        );
         assert_eq!(definition.risk, CapabilityRisk::Low);
         assert_eq!(
             definition.input_contract.allowed_data_classes,
             vec![DataClass::Confidential]
         );
-        assert!(definition.output_contract.is_some());
+        assert_eq!(
+            definition
+                .output_contract
+                .as_ref()
+                .expect("Data Quality query output contract")
+                .allowed_data_classes,
+            vec![DataClass::Confidential]
+        );
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);
         assert!(!definition.requires_approval);
