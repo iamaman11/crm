@@ -1,4 +1,7 @@
-use crate::{EvaluatedPartyKind, PartyFinding, PartyQualityInput, derived_identity::derived_id};
+use crate::{
+    EvaluatedPartyKind, PartyFinding, PartyFindingStatus, PartyQualityInput,
+    derived_identity::derived_id,
+};
 use crm_module_sdk::{ErrorCategory, IdempotencyKey, RecordId, SdkError, TenantId};
 
 const ATTEMPT_ID_DOMAIN: &[u8] = b"crm.data-quality.party-display-name-remediation-attempt/v1";
@@ -22,6 +25,9 @@ impl PartyDisplayNameRemediationIdentity {
         expected_party_version: i64,
         display_name: &str,
     ) -> Result<Self, SdkError> {
+        if tenant_id != finding.tenant_id() {
+            return Err(evidence_conflict());
+        }
         validate_request(
             finding,
             expected_finding_version,
@@ -33,6 +39,7 @@ impl PartyDisplayNameRemediationIdentity {
             tenant_id,
             caller_idempotency_key.clone(),
             finding.finding_id(),
+            finding.party_id().as_str(),
             expected_finding_version,
             expected_observation_id,
             expected_party_version,
@@ -40,10 +47,12 @@ impl PartyDisplayNameRemediationIdentity {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn derive_raw(
         tenant_id: &TenantId,
         caller_idempotency_key: IdempotencyKey,
         finding_id: &str,
+        party_id: &str,
         expected_finding_version: i64,
         expected_observation_id: &str,
         expected_party_version: i64,
@@ -58,6 +67,7 @@ impl PartyDisplayNameRemediationIdentity {
                 tenant_id.as_str().as_bytes(),
                 caller_idempotency_key.as_str().as_bytes(),
                 finding_id.as_bytes(),
+                party_id.as_bytes(),
                 expected_observation_id.as_bytes(),
                 finding_version.as_bytes(),
                 party_version.as_bytes(),
@@ -124,11 +134,26 @@ impl PartyDisplayNameRemediationAttempt {
             expected_party_version,
             &display_name,
         )?;
+        let exact_updated_version = expected_party_version
+            .checked_add(1)
+            .ok_or_else(|| invalid("expected Party version cannot advance safely"))?;
         if &tenant_id != finding.tenant_id()
-            || updated_party_version <= expected_party_version
+            || updated_party_version != exact_updated_version
             || completed_at < finding.updated_at()
         {
             return Err(invalid("completed remediation evidence is inconsistent"));
+        }
+        let expected_identity = PartyDisplayNameRemediationIdentity::derive(
+            &tenant_id,
+            identity.caller_idempotency_key(),
+            finding,
+            expected_finding_version,
+            expected_observation_id,
+            expected_party_version,
+            &display_name,
+        )?;
+        if identity != expected_identity {
+            return Err(invalid("completed remediation identity is inconsistent"));
         }
         Ok(Self {
             tenant_id,
@@ -150,11 +175,15 @@ impl PartyDisplayNameRemediationAttempt {
         state: PartyDisplayNameRemediationAttemptRestore,
     ) -> Result<Self, SdkError> {
         validate_display_name(&state.requested_display_name)?;
+        let exact_updated_version = state
+            .expected_party_version
+            .checked_add(1)
+            .ok_or_else(|| invalid("persisted Party version cannot advance safely"))?;
         if state.finding_id.is_empty()
             || state.observation_id.is_empty()
             || state.expected_finding_version <= 0
             || state.expected_party_version <= 0
-            || state.updated_party_version <= state.expected_party_version
+            || state.updated_party_version != exact_updated_version
             || state.completed_at < 0
         {
             return Err(invalid(
@@ -165,6 +194,7 @@ impl PartyDisplayNameRemediationAttempt {
             &state.tenant_id,
             state.caller_idempotency_key.clone(),
             &state.finding_id,
+            state.party_id.as_str(),
             state.expected_finding_version,
             &state.observation_id,
             state.expected_party_version,
@@ -254,13 +284,9 @@ fn validate_request(
     if expected_finding_version <= 0
         || expected_observation_id != finding.current_observation_id()
         || expected_party_version != finding.evaluated_party_resource_version()
+        || finding.status() == PartyFindingStatus::Remediated
     {
-        return Err(SdkError::new(
-            "DATA_QUALITY_REMEDIATION_EVIDENCE_CONFLICT",
-            ErrorCategory::Conflict,
-            false,
-            "The Data Quality finding or Party evidence changed before remediation.",
-        ));
+        return Err(evidence_conflict());
     }
     validate_display_name(display_name)
 }
@@ -269,6 +295,15 @@ fn validate_display_name(value: &str) -> Result<(), SdkError> {
     PartyQualityInput::try_new(EvaluatedPartyKind::Person, value.to_owned())
         .map(|_| ())
         .map_err(|error| invalid(&format!("requested display name is invalid: {error}")))
+}
+
+fn evidence_conflict() -> SdkError {
+    SdkError::new(
+        "DATA_QUALITY_REMEDIATION_EVIDENCE_CONFLICT",
+        ErrorCategory::Conflict,
+        false,
+        "The Data Quality finding or Party evidence changed before remediation.",
+    )
 }
 
 fn configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
