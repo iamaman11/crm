@@ -54,6 +54,16 @@ pub async fn mutate(
     input: TypedPayload,
     idempotency_key: &str,
 ) -> Result<crm_application_runtime::gateway_v1::MutateResponse, Status> {
+    mutate_for_tenant(client, definition, input, idempotency_key, TENANT).await
+}
+
+pub async fn mutate_for_tenant(
+    client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
+    definition: &CapabilityDefinition,
+    input: TypedPayload,
+    idempotency_key: &str,
+    tenant_id: &str,
+) -> Result<crm_application_runtime::gateway_v1::MutateResponse, Status> {
     let mut request = Request::new(GatewayMutateRequest {
         owner_module_id: definition.owner_module_id.as_str().to_owned(),
         capability_id: definition.capability_id.as_str().to_owned(),
@@ -63,7 +73,7 @@ pub async fn mutate(
     });
     request
         .metadata_mut()
-        .insert("x-tenant-id", TENANT.parse().unwrap());
+        .insert("x-tenant-id", tenant_id.parse().unwrap());
     request
         .metadata_mut()
         .insert("idempotency-key", idempotency_key.parse().unwrap());
@@ -81,6 +91,15 @@ pub async fn query(
     definition: &CapabilityDefinition,
     input: TypedPayload,
 ) -> Result<crm_application_runtime::gateway_v1::QueryResponse, Status> {
+    query_for_tenant(client, definition, input, TENANT).await
+}
+
+pub async fn query_for_tenant(
+    client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
+    definition: &CapabilityDefinition,
+    input: TypedPayload,
+    tenant_id: &str,
+) -> Result<crm_application_runtime::gateway_v1::QueryResponse, Status> {
     let mut request = Request::new(GatewayQueryRequest {
         owner_module_id: definition.owner_module_id.as_str().to_owned(),
         capability_id: definition.capability_id.as_str().to_owned(),
@@ -89,7 +108,7 @@ pub async fn query(
     });
     request
         .metadata_mut()
-        .insert("x-tenant-id", TENANT.parse().unwrap());
+        .insert("x-tenant-id", tenant_id.parse().unwrap());
     request
         .metadata_mut()
         .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
