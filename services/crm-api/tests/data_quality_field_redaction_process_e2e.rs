@@ -34,7 +34,9 @@ const HIDDEN_FIELDS: &str = "data_quality.party.rule_set.get|crm.data-quality|da
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn crm_api_restart_applies_live_data_quality_field_redaction() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping Data Quality field-redaction process proof because DATABASE_URL is absent");
+        eprintln!(
+            "skipping Data Quality field-redaction process proof because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -294,7 +296,11 @@ async fn get_rule_set(
     )
     .await?;
     data_quality::GetPartyRuleSetVersionResponse::decode(
-        response.output.expect("rule-set query output").payload.as_slice(),
+        response
+            .output
+            .expect("rule-set query output")
+            .payload
+            .as_slice(),
     )
     .map_err(|error| Status::internal(format!("decode rule-set response: {error}")))
 }
@@ -318,7 +324,11 @@ async fn get_profile(
     )
     .await?;
     data_quality::GetPartyCompletenessProfileVersionResponse::decode(
-        response.output.expect("profile query output").payload.as_slice(),
+        response
+            .output
+            .expect("profile query output")
+            .payload
+            .as_slice(),
     )
     .map_err(|error| Status::internal(format!("decode profile response: {error}")))
 }
@@ -517,7 +527,10 @@ async fn stop(child: &mut Child) {
         .expect("send SIGINT to redaction crm-api");
     assert!(status.success(), "kill -INT failed: {status}");
     let status = child.wait().await.expect("wait for redaction crm-api");
-    assert!(status.success(), "redaction crm-api exited unsuccessfully: {status}");
+    assert!(
+        status.success(),
+        "redaction crm-api exited unsuccessfully: {status}"
+    );
 }
 
 fn free_addresses() -> (String, String) {
