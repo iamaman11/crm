@@ -71,9 +71,15 @@ fn evaluation_timestamps_above_safe_json_integer_range_are_decimal_strings() {
         input
     );
 
-    let noncanonical = job_text.replace(
+    let noncanonical_job = job_text.replace(
         &format!("\"created_at\":\"{LARGE_UNIX_NANOS}\""),
         &format!("\"created_at\":\"0{LARGE_UNIX_NANOS}\""),
     );
-    assert!(decode_party_evaluation_job_state(noncanonical.as_bytes()).is_err());
+    assert!(decode_party_evaluation_job_state(noncanonical_job.as_bytes()).is_err());
+
+    let noncanonical_input = input_text.replace(
+        &format!("\"captured_at\":\"{}\"", LARGE_UNIX_NANOS + 1),
+        &format!("\"captured_at\":\"0{}\"", LARGE_UNIX_NANOS + 1),
+    );
+    assert!(decode_party_evaluation_input_state(noncanonical_input.as_bytes()).is_err());
 }
