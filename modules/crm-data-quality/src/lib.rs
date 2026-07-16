@@ -13,56 +13,48 @@ mod derived_identity;
 mod finding_identity;
 
 pub mod domain {
-    // `domain.rs` has one JSON serialization site: immutable semantic identity.
-    // Bind it explicitly to the normative platform canonicalization profile.
     use crate::canonicalization::semantic_json as serde_json;
     #[cfg(test)]
     use std::collections::BTreeSet;
-
     include!("domain.rs");
 }
 
 pub mod definition_persistence {
-    // Persisted immutable definitions store and verify the exact profile beside
-    // the content-derived version identity before strict domain rehydration.
     use crate::canonicalization::persisted_state_json as serde_json;
-
     include!("definition_persistence.rs");
 }
 
-// Persisted job rehydration names every stored invariant explicitly. Keep the
-// restore-constructor lint exception local rather than weakening workspace policy.
 #[allow(clippy::too_many_arguments)]
 pub mod evaluation_job;
 
 pub mod evaluation_persistence {
-    // Mutable job state and immutable staged input both retain the exact
-    // canonicalization profile and require canonical byte-for-byte rehydration.
     use crate::canonicalization::persisted_state_json as serde_json;
-
     include!("evaluation_persistence.rs");
 }
 
 pub mod completeness_result;
 pub mod finding;
 mod finding_stewardship;
+pub mod remediation;
 pub mod rule_outcome;
 
 pub mod completeness_result_persistence {
     use crate::canonicalization::persisted_state_json as serde_json;
-
     include!("completeness_result_persistence.rs");
 }
 
 pub mod finding_persistence {
     use crate::canonicalization::persisted_state_json as serde_json;
-
     include!("finding_persistence.rs");
+}
+
+pub mod remediation_persistence {
+    use crate::canonicalization::persisted_state_json as serde_json;
+    include!("remediation_persistence.rs");
 }
 
 pub mod rule_outcome_persistence {
     use crate::canonicalization::persisted_state_json as serde_json;
-
     include!("rule_outcome_persistence.rs");
 }
 
@@ -75,6 +67,8 @@ pub use evaluation_persistence::*;
 pub use finding::*;
 pub use finding_identity::*;
 pub use finding_persistence::*;
+pub use remediation::*;
+pub use remediation_persistence::*;
 pub use rule_outcome::*;
 pub use rule_outcome_persistence::*;
 
