@@ -2,12 +2,13 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_module_sdk::{CapabilityId, CapabilityVersion, DataClass, ModuleId, SdkError};
 pub use crm_data_quality::{
-    PartyDisplayNameRemediationAttempt, PartyDisplayNameRemediationIdentity,
+    PartyDisplayNameRemediationAttempt, PartyDisplayNameRemediationIdentity, PartyFinding,
     PartyQualityEvaluator,
 };
 
 use crate::MODULE_ID;
 
+pub const FINDING_RECORD_TYPE: &str = crm_data_quality::FINDING_RECORD_TYPE;
 pub const REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY: &str =
     "data_quality.party.display_name.remediate";
 pub const REMEDIATE_PARTY_DISPLAY_NAME_REQUEST_SCHEMA: &str =
