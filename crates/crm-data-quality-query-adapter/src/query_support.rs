@@ -21,6 +21,7 @@ use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
     PortFuture, RecordId, RecordSnapshot, RecordType, SdkError, TypedPayload,
 };
+use crm_parties_query_adapter::PartyQueryAdapter;
 use crm_proto_contracts::crm::{
     core::v1 as core, customer::v1 as customer, data_quality::v1 as wire,
 };
