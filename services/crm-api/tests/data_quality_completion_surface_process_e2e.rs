@@ -15,9 +15,12 @@ mod data_quality_evaluation_registry;
 #[path = "support/data_quality_evaluation_worker.rs"]
 mod data_quality_evaluation_worker;
 
+use crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient;
 use crm_core_data::{PostgresDataStore, RecordGetQuery, RecordListQuery, RecordQuerySort};
-use crm_data_quality::{decode_finding_state, decode_remediation_attempt_state};
-use crm_module_sdk::{ModuleId, RecordId, RecordType, TenantId};
+use crm_data_quality::{
+    PartyFindingStatus, decode_finding_state, decode_remediation_attempt_state,
+};
+use crm_module_sdk::{ModuleId, RecordId, RecordSnapshot, RecordType, TenantId};
 use crm_proto_contracts::crm::{customer::v1 as customer, data_quality::v1 as data_quality};
 use data_quality_evaluation_actor::provision_worker_actor;
 use data_quality_evaluation_fixture::{TENANT, profile_input, rule_set_input, unique_id};
@@ -33,7 +36,7 @@ use data_quality_evaluation_registry::register_evaluation_capabilities;
 use data_quality_evaluation_worker::build_evaluation_worker;
 use prost::Message;
 use sqlx::{PgPool, Row};
-use tonic::Code;
+use tonic::{Code, Status, transport::Channel};
 
 const OTHER_TENANT: &str = "tenant-evaluation-other";
 const DQ_MODULE: &str = "crm.data-quality";
@@ -53,6 +56,8 @@ const ASSIGN: &str = "data_quality.finding.assign";
 const ACKNOWLEDGE: &str = "data_quality.finding.acknowledge";
 const WAIVE: &str = "data_quality.finding.waive";
 const REMEDIATE: &str = "data_quality.party.display_name.remediate";
+
+type Client = ApplicationGatewayServiceClient<Channel>;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn completion_surfaces_stewardship_and_remediation_recover_without_duplicates() {
@@ -102,8 +107,8 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
         &unique_id("completion-party-b-create"),
     )
     .await;
-    let party_a_version = resource_version(&created_a);
-    let party_b_version = resource_version(&created_b);
+    let party_a_version = party_resource_version(&created_a);
+    let party_b_version = party_resource_version(&created_b);
     assert_eq!(party_a_version, 1);
     assert_eq!(party_b_version, 1);
 
@@ -130,23 +135,31 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
     stop(&mut api).await;
 
     run_worker_until_idle(&database_url).await;
-    let store = PostgresDataStore::connect(&database_url)
+    let store = PostgresDataStore::connect(&database_url, 6)
         .await
         .expect("connect completion-surface evidence store");
     let evidence_a = evaluation_evidence(&store, &party_a, &job_a).await;
     let evidence_b = evaluation_evidence(&store, &party_b, &job_b).await;
 
+    let tenants = format!("{TENANT},{OTHER_TENANT}");
     let hidden = "data_quality.party.evaluation.get|crm.data-quality|data_quality.party_evaluation_job|failed_rules";
-    let mut api = start_with_environment(
-        &database_url,
-        &[
-            ("CRM_API_TENANTS", &format!("{TENANT},{OTHER_TENANT}")),
-            ("CRM_QUERY_HIDDEN_FIELDS", hidden),
-        ],
+    let environment = [
+        ("CRM_API_TENANTS", tenants.as_str()),
+        ("CRM_QUERY_HIDDEN_FIELDS", hidden),
+    ];
+    let mut api = start_with_environment(&database_url, &environment).await;
+
+    let evaluation: data_quality::GetPartyEvaluationJobResponse = query_proto(
+        &mut api.client,
+        GET_EVALUATION,
+        data_quality::GetPartyEvaluationJobRequest {
+            evaluation_job_ref: Some(data_quality::PartyEvaluationJobRef {
+                evaluation_job_id: job_a.clone(),
+            }),
+        },
     )
     .await;
-
-    let evaluation = get_evaluation(&mut api.client, &job_a).await;
+    let evaluation = evaluation.evaluation_job.expect("evaluation job");
     assert_eq!(
         evaluation.status,
         data_quality::PartyEvaluationJobStatus::Completed as i32
@@ -162,11 +175,12 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
         party_a_version
     );
 
+    let evaluation_definition = query_definition(GET_EVALUATION);
     let cross_tenant = query_for_tenant(
         &mut api.client,
-        &query_definition(GET_EVALUATION),
+        &evaluation_definition,
         payload(
-            &query_definition(GET_EVALUATION),
+            &evaluation_definition,
             data_quality::GetPartyEvaluationJobRequest {
                 evaluation_job_ref: Some(data_quality::PartyEvaluationJobRef {
                     evaluation_job_id: job_a.clone(),
@@ -179,28 +193,47 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
     .expect_err("tenant B must not discover tenant A evaluation job");
     assert_eq!(cross_tenant.code(), Code::NotFound);
 
-    let finding_a = get_finding(&mut api.client, &evidence_a.finding_id).await;
-    let observation_a = finding_a
+    let finding_response: data_quality::GetDataQualityFindingResponse = query_proto(
+        &mut api.client,
+        GET_FINDING,
+        data_quality::GetDataQualityFindingRequest {
+            finding_ref: Some(data_quality::DataQualityFindingRef {
+                finding_id: evidence_a.finding_id.clone(),
+            }),
+        },
+    )
+    .await;
+    let observation = finding_response
         .current_observation
         .as_ref()
         .expect("visible current finding observation");
     assert_eq!(
-        observation_a.reason_code,
+        observation.reason_code,
         "DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER"
     );
     assert_eq!(
-        finding_a
+        finding_response
             .finding
             .as_ref()
-            .expect("visible finding")
-            .party_ref
-            .as_ref()
-            .expect("visible Party ref")
+            .and_then(|finding| finding.party_ref.as_ref())
+            .expect("visible finding Party ref")
             .party_id,
         party_a
     );
 
-    let completeness = get_completeness(&mut api.client, &evidence_a.result_id).await;
+    let completeness_response: data_quality::GetPartyCompletenessResultResponse = query_proto(
+        &mut api.client,
+        GET_COMPLETENESS,
+        data_quality::GetPartyCompletenessResultRequest {
+            completeness_result_ref: Some(data_quality::PartyCompletenessResultRef {
+                completeness_result_id: evidence_a.result_id.clone(),
+            }),
+        },
+    )
+    .await;
+    let completeness = completeness_response
+        .completeness_result
+        .expect("completeness result");
     assert_eq!(completeness.score_basis_points, 4_000);
     assert_eq!(completeness.components.len(), 2);
     assert!(
@@ -210,15 +243,27 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
             .all(|component| component.rule_outcome_ref.is_some())
     );
 
-    let listed_a = list_by_party(&mut api.client, &party_a).await;
-    assert_eq!(listed_a.findings.len(), 1);
-    assert!(listed_a.next_cursor.is_empty());
+    let by_party: data_quality::ListDataQualityFindingsByPartyResponse = query_proto(
+        &mut api.client,
+        LIST_BY_PARTY,
+        data_quality::ListDataQualityFindingsByPartyRequest {
+            party_ref: Some(customer::PartyRef {
+                party_id: party_a.clone(),
+            }),
+            status: None,
+            severity: None,
+            page_size: 1,
+            cursor: String::new(),
+        },
+    )
+    .await;
+    assert_eq!(by_party.findings.len(), 1);
+    assert!(by_party.next_cursor.is_empty());
 
     let assigned_a = assign_finding(
         &mut api.client,
         &evidence_a.finding_id,
         1,
-        Some("actor-evaluation"),
         &unique_id("completion-assign-a"),
     )
     .await;
@@ -226,24 +271,24 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
         &mut api.client,
         &evidence_b.finding_id,
         1,
-        Some("actor-evaluation"),
         &unique_id("completion-assign-b"),
     )
     .await;
-    assert_eq!(wire_resource_version(&assigned_a), 2);
-    assert_eq!(wire_resource_version(&assigned_b), 2);
+    assert_eq!(finding_resource_version(&assigned_a), 2);
+    assert_eq!(finding_resource_version(&assigned_b), 2);
 
+    let assign_definition = mutation_definition(ASSIGN);
     let stale_assign = mutate(
         &mut api.client,
-        &mutation_definition(ASSIGN),
+        &assign_definition,
         payload(
-            &mutation_definition(ASSIGN),
+            &assign_definition,
             data_quality::AssignDataQualityFindingRequest {
                 finding_ref: Some(data_quality::DataQualityFindingRef {
                     finding_id: evidence_a.finding_id.clone(),
                 }),
-                assigned_actor_id: None,
                 expected_version: 1,
+                assigned_actor_id: None,
             },
         ),
         &unique_id("completion-stale-assign"),
@@ -252,27 +297,47 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
     .expect_err("stale finding version must conflict");
     assert_ne!(stale_assign.code(), Code::Ok);
 
-    let acknowledged = acknowledge_finding(
+    let acknowledged: data_quality::AcknowledgeDataQualityFindingResponse = mutate_proto(
         &mut api.client,
-        &evidence_a.finding_id,
-        &evidence_a.observation_id,
-        2,
+        ACKNOWLEDGE,
+        data_quality::AcknowledgeDataQualityFindingRequest {
+            finding_ref: Some(data_quality::DataQualityFindingRef {
+                finding_id: evidence_a.finding_id.clone(),
+            }),
+            expected_current_observation_ref: Some(
+                data_quality::DataQualityFindingObservationRef {
+                    finding_observation_id: evidence_a.observation_id.clone(),
+                },
+            ),
+            expected_version: 2,
+        },
         &unique_id("completion-acknowledge"),
     )
     .await;
     assert_eq!(
-        acknowledged.status,
+        acknowledged.finding.expect("acknowledged finding").status,
         data_quality::DataQualityFindingStatus::Acknowledged as i32
     );
-    let waived = waive_finding(
+
+    let waived: data_quality::WaiveDataQualityFindingResponse = mutate_proto(
         &mut api.client,
-        &evidence_a.finding_id,
-        &evidence_a.observation_id,
-        3,
-        "Accepted source-system exception",
+        WAIVE,
+        data_quality::WaiveDataQualityFindingRequest {
+            finding_ref: Some(data_quality::DataQualityFindingRef {
+                finding_id: evidence_a.finding_id.clone(),
+            }),
+            expected_current_observation_ref: Some(
+                data_quality::DataQualityFindingObservationRef {
+                    finding_observation_id: evidence_a.observation_id.clone(),
+                },
+            ),
+            expected_version: 3,
+            reason: "Accepted source-system exception".to_owned(),
+        },
         &unique_id("completion-waive"),
     )
     .await;
+    let waived = waived.finding.expect("waived finding");
     assert_eq!(
         waived.status,
         data_quality::DataQualityFindingStatus::Waived as i32
@@ -282,35 +347,28 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
         Some("Accepted source-system exception")
     );
 
-    let first_page = list_assigned(&mut api.client, "", 1).await;
+    let first_page = list_assigned(&mut api.client, String::new(), 1).await;
     assert_eq!(first_page.findings.len(), 1);
     assert!(!first_page.next_cursor.is_empty());
-    let second_page = list_assigned(&mut api.client, &first_page.next_cursor, 1).await;
+    let second_page = list_assigned(&mut api.client, first_page.next_cursor.clone(), 1).await;
     assert_eq!(second_page.findings.len(), 1);
     assert_ne!(
-        first_page.findings[0]
-            .finding_ref
-            .as_ref()
-            .expect("first finding ref")
-            .finding_id,
-        second_page.findings[0]
-            .finding_ref
-            .as_ref()
-            .expect("second finding ref")
-            .finding_id
+        finding_id(&first_page.findings[0]),
+        finding_id(&second_page.findings[0])
     );
-    let tampered = format!("{}x", first_page.next_cursor);
+
+    let list_definition = query_definition(LIST_ASSIGNED);
     let invalid_cursor = query(
         &mut api.client,
-        &query_definition(LIST_ASSIGNED),
+        &list_definition,
         payload(
-            &query_definition(LIST_ASSIGNED),
+            &list_definition,
             data_quality::ListAssignedDataQualityFindingsRequest {
                 assigned_actor_id: None,
                 status: None,
                 severity: None,
                 page_size: 1,
-                cursor: tampered,
+                cursor: format!("{}x", first_page.next_cursor),
             },
         ),
     )
@@ -319,17 +377,15 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
     assert_eq!(invalid_cursor.code(), Code::InvalidArgument);
     stop(&mut api).await;
 
-    let mut failpoint_api = start_with_environment(
-        &database_url,
-        &[
-            ("CRM_API_TENANTS", &format!("{TENANT},{OTHER_TENANT}")),
-            (
-                "CRM_DATA_QUALITY_REMEDIATION_FAIL_AFTER_TARGET_ONCE",
-                "true",
-            ),
-        ],
-    )
-    .await;
+    let failpoint_tenants = format!("{TENANT},{OTHER_TENANT}");
+    let failpoint_environment = [
+        ("CRM_API_TENANTS", failpoint_tenants.as_str()),
+        (
+            "CRM_DATA_QUALITY_REMEDIATION_FAIL_AFTER_TARGET_ONCE",
+            "true",
+        ),
+    ];
+    let mut failpoint_api = start_with_environment(&database_url, &failpoint_environment).await;
     let remediation_key = unique_id("completion-remediation");
     let remediation_request = data_quality::RemediatePartyDisplayNameRequest {
         finding_ref: Some(data_quality::DataQualityFindingRef {
@@ -342,10 +398,11 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
         expected_party_resource_version: party_b_version,
         display_name: "Grace Hopper".to_owned(),
     };
+    let remediation_definition = mutation_definition(REMEDIATE);
     let deferred = mutate(
         &mut failpoint_api.client,
-        &mutation_definition(REMEDIATE),
-        payload(&mutation_definition(REMEDIATE), remediation_request.clone()),
+        &remediation_definition,
+        payload(&remediation_definition, remediation_request.clone()),
         &remediation_key,
     )
     .await
@@ -357,13 +414,12 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
     assert_eq!(record_count(&admin, ATTEMPT_TYPE).await, 0);
     stop(&mut failpoint_api).await;
 
-    let mut recovery_api = start_with_environment(
-        &database_url,
-        &[("CRM_API_TENANTS", &format!("{TENANT},{OTHER_TENANT}"))],
-    )
-    .await;
-    let recovered = remediate(
+    let recovery_tenants = format!("{TENANT},{OTHER_TENANT}");
+    let recovery_environment = [("CRM_API_TENANTS", recovery_tenants.as_str())];
+    let mut recovery_api = start_with_environment(&database_url, &recovery_environment).await;
+    let recovered: data_quality::RemediatePartyDisplayNameResponse = mutate_proto(
         &mut recovery_api.client,
+        REMEDIATE,
         remediation_request.clone(),
         &remediation_key,
     )
@@ -377,21 +433,17 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
             .version,
         2
     );
-    let attempt = recovered
+    let attempt_id = recovered
         .remediation_attempt
         .as_ref()
-        .expect("durable remediation attempt");
-    assert_eq!(
-        attempt
-            .finding_ref
-            .as_ref()
-            .expect("attempt finding ref")
-            .finding_id,
-        evidence_b.finding_id
-    );
+        .and_then(|attempt| attempt.remediation_attempt_ref.as_ref())
+        .expect("durable remediation attempt ref")
+        .remediation_attempt_id
+        .clone();
     assert_eq!(record_count(&admin, ATTEMPT_TYPE).await, 1);
-    let replayed = remediate(
+    let replayed: data_quality::RemediatePartyDisplayNameResponse = mutate_proto(
         &mut recovery_api.client,
+        REMEDIATE,
         remediation_request,
         &remediation_key,
     )
@@ -415,32 +467,109 @@ async fn completion_surfaces_stewardship_and_remediation_recover_without_duplica
     stop(&mut recovery_api).await;
     run_worker_until_idle(&database_url).await;
 
-    let remediated_snapshot = finding_snapshot(&store, &evidence_b.finding_id).await;
-    assert_eq!(
-        remediated_snapshot.finding.status(),
-        crm_data_quality::PartyFindingStatus::Remediated
-    );
-    assert_eq!(remediated_snapshot.version, 3);
-    assert!(
-        remediated_snapshot
-            .finding
-            .remediated_by_rule_outcome_id()
-            .is_some()
-    );
+    let remediated = finding_snapshot(&store, &evidence_b.finding_id).await;
+    assert_eq!(remediated.finding.status(), PartyFindingStatus::Remediated);
+    assert_eq!(remediated.version, 3);
+    assert!(remediated.finding.remediated_by_rule_outcome_id().is_some());
     assert_eq!(record_count(&admin, OBSERVATION_TYPE).await, 2);
     assert_force_rls_completion_records(
         &admin,
+        &store,
         &database_url,
         &evidence_b.finding_id,
         &evidence_b.result_id,
-        attempt
-            .remediation_attempt_ref
-            .as_ref()
-            .expect("attempt ref")
-            .remediation_attempt_id
-            .as_str(),
+        &attempt_id,
     )
     .await;
+}
+
+async fn query_proto<Req, Res>(client: &mut Client, capability_id: &str, request: Req) -> Res
+where
+    Req: Message,
+    Res: Message + Default,
+{
+    let definition = query_definition(capability_id);
+    let response = query(client, &definition, payload(&definition, request))
+        .await
+        .unwrap_or_else(|error| panic!("query {capability_id} failed: {error}"));
+    Res::decode(
+        response
+            .output
+            .unwrap_or_else(|| panic!("query {capability_id} output is missing"))
+            .payload
+            .as_slice(),
+    )
+    .unwrap_or_else(|error| panic!("decode query {capability_id} response: {error}"))
+}
+
+async fn mutate_proto<Req, Res>(
+    client: &mut Client,
+    capability_id: &str,
+    request: Req,
+    idempotency_key: &str,
+) -> Res
+where
+    Req: Message,
+    Res: Message + Default,
+{
+    let definition = mutation_definition(capability_id);
+    let response = mutate(
+        client,
+        &definition,
+        payload(&definition, request),
+        idempotency_key,
+    )
+    .await
+    .unwrap_or_else(|error| panic!("mutation {capability_id} failed: {error}"));
+    Res::decode(
+        response
+            .output
+            .unwrap_or_else(|| panic!("mutation {capability_id} output is missing"))
+            .payload
+            .as_slice(),
+    )
+    .unwrap_or_else(|error| panic!("decode mutation {capability_id} response: {error}"))
+}
+
+async fn assign_finding(
+    client: &mut Client,
+    finding_id: &str,
+    expected_version: i64,
+    idempotency_key: &str,
+) -> data_quality::DataQualityFinding {
+    let response: data_quality::AssignDataQualityFindingResponse = mutate_proto(
+        client,
+        ASSIGN,
+        data_quality::AssignDataQualityFindingRequest {
+            finding_ref: Some(data_quality::DataQualityFindingRef {
+                finding_id: finding_id.to_owned(),
+            }),
+            expected_version,
+            assigned_actor_id: Some("actor-a".to_owned()),
+        },
+        idempotency_key,
+    )
+    .await;
+    response.finding.expect("assigned finding")
+}
+
+async fn list_assigned(
+    client: &mut Client,
+    cursor: String,
+    page_size: i32,
+) -> data_quality::ListAssignedDataQualityFindingsResponse {
+    query_proto(
+        client,
+        LIST_ASSIGNED,
+        data_quality::ListAssignedDataQualityFindingsRequest {
+            assigned_actor_id: None,
+            status: None,
+            severity: None,
+            page_size,
+            cursor,
+        },
+    )
+    .await
 }
 
 async fn run_worker_until_idle(database_url: &str) {
@@ -453,9 +582,10 @@ async fn run_worker_until_idle(database_url: &str) {
             .await
             .expect("run Data Quality completion-surface worker cycle");
         if result.staged_jobs == 0 && result.materialized_jobs == 0 && result.deferred_jobs == 0 {
-            break;
+            return;
         }
     }
+    panic!("Data Quality completion-surface worker did not become idle");
 }
 
 struct EvaluationEvidence {
@@ -469,36 +599,36 @@ async fn evaluation_evidence(
     party_id: &str,
     job_id: &str,
 ) -> EvaluationEvidence {
-    let findings = list_records(store, FINDING_TYPE).await;
-    let (finding_id, finding_json) = findings
+    let findings = list_snapshots(store, FINDING_TYPE).await;
+    let finding_snapshot = findings
         .into_iter()
-        .find(|(_, json)| json["party_id"] == party_id)
+        .find(|snapshot| {
+            decode_finding_state(&snapshot.payload.bytes)
+                .is_ok_and(|finding| finding.party_id().as_str() == party_id)
+        })
         .expect("finding for evaluated Party");
-    let observation_id = finding_json["current_observation_id"]
-        .as_str()
-        .expect("current observation id")
-        .to_owned();
-    let results = list_records(store, RESULT_TYPE).await;
-    let (result_id, _) = results
+    let finding = decode_finding_state(&finding_snapshot.payload.bytes).expect("decode finding");
+    let results = list_snapshots(store, RESULT_TYPE).await;
+    let result_snapshot = results
         .into_iter()
-        .find(|(_, json)| json["job_id"] == job_id)
+        .find(|snapshot| {
+            serde_json::from_slice::<serde_json::Value>(&snapshot.payload.bytes)
+                .is_ok_and(|value| value["job_id"] == job_id)
+        })
         .expect("completeness result for evaluation job");
     EvaluationEvidence {
-        finding_id,
-        observation_id,
-        result_id,
+        finding_id: finding_snapshot.reference.record_id.as_str().to_owned(),
+        observation_id: finding.current_observation_id().to_owned(),
+        result_id: result_snapshot.reference.record_id.as_str().to_owned(),
     }
 }
 
-async fn list_records(
-    store: &PostgresDataStore,
-    record_type_value: &str,
-) -> Vec<(String, serde_json::Value)> {
+async fn list_snapshots(store: &PostgresDataStore, record_type: &str) -> Vec<RecordSnapshot> {
     let page = store
         .list_records_for_query(&RecordListQuery {
             tenant_id: TenantId::try_new(TENANT).unwrap(),
             owner_module_id: ModuleId::try_new(DQ_MODULE).unwrap(),
-            record_type: RecordType::try_new(record_type_value).unwrap(),
+            record_type: RecordType::try_new(record_type).unwrap(),
             page_size: 200,
             sort: RecordQuerySort::CreatedAtAscending,
             after: None,
@@ -507,310 +637,9 @@ async fn list_records(
         .expect("list Data Quality completion-surface records");
     assert!(page.next.is_none());
     page.records
-        .into_iter()
-        .map(|snapshot| {
-            (
-                snapshot.reference.record_id.as_str().to_owned(),
-                serde_json::from_slice(&snapshot.payload.bytes)
-                    .expect("decode Data Quality owner record"),
-            )
-        })
-        .collect()
 }
 
-async fn get_evaluation(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    job_id: &str,
-) -> data_quality::PartyEvaluationJob {
-    let definition = query_definition(GET_EVALUATION);
-    let response = query(
-        client,
-        &definition,
-        payload(
-            &definition,
-            data_quality::GetPartyEvaluationJobRequest {
-                evaluation_job_ref: Some(data_quality::PartyEvaluationJobRef {
-                    evaluation_job_id: job_id.to_owned(),
-                }),
-            },
-        ),
-    )
-    .await
-    .expect("query completed Party evaluation");
-    data_quality::GetPartyEvaluationJobResponse::decode(
-        response
-            .output
-            .expect("evaluation query output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode evaluation query response")
-    .evaluation_job
-    .expect("evaluation job")
-}
-
-async fn get_finding(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    finding_id: &str,
-) -> data_quality::GetDataQualityFindingResponse {
-    let definition = query_definition(GET_FINDING);
-    let response = query(
-        client,
-        &definition,
-        payload(
-            &definition,
-            data_quality::GetDataQualityFindingRequest {
-                finding_ref: Some(data_quality::DataQualityFindingRef {
-                    finding_id: finding_id.to_owned(),
-                }),
-            },
-        ),
-    )
-    .await
-    .expect("query Data Quality finding");
-    data_quality::GetDataQualityFindingResponse::decode(
-        response
-            .output
-            .expect("finding query output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode finding query response")
-}
-
-async fn get_completeness(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    result_id: &str,
-) -> data_quality::PartyCompletenessResult {
-    let definition = query_definition(GET_COMPLETENESS);
-    let response = query(
-        client,
-        &definition,
-        payload(
-            &definition,
-            data_quality::GetPartyCompletenessResultRequest {
-                completeness_result_ref: Some(data_quality::PartyCompletenessResultRef {
-                    completeness_result_id: result_id.to_owned(),
-                }),
-            },
-        ),
-    )
-    .await
-    .expect("query Party completeness result");
-    data_quality::GetPartyCompletenessResultResponse::decode(
-        response
-            .output
-            .expect("completeness query output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode completeness query response")
-    .completeness_result
-    .expect("completeness result")
-}
-
-async fn list_by_party(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    party_id: &str,
-) -> data_quality::ListDataQualityFindingsByPartyResponse {
-    let definition = query_definition(LIST_BY_PARTY);
-    let response = query(
-        client,
-        &definition,
-        payload(
-            &definition,
-            data_quality::ListDataQualityFindingsByPartyRequest {
-                party_ref: Some(customer::PartyRef {
-                    party_id: party_id.to_owned(),
-                }),
-                status: None,
-                severity: None,
-                page_size: 1,
-                cursor: String::new(),
-            },
-        ),
-    )
-    .await
-    .expect("list Party findings");
-    data_quality::ListDataQualityFindingsByPartyResponse::decode(
-        response
-            .output
-            .expect("finding list output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode finding list")
-}
-
-async fn list_assigned(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    cursor: &str,
-    page_size: u32,
-) -> data_quality::ListAssignedDataQualityFindingsResponse {
-    let definition = query_definition(LIST_ASSIGNED);
-    let response = query(
-        client,
-        &definition,
-        payload(
-            &definition,
-            data_quality::ListAssignedDataQualityFindingsRequest {
-                assigned_actor_id: None,
-                status: None,
-                severity: None,
-                page_size,
-                cursor: cursor.to_owned(),
-            },
-        ),
-    )
-    .await
-    .expect("list assigned findings");
-    data_quality::ListAssignedDataQualityFindingsResponse::decode(
-        response
-            .output
-            .expect("assigned finding list output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode assigned finding list")
-}
-
-async fn assign_finding(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    finding_id: &str,
-    expected_version: i64,
-    assigned_actor_id: Option<&str>,
-    key: &str,
-) -> data_quality::DataQualityFinding {
-    let definition = mutation_definition(ASSIGN);
-    let response = mutate(
-        client,
-        &definition,
-        payload(
-            &definition,
-            data_quality::AssignDataQualityFindingRequest {
-                finding_ref: Some(data_quality::DataQualityFindingRef {
-                    finding_id: finding_id.to_owned(),
-                }),
-                assigned_actor_id: assigned_actor_id.map(str::to_owned),
-                expected_version,
-            },
-        ),
-        key,
-    )
-    .await
-    .expect("assign Data Quality finding");
-    data_quality::AssignDataQualityFindingResponse::decode(
-        response
-            .output
-            .expect("assignment output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode finding assignment")
-    .finding
-    .expect("assigned finding")
-}
-
-async fn acknowledge_finding(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    finding_id: &str,
-    observation_id: &str,
-    expected_version: i64,
-    key: &str,
-) -> data_quality::DataQualityFinding {
-    let definition = mutation_definition(ACKNOWLEDGE);
-    let response = mutate(
-        client,
-        &definition,
-        payload(
-            &definition,
-            data_quality::AcknowledgeDataQualityFindingRequest {
-                finding_ref: Some(data_quality::DataQualityFindingRef {
-                    finding_id: finding_id.to_owned(),
-                }),
-                expected_current_observation_ref: Some(
-                    data_quality::DataQualityFindingObservationRef {
-                        finding_observation_id: observation_id.to_owned(),
-                    },
-                ),
-                expected_version,
-            },
-        ),
-        key,
-    )
-    .await
-    .expect("acknowledge Data Quality finding");
-    data_quality::AcknowledgeDataQualityFindingResponse::decode(
-        response
-            .output
-            .expect("acknowledgement output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode finding acknowledgement")
-    .finding
-    .expect("acknowledged finding")
-}
-
-async fn waive_finding(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    finding_id: &str,
-    observation_id: &str,
-    expected_version: i64,
-    reason: &str,
-    key: &str,
-) -> data_quality::DataQualityFinding {
-    let definition = mutation_definition(WAIVE);
-    let response = mutate(
-        client,
-        &definition,
-        payload(
-            &definition,
-            data_quality::WaiveDataQualityFindingRequest {
-                finding_ref: Some(data_quality::DataQualityFindingRef {
-                    finding_id: finding_id.to_owned(),
-                }),
-                expected_current_observation_ref: Some(
-                    data_quality::DataQualityFindingObservationRef {
-                        finding_observation_id: observation_id.to_owned(),
-                    },
-                ),
-                reason: reason.to_owned(),
-                expected_version,
-            },
-        ),
-        key,
-    )
-    .await
-    .expect("waive Data Quality finding");
-    data_quality::WaiveDataQualityFindingResponse::decode(
-        response.output.expect("waiver output").payload.as_slice(),
-    )
-    .expect("decode finding waiver")
-    .finding
-    .expect("waived finding")
-}
-
-async fn remediate(
-    client: &mut crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient<tonic::transport::Channel>,
-    request: data_quality::RemediatePartyDisplayNameRequest,
-    key: &str,
-) -> data_quality::RemediatePartyDisplayNameResponse {
-    let definition = mutation_definition(REMEDIATE);
-    let response = mutate(client, &definition, payload(&definition, request), key)
-        .await
-        .expect("recover Party display-name remediation");
-    data_quality::RemediatePartyDisplayNameResponse::decode(
-        response
-            .output
-            .expect("remediation output")
-            .payload
-            .as_slice(),
-    )
-    .expect("decode remediation response")
-}
-
-fn resource_version(party: &crm_proto_contracts::crm::parties::v1::Party) -> i64 {
+fn party_resource_version(party: &crm_proto_contracts::crm::parties::v1::Party) -> i64 {
     party
         .resource_version
         .as_ref()
@@ -818,12 +647,21 @@ fn resource_version(party: &crm_proto_contracts::crm::parties::v1::Party) -> i64
         .version
 }
 
-fn wire_resource_version(finding: &data_quality::DataQualityFinding) -> i64 {
+fn finding_resource_version(finding: &data_quality::DataQualityFinding) -> i64 {
     finding
         .resource_version
         .as_ref()
         .expect("finding resource version")
         .version
+}
+
+fn finding_id(finding: &data_quality::DataQualityFinding) -> &str {
+    finding
+        .finding_ref
+        .as_ref()
+        .expect("finding ref")
+        .finding_id
+        .as_str()
 }
 
 struct PartySnapshot {
@@ -890,6 +728,7 @@ async fn record_count(admin: &PgPool, record_type: &str) -> i64 {
 
 async fn assert_force_rls_completion_records(
     admin: &PgPool,
+    store: &PostgresDataStore,
     database_url: &str,
     finding_id: &str,
     result_id: &str,
@@ -910,8 +749,7 @@ async fn assert_force_rls_completion_records(
         (ATTEMPT_TYPE, attempt_id),
     ] {
         assert_eq!(
-            app_role_record_count(&application, OTHER_TENANT, TENANT, record_type, record_id,)
-                .await,
+            app_role_record_count(&application, OTHER_TENANT, TENANT, record_type, record_id).await,
             0,
             "FORCE RLS must hide tenant A completion records under tenant B context"
         );
@@ -921,17 +759,20 @@ async fn assert_force_rls_completion_records(
             "application role must see completion record under owning tenant context"
         );
     }
-    let persisted_attempt = list_records(
-        &PostgresDataStore::connect(database_url).await.unwrap(),
-        ATTEMPT_TYPE,
-    )
-    .await
-    .into_iter()
-    .find(|(record_id, _)| record_id == attempt_id)
-    .expect("persisted remediation attempt");
-    let attempt_bytes = serde_json::to_vec(&persisted_attempt.1).unwrap();
-    decode_remediation_attempt_state(&attempt_bytes)
+
+    let attempt_snapshot = store
+        .get_record_for_query(&RecordGetQuery {
+            tenant_id: TenantId::try_new(TENANT).unwrap(),
+            owner_module_id: ModuleId::try_new(DQ_MODULE).unwrap(),
+            record_type: RecordType::try_new(ATTEMPT_TYPE).unwrap(),
+            record_id: RecordId::try_new(attempt_id).unwrap(),
+        })
+        .await
+        .expect("load persisted remediation attempt")
+        .expect("persisted remediation attempt");
+    decode_remediation_attempt_state(&attempt_snapshot.payload.bytes)
         .expect("strict remediation attempt persisted state");
+
     let admin_count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM crm.records WHERE tenant_id = $1 AND owner_module_id = $2 AND record_type = $3 AND record_id = $4 AND deleted_at IS NULL",
     )
@@ -957,7 +798,7 @@ async fn app_role_record_count(
         .await
         .expect("begin Data Quality RLS transaction");
     sqlx::query(
-        "SELECT set_config('app.tenant_id', $1, true), set_config('app.actor_id', 'actor-evaluation', true), set_config('app.request_id', 'dq-completion-rls-request', true), set_config('app.capability_id', $2, true), set_config('app.capability_version', '1.0.0', true), set_config('app.business_transaction_id', 'dq-completion-rls-transaction', true)",
+        "SELECT set_config('app.tenant_id', $1, true), set_config('app.actor_id', 'actor-a', true), set_config('app.request_id', 'dq-completion-rls-request', true), set_config('app.capability_id', $2, true), set_config('app.capability_version', '1.0.0', true), set_config('app.business_transaction_id', 'dq-completion-rls-transaction', true)",
     )
     .bind(context_tenant)
     .bind(GET_FINDING)
@@ -980,3 +821,5 @@ async fn app_role_record_count(
         .expect("rollback Data Quality RLS proof");
     count
 }
+
+fn _status_is_used(_: Status) {}
