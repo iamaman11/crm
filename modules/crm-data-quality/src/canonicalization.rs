@@ -25,9 +25,7 @@ pub fn semantic_to_vec<T: Serialize>(
         .map_err(|error| DataQualityCanonicalizationError(error.to_string()))
 }
 
-pub fn state_to_vec<T: Serialize>(
-    value: &T,
-) -> Result<Vec<u8>, DataQualityCanonicalizationError> {
+pub fn state_to_vec<T: Serialize>(value: &T) -> Result<Vec<u8>, DataQualityCanonicalizationError> {
     let mut value = serde_json::to_value(value)
         .map_err(|error| DataQualityCanonicalizationError(error.to_string()))?;
     let object = value.as_object_mut().ok_or_else(|| {
@@ -36,7 +34,10 @@ pub fn state_to_vec<T: Serialize>(
         )
     })?;
     if object
-        .insert(PROFILE_FIELD.to_owned(), Value::String(PROFILE_ID.to_owned()))
+        .insert(
+            PROFILE_FIELD.to_owned(),
+            Value::String(PROFILE_ID.to_owned()),
+        )
         .is_some()
     {
         return Err(DataQualityCanonicalizationError(
@@ -98,7 +99,10 @@ mod tests {
             encoded,
             br#"{"canonicalization_profile":"crm.cjson/v1","value":7}"#
         );
-        assert_eq!(state_from_slice::<Fixture>(&encoded).unwrap(), Fixture { value: 7 });
+        assert_eq!(
+            state_from_slice::<Fixture>(&encoded).unwrap(),
+            Fixture { value: 7 }
+        );
 
         let wrong = String::from_utf8(encoded)
             .unwrap()
