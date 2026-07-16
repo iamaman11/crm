@@ -7,7 +7,7 @@ use crm_data_quality::{
 use crm_module_sdk::RecordId;
 
 #[test]
-fn staged_job_records_materialized_outcome_counts_without_crossing_completion_boundary() {
+fn staged_job_crosses_completion_only_after_exact_materialized_counts() {
     let rule_key = RuleKey::try_new("display_name.minimum").unwrap();
     let rule_set = PartyRuleSetVersion::publish(vec![
         PartyQualityRule::try_new(
@@ -52,12 +52,18 @@ fn staged_job_records_materialized_outcome_counts_without_crossing_completion_bo
     assert_eq!(materialized.evaluated_rules(), 1);
     assert_eq!(materialized.failed_rules(), 1);
     assert_eq!(materialized.updated_at(), input.captured_at());
+    assert!(materialized.complete(2, 1, 102).is_err());
+    assert!(materialized.complete(1, 0, 102).is_err());
 
-    let bytes = encode_party_evaluation_job_state(&materialized).unwrap();
-    assert_eq!(
-        decode_party_evaluation_job_state(&bytes).unwrap(),
-        materialized
-    );
+    let completed = materialized.complete(1, 1, 102).unwrap();
+    assert_eq!(completed.status(), PartyEvaluationJobStatus::Completed);
+    assert_eq!(completed.evaluated_rules(), 1);
+    assert_eq!(completed.failed_rules(), 1);
+    assert_eq!(completed.updated_at(), 102);
+    let bytes = encode_party_evaluation_job_state(&completed).unwrap();
+    assert_eq!(decode_party_evaluation_job_state(&bytes).unwrap(), completed);
+    assert!(completed.complete(1, 1, 103).is_err());
+
     assert!(
         staged
             .record_materialized_outcomes(0, 0, input.captured_at())

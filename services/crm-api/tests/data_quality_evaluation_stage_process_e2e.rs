@@ -28,19 +28,21 @@ use data_quality_evaluation_assertions::{
 };
 use data_quality_evaluation_fixture::{TENANT, profile_input, rule_set_input, unique_id};
 use data_quality_evaluation_operations::{
-    create_party, profile_version_id, publish_profile, publish_rule_set, request_evaluation,
-    rule_set_version_id,
+    create_party_with_display_name, profile_version_id, publish_profile, publish_rule_set,
+    request_evaluation, rule_set_version_id,
 };
 use data_quality_evaluation_process::{start, stop};
 use data_quality_evaluation_registry::register_evaluation_capabilities;
 use data_quality_evaluation_worker::build_evaluation_worker;
 use sqlx::PgPool;
 
+const EVALUATED_DISPLAY_NAME: &str = "unknown";
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn evaluation_job_materializes_exact_outcomes_and_restarts_without_duplicates() {
+async fn evaluation_job_completes_with_exact_findings_and_restarts_without_duplicates() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
         eprintln!(
-            "skipping evaluation materialization process proof because DATABASE_URL is absent"
+            "skipping evaluation completion process proof because DATABASE_URL is absent"
         );
         return;
     };
@@ -68,9 +70,10 @@ async fn evaluation_job_materializes_exact_outcomes_and_restarts_without_duplica
     .await;
     let profile_id = profile_version_id(&profile);
     let party_id = unique_id("evaluation-party");
-    let party = create_party(
+    let party = create_party_with_display_name(
         &mut api.client,
         &party_id,
+        EVALUATED_DISPLAY_NAME,
         &unique_id("evaluation-party-create"),
     )
     .await;
@@ -122,7 +125,10 @@ async fn evaluation_job_materializes_exact_outcomes_and_restarts_without_duplica
             party_id: &party_id,
             rule_set_id: &rule_set_id,
             profile_id: &profile_id,
+            display_name: EVALUATED_DISPLAY_NAME,
             party_version,
+            failed_rules: 1,
+            score_basis_points: 4_000,
         },
     )
     .await;
@@ -133,7 +139,7 @@ async fn evaluation_job_materializes_exact_outcomes_and_restarts_without_duplica
         .worker
         .run_tenant_cycle(TenantId::try_new(TENANT).unwrap())
         .await
-        .expect("materialize deterministic evaluation outcomes after restart");
+        .expect("atomically materialize outcomes findings and completion after restart");
     assert_eq!(second.staged_jobs, 0);
     assert_eq!(second.materialized_jobs, 1);
     assert_eq!(second.deferred_jobs, 0);
@@ -145,7 +151,10 @@ async fn evaluation_job_materializes_exact_outcomes_and_restarts_without_duplica
             party_id: &party_id,
             rule_set_id: &rule_set_id,
             profile_id: &profile_id,
+            display_name: EVALUATED_DISPLAY_NAME,
             party_version,
+            failed_rules: 1,
+            score_basis_points: 4_000,
         },
     )
     .await;
@@ -156,7 +165,7 @@ async fn evaluation_job_materializes_exact_outcomes_and_restarts_without_duplica
         .worker
         .run_tenant_cycle(TenantId::try_new(TENANT).unwrap())
         .await
-        .expect("restart materialized evaluation worker");
+        .expect("restart completed evaluation worker");
     assert_eq!(third.staged_jobs, 0);
     assert_eq!(third.materialized_jobs, 0);
     assert_eq!(third.deferred_jobs, 0);

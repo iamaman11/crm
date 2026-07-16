@@ -67,6 +67,15 @@ pub async fn create_party(
     party_id: &str,
     key: &str,
 ) -> parties::Party {
+    create_party_with_display_name(client, party_id, "Ada Lovelace", key).await
+}
+
+pub async fn create_party_with_display_name(
+    client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
+    party_id: &str,
+    display_name: &str,
+    key: &str,
+) -> parties::Party {
     let capability = mutation_definition(PARTY_CREATE);
     let response = mutate(
         client,
@@ -78,7 +87,7 @@ pub async fn create_party(
                     party_id: party_id.to_owned(),
                 }),
                 kind: parties::PartyKind::Person as i32,
-                display_name: "Ada Lovelace".to_owned(),
+                display_name: display_name.to_owned(),
             },
         ),
         key,

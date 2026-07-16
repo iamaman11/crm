@@ -155,6 +155,29 @@ impl PartyEvaluationJob {
         Ok(materialized)
     }
 
+    pub fn complete(
+        &self,
+        expected_evaluated_rules: u32,
+        expected_failed_rules: u32,
+        now: i64,
+    ) -> Result<Self, SdkError> {
+        if self.status != PartyEvaluationJobStatus::Staged
+            || !self.outcomes_materialized()
+            || self.evaluated_rules != expected_evaluated_rules
+            || self.failed_rules != expected_failed_rules
+            || expected_failed_rules > expected_evaluated_rules
+            || now < self.updated_at
+        {
+            return Err(invalid(
+                "evaluation job cannot cross the completion boundary",
+            ));
+        }
+        let mut completed = self.clone();
+        completed.status = PartyEvaluationJobStatus::Completed;
+        completed.updated_at = now;
+        Ok(completed)
+    }
+
     pub fn job_id(&self) -> &RecordId {
         &self.job_id
     }

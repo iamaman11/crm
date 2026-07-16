@@ -12,24 +12,45 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_data_quality::{
+    FINDING_OBSERVATION_RECORD_TYPE, FINDING_OBSERVATION_STATE_MAXIMUM_BYTES,
+    FINDING_OBSERVATION_STATE_RETENTION_POLICY_ID, FINDING_OBSERVATION_STATE_SCHEMA_ID,
+    FINDING_OBSERVATION_STATE_SCHEMA_VERSION, FINDING_RECORD_TYPE, FINDING_STATE_MAXIMUM_BYTES,
+    FINDING_STATE_RETENTION_POLICY_ID, FINDING_STATE_SCHEMA_ID, FINDING_STATE_SCHEMA_VERSION,
     PARTY_COMPLETENESS_RESULT_RECORD_TYPE, PARTY_COMPLETENESS_RESULT_STATE_MAXIMUM_BYTES,
     PARTY_COMPLETENESS_RESULT_STATE_RETENTION_POLICY_ID, PARTY_COMPLETENESS_RESULT_STATE_SCHEMA_ID,
     PARTY_COMPLETENESS_RESULT_STATE_SCHEMA_VERSION, PartyCompletenessProfileVersion,
-    PartyCompletenessResult, PartyEvaluationInputSnapshot, PartyEvaluationJobStatus,
-    PartyQualityInput, PartyRuleOutcome, PartyRuleSetVersion, RULE_OUTCOME_RECORD_TYPE,
-    RULE_OUTCOME_STATE_MAXIMUM_BYTES, RULE_OUTCOME_STATE_RETENTION_POLICY_ID,
-    RULE_OUTCOME_STATE_SCHEMA_ID, RULE_OUTCOME_STATE_SCHEMA_VERSION,
+    PartyCompletenessResult, PartyEvaluationInputSnapshot, PartyEvaluationJobStatus, PartyFinding,
+    PartyFindingObservation, PartyQualityInput, PartyRuleOutcome, PartyRuleSetVersion,
+    RULE_OUTCOME_RECORD_TYPE, RULE_OUTCOME_STATE_MAXIMUM_BYTES,
+    RULE_OUTCOME_STATE_RETENTION_POLICY_ID, RULE_OUTCOME_STATE_SCHEMA_ID,
+    RULE_OUTCOME_STATE_SCHEMA_VERSION, encode_finding_observation_state, encode_finding_state,
     encode_party_completeness_result_state, encode_rule_outcome_state,
-    party_completeness_result_state_descriptor_hash, rule_outcome_state_descriptor_hash,
+    finding_observation_state_descriptor_hash, finding_state_descriptor_hash,
+    party_completeness_result_state_descriptor_hash, party_finding_id,
+    rule_outcome_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordSnapshot, SdkError};
 use crm_proto_contracts::crm::data_quality::v1 as wire;
+use std::collections::BTreeMap;
+
+#[derive(Debug, Clone)]
+pub struct ExistingPartyFinding {
+    pub version: i64,
+    pub finding: PartyFinding,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExistingPartyFindingObservation {
+    pub observation: PartyFindingObservation,
+}
 
 #[derive(Debug, Clone)]
 pub struct DataQualityEvaluationMaterializationPlanner {
     rule_set: PartyRuleSetVersion,
     profile: PartyCompletenessProfileVersion,
     input: PartyEvaluationInputSnapshot,
+    current_findings: BTreeMap<String, ExistingPartyFinding>,
+    current_observations: BTreeMap<String, ExistingPartyFindingObservation>,
 }
 
 impl DataQualityEvaluationMaterializationPlanner {
@@ -37,14 +58,29 @@ impl DataQualityEvaluationMaterializationPlanner {
         rule_set: PartyRuleSetVersion,
         profile: PartyCompletenessProfileVersion,
         input: PartyEvaluationInputSnapshot,
+        current_findings: BTreeMap<String, ExistingPartyFinding>,
+        current_observations: BTreeMap<String, ExistingPartyFindingObservation>,
     ) -> Result<Self, SdkError> {
-        if profile.rule_set_version_id() != rule_set.version_id() {
-            return Err(invalid_plan("profile and rule-set bindings differ"));
+        if profile.rule_set_version_id() != rule_set.version_id()
+            || current_findings.iter().any(|(finding_id, existing)| {
+                existing.version <= 0 || existing.finding.finding_id() != finding_id
+            })
+            || current_observations
+                .iter()
+                .any(|(observation_id, existing)| {
+                    existing.observation.observation_id() != observation_id
+                })
+        {
+            return Err(invalid_plan(
+                "materialization definitions or current finding evidence are invalid",
+            ));
         }
         Ok(Self {
             rule_set,
             profile,
             input,
+            current_findings,
+            current_observations,
         })
     }
 }
@@ -83,7 +119,7 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
         let job = party_evaluation_job_from_snapshot(current)?;
         if job.status() != PartyEvaluationJobStatus::Staged || job.outcomes_materialized() {
             return Err(invalid_plan(
-                "only an unmaterialized staged evaluation job can produce durable outcomes",
+                "only an unmaterialized staged evaluation job can cross the completion boundary",
             ));
         }
         if self.input.job_id() != job.job_id()
@@ -124,6 +160,11 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
             failed_rules,
             self.input.captured_at(),
         )?;
+        let completed_job = materialized_job.complete(
+            evaluated_rules,
+            failed_rules,
+            request.context.execution.request_started_at_unix_nanos,
+        )?;
 
         let aggregate = current.reference.clone();
         let aggregate_version = current
@@ -139,7 +180,84 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
         let completeness_ref = wire::PartyCompletenessResultRef {
             completeness_result_id: completeness.result_id().to_owned(),
         };
-        let public_job = party_evaluation_job_to_wire(&materialized_job, aggregate_version);
+
+        let mut finding_refs = Vec::new();
+        let mut observation_refs = Vec::new();
+        let mut finding_effects = Vec::new();
+        for outcome in &outcomes {
+            let finding_id = party_finding_id(
+                &request.context.execution.tenant_id,
+                outcome.party_id(),
+                outcome.rule_set_version_id(),
+                outcome.rule_key(),
+            );
+            let existing_finding = self.current_findings.get(&finding_id);
+            if outcome.passed() {
+                if let Some(existing) = existing_finding {
+                    let updated = existing.finding.apply_passing_outcome(outcome)?;
+                    finding_refs.push(wire::DataQualityFindingRef {
+                        finding_id: finding_id.clone(),
+                    });
+                    if updated != existing.finding {
+                        finding_effects.push(RecordMutation::Update {
+                            reference: party_finding_record_ref(&updated)?,
+                            expected_version: existing.version,
+                            payload: party_finding_persisted_payload(&updated)?,
+                        });
+                    }
+                }
+                continue;
+            }
+
+            let rule = self
+                .rule_set
+                .rule(outcome.rule_key())
+                .ok_or_else(|| invalid_plan("failed outcome rule is unavailable"))?;
+            let observation = PartyFindingObservation::observe_failure(
+                request.context.execution.tenant_id.clone(),
+                rule,
+                outcome,
+            )?;
+            finding_refs.push(wire::DataQualityFindingRef {
+                finding_id: finding_id.clone(),
+            });
+            observation_refs.push(wire::DataQualityFindingObservationRef {
+                finding_observation_id: observation.observation_id().to_owned(),
+            });
+            match self.current_observations.get(observation.observation_id()) {
+                Some(existing) if existing.observation == observation => {}
+                Some(_) => {
+                    return Err(invalid_plan(
+                        "existing finding observation differs from deterministic evidence",
+                    ));
+                }
+                None => finding_effects.push(RecordMutation::Create {
+                    reference: party_finding_observation_record_ref(&observation)?,
+                    payload: party_finding_observation_persisted_payload(&observation)?,
+                }),
+            }
+            match existing_finding {
+                Some(existing) => {
+                    let updated = existing.finding.apply_failed_observation(&observation)?;
+                    if updated != existing.finding {
+                        finding_effects.push(RecordMutation::Update {
+                            reference: party_finding_record_ref(&updated)?,
+                            expected_version: existing.version,
+                            payload: party_finding_persisted_payload(&updated)?,
+                        });
+                    }
+                }
+                None => {
+                    let opened = PartyFinding::open(rule, &observation)?;
+                    finding_effects.push(RecordMutation::Create {
+                        reference: party_finding_record_ref(&opened)?,
+                        payload: party_finding_persisted_payload(&opened)?,
+                    });
+                }
+            }
+        }
+
+        let public_job = party_evaluation_job_to_wire(&completed_job, aggregate_version);
         let output = support::protobuf_payload(
             MODULE_ID,
             MATERIALIZE_PARTY_EVALUATION_RESPONSE_SCHEMA,
@@ -148,6 +266,8 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
                 evaluation_job: Some(public_job.clone()),
                 rule_outcome_refs: outcome_refs.clone(),
                 completeness_result_ref: Some(completeness_ref.clone()),
+                finding_refs: finding_refs.clone(),
+                finding_observation_refs: observation_refs.clone(),
             },
         )?;
         let event = support::event_evidence_with_data_class(
@@ -165,6 +285,8 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
                 evaluation_job: Some(public_job),
                 rule_outcome_refs: outcome_refs,
                 completeness_result_ref: Some(completeness_ref),
+                finding_refs,
+                finding_observation_refs: observation_refs,
             },
         )?;
         let audit = support::audit_intent(
@@ -175,11 +297,11 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
             &output.bytes,
         )?;
 
-        let mut records = Vec::with_capacity(outcomes.len() + 2);
+        let mut records = Vec::with_capacity(outcomes.len() + finding_effects.len() + 2);
         records.push(RecordMutation::Update {
             reference: aggregate,
             expected_version: current.version,
-            payload: party_evaluation_job_persisted_payload(&materialized_job)?,
+            payload: party_evaluation_job_persisted_payload(&completed_job)?,
         });
         for outcome in &outcomes {
             records.push(RecordMutation::Create {
@@ -191,6 +313,7 @@ impl TransactionalAggregatePlanner for DataQualityEvaluationMaterializationPlann
             reference: party_completeness_result_record_ref(&completeness)?,
             payload: party_completeness_result_persisted_payload(&completeness)?,
         });
+        records.extend(finding_effects);
 
         Ok(CapabilityBatchExecutionPlan {
             batch: BatchMutationPlan {
@@ -265,6 +388,68 @@ pub fn party_completeness_result_record_ref(
         PARTY_COMPLETENESS_RESULT_RECORD_TYPE,
         result.result_id(),
         "data_quality.completeness_result_ref.completeness_result_id",
+    )
+}
+
+pub fn party_finding_persisted_contract() -> PersistedPayloadContract<'static> {
+    PersistedPayloadContract {
+        owner: MODULE_ID,
+        schema_id: FINDING_STATE_SCHEMA_ID,
+        schema_version: FINDING_STATE_SCHEMA_VERSION,
+        descriptor_hash: finding_state_descriptor_hash(),
+        maximum_size_bytes: FINDING_STATE_MAXIMUM_BYTES,
+        retention_policy_id: FINDING_STATE_RETENTION_POLICY_ID,
+    }
+}
+
+pub fn party_finding_persisted_payload(
+    finding: &PartyFinding,
+) -> Result<crm_module_sdk::TypedPayload, SdkError> {
+    support::persisted_json_payload_with_data_class(
+        party_finding_persisted_contract(),
+        DataClass::Personal,
+        encode_finding_state(finding)?,
+    )
+}
+
+pub fn party_finding_record_ref(
+    finding: &PartyFinding,
+) -> Result<crm_module_sdk::RecordRef, SdkError> {
+    support::record_ref(
+        FINDING_RECORD_TYPE,
+        finding.finding_id(),
+        "data_quality.finding_ref.finding_id",
+    )
+}
+
+pub fn party_finding_observation_persisted_contract() -> PersistedPayloadContract<'static> {
+    PersistedPayloadContract {
+        owner: MODULE_ID,
+        schema_id: FINDING_OBSERVATION_STATE_SCHEMA_ID,
+        schema_version: FINDING_OBSERVATION_STATE_SCHEMA_VERSION,
+        descriptor_hash: finding_observation_state_descriptor_hash(),
+        maximum_size_bytes: FINDING_OBSERVATION_STATE_MAXIMUM_BYTES,
+        retention_policy_id: FINDING_OBSERVATION_STATE_RETENTION_POLICY_ID,
+    }
+}
+
+pub fn party_finding_observation_persisted_payload(
+    observation: &PartyFindingObservation,
+) -> Result<crm_module_sdk::TypedPayload, SdkError> {
+    support::persisted_json_payload_with_data_class(
+        party_finding_observation_persisted_contract(),
+        DataClass::Personal,
+        encode_finding_observation_state(observation)?,
+    )
+}
+
+pub fn party_finding_observation_record_ref(
+    observation: &PartyFindingObservation,
+) -> Result<crm_module_sdk::RecordRef, SdkError> {
+    support::record_ref(
+        FINDING_OBSERVATION_RECORD_TYPE,
+        observation.observation_id(),
+        "data_quality.finding_observation_ref.finding_observation_id",
     )
 }
 

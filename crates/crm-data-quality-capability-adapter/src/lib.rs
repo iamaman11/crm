@@ -26,8 +26,12 @@ pub use evaluation_job_planner::{
     party_evaluation_job_to_wire,
 };
 pub use evaluation_materialization_planner::{
-    DataQualityEvaluationMaterializationPlanner, party_completeness_result_persisted_contract,
+    DataQualityEvaluationMaterializationPlanner, ExistingPartyFinding,
+    ExistingPartyFindingObservation, party_completeness_result_persisted_contract,
     party_completeness_result_persisted_payload, party_completeness_result_record_ref,
+    party_finding_observation_persisted_contract, party_finding_observation_persisted_payload,
+    party_finding_observation_record_ref, party_finding_persisted_contract,
+    party_finding_persisted_payload, party_finding_record_ref,
     party_rule_outcome_persisted_contract, party_rule_outcome_persisted_payload,
     party_rule_outcome_record_ref,
 };

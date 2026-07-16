@@ -10,6 +10,7 @@
 mod canonical_json;
 mod canonicalization;
 mod derived_identity;
+mod finding_identity;
 
 pub mod domain {
     // `domain.rs` has one JSON serialization site: immutable semantic identity.
@@ -71,6 +72,7 @@ pub use domain::*;
 pub use evaluation_job::*;
 pub use evaluation_persistence::*;
 pub use finding::*;
+pub use finding_identity::*;
 pub use finding_persistence::*;
 pub use rule_outcome::*;
 pub use rule_outcome_persistence::*;

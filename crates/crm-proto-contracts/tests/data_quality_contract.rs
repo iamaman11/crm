@@ -82,6 +82,12 @@ fn internal_materialization_contract_returns_exact_durable_refs() {
         completeness_result_ref: Some(data_quality::PartyCompletenessResultRef {
             completeness_result_id: "dq-completeness-result-example".to_owned(),
         }),
+        finding_refs: vec![data_quality::DataQualityFindingRef {
+            finding_id: "dq-finding-example".to_owned(),
+        }],
+        finding_observation_refs: vec![data_quality::DataQualityFindingObservationRef {
+            finding_observation_id: "dq-finding-observation-example".to_owned(),
+        }],
     };
 
     let bytes = response.encode_to_vec();
