@@ -1,0 +1,13 @@
+[package]
+name = "crm-data-quality-source-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-query-runtime = { path = "../crm-query-runtime" }
+prost = "0.13"
