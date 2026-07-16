@@ -8,6 +8,7 @@
 
 mod completeness_profile_planner;
 mod evaluation_job_planner;
+mod evaluation_stage_planner;
 mod rule_set_planner;
 
 pub use completeness_profile_planner::{
@@ -22,6 +23,10 @@ pub use evaluation_job_planner::{
     evaluation_reference_scope_from_request, party_evaluation_job_from_snapshot,
     party_evaluation_job_persisted_contract, party_evaluation_job_persisted_payload,
     party_evaluation_job_to_wire,
+};
+pub use evaluation_stage_planner::{
+    DataQualityEvaluationStagePlanner, party_evaluation_input_persisted_contract,
+    party_evaluation_input_persisted_payload, party_evaluation_input_record_ref,
 };
 pub use rule_set_planner::{
     DataQualityRuleSetCapabilityPlanner, party_rule_set_from_definition,
@@ -71,6 +76,16 @@ pub const REQUEST_PARTY_EVALUATION_RESPONSE_SCHEMA: &str =
 pub const PARTY_EVALUATION_REQUESTED_EVENT_TYPE: &str = "data_quality.party.evaluation.requested";
 pub const PARTY_EVALUATION_REQUESTED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.PartyEvaluationRequestedEvent";
+
+pub const STAGE_PARTY_EVALUATION_INPUT_CAPABILITY: &str =
+    "data_quality.party.evaluation.internal.stage";
+pub const STAGE_PARTY_EVALUATION_INPUT_REQUEST_SCHEMA: &str =
+    "crm.data_quality.v1.StagePartyEvaluationInputRequest";
+pub const STAGE_PARTY_EVALUATION_INPUT_RESPONSE_SCHEMA: &str =
+    "crm.data_quality.v1.StagePartyEvaluationInputResponse";
+pub const PARTY_EVALUATION_STAGED_EVENT_TYPE: &str = "data_quality.party.evaluation.staged";
+pub const PARTY_EVALUATION_STAGED_EVENT_SCHEMA: &str =
+    "crm.data_quality.v1.PartyEvaluationStagedEvent";
 
 pub const MUTATION_CAPABILITY_IDS: &[&str] = &[
     PUBLISH_PARTY_RULE_SET_CAPABILITY,
@@ -128,6 +143,15 @@ pub fn evaluation_request_capability_definition() -> Result<CapabilityDefinition
         REQUEST_PARTY_EVALUATION_CAPABILITY,
         REQUEST_PARTY_EVALUATION_REQUEST_SCHEMA,
         REQUEST_PARTY_EVALUATION_RESPONSE_SCHEMA,
+        DataClass::Personal,
+    )
+}
+
+pub fn evaluation_stage_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        STAGE_PARTY_EVALUATION_INPUT_CAPABILITY,
+        STAGE_PARTY_EVALUATION_INPUT_REQUEST_SCHEMA,
+        STAGE_PARTY_EVALUATION_INPUT_RESPONSE_SCHEMA,
         DataClass::Personal,
     )
 }
@@ -215,5 +239,19 @@ mod tests {
             assert!(definition.requires_idempotency);
             assert!(!definition.requires_approval);
         }
+    }
+
+    #[test]
+    fn internal_stage_definition_is_personal_and_not_publicly_catalogued() {
+        let definition = evaluation_stage_capability_definition().unwrap();
+        assert_eq!(
+            definition.capability_id.as_str(),
+            STAGE_PARTY_EVALUATION_INPUT_CAPABILITY
+        );
+        assert_eq!(
+            definition.input_contract.allowed_data_classes,
+            vec![DataClass::Personal]
+        );
+        assert!(!MUTATION_CAPABILITY_IDS.contains(&STAGE_PARTY_EVALUATION_INPUT_CAPABILITY));
     }
 }
