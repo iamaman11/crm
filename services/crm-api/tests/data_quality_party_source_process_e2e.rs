@@ -138,11 +138,13 @@ async fn build_source(
         .expect("connect governed Party quality source store");
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
     let now = clock.now_unix_nanos();
-    let expires_at = now.checked_add(60_000_000_000).expect("bounded grant expiry");
+    let expires_at = now
+        .checked_add(60_000_000_000)
+        .expect("bounded grant expiry");
     let tenant_id = TenantId::try_new(tenant).unwrap();
     let actor_id = ActorId::try_new(SOURCE_ACTOR).unwrap();
-    let definition = query_capability_definition(PARTY_GET_CAPABILITY)
-        .expect("valid Party GET definition");
+    let definition =
+        query_capability_definition(PARTY_GET_CAPABILITY).expect("valid Party GET definition");
 
     let authorization_store = LiveAuthorizationStore::default();
     if authorize {
@@ -361,7 +363,10 @@ async fn wait_until_ready(client: &reqwest::Client, child: &mut Child, http_addr
         {
             return;
         }
-        assert!(Instant::now() < deadline, "Party source readiness timed out");
+        assert!(
+            Instant::now() < deadline,
+            "Party source readiness timed out"
+        );
         sleep(Duration::from_millis(200)).await;
     }
 }
@@ -394,7 +399,10 @@ async fn stop(child: &mut Child) {
         .expect("send SIGINT to Party source crm-api");
     assert!(status.success(), "kill -INT failed: {status}");
     let status = child.wait().await.expect("wait for Party source crm-api");
-    assert!(status.success(), "Party source crm-api exited unsuccessfully: {status}");
+    assert!(
+        status.success(),
+        "Party source crm-api exited unsuccessfully: {status}"
+    );
 }
 
 fn free_addresses() -> (String, String) {

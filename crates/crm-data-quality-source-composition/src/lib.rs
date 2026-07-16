@@ -90,12 +90,7 @@ impl PartyQualitySource for GovernedPartyQualitySource {
                 source_request.request_started_at_unix_nanos,
             )?;
             let definition = query_capability_definition(PARTY_GET_CAPABILITY)?;
-            authorize_party_get(
-                self.query_authorizer.as_ref(),
-                &definition,
-                &request,
-            )
-            .await?;
+            authorize_party_get(self.query_authorizer.as_ref(), &definition, &request).await?;
             self.adapter.validate(&definition, &request).await?;
             let result = self.adapter.execute(&definition, request).await?;
             let response = wire::GetPartyResponse::decode(result.output.bytes.as_slice())
@@ -182,7 +177,10 @@ mod tests {
 
     #[test]
     fn minimized_source_contract_is_closed_and_thread_safe() {
-        assert_ne!(PartyQualitySourceKind::Person, PartyQualitySourceKind::Organization);
+        assert_ne!(
+            PartyQualitySourceKind::Person,
+            PartyQualitySourceKind::Organization
+        );
         assert_send_sync::<GovernedPartyQualitySource>();
     }
 }

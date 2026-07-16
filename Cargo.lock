@@ -260,9 +260,12 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-360-composition",
+ "crm-data-quality-source-composition",
  "crm-module-sdk",
+ "crm-parties-query-adapter",
  "crm-party-relationships-projection",
  "crm-proto-contracts",
+ "crm-query-runtime",
  "crm-sales-activities-capability-composition",
  "prost",
  "reqwest",
@@ -725,6 +728,18 @@ dependencies = [
  "crm-data-quality",
  "crm-data-quality-capability-adapter",
  "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
+]
+
+[[package]]
+name = "crm-data-quality-source-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-module-sdk",
+ "crm-parties-query-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
  "prost",
