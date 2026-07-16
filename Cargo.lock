@@ -337,6 +337,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-canonical-json"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "crm-capability-adapters"
 version = "0.1.0"
 dependencies = [
@@ -696,6 +704,7 @@ dependencies = [
 name = "crm-data-quality"
 version = "0.1.0"
 dependencies = [
+ "crm-canonical-json",
  "crm-module-sdk",
  "serde",
  "serde_json",

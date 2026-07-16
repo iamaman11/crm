@@ -122,9 +122,9 @@ fn is_ascii_identifier(value: &str) -> bool {
             .as_bytes()
             .first()
             .is_some_and(|byte| byte.is_ascii_alphabetic() || *byte == b'_')
-        && value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-')
-        })
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
 }
 
 #[cfg(test)]
