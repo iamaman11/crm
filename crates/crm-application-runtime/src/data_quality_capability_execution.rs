@@ -126,23 +126,31 @@ impl ApplicationCapabilityExecutorRouter {
             &command.display_name,
         )?;
         let source_request_identity = format!("dq-remediation-source-{}", identity.attempt_id());
-        let source = GovernedPartyQualitySource::new(
+        let governed_source = GovernedPartyQualitySource::new(
             registered_party_quality_query_adapter()?,
             self.query_authorizer.clone(),
-        )
-        .get(PartyQualitySourceRequest {
-            tenant_id: &request.context.execution.tenant_id,
-            actor_id: &request.context.execution.actor_id,
-            request_identity: &source_request_identity,
-            party_id: finding.party_id(),
-            request_started_at_unix_nanos: request
-                .context
-                .execution
-                .request_started_at_unix_nanos,
-        })
-        .await?;
+        );
+        let source = governed_source
+            .get(PartyQualitySourceRequest {
+                tenant_id: &request.context.execution.tenant_id,
+                actor_id: &request.context.execution.actor_id,
+                request_identity: &source_request_identity,
+                party_id: finding.party_id(),
+                request_started_at_unix_nanos: request
+                    .context
+                    .execution
+                    .request_started_at_unix_nanos,
+            })
+            .await?;
+        let expected_party_version = command.expected_party_resource_version;
+        let applied_party_version = expected_party_version
+            .checked_add(1)
+            .ok_or_else(remediation_evidence_conflict)?;
+        let target_not_applied = source.resource_version == expected_party_version;
+        let target_already_applied = source.resource_version == applied_party_version
+            && source.display_name == command.display_name;
         if source.party_id.as_str() != finding.party_id().as_str()
-            || source.resource_version != command.expected_party_resource_version
+            || (!target_not_applied && !target_already_applied)
         {
             return Err(remediation_evidence_conflict());
         }
@@ -156,7 +164,7 @@ impl ApplicationCapabilityExecutorRouter {
                 party_ref: Some(crm_proto_contracts::crm::customer::v1::PartyRef {
                     party_id: finding.party_id().as_str().to_owned(),
                 }),
-                expected_version: source.resource_version,
+                expected_version: expected_party_version,
                 display_name: command.display_name.clone(),
             },
         )?;
@@ -199,7 +207,7 @@ impl ApplicationCapabilityExecutorRouter {
             &finding,
             command.expected_finding_version,
             observation_id.as_str(),
-            command.expected_party_resource_version,
+            expected_party_version,
             command.display_name,
             updated_version,
             request.context.execution.request_started_at_unix_nanos,
