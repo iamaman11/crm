@@ -7,17 +7,31 @@
 //! remain owned by `crm.parties`; application composition supplies only the
 //! exact governed source evidence required by the frozen evaluator vocabulary.
 
+mod canonical_json;
+mod canonicalization;
+
 pub mod domain {
+    // `domain.rs` has one JSON serialization site: immutable semantic identity.
+    // Bind it explicitly to the normative platform canonicalization profile.
+    use crate::canonicalization::semantic_json as serde_json;
     #[cfg(test)]
     use std::collections::BTreeSet;
 
     include!("domain.rs");
 }
-pub mod definition_persistence;
+
+pub mod definition_persistence {
+    // Persisted immutable definitions store and verify the exact profile beside
+    // the content-derived version identity before strict domain rehydration.
+    use crate::canonicalization::persisted_state_json as serde_json;
+
+    include!("definition_persistence.rs");
+}
 
 pub use definition_persistence::*;
 pub use domain::*;
 
+pub const CANONICALIZATION_PROFILE_ID: &str = canonicalization::PROFILE_ID;
 pub const MODULE_ID: &str = "crm.data-quality";
 pub const PARTY_RULE_SET_VERSION_RECORD_TYPE: &str = "data_quality.party_rule_set_version";
 pub const PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE: &str =
