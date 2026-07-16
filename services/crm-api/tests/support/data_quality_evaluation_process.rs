@@ -12,8 +12,16 @@ pub struct RunningApi {
 }
 
 pub async fn start(database_url: &str) -> RunningApi {
+    start_with_environment(database_url, &[]).await
+}
+
+pub async fn start_with_environment(
+    database_url: &str,
+    environment: &[(&str, &str)],
+) -> RunningApi {
     let (http_addr, grpc_addr) = free_addresses();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_crm-api"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_crm-api"));
+    command
         .env("CRM_DATABASE_URL", database_url)
         .env("CRM_HTTP_BIND", &http_addr)
         .env("CRM_GRPC_BIND", &grpc_addr)
@@ -28,7 +36,11 @@ pub async fn start(database_url: &str) -> RunningApi {
         .env("CRM_BOOTSTRAP_ALLOW_PHASE6", "true")
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .kill_on_drop(true)
+        .kill_on_drop(true);
+    for (key, value) in environment {
+        command.env(key, value);
+    }
+    let mut child = command
         .spawn()
         .expect("spawn crm-api for evaluation staging proof");
     let http = reqwest::Client::new();
