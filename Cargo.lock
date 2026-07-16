@@ -260,6 +260,7 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-360-composition",
+ "crm-data-quality-capability-adapter",
  "crm-data-quality-source-composition",
  "crm-module-sdk",
  "crm-parties-query-adapter",
