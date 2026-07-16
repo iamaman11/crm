@@ -7,7 +7,8 @@ use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
 use crm_data_quality_capability_adapter::{
-    DataQualityRuleSetCapabilityPlanner, PUBLISH_PARTY_RULE_SET_CAPABILITY,
+    DataQualityRuleSetCapabilityPlanner, PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+    PUBLISH_PARTY_RULE_SET_CAPABILITY,
     capability_definitions as data_quality_capability_definitions,
 };
 use crm_module_sdk::{ErrorCategory, RecordSnapshot, SdkError};
@@ -70,27 +71,30 @@ mod tests {
     use crm_module_sdk::{CapabilityId, CapabilityVersion};
 
     #[test]
-    fn application_mutation_catalog_adds_exact_data_quality_publication_coordinate() {
+    fn application_mutation_catalog_adds_exact_data_quality_definition_coordinates() {
         let definitions = application_mutation_definitions().unwrap();
-        assert_eq!(
-            definitions
-                .iter()
-                .filter(|definition| {
-                    definition.capability_id.as_str() == PUBLISH_PARTY_RULE_SET_CAPABILITY
-                })
-                .count(),
-            1
-        );
-        let capability_id = CapabilityId::try_new(PUBLISH_PARTY_RULE_SET_CAPABILITY).unwrap();
-        let capability_version = CapabilityVersion::try_new("1.0.0").unwrap();
-        assert_eq!(
-            application_capability_catalog()
-                .unwrap()
-                .definition(&capability_id, &capability_version)
-                .unwrap()
-                .capability_id
-                .as_str(),
-            PUBLISH_PARTY_RULE_SET_CAPABILITY
-        );
+        for capability in [
+            PUBLISH_PARTY_RULE_SET_CAPABILITY,
+            PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+        ] {
+            assert_eq!(
+                definitions
+                    .iter()
+                    .filter(|definition| definition.capability_id.as_str() == capability)
+                    .count(),
+                1
+            );
+            let capability_id = CapabilityId::try_new(capability).unwrap();
+            let capability_version = CapabilityVersion::try_new("1.0.0").unwrap();
+            assert_eq!(
+                application_capability_catalog()
+                    .unwrap()
+                    .definition(&capability_id, &capability_version)
+                    .unwrap()
+                    .capability_id
+                    .as_str(),
+                capability
+            );
+        }
     }
 }
