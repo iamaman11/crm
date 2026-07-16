@@ -93,10 +93,7 @@ fn staged_evaluation_produces_replay_stable_outcomes_and_exact_lineage() {
     for outcome in &outcomes {
         let bytes = encode_rule_outcome_state(outcome).unwrap();
         let text = std::str::from_utf8(&bytes).unwrap();
-        assert!(text.contains(&format!(
-            "\"evaluated_at\":\"{}\"",
-            LARGE_UNIX_NANOS + 2
-        )));
+        assert!(text.contains(&format!("\"evaluated_at\":\"{}\"", LARGE_UNIX_NANOS + 2)));
         assert_eq!(decode_rule_outcome_state(&bytes).unwrap(), *outcome);
         let noncanonical = text.replace(
             &format!("\"evaluated_at\":\"{}\"", LARGE_UNIX_NANOS + 2),
@@ -105,20 +102,12 @@ fn staged_evaluation_produces_replay_stable_outcomes_and_exact_lineage() {
         assert!(decode_rule_outcome_state(noncanonical.as_bytes()).is_err());
     }
 
-    let result = PartyCompletenessResult::compute(
-        &staged,
-        &profile,
-        &outcomes,
-        LARGE_UNIX_NANOS + 3,
-    )
-    .unwrap();
-    let replayed = PartyCompletenessResult::compute(
-        &staged,
-        &profile,
-        &outcomes,
-        LARGE_UNIX_NANOS + 3,
-    )
-    .unwrap();
+    let result =
+        PartyCompletenessResult::compute(&staged, &profile, &outcomes, LARGE_UNIX_NANOS + 3)
+            .unwrap();
+    let replayed =
+        PartyCompletenessResult::compute(&staged, &profile, &outcomes, LARGE_UNIX_NANOS + 3)
+            .unwrap();
     assert_eq!(result, replayed);
     assert_eq!(result.score_basis_points(), 4_000);
     assert_eq!(result.components().len(), 2);
@@ -140,11 +129,11 @@ fn staged_evaluation_produces_replay_stable_outcomes_and_exact_lineage() {
 
     let bytes = encode_party_completeness_result_state(&result).unwrap();
     let text = std::str::from_utf8(&bytes).unwrap();
-    assert!(text.contains(&format!(
-        "\"computed_at\":\"{}\"",
-        LARGE_UNIX_NANOS + 3
-    )));
-    assert_eq!(decode_party_completeness_result_state(&bytes).unwrap(), result);
+    assert!(text.contains(&format!("\"computed_at\":\"{}\"", LARGE_UNIX_NANOS + 3)));
+    assert_eq!(
+        decode_party_completeness_result_state(&bytes).unwrap(),
+        result
+    );
     let noncanonical = text.replace(
         &format!("\"computed_at\":\"{}\"", LARGE_UNIX_NANOS + 3),
         &format!("\"computed_at\":\"0{}\"", LARGE_UNIX_NANOS + 3),
