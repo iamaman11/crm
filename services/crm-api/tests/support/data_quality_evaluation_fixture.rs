@@ -3,10 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const TENANT: &str = "tenant-a";
 pub const API_ACTOR: &str = "actor-a";
-pub const TOKEN: &str =
-    "data-quality-evaluation-process-token-0123456789abcdef0123456789abcdef";
-pub const APPROVAL_KEY: &str =
-    "data-quality-evaluation-process-approval-key-0123456789abcdef";
+pub const TOKEN: &str = "data-quality-evaluation-process-token-0123456789abcdef0123456789abcdef";
+pub const APPROVAL_KEY: &str = "data-quality-evaluation-process-approval-key-0123456789abcdef";
 pub const PUBLISH_RULE_SET: &str = "data_quality.party.rule_set.publish";
 pub const PUBLISH_PROFILE: &str = "data_quality.party.completeness_profile.publish";
 pub const REQUEST_EVALUATION: &str = "data_quality.party.evaluation.request";
@@ -48,7 +46,9 @@ pub fn rule_set_input() -> data_quality::PartyRuleSetDefinition {
     }
 }
 
-pub fn profile_input(rule_set_version_id: &str) -> data_quality::PartyCompletenessProfileDefinition {
+pub fn profile_input(
+    rule_set_version_id: &str,
+) -> data_quality::PartyCompletenessProfileDefinition {
     data_quality::PartyCompletenessProfileDefinition {
         completeness_semantic_version: data_quality::PartyCompletenessSemanticVersion::V1 as i32,
         rule_set_version_ref: Some(data_quality::PartyRuleSetVersionRef {

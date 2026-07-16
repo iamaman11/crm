@@ -85,12 +85,10 @@ pub async fn create_party(
     )
     .await
     .expect("create Party for evaluation staging");
-    parties::CreatePartyResponse::decode(
-        response.output.expect("Party output").payload.as_slice(),
-    )
-    .expect("decode Party response")
-    .party
-    .expect("created Party")
+    parties::CreatePartyResponse::decode(response.output.expect("Party output").payload.as_slice())
+        .expect("decode Party response")
+        .party
+        .expect("created Party")
 }
 
 pub async fn request_evaluation(
@@ -129,7 +127,11 @@ pub async fn request_evaluation(
     .await
     .expect("request Party evaluation");
     data_quality::RequestPartyEvaluationResponse::decode(
-        response.output.expect("evaluation output").payload.as_slice(),
+        response
+            .output
+            .expect("evaluation output")
+            .payload
+            .as_slice(),
     )
     .expect("decode evaluation response")
     .evaluation_job
