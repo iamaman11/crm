@@ -18,9 +18,7 @@ use crm_data_quality::{
     party_evaluation_input_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordSnapshot, SdkError};
-use crm_proto_contracts::crm::{
-    data_quality::v1 as wire, parties::v1 as parties,
-};
+use crm_proto_contracts::crm::{data_quality::v1 as wire, parties::v1 as parties};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DataQualityEvaluationStagePlanner;
