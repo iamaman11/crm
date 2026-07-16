@@ -6,8 +6,7 @@ use crate::governed_metadata::{
 use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::CapabilityDefinition;
 use crm_data_quality_query_adapter::{
-    DataQualityQueryAdapter, GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
-    GET_PARTY_RULE_SET_CAPABILITY, QUERY_CAPABILITY_IDS,
+    DataQualityQueryAdapter, QUERY_CAPABILITY_IDS,
     query_capability_definitions as data_quality_query_capability_definitions,
 };
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
