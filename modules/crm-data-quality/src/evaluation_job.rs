@@ -33,7 +33,9 @@ impl PartyEvaluationJob {
         now: i64,
     ) -> Result<Self, SdkError> {
         if now < 0 || profile.rule_set_version_id() != rule_set.version_id() {
-            return Err(invalid("evaluation job references or timestamp are invalid"));
+            return Err(invalid(
+                "evaluation job references or timestamp are invalid",
+            ));
         }
         Ok(Self {
             job_id,

@@ -9,11 +9,10 @@ use crm_core_data::{
 };
 use crm_data_quality_capability_adapter::{
     DataQualityCompletenessProfileCapabilityPlanner, DataQualityEvaluationJobCapabilityPlanner,
-    MODULE_ID, PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE,
-    PARTY_RULE_SET_VERSION_RECORD_TYPE, PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
-    REQUEST_PARTY_EVALUATION_CAPABILITY, completeness_profile_reference_scope_from_request,
-    evaluation_reference_scope_from_request, party_completeness_profile_from_immutable_snapshot,
-    party_rule_set_from_snapshot,
+    MODULE_ID, PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE, PARTY_RULE_SET_VERSION_RECORD_TYPE,
+    PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY, REQUEST_PARTY_EVALUATION_CAPABILITY,
+    completeness_profile_reference_scope_from_request, evaluation_reference_scope_from_request,
+    party_completeness_profile_from_immutable_snapshot, party_rule_set_from_snapshot,
 };
 use crm_module_sdk::{ErrorCategory, ModuleId, PortFuture, RecordId, RecordType, SdkError};
 use std::fmt;
@@ -100,9 +99,7 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
                     .get_record_for_query(&RecordGetQuery {
                         tenant_id: request.context.execution.tenant_id.clone(),
                         owner_module_id: module_id()?,
-                        record_type: record_type(
-                            PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE,
-                        )?,
+                        record_type: record_type(PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE)?,
                         record_id: scope.profile_version_id,
                     })
                     .await?

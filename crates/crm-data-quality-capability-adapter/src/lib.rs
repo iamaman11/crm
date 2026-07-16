@@ -68,8 +68,7 @@ pub const REQUEST_PARTY_EVALUATION_REQUEST_SCHEMA: &str =
     "crm.data_quality.v1.RequestPartyEvaluationRequest";
 pub const REQUEST_PARTY_EVALUATION_RESPONSE_SCHEMA: &str =
     "crm.data_quality.v1.RequestPartyEvaluationResponse";
-pub const PARTY_EVALUATION_REQUESTED_EVENT_TYPE: &str =
-    "data_quality.party.evaluation.requested";
+pub const PARTY_EVALUATION_REQUESTED_EVENT_TYPE: &str = "data_quality.party.evaluation.requested";
 pub const PARTY_EVALUATION_REQUESTED_EVENT_SCHEMA: &str =
     "crm.data_quality.v1.PartyEvaluationRequestedEvent";
 

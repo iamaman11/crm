@@ -12,13 +12,14 @@ use crm_core_data::{
 use crm_data_quality::{
     PARTY_EVALUATION_JOB_RECORD_TYPE, PARTY_EVALUATION_JOB_STATE_MAXIMUM_BYTES,
     PARTY_EVALUATION_JOB_STATE_RETENTION_POLICY_ID, PARTY_EVALUATION_JOB_STATE_SCHEMA_ID,
-    PARTY_EVALUATION_JOB_STATE_SCHEMA_VERSION, PartyCompletenessProfileVersion,
-    PartyEvaluationJob, PartyEvaluationJobStatus, PartyRuleSetVersion,
-    decode_party_evaluation_job_state, encode_party_evaluation_job_state,
-    party_evaluation_job_state_descriptor_hash,
+    PARTY_EVALUATION_JOB_STATE_SCHEMA_VERSION, PartyCompletenessProfileVersion, PartyEvaluationJob,
+    PartyEvaluationJobStatus, PartyRuleSetVersion, decode_party_evaluation_job_state,
+    encode_party_evaluation_job_state, party_evaluation_job_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordSnapshot, SdkError};
-use crm_proto_contracts::crm::{core::v1 as core, customer::v1 as customer, data_quality::v1 as wire};
+use crm_proto_contracts::crm::{
+    core::v1 as core, customer::v1 as customer, data_quality::v1 as wire,
+};
 
 #[derive(Debug, Clone)]
 pub struct EvaluationReferenceScope {
@@ -45,12 +46,17 @@ impl DataQualityEvaluationJobCapabilityPlanner {
         Ok(Self { rule_set, profile })
     }
 
-    fn job_from_request(&self, request: &CapabilityRequest) -> Result<PartyEvaluationJob, SdkError> {
+    fn job_from_request(
+        &self,
+        request: &CapabilityRequest,
+    ) -> Result<PartyEvaluationJob, SdkError> {
         let scope = evaluation_reference_scope_from_request(request)?;
         if scope.rule_set_version_id.as_str() != self.rule_set.version_id().as_str()
             || scope.profile_version_id.as_str() != self.profile.version_id().as_str()
         {
-            return Err(invalid_plan("request references differ from validated definitions"));
+            return Err(invalid_plan(
+                "request references differ from validated definitions",
+            ));
         }
         PartyEvaluationJob::create(
             scope.job_id,
@@ -177,7 +183,10 @@ pub fn evaluation_reference_scope_from_request(
     })
 }
 
-pub fn party_evaluation_job_to_wire(job: &PartyEvaluationJob, resource_version: i64) -> wire::PartyEvaluationJob {
+pub fn party_evaluation_job_to_wire(
+    job: &PartyEvaluationJob,
+    resource_version: i64,
+) -> wire::PartyEvaluationJob {
     wire::PartyEvaluationJob {
         evaluation_job_ref: Some(wire::PartyEvaluationJobRef {
             evaluation_job_id: job.job_id().as_str().to_owned(),
@@ -257,7 +266,9 @@ pub fn party_evaluation_job_from_snapshot(
     )?;
     let job = decode_party_evaluation_job_state(bytes)?;
     if job.job_id().as_str() != snapshot.reference.record_id.as_str() {
-        return Err(invalid_plan("persisted evaluation job identity differs from its record"));
+        return Err(invalid_plan(
+            "persisted evaluation job identity differs from its record",
+        ));
     }
     Ok(job)
 }
@@ -286,7 +297,9 @@ fn ensure_definition(
         || definition.owner_module_id.as_str() != MODULE_ID
         || definition.capability_id.as_str() != request.context.execution.capability_id.as_str()
     {
-        return Err(invalid_plan("capability definition does not match the request"));
+        return Err(invalid_plan(
+            "capability definition does not match the request",
+        ));
     }
     Ok(())
 }
