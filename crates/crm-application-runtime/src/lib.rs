@@ -8,6 +8,7 @@
 //! published composition/adapters.
 
 mod config;
+mod data_quality_capability_execution;
 mod data_quality_query_registration;
 mod data_quality_registration;
 mod export_artifact_download;
@@ -22,6 +23,7 @@ mod process;
 mod runtime;
 
 pub use config::*;
+pub use data_quality_capability_execution::ApplicationCapabilityExecutorRouter;
 pub use data_quality_query_registration::*;
 pub use data_quality_registration::*;
 pub use export_artifact_download::*;
@@ -30,7 +32,6 @@ pub use export_execution_source::*;
 pub(crate) use export_selection_bootstrap::bootstrap_export_selection_worker_access;
 pub use export_selection_source::*;
 pub use gateway_grpc::*;
-pub use governed_metadata::ApplicationCapabilityExecutorRouter;
 pub use platform::*;
 pub use process::*;
 pub use runtime::*;
