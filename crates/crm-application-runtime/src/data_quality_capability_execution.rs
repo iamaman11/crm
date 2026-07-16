@@ -11,26 +11,31 @@ use crm_core_data::{
 };
 use crm_data_quality_capability_adapter::{
     DataQualityCompletenessProfileCapabilityPlanner, DataQualityEvaluationJobCapabilityPlanner,
-    DataQualityRemediationCompletionPlanner, MODULE_ID,
+    DataQualityRemediationCompletionPlanner, FINDING_RECORD_TYPE, MODULE_ID,
     PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE, PARTY_RULE_SET_VERSION_RECORD_TYPE,
     PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY, PartyDisplayNameRemediationAttempt,
-    PartyDisplayNameRemediationIdentity, PartyQualityEvaluator,
+    PartyDisplayNameRemediationIdentity, PartyFinding, PartyQualityEvaluator,
     REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY, REMEDIATE_PARTY_DISPLAY_NAME_REQUEST_SCHEMA,
     REQUEST_PARTY_EVALUATION_CAPABILITY, completeness_profile_reference_scope_from_request,
     evaluation_reference_scope_from_request, party_completeness_profile_from_immutable_snapshot,
     party_finding_from_snapshot, party_rule_set_from_snapshot,
 };
-use crm_data_quality_source_composition::{PartyQualitySource, PartyQualitySourceRequest};
+use crm_data_quality_query_adapter::registered_party_quality_query_adapter;
+use crm_data_quality_source_composition::{
+    GovernedPartyQualitySource, PartyQualitySource, PartyQualitySourceRequest,
+};
 use crm_module_sdk::{
     BusinessTransactionId, DataClass, ErrorCategory, ModuleId, PortFuture, RecordId, RecordType,
     SchemaVersion, SdkError,
 };
 use crm_parties_capability_adapter::{
     MODULE_ID as PARTIES_MODULE_ID, UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
-    UPDATE_REQUEST_SCHEMA as PARTY_UPDATE_REQUEST_SCHEMA, UPDATE_RESPONSE_SCHEMA as PARTY_UPDATE_RESPONSE_SCHEMA,
+    UPDATE_REQUEST_SCHEMA as PARTY_UPDATE_REQUEST_SCHEMA,
+    UPDATE_RESPONSE_SCHEMA as PARTY_UPDATE_RESPONSE_SCHEMA,
     capability_definition as party_capability_definition,
 };
 use crm_proto_contracts::crm::{data_quality::v1 as data_quality, parties::v1 as parties};
+use crm_query_runtime::QueryAuthorizer;
 use prost::Message;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,29 +47,33 @@ static REMEDIATION_FAILPOINT_USED: AtomicBool = AtomicBool::new(false);
 pub struct ApplicationCapabilityExecutorRouter {
     store: PostgresDataStore,
     base: BaseApplicationCapabilityExecutorRouter,
-    authorizer: Arc<dyn CapabilityAuthorizer>,
-    party_quality_source: Arc<dyn PartyQualitySource>,
+    capability_authorizer: Arc<dyn CapabilityAuthorizer>,
+    query_authorizer: Arc<dyn QueryAuthorizer>,
 }
 
 impl ApplicationCapabilityExecutorRouter {
-    pub fn new(
+    pub fn new<A>(
         store: PostgresDataStore,
         aggregate: Arc<PostgresTransactionalAggregateExecutor>,
         metadata: Arc<PostgresMetadataCapabilityExecutor>,
-        authorizer: Arc<dyn CapabilityAuthorizer>,
-        party_quality_source: Arc<dyn PartyQualitySource>,
-    ) -> Self {
+        authorizer: Arc<A>,
+    ) -> Self
+    where
+        A: CapabilityAuthorizer + QueryAuthorizer + 'static,
+    {
+        let capability_authorizer: Arc<dyn CapabilityAuthorizer> = authorizer.clone();
+        let query_authorizer: Arc<dyn QueryAuthorizer> = authorizer.clone();
         let base = BaseApplicationCapabilityExecutorRouter::new(
             store.clone(),
             aggregate,
             metadata,
-            authorizer.clone(),
+            capability_authorizer.clone(),
         );
         Self {
             store,
             base,
-            authorizer,
-            party_quality_source,
+            capability_authorizer,
+            query_authorizer,
         }
     }
 
@@ -86,7 +95,7 @@ impl ApplicationCapabilityExecutorRouter {
             .get_record_for_query(&RecordGetQuery {
                 tenant_id: request.context.execution.tenant_id.clone(),
                 owner_module_id: module_id()?,
-                record_type: record_type(crm_data_quality_capability_adapter::FINDING_RECORD_TYPE)?,
+                record_type: record_type(FINDING_RECORD_TYPE)?,
                 record_id: finding_id,
             })
             .await?
@@ -97,9 +106,8 @@ impl ApplicationCapabilityExecutorRouter {
             return Err(remediation_evidence_conflict());
         }
         let finding = party_finding_from_snapshot(&finding_snapshot)?;
-        let observation_id = required_observation_id(
-            command.expected_current_observation_ref.as_ref(),
-        )?;
+        let observation_id =
+            required_observation_id(command.expected_current_observation_ref.as_ref())?;
         if observation_id.as_str() != finding.current_observation_id()
             || command.expected_party_resource_version
                 != finding.evaluated_party_resource_version()
@@ -117,24 +125,23 @@ impl ApplicationCapabilityExecutorRouter {
             command.expected_party_resource_version,
             &command.display_name,
         )?;
-        let source_request_identity = format!(
-            "dq-remediation-source-{}",
-            identity.attempt_id()
-        );
-        let source = self
-            .party_quality_source
-            .get(PartyQualitySourceRequest {
-                tenant_id: &request.context.execution.tenant_id,
-                actor_id: &request.context.execution.actor_id,
-                request_identity: &source_request_identity,
-                party_id: finding.party_id(),
-                request_started_at_unix_nanos: request
-                    .context
-                    .execution
-                    .request_started_at_unix_nanos,
-            })
-            .await?;
-        if source.party_id != *finding.party_id()
+        let source_request_identity = format!("dq-remediation-source-{}", identity.attempt_id());
+        let source = GovernedPartyQualitySource::new(
+            registered_party_quality_query_adapter()?,
+            self.query_authorizer.clone(),
+        )
+        .get(PartyQualitySourceRequest {
+            tenant_id: &request.context.execution.tenant_id,
+            actor_id: &request.context.execution.actor_id,
+            request_identity: &source_request_identity,
+            party_id: finding.party_id(),
+            request_started_at_unix_nanos: request
+                .context
+                .execution
+                .request_started_at_unix_nanos,
+        })
+        .await?;
+        if source.party_id.as_str() != finding.party_id().as_str()
             || source.resource_version != command.expected_party_resource_version
         {
             return Err(remediation_evidence_conflict());
@@ -162,20 +169,19 @@ impl ApplicationCapabilityExecutorRouter {
             identity.target_idempotency_key(),
         )?;
         authorize_target(
-            self.authorizer.as_ref(),
+            self.capability_authorizer.as_ref(),
             &target_definition,
             &target_request,
         )
         .await?;
-        let target_result = self
-            .base
-            .execute(&target_definition, target_request)
-            .await?;
+        let target_result = self.base.execute(&target_definition, target_request).await?;
         let updated_party = decode_updated_party(target_result)?;
         let updated_version = updated_party
             .resource_version
             .as_ref()
-            .ok_or_else(|| remediation_target_contract_invalid("updated Party version is missing"))?
+            .ok_or_else(|| {
+                remediation_target_contract_invalid("updated Party version is missing")
+            })?
             .version;
 
         if fail_after_target_once() {
@@ -212,7 +218,7 @@ impl ApplicationCapabilityExecutorRouter {
     async fn ensure_display_name_rule(
         &self,
         request: &CapabilityRequest,
-        finding: &crm_data_quality_capability_adapter::PartyFinding,
+        finding: &PartyFinding,
     ) -> Result<(), SdkError> {
         let snapshot = self
             .store
@@ -251,8 +257,8 @@ impl fmt::Debug for ApplicationCapabilityExecutorRouter {
             .debug_struct("ApplicationCapabilityExecutorRouter")
             .field("store", &self.store)
             .field("base", &self.base)
-            .field("authorizer", &"dyn CapabilityAuthorizer")
-            .field("party_quality_source", &"dyn PartyQualitySource")
+            .field("capability_authorizer", &"dyn CapabilityAuthorizer")
+            .field("query_authorizer", &"dyn QueryAuthorizer")
             .finish()
     }
 }
@@ -379,9 +385,7 @@ async fn authorize_target(
     )))
 }
 
-fn decode_updated_party(
-    result: CapabilityExecutionResult,
-) -> Result<parties::Party, SdkError> {
+fn decode_updated_party(result: CapabilityExecutionResult) -> Result<parties::Party, SdkError> {
     let payload = result
         .output
         .ok_or_else(|| remediation_target_contract_invalid("Party update output is missing"))?;
