@@ -18,8 +18,8 @@ fn application_runtime_registers_exactly_one_party_rule_set_publication_coordina
 
     let capability_id = CapabilityId::try_new(PUBLISH_PARTY_RULE_SET_CAPABILITY).unwrap();
     let capability_version = CapabilityVersion::try_new("1.0.0").unwrap();
-    let definition = application_capability_catalog()
-        .unwrap()
+    let catalog = application_capability_catalog().unwrap();
+    let definition = catalog
         .definition(&capability_id, &capability_version)
         .expect("Data Quality publication capability in production application catalog");
 
