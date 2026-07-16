@@ -11,14 +11,16 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_data_quality::{
-    PARTY_EVALUATION_INPUT_RECORD_TYPE, PARTY_EVALUATION_INPUT_STATE_MAXIMUM_BYTES,
-    PARTY_EVALUATION_INPUT_STATE_RETENTION_POLICY_ID, PARTY_EVALUATION_INPUT_STATE_SCHEMA_ID,
-    PARTY_EVALUATION_INPUT_STATE_SCHEMA_VERSION, EvaluatedPartyKind, PartyEvaluationInputSnapshot,
-    PartyEvaluationJobStatus, encode_party_evaluation_input_state,
+    EvaluatedPartyKind, PARTY_EVALUATION_INPUT_RECORD_TYPE,
+    PARTY_EVALUATION_INPUT_STATE_MAXIMUM_BYTES, PARTY_EVALUATION_INPUT_STATE_RETENTION_POLICY_ID,
+    PARTY_EVALUATION_INPUT_STATE_SCHEMA_ID, PARTY_EVALUATION_INPUT_STATE_SCHEMA_VERSION,
+    PartyEvaluationInputSnapshot, PartyEvaluationJobStatus, encode_party_evaluation_input_state,
     party_evaluation_input_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordSnapshot, SdkError};
-use crm_proto_contracts::crm::{customer::v1 as customer, data_quality::v1 as wire, parties::v1 as parties};
+use crm_proto_contracts::crm::{
+    customer::v1 as customer, data_quality::v1 as wire, parties::v1 as parties,
+};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DataQualityEvaluationStagePlanner;
@@ -218,7 +220,9 @@ fn ensure_definition(
         || definition.owner_module_id.as_str() != MODULE_ID
         || definition.capability_id.as_str() != request.context.execution.capability_id.as_str()
     {
-        return Err(invalid_plan("capability definition does not match the request"));
+        return Err(invalid_plan(
+            "capability definition does not match the request",
+        ));
     }
     Ok(())
 }
