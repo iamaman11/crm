@@ -81,7 +81,10 @@ async fn crm_api_process_discloses_only_authorized_party_rule_set_versions() {
         .definition
         .expect("bootstrap visibility discloses rule-set definition");
     assert_eq!(definition.rules.len(), 1);
-    assert_eq!(definition.rules[0].rule_key, "display_name.query_process_minimum");
+    assert_eq!(
+        definition.rules[0].rule_key,
+        "display_name.query_process_minimum"
+    );
 
     let cross_tenant = get_rule_set(&mut grpc, &get_definition, version_ref, "tenant-b")
         .await
@@ -193,9 +196,10 @@ async fn mutate(
     request
         .metadata_mut()
         .insert("x-tenant-id", TENANT.parse().unwrap());
-    request
-        .metadata_mut()
-        .insert("idempotency-key", "data-quality-query-process-publish".parse().unwrap());
+    request.metadata_mut().insert(
+        "idempotency-key",
+        "data-quality-query-process-publish".parse().unwrap(),
+    );
     request
         .metadata_mut()
         .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
