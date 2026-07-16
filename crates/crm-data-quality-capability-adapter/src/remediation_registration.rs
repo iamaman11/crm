@@ -1,6 +1,10 @@
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_module_sdk::{CapabilityId, CapabilityVersion, DataClass, ModuleId, SdkError};
+pub use crm_data_quality::{
+    PartyDisplayNameRemediationAttempt, PartyDisplayNameRemediationIdentity,
+    PartyQualityEvaluator,
+};
 
 use crate::MODULE_ID;
 
