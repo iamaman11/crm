@@ -28,6 +28,9 @@ pub mod definition_persistence {
     include!("definition_persistence.rs");
 }
 
+// Persisted job rehydration names every stored invariant explicitly. Keep the
+// restore-constructor lint exception local rather than weakening workspace policy.
+#[allow(clippy::too_many_arguments)]
 pub mod evaluation_job;
 
 pub mod evaluation_persistence {
