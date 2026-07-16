@@ -30,6 +30,7 @@ crm-customer-data-operations-execution-composition = { path = "../crm-customer-d
 crm-customer-data-operations-query-adapter = { path = "../crm-customer-data-operations-query-adapter" }
 crm-customer-data-operations-source-composition = { path = "../crm-customer-data-operations-source-composition" }
 crm-data-quality-capability-adapter = { path = "../crm-data-quality-capability-adapter" }
+crm-data-quality-query-adapter = { path = "../crm-data-quality-query-adapter" }
 crm-global-search-composition = { path = "../crm-global-search-composition" }
 crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
 crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }
