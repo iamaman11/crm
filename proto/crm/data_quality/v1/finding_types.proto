@@ -48,4 +48,5 @@ message DataQualityFinding {
   crm.core.v1.UnixTime created_at = 11;
   crm.core.v1.UnixTime updated_at = 12;
   crm.customer.v1.CustomerResourceVersion resource_version = 13;
+  PartyRuleOutcomeRef remediated_by_rule_outcome_ref = 14;
 }

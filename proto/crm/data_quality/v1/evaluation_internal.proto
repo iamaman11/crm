@@ -5,6 +5,7 @@ package crm.data_quality.v1;
 import "crm/customer/v1/reference.proto";
 import "crm/data_quality/v1/evaluation_types.proto";
 import "crm/data_quality/v1/finding_types.proto";
+import "crm/data_quality/v1/reference.proto";
 import "crm/parties/v1/party.proto";
 
 message StagePartyEvaluationInputRequest {
@@ -22,14 +23,6 @@ message StagePartyEvaluationInputResponse {
 
 message PartyEvaluationStagedEvent {
   PartyEvaluationJob evaluation_job = 1;
-}
-
-message PartyRuleOutcomeRef {
-  string rule_outcome_id = 1;
-}
-
-message PartyCompletenessResultRef {
-  string completeness_result_id = 1;
 }
 
 message MaterializePartyEvaluationRequest {

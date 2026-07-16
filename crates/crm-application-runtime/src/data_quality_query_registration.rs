@@ -10,9 +10,7 @@ use crm_data_quality_query_adapter::{
     query_capability_definitions as data_quality_query_capability_definitions,
 };
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
-use crm_query_runtime::{
-    QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator,
-};
+use crm_query_runtime::{QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator};
 use std::fmt;
 
 pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
@@ -33,47 +31,23 @@ pub struct ApplicationQueryRouter {
 }
 
 impl ApplicationQueryRouter {
-    pub fn new(base: BaseApplicationQueryRouter, data_quality: DataQualityQueryAdapter) -> Self {
-        Self { base, data_quality }
-    }
+    pub fn new(base: BaseApplicationQueryRouter, data_quality: DataQualityQueryAdapter) -> Self { Self { base, data_quality } }
 }
 
 impl QuerySemanticValidator for ApplicationQueryRouter {
-    fn validate<'a>(
-        &'a self,
-        definition: &'a CapabilityDefinition,
-        request: &'a QueryRequest,
-    ) -> PortFuture<'a, Result<(), SdkError>> {
-        if QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
-            self.data_quality.validate(definition, request)
-        } else {
-            self.base.validate(definition, request)
-        }
+    fn validate<'a>(&'a self, definition: &'a CapabilityDefinition, request: &'a QueryRequest) -> PortFuture<'a, Result<(), SdkError>> {
+        if QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) { self.data_quality.validate(definition, request) } else { self.base.validate(definition, request) }
     }
 }
 
 impl QueryExecutor for ApplicationQueryRouter {
-    fn execute<'a>(
-        &'a self,
-        definition: &'a CapabilityDefinition,
-        request: QueryRequest,
-    ) -> PortFuture<'a, Result<QueryExecutionResult, SdkError>> {
-        if QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
-            self.data_quality.execute(definition, request)
-        } else {
-            self.base.execute(definition, request)
-        }
+    fn execute<'a>(&'a self, definition: &'a CapabilityDefinition, request: QueryRequest) -> PortFuture<'a, Result<QueryExecutionResult, SdkError>> {
+        if QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) { self.data_quality.execute(definition, request) } else { self.base.execute(definition, request) }
     }
 }
 
 fn catalog_error(error: impl fmt::Display) -> SdkError {
-    SdkError::new(
-        "APPLICATION_QUERY_CATALOG_CONFIGURATION_INVALID",
-        ErrorCategory::Internal,
-        false,
-        "The application query capability catalog configuration is invalid.",
-    )
-    .with_internal_reference(error.to_string())
+    SdkError::new("APPLICATION_QUERY_CATALOG_CONFIGURATION_INVALID", ErrorCategory::Internal, false, "The application query capability catalog configuration is invalid.").with_internal_reference(error.to_string())
 }
 
 #[cfg(test)]
@@ -82,8 +56,10 @@ mod tests {
     use crm_capability_runtime::CapabilityRisk;
     use crm_data_quality_capability_adapter::MODULE_ID;
     use crm_data_quality_query_adapter::{
-        GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY, GET_PARTY_EVALUATION_JOB_CAPABILITY,
-        GET_PARTY_RULE_SET_CAPABILITY,
+        GET_FINDING_CAPABILITY, GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+        GET_PARTY_COMPLETENESS_RESULT_CAPABILITY, GET_PARTY_EVALUATION_JOB_CAPABILITY,
+        GET_PARTY_RULE_SET_CAPABILITY, LIST_ASSIGNED_FINDINGS_CAPABILITY,
+        LIST_FINDINGS_BY_PARTY_CAPABILITY,
     };
     use crm_module_sdk::DataClass;
 
@@ -92,34 +68,21 @@ mod tests {
         let definitions = application_query_definitions().unwrap();
         for (capability, expected_class) in [
             (GET_PARTY_RULE_SET_CAPABILITY, DataClass::Confidential),
-            (
-                GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
-                DataClass::Confidential,
-            ),
+            (GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY, DataClass::Confidential),
             (GET_PARTY_EVALUATION_JOB_CAPABILITY, DataClass::Personal),
+            (GET_FINDING_CAPABILITY, DataClass::Personal),
+            (LIST_FINDINGS_BY_PARTY_CAPABILITY, DataClass::Personal),
+            (LIST_ASSIGNED_FINDINGS_CAPABILITY, DataClass::Personal),
+            (GET_PARTY_COMPLETENESS_RESULT_CAPABILITY, DataClass::Personal),
         ] {
-            let matches = definitions
-                .iter()
-                .filter(|definition| definition.capability_id.as_str() == capability)
-                .collect::<Vec<_>>();
+            let matches = definitions.iter().filter(|definition| definition.capability_id.as_str() == capability).collect::<Vec<_>>();
             assert_eq!(matches.len(), 1);
-
             let definition = matches[0];
             assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
             assert_eq!(definition.authorization_policy_id, capability);
             assert_eq!(definition.risk, CapabilityRisk::Low);
-            assert_eq!(
-                definition.input_contract.allowed_data_classes,
-                vec![expected_class]
-            );
-            assert_eq!(
-                definition
-                    .output_contract
-                    .as_ref()
-                    .expect("Data Quality query output contract")
-                    .allowed_data_classes,
-                vec![expected_class]
-            );
+            assert_eq!(definition.input_contract.allowed_data_classes, vec![expected_class]);
+            assert_eq!(definition.output_contract.as_ref().expect("Data Quality query output contract").allowed_data_classes, vec![expected_class]);
             assert!(!definition.mutation);
             assert!(!definition.requires_idempotency);
             assert!(!definition.requires_approval);
