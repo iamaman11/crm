@@ -1,5 +1,8 @@
 impl DataQualityQueryAdapter {
-    async fn execute_get_finding(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
+    async fn execute_get_finding(
+        &self,
+        request: &QueryRequest,
+    ) -> Result<TypedPayload, SdkError> {
         let command: wire::GetDataQualityFindingRequest = decode_input(
             request,
             GET_FINDING_REQUEST_SCHEMA,
@@ -17,7 +20,8 @@ impl DataQualityQueryAdapter {
             .await?;
         let visibility = self.visible_or(&snapshot, request, finding_not_found).await?;
         let finding = finding_from_snapshot(&snapshot)?;
-        let finding_output = finding_to_wire_with_visibility(&finding, snapshot.version, &visibility);
+        let finding_output =
+            finding_to_wire_with_visibility(&finding, snapshot.version, &visibility);
         let observation_output = if visibility.allows_field("current_observation") {
             let observation_snapshot = self
                 .load_snapshot(
@@ -28,12 +32,14 @@ impl DataQualityQueryAdapter {
                 )
                 .await?;
             let observation_visibility = self
-                .visibility
-                .authorize_visibility(request, &observation_snapshot.reference)
+                .data_quality_visibility(request, &observation_snapshot.reference)
                 .await?;
             if observation_visibility.resource_visible {
                 let observation = observation_from_snapshot(&observation_snapshot)?;
-                Some(observation_to_wire_with_visibility(&observation, &observation_visibility))
+                Some(observation_to_wire_with_visibility(
+                    &observation,
+                    &observation_visibility,
+                ))
             } else {
                 None
             }
