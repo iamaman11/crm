@@ -7,7 +7,9 @@ use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
 use crm_data_quality_capability_adapter::{
-    DataQualityRuleSetCapabilityPlanner, PUBLISH_PARTY_RULE_SET_CAPABILITY,
+    ACKNOWLEDGE_FINDING_CAPABILITY, ASSIGN_FINDING_CAPABILITY,
+    DataQualityFindingStewardshipPlanner, DataQualityRuleSetCapabilityPlanner,
+    PUBLISH_PARTY_RULE_SET_CAPABILITY, WAIVE_FINDING_CAPABILITY,
     capability_definitions as data_quality_capability_definitions,
 };
 use crm_module_sdk::{ErrorCategory, RecordSnapshot, SdkError};
@@ -33,10 +35,16 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
         definition: &CapabilityDefinition,
         request: &CapabilityRequest,
     ) -> Result<AggregateTarget, SdkError> {
-        if definition.capability_id.as_str() == PUBLISH_PARTY_RULE_SET_CAPABILITY {
-            DataQualityRuleSetCapabilityPlanner.target(definition, request)
-        } else {
-            BaseApplicationAggregatePlannerRouter.target(definition, request)
+        match definition.capability_id.as_str() {
+            PUBLISH_PARTY_RULE_SET_CAPABILITY => {
+                DataQualityRuleSetCapabilityPlanner.target(definition, request)
+            }
+            ASSIGN_FINDING_CAPABILITY
+            | ACKNOWLEDGE_FINDING_CAPABILITY
+            | WAIVE_FINDING_CAPABILITY => {
+                DataQualityFindingStewardshipPlanner.target(definition, request)
+            }
+            _ => BaseApplicationAggregatePlannerRouter.target(definition, request),
         }
     }
 
@@ -46,10 +54,16 @@ impl TransactionalAggregatePlanner for ApplicationAggregatePlannerRouter {
         request: &CapabilityRequest,
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        if definition.capability_id.as_str() == PUBLISH_PARTY_RULE_SET_CAPABILITY {
-            DataQualityRuleSetCapabilityPlanner.plan(definition, request, current)
-        } else {
-            BaseApplicationAggregatePlannerRouter.plan(definition, request, current)
+        match definition.capability_id.as_str() {
+            PUBLISH_PARTY_RULE_SET_CAPABILITY => {
+                DataQualityRuleSetCapabilityPlanner.plan(definition, request, current)
+            }
+            ASSIGN_FINDING_CAPABILITY
+            | ACKNOWLEDGE_FINDING_CAPABILITY
+            | WAIVE_FINDING_CAPABILITY => {
+                DataQualityFindingStewardshipPlanner.plan(definition, request, current)
+            }
+            _ => BaseApplicationAggregatePlannerRouter.plan(definition, request, current),
         }
     }
 }
@@ -79,6 +93,9 @@ mod tests {
             PUBLISH_PARTY_RULE_SET_CAPABILITY,
             PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
             REQUEST_PARTY_EVALUATION_CAPABILITY,
+            ASSIGN_FINDING_CAPABILITY,
+            ACKNOWLEDGE_FINDING_CAPABILITY,
+            WAIVE_FINDING_CAPABILITY,
         ] {
             assert_eq!(
                 definitions
