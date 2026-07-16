@@ -5,7 +5,12 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-capability-adapters = { path = "../crm-capability-adapters" }
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-core-data = { path = "../crm-core-data" }
+crm-data-quality = { path = "../../modules/crm-data-quality" }
+crm-data-quality-capability-adapter = { path = "../crm-data-quality-capability-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
