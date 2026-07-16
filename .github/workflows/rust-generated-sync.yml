@@ -43,6 +43,9 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          temporary_workflow = Path(".github/workflows/phase8a9-wire-data-quality-query.yml")
+          temporary_workflow.unlink(missing_ok=True)
+
           path = Path("crates/crm-application-runtime/src/runtime.rs")
           text = path.read_text()
           marker = "use crm_data_quality_query_adapter::DataQualityQueryAdapter;"
@@ -157,12 +160,13 @@ jobs:
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts; then
+          if git diff --quiet -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts .github/workflows/phase8a9-wire-data-quality-query.yml; then
             echo "Rust and generated contract artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts
+            git add -A .github/workflows/phase8a9-wire-data-quality-query.yml
             git commit -m "Synchronize Rust and generated contract artifacts"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
