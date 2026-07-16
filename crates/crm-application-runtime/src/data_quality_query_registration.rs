@@ -1,5 +1,6 @@
 use crate::governed_metadata::{
     ApplicationQueryRouter as BaseApplicationQueryRouter,
+    application_query_capability_catalog as base_application_query_capability_catalog,
     application_query_definitions as base_application_query_definitions,
 };
 use crm_capability_adapters::CapabilityCatalog;
@@ -21,6 +22,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
 }
 
 pub fn application_query_capability_catalog() -> Result<CapabilityCatalog, SdkError> {
+    let _base_catalog = base_application_query_capability_catalog()?;
     CapabilityCatalog::new(application_query_definitions()?).map_err(catalog_error)
 }
 
