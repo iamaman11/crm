@@ -11,6 +11,7 @@ crm-core-data = { path = "../crm-core-data" }
 crm-data-quality = { path = "../../modules/crm-data-quality" }
 crm-data-quality-capability-adapter = { path = "../crm-data-quality-capability-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
+crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-query-runtime = { path = "../crm-query-runtime" }
 prost = "0.14"
