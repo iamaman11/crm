@@ -29,6 +29,8 @@ const PUBLISH_RULE_SET: &str = "data_quality.party.rule_set.publish";
 const PUBLISH_PROFILE: &str = "data_quality.party.completeness_profile.publish";
 const GET_RULE_SET: &str = "data_quality.party.rule_set.get";
 const GET_PROFILE: &str = "data_quality.party.completeness_profile.get";
+const MODULE_ID: &str = "crm.data-quality";
+const PROFILE_RECORD_TYPE: &str = "data_quality.party_completeness_profile_version";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn crm_api_process_discloses_only_tenant_bound_data_quality_definitions() {
@@ -136,6 +138,13 @@ async fn crm_api_process_discloses_only_tenant_bound_data_quality_definitions() 
     .await;
     let tenant_b_profile_ref = profile_ref(&tenant_b_profile);
 
+    assert_force_rls_profile_boundary(
+        &admin,
+        &database_url,
+        &tenant_b_profile_ref.completeness_profile_version_id,
+    )
+    .await;
+
     let disclosed_b = get_profile(
         &mut grpc,
         &get_profile_definition,
@@ -208,6 +217,84 @@ async fn crm_api_process_discloses_only_tenant_bound_data_quality_definitions() 
         .await
         .expect("wait for Data Quality query acceptance crm-api");
     assert!(status.success(), "crm-api exited unsuccessfully: {status}");
+}
+
+async fn assert_force_rls_profile_boundary(
+    admin: &PgPool,
+    application_database_url: &str,
+    record_id: &str,
+) {
+    let durable_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM crm.records WHERE tenant_id = $1 AND owner_module_id = $2 AND record_type = $3 AND record_id = $4 AND deleted_at IS NULL",
+    )
+    .bind(TENANT_B)
+    .bind(MODULE_ID)
+    .bind(PROFILE_RECORD_TYPE)
+    .bind(record_id)
+    .fetch_one(admin)
+    .await
+    .expect("confirm tenant B completeness-profile record exists as administrator");
+    assert_eq!(durable_count, 1);
+
+    let application = PgPool::connect(application_database_url)
+        .await
+        .expect("connect application role for Data Quality RLS proof");
+    let current_user = sqlx::query_scalar::<_, String>("SELECT current_user")
+        .fetch_one(&application)
+        .await
+        .expect("read Data Quality RLS proof database role");
+    assert_eq!(current_user, "crm_app_test");
+
+    let tenant_a_visible = app_role_profile_count(&application, TENANT_A, TENANT_B, record_id).await;
+    assert_eq!(
+        tenant_a_visible, 0,
+        "FORCE RLS must hide tenant B Data Quality records under tenant A context"
+    );
+
+    let tenant_b_visible = app_role_profile_count(&application, TENANT_B, TENANT_B, record_id).await;
+    assert_eq!(
+        tenant_b_visible, 1,
+        "application role must see the same record under its owning tenant context"
+    );
+}
+
+async fn app_role_profile_count(
+    application: &PgPool,
+    context_tenant: &str,
+    row_tenant: &str,
+    record_id: &str,
+) -> i64 {
+    let mut transaction = application
+        .begin()
+        .await
+        .expect("begin Data Quality application-role RLS transaction");
+    sqlx::query(
+        "SELECT set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), set_config('app.request_id', $3, true), set_config('app.capability_id', $4, true), set_config('app.capability_version', '1.0.0', true), set_config('app.business_transaction_id', $5, true)",
+    )
+    .bind(context_tenant)
+    .bind(ACTOR)
+    .bind(unique_id("data-quality-rls-request"))
+    .bind(GET_PROFILE)
+    .bind(unique_id("data-quality-rls-transaction"))
+    .execute(&mut *transaction)
+    .await
+    .expect("set transaction-local Data Quality RLS context");
+
+    let count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM crm.records WHERE tenant_id = $1 AND owner_module_id = $2 AND record_type = $3 AND record_id = $4 AND deleted_at IS NULL",
+    )
+    .bind(row_tenant)
+    .bind(MODULE_ID)
+    .bind(PROFILE_RECORD_TYPE)
+    .bind(record_id)
+    .fetch_one(&mut *transaction)
+    .await
+    .expect("read Data Quality record through application-role RLS boundary");
+    transaction
+        .rollback()
+        .await
+        .expect("rollback Data Quality RLS proof transaction");
+    count
 }
 
 async fn publish_rule_set(
