@@ -1,6 +1,10 @@
 use super::data_quality_evaluation_fixture::{
     INTERNAL_MATERIALIZE, INTERNAL_STAGE, REQUEST_EVALUATION,
 };
+use crm_data_quality_capability_adapter::{
+    ACKNOWLEDGE_FINDING_CAPABILITY, ASSIGN_FINDING_CAPABILITY,
+    REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY, WAIVE_FINDING_CAPABILITY,
+};
 use sqlx::PgPool;
 
 pub async fn register_evaluation_capabilities(admin: &PgPool) {
@@ -11,6 +15,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "RequestPartyEvaluation",
         "e1",
         "e2",
+        "medium",
     )
     .await;
     register(
@@ -20,6 +25,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "StagePartyEvaluationInput",
         "e3",
         "e4",
+        "medium",
     )
     .await;
     register(
@@ -29,6 +35,47 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "MaterializePartyEvaluation",
         "e5",
         "e6",
+        "medium",
+    )
+    .await;
+    register(
+        admin,
+        ASSIGN_FINDING_CAPABILITY,
+        "crm.data_quality.v1.DataQualityService",
+        "AssignDataQualityFinding",
+        "e7",
+        "e8",
+        "medium",
+    )
+    .await;
+    register(
+        admin,
+        ACKNOWLEDGE_FINDING_CAPABILITY,
+        "crm.data_quality.v1.DataQualityService",
+        "AcknowledgeDataQualityFinding",
+        "e9",
+        "ea",
+        "medium",
+    )
+    .await;
+    register(
+        admin,
+        WAIVE_FINDING_CAPABILITY,
+        "crm.data_quality.v1.DataQualityService",
+        "WaiveDataQualityFinding",
+        "eb",
+        "ec",
+        "medium",
+    )
+    .await;
+    register(
+        admin,
+        REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY,
+        "crm.data_quality.v1.DataQualityService",
+        "RemediatePartyDisplayName",
+        "ed",
+        "ee",
+        "high",
     )
     .await;
 }
@@ -40,6 +87,7 @@ async fn register(
     method_name: &str,
     input_byte: &str,
     output_byte: &str,
+    risk_level: &str,
 ) {
     sqlx::query(
         "INSERT INTO crm.capability_registry (
@@ -51,7 +99,7 @@ async fn register(
          ) VALUES (
            $1, '1.0.0', 'crm.data-quality', '0.1.0', $2, $3,
            decode(repeat($4, 32), 'hex'), decode(repeat($5, 32), 'hex'),
-           'medium', true, true, false, false, false, false, false,
+           $6, true, true, false, false, false, false, false,
            ARRAY['personal']::text[]
          ) ON CONFLICT (capability_id, capability_version) DO NOTHING",
     )
@@ -60,6 +108,7 @@ async fn register(
     .bind(method_name)
     .bind(input_byte)
     .bind(output_byte)
+    .bind(risk_level)
     .execute(admin)
     .await
     .unwrap_or_else(|error| panic!("register {capability_id} audit lineage: {error}"));
