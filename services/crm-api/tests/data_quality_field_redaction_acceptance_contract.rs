@@ -1,6 +1,5 @@
-const VISIBILITY_SOURCE: &str = include_str!(
-    "../../../crates/crm-capability-adapters/src/query_visibility.rs"
-);
+const VISIBILITY_SOURCE: &str =
+    include_str!("../../../crates/crm-capability-adapters/src/query_visibility.rs");
 const PROCESS_SOURCE: &str = include_str!("data_quality_field_redaction_process_e2e.rs");
 
 #[test]
