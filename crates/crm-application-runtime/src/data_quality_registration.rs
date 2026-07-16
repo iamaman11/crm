@@ -7,8 +7,7 @@ use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
 use crm_data_quality_capability_adapter::{
-    DataQualityRuleSetCapabilityPlanner,
-    PUBLISH_PARTY_RULE_SET_CAPABILITY,
+    DataQualityRuleSetCapabilityPlanner, PUBLISH_PARTY_RULE_SET_CAPABILITY,
     capability_definitions as data_quality_capability_definitions,
 };
 use crm_module_sdk::{ErrorCategory, RecordSnapshot, SdkError};
