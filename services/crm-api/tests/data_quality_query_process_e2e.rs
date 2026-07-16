@@ -181,7 +181,10 @@ async fn crm_api_process_discloses_only_tenant_bound_data_quality_definitions() 
     .await
     .expect_err("unavailable Data Quality rule-set version must fail closed");
     assert_eq!(unavailable_rule_set.code(), Code::NotFound);
-    assert_eq!(cross_tenant_rule_set.message(), unavailable_rule_set.message());
+    assert_eq!(
+        cross_tenant_rule_set.message(),
+        unavailable_rule_set.message()
+    );
 
     let unavailable_profile = get_profile(
         &mut grpc,
@@ -194,7 +197,10 @@ async fn crm_api_process_discloses_only_tenant_bound_data_quality_definitions() 
     .await
     .expect_err("unavailable completeness-profile version must fail closed");
     assert_eq!(unavailable_profile.code(), Code::NotFound);
-    assert_eq!(cross_tenant_profile.message(), unavailable_profile.message());
+    assert_eq!(
+        cross_tenant_profile.message(),
+        unavailable_profile.message()
+    );
 
     send_sigint(&child).await;
     let status = child
