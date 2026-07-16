@@ -62,6 +62,7 @@ use crm_customer_data_operations_query_adapter::{
     CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
     PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
+use crm_data_quality_query_adapter::DataQualityQueryAdapter;
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
@@ -416,6 +417,8 @@ impl ApplicationRuntime {
             visibility_authorizer.clone(),
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let data_quality_query_adapter =
+            DataQualityQueryAdapter::new(store.clone(), visibility_authorizer.clone());
         let search_query_adapter = SearchQueryAdapter::new(
             SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
@@ -429,7 +432,7 @@ impl ApplicationRuntime {
             ProductionQueryRouter::new(owner_query_adapter, search_query_adapter);
         let metadata_query_adapter =
             MetadataQueryAdapter::new(Arc::new(PostgresMetadataQueryStore::new(store.clone())));
-        let query_router = Arc::new(ApplicationQueryRouter::new(
+        let base_query_router = crate::governed_metadata::ApplicationQueryRouter::new(
             production_query_router,
             party_query_adapter,
             account_query_adapter,
@@ -441,6 +444,10 @@ impl ApplicationRuntime {
             identity_resolution_merge_query_adapter,
             customer_data_operations_query_adapter,
             metadata_query_adapter,
+        );
+        let query_router = Arc::new(ApplicationQueryRouter::new(
+            base_query_router,
+            data_quality_query_adapter,
         ));
         let query_gateway = Arc::new(QueryGateway::new(
             Arc::new(
@@ -1144,6 +1151,18 @@ fn bootstrap_application_access(
                         )?;
                     }
                 }
+                "crm.data-quality" => upsert_bootstrap_visibility(
+                    visibility_store,
+                    config,
+                    tenant_id,
+                    definition,
+                    BootstrapVisibilityResource {
+                        owner_module_id: "crm.data-quality",
+                        resource_type: "data_quality.party_rule_set_version",
+                    },
+                    ["definition"].into_iter().map(str::to_owned).collect(),
+                    expires_at,
+                )?,
                 METADATA_MODULE_ID => {}
                 CUSTOMER_360_MODULE_ID => {
                     upsert_bootstrap_visibility(
