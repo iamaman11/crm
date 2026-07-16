@@ -25,6 +25,51 @@ fn remediation_identity_rejects_cross_tenant_evidence() {
 }
 
 #[test]
+fn remediation_identity_is_stable_for_exact_replay_and_changes_with_caller_key() {
+    let finding = open_finding();
+    let tenant = TenantId::try_new("tenant-remediation").unwrap();
+    let observation = finding.current_observation_id().to_owned();
+    let caller_key = IdempotencyKey::try_new("remediation-stable-replay").unwrap();
+    let first = PartyDisplayNameRemediationIdentity::derive(
+        &tenant,
+        &caller_key,
+        &finding,
+        1,
+        &observation,
+        7,
+        "Ada Lovelace",
+    )
+    .unwrap();
+    let replay = PartyDisplayNameRemediationIdentity::derive(
+        &tenant,
+        &caller_key,
+        &finding,
+        1,
+        &observation,
+        7,
+        "Ada Lovelace",
+    )
+    .unwrap();
+    let different_request = PartyDisplayNameRemediationIdentity::derive(
+        &tenant,
+        &IdempotencyKey::try_new("remediation-different-request").unwrap(),
+        &finding,
+        1,
+        &observation,
+        7,
+        "Ada Lovelace",
+    )
+    .unwrap();
+
+    assert_eq!(first, replay);
+    assert_ne!(first.attempt_id(), different_request.attempt_id());
+    assert_ne!(
+        first.target_idempotency_key(),
+        different_request.target_idempotency_key()
+    );
+}
+
+#[test]
 fn persisted_remediation_identity_rejects_forged_party_reference() {
     let finding = open_finding();
     let tenant = TenantId::try_new("tenant-remediation").unwrap();
