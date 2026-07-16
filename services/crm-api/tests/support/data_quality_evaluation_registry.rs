@@ -1,4 +1,6 @@
-use super::data_quality_evaluation_fixture::{INTERNAL_STAGE, REQUEST_EVALUATION};
+use super::data_quality_evaluation_fixture::{
+    INTERNAL_MATERIALIZE, INTERNAL_STAGE, REQUEST_EVALUATION,
+};
 use sqlx::PgPool;
 
 pub async fn register_evaluation_capabilities(admin: &PgPool) {
@@ -18,6 +20,15 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "StagePartyEvaluationInput",
         "e3",
         "e4",
+    )
+    .await;
+    register(
+        admin,
+        INTERNAL_MATERIALIZE,
+        "crm.data_quality.v1.InternalDataQualityWorker",
+        "MaterializePartyEvaluation",
+        "e5",
+        "e6",
     )
     .await;
 }
