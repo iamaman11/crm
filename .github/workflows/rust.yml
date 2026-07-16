@@ -48,6 +48,7 @@ jobs:
             crates/*/src/
             crates/*/tests/
             modules/*/src/
+            modules/*/tests/
             services/*/src/
           if-no-files-found: error
           retention-days: 7
