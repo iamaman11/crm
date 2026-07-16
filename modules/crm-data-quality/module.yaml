@@ -43,6 +43,8 @@ provides:
       version: "1.0.0"
     - id: data_quality.party.evaluation.requested
       version: "1.0.0"
+    - id: data_quality.party.evaluation.staged
+      version: "1.0.0"
   objects:
     - data_quality.party_rule_set_version
     - data_quality.party_completeness_profile_version
