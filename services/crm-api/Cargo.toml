@@ -18,9 +18,12 @@ crm-capability-ingress = { path = "../../crates/crm-capability-ingress" }
 crm-capability-runtime = { path = "../../crates/crm-capability-runtime" }
 crm-core-data = { path = "../../crates/crm-core-data" }
 crm-customer-360-composition = { path = "../../crates/crm-customer-360-composition" }
+crm-data-quality-source-composition = { path = "../../crates/crm-data-quality-source-composition" }
 crm-module-sdk = { path = "../../crates/crm-module-sdk" }
+crm-parties-query-adapter = { path = "../../crates/crm-parties-query-adapter" }
 crm-party-relationships-projection = { path = "../../crates/crm-party-relationships-projection" }
 crm-proto-contracts = { path = "../../crates/crm-proto-contracts" }
+crm-query-runtime = { path = "../../crates/crm-query-runtime" }
 crm-sales-activities-capability-composition = { path = "../../crates/crm-sales-activities-capability-composition" }
 prost = "0.14"
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
