@@ -77,18 +77,31 @@ fn catalog_error(error: impl fmt::Display) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_capability_runtime::CapabilityRisk;
+    use crm_data_quality_capability_adapter::MODULE_ID;
+    use crm_module_sdk::DataClass;
 
     #[test]
     fn application_query_catalog_adds_exact_data_quality_rule_set_coordinate() {
         let definitions = application_query_definitions().unwrap();
+        let matches = definitions
+            .iter()
+            .filter(|definition| {
+                definition.capability_id.as_str() == GET_PARTY_RULE_SET_CAPABILITY
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(matches.len(), 1);
+
+        let definition = matches[0];
+        assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
+        assert_eq!(definition.risk, CapabilityRisk::Low);
         assert_eq!(
-            definitions
-                .iter()
-                .filter(|definition| {
-                    definition.capability_id.as_str() == GET_PARTY_RULE_SET_CAPABILITY
-                })
-                .count(),
-            1
+            definition.input_contract.allowed_data_classes,
+            vec![DataClass::Confidential]
         );
+        assert!(definition.output_contract.is_some());
+        assert!(!definition.mutation);
+        assert!(!definition.requires_idempotency);
+        assert!(!definition.requires_approval);
     }
 }
