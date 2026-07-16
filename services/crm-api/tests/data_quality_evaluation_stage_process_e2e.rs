@@ -41,9 +41,7 @@ const EVALUATED_DISPLAY_NAME: &str = "unknown";
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn evaluation_job_completes_with_exact_findings_and_restarts_without_duplicates() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!(
-            "skipping evaluation completion process proof because DATABASE_URL is absent"
-        );
+        eprintln!("skipping evaluation completion process proof because DATABASE_URL is absent");
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")

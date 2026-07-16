@@ -61,7 +61,10 @@ fn staged_job_crosses_completion_only_after_exact_materialized_counts() {
     assert_eq!(completed.failed_rules(), 1);
     assert_eq!(completed.updated_at(), 102);
     let bytes = encode_party_evaluation_job_state(&completed).unwrap();
-    assert_eq!(decode_party_evaluation_job_state(&bytes).unwrap(), completed);
+    assert_eq!(
+        decode_party_evaluation_job_state(&bytes).unwrap(),
+        completed
+    );
     assert!(completed.complete(1, 1, 103).is_err());
 
     assert!(

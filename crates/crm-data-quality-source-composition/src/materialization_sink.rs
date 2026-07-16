@@ -3,9 +3,7 @@ use crm_capability_plan_support::{self as support, persisted_json_bytes_with_dat
 use crm_capability_runtime::{
     CapabilityAuthorizer, CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
 };
-use crm_core_data::{
-    PostgresDataStore, PostgresTransactionalAggregateExecutor, RecordGetQuery,
-};
+use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor, RecordGetQuery};
 use crm_data_quality::{
     FINDING_OBSERVATION_RECORD_TYPE, FINDING_RECORD_TYPE, PartyCompletenessProfileVersion,
     PartyEvaluationInputSnapshot, PartyEvaluationJob, PartyFindingObservation, PartyQualityInput,
@@ -15,8 +13,8 @@ use crm_data_quality::{
 use crm_data_quality_capability_adapter::{
     DataQualityEvaluationMaterializationPlanner, ExistingPartyFinding,
     ExistingPartyFindingObservation, MATERIALIZE_PARTY_EVALUATION_REQUEST_SCHEMA, MODULE_ID,
-    evaluation_materialization_capability_definition,
-    party_finding_observation_persisted_contract, party_finding_persisted_contract,
+    evaluation_materialization_capability_definition, party_finding_observation_persisted_contract,
+    party_finding_persisted_contract,
 };
 use crm_module_sdk::{
     BusinessTransactionId, DataClass, ErrorCategory, IdempotencyKey, ModuleExecutionContext,
@@ -184,8 +182,7 @@ impl PostgresPartyEvaluationMaterializationSink {
             .get_record_for_query(&RecordGetQuery {
                 tenant_id: tenant_id.clone(),
                 owner_module_id: ModuleId::try_new(MODULE_ID).map_err(configuration_error)?,
-                record_type: RecordType::try_new(record_type_value)
-                    .map_err(configuration_error)?,
+                record_type: RecordType::try_new(record_type_value).map_err(configuration_error)?,
                 record_id: RecordId::try_new(record_id_value).map_err(configuration_error)?,
             })
             .await
@@ -202,7 +199,9 @@ impl std::fmt::Debug for PostgresPartyEvaluationMaterializationSink {
     }
 }
 
-fn decode_current_finding(snapshot: &RecordSnapshot) -> Result<crm_data_quality::PartyFinding, SdkError> {
+fn decode_current_finding(
+    snapshot: &RecordSnapshot,
+) -> Result<crm_data_quality::PartyFinding, SdkError> {
     if snapshot.version <= 0 {
         return Err(materialization_state_invalid(
             "current finding record version is invalid",

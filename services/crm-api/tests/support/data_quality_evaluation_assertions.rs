@@ -108,7 +108,10 @@ pub async fn assert_materialized_evidence(
     assert_eq!(result_json["canonicalization_profile"], "crm.cjson/v1");
     assert_eq!(result_json["job_id"], expected.job_id);
     assert_eq!(result_json["party_id"], expected.party_id);
-    assert_eq!(result_json["party_resource_version"], expected.party_version);
+    assert_eq!(
+        result_json["party_resource_version"],
+        expected.party_version
+    );
     assert_eq!(result_json["profile_version_id"], expected.profile_id);
     assert_eq!(
         result_json["score_basis_points"],
@@ -124,7 +127,10 @@ pub async fn assert_materialized_evidence(
 
     let findings = list_record_bytes(store, FINDING_RECORD_TYPE).await;
     let observations = list_record_bytes(store, OBSERVATION_RECORD_TYPE).await;
-    assert_eq!(findings.len(), usize::try_from(expected.failed_rules).unwrap());
+    assert_eq!(
+        findings.len(),
+        usize::try_from(expected.failed_rules).unwrap()
+    );
     assert_eq!(
         observations.len(),
         usize::try_from(expected.failed_rules).unwrap()
@@ -150,7 +156,10 @@ pub async fn assert_materialized_evidence(
             observation["party_resource_version"],
             expected.party_version
         );
-        assert_eq!(observation["reason_code"], "DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER");
+        assert_eq!(
+            observation["reason_code"],
+            "DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER"
+        );
         assert_eq!(
             finding["current_observation_id"],
             observation["observation_id"]
