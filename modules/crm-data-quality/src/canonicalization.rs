@@ -64,11 +64,12 @@ impl fmt::Display for ProfiledStateError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Json(error) => write!(formatter, "JSON processing failed: {error}"),
-            Self::Canonical(error) => write!(formatter, "canonical JSON processing failed: {error}"),
-            Self::RootNotObject => formatter.write_str("profiled state root must be an object"),
-            Self::ReservedProfileField => {
-                formatter.write_str("profiled state used the reserved canonicalization profile field")
+            Self::Canonical(error) => {
+                write!(formatter, "canonical JSON processing failed: {error}")
             }
+            Self::RootNotObject => formatter.write_str("profiled state root must be an object"),
+            Self::ReservedProfileField => formatter
+                .write_str("profiled state used the reserved canonicalization profile field"),
             Self::ProfileMissing => {
                 formatter.write_str("profiled state is missing the canonicalization profile")
             }
@@ -112,12 +113,13 @@ mod tests {
             bytes,
             br#"{"canonicalization_profile":"crm.cjson/v1","count":7,"version_id":"version-1"}"#
         );
-        assert_eq!(persisted_state_json::from_slice::<Fixture>(&bytes).unwrap(), fixture);
+        assert_eq!(
+            persisted_state_json::from_slice::<Fixture>(&bytes).unwrap(),
+            fixture
+        );
         assert!(
-            persisted_state_json::from_slice::<Fixture>(
-                br#"{"count":7,"version_id":"version-1"}"#
-            )
-            .is_err()
+            persisted_state_json::from_slice::<Fixture>(br#"{"count":7,"version_id":"version-1"}"#)
+                .is_err()
         );
         assert!(
             persisted_state_json::from_slice::<Fixture>(
