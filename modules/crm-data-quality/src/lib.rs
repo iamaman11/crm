@@ -45,6 +45,7 @@ pub mod evaluation_persistence {
 
 pub mod completeness_result;
 pub mod finding;
+mod finding_stewardship;
 pub mod rule_outcome;
 
 pub mod completeness_result_persistence {
