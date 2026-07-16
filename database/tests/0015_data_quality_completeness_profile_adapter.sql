@@ -42,3 +42,25 @@ FROM crm.capability_registry
 WHERE capability_id = 'data_quality.party.rule_set.publish'
   AND capability_version = '1.0.0'
 ON CONFLICT (capability_id, capability_version) DO NOTHING;
+
+-- The two-tenant query acceptance uses one authenticated service actor that is
+-- explicitly provisioned in both tenant domains. This keeps mutation auditing
+-- tenant-scoped while allowing the test to reach the authorized storage/query
+-- boundary instead of stopping at authentication or actor foreign keys.
+INSERT INTO crm.actors (
+  tenant_id,
+  actor_id,
+  actor_type,
+  status,
+  display_name,
+  last_business_transaction_id
+)
+VALUES (
+  'tenant-b',
+  'actor-a',
+  'service',
+  'active',
+  'Tenant B Data Quality process actor',
+  'data-quality-process-bootstrap-b'
+)
+ON CONFLICT (tenant_id, actor_id) DO NOTHING;
