@@ -1,9 +1,9 @@
 use crm_data_quality::{
     CANONICALIZATION_PROFILE_ID, ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent,
     PartyCompletenessProfileVersion, PartyQualityEvaluator, PartyQualityInput, PartyQualityRule,
-    PartyRuleSetVersion, QualitySeverity, RuleKey,
-    decode_party_completeness_profile_version_state, decode_party_rule_set_version_state,
-    encode_party_completeness_profile_version_state, encode_party_rule_set_version_state,
+    PartyRuleSetVersion, QualitySeverity, RuleKey, decode_party_completeness_profile_version_state,
+    decode_party_rule_set_version_state, encode_party_completeness_profile_version_state,
+    encode_party_rule_set_version_state,
 };
 
 const RULE_SET_ID: &str =
@@ -75,20 +75,26 @@ fn v1_identities_are_bound_to_the_explicit_canonicalization_profile() {
 fn persisted_definitions_round_trip_with_profile_beside_identity() {
     let rule_set = rule_set();
     let rule_bytes = encode_party_rule_set_version_state(&rule_set).unwrap();
-    assert!(String::from_utf8_lossy(&rule_bytes).contains(
-        "\"canonicalization_profile\":\"crm.cjson/v1\""
-    ));
+    assert!(
+        String::from_utf8_lossy(&rule_bytes)
+            .contains("\"canonicalization_profile\":\"crm.cjson/v1\"")
+    );
     let restored_rule_set = decode_party_rule_set_version_state(&rule_bytes).unwrap();
     assert_eq!(restored_rule_set, rule_set);
-    assert_eq!(encode_party_rule_set_version_state(&restored_rule_set).unwrap(), rule_bytes);
+    assert_eq!(
+        encode_party_rule_set_version_state(&restored_rule_set).unwrap(),
+        rule_bytes
+    );
 
     let profile = profile(&rule_set);
     let profile_bytes = encode_party_completeness_profile_version_state(&profile).unwrap();
-    assert!(String::from_utf8_lossy(&profile_bytes).contains(
-        "\"canonicalization_profile\":\"crm.cjson/v1\""
-    ));
+    assert!(
+        String::from_utf8_lossy(&profile_bytes)
+            .contains("\"canonicalization_profile\":\"crm.cjson/v1\"")
+    );
     let restored_profile =
-        decode_party_completeness_profile_version_state(&profile_bytes, &restored_rule_set).unwrap();
+        decode_party_completeness_profile_version_state(&profile_bytes, &restored_rule_set)
+            .unwrap();
     assert_eq!(restored_profile, profile);
     assert_eq!(
         encode_party_completeness_profile_version_state(&restored_profile).unwrap(),
@@ -99,9 +105,8 @@ fn persisted_definitions_round_trip_with_profile_beside_identity() {
 #[test]
 fn evaluator_and_integer_scoring_semantics_remain_exact() {
     let rule_set = rule_set();
-    let outcomes = rule_set.evaluate(
-        &PartyQualityInput::try_new(EvaluatedPartyKind::Person, "Unknown").unwrap(),
-    );
+    let outcomes = rule_set
+        .evaluate(&PartyQualityInput::try_new(EvaluatedPartyKind::Person, "Unknown").unwrap());
     assert_eq!(outcomes.len(), 2);
     assert!(outcomes[0].passed());
     assert!(!outcomes[1].passed());
