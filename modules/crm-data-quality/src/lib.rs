@@ -7,10 +7,6 @@
 //! remain owned by `crm.parties`; application composition supplies only the
 //! exact governed source evidence required by the frozen evaluator vocabulary.
 
-mod canonicalization;
-
-pub const CANONICALIZATION_PROFILE: &str = canonicalization::PROFILE_ID;
-
 pub mod domain {
     #[cfg(test)]
     use std::collections::BTreeSet;
