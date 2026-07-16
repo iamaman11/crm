@@ -147,11 +147,12 @@ jobs:
             "
             echo "=== data-quality audits ==="
             psql --no-psqlrc --pset pager=off --command "
-              SELECT tenant_id, actor_id, capability_id, capability_version,
-                     resource_type, resource_id, resource_version, occurred_at
+              SELECT tenant_id, audit_sequence, audit_record_id,
+                     business_transaction_id, actor_id, capability_id,
+                     capability_version, canonicalization_profile, occurred_at
                 FROM crm.audit_records
                WHERE capability_id LIKE 'data_quality.%'
-               ORDER BY tenant_id, occurred_at;
+               ORDER BY tenant_id, audit_sequence;
             "
           } > database/data-quality-process-runtime-state.log 2>&1
 
