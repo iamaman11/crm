@@ -81,6 +81,9 @@ mod tests {
     use super::*;
     use crm_capability_runtime::CapabilityRisk;
     use crm_data_quality_capability_adapter::MODULE_ID;
+    use crm_data_quality_query_adapter::{
+        GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY, GET_PARTY_RULE_SET_CAPABILITY,
+    };
     use crm_module_sdk::DataClass;
 
     #[test]
