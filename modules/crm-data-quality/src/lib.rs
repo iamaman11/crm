@@ -28,8 +28,20 @@ pub mod definition_persistence {
     include!("definition_persistence.rs");
 }
 
+pub mod evaluation_job;
+
+pub mod evaluation_persistence {
+    // Mutable job state and immutable staged input both retain the exact
+    // canonicalization profile and require canonical byte-for-byte rehydration.
+    use crate::canonicalization::persisted_state_json as serde_json;
+
+    include!("evaluation_persistence.rs");
+}
+
 pub use definition_persistence::*;
 pub use domain::*;
+pub use evaluation_job::*;
+pub use evaluation_persistence::*;
 
 pub const CANONICALIZATION_PROFILE_ID: &str = canonicalization::PROFILE_ID;
 pub const MODULE_ID: &str = "crm.data-quality";
