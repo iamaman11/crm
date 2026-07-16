@@ -18,6 +18,7 @@ crm-capability-ingress = { path = "../../crates/crm-capability-ingress" }
 crm-capability-runtime = { path = "../../crates/crm-capability-runtime" }
 crm-core-data = { path = "../../crates/crm-core-data" }
 crm-customer-360-composition = { path = "../../crates/crm-customer-360-composition" }
+crm-data-quality-capability-adapter = { path = "../../crates/crm-data-quality-capability-adapter" }
 crm-data-quality-source-composition = { path = "../../crates/crm-data-quality-source-composition" }
 crm-module-sdk = { path = "../../crates/crm-module-sdk" }
 crm-parties-query-adapter = { path = "../../crates/crm-parties-query-adapter" }
