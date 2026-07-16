@@ -444,9 +444,6 @@ mod tests {
         let definitions = query_capability_definitions().unwrap();
         assert_eq!(definitions.len(), 2);
         assert_read_only_definition(&definitions[0], GET_PARTY_RULE_SET_CAPABILITY);
-        assert_read_only_definition(
-            &definitions[1],
-            GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
-        );
+        assert_read_only_definition(&definitions[1], GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY);
     }
 }
