@@ -1,4 +1,6 @@
-use crate::{EvaluatedPartyKind, PartyCompletenessProfileVersion, PartyQualityInput, PartyRuleSetVersion};
+use crate::{
+    EvaluatedPartyKind, PartyCompletenessProfileVersion, PartyQualityInput, PartyRuleSetVersion,
+};
 use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,16 +128,45 @@ impl PartyEvaluationJob {
         ))
     }
 
-    pub fn job_id(&self) -> &RecordId { &self.job_id }
-    pub fn party_id(&self) -> &RecordId { &self.party_id }
-    pub fn rule_set_version_id(&self) -> &str { &self.rule_set_version_id }
-    pub fn profile_version_id(&self) -> &str { &self.profile_version_id }
-    pub const fn status(&self) -> PartyEvaluationJobStatus { self.status }
-    pub const fn party_resource_version(&self) -> Option<i64> { self.party_resource_version }
-    pub const fn evaluated_rules(&self) -> u32 { self.evaluated_rules }
-    pub const fn failed_rules(&self) -> u32 { self.failed_rules }
-    pub const fn created_at(&self) -> i64 { self.created_at }
-    pub const fn updated_at(&self) -> i64 { self.updated_at }
+    pub fn job_id(&self) -> &RecordId {
+        &self.job_id
+    }
+
+    pub fn party_id(&self) -> &RecordId {
+        &self.party_id
+    }
+
+    pub fn rule_set_version_id(&self) -> &str {
+        &self.rule_set_version_id
+    }
+
+    pub fn profile_version_id(&self) -> &str {
+        &self.profile_version_id
+    }
+
+    pub const fn status(&self) -> PartyEvaluationJobStatus {
+        self.status
+    }
+
+    pub const fn party_resource_version(&self) -> Option<i64> {
+        self.party_resource_version
+    }
+
+    pub const fn evaluated_rules(&self) -> u32 {
+        self.evaluated_rules
+    }
+
+    pub const fn failed_rules(&self) -> u32 {
+        self.failed_rules
+    }
+
+    pub const fn created_at(&self) -> i64 {
+        self.created_at
+    }
+
+    pub const fn updated_at(&self) -> i64 {
+        self.updated_at
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,12 +180,51 @@ pub struct PartyEvaluationInputSnapshot {
 }
 
 impl PartyEvaluationInputSnapshot {
-    pub fn job_id(&self) -> &RecordId { &self.job_id }
-    pub fn party_id(&self) -> &RecordId { &self.party_id }
-    pub const fn kind(&self) -> EvaluatedPartyKind { self.kind }
-    pub fn display_name(&self) -> &str { &self.display_name }
-    pub const fn party_resource_version(&self) -> i64 { self.party_resource_version }
-    pub const fn captured_at(&self) -> i64 { self.captured_at }
+    pub(crate) fn restore(
+        job_id: RecordId,
+        party_id: RecordId,
+        kind: EvaluatedPartyKind,
+        display_name: String,
+        party_resource_version: i64,
+        captured_at: i64,
+    ) -> Result<Self, SdkError> {
+        let input = PartyQualityInput::try_new(kind, display_name)?;
+        if party_resource_version <= 0 || captured_at < 0 {
+            return Err(invalid("persisted evaluation input invariants are invalid"));
+        }
+        Ok(Self {
+            job_id,
+            party_id,
+            kind,
+            display_name: input.display_name().to_owned(),
+            party_resource_version,
+            captured_at,
+        })
+    }
+
+    pub fn job_id(&self) -> &RecordId {
+        &self.job_id
+    }
+
+    pub fn party_id(&self) -> &RecordId {
+        &self.party_id
+    }
+
+    pub const fn kind(&self) -> EvaluatedPartyKind {
+        self.kind
+    }
+
+    pub fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    pub const fn party_resource_version(&self) -> i64 {
+        self.party_resource_version
+    }
+
+    pub const fn captured_at(&self) -> i64 {
+        self.captured_at
+    }
 }
 
 fn invalid(reference: &str) -> SdkError {
