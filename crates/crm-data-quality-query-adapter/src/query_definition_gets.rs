@@ -153,12 +153,11 @@ impl DataQualityQueryAdapter {
 }
 
 fn data_quality_cursor_key() -> [u8; 32] {
-    if let Ok(value) = std::env::var("CRM_CURSOR_SIGNING_KEY") {
-        if value.len() >= 32 {
+    if let Ok(value) = std::env::var("CRM_CURSOR_SIGNING_KEY")
+        && value.len() >= 32 {
             let mut key = [0_u8; 32];
             key.copy_from_slice(&value.as_bytes()[..32]);
             return key;
         }
-    }
     [0x44; 32]
 }
