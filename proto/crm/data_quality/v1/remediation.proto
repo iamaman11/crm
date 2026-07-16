@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+import "crm/core/v1/common.proto";
+import "crm/customer/v1/reference.proto";
+import "crm/data_quality/v1/finding_types.proto";
+import "crm/parties/v1/party.proto";
+
+message DataQualityRemediationAttemptRef {
+  string remediation_attempt_id = 1;
+}
+
+message PartyDisplayNameRemediationAttempt {
+  DataQualityRemediationAttemptRef remediation_attempt_ref = 1;
+  DataQualityFindingRef finding_ref = 2;
+  DataQualityFindingObservationRef finding_observation_ref = 3;
+  crm.customer.v1.PartyRef party_ref = 4;
+  crm.customer.v1.CustomerResourceVersion expected_party_resource_version = 5;
+  string requested_display_name = 6;
+  string target_idempotency_key = 7;
+  crm.customer.v1.CustomerResourceVersion updated_party_resource_version = 8;
+  crm.core.v1.UnixTime completed_at = 9;
+  crm.customer.v1.CustomerResourceVersion resource_version = 10;
+}
+
+message RemediatePartyDisplayNameRequest {
+  DataQualityFindingRef finding_ref = 1;
+  int64 expected_finding_version = 2;
+  DataQualityFindingObservationRef expected_current_observation_ref = 3;
+  int64 expected_party_resource_version = 4;
+  string display_name = 5;
+}
+
+message RemediatePartyDisplayNameResponse {
+  PartyDisplayNameRemediationAttempt remediation_attempt = 1;
+  crm.parties.v1.Party party = 2;
+}
+
+message PartyDisplayNameRemediationCompletedEvent {
+  PartyDisplayNameRemediationAttempt remediation_attempt = 1;
+}
