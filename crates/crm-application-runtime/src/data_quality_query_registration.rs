@@ -86,9 +86,7 @@ mod tests {
         let definitions = application_query_definitions().unwrap();
         let matches = definitions
             .iter()
-            .filter(|definition| {
-                definition.capability_id.as_str() == GET_PARTY_RULE_SET_CAPABILITY
-            })
+            .filter(|definition| definition.capability_id.as_str() == GET_PARTY_RULE_SET_CAPABILITY)
             .collect::<Vec<_>>();
         assert_eq!(matches.len(), 1);
 
