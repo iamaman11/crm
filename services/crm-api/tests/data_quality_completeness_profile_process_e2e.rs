@@ -21,15 +21,13 @@ use tonic::{Request, Status};
 
 const TENANT: &str = "tenant-a";
 const ACTOR: &str = "actor-a";
-const TOKEN: &str =
-    "data-quality-profile-process-bearer-token-0123456789abcdef0123456789abcdef";
+const TOKEN: &str = "data-quality-profile-process-bearer-token-0123456789abcdef0123456789abcdef";
 const APPROVAL_KEY: &str = "data-quality-profile-process-approval-key-0123456789abcdef";
 const PUBLISH_RULE_SET: &str = "data_quality.party.rule_set.publish";
 const PUBLISH_PROFILE: &str = "data_quality.party.completeness_profile.publish";
 const MODULE_ID: &str = "crm.data-quality";
 const PROFILE_RECORD_TYPE: &str = "data_quality.party_completeness_profile_version";
-const PROFILE_PUBLISHED_EVENT_TYPE: &str =
-    "data_quality.party.completeness_profile.published";
+const PROFILE_PUBLISHED_EVENT_TYPE: &str = "data_quality.party.completeness_profile.published";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn crm_api_process_publishes_party_completeness_profiles_with_exact_binding_and_replay() {
