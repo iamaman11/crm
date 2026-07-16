@@ -2,9 +2,7 @@ use crate::{
     PartyQualitySource, PartyQualitySourceRequest, PostgresPartyEvaluationStageSink,
     worker_context::{evaluation_worker_context, worker_actor_id},
 };
-use crm_core_data::{
-    PostgresDataStore, RecordListQuery, RecordQueryContinuation, RecordQuerySort,
-};
+use crm_core_data::{PostgresDataStore, RecordListQuery, RecordQueryContinuation, RecordQuerySort};
 use crm_data_quality::PartyEvaluationJobStatus;
 use crm_data_quality_capability_adapter::{
     PARTY_EVALUATION_JOB_RECORD_TYPE, party_evaluation_job_from_snapshot,
@@ -109,7 +107,8 @@ impl PartyEvaluationStageWorker {
                 .map_err(|_| worker_unavailable())?
                 .insert(tenant_id.clone(), next.clone());
 
-            let scanned_jobs = u32::try_from(page.records.len()).map_err(|_| worker_unavailable())?;
+            let scanned_jobs =
+                u32::try_from(page.records.len()).map_err(|_| worker_unavailable())?;
             let mut staged_jobs = 0_u32;
             let mut deferred_jobs = 0_u32;
             for record in page.records {
@@ -142,7 +141,9 @@ impl PartyEvaluationStageWorker {
                     job.job_id().as_str(),
                     now,
                 )?;
-                self.sink.stage(&context, &job, record.version, &source).await?;
+                self.sink
+                    .stage(&context, &job, record.version, &source)
+                    .await?;
                 staged_jobs = staged_jobs.saturating_add(1);
             }
             Ok(EvaluationStageTenantCycle {

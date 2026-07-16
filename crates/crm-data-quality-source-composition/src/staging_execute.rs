@@ -1,7 +1,5 @@
 use crm_capability_runtime::CapabilityAuthorizer;
-use crm_core_data::{
-    BatchError, PostgresDataStore, RecordGetQuery, TransactionalAggregatePlanner,
-};
+use crm_core_data::{BatchError, PostgresDataStore, RecordGetQuery, TransactionalAggregatePlanner};
 use crm_data_quality_capability_adapter::DataQualityEvaluationStagePlanner;
 use crm_module_sdk::{ErrorCategory, SdkError};
 

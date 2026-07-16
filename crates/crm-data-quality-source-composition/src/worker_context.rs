@@ -25,10 +25,8 @@ pub(crate) fn evaluation_worker_context(
             trace_id: TraceId::try_new(job_id).map_err(config_error)?,
             capability_id: CapabilityId::try_new(STAGE_PARTY_EVALUATION_INPUT_CAPABILITY)
                 .map_err(config_error)?,
-            capability_version: CapabilityVersion::try_new(
-                EVALUATION_WORKER_CAPABILITY_VERSION,
-            )
-            .map_err(config_error)?,
+            capability_version: CapabilityVersion::try_new(EVALUATION_WORKER_CAPABILITY_VERSION)
+                .map_err(config_error)?,
             idempotency_key: IdempotencyKey::try_new(job_id).map_err(config_error)?,
             business_transaction_id: BusinessTransactionId::try_new(job_id)
                 .map_err(config_error)?,

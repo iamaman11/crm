@@ -3,14 +3,12 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_data_quality::PartyEvaluationJob;
 use crm_data_quality_capability_adapter::{
-    MODULE_ID, STAGE_PARTY_EVALUATION_INPUT_REQUEST_SCHEMA,
-    evaluation_stage_capability_definition,
+    MODULE_ID, STAGE_PARTY_EVALUATION_INPUT_REQUEST_SCHEMA, evaluation_stage_capability_definition,
 };
 use crm_module_sdk::{DataClass, ModuleExecutionContext, SdkError};
 
 use crate::{
-    PartyQualitySourceSnapshot, staging_command::stage_command,
-    staging_context::bind_stage_request,
+    PartyQualitySourceSnapshot, staging_command::stage_command, staging_context::bind_stage_request,
 };
 
 pub(crate) struct PreparedStageRequest {

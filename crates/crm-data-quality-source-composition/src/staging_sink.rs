@@ -28,8 +28,7 @@ impl PostgresPartyEvaluationStageSink {
         source: &'a PartyQualitySourceSnapshot,
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
-            let prepared =
-                prepare_stage_request(context, job, expected_job_version, source)?;
+            let prepared = prepare_stage_request(context, job, expected_job_version, source)?;
             execute_stage(&self.store, self.authorizer.as_ref(), prepared).await
         })
     }
