@@ -34,10 +34,14 @@ provides:
       version: "1.0.0"
     - id: data_quality.party.completeness_profile.get
       version: "1.0.0"
+    - id: data_quality.party.evaluation.request
+      version: "1.0.0"
   events:
     - id: data_quality.party.rule_set.published
       version: "1.0.0"
     - id: data_quality.party.completeness_profile.published
+      version: "1.0.0"
+    - id: data_quality.party.evaluation.requested
       version: "1.0.0"
   objects:
     - data_quality.party_rule_set_version
