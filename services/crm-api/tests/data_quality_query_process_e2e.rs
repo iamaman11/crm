@@ -245,13 +245,15 @@ async fn assert_force_rls_profile_boundary(
         .expect("read Data Quality RLS proof database role");
     assert_eq!(current_user, "crm_app_test");
 
-    let tenant_a_visible = app_role_profile_count(&application, TENANT_A, TENANT_B, record_id).await;
+    let tenant_a_visible =
+        app_role_profile_count(&application, TENANT_A, TENANT_B, record_id).await;
     assert_eq!(
         tenant_a_visible, 0,
         "FORCE RLS must hide tenant B Data Quality records under tenant A context"
     );
 
-    let tenant_b_visible = app_role_profile_count(&application, TENANT_B, TENANT_B, record_id).await;
+    let tenant_b_visible =
+        app_role_profile_count(&application, TENANT_B, TENANT_B, record_id).await;
     assert_eq!(
         tenant_b_visible, 1,
         "application role must see the same record under its owning tenant context"
