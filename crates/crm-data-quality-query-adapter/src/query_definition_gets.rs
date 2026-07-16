@@ -153,11 +153,35 @@ impl DataQualityQueryAdapter {
 }
 
 fn data_quality_cursor_key() -> [u8; 32] {
-    if let Ok(value) = std::env::var("CRM_CURSOR_SIGNING_KEY")
-        && value.len() >= 32 {
-            let mut key = [0_u8; 32];
-            key.copy_from_slice(&value.as_bytes()[..32]);
-            return key;
-        }
-    [0x44; 32]
+    let value = std::env::var("CRM_CURSOR_SIGNING_KEY")
+        .expect("CRM_CURSOR_SIGNING_KEY is required for Data Quality pagination");
+    configured_data_quality_cursor_key(&value)
+        .expect("CRM_CURSOR_SIGNING_KEY must contain at least 32 bytes")
+}
+
+fn configured_data_quality_cursor_key(value: &str) -> Option<[u8; 32]> {
+    if value.len() < 32 {
+        return None;
+    }
+    let mut key = [0_u8; 32];
+    key.copy_from_slice(&value.as_bytes()[..32]);
+    Some(key)
+}
+
+#[cfg(test)]
+mod data_quality_cursor_key_tests {
+    use super::configured_data_quality_cursor_key;
+
+    #[test]
+    fn cursor_key_configuration_is_fail_closed_and_deterministic() {
+        assert!(configured_data_quality_cursor_key("too-short").is_none());
+        let configured = configured_data_quality_cursor_key(
+            "data-quality-cursor-key-0123456789abcdef-extra",
+        )
+        .expect("valid cursor key");
+        assert_eq!(
+            configured,
+            *b"data-quality-cursor-key-01234567"
+        );
+    }
 }
