@@ -45,12 +45,26 @@ pub mod evaluation_persistence {
 pub mod completeness_result;
 pub mod rule_outcome;
 
+pub mod completeness_result_persistence {
+    use crate::canonicalization::persisted_state_json as serde_json;
+
+    include!("completeness_result_persistence.rs");
+}
+
+pub mod rule_outcome_persistence {
+    use crate::canonicalization::persisted_state_json as serde_json;
+
+    include!("rule_outcome_persistence.rs");
+}
+
 pub use completeness_result::*;
+pub use completeness_result_persistence::*;
 pub use definition_persistence::*;
 pub use domain::*;
 pub use evaluation_job::*;
 pub use evaluation_persistence::*;
 pub use rule_outcome::*;
+pub use rule_outcome_persistence::*;
 
 pub const CANONICALIZATION_PROFILE_ID: &str = canonicalization::PROFILE_ID;
 pub const MODULE_ID: &str = "crm.data-quality";
