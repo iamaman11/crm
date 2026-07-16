@@ -1,7 +1,7 @@
 use crm_data_quality::{
-    ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent,
-    PartyCompletenessProfileVersion, PartyEvaluationJob, PartyQualityEvaluator, PartyQualityRule,
-    PartyRuleSetVersion, QualitySeverity, RuleKey, decode_party_evaluation_input_state,
+    ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent, PartyCompletenessProfileVersion,
+    PartyEvaluationJob, PartyQualityEvaluator, PartyQualityRule, PartyRuleSetVersion,
+    QualitySeverity, RuleKey, decode_party_evaluation_input_state,
     decode_party_evaluation_job_state, encode_party_evaluation_input_state,
     encode_party_evaluation_job_state,
 };
@@ -65,10 +65,7 @@ fn evaluation_timestamps_above_safe_json_integer_range_are_decimal_strings() {
     );
     let input_bytes = encode_party_evaluation_input_state(&input).unwrap();
     let input_text = std::str::from_utf8(&input_bytes).unwrap();
-    assert!(input_text.contains(&format!(
-        "\"captured_at\":\"{}\"",
-        LARGE_UNIX_NANOS + 1
-    )));
+    assert!(input_text.contains(&format!("\"captured_at\":\"{}\"", LARGE_UNIX_NANOS + 1)));
     assert_eq!(
         decode_party_evaluation_input_state(&input_bytes).unwrap(),
         input
