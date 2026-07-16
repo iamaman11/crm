@@ -5,7 +5,7 @@ use crate::{
     FINDING_ASSIGNMENT_CHANGED_EVENT_TYPE, FINDING_STATUS_CHANGED_EVENT_SCHEMA,
     FINDING_STATUS_CHANGED_EVENT_TYPE, MODULE_ID, WAIVE_FINDING_CAPABILITY,
     WAIVE_FINDING_REQUEST_SCHEMA, WAIVE_FINDING_RESPONSE_SCHEMA, party_finding_persisted_contract,
-    party_finding_persisted_payload, party_finding_record_ref, party_finding_to_wire,
+    party_finding_persisted_payload, party_finding_to_wire,
 };
 use crm_capability_plan_support::{self as support, EventSpec};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
@@ -47,130 +47,93 @@ impl TransactionalAggregatePlanner for DataQualityFindingStewardshipPlanner {
         }
         let finding = party_finding_from_snapshot(current)?;
         let now = request.context.execution.request_started_at_unix_nanos;
-        let updated = match definition.capability_id.as_str() {
-            ASSIGN_FINDING_CAPABILITY => {
-                let command: wire::AssignDataQualityFindingRequest = decode(
-                    request,
-                    ASSIGN_FINDING_REQUEST_SCHEMA,
-                )?;
-                let actor = command
-                    .assigned_actor_id
-                    .map(ActorId::try_new)
-                    .transpose()
-                    .map_err(|error| {
-                        SdkError::invalid_argument(
-                            "data_quality.finding.assigned_actor_id",
-                            error.to_string(),
-                        )
-                    })?;
-                finding.assign(actor, now)?
-            }
-            ACKNOWLEDGE_FINDING_CAPABILITY => {
-                let command: wire::AcknowledgeDataQualityFindingRequest = decode(
-                    request,
-                    ACKNOWLEDGE_FINDING_REQUEST_SCHEMA,
-                )?;
-                finding.acknowledge(
-                    required_observation_id(command.expected_current_observation_ref)?,
-                    now,
-                )?
-            }
-            WAIVE_FINDING_CAPABILITY => {
-                let command: wire::WaiveDataQualityFindingRequest = decode(
-                    request,
-                    WAIVE_FINDING_REQUEST_SCHEMA,
-                )?;
-                finding.waive(
-                    required_observation_id(command.expected_current_observation_ref)?,
-                    command.reason,
-                    now,
-                )?
-            }
-            _ => return Err(unsupported()),
-        };
+        let updated = apply_command(definition, request, &finding, now)?;
         let aggregate_version = current
             .version
             .checked_add(1)
             .ok_or_else(|| invalid_plan("finding version overflowed"))?;
         let public_finding = party_finding_to_wire(&updated, aggregate_version);
-        let (response_schema, output, event_type, event_schema, event_payload) =
-            match definition.capability_id.as_str() {
-                ASSIGN_FINDING_CAPABILITY => {
-                    let response = wire::AssignDataQualityFindingResponse {
+        let (output, event) = match definition.capability_id.as_str() {
+            ASSIGN_FINDING_CAPABILITY => {
+                let output = support::protobuf_payload(
+                    MODULE_ID,
+                    ASSIGN_FINDING_RESPONSE_SCHEMA,
+                    DataClass::Personal,
+                    &wire::AssignDataQualityFindingResponse {
                         finding: Some(public_finding.clone()),
-                    };
-                    let event = wire::DataQualityFindingAssignmentChangedEvent {
+                    },
+                )?;
+                let event = support::event_evidence_with_data_class(
+                    request,
+                    current.reference.clone(),
+                    MODULE_ID,
+                    EventSpec {
+                        event_type: FINDING_ASSIGNMENT_CHANGED_EVENT_TYPE,
+                        event_schema_id: FINDING_ASSIGNMENT_CHANGED_EVENT_SCHEMA,
+                        aggregate_version,
+                        previous_version: Some(current.version),
+                    },
+                    DataClass::Personal,
+                    &wire::DataQualityFindingAssignmentChangedEvent {
+                        finding: Some(public_finding),
+                    },
+                )?;
+                (output, event)
+            }
+            ACKNOWLEDGE_FINDING_CAPABILITY => {
+                let output = support::protobuf_payload(
+                    MODULE_ID,
+                    ACKNOWLEDGE_FINDING_RESPONSE_SCHEMA,
+                    DataClass::Personal,
+                    &wire::AcknowledgeDataQualityFindingResponse {
                         finding: Some(public_finding.clone()),
-                    };
-                    (
-                        ASSIGN_FINDING_RESPONSE_SCHEMA,
-                        support::protobuf_payload(
-                            MODULE_ID,
-                            ASSIGN_FINDING_RESPONSE_SCHEMA,
-                            DataClass::Personal,
-                            &response,
-                        )?,
-                        FINDING_ASSIGNMENT_CHANGED_EVENT_TYPE,
-                        FINDING_ASSIGNMENT_CHANGED_EVENT_SCHEMA,
-                        event.encode_to_vec(),
-                    )
-                }
-                ACKNOWLEDGE_FINDING_CAPABILITY => {
-                    let response = wire::AcknowledgeDataQualityFindingResponse {
+                    },
+                )?;
+                let event = support::event_evidence_with_data_class(
+                    request,
+                    current.reference.clone(),
+                    MODULE_ID,
+                    EventSpec {
+                        event_type: FINDING_STATUS_CHANGED_EVENT_TYPE,
+                        event_schema_id: FINDING_STATUS_CHANGED_EVENT_SCHEMA,
+                        aggregate_version,
+                        previous_version: Some(current.version),
+                    },
+                    DataClass::Personal,
+                    &wire::DataQualityFindingStatusChangedEvent {
+                        finding: Some(public_finding),
+                    },
+                )?;
+                (output, event)
+            }
+            WAIVE_FINDING_CAPABILITY => {
+                let output = support::protobuf_payload(
+                    MODULE_ID,
+                    WAIVE_FINDING_RESPONSE_SCHEMA,
+                    DataClass::Personal,
+                    &wire::WaiveDataQualityFindingResponse {
                         finding: Some(public_finding.clone()),
-                    };
-                    let event = wire::DataQualityFindingStatusChangedEvent {
-                        finding: Some(public_finding.clone()),
-                    };
-                    (
-                        ACKNOWLEDGE_FINDING_RESPONSE_SCHEMA,
-                        support::protobuf_payload(
-                            MODULE_ID,
-                            ACKNOWLEDGE_FINDING_RESPONSE_SCHEMA,
-                            DataClass::Personal,
-                            &response,
-                        )?,
-                        FINDING_STATUS_CHANGED_EVENT_TYPE,
-                        FINDING_STATUS_CHANGED_EVENT_SCHEMA,
-                        event.encode_to_vec(),
-                    )
-                }
-                WAIVE_FINDING_CAPABILITY => {
-                    let response = wire::WaiveDataQualityFindingResponse {
-                        finding: Some(public_finding.clone()),
-                    };
-                    let event = wire::DataQualityFindingStatusChangedEvent {
-                        finding: Some(public_finding.clone()),
-                    };
-                    (
-                        WAIVE_FINDING_RESPONSE_SCHEMA,
-                        support::protobuf_payload(
-                            MODULE_ID,
-                            WAIVE_FINDING_RESPONSE_SCHEMA,
-                            DataClass::Personal,
-                            &response,
-                        )?,
-                        FINDING_STATUS_CHANGED_EVENT_TYPE,
-                        FINDING_STATUS_CHANGED_EVENT_SCHEMA,
-                        event.encode_to_vec(),
-                    )
-                }
-                _ => return Err(unsupported()),
-            };
-        let _ = response_schema;
-        let event = support::event_evidence_bytes_with_data_class(
-            request,
-            current.reference.clone(),
-            MODULE_ID,
-            EventSpec {
-                event_type,
-                event_schema_id: event_schema,
-                aggregate_version,
-                previous_version: Some(current.version),
-            },
-            DataClass::Personal,
-            event_payload,
-        )?;
+                    },
+                )?;
+                let event = support::event_evidence_with_data_class(
+                    request,
+                    current.reference.clone(),
+                    MODULE_ID,
+                    EventSpec {
+                        event_type: FINDING_STATUS_CHANGED_EVENT_TYPE,
+                        event_schema_id: FINDING_STATUS_CHANGED_EVENT_SCHEMA,
+                        aggregate_version,
+                        previous_version: Some(current.version),
+                    },
+                    DataClass::Personal,
+                    &wire::DataQualityFindingStatusChangedEvent {
+                        finding: Some(public_finding),
+                    },
+                )?;
+                (output, event)
+            }
+            _ => return Err(unsupported()),
+        };
         let audit = support::audit_intent(
             request,
             &current.reference,
@@ -193,6 +156,46 @@ impl TransactionalAggregatePlanner for DataQualityFindingStewardshipPlanner {
             },
             output: Some(output),
         })
+    }
+}
+
+fn apply_command(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    finding: &PartyFinding,
+    now: i64,
+) -> Result<PartyFinding, SdkError> {
+    match definition.capability_id.as_str() {
+        ASSIGN_FINDING_CAPABILITY => {
+            let command: wire::AssignDataQualityFindingRequest =
+                decode(request, ASSIGN_FINDING_REQUEST_SCHEMA)?;
+            let actor = command
+                .assigned_actor_id
+                .map(ActorId::try_new)
+                .transpose()
+                .map_err(|error| {
+                    SdkError::invalid_argument(
+                        "data_quality.finding.assigned_actor_id",
+                        error.to_string(),
+                    )
+                })?;
+            finding.assign(actor, now)
+        }
+        ACKNOWLEDGE_FINDING_CAPABILITY => {
+            let command: wire::AcknowledgeDataQualityFindingRequest =
+                decode(request, ACKNOWLEDGE_FINDING_REQUEST_SCHEMA)?;
+            let observation_id =
+                required_observation_id(command.expected_current_observation_ref)?;
+            finding.acknowledge(&observation_id, now)
+        }
+        WAIVE_FINDING_CAPABILITY => {
+            let command: wire::WaiveDataQualityFindingRequest =
+                decode(request, WAIVE_FINDING_REQUEST_SCHEMA)?;
+            let observation_id =
+                required_observation_id(command.expected_current_observation_ref)?;
+            finding.waive(&observation_id, command.reason, now)
+        }
+        _ => Err(unsupported()),
     }
 }
 
@@ -289,15 +292,19 @@ fn required_finding_id(value: Option<wire::DataQualityFindingRef>) -> Result<Rec
 
 fn required_observation_id(
     value: Option<wire::DataQualityFindingObservationRef>,
-) -> Result<&'static str, SdkError> {
-    let value = value.ok_or_else(|| missing("expected_current_observation_ref"))?;
-    let value = RecordId::try_new(value.finding_observation_id).map_err(|error| {
+) -> Result<String, SdkError> {
+    RecordId::try_new(
+        value
+            .ok_or_else(|| missing("expected_current_observation_ref"))?
+            .finding_observation_id,
+    )
+    .map(RecordId::into_inner)
+    .map_err(|error| {
         SdkError::invalid_argument(
             "data_quality.finding.expected_current_observation_ref.finding_observation_id",
             error.to_string(),
         )
-    })?;
-    Ok(Box::leak(value.into_inner().into_boxed_str()))
+    })
 }
 
 fn ensure_definition(
