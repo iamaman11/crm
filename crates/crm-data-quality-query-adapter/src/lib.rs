@@ -123,13 +123,6 @@ impl DataQualityQueryAdapter {
                 completeness_profile_not_found,
             )
             .await?;
-        let visibility = self
-            .visibility
-            .authorize_visibility(request, &snapshot.reference)
-            .await?;
-        if !visibility.resource_visible {
-            return Err(completeness_profile_not_found());
-        }
 
         let rule_set_version_id =
             completeness_profile_rule_set_version_id_from_snapshot(&snapshot)?;
@@ -141,6 +134,19 @@ impl DataQualityQueryAdapter {
                 persisted_reference_missing,
             )
             .await?;
+
+        // Profile disclosure inherits the exact referenced immutable rule-set visibility,
+        // but remains capability-specific because the live visibility key includes the
+        // profile-get capability coordinate. This avoids an independent ACL drifting
+        // away from the profile's mandatory same-owner rule-set binding.
+        let visibility = self
+            .visibility
+            .authorize_visibility(request, &rule_set_snapshot.reference)
+            .await?;
+        if !visibility.resource_visible {
+            return Err(completeness_profile_not_found());
+        }
+
         let rule_set = party_rule_set_from_snapshot(&rule_set_snapshot)?;
         let profile = party_completeness_profile_from_immutable_snapshot(&snapshot, &rule_set)?;
         let mut output = party_completeness_profile_to_wire(&profile);
@@ -179,7 +185,10 @@ impl DataQualityQueryAdapter {
 }
 
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    Ok(vec![rule_set_query_capability_definition()?])
+    Ok(vec![
+        rule_set_query_capability_definition()?,
+        completeness_profile_query_capability_definition()?,
+    ])
 }
 
 pub fn query_capability_definition() -> Result<CapabilityDefinition, SdkError> {
@@ -431,12 +440,13 @@ mod tests {
     }
 
     #[test]
-    fn rule_set_query_is_publicly_registered_and_profile_query_remains_standalone() {
+    fn both_immutable_definition_queries_are_publicly_registered() {
         let definitions = query_capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 1);
+        assert_eq!(definitions.len(), 2);
         assert_read_only_definition(&definitions[0], GET_PARTY_RULE_SET_CAPABILITY);
-
-        let profile = completeness_profile_query_capability_definition().unwrap();
-        assert_read_only_definition(&profile, GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY);
+        assert_read_only_definition(
+            &definitions[1],
+            GET_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+        );
     }
 }
