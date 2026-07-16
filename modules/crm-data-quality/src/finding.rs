@@ -255,8 +255,7 @@ impl PartyFinding {
             )),
             std::cmp::Ordering::Equal => {
                 if self.status == PartyFindingStatus::Remediated
-                    && self.remediated_by_rule_outcome_id.as_deref()
-                        == Some(outcome.outcome_id())
+                    && self.remediated_by_rule_outcome_id.as_deref() == Some(outcome.outcome_id())
                 {
                     Ok(self.clone())
                 } else {
@@ -284,9 +283,7 @@ impl PartyFinding {
             || state.created_at < 0
             || state.updated_at < state.created_at
         {
-            return Err(invalid_finding(
-                "persisted finding invariants are invalid",
-            ));
+            return Err(invalid_finding("persisted finding invariants are invalid"));
         }
         let expected_finding_id = finding_id(
             &state.tenant_id,

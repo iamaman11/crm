@@ -1,9 +1,9 @@
 use crm_data_quality::{
     ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent, PartyCompletenessProfileVersion,
     PartyEvaluationJob, PartyFinding, PartyFindingObservation, PartyFindingStatus,
-    PartyQualityEvaluator, PartyQualityInput, PartyQualityRule, PartyRuleOutcome, PartyRuleSetVersion,
-    QualitySeverity, RuleKey, decode_finding_observation_state, decode_finding_state,
-    encode_finding_observation_state, encode_finding_state,
+    PartyQualityEvaluator, PartyQualityInput, PartyQualityRule, PartyRuleOutcome,
+    PartyRuleSetVersion, QualitySeverity, RuleKey, decode_finding_observation_state,
+    decode_finding_state, encode_finding_observation_state, encode_finding_state,
 };
 use crm_module_sdk::{RecordId, TenantId};
 
@@ -26,12 +26,14 @@ fn logical_finding_is_stable_across_jobs_and_tracks_versioned_observations() {
     let rule_set = PartyRuleSetVersion::publish(vec![rule.clone()]).unwrap();
     let profile = PartyCompletenessProfileVersion::publish(
         &rule_set,
-        vec![PartyCompletenessComponent::try_new(
-            ComponentKey::try_new("name.placeholder").unwrap(),
-            rule_key,
-            10_000,
-        )
-        .unwrap()],
+        vec![
+            PartyCompletenessComponent::try_new(
+                ComponentKey::try_new("name.placeholder").unwrap(),
+                rule_key,
+                10_000,
+            )
+            .unwrap(),
+        ],
     )
     .unwrap();
     let tenant_id = TenantId::try_new("finding-tenant").unwrap();
@@ -138,12 +140,14 @@ fn finding_persistence_is_strict_canonical_and_recomputes_identities() {
     let rule_set = PartyRuleSetVersion::publish(vec![rule.clone()]).unwrap();
     let profile = PartyCompletenessProfileVersion::publish(
         &rule_set,
-        vec![PartyCompletenessComponent::try_new(
-            ComponentKey::try_new("name.placeholder").unwrap(),
-            rule_key,
-            10_000,
-        )
-        .unwrap()],
+        vec![
+            PartyCompletenessComponent::try_new(
+                ComponentKey::try_new("name.placeholder").unwrap(),
+                rule_key,
+                10_000,
+            )
+            .unwrap(),
+        ],
     )
     .unwrap();
     let failed = outcome(
@@ -220,9 +224,7 @@ fn outcome(
         )
         .unwrap();
     let evaluation = rule_set
-        .evaluate(
-            &PartyQualityInput::try_new(EvaluatedPartyKind::Person, display_name).unwrap(),
-        )
+        .evaluate(&PartyQualityInput::try_new(EvaluatedPartyKind::Person, display_name).unwrap())
         .into_iter()
         .next()
         .unwrap();
