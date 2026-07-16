@@ -19,7 +19,7 @@ use crm_data_quality::{
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordSnapshot, SdkError};
 use crm_proto_contracts::crm::{
-    customer::v1 as customer, data_quality::v1 as wire, parties::v1 as parties,
+    data_quality::v1 as wire, parties::v1 as parties,
 };
 
 #[derive(Debug, Default, Clone, Copy)]
