@@ -17,4 +17,5 @@ include!("query_wire_finding.rs");
 include!("query_wire_completeness.rs");
 include!("query_decode.rs");
 include!("query_filters.rs");
+include!("query_visibility.rs");
 include!("query_common.rs");
