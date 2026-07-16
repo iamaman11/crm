@@ -18,6 +18,7 @@ on:
       - "database/migrations/**"
       - "database/tests/0014_data_quality_adapter.sql"
       - "database/tests/0015_data_quality_completeness_profile_adapter.sql"
+      - "scripts/prepare_data_quality_process_database.sh"
       - ".github/workflows/data-quality-process-runtime.yml"
   pull_request:
     paths:
@@ -36,6 +37,7 @@ on:
       - "database/migrations/**"
       - "database/tests/0014_data_quality_adapter.sql"
       - "database/tests/0015_data_quality_completeness_profile_adapter.sql"
+      - "scripts/prepare_data_quality_process_database.sh"
       - ".github/workflows/data-quality-process-runtime.yml"
 
 permissions:
@@ -75,23 +77,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
       - name: Prepare fresh Data Quality process database
-        shell: bash
-        run: |
-          set -euo pipefail
-          psql --set ON_ERROR_STOP=1 --command "DROP SCHEMA IF EXISTS crm CASCADE"
-          while IFS= read -r migration; do
-            psql --set ON_ERROR_STOP=1 --file "${migration}"
-          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
-          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
-          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
-          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
-          psql --set ON_ERROR_STOP=1 --file database/tests/0014_data_quality_adapter.sql
-          psql --set ON_ERROR_STOP=1 --file database/tests/0015_data_quality_completeness_profile_adapter.sql
-          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+        run: bash scripts/prepare_data_quality_process_database.sh
       - name: Verify immutable Data Quality definitions through real crm-api
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
+          : > database/data-quality-process-runtime.log
           : > database/data-quality-process-runtime-health.log
           (
             while true; do
@@ -114,15 +105,24 @@ jobs:
           health_probe_pid=$!
           trap 'kill "${health_probe_pid}" 2>/dev/null || true' EXIT
 
-          cargo test -p crm-api \
-            --test data_quality_process_e2e \
-            --test data_quality_query_process_e2e \
-            --test data_quality_completeness_profile_process_e2e \
-            -- --nocapture 2>&1 | tee database/data-quality-process-runtime.log
-          test_status=${PIPESTATUS[0]}
+          run_process_test() {
+            local test_name="$1"
+            echo "=== ${test_name} ===" | tee -a database/data-quality-process-runtime.log
+            bash scripts/prepare_data_quality_process_database.sh
+            set +e
+            cargo test -p crm-api --test "${test_name}" -- --nocapture 2>&1 \
+              | tee -a database/data-quality-process-runtime.log
+            local test_status=${PIPESTATUS[0]}
+            set -e
+            return "${test_status}"
+          }
+
+          run_process_test data_quality_process_e2e
+          run_process_test data_quality_query_process_e2e
+          run_process_test data_quality_completeness_profile_process_e2e
+
           kill "${health_probe_pid}" 2>/dev/null || true
           wait "${health_probe_pid}" 2>/dev/null || true
-          exit "${test_status}"
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -177,6 +177,7 @@ jobs:
             services/crm-api/tests/data_quality_completeness_profile_process_e2e.rs
             database/tests/0014_data_quality_adapter.sql
             database/tests/0015_data_quality_completeness_profile_adapter.sql
+            scripts/prepare_data_quality_process_database.sh
             crates/crm-data-quality-capability-adapter/
             crates/crm-data-quality-query-adapter/
             crates/crm-application-runtime/src/data_quality_capability_execution.rs
