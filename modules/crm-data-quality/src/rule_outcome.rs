@@ -34,7 +34,9 @@ impl PartyRuleOutcome {
         }
         let reason_code = canonical_reason_code(evaluation.reason_code())?;
         if evaluation.passed() != (reason_code == "DATA_QUALITY_RULE_PASSED") {
-            return Err(invalid_outcome("evaluation pass state and reason code differ"));
+            return Err(invalid_outcome(
+                "evaluation pass state and reason code differ",
+            ));
         }
         let rule_key = evaluation.rule_key().clone();
         let outcome_id = derived_id(
@@ -61,11 +63,15 @@ impl PartyRuleOutcome {
 
     pub(crate) fn restore(state: PartyRuleOutcomeRestore) -> Result<Self, SdkError> {
         if state.party_resource_version <= 0 || state.evaluated_at < 0 {
-            return Err(invalid_outcome("persisted outcome version or timestamp is invalid"));
+            return Err(invalid_outcome(
+                "persisted outcome version or timestamp is invalid",
+            ));
         }
         let reason_code = canonical_reason_code(&state.reason_code)?;
         if state.passed != (reason_code == "DATA_QUALITY_RULE_PASSED") {
-            return Err(invalid_outcome("persisted outcome pass state and reason code differ"));
+            return Err(invalid_outcome(
+                "persisted outcome pass state and reason code differ",
+            ));
         }
         let expected_id = derived_id(
             "dq-rule-outcome",

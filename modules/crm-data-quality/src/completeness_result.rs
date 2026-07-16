@@ -58,7 +58,9 @@ impl PartyCompletenessResult {
             || job.rule_set_version_id() != profile.rule_set_version_id().as_str()
             || computed_at < job.updated_at()
         {
-            return Err(invalid_result("profile or timestamp does not match the staged job"));
+            return Err(invalid_result(
+                "profile or timestamp does not match the staged job",
+            ));
         }
         let party_resource_version = job
             .party_resource_version()
@@ -104,7 +106,9 @@ impl PartyCompletenessResult {
             });
         }
         if score_basis_points > TOTAL_BASIS_POINTS {
-            return Err(invalid_result("completeness score exceeds 10,000 basis points"));
+            return Err(invalid_result(
+                "completeness score exceeds 10,000 basis points",
+            ));
         }
         let result_id = result_id(job.job_id(), profile.version_id().as_str());
         Ok(Self {
@@ -125,20 +129,25 @@ impl PartyCompletenessResult {
             || state.score_basis_points > TOTAL_BASIS_POINTS
             || state.components.is_empty()
         {
-            return Err(invalid_result("persisted completeness result invariants are invalid"));
+            return Err(invalid_result(
+                "persisted completeness result invariants are invalid",
+            ));
         }
         let expected_id = result_id(&state.job_id, &state.profile_version_id);
         if state.result_id != expected_id {
-            return Err(invalid_result("persisted completeness result identity is invalid"));
+            return Err(invalid_result(
+                "persisted completeness result identity is invalid",
+            ));
         }
         let awarded_total = state.components.iter().try_fold(0_u32, |sum, component| {
             sum.checked_add(component.awarded_basis_points)
                 .ok_or_else(|| invalid_result("persisted component awards overflowed"))
         })?;
         if awarded_total != state.score_basis_points
-            || state.components.windows(2).any(|pair| {
-                pair[0].component_key.as_str() >= pair[1].component_key.as_str()
-            })
+            || state
+                .components
+                .windows(2)
+                .any(|pair| pair[0].component_key.as_str() >= pair[1].component_key.as_str())
             || state.components.iter().any(|component| {
                 component.rule_outcome_id.is_empty()
                     || component.awarded_basis_points > TOTAL_BASIS_POINTS

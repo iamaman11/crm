@@ -1,8 +1,7 @@
 use crm_data_quality::{
-    ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent,
-    PartyCompletenessProfileVersion, PartyCompletenessResult, PartyEvaluationJob,
-    PartyQualityEvaluator, PartyQualityInput, PartyQualityRule, PartyRuleOutcome,
-    PartyRuleSetVersion, QualitySeverity, RuleKey,
+    ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent, PartyCompletenessProfileVersion,
+    PartyCompletenessResult, PartyEvaluationJob, PartyQualityEvaluator, PartyQualityInput,
+    PartyQualityRule, PartyRuleOutcome, PartyRuleSetVersion, QualitySeverity, RuleKey,
 };
 use crm_module_sdk::RecordId;
 
@@ -61,9 +60,8 @@ fn staged_evaluation_produces_replay_stable_outcomes_and_exact_lineage() {
     let (staged, _) = created
         .stage(EvaluatedPartyKind::Person, "unknown", 7, 110)
         .unwrap();
-    let evaluations = rule_set.evaluate(
-        &PartyQualityInput::try_new(EvaluatedPartyKind::Person, "unknown").unwrap(),
-    );
+    let evaluations = rule_set
+        .evaluate(&PartyQualityInput::try_new(EvaluatedPartyKind::Person, "unknown").unwrap());
     let outcomes = evaluations
         .iter()
         .map(|evaluation| PartyRuleOutcome::evaluate(&staged, evaluation, 120).unwrap())
@@ -74,7 +72,10 @@ fn staged_evaluation_produces_replay_stable_outcomes_and_exact_lineage() {
         .collect::<Vec<_>>();
     assert_eq!(outcomes, replayed_outcomes);
     assert_eq!(outcomes.len(), 2);
-    assert_eq!(outcomes.iter().filter(|outcome| !outcome.passed()).count(), 1);
+    assert_eq!(
+        outcomes.iter().filter(|outcome| !outcome.passed()).count(),
+        1
+    );
 
     let result = PartyCompletenessResult::compute(&staged, &profile, &outcomes, 130).unwrap();
     let replayed = PartyCompletenessResult::compute(&staged, &profile, &outcomes, 130).unwrap();
