@@ -82,7 +82,8 @@ fn catalog_error(error: impl fmt::Display) -> SdkError {
 mod tests {
     use super::*;
     use crm_data_quality_capability_adapter::{
-        PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY, REQUEST_PARTY_EVALUATION_CAPABILITY,
+        PUBLISH_PARTY_COMPLETENESS_PROFILE_CAPABILITY,
+        REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY, REQUEST_PARTY_EVALUATION_CAPABILITY,
     };
     use crm_module_sdk::{CapabilityId, CapabilityVersion};
 
@@ -96,6 +97,7 @@ mod tests {
             ASSIGN_FINDING_CAPABILITY,
             ACKNOWLEDGE_FINDING_CAPABILITY,
             WAIVE_FINDING_CAPABILITY,
+            REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY,
         ] {
             assert_eq!(
                 definitions
