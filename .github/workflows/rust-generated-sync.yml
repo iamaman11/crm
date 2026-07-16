@@ -42,6 +42,7 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           temporary_workflow = Path(".github/workflows/phase8a9-wire-data-quality-query.yml")
           temporary_workflow.unlink(missing_ok=True)
@@ -55,96 +56,103 @@ jobs:
 
           replacements = [
               (
-                  """use crm_customer_data_operations_query_adapter::{
-              CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
-              PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
-          };
-          """,
-                  """use crm_customer_data_operations_query_adapter::{
-              CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
-              PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
-          };
-          use crm_data_quality_query_adapter::DataQualityQueryAdapter;
-          """,
+                  dedent("""\
+                  use crm_customer_data_operations_query_adapter::{
+                      CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
+                      PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
+                  };
+                  """),
+                  dedent("""\
+                  use crm_customer_data_operations_query_adapter::{
+                      CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
+                      PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
+                  };
+                  use crm_data_quality_query_adapter::DataQualityQueryAdapter;
+                  """),
               ),
               (
-                  """        let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
-              store.clone(),
-              CursorCodec::new(cursor_key)
-                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-              visibility_authorizer.clone(),
-          )
-          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-          """,
-                  """        let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
-              store.clone(),
-              CursorCodec::new(cursor_key)
-                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-              visibility_authorizer.clone(),
-          )
-          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-          let data_quality_query_adapter =
-              DataQualityQueryAdapter::new(store.clone(), visibility_authorizer.clone());
-          """,
+                  dedent("""\
+                          let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
+                              store.clone(),
+                              CursorCodec::new(cursor_key)
+                                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                              visibility_authorizer.clone(),
+                          )
+                          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+                  """),
+                  dedent("""\
+                          let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
+                              store.clone(),
+                              CursorCodec::new(cursor_key)
+                                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                              visibility_authorizer.clone(),
+                          )
+                          .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+                          let data_quality_query_adapter =
+                              DataQualityQueryAdapter::new(store.clone(), visibility_authorizer.clone());
+                  """),
               ),
               (
-                  """        let query_router = Arc::new(ApplicationQueryRouter::new(
-              production_query_router,
-              party_query_adapter,
-              account_query_adapter,
-              contact_point_query_adapter,
-              party_relationship_query_adapter,
-              customer_360_query_adapter,
-              consent_query_adapter,
-              identity_resolution_query_adapter,
-              identity_resolution_merge_query_adapter,
-              customer_data_operations_query_adapter,
-              metadata_query_adapter,
-          ));
-          """,
-                  """        let base_query_router = crate::governed_metadata::ApplicationQueryRouter::new(
-              production_query_router,
-              party_query_adapter,
-              account_query_adapter,
-              contact_point_query_adapter,
-              party_relationship_query_adapter,
-              customer_360_query_adapter,
-              consent_query_adapter,
-              identity_resolution_query_adapter,
-              identity_resolution_merge_query_adapter,
-              customer_data_operations_query_adapter,
-              metadata_query_adapter,
-          );
-          let query_router = Arc::new(ApplicationQueryRouter::new(
-              base_query_router,
-              data_quality_query_adapter,
-          ));
-          """,
+                  dedent("""\
+                          let query_router = Arc::new(ApplicationQueryRouter::new(
+                              production_query_router,
+                              party_query_adapter,
+                              account_query_adapter,
+                              contact_point_query_adapter,
+                              party_relationship_query_adapter,
+                              customer_360_query_adapter,
+                              consent_query_adapter,
+                              identity_resolution_query_adapter,
+                              identity_resolution_merge_query_adapter,
+                              customer_data_operations_query_adapter,
+                              metadata_query_adapter,
+                          ));
+                  """),
+                  dedent("""\
+                          let base_query_router = crate::governed_metadata::ApplicationQueryRouter::new(
+                              production_query_router,
+                              party_query_adapter,
+                              account_query_adapter,
+                              contact_point_query_adapter,
+                              party_relationship_query_adapter,
+                              customer_360_query_adapter,
+                              consent_query_adapter,
+                              identity_resolution_query_adapter,
+                              identity_resolution_merge_query_adapter,
+                              customer_data_operations_query_adapter,
+                              metadata_query_adapter,
+                          );
+                          let query_router = Arc::new(ApplicationQueryRouter::new(
+                              base_query_router,
+                              data_quality_query_adapter,
+                          ));
+                  """),
               ),
               (
-                  """                METADATA_MODULE_ID => {}
-          """,
-                  """                "crm.data-quality" => upsert_bootstrap_visibility(
-              visibility_store,
-              config,
-              tenant_id,
-              definition,
-              BootstrapVisibilityResource {
-                  owner_module_id: "crm.data-quality",
-                  resource_type: "data_quality.party_rule_set_version",
-              },
-              ["definition"].into_iter().map(str::to_owned).collect(),
-              expires_at,
-          )?,
-          METADATA_MODULE_ID => {}
-          """,
+                  "                METADATA_MODULE_ID => {}\n",
+                  dedent("""\
+                                  "crm.data-quality" => upsert_bootstrap_visibility(
+                                      visibility_store,
+                                      config,
+                                      tenant_id,
+                                      definition,
+                                      BootstrapVisibilityResource {
+                                          owner_module_id: "crm.data-quality",
+                                          resource_type: "data_quality.party_rule_set_version",
+                                      },
+                                      ["definition"].into_iter().map(str::to_owned).collect(),
+                                      expires_at,
+                                  )?,
+                                  METADATA_MODULE_ID => {}
+                  """),
               ),
           ]
 
-          for old, new in replacements:
+          for index, (old, new) in enumerate(replacements, start=1):
               count = text.count(old)
+              print(f"fragment {index}: {count}")
               if count != 1:
-                  raise SystemExit(f"expected exactly one runtime fragment, found {count}: {old[:80]!r}")
+                  raise SystemExit(f"expected exactly one runtime fragment {index}, found {count}")
               text = text.replace(old, new, 1)
 
           path.write_text(text)
