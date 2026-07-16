@@ -43,12 +43,19 @@ pub mod evaluation_persistence {
 }
 
 pub mod completeness_result;
+pub mod finding;
 pub mod rule_outcome;
 
 pub mod completeness_result_persistence {
     use crate::canonicalization::persisted_state_json as serde_json;
 
     include!("completeness_result_persistence.rs");
+}
+
+pub mod finding_persistence {
+    use crate::canonicalization::persisted_state_json as serde_json;
+
+    include!("finding_persistence.rs");
 }
 
 pub mod rule_outcome_persistence {
@@ -63,6 +70,8 @@ pub use definition_persistence::*;
 pub use domain::*;
 pub use evaluation_job::*;
 pub use evaluation_persistence::*;
+pub use finding::*;
+pub use finding_persistence::*;
 pub use rule_outcome::*;
 pub use rule_outcome_persistence::*;
 
