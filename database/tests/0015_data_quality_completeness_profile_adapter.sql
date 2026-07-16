@@ -44,9 +44,16 @@ WHERE capability_id = 'data_quality.party.rule_set.publish'
 ON CONFLICT (capability_id, capability_version) DO NOTHING;
 
 -- The two-tenant query acceptance uses one authenticated service actor that is
--- explicitly provisioned in both tenant domains. This keeps mutation auditing
--- tenant-scoped while allowing the test to reach the authorized storage/query
--- boundary instead of stopping at authentication or actor foreign keys.
+-- explicitly provisioned in both tenant domains. The fixture itself follows the
+-- same mandatory transaction-local write context as production mutations.
+BEGIN;
+SET LOCAL app.tenant_id = 'tenant-b';
+SET LOCAL app.actor_id = 'actor-a';
+SET LOCAL app.request_id = 'data-quality-process-bootstrap-b';
+SET LOCAL app.capability_id = 'data_quality.party.completeness_profile.publish';
+SET LOCAL app.capability_version = '1.0.0';
+SET LOCAL app.business_transaction_id = 'data-quality-process-bootstrap-b';
+
 INSERT INTO crm.actors (
   tenant_id,
   actor_id,
@@ -64,3 +71,4 @@ VALUES (
   'data-quality-process-bootstrap-b'
 )
 ON CONFLICT (tenant_id, actor_id) DO NOTHING;
+COMMIT;
