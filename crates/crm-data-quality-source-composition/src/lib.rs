@@ -6,6 +6,18 @@
 //! then executes the normal Party query adapter. Tenant/RLS and live resource and
 //! field visibility therefore remain owned by the Party query boundary.
 
+mod staging_command;
+mod staging_context;
+mod staging_execute;
+mod staging_request;
+pub mod staging_sink;
+pub mod worker;
+mod worker_context;
+
+pub use staging_sink::*;
+pub use worker::*;
+pub use worker_context::{EVALUATION_WORKER_ACTOR_ID, EVALUATION_WORKER_CAPABILITY_VERSION};
+
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::{ActorId, ErrorCategory, PortFuture, RecordId, SdkError, TenantId};
 use crm_parties_query_adapter::{
@@ -182,5 +194,6 @@ mod tests {
             PartyQualitySourceKind::Organization
         );
         assert_send_sync::<GovernedPartyQualitySource>();
+        assert_send_sync::<PartyEvaluationStageWorker>();
     }
 }
