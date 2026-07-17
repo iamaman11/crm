@@ -1,0 +1,352 @@
++struct ClassifiedRoute { owner_module_id: String, id: String, version: String, reason: String }
+ 
+ #[test]
+-fn production_routes_exactly_cover_first_party_contract_bindings() {
+-    let registry = binding_registry();
+-    let manifest_modules: BTreeSet<String> = registry
+-        .modules
+-        .iter()
+-        .map(|module| module.module_id.clone())
+-        .collect();
+-    let bound_routes: BTreeSet<RouteCoordinate> = registry
+-        .modules
+-        .iter()
+-        .flat_map(|module| {
+-            module.capabilities.iter().map(|capability| {
+-                (
+-                    module.module_id.clone(),
+-                    capability.id.clone(),
+-                    capability.version.clone(),
+-                )
+-            })
+-        })
+-        .collect();
+-
+-    let mutation_definitions = application_mutation_definitions().unwrap();
+-    let query_definitions = application_query_definitions().unwrap();
+-    assert_route_kinds_are_disjoint(&mutation_definitions, &query_definitions);
+-
+-    let runtime_routes =
+-        unique_runtime_routes(mutation_definitions.iter().chain(query_definitions.iter()));
+-    let first_party_routes: BTreeSet<RouteCoordinate> = runtime_routes
+-        .iter()
+-        .filter(|(module_id, _, _)| manifest_modules.contains(module_id))
+-        .cloned()
+-        .collect();
+-
+-    assert_eq!(
+-        first_party_routes, bound_routes,
+-        "production route coverage drifted from module contract bindings"
+-    );
+-
+-    let platform_owners: BTreeSet<String> = runtime_routes
+-        .iter()
+-        .map(|(module_id, _, _)| module_id.clone())
+-        .filter(|module_id| !manifest_modules.contains(module_id))
+-        .collect();
+-    assert_eq!(
+-        platform_owners,
+-        PLATFORM_ROUTE_OWNERS
+-            .into_iter()
+-            .map(str::to_owned)
+-            .collect(),
+-        "a non-manifest production route owner requires explicit platform classification"
+-    );
+-
+-    let first_party_route_owners: BTreeSet<String> = first_party_routes
+-        .iter()
+-        .map(|(module_id, _, _)| module_id.clone())
+-        .collect();
+-    let empty_route_modules: BTreeSet<String> = manifest_modules
+-        .difference(&first_party_route_owners)
+-        .cloned()
+-        .collect();
+-    assert_eq!(
+-        empty_route_modules,
+-        FIRST_PARTY_EMPTY_ROUTE_MODULES
+-            .into_iter()
+-            .map(str::to_owned)
+-            .collect(),
+-        "a first-party module without production routes requires explicit classification"
+-    );
++fn governed_contracts_equal_production_routes_exactly() {
++    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
++    let bindings: ContractBindings = serde_json::from_str(&fs::read_to_string(root.join("contracts/module-contract-bindings.json")).unwrap()).unwrap();
++    let classifications: RouteClassifications = serde_json::from_str(&fs::read_to_string(root.join("contracts/production-route-classifications.json")).unwrap()).unwrap();
++    assert_eq!(bindings.schema_version, "crm.contract-bindings/v1");
++    assert_eq!(classifications.schema_version, "crm.production-route-classifications/v1");
++    let governed = unique(bindings.modules.into_iter().flat_map(|module| module.capabilities.into_iter().map(move |capability| (module.module_id.clone(), capability.id, capability.version))), "governed contract bindings");
++    let platform = classified(&classifications.platform_runtime_routes, "platform runtime");
++    let non_runtime = classified(&classifications.non_runtime_contract_routes, "non-runtime contract");
++    assert!(platform.is_disjoint(&non_runtime), "route classifications overlap");
++    assert!(non_runtime.is_subset(&governed), "non-runtime classifications must name governed contract routes");
++    let mut expected = governed.difference(&non_runtime).cloned().collect::<BTreeSet<_>>();
++    expected.extend(platform);
++    let mutations = application_mutation_definitions().unwrap();
++    let queries = application_query_definitions().unwrap();
++    assert_kinds_are_disjoint(&mutations, &queries);
++    let actual = unique(mutations.iter().chain(&queries).map(route_coordinate), "production route inventory");
++    assert_eq!(expected, actual, "manifest/binding/production route drift");
+ }
+ 
+-fn binding_registry() -> BindingRegistry {
+-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+-        .join("../../contracts/module-contract-bindings.json");
+-    serde_json::from_slice(&fs::read(path).unwrap()).unwrap()
++fn classified(routes: &[ClassifiedRoute], label: &str) -> BTreeSet<Coordinate> {
++    for route in routes { assert!(!route.reason.trim().is_empty(), "{label} classification lacks reason"); }
++    unique(routes.iter().map(|route| (route.owner_module_id.clone(), route.id.clone(), route.version.clone())), label)
+ }
+-
+-fn unique_runtime_routes<'a>(
+-    definitions: impl IntoIterator<Item = &'a CapabilityDefinition>,
+-) -> BTreeSet<RouteCoordinate> {
+-    let mut routes = BTreeSet::new();
+-    for definition in definitions {
+-        let coordinate = route_coordinate(definition);
+-        assert!(
+-            routes.insert(coordinate.clone()),
+-            "duplicate production route coordinate: {coordinate:?}"
+-        );
+-    }
+-    routes
++fn unique(coordinates: impl IntoIterator<Item = Coordinate>, label: &str) -> BTreeSet<Coordinate> {
++    let coordinates = coordinates.into_iter().collect::<Vec<_>>();
++    let unique = coordinates.iter().cloned().collect::<BTreeSet<_>>();
++    assert_eq!(coordinates.len(), unique.len(), "duplicate coordinate in {label}");
++    unique
+ }
+-
+-fn assert_route_kinds_are_disjoint(
+-    mutations: &[CapabilityDefinition],
+-    queries: &[CapabilityDefinition],
+-) {
+-    let mutation_routes: BTreeMap<RouteCoordinate, ()> = mutations
+-        .iter()
+-        .map(|definition| (route_coordinate(definition), ()))
+-        .collect();
+-    for definition in queries {
+-        let coordinate = route_coordinate(definition);
+-        assert!(
+-            !mutation_routes.contains_key(&coordinate),
+-            "production route is registered as both mutation and query: {coordinate:?}"
+-        );
++fn assert_kinds_are_disjoint(mutations: &[CapabilityDefinition], queries: &[CapabilityDefinition]) {
++    let mutation_coordinates = mutations.iter().map(route_coordinate).collect::<BTreeSet<_>>();
++    for query in queries {
++        let coordinate = route_coordinate(query);
++        assert!(!mutation_coordinates.contains(&coordinate), "route registered as both mutation and query: {coordinate:?}");
+     }
+ }
+-
+-fn route_coordinate(definition: &CapabilityDefinition) -> RouteCoordinate {
+-    (
+-        definition.owner_module_id.as_str().to_owned(),
+-        definition.capability_id.as_str().to_owned(),
+-        definition.capability_version.as_str().to_owned(),
+-    )
++fn route_coordinate(definition: &CapabilityDefinition) -> Coordinate {
++    (definition.owner_module_id.as_str().to_owned(), definition.capability_id.as_str().to_owned(), definition.capability_version.as_str().to_owned())
+ }
+-diff --git a/database/tests/0001_platform_foundation.sql b/database/tests/0001_platform_foundation.sql
+-index 5f3cded..103d580 100644
+---- a/database/tests/0001_platform_foundation.sql
+-+++ b/database/tests/0001_platform_foundation.sql
+-@@ -32,6 +32,33 @@ VALUES
+-     '{"platform":"metadata"}'::jsonb,
+-     clock_timestamp(),
+-     'platform'
+-+  ),
+-+  (
+-+    'crm.search',
+-+    '1.0.0',
+-+    'crm.cjson/v1',
+-+    decode(repeat('ce', 32), 'hex'),
+-+    '{"platform":"search"}'::jsonb,
+-+    clock_timestamp(),
+-+    'platform'
+-+  ),
+-+  (
+-+    'crm.customer360',
+-+    '0.1.0',
+-+    'crm.cjson/v1',
+-+    decode(repeat('cf', 32), 'hex'),
+-+    '{"platform":"customer360"}'::jsonb,
+-+    clock_timestamp(),
+-+    'platform'
+-+  ),
+-+  (
+-+    'crm.sales-activities-link',
+-+    '0.1.0',
+-+    'crm.cjson/v1',
+-+    decode(repeat('d0', 32), 'hex'),
+-+    '{"platform":"sales-activities-link"}'::jsonb,
+-+    clock_timestamp(),
+-+    'platform'
+-   );
+- 
+- INSERT INTO crm.capability_registry (
+-@@ -279,6 +306,143 @@ VALUES (
+- );
+- COMMIT;
+- 
+-+BEGIN;
+-+SET LOCAL app.tenant_id = 'tenant-b';
+-+SET LOCAL app.actor_id = 'actor-b';
+-+SET LOCAL app.request_id = 'request-bootstrap-b';
+-+SET LOCAL app.capability_id = 'test.record.mutate';
+-+SET LOCAL app.capability_version = '1.0.0';
+-+SET LOCAL app.business_transaction_id = 'tx-bootstrap-b';
+-+
+-+INSERT INTO crm.actors (
+-+  tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id
+-+) VALUES (
+-+  'tenant-b', 'actor-b', 'service', 'active', 'Tenant B bootstrap actor', 'tx-bootstrap-b'
+-+);
+-+
+-+INSERT INTO crm.idempotency_records (
+-+  tenant_id, idempotency_scope, idempotency_key, request_hash, status,
+-+  business_transaction_id, expires_at
+-+) VALUES (
+-+  'tenant-b', 'test.record.mutate@1.0.0', 'bootstrap-b',
+-+  decode(repeat('12', 32), 'hex'), 'completed', 'tx-bootstrap-b',
+-+  clock_timestamp() + interval '1 day'
+-+);
+-+
+-+INSERT INTO crm.outbox_events (
+-+  tenant_id, event_id, business_transaction_id, aggregate_type, aggregate_id,
+-+  aggregate_version, event_sequence, event_type, deduplication_key, schema_id,
+-+  schema_version, descriptor_hash, data_class, payload_encoding,
+-+  maximum_payload_size, retention_policy_id, payload_bytes, occurred_at
+-+) VALUES (
+-+  'tenant-b', 'event-bootstrap-b', 'tx-bootstrap-b', 'crm.actor', 'actor-b',
+-+  1, 1, 'actor.created', 'bootstrap-b', 'crm.actor.created.v1', '1.0.0',
+-+  decode(repeat('21', 32), 'hex'), 'internal', 'protobuf', 16, 'standard',
+-+  decode('02', 'hex'), clock_timestamp()
+-+);
+-+
+-+INSERT INTO crm.audit_records (
+-+  tenant_id, audit_sequence, audit_record_id, business_transaction_id, actor_id,
+-+  capability_id, capability_version, canonicalization_profile, previous_hash,
+-+  record_hash, canonical_envelope, occurred_at
+-+) VALUES (
+-+  'tenant-b', 1, 'audit-bootstrap-b', 'tx-bootstrap-b', 'actor-b',
+-+  'test.record.mutate', '1.0.0', 'crm.cjson/v1',
+-+  decode(repeat('00', 32), 'hex'), decode(repeat('13', 32), 'hex'),
+-+  convert_to('{"audit":"bootstrap-b"}', 'UTF8'), clock_timestamp()
+-+);
+-+
+-+INSERT INTO crm.business_transactions (
+-+  tenant_id, business_transaction_id, actor_id, request_id, capability_id,
+-+  capability_version, expected_outbox_events, expected_audit_records,
+-+  expected_idempotency_records
+-+) VALUES (
+-+  'tenant-b', 'tx-bootstrap-b', 'actor-b', 'request-bootstrap-b',
+-+  'test.record.mutate', '1.0.0', 1, 1, 1
+-+);
+-+COMMIT;
+-+
+-+-- Test-only lifecycle provisioning. Production activation is never bootstrapped
+-+-- in process memory: every published fixture module receives a durable active
+-+-- installation row, and later adapter fixtures are activated by this trigger.
+-+CREATE OR REPLACE FUNCTION crm.test_activate_module_version(
+-+  requested_module_id text,
+-+  requested_version text
+-+) RETURNS void
+-+LANGUAGE plpgsql
+-+AS $$
+-+DECLARE
+-+  tenant_row record;
+-+  bootstrap_transaction_id text;
+-+BEGIN
+-+  FOR tenant_row IN SELECT tenant_id FROM crm.tenants ORDER BY tenant_id LOOP
+-+    bootstrap_transaction_id := CASE tenant_row.tenant_id
+-+      WHEN 'tenant-a' THEN 'tx-bootstrap-a'
+-+      WHEN 'tenant-b' THEN 'tx-bootstrap-b'
+-+      ELSE NULL
+-+    END;
+-+    IF bootstrap_transaction_id IS NULL THEN
+-+      CONTINUE;
+-+    END IF;
+-+    INSERT INTO crm.module_installations (
+-+      tenant_id, install_id, module_id, current_version, status, generation,
+-+      grant_set_digest, last_business_transaction_id
+-+    ) VALUES (
+-+      tenant_row.tenant_id,
+-+      'fixture:' || requested_module_id,
+-+      requested_module_id,
+-+      requested_version,
+-+      'active',
+-+      1,
+-+      decode(repeat(substr(md5(tenant_row.tenant_id || ':' || requested_module_id || ':' || requested_version), 1, 2), 32), 'hex'),
+-+      bootstrap_transaction_id
+-+    )
+-+    ON CONFLICT (tenant_id, module_id) DO UPDATE SET
+-+      current_version = EXCLUDED.current_version,
+-+      status = 'active',
+-+      pending_version = NULL,
+-+      failure_code = NULL,
+-+      generation = CASE
+-+        WHEN crm.module_installations.current_version <> EXCLUDED.current_version
+-+          OR crm.module_installations.status <> 'active'
+-+        THEN crm.module_installations.generation + 1
+-+        ELSE crm.module_installations.generation
+-+      END,
+-+      grant_set_digest = EXCLUDED.grant_set_digest,
+-+      last_business_transaction_id = EXCLUDED.last_business_transaction_id,
+-+      updated_at = clock_timestamp();
+-+  END LOOP;
+-+END;
+-+$$;
+-+
+-+CREATE OR REPLACE FUNCTION crm.test_activate_published_module_version()
+-+RETURNS trigger
+-+LANGUAGE plpgsql
+-+AS $$
+-+BEGIN
+-+  PERFORM crm.test_activate_module_version(NEW.module_id, NEW.version);
+-+  RETURN NEW;
+-+END;
+-+$$;
+-+
+-+CREATE TRIGGER test_module_version_activation
+-+AFTER INSERT OR UPDATE ON crm.module_versions
+-+FOR EACH ROW EXECUTE FUNCTION crm.test_activate_published_module_version();
+-+
+-+DO $$
+-+DECLARE
+-+  module_row record;
+-+BEGIN
+-+  FOR module_row IN
+-+    SELECT DISTINCT ON (module_id) module_id, version
+-+    FROM crm.module_versions
+-+    ORDER BY module_id, published_at DESC, version DESC
+-+  LOOP
+-+    PERFORM crm.test_activate_module_version(module_row.module_id, module_row.version);
+-+  END LOOP;
+-+END;
+-+$$;
+-+
+- DO $$
+- DECLARE
+-   visible_count integer;
+-diff --git a/docs/ARCHITECTURE_READINESS.md b/docs/ARCHITECTURE_READINESS.md
+-index d4f0ffd..9840cde 100644
+---- a/docs/ARCHITECTURE_READINESS.md
+-+++ b/docs/ARCHITECTURE_READINESS.md
+-@@ -1,30 +1,29 @@
+- # Architecture Readiness Gate
+- 
+--Status: **Blocked until PR #135 completes issue #134**.
+-+Status: **Verification pending on PR #135 exact-head CI**.
+- 
+--The CRM may continue maintenance and integrity work, but new product-module expansion must not merge while production composition still has incomplete route parity, incomplete module lifecycle authority or incomplete golden scaffolding.
+-+The production composition migration is implemented. Product expansion remains blocked until every applicable workflow passes on one unchanged human-authored SHA and the PR review surface confirms no unresolved architectural regression.
+- 
+--## Verified progress in PR #135
+-+## Implemented integrity mechanisms
+- 
+--The production mutation/query route layer now assembles exact module-owned contributions through `crm-application-composition`. Central mutation planner, capability executor and query routers have been removed from the production path; tenant activation gates wrap business routes; and Accounts, Contact Points, Party Relationships, Consents and Identity Resolution perform cross-owner reference validation before final live authorization.
+--
+--Background processing now assembles through one deterministic, phase-ordered registry. Import execution, export selection, Sales-to-Activities linking, Sales and Activities projections, Customer 360 projection and global search are module-owned contributions guarded by tenant module activation. `ApplicationComponents` no longer owns fixed worker fields or invokes a hard-coded worker sequence.
+--
