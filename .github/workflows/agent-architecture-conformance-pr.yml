@@ -37,6 +37,27 @@ jobs:
               for line in embedded.splitlines()
           )
           exec(compile(script, '<architecture-conformance-sync>', 'exec'))
+
+          normalized_paths = [
+              Path('AGENTS.md'),
+              Path('.github/pull_request_template.md'),
+              Path('docs/ARCHITECTURE_READINESS.md'),
+              Path('docs/SYSTEM_INVARIANTS.md'),
+              Path('docs/APPLICATION_ARCHITECTURE.md'),
+              Path('docs/DEVELOPMENT_WORKFLOW.md'),
+              Path('docs/MODULE_DEVELOPMENT.md'),
+              Path('docs/DELIVERY_GOVERNANCE.md'),
+              Path('docs/PROJECT_STATUS.md'),
+              Path('docs/IMPLEMENTATION_ROADMAP.md'),
+              Path('docs/PHASE8_DELIVERY_PLAN.md'),
+              Path('scripts/repo.py'),
+          ]
+          for path in normalized_paths:
+              text = path.read_text(encoding='utf-8')
+              path.write_text(
+                  "\n".join(line.rstrip() for line in text.splitlines()) + "\n",
+                  encoding='utf-8',
+              )
           PY
             python -m py_compile scripts/repo.py
             python scripts/check_architecture.py
