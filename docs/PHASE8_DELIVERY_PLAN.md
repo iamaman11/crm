@@ -109,13 +109,14 @@ Implemented:
 
 Exported bytes remain derived artifacts and never become authoritative customer-master state.
 
-### 8A.9 — Customer Data Quality Rules, Completeness and Stewardship — Gate review
+### 8A.9 — Customer Data Quality Rules, Completeness and Stewardship — Complete
 
 Issue: #124  
-Implementation: draft PR #132  
+Delivered by: PR #132  
+Merge commit: `8a1664309be9dc0c5e3bf9014cf248b1c3680035`  
 Depends on: completed #123 / merged PR #130 (`0e7f9889362533446cc65d95dcf7969a60086a57`)
 
-The Party-focused v1 implementation is delivered and has passed its functional unchanged-head gate. It remains **Gate review**, not **Complete**, until synchronized documentation passes a final exact-head gate and PR #132 is merged.
+The Party-focused v1 implementation is merged and complete.
 
 #### Delivered ownership boundary
 
@@ -165,7 +166,7 @@ The v1 packet proves:
 
 #### Acceptance evidence
 
-Source-authored functional candidate `29381433c992716f16ef3098f6acd73cfa2d2298` passed all 15 applicable workflows unchanged, including:
+Final source-authored candidate `c066c278edd75b5f78bbfcead792d34164c76ff5` passed all 15 applicable workflows unchanged before merge, including:
 
 - Contract and Governance checks;
 - current Cargo lockfile, rustfmt, Clippy and all workspace tests;
@@ -177,19 +178,19 @@ Source-authored functional candidate `29381433c992716f16ef3098f6acd73cfa2d2298` 
 - governed remediation crash recovery with no duplicate Party update;
 - strict persisted remediation evidence and FORCE RLS.
 
-Documentation changes after that candidate invalidate the exact-SHA evidence. The synchronized head must pass the same final gate before PR #132 leaves draft.
-
-### 8A.10 — Governed Customer Enrichment and Provenance — Planned
+### 8A.10 — Governed Customer Enrichment and Provenance — Ready
 
 Issue: #125  
-Depends on: merged #124 / PR #132
+Depends on: completed #124 / merged PR #132 (`8a1664309be9dc0c5e3bf9014cf248b1c3680035`)
+
+This is the next customer-master production packet.
 
 Deliver provider adapter boundaries, secret handles, versioned mappings, source/freshness/licensing provenance, review/approval policy where required and exact owner-capability application of accepted changes.
 
 ### 8A.11 — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — Planned
 
 Issue: #126  
-Depends on: #123, merged #124 and #125
+Depends on: #123, completed #124 and #125
 
 Deliver governed privacy request lifecycle, access/export, live restriction enforcement, owner-aware deletion/anonymization planning, retention/legal-hold conflict handling and downstream search/projection convergence with immutable evidence preservation where required.
 
