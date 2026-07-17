@@ -1,5 +1,12 @@
 #![forbid(unsafe_code)]
 
+pub mod definitions;
+
+pub use definitions::{
+    MappingDraft, MappingNormalization, MappingVersion, MappingVersionId, ProviderProfileDraft,
+    ProviderProfileVersion, ProviderProfileVersionId, RawPayloadPolicy, TargetField,
+};
+
 /// Stable crate identity for repository tooling.
 pub const CRATE_NAME: &str = "crm-customer-enrichment";
 /// Immutable governed module identity.
