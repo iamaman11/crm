@@ -1,0 +1,320 @@
+-                )
+-                .await
+-                .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+-            if let SalesActivitiesLinkDeliveryOutcome::DeadLettered { error_code } = outcome {
+-                return Err(ApplicationRuntimeError::Server(format!(
+-                    "link event dead-lettered: {error_code}"
+-                )));
+-            }
+-        }
+-        let Some(next) = page.next_cursor else {
+-            return Ok(());
+-        };
+-        after = Some(next);
+-    }
+-}
+-
+-async fn drain_projection(
+-    worker: &Phase6ProjectionWorker,
+-    tenant_id: TenantId,
+-    projection_id: &str,
+-) -> Result<(), ApplicationRuntimeError> {
+-    loop {
+-        let result = worker
+-            .run_batch(tenant_id.clone(), projection_id, PROJECTION_PAGE_SIZE)
+-            .await
+-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+-        if !result.has_more {
+-            return Ok(());
+-        }
+-    }
+-}
+-
+-#[derive(Clone, Copy)]
+-struct BootstrapVisibilityResource<'a> {
+-    owner_module_id: &'a str,
+-    resource_type: &'a str,
+-}
+-
+ fn bootstrap_application_access(
+     config: &ApplicationConfig,
+     now_unix_nanos: i64,
+@@ -880,6 +748,8 @@ fn bootstrap_application_access(
+     query_definitions: &[CapabilityDefinition],
+ ) -> Result<(), ApplicationRuntimeError> {
+     let expires_at = expiry(now_unix_nanos)?;
++    let visibility = build_bootstrap_visibility_registry()
++        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+     for tenant_id in &config.tenant_ids {
+         for definition in mutation_definitions.iter().chain(query_definitions) {
+             authorization_store
+@@ -896,251 +766,18 @@ fn bootstrap_application_access(
+                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+         }
+         for definition in query_definitions {
+-            match definition.owner_module_id.as_str() {
+-                "crm.sales" => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: "crm.sales",
+-                        resource_type: SALES_RECORD_TYPE,
+-                    },
+-                    sales_fields(),
+-                    expires_at,
+-                )?,
+-                "crm.activities" => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: "crm.activities",
+-                        resource_type: ACTIVITIES_RECORD_TYPE,
+-                    },
+-                    task_fields(),
+-                    expires_at,
+-                )?,
+-                PARTIES_MODULE_ID => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: PARTIES_MODULE_ID,
+-                        resource_type: PARTY_RECORD_TYPE,
+-                    },
+-                    party_fields(),
+-                    expires_at,
+-                )?,
+-                ACCOUNTS_MODULE_ID => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: ACCOUNTS_MODULE_ID,
+-                        resource_type: ACCOUNT_RECORD_TYPE,
+-                    },
+-                    account_fields(),
+-                    expires_at,
+-                )?,
+-                CONTACT_POINTS_MODULE_ID => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: CONTACT_POINTS_MODULE_ID,
+-                        resource_type: CONTACT_POINT_RECORD_TYPE,
+-                    },
+-                    contact_point_fields(),
+-                    expires_at,
+-                )?,
+-                CONSENTS_MODULE_ID => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: CONSENTS_MODULE_ID,
+-                        resource_type: CONSENT_RECORD_TYPE,
+-                    },
+-                    consent_fields(),
+-                    expires_at,
+-                )?,
+-                IDENTITY_RESOLUTION_MODULE_ID => {
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
+-                            resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,
+-                        },
+-                        identity_resolution_fields(),
+-                        expires_at,
+-                    )?;
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
+-                            resource_type: IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
+-                        },
+-                        identity_resolution_merge_fields(),
+-                        expires_at,
+-                    )?;
+-                }
+-                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
+-                        resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
+-                    },
+-                    party_relationship_fields(),
+-                    expires_at,
+-                )?,
+-                CUSTOMER_DATA_OPERATIONS_MODULE_ID => {
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+-                            resource_type: CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
+-                        },
+-                        customer_data_import_job_fields(),
+-                        expires_at,
+-                    )?;
+-                    if definition.capability_id.as_str() == LIST_IMPORT_ROWS_CAPABILITY {
+-                        upsert_bootstrap_visibility(
+-                            visibility_store,
+-                            config,
+-                            tenant_id,
+-                            definition,
+-                            BootstrapVisibilityResource {
+-                                owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+-                                resource_type: CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
+-                            },
+-                            customer_data_import_row_fields(),
+-                            expires_at,
+-                        )?;
+-                    }
+-                }
+-                "crm.data-quality" => upsert_bootstrap_visibility(
++            let resources = visibility
++                .resources_for(definition)
++                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
++            for resource in resources {
++                upsert_bootstrap_visibility(
+                     visibility_store,
+                     config,
+                     tenant_id,
+                     definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: "crm.data-quality",
+-                        resource_type: "data_quality.party_rule_set_version",
+-                    },
+-                    ["definition"].into_iter().map(str::to_owned).collect(),
++                    resource,
+                     expires_at,
+-                )?,
+-                METADATA_MODULE_ID => {}
+-                CUSTOMER_360_MODULE_ID => {
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: PARTIES_MODULE_ID,
+-                            resource_type: PARTY_RECORD_TYPE,
+-                        },
+-                        customer_360_party_fields(),
+-                        expires_at,
+-                    )?;
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: ACCOUNTS_MODULE_ID,
+-                            resource_type: ACCOUNT_RECORD_TYPE,
+-                        },
+-                        customer_360_account_fields(),
+-                        expires_at,
+-                    )?;
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: CONTACT_POINTS_MODULE_ID,
+-                            resource_type: CONTACT_POINT_RECORD_TYPE,
+-                        },
+-                        customer_360_contact_point_fields(),
+-                        expires_at,
+-                    )?;
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
+-                            resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
+-                        },
+-                        customer_360_party_relationship_fields(),
+-                        expires_at,
+-                    )?;
+-                }
+-                SEARCH_MODULE_ID => {
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: "crm.sales",
+-                            resource_type: SALES_RECORD_TYPE,
+-                        },
+-                        ["name"].into_iter().map(str::to_owned).collect(),
+-                        expires_at,
+-                    )?;
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: "crm.activities",
+-                            resource_type: ACTIVITIES_RECORD_TYPE,
+-                        },
+-                        ["subject"].into_iter().map(str::to_owned).collect(),
+-                        expires_at,
+-                    )?;
+-                    upsert_bootstrap_visibility(
+-                        visibility_store,
+-                        config,
+-                        tenant_id,
+-                        definition,
+-                        BootstrapVisibilityResource {
+-                            owner_module_id: PARTIES_MODULE_ID,
+-                            resource_type: PARTY_RECORD_TYPE,
+-                        },
+-                        party_fields(),
+-                        expires_at,
+-                    )?;
+-                }
+-                _ => {
+-                    return Err(ApplicationRuntimeError::Assembly(
+-                        "unsupported bootstrap query owner".to_owned(),
+-                    ));
+-                }
++                )?;
+             }
+         }
+     }
+@@ -1191,8 +828,7 @@ fn upsert_bootstrap_visibility(
+     config: &ApplicationConfig,
+     tenant_id: &TenantId,
+     definition: &CapabilityDefinition,
+-    resource: BootstrapVisibilityResource<'_>,
+-    allowed_fields: BTreeSet<String>,
++    resource: BootstrapVisibilityResource,
+     expires_at: i64,
+ ) -> Result<(), ApplicationRuntimeError> {
+     visibility_store
+@@ -1206,7 +842,7 @@ fn upsert_bootstrap_visibility(
