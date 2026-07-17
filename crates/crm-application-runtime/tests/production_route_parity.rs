@@ -5,13 +5,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 
-const PLATFORM_ROUTE_OWNERS: [&str; 2] = ["crm.metadata", "crm.search"];
-const FIRST_PARTY_EMPTY_ROUTE_MODULES: [&str; 1] = ["crm.sales-activities-link"];
-
 type RouteCoordinate = (String, String, String);
 
 #[derive(Debug, Deserialize)]
 struct BindingRegistry {
+    schema_version: String,
     modules: Vec<BindingModule>,
 }
 
@@ -27,18 +25,45 @@ struct BindingCapability {
     version: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct RouteClassifications {
+    schema_version: String,
+    platform_runtime_routes: Vec<ClassifiedRoute>,
+    non_runtime_contract_routes: Vec<ClassifiedRoute>,
+    empty_runtime_modules: Vec<ClassifiedModule>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClassifiedRoute {
+    owner_module_id: String,
+    id: String,
+    version: String,
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClassifiedModule {
+    module_id: String,
+    reason: String,
+}
+
 #[test]
-fn production_routes_exactly_cover_first_party_contract_bindings() {
+fn production_routes_exactly_cover_governed_bindings_and_exact_classifications() {
     let registry = binding_registry();
-    let manifest_modules: BTreeSet<String> = registry
+    let classifications = route_classifications();
+    assert_eq!(registry.schema_version, "crm.contract-bindings/v1");
+    assert_eq!(
+        classifications.schema_version,
+        "crm.production-route-classifications/v1"
+    );
+
+    let governed_modules: BTreeSet<String> = registry
         .modules
         .iter()
         .map(|module| module.module_id.clone())
         .collect();
-    let bound_routes: BTreeSet<RouteCoordinate> = registry
-        .modules
-        .iter()
-        .flat_map(|module| {
+    let governed_routes = unique_routes(
+        registry.modules.iter().flat_map(|module| {
             module.capabilities.iter().map(|capability| {
                 (
                     module.module_id.clone(),
@@ -46,76 +71,128 @@ fn production_routes_exactly_cover_first_party_contract_bindings() {
                     capability.version.clone(),
                 )
             })
-        })
+        }),
+        "governed contract bindings",
+    );
+    let bound_empty_modules: BTreeSet<String> = registry
+        .modules
+        .iter()
+        .filter(|module| module.capabilities.is_empty())
+        .map(|module| module.module_id.clone())
         .collect();
+
+    let platform_routes = classified_routes(
+        &classifications.platform_runtime_routes,
+        "platform runtime routes",
+    );
+    let non_runtime_routes = classified_routes(
+        &classifications.non_runtime_contract_routes,
+        "non-runtime contract routes",
+    );
+    assert!(
+        platform_routes.is_disjoint(&non_runtime_routes),
+        "route classifications overlap"
+    );
+    assert!(
+        platform_routes
+            .iter()
+            .all(|(owner, _, _)| !governed_modules.contains(owner)),
+        "platform routes may not hide a governed module route"
+    );
+    assert!(
+        non_runtime_routes.is_subset(&governed_routes),
+        "non-runtime routes must name governed coordinates"
+    );
+
+    let classified_empty_modules = unique_modules(&classifications.empty_runtime_modules);
+    assert_eq!(
+        classified_empty_modules, bound_empty_modules,
+        "route-less module classifications drifted from governed bindings"
+    );
 
     let mutation_definitions = application_mutation_definitions().unwrap();
     let query_definitions = application_query_definitions().unwrap();
     assert_route_kinds_are_disjoint(&mutation_definitions, &query_definitions);
-
-    let runtime_routes =
-        unique_runtime_routes(mutation_definitions.iter().chain(query_definitions.iter()));
-    let first_party_routes: BTreeSet<RouteCoordinate> = runtime_routes
-        .iter()
-        .filter(|(module_id, _, _)| manifest_modules.contains(module_id))
-        .cloned()
-        .collect();
-
-    assert_eq!(
-        first_party_routes, bound_routes,
-        "production route coverage drifted from module contract bindings"
+    let actual_routes = unique_runtime_routes(
+        mutation_definitions.iter().chain(query_definitions.iter()),
     );
 
-    let platform_owners: BTreeSet<String> = runtime_routes
-        .iter()
-        .map(|(module_id, _, _)| module_id.clone())
-        .filter(|module_id| !manifest_modules.contains(module_id))
-        .collect();
-    assert_eq!(
-        platform_owners,
-        PLATFORM_ROUTE_OWNERS
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
-        "a non-manifest production route owner requires explicit platform classification"
-    );
-
-    let first_party_route_owners: BTreeSet<String> = first_party_routes
-        .iter()
-        .map(|(module_id, _, _)| module_id.clone())
-        .collect();
-    let empty_route_modules: BTreeSet<String> = manifest_modules
-        .difference(&first_party_route_owners)
+    let mut expected_routes = governed_routes
+        .difference(&non_runtime_routes)
         .cloned()
-        .collect();
+        .collect::<BTreeSet<_>>();
+    expected_routes.extend(platform_routes);
     assert_eq!(
-        empty_route_modules,
-        FIRST_PARTY_EMPTY_ROUTE_MODULES
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
-        "a first-party module without production routes requires explicit classification"
+        actual_routes, expected_routes,
+        "manifest/binding/production route parity drifted"
     );
 }
 
 fn binding_registry() -> BindingRegistry {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../contracts/module-contract-bindings.json");
-    serde_json::from_slice(&fs::read(path).unwrap()).unwrap()
+    serde_json::from_slice(&fs::read(root().join("contracts/module-contract-bindings.json")).unwrap())
+        .unwrap()
+}
+
+fn route_classifications() -> RouteClassifications {
+    serde_json::from_slice(
+        &fs::read(root().join("contracts/production-route-classifications.json")).unwrap(),
+    )
+    .unwrap()
+}
+
+fn root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn classified_routes(routes: &[ClassifiedRoute], label: &str) -> BTreeSet<RouteCoordinate> {
+    for route in routes {
+        assert!(
+            !route.reason.trim().is_empty(),
+            "{label} classification lacks a reason"
+        );
+    }
+    unique_routes(
+        routes.iter().map(|route| {
+            (
+                route.owner_module_id.clone(),
+                route.id.clone(),
+                route.version.clone(),
+            )
+        }),
+        label,
+    )
+}
+
+fn unique_modules(modules: &[ClassifiedModule]) -> BTreeSet<String> {
+    let mut unique = BTreeSet::new();
+    for module in modules {
+        assert!(
+            !module.reason.trim().is_empty(),
+            "route-less module classification lacks a reason"
+        );
+        assert!(
+            unique.insert(module.module_id.clone()),
+            "duplicate route-less module classification: {}",
+            module.module_id
+        );
+    }
+    unique
 }
 
 fn unique_runtime_routes<'a>(
     definitions: impl IntoIterator<Item = &'a CapabilityDefinition>,
 ) -> BTreeSet<RouteCoordinate> {
-    let mut routes = BTreeSet::new();
-    for definition in definitions {
-        let coordinate = route_coordinate(definition);
-        assert!(
-            routes.insert(coordinate.clone()),
-            "duplicate production route coordinate: {coordinate:?}"
-        );
-    }
-    routes
+    unique_routes(definitions.into_iter().map(route_coordinate), "production routes")
+}
+
+fn unique_routes(
+    routes: impl IntoIterator<Item = RouteCoordinate>,
+    label: &str,
+) -> BTreeSet<RouteCoordinate> {
+    let routes = routes.into_iter().collect::<Vec<_>>();
+    let unique = routes.iter().cloned().collect::<BTreeSet<_>>();
+    assert_eq!(routes.len(), unique.len(), "duplicate coordinate in {label}");
+    unique
 }
 
 fn assert_route_kinds_are_disjoint(

@@ -32,6 +32,33 @@ VALUES
     '{"platform":"metadata"}'::jsonb,
     clock_timestamp(),
     'platform'
+  ),
+  (
+    'crm.search',
+    '1.0.0',
+    'crm.cjson/v1',
+    decode(repeat('ce', 32), 'hex'),
+    '{"platform":"search"}'::jsonb,
+    clock_timestamp(),
+    'platform'
+  ),
+  (
+    'crm.customer360',
+    '0.1.0',
+    'crm.cjson/v1',
+    decode(repeat('cf', 32), 'hex'),
+    '{"platform":"customer360"}'::jsonb,
+    clock_timestamp(),
+    'platform'
+  ),
+  (
+    'crm.sales-activities-link',
+    '0.1.0',
+    'crm.cjson/v1',
+    decode(repeat('d0', 32), 'hex'),
+    '{"platform":"sales-activities-link"}'::jsonb,
+    clock_timestamp(),
+    'platform'
   );
 
 INSERT INTO crm.capability_registry (
@@ -276,6 +303,62 @@ VALUES (
   1,
   1,
   1
+);
+COMMIT;
+
+BEGIN;
+SET LOCAL app.tenant_id = 'tenant-b';
+SET LOCAL app.actor_id = 'actor-b';
+SET LOCAL app.request_id = 'request-bootstrap-b';
+SET LOCAL app.capability_id = 'test.record.mutate';
+SET LOCAL app.capability_version = '1.0.0';
+SET LOCAL app.business_transaction_id = 'tx-bootstrap-b';
+
+INSERT INTO crm.actors (
+  tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id
+) VALUES (
+  'tenant-b', 'actor-b', 'service', 'active', 'Tenant B bootstrap actor', 'tx-bootstrap-b'
+);
+
+INSERT INTO crm.idempotency_records (
+  tenant_id, idempotency_scope, idempotency_key, request_hash, status,
+  business_transaction_id, expires_at
+) VALUES (
+  'tenant-b', 'test.record.mutate@1.0.0', 'bootstrap-b',
+  decode(repeat('12', 32), 'hex'), 'completed', 'tx-bootstrap-b',
+  clock_timestamp() + interval '1 day'
+);
+
+INSERT INTO crm.outbox_events (
+  tenant_id, event_id, business_transaction_id, aggregate_type, aggregate_id,
+  aggregate_version, event_sequence, event_type, deduplication_key, schema_id,
+  schema_version, descriptor_hash, data_class, payload_encoding,
+  maximum_payload_size, retention_policy_id, payload_bytes, occurred_at
+) VALUES (
+  'tenant-b', 'event-bootstrap-b', 'tx-bootstrap-b', 'crm.actor', 'actor-b',
+  1, 1, 'actor.created', 'bootstrap-b', 'crm.actor.created.v1', '1.0.0',
+  decode(repeat('21', 32), 'hex'), 'internal', 'protobuf', 16, 'standard',
+  decode('02', 'hex'), clock_timestamp()
+);
+
+INSERT INTO crm.audit_records (
+  tenant_id, audit_sequence, audit_record_id, business_transaction_id, actor_id,
+  capability_id, capability_version, canonicalization_profile, previous_hash,
+  record_hash, canonical_envelope, occurred_at
+) VALUES (
+  'tenant-b', 1, 'audit-bootstrap-b', 'tx-bootstrap-b', 'actor-b',
+  'test.record.mutate', '1.0.0', 'crm.cjson/v1',
+  decode(repeat('00', 32), 'hex'), decode(repeat('13', 32), 'hex'),
+  convert_to('{"audit":"bootstrap-b"}', 'UTF8'), clock_timestamp()
+);
+
+INSERT INTO crm.business_transactions (
+  tenant_id, business_transaction_id, actor_id, request_id, capability_id,
+  capability_version, expected_outbox_events, expected_audit_records,
+  expected_idempotency_records
+) VALUES (
+  'tenant-b', 'tx-bootstrap-b', 'actor-b', 'request-bootstrap-b',
+  'test.record.mutate', '1.0.0', 1, 1, 1
 );
 COMMIT;
 

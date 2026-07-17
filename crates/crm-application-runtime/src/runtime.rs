@@ -172,7 +172,7 @@ impl ApplicationRuntime {
             .try_into()
             .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
         let activation: Arc<dyn crm_application_composition::ModuleActivationPort> = Arc::new(
-            PostgresModuleActivation::new(store.clone(), config.bootstrap_allow_phase6),
+            PostgresModuleActivation::new(store.clone()),
         );
         let capability_authorizer: Arc<dyn crm_capability_runtime::CapabilityAuthorizer> =
             authorizer.clone();
@@ -189,6 +189,12 @@ impl ApplicationRuntime {
         })
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let module_ids = composition.module_ids().clone();
+        if config.bootstrap_allow_phase6 {
+            store
+                .bootstrap_activate_published_modules(&config.tenant_ids, &module_ids)
+                .await
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        }
         let mutation_definitions = composition.mutation_definitions().to_vec();
         let query_definitions = composition.query_definitions().to_vec();
         let internal_import_outcome_definitions = internal_capability_definitions()

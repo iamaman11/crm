@@ -1,8 +1,8 @@
 # Architecture Readiness Gate
 
-Status: **Blocked until PR #135 completes issue #134**.
+Status: **Verification pending on PR #135 exact-head CI**.
 
-The CRM may continue maintenance and integrity work, but new product-module expansion must not merge while production composition still has incomplete route parity, incomplete module lifecycle authority or incomplete golden scaffolding.
+The CRM may continue maintenance and integrity work, but new product-module expansion must not merge until the completed integrity mechanisms pass together on one unchanged exact SHA.
 
 ## Verified progress in PR #135
 
@@ -12,7 +12,7 @@ Background processing now assembles through one deterministic, phase-ordered reg
 
 Bootstrap query visibility now resolves through declarative module contributions rather than a central `owner_module_id` switch. Data Quality remediation dispatches nested Party mutation through the exact Party executor and verifies Party activation before the nested authoritative operation.
 
-These milestones do **not** make the architecture ready by themselves. Authoritative persisted installation lifecycle, mechanical manifest/binding/production-route parity, golden scaffolding and one unchanged all-green exact SHA remain mandatory.
+These mechanisms now include authoritative persisted installation lifecycle, exact manifest/binding/production-route parity and golden scaffolding. They do **not** make the architecture ready until one unchanged exact SHA passes every applicable workflow.
 
 Architecture readiness is proven only when all of the following hold together on one exact commit:
 
@@ -28,3 +28,14 @@ Architecture readiness is proven only when all of the following hold together on
 10. All applicable workflows pass together on one unchanged exact SHA.
 
 No marker may be suppressed or allowlisted merely to make the gate green. The corresponding legacy wiring must be removed through a real module-owned replacement.
+
+
+## Implemented integrity mechanisms
+
+- Production mutations and queries are assembled from exact module-owned contributions.
+- Tenant route and worker activation reads `crm.module_installations`; bootstrap provisions durable active installations instead of bypassing lifecycle state.
+- Background workers and bootstrap visibility are deterministic contribution registries.
+- `production_route_parity` compares compiled production coordinates with governed bindings and explicit exact-route classifications.
+- The module scaffold emits `production/CONTRIBUTION.md` so new modules cannot omit the production boundary.
+
+Readiness remains blocked until every applicable workflow is green on one unchanged human-authored SHA.

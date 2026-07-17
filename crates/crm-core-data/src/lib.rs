@@ -7,6 +7,7 @@ pub mod capability_executor;
 mod metadata_capability_executor;
 mod metadata_query_store;
 mod metadata_store;
+mod module_activation;
 pub mod postgres;
 pub mod postgres_batch;
 mod postgres_event_delivery;

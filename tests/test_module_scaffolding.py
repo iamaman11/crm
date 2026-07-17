@@ -87,6 +87,9 @@ members = [
             self.assertIn(Path("modules/crm-customer/module.yaml"), changed)
             self.assertIn(Path("modules/crm-customer/contracts/README.md"), changed)
             self.assertIn(Path("modules/crm-customer/adapters/README.md"), changed)
+            self.assertIn(
+                Path("modules/crm-customer/production/CONTRIBUTION.md"), changed
+            )
             self.assertIn(Path("modules/crm-customer/tests/acceptance.rs"), changed)
 
             manifest_path = root / "modules/crm-customer/module.yaml"
@@ -107,6 +110,14 @@ members = [
                 manifest["lifecycle"]["uninstall_policy"],
                 "retain_business_records",
             )
+
+            contribution = (
+                root / "modules/crm-customer/production/CONTRIBUTION.md"
+            ).read_text(encoding="utf-8")
+            self.assertIn("crm.customer", contribution)
+            self.assertIn("ModuleActivationPort", contribution)
+            self.assertIn("pre-authorization semantic validation", contribution)
+            self.assertIn("no edits to central", contribution)
 
             acceptance = (
                 root / "modules/crm-customer/tests/acceptance.rs"

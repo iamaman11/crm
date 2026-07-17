@@ -122,15 +122,11 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct PostgresModuleActivation {
     store: PostgresDataStore,
-    bootstrap_active: bool,
 }
 
 impl PostgresModuleActivation {
-    pub fn new(store: PostgresDataStore, bootstrap_active: bool) -> Self {
-        Self {
-            store,
-            bootstrap_active,
-        }
+    pub fn new(store: PostgresDataStore) -> Self {
+        Self { store }
     }
 }
 
@@ -140,12 +136,7 @@ impl ModuleActivationPort for PostgresModuleActivation {
         tenant_id: &'a TenantId,
         module_id: &'a ModuleId,
     ) -> PortFuture<'a, Result<bool, SdkError>> {
-        Box::pin(async move {
-            if self.bootstrap_active {
-                return Ok(true);
-            }
-            self.store.is_module_active(tenant_id, module_id).await
-        })
+        Box::pin(async move { self.store.is_module_active(tenant_id, module_id).await })
     }
 }
 
