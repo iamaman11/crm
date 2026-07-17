@@ -48,10 +48,11 @@ Implement each packet in this order unless an accepted ADR says otherwise:
 1. ownership and invariants
 2. public contracts
 3. application ports/use cases
-4. infrastructure adapters
-5. composition
-6. acceptance tests
-7. operational and documentation closure
+4. module-owned production contribution contract
+5. infrastructure adapters
+6. exact-coordinate composition registration
+7. acceptance tests
+8. operational and documentation closure
 ```
 
 The dependency direction remains:
@@ -73,7 +74,9 @@ When an independent local verifier is available, these checkpoints also define t
 - dependency and source-boundary checks pass;
 - affected crates/packages compile;
 - published contracts and module manifests are internally consistent;
-- no forbidden cross-module or infrastructure dependency is introduced.
+- no forbidden cross-module or infrastructure dependency is introduced;
+- exact route/worker ownership, durable activation and classification impacts are identified;
+- generic router and worker algorithms remain free of business switches.
 
 ### Checkpoint B — behavior
 
@@ -106,7 +109,8 @@ A pull request description must state:
 
 - the architecture result;
 - ownership and dependency boundaries;
-- exact production path;
+- exact production path and module-owned contribution coordinates;
+- tenant activation, worker-phase and route-classification impact;
 - failure and rollback behavior;
 - acceptance evidence;
 - local exact-SHA verification status when the multi-agent protocol is used;
@@ -140,10 +144,12 @@ module manifest
 published contracts
 domain aggregates and value objects
 application commands/queries and ports
+pre-authorization semantic validators
 capability/query adapters
 persistence and external adapters
-composition registration
-unit/integration/PostgreSQL acceptance
+module-owned production contribution
+exact-coordinate composition registration and durable activation
+unit/integration/PostgreSQL/process acceptance
 ```
 
 Physical crate boundaries may vary, but ownership and dependency direction may not.
@@ -209,6 +215,8 @@ Faster delivery must never weaken:
 - atomic state, outbox, audit and idempotency evidence;
 - rebuildable non-authoritative projections;
 - safe disable, upgrade, rollback and uninstall behavior;
-- exact typed money, time, identity and lifecycle semantics.
+- exact typed money, time, identity and lifecycle semantics;
+- module-owned route/worker contributions with no central business switches;
+- exact manifest/binding/production-route parity and individually reasoned classifications.
 
 The process is optimized for fewer coordination steps, faster evidence and earlier failure reproduction, not fewer correctness guarantees.

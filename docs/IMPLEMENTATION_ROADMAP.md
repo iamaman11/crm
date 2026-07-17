@@ -2,12 +2,12 @@
 
 Status: **Normative delivery plan**
 
-Parent epic: #2  
-Governing rules: `SYSTEM_INVARIANTS.md`  
-Delivery-control policy: `DELIVERY_GOVERNANCE.md`  
-Current concise state: `PROJECT_STATUS.md`  
-Detailed Phase 8 sequence: `PHASE8_DELIVERY_PLAN.md`  
-Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`  
+Parent epic: #2
+Governing rules: `SYSTEM_INVARIANTS.md`
+Delivery-control policy: `DELIVERY_GOVERNANCE.md`
+Current concise state: `PROJECT_STATUS.md`
+Detailed Phase 8 sequence: `PHASE8_DELIVERY_PLAN.md`
+Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`
 Business-module accounting: `MODULE_CATALOG.md`
 
 ## 1. Purpose
@@ -81,6 +81,10 @@ Delivered independent Sales `Deal` and Activities `Task` owner aggregates, versi
 
 Delivered golden module tooling, generalized projection runtime, permission-aware global search, typed web product shell, immutable tenant-authorized metadata, Admin Studio publication/rollback and trusted-code UI-extension failure isolation.
 
+### Native application-composition integrity — Complete
+
+Issue #134 / PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8` completed module-owned exact-coordinate routing, durable tenant activation, pre-authorization cross-owner validation, deterministic worker contributions, exact production-route parity, immutable compatibility gates and production contribution scaffolding. This is the required baseline for all subsequent Phase 8 modules.
+
 Untrusted third-party execution remains Phase 10.
 
 ## 6. Phase 8 — expert owner domains and product experience
@@ -91,7 +95,7 @@ Detailed sequencing lives in `PHASE8_DELIVERY_PLAN.md`.
 
 ### 8A — canonical customer master, identity, consent and customer-data lifecycle
 
-State: **In progress**  
+State: **In progress**
 Parent issue: #28
 
 Completed packets:
@@ -113,7 +117,7 @@ Completed packets:
 
 Active and planned sequence:
 
-1. **8A.10 / #125 — Ready:** Governed Customer Enrichment and Provenance is the next customer-master production packet.
+1. **8A.10 / #125 — Ready:** Governed Customer Enrichment and Provenance is the next customer-master production packet, based on completed architecture integrity issue #134 / PR #135.
 2. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
 Phase 8A is complete only when the customer-master acceptance baseline covers:
@@ -156,7 +160,7 @@ The merged 8A.9 packet proves:
 
 ### 8B — product catalog, pricing, CPQ and quote-to-revenue
 
-State: **Planned**  
+State: **Planned**
 Issue: #29
 
 Required owner domains include Product Catalog, Price Books/Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements and governed billing/ERP/payment/tax/fulfillment integration boundaries.
@@ -181,7 +185,7 @@ Each authoritative domain receives an explicit owner and cannot be hidden inside
 
 ## 7. Phase 9 — AI-native CRM
 
-State: **Planned**  
+State: **Planned**
 Issue: #12
 
 AI is an authenticated audited Actor using permission-scoped governed tools. It has no alternate identity-merge, consent or mutation path.
@@ -190,14 +194,14 @@ Required outcomes include tenant/data-class/purpose/residency/cost-aware model r
 
 ## 8. Phase 10 — signed marketplace and sandbox
 
-State: **Planned**  
+State: **Planned**
 Issue: #13
 
 Required outcomes include signed packages, publisher identity, dependency/compatibility resolution, SBOM/provenance policy, explicit grants, sandboxed untrusted execution, quotas, timeouts, kill switch and safe lifecycle operations.
 
 ## 9. Phase 11 — enterprise security and production proof
 
-State: **Planned / continuous hardening**  
+State: **Planned / continuous hardening**
 Issue: #14
 
 Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarchy/encryption, WORM audit export, privacy/legal-hold integration, backup/PITR/restore, residency, supply-chain/security testing, load/chaos proof, SLOs, alerting, incident response and runbooks.
@@ -206,7 +210,7 @@ Enterprise claims require automated and operational evidence, not configuration 
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Start #125 from merged Phase 8A.9 baseline `8a1664309be9dc0c5e3bf9014cf248b1c3680035` as the single active customer-master production packet.
+1. Start #125 from accepted native-composition baseline `023fa5ef1d510d5bcc32222c739e6d58e5696fb8` as the single active customer-master production packet.
 2. Freeze enrichment provider, secret-handle, mapping, provenance, review and exact owner-capability application boundaries before publishing public contracts.
 3. Deliver #125 and then #126 in dependency order.
 4. Close Phase 8A only after its full merged acceptance baseline is proven.

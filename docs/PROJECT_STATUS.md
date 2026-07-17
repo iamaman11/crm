@@ -7,11 +7,12 @@ This document is the concise human-readable status page. It is not the normative
 Authoritative references:
 
 1. `SYSTEM_INVARIANTS.md` — absolute architecture rules.
-2. `DELIVERY_GOVERNANCE.md` — source-of-truth, packet-state and synchronization policy.
-3. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
-4. `PHASE8_DELIVERY_PLAN.md` — detailed active Phase 8 packet sequence.
-5. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
-6. `MODULE_CATALOG.md` — business-module ownership and readiness accounting.
+2. `ARCHITECTURE_READINESS.md` — accepted native-composition non-regression baseline.
+3. `DELIVERY_GOVERNANCE.md` — source-of-truth, packet-state and synchronization policy.
+4. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
+5. `PHASE8_DELIVERY_PLAN.md` — detailed active Phase 8 packet sequence.
+6. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
+7. `MODULE_CATALOG.md` — business-module ownership and readiness accounting.
 
 ## Current position
 
@@ -39,6 +40,8 @@ Current Phase 8A execution baseline:
 The active dependency lane is:
 
 `8A.10 -> 8A.11 -> Phase 8A closure -> 8B`
+
+The accepted architecture baseline is issue #134 / PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`. It provides module-owned exact-coordinate routing, durable activation, pre-authorization cross-owner semantics, deterministic workers, exact route parity and golden production scaffolding. Phase 8A.10 must build on this baseline rather than the older post-8A.9 commit directly.
 
 A later packet may have architecture preparation, but it is not the active production merge target until its prerequisite is merged and verified against the accepted baseline.
 
@@ -83,7 +86,9 @@ The repository contains a production-composed modular CRM platform foundation wi
 - governed event delivery and an optional Sales–Activities link module;
 - generalized rebuildable projections and permission-aware search;
 - neutral cross-domain global-search composition;
-- real application composition and deployable `services/crm-api` process acceptance;
+- native module-owned exact-coordinate application composition and deployable `services/crm-api` process acceptance;
+- durable tenant module activation and deterministic activation-gated worker composition;
+- mechanical manifest/binding/production-route parity and immutable publication compatibility;
 - typed web product shell with governed generated browser clients and browser E2E;
 - immutable tenant-authorized metadata publication and rollback;
 - Admin Studio publish/impact/activate/rollback workflow;
@@ -151,6 +156,8 @@ Current architecture and delivery standards require:
 - FORCE RLS and cross-tenant negative testing;
 - immutable published versions and compatibility gates;
 - rebuildable non-authoritative search/projections;
+- exact module-owned route/validator/worker contributions with no central business switches;
+- durable installation-state activation and exact route classifications;
 - exact-SHA final evidence for every merge candidate;
 - synchronization of roadmap, status, module accounting, issues and PR descriptions when state changes.
 
@@ -158,8 +165,8 @@ See `DELIVERY_GOVERNANCE.md` for the normative control rules.
 
 ## Immediate next actions
 
-1. Start #125 from merged Phase 8A.9 baseline `8a1664309be9dc0c5e3bf9014cf248b1c3680035`.
-2. Freeze governed enrichment provider, secret-handle, mapping, provenance, licensing and owner-capability application boundaries.
+1. Start #125 from accepted native-composition baseline `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`.
+2. Freeze enrichment ownership, module contribution, provider adapter, secret-handle, mapping, provenance, licensing, activation and exact owner-capability application boundaries before implementation.
 3. Deliver #125 and then #126 in dependency order.
 4. Close Phase 8A only after its full merged acceptance baseline is proven.
 5. Begin Phase 8B / #29 only after the customer-master baseline is complete.

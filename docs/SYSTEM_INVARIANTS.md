@@ -1,6 +1,6 @@
 # Ultimate CRM — System Invariants v1
 
-Status: **Normative**  
+Status: **Normative**
 Applies to: platform core, first-party modules, marketplace modules, workflows, AI actors, integrations, UI extensions, infrastructure and operational tooling.
 
 The keywords **MUST**, **MUST NOT**, **SHOULD** and **MAY** are normative. A component that violates a MUST or MUST NOT is not conformant with the platform.
@@ -132,7 +132,18 @@ Arbitrary JavaScript, Python, Lua, shell or dynamic SQL execution inside busines
 57. Backups, restores, tenant exports and tenant moves MUST preserve referential, event and audit consistency.
 58. Production readiness requires measured performance, security testing, restore drills and SLO evidence; documentation alone is insufficient.
 
-## 11. Conformance gates
+## 11. Native production composition
+
+59. Every public production mutation route, query route and background worker MUST enter the process through an explicit deterministic module-owned contribution.
+60. Generic router and worker algorithms MUST NOT branch on business capability IDs, query IDs, owner-module IDs or concrete adapter types. Adding a module MUST NOT require changing generic dispatch or worker algorithms.
+61. Production routing MUST resolve exact owner, identifier, version and route kind. Duplicate coordinates, owner mismatches, kind mismatches and incomplete handlers MUST fail application assembly.
+62. Durable tenant module-installation state MUST be the runtime authority for route and worker activation. Bootstrap MAY provision durable installation state but MUST NOT create an in-memory activation bypass.
+63. Cross-owner reads required to establish request semantics MUST occur in pre-authorization semantic validation. After final live authorization, an authoritative executor MUST NOT perform unrelated awaited validation before its side effect.
+64. Every governed capability and query coordinate MUST have exactly one production route or one explicit exact non-runtime classification with a reason. Owner-wide, prefix and pattern allowlists are forbidden.
+65. Background workers MUST have deterministic module ownership, ordering/phase semantics, tenant activation checks, bounded work and retry/idempotency evidence.
+66. Golden scaffolding and permanent CI MUST enforce the production-contribution boundary so future modules cannot silently omit routing, activation, worker or acceptance obligations.
+
+## 12. Conformance gates
 
 A change MUST NOT merge unless applicable gates pass:
 
@@ -140,9 +151,12 @@ A change MUST NOT merge unless applicable gates pass:
 - strict module-manifest parsing and schema validation;
 - module dependency cycle and duplicate-provider checks;
 - architecture dependency-boundary checks;
+- native module composition, exact production-route parity and classification checks;
+- durable module-activation and deterministic worker-registry acceptance where affected;
 - formatting, linting and automated tests;
 - migration forward and rollback/compensation review;
 - security and data-class impact review for privileged capabilities;
-- reproducible artifact digest generation.
+- reproducible artifact digest generation;
+- all applicable specialized workflows green on one unchanged exact review SHA.
 
 Exceptions require an ADR with an owner, expiry date, migration plan and explicit risk acceptance. Permanent undocumented exceptions are forbidden.

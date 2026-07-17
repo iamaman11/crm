@@ -2,10 +2,10 @@
 
 Status: **Active execution — Phase 8A customer master**
 
-Parent program: #11  
-Customer-master program: #28  
-Commercial follow-on: #29  
-Delivery governance: `DELIVERY_GOVERNANCE.md`  
+Parent program: #11
+Customer-master program: #28
+Commercial follow-on: #29
+Delivery governance: `DELIVERY_GOVERNANCE.md`
 Functional scope guardrail: `CRM_CAPABILITY_COVERAGE.md`
 
 ## 1. Goal
@@ -25,6 +25,8 @@ Every Phase 8 packet must define:
 - projection/search implications;
 - frontend/product workflow where applicable;
 - import/export and compatibility consequences;
+- module-owned mutation/query/worker contributions and durable activation semantics;
+- exact route-parity/classification impact with no central business switches;
 - exact process/browser/operational acceptance gates.
 
 A packet may be marked **Complete** only after merge to `main`. Exact candidate evidence is invalidated by every later source or documentation change until applicable checks rerun.
@@ -64,7 +66,7 @@ Implemented deterministic duplicate-candidate case identity, bounded evidence wi
 
 ### 8A.6 — Merge, Unmerge, Provenance and Survivorship — Complete
 
-Delivered by #116 / PR #119.  
+Delivered by #116 / PR #119.
 Merge commit: `d5cb4502ad0c49158e0789d8749dc09160da7895`.
 
 Implemented approval-required reversible Party merge/unmerge, immutable merge-operation lineage, exact Party-version validation, field-level survivorship provenance, cycle-safe canonical redirection, permission-aware merge queries, hard PostgreSQL topology invariants and fresh-process acceptance.
@@ -73,7 +75,7 @@ Party remains authoritative. Merge does not delete Party records or destructivel
 
 ### 8A.7 — Customer Import Jobs, Versioned Mappings and Resumable Execution — Complete
 
-Delivered by #120 / PR #121.  
+Delivered by #120 / PR #121.
 Merge commit: `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
 
 Implemented:
@@ -92,7 +94,7 @@ Implemented:
 
 ### 8A.8 — Customer Export Jobs, Artifacts and Reconciliation Evidence — Complete
 
-Delivered by #123 / PR #130.  
+Delivered by #123 / PR #130.
 Merge commit: `0e7f9889362533446cc65d95dcf7969a60086a57`.
 
 Implemented:
@@ -111,9 +113,9 @@ Exported bytes remain derived artifacts and never become authoritative customer-
 
 ### 8A.9 — Customer Data Quality Rules, Completeness and Stewardship — Complete
 
-Issue: #124  
-Delivered by: PR #132  
-Merge commit: `8a1664309be9dc0c5e3bf9014cf248b1c3680035`  
+Issue: #124
+Delivered by: PR #132
+Merge commit: `8a1664309be9dc0c5e3bf9014cf248b1c3680035`
 Depends on: completed #123 / merged PR #130 (`0e7f9889362533446cc65d95dcf7969a60086a57`)
 
 The Party-focused v1 implementation is merged and complete.
@@ -180,16 +182,16 @@ Final source-authored candidate `c066c278edd75b5f78bbfcead792d34164c76ff5` passe
 
 ### 8A.10 — Governed Customer Enrichment and Provenance — Ready
 
-Issue: #125  
-Depends on: completed #124 / merged PR #132 (`8a1664309be9dc0c5e3bf9014cf248b1c3680035`)
+Issue: #125
+Depends on: completed #124 / merged PR #132 and completed architecture integrity #134 / merged PR #135 (`023fa5ef1d510d5bcc32222c739e6d58e5696fb8`)
 
-This is the next customer-master production packet.
+This is the next customer-master production packet and must branch from the accepted native-composition baseline.
 
-Deliver provider adapter boundaries, secret handles, versioned mappings, source/freshness/licensing provenance, review/approval policy where required and exact owner-capability application of accepted changes.
+Deliver a distinct enrichment ownership boundary, module-owned production contributions, provider adapter boundaries, secret handles, versioned mappings, source/freshness/licensing provenance, review/approval policy where required and exact owner-capability application of accepted changes. Provider I/O remains an infrastructure adapter and must not enter the pure business core.
 
 ### 8A.11 — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — Planned
 
-Issue: #126  
+Issue: #126
 Depends on: #123, completed #124 and #125
 
 Deliver governed privacy request lifecycle, access/export, live restriction enforcement, owner-aware deletion/anonymization planning, retention/legal-hold conflict handling and downstream search/projection convergence with immutable evidence preservation where required.
@@ -212,7 +214,7 @@ Phase 8A is complete only when the merged system proves:
 
 ## 4. Wave 8B — Product Catalog and Quote-to-Revenue
 
-State: **Planned**  
+State: **Planned**
 Issue: #29
 
 Begin only after the Phase 8A customer-master baseline is complete.

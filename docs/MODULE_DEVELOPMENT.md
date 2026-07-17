@@ -1,7 +1,7 @@
 # Ultimate CRM — Golden Module Development
 
-Status: **Phase 7 foundation**  
-Tracked by: issue #56 and parent Phase 7 issue #10.
+Status: **Normative golden-module workflow**
+Foundation: issue #56 / Phase 7; native production contribution baseline: issue #134 / PR #135.
 
 This guide defines the repository-supported starting point for new business owner modules and optional link modules. Scaffolding removes repetitive wiring; it does not decide domain ownership and never implies production readiness.
 
@@ -42,6 +42,7 @@ modules/crm-customer/
   src/lib.rs
   contracts/README.md
   adapters/README.md
+  production/CONTRIBUTION.md
   tests/acceptance.rs
   migrations/.gitkeep
   README.md
@@ -100,7 +101,10 @@ The generator refuses to overwrite an existing module directory or duplicate wor
 Use the cross-platform command runner rather than memorizing CI internals:
 
 ```bash
-# architecture dependency/source boundaries
+# full native architecture conformance preflight
+python scripts/repo.py conformance
+
+# focused architecture dependency/source boundaries
 python scripts/repo.py architecture
 
 # module manifests, normalized IR and Rust digest parity
@@ -183,10 +187,11 @@ After generation, follow `DEVELOPMENT_WORKFLOW.md`:
 1. ownership and invariants;
 2. public contracts;
 3. application ports/use cases;
-4. infrastructure adapters outside the module core;
-5. production composition;
-6. acceptance tests;
-7. operational and documentation closure.
+4. module-owned production contribution contract;
+5. infrastructure adapters outside the module core;
+6. exact-coordinate composition registration and durable activation;
+7. acceptance tests;
+8. operational and documentation closure.
 
 Move the generated `MODULE_CATALOG_ENTRY.md` content into the normative catalog only when the module identity and ownership decision are accepted. Update readiness only when the corresponding merged acceptance evidence exists.
 
@@ -207,6 +212,16 @@ python scripts/generate_contract_bindings.py --check
 
 ## Production contribution boundary
 
-Every generated module contains `production/CONTRIBUTION.md`. The pure module core does not wire itself into the process host. A separately owned adapter/composition crate contributes exact versioned mutation/query routes, pre-authorization semantic validation, activation-gated workers and deterministic worker phases. Adding a module must not require edits to central routers.
+Every generated module contains `production/CONTRIBUTION.md`. The pure module core does not wire itself into the process host. A separately owned adapter/composition crate contributes exact versioned mutation/query routes, pre-authorization semantic validation, activation-gated workers and deterministic worker phases. Adding a module must not require edits to generic router or worker algorithms.
+
+Before a generated module can claim a production vertical slice, its contribution must prove:
+
+1. exact owner/identifier/version/kind definitions;
+2. complete validator and handler bindings with startup failure on mismatch;
+3. durable tenant installation, disable and uninstall behavior;
+4. pre-authorization cross-owner validation through governed ports only;
+5. deterministic worker phases, bounded work and retry/idempotency where workers exist;
+6. route-parity coverage or an exact reasoned non-runtime classification;
+7. focused, PostgreSQL and real-process acceptance plus synchronized module/roadmap status.
 
 Compiled production coordinates are checked against `contracts/module-contract-bindings.json`. Platform-owned routes and any intentionally non-runtime governed coordinate must be listed individually, with a reason, in `contracts/production-route-classifications.json`; owner-wide or pattern allowlists are forbidden.

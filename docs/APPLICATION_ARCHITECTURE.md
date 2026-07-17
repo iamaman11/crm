@@ -58,17 +58,7 @@ Current structure:
 └── .github/workflows/        # permanent conformance gates
 ```
 
-Future product-plane structure may be introduced when Phase 7 starts:
-
-```text
-apps/
-  web/                        # product shell
-packages/
-  ui/                         # design system and shared UI primitives
-  client/                     # generated/typed API client boundary
-```
-
-Do not create frontend directories before there is executable Phase 7 scope and ownership.
+The product plane is established under `apps/` and shared typed packages under `packages/`. Product-plane code remains outside authoritative domain ownership and must use generated/governed client boundaries rather than private backend types.
 
 ## 3. Layer responsibilities
 
@@ -158,8 +148,9 @@ HTTP/gRPC
 → authentication
 → tenant/actor resolution
 → immutable execution context
-→ exact capability/version
-→ typed + semantic validation
+→ exact module-owned capability/version route
+→ durable tenant module-activation check
+→ typed + pre-authorization semantic validation
 → rate/approval policy
 → live authorization
 → synchronous deterministic planning
@@ -175,8 +166,9 @@ HTTP/gRPC
 → authentication
 → tenant/actor resolution
 → query-only execution context
-→ exact query/version
-→ typed + semantic validation
+→ exact module-owned query/version route
+→ durable tenant module-activation check
+→ typed + pre-authorization semantic validation
 → live authorization
 → resource/field visibility
 → authoritative tenant-scoped read
@@ -202,15 +194,16 @@ Duplicate event delivery must not create duplicate business effects.
 
 ## 5. Composition boundaries
 
-The final `crm-api` service should be assembled in explicit stages:
+The production `crm-api` service is assembled in explicit stages:
 
 ```text
 configuration
 → infrastructure resources
 → platform stores/adapters
-→ module publication/install state
-→ capability/query catalogs
-→ owner adapter compositions
+→ published module identities and durable installation state
+→ module-owned mutation/query/visibility/worker contributions
+→ exact-coordinate route and worker registries
+→ manifest/binding/production parity validation
 → auth/policy runtime
 → ingress
 → HTTP/gRPC servers
@@ -218,7 +211,24 @@ configuration
 → shutdown/drain
 ```
 
-Construction failures are startup failures. Invalid production configuration must not degrade silently into partially governed behavior.
+Construction failures are startup failures. Invalid production configuration, duplicate coordinates, missing handlers, invalid ownership or route-kind drift must not degrade silently into partially governed behavior.
+
+### 5.1 Native module contribution model
+
+Each in-process business or link module owns an explicit production contribution boundary. Depending on its role, that contribution contains:
+
+- exact versioned mutation and query definitions;
+- pre-authorization semantic validators;
+- planner/executor or query-adapter bindings;
+- declarative visibility contributions;
+- background workers with deterministic phases;
+- module identity needed for durable tenant activation.
+
+Generic registries perform exact-coordinate dispatch and deterministic worker iteration. They do not contain business capability-ID, query-ID, module-ID or concrete-adapter switches. A new module may require an explicit contribution registration at the composition boundary, but it must not require modification of generic router or worker algorithms.
+
+`crm.module_installations` is authoritative for tenant activation. Bootstrap may create durable active installations for configured bootstrap tenants; it may not bypass persisted lifecycle state.
+
+Compiled production coordinates are mechanically compared with governed module contract bindings. Platform routes and intentionally non-runtime coordinates are classified individually with reasons; broad allowlists are forbidden.
 
 ## 6. Directory evolution rule
 
@@ -267,6 +277,7 @@ A new feature is not complete merely because its domain code compiles. Depending
 - idempotency/retry semantics;
 - rollback/fault evidence;
 - rebuildability for derived state;
+- module-owned production contribution, durable activation and exact route parity;
 - application composition;
 - user-facing experience when the product plane exists;
 - exact CI evidence and synchronized documentation.

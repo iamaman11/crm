@@ -1,40 +1,52 @@
-# Architecture Readiness Gate
+# Architecture Readiness Baseline
 
-Status: **Verification pending on PR #135 exact-head CI**.
+Status: **Ready for modular product development**
+Accepted implementation: issue #134 / PR #135
+Merged baseline: `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`
+Exact verification head: `c73a3eb830893477a4d535acc9383e006d74367d`
 
-The CRM may continue maintenance and integrity work, but new product-module expansion must not merge until the completed integrity mechanisms pass together on one unchanged exact SHA.
+This document records the accepted non-regression baseline for continued CRM development. It does not claim that the universal CRM product is complete; it confirms that the production architecture is prepared for further owner-domain and link-module delivery without returning to central business routing or hidden lifecycle bypasses.
 
-## Verified progress in PR #135
+## Proven guarantees
 
-The production mutation/query route layer now assembles exact module-owned contributions through `crm-application-composition`. Central mutation planner, capability executor and query routers have been removed from the production path; tenant activation gates wrap business routes; and Accounts, Contact Points, Party Relationships, Consents and Identity Resolution perform cross-owner reference validation before final live authorization.
+The accepted baseline provides:
 
-Background processing now assembles through one deterministic, phase-ordered registry. Import execution, export selection, Sales-to-Activities linking, Sales and Activities projections, Customer 360 projection and global search are module-owned contributions guarded by tenant module activation. `ApplicationComponents` no longer owns fixed worker fields or invokes a hard-coded worker sequence.
+- deterministic module-owned mutation and query contributions;
+- generic exact-coordinate routing with startup rejection for duplicates, owner mismatches, route-kind mismatches and incomplete handlers;
+- tenant route and worker activation backed by durable `crm.module_installations` state;
+- pre-authorization cross-owner semantic validation before final live authorization;
+- deterministic, phase-ordered, activation-gated background worker contributions;
+- declarative bootstrap visibility contributions;
+- exact manifest/binding/production-route parity with individually reasoned classifications;
+- immutable module publication compatibility enforcement;
+- golden scaffolding with a mandatory `production/CONTRIBUTION.md` boundary;
+- structural readiness checks that reject legacy central routers, fixed worker wiring and lifecycle bypasses.
 
-Bootstrap query visibility now resolves through declarative module contributions rather than a central `owner_module_id` switch. Data Quality remediation dispatches nested Party mutation through the exact Party executor and verifies Party activation before the nested authoritative operation.
+All 15 applicable workflows passed together on the unchanged human-authored verification head before PR #135 merged.
 
-These mechanisms now include authoritative persisted installation lifecycle, exact manifest/binding/production-route parity and golden scaffolding. Generated Sync has verified canonical formatting, generated artifacts and canonical Clippy state. The architecture does **not** become ready until one unchanged exact SHA passes every applicable workflow, including workspace and production runtime tests.
+## Non-regression contract
 
-Architecture readiness is proven only when all of the following hold together on one exact commit:
+Future changes MUST preserve all of the following:
 
-1. Every in-process module contributes its exact versioned mutation/query routes and background workers through the generic composition boundary.
-2. Duplicate coordinates, owner mismatches, missing handlers and route-kind mismatches fail assembly deterministically.
-3. Tenant module activation is checked before final live authorization for both mutations and queries.
-4. Cross-owner reference reads occur in pre-authorization semantic validation, never as unrelated awaited work inside the authoritative executor.
-5. Production route coverage is mechanically equal to the governed manifest/contract surface, except for explicit non-runtime classifications.
-6. Background workers are discovered from deterministic module contributions rather than fixed `ApplicationComponents` fields.
-7. Published module runtime identity is immutable at the same module version; semantic change requires a version bump.
-8. Golden scaffolding creates the production contribution boundary and its acceptance checklist.
-9. `python scripts/check_native_module_composition.py` reports no violations.
-10. All applicable workflows pass together on one unchanged exact SHA.
+1. Business behavior enters production through explicit module-owned contributions, never a central capability-ID or concrete-adapter switch.
+2. Public mutation/query dispatch uses exact owner, identifier, version and route-kind coordinates.
+3. Durable tenant installation state is the runtime authority for module activation; bootstrap may provision that state but MUST NOT bypass it.
+4. Cross-owner reads needed to establish request semantics occur before final authorization; authoritative executors do not perform unrelated awaited validation after authorization and before their side effect.
+5. Background workers are contributed by modules, assigned deterministic phases and activation-gated per tenant.
+6. Every governed contract coordinate has exactly one production route or one exact documented non-runtime classification; owner-wide and pattern allowlists are forbidden.
+7. New modules use the golden scaffold and do not require edits to generic router or worker algorithms.
+8. Any source or documentation change invalidates prior exact-SHA evidence until all applicable checks pass again.
 
-No marker may be suppressed or allowlisted merely to make the gate green. The corresponding legacy wiring must be removed through a real module-owned replacement.
+## Required development entry point
 
-## Implemented integrity mechanisms
+Every new delivery packet must begin from current `main`, read `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `DEVELOPMENT_WORKFLOW.md`, `MODULE_DEVELOPMENT.md` and its active issue, then identify:
 
-- Production mutations and queries are assembled from exact module-owned contributions.
-- Tenant route and worker activation reads `crm.module_installations`; bootstrap provisions durable active installations instead of bypassing lifecycle state.
-- Background workers and bootstrap visibility are deterministic contribution registries.
-- `production_route_parity` compares compiled production coordinates with governed bindings and explicit exact-route classifications.
-- The module scaffold emits `production/CONTRIBUTION.md` so new modules cannot omit the production boundary.
+- authoritative ownership and stable references;
+- exact public contract coordinates;
+- module-owned routes, validators and workers;
+- durable installation/disable/uninstall behavior;
+- persistence, authorization, audit, idempotency and rollback semantics;
+- route-parity/classification impact;
+- required unit, PostgreSQL, process, browser and operational acceptance.
 
-Readiness remains blocked until every applicable workflow is green on one unchanged human-authored SHA.
+Use `python scripts/repo.py conformance` for the permanent local architecture preflight and run all specialized GitHub workflows affected by the packet. Architecture readiness remains valid only while these mechanical gates stay green.
