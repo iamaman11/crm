@@ -1,0 +1,60 @@
+name: Agent Architecture Conformance PR Sync
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/agent-architecture-conformance-pr.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Execute deterministic conformance synchronization
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/agent-architecture-conformance-sync.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          end_marker = "\n          PY\n"
+          if marker not in workflow or end_marker not in workflow:
+              raise SystemExit('embedded synchronization script markers are missing')
+          script = workflow.split(marker, 1)[1].split(end_marker, 1)[0]
+          exec(compile(textwrap.dedent(script), '<architecture-conformance-sync>', 'exec'))
+          PY
+          python -m py_compile scripts/repo.py
+          python scripts/check_architecture.py
+          python scripts/check_native_module_composition.py
+          python scripts/check_production_route_classifications.py
+          git diff --check
+      - name: Publish synchronized architecture controls
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            AGENTS.md \
+            .github/pull_request_template.md \
+            docs/ARCHITECTURE_READINESS.md \
+            docs/SYSTEM_INVARIANTS.md \
+            docs/APPLICATION_ARCHITECTURE.md \
+            docs/DEVELOPMENT_WORKFLOW.md \
+            docs/MODULE_DEVELOPMENT.md \
+            docs/DELIVERY_GOVERNANCE.md \
+            docs/PROJECT_STATUS.md \
+            docs/IMPLEMENTATION_ROADMAP.md \
+            docs/PHASE8_DELIVERY_PLAN.md \
+            scripts/repo.py
+          git commit -m "Synchronize architecture conformance baseline"
+          git push origin HEAD:${{ github.head_ref }}
