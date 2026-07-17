@@ -8,8 +8,11 @@ use crm_data_quality_capability_adapter::{
 use sqlx::PgPool;
 
 const PARTY_UPDATE_CAPABILITY: &str = "parties.party.update";
+const COMPLETION_OTHER_TENANT: &str = "tenant-evaluation-other";
+const POLICY_OTHER_TENANT: &str = "tenant-evaluation-policy-other";
 
 pub async fn register_evaluation_capabilities(admin: &PgPool) {
+    provision_process_tenants(admin).await;
     register_data_quality(
         admin,
         REQUEST_EVALUATION,
@@ -92,6 +95,20 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "medium",
     )
     .await;
+}
+
+async fn provision_process_tenants(admin: &PgPool) {
+    for tenant_id in [COMPLETION_OTHER_TENANT, POLICY_OTHER_TENANT] {
+        sqlx::query(
+            "INSERT INTO crm.tenants (tenant_id, status, data_region)
+             VALUES ($1, 'active', 'eu-central')
+             ON CONFLICT (tenant_id) DO NOTHING",
+        )
+        .bind(tenant_id)
+        .execute(admin)
+        .await
+        .unwrap_or_else(|error| panic!("provision process tenant {tenant_id}: {error}"));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
