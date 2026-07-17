@@ -1,6 +1,6 @@
 use crate::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
-    EventType, FieldName, FileId, IdentifierError, IdempotencyKey, ModuleId, RecordId, RecordType,
+    EventType, FieldName, FileId, IdempotencyKey, IdentifierError, ModuleId, RecordId, RecordType,
     RelationshipType, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, StateKey, TenantId,
     TraceId, WorkflowId, WorkflowRunId,
 };

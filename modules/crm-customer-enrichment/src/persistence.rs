@@ -3,20 +3,15 @@ use crate::{
     ProviderProfileVersionId, ProviderResponseClass, ProviderResponseReceipt,
     RecordedApplicationOutcome, ReviewDecision, ReviewDecisionKind, Suggestion, TargetField,
 };
-use crm_module_sdk::{
-    ActorId, ErrorCategory, IdempotencyKey, SdkError, TenantId,
-};
+use crm_module_sdk::{ActorId, ErrorCategory, IdempotencyKey, SdkError, TenantId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 
-pub const ENRICHMENT_REQUEST_STATE_SCHEMA_ID: &str =
-    "crm.customer-enrichment.request.state";
+pub const ENRICHMENT_REQUEST_STATE_SCHEMA_ID: &str = "crm.customer-enrichment.request.state";
 pub const PROVIDER_RESPONSE_RECEIPT_STATE_SCHEMA_ID: &str =
     "crm.customer-enrichment.provider_response_receipt.state";
-pub const SUGGESTION_STATE_SCHEMA_ID: &str =
-    "crm.customer-enrichment.suggestion.state";
-pub const REVIEW_DECISION_STATE_SCHEMA_ID: &str =
-    "crm.customer-enrichment.review_decision.state";
+pub const SUGGESTION_STATE_SCHEMA_ID: &str = "crm.customer-enrichment.suggestion.state";
+pub const REVIEW_DECISION_STATE_SCHEMA_ID: &str = "crm.customer-enrichment.review_decision.state";
 pub const APPLICATION_ATTEMPT_STATE_SCHEMA_ID: &str =
     "crm.customer-enrichment.application_attempt.state";
 pub const LIFECYCLE_STATE_SCHEMA_VERSION: &str = "1.0.0";
@@ -64,7 +59,11 @@ pub fn application_attempt_state_descriptor_hash() -> [u8; 32] {
 }
 
 pub fn encode_enrichment_request_state(value: &EnrichmentRequest) -> Result<Vec<u8>, SdkError> {
-    encode(value, ENRICHMENT_REQUEST_STATE_MAXIMUM_BYTES, "enrichment request")
+    encode(
+        value,
+        ENRICHMENT_REQUEST_STATE_MAXIMUM_BYTES,
+        "enrichment request",
+    )
 }
 
 pub fn decode_enrichment_request_state(bytes: &[u8]) -> Result<EnrichmentRequest, SdkError> {
@@ -131,7 +130,9 @@ pub fn decode_review_decision_state(bytes: &[u8]) -> Result<ReviewDecision, SdkE
     )
 }
 
-pub fn encode_application_attempt_state(value: &crate::ApplicationAttempt) -> Result<Vec<u8>, SdkError> {
+pub fn encode_application_attempt_state(
+    value: &crate::ApplicationAttempt,
+) -> Result<Vec<u8>, SdkError> {
     encode(
         value,
         APPLICATION_ATTEMPT_STATE_MAXIMUM_BYTES,
@@ -139,7 +140,9 @@ pub fn encode_application_attempt_state(value: &crate::ApplicationAttempt) -> Re
     )
 }
 
-pub fn decode_application_attempt_state(bytes: &[u8]) -> Result<crate::ApplicationAttempt, SdkError> {
+pub fn decode_application_attempt_state(
+    bytes: &[u8],
+) -> Result<crate::ApplicationAttempt, SdkError> {
     decode::<crate::ApplicationAttempt, ApplicationAttemptStateV1>(
         bytes,
         APPLICATION_ATTEMPT_STATE_MAXIMUM_BYTES,
@@ -658,17 +661,13 @@ impl ApplicationAttemptStateV1 {
             ));
         }
         if self.owner_capability_id != self.target.target_field.owner_capability_id()
-            || self.owner_capability_version
-                != self.target.target_field.owner_capability_version()
+            || self.owner_capability_version != self.target.target_field.owner_capability_version()
         {
             return Err(persisted_error(
                 "persisted application owner capability does not match the target field",
             ));
         }
-        identifier::<IdempotencyKey>(
-            &self.target_idempotency_key,
-            "target idempotency key",
-        )?;
+        identifier::<IdempotencyKey>(&self.target_idempotency_key, "target idempotency key")?;
         let identity = ApplicationIdentityState {
             semantic_version: "1.0.0",
             tenant_id: &self.tenant_id,
@@ -828,9 +827,7 @@ fn canonical_key(value: &str, label: &str) -> Result<(), SdkError> {
         && value.len() <= 80
         && value.is_ascii()
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'_' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         })
         && value
             .as_bytes()
@@ -864,10 +861,7 @@ fn canonical_version(value: &str, label: &str) -> Result<(), SdkError> {
 }
 
 fn bounded(value: &str, maximum_bytes: usize, label: &str) -> Result<(), SdkError> {
-    if value.is_empty()
-        || value.len() > maximum_bytes
-        || value.chars().any(char::is_control)
-    {
+    if value.is_empty() || value.len() > maximum_bytes || value.chars().any(char::is_control) {
         return Err(persisted_error(format!(
             "persisted {label} must contain 1..={maximum_bytes} bytes and no control characters"
         )));
@@ -977,7 +971,8 @@ mod tests {
             confidence_required: true,
         })
         .unwrap();
-        let target = TargetSnapshot::try_new("party-123", 7, TargetField::PartyDisplayName).unwrap();
+        let target =
+            TargetSnapshot::try_new("party-123", 7, TargetField::PartyDisplayName).unwrap();
         let mut request = EnrichmentRequest::create(EnrichmentRequestDraft {
             tenant_id: TenantId::try_new("tenant-a").unwrap(),
             requested_by: ActorId::try_new("reviewer-1").unwrap(),
@@ -1064,8 +1059,7 @@ mod tests {
         application
             .record_outcome(
                 ApplicationOutcome::Succeeded {
-                    business_transaction_id: BusinessTransactionId::try_new("party-tx-42")
-                        .unwrap(),
+                    business_transaction_id: BusinessTransactionId::try_new("party-tx-42").unwrap(),
                     resulting_target_version: 8,
                 },
                 450,
@@ -1094,9 +1088,15 @@ mod tests {
             values.response
         );
         let suggestion = encode_suggestion_state(&values.suggestion).unwrap();
-        assert_eq!(decode_suggestion_state(&suggestion).unwrap(), values.suggestion);
+        assert_eq!(
+            decode_suggestion_state(&suggestion).unwrap(),
+            values.suggestion
+        );
         let review = encode_review_decision_state(&values.review).unwrap();
-        assert_eq!(decode_review_decision_state(&review).unwrap(), values.review);
+        assert_eq!(
+            decode_review_decision_state(&review).unwrap(),
+            values.review
+        );
         let application = encode_application_attempt_state(&values.application).unwrap();
         assert_eq!(
             decode_application_attempt_state(&application).unwrap(),
@@ -1109,10 +1109,7 @@ mod tests {
         let values = fixture();
         let bytes = encode_suggestion_state(&values.suggestion).unwrap();
         let mut json: Value = serde_json::from_slice(&bytes).unwrap();
-        json["suggestion_id"] = Value::String(format!(
-            "enrichment-suggestion-{}",
-            "0".repeat(64)
-        ));
+        json["suggestion_id"] = Value::String(format!("enrichment-suggestion-{}", "0".repeat(64)));
         let corrupted = serde_json::to_vec(&json).unwrap();
         let error = decode_suggestion_state(&corrupted).unwrap_err();
         assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PERSISTED_STATE_INVALID");
