@@ -134,10 +134,16 @@ impl fmt::Display for CompositionError {
                 "module {module_id} cannot contribute {capability_id}@{capability_version} owned by {owner_module_id}"
             ),
             Self::MutationKindMismatch((id, version)) => {
-                write!(formatter, "mutation route {id}@{version} has a query definition")
+                write!(
+                    formatter,
+                    "mutation route {id}@{version} has a query definition"
+                )
             }
             Self::QueryKindMismatch((id, version)) => {
-                write!(formatter, "query route {id}@{version} has a mutation definition")
+                write!(
+                    formatter,
+                    "query route {id}@{version} has a mutation definition"
+                )
             }
             Self::Empty => formatter.write_str("application composition declares no modules"),
         }
@@ -241,7 +247,10 @@ impl ApplicationCompositionBuilder {
     }
 }
 
-fn validate_owner(module_id: &str, definition: &CapabilityDefinition) -> Result<(), CompositionError> {
+fn validate_owner(
+    module_id: &str,
+    definition: &CapabilityDefinition,
+) -> Result<(), CompositionError> {
     if definition.owner_module_id.as_str() != module_id {
         return Err(CompositionError::OwnerMismatch {
             module_id: module_id.to_owned(),
@@ -630,13 +639,22 @@ impl fmt::Display for BackgroundCompositionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UndeclaredModule(module_id) => {
-                write!(formatter, "background worker owner {module_id} is undeclared")
+                write!(
+                    formatter,
+                    "background worker owner {module_id} is undeclared"
+                )
             }
             Self::DuplicateWorker((module_id, worker_id)) => {
-                write!(formatter, "duplicate background worker {module_id}/{worker_id}")
+                write!(
+                    formatter,
+                    "duplicate background worker {module_id}/{worker_id}"
+                )
             }
             Self::InvalidWorkerId((module_id, worker_id)) => {
-                write!(formatter, "invalid background worker id {module_id}/{worker_id}")
+                write!(
+                    formatter,
+                    "invalid background worker id {module_id}/{worker_id}"
+                )
             }
         }
     }
@@ -699,9 +717,7 @@ fn valid_worker_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 180
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'_' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         })
 }
 
@@ -905,10 +921,7 @@ mod tests {
         let inner = Arc::new(MutationHandler {
             calls: Arc::clone(&calls),
         });
-        let validator = ActivationGatedMutationValidator::new(
-            Arc::new(Activation(false)),
-            inner,
-        );
+        let validator = ActivationGatedMutationValidator::new(Arc::new(Activation(false)), inner);
         let definition = definition("crm.alpha", "alpha.record.create", true);
         let error = validator
             .validate(&definition, &request(&definition))
@@ -965,8 +978,7 @@ mod tests {
         let mut builder = ApplicationCompositionBuilder::new();
         let error = builder
             .add_module(
-                ModuleRuntimeContribution::new(module_id("crm.beta"))
-                    .with_mutation(route.clone()),
+                ModuleRuntimeContribution::new(module_id("crm.beta")).with_mutation(route.clone()),
             )
             .unwrap_err();
         assert!(matches!(error, CompositionError::OwnerMismatch { .. }));
