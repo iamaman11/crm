@@ -34,6 +34,7 @@ crm-customer-data-operations-execution-composition = { path = "../crm-customer-d
 crm-customer-data-operations-query-adapter = { path = "../crm-customer-data-operations-query-adapter" }
 crm-customer-data-operations-source-composition = { path = "../crm-customer-data-operations-source-composition" }
 crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
+crm-customer-enrichment-query-adapter = { path = "../crm-customer-enrichment-query-adapter" }
 crm-data-quality-capability-adapter = { path = "../crm-data-quality-capability-adapter" }
 crm-data-quality-query-adapter = { path = "../crm-data-quality-query-adapter" }
 crm-data-quality-source-composition = { path = "../crm-data-quality-source-composition" }
