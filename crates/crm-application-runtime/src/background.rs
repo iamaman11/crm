@@ -11,9 +11,7 @@ use crm_customer_data_operations_execution_composition::{
     PartyExportSelectionWorker, PartyImportExecutionWorker,
 };
 use crm_global_search_composition::GlobalSearchWorker;
-use crm_module_sdk::{
-    ErrorCategory, EventType, ModuleId, PortFuture, SdkError, TenantId,
-};
+use crm_module_sdk::{ErrorCategory, EventType, ModuleId, PortFuture, SdkError, TenantId};
 use crm_sales_activities_capability_composition::{
     DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, SalesActivitiesLinkDeliveryOutcome,
     SalesActivitiesLinkEventProcessor, TASK_STATUS_PROJECTION_ID,
@@ -72,7 +70,9 @@ pub(crate) fn build_production_background_workers(
         BackgroundWorkerPhase::SOURCE_INGESTION,
         CUSTOMER_DATA_OPERATIONS_MODULE_ID,
         IMPORT_EXECUTION_WORKER_ID,
-        Arc::new(ImportExecutionBackgroundWorker::new(import_execution_worker)),
+        Arc::new(ImportExecutionBackgroundWorker::new(
+            import_execution_worker,
+        )),
     )?;
     add_worker(
         &mut builder,
@@ -80,7 +80,9 @@ pub(crate) fn build_production_background_workers(
         BackgroundWorkerPhase::new(110),
         CUSTOMER_DATA_OPERATIONS_MODULE_ID,
         EXPORT_SELECTION_WORKER_ID,
-        Arc::new(ExportSelectionBackgroundWorker::new(export_selection_worker)),
+        Arc::new(ExportSelectionBackgroundWorker::new(
+            export_selection_worker,
+        )),
     )?;
     add_worker(
         &mut builder,
@@ -88,7 +90,10 @@ pub(crate) fn build_production_background_workers(
         BackgroundWorkerPhase::DOMAIN_LINKING,
         LINK_MODULE_ID,
         SALES_ACTIVITIES_LINK_WORKER_ID,
-        Arc::new(SalesActivitiesLinkBackgroundWorker::new(store, link_processor)),
+        Arc::new(SalesActivitiesLinkBackgroundWorker::new(
+            store,
+            link_processor,
+        )),
     )?;
     add_worker(
         &mut builder,
@@ -141,9 +146,11 @@ fn add_worker(
     worker: Arc<dyn TenantBackgroundWorker>,
 ) -> Result<(), SdkError> {
     let module_id = ModuleId::try_new(owner_module_id).map_err(configuration_error)?;
-    let gated: Arc<dyn TenantBackgroundWorker> = Arc::new(
-        ActivationGatedBackgroundWorker::new(activation, module_id.clone(), worker),
-    );
+    let gated: Arc<dyn TenantBackgroundWorker> = Arc::new(ActivationGatedBackgroundWorker::new(
+        activation,
+        module_id.clone(),
+        worker,
+    ));
     builder
         .add_in_phase(phase, module_id, worker_id, gated)
         .map(|_| ())
@@ -248,10 +255,10 @@ impl TenantBackgroundWorker for SalesActivitiesLinkBackgroundWorker {
         now_unix_nanos: i64,
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
-            let event_type = EventType::try_new("sales.deal.stage_changed")
-                .map_err(configuration_error)?;
-            let consumer_module_id = ModuleId::try_new(LINK_MODULE_ID)
-                .map_err(configuration_error)?;
+            let event_type =
+                EventType::try_new("sales.deal.stage_changed").map_err(configuration_error)?;
+            let consumer_module_id =
+                ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?;
             let mut after = None;
             loop {
                 let page = self

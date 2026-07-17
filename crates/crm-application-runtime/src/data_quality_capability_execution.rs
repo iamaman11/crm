@@ -106,8 +106,8 @@ impl DataQualityCapabilityExecutor {
             return Err(remediation_evidence_conflict());
         }
         self.ensure_display_name_rule(&request, &finding).await?;
-        let party_module_id = ModuleId::try_new(PARTIES_MODULE_ID)
-            .map_err(reference_configuration_error)?;
+        let party_module_id =
+            ModuleId::try_new(PARTIES_MODULE_ID).map_err(reference_configuration_error)?;
         if !self
             .activation
             .is_active(&request.context.execution.tenant_id, &party_module_id)

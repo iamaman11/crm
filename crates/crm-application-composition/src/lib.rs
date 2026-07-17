@@ -782,9 +782,7 @@ impl TenantBackgroundWorker for ActivationGatedBackgroundWorker {
             {
                 return Ok(());
             }
-            self.inner
-                .run_tenant_cycle(tenant_id, now_unix_nanos)
-                .await
+            self.inner.run_tenant_cycle(tenant_id, now_unix_nanos).await
         })
     }
 }
@@ -930,9 +928,9 @@ impl BackgroundWorkerRegistry {
     pub fn scheduled_coordinates(
         &self,
     ) -> impl Iterator<Item = (BackgroundWorkerPhase, &str, &str)> {
-        self.workers.keys().map(|(phase, module_id, worker_id)| {
-            (*phase, module_id.as_str(), worker_id.as_str())
-        })
+        self.workers
+            .keys()
+            .map(|(phase, module_id, worker_id)| (*phase, module_id.as_str(), worker_id.as_str()))
     }
 
     pub async fn run_tenant_cycle(

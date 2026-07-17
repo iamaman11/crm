@@ -1,7 +1,7 @@
 use crate::{
-    ApplicationConfig, ApplicationGatewayService, GovernedPartyExportSelectionSource,
-    PartyExportArtifactDownloadService, PostgresModuleActivation, ProcessIdentitySource,
-    BootstrapVisibilityResource, ProductionBackgroundWorkerDependencies,
+    ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
+    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
+    PostgresModuleActivation, ProcessIdentitySource, ProductionBackgroundWorkerDependencies,
     ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
     build_bootstrap_visibility_registry, build_production_background_workers,
     build_production_composition,
@@ -356,8 +356,8 @@ impl ApplicationRuntime {
             GlobalSearchWorker::new(store.clone())
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
-        let background_workers = build_production_background_workers(
-            ProductionBackgroundWorkerDependencies {
+        let background_workers =
+            build_production_background_workers(ProductionBackgroundWorkerDependencies {
                 module_ids: module_ids.clone(),
                 activation,
                 store,
@@ -367,9 +367,8 @@ impl ApplicationRuntime {
                 projection_worker,
                 customer_360_worker,
                 search_worker,
-            },
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+            })
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let components = Arc::new(ApplicationComponents {
             module_ids,
             mutation_http: Arc::new(HttpCapabilityMiddleware::new(mutation_ingress.clone())),

@@ -63,8 +63,8 @@ impl BootstrapVisibilityRegistry {
     }
 }
 
-pub(crate) fn build_bootstrap_visibility_registry(
-) -> Result<BootstrapVisibilityRegistry, SdkError> {
+pub(crate) fn build_bootstrap_visibility_registry() -> Result<BootstrapVisibilityRegistry, SdkError>
+{
     let mut providers = BTreeMap::new();
     register(&mut providers, SALES_MODULE_ID, sales_visibility)?;
     register(&mut providers, ACTIVITIES_MODULE_ID, activities_visibility)?;
@@ -148,7 +148,11 @@ fn activities_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityRes
 }
 
 fn parties_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
-    vec![resource(PARTIES_MODULE_ID, PARTY_RECORD_TYPE, party_fields())]
+    vec![resource(
+        PARTIES_MODULE_ID,
+        PARTY_RECORD_TYPE,
+        party_fields(),
+    )]
 }
 
 fn accounts_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
@@ -175,9 +179,7 @@ fn consents_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResou
     )]
 }
 
-fn identity_resolution_visibility(
-    _: &CapabilityDefinition,
-) -> Vec<BootstrapVisibilityResource> {
+fn identity_resolution_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
     vec![
         resource(
             IDENTITY_RESOLUTION_MODULE_ID,
@@ -192,9 +194,7 @@ fn identity_resolution_visibility(
     ]
 }
 
-fn party_relationships_visibility(
-    _: &CapabilityDefinition,
-) -> Vec<BootstrapVisibilityResource> {
+fn party_relationships_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
     vec![resource(
         PARTY_RELATIONSHIPS_MODULE_ID,
         PARTY_RELATIONSHIP_RECORD_TYPE,
