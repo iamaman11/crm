@@ -12,7 +12,7 @@ Background processing now assembles through one deterministic, phase-ordered reg
 
 Bootstrap query visibility now resolves through declarative module contributions rather than a central `owner_module_id` switch. Data Quality remediation dispatches nested Party mutation through the exact Party executor and verifies Party activation before the nested authoritative operation.
 
-These mechanisms now include authoritative persisted installation lifecycle, exact manifest/binding/production-route parity and golden scaffolding. They do **not** make the architecture ready until one unchanged exact SHA passes every applicable workflow.
+These mechanisms now include authoritative persisted installation lifecycle, exact manifest/binding/production-route parity and golden scaffolding. Generated Sync has verified canonical formatting, generated artifacts and canonical Clippy state. The architecture does **not** become ready until one unchanged exact SHA passes every applicable workflow, including workspace and production runtime tests.
 
 Architecture readiness is proven only when all of the following hold together on one exact commit:
 
@@ -28,7 +28,6 @@ Architecture readiness is proven only when all of the following hold together on
 10. All applicable workflows pass together on one unchanged exact SHA.
 
 No marker may be suppressed or allowlisted merely to make the gate green. The corresponding legacy wiring must be removed through a real module-owned replacement.
-
 
 ## Implemented integrity mechanisms
 
