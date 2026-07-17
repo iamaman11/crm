@@ -2,6 +2,8 @@
 
 pub mod definitions;
 pub mod lifecycle;
+#[allow(unused_imports)]
+pub mod persistence;
 
 pub use definitions::{
     MappingDraft, MappingNormalization, MappingVersion, MappingVersionId, ProviderProfileDraft,
@@ -16,6 +18,7 @@ pub use lifecycle::{
     SuggestionDraft, SuggestionId, SuggestionLifecycleStatus, TargetSnapshot,
     derive_suggestion_status,
 };
+pub use persistence::*;
 
 /// Stable crate identity for repository tooling.
 pub const CRATE_NAME: &str = "crm-customer-enrichment";
