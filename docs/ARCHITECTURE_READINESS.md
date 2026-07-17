@@ -2,7 +2,13 @@
 
 Status: **Blocked until PR #135 completes issue #134**.
 
-The CRM may continue maintenance and integrity work, but new product-module expansion must not merge while production composition still depends on central capability/query switches, fixed process worker fields, a non-authoritative module registry or post-authorization cross-owner validation.
+The CRM may continue maintenance and integrity work, but new product-module expansion must not merge while production composition still depends on fixed process worker fields, central bootstrap visibility mapping, incomplete route parity or incomplete module lifecycle authority.
+
+## Verified progress in PR #135
+
+The production mutation/query route layer now assembles exact module-owned contributions through `crm-application-composition`. Central mutation planner, capability executor and query routers have been removed from the production path; tenant activation gates wrap business routes; and Accounts, Contact Points, Party Relationships, Consents and Identity Resolution perform cross-owner reference validation before final live authorization.
+
+This milestone does **not** make the architecture ready by itself. Background-worker composition, declarative bootstrap visibility, mechanical manifest/binding/production parity and golden scaffolding remain mandatory.
 
 Architecture readiness is proven only when all of the following hold together on one exact commit:
 
