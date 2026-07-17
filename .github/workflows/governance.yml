@@ -90,7 +90,7 @@ permissions:
 jobs:
   governance:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -103,23 +103,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install validation dependencies
         run: python -m pip install --requirement requirements-dev.txt
-      - name: Validate module manifests
-        run: python scripts/validate_module_manifests.py
-      - name: Validate production route classifications
-        run: python scripts/check_production_route_classifications.py
       - name: Enforce immutable module publication compatibility
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: python scripts/check_module_compatibility.py --base-ref "origin/${BASE_REF}"
-      - name: Test native module composition readiness policy
-        run: python -m unittest tests/test_native_module_composition.py
-      - name: Enforce native module composition readiness
-        run: python scripts/check_native_module_composition.py
-      - name: Compile normalized runtime module IR
-        run: python scripts/compile_module_manifest_ir.py --output-dir build/module-ir
-      - name: Verify Rust runtime IR and digest parity
-        run: cargo run --quiet -p crm-module-manifest --bin validate-module-manifest -- build/module-ir/*.json
-      - name: Test strict format, compatibility, projection, dependency and scaffolding enforcement
-        run: python -m unittest tests/test_contract_bindings.py tests/test_module_compatibility.py tests/test_module_manifest_validation.py tests/test_module_scaffolding.py tests/test_production_route_classifications.py
-      - name: Enforce architecture boundaries
-        run: python scripts/check_architecture.py
+      - name: Run permanent native architecture conformance preflight
+        run: python scripts/repo.py conformance
