@@ -327,8 +327,14 @@ mod tests {
     fn persisted_contract_is_exact_and_confidential() {
         let profile = provider_profile_from_definition(Some(definition())).unwrap();
         let payload = provider_profile_persisted_payload(&profile).unwrap();
-        assert_eq!(payload.schema_id, PROVIDER_PROFILE_VERSION_STATE_SCHEMA_ID);
-        assert_eq!(payload.schema_version, DEFINITION_STATE_SCHEMA_VERSION);
+        assert_eq!(
+            payload.schema_id.as_str(),
+            PROVIDER_PROFILE_VERSION_STATE_SCHEMA_ID
+        );
+        assert_eq!(
+            payload.schema_version.as_str(),
+            DEFINITION_STATE_SCHEMA_VERSION
+        );
         assert_eq!(payload.data_class, DataClass::Confidential);
     }
 }
