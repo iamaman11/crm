@@ -1,0 +1,91 @@
+diff --git a/scripts/scaffold_module.py b/scripts/scaffold_module.py
+index d0454b6..91425e0 100644
+--- a/scripts/scaffold_module.py
++++ b/scripts/scaffold_module.py
+@@ -47,10 +47,18 @@ class ModuleSpec:
+     def rust_crate_name(self) -> str:
+         return self.crate_name.replace("-", "_")
+ 
++    @property
++    def composition_crate_name(self) -> str:
++        return f"{self.crate_name}-composition"
++
+     @property
+     def relative_dir(self) -> Path:
+         return Path("modules") / self.crate_name
+ 
++    @property
++    def composition_relative_dir(self) -> Path:
++        return Path("crates") / self.composition_crate_name
++
+ 
+ def _quoted(value: str) -> str:
+     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+@@ -119,6 +127,67 @@ crm-module-sdk = {{ path = "../../crates/crm-module-sdk" }}
+ '''
+ 
+ 
++def render_composition_cargo_toml(spec: ModuleSpec) -> str:
++    return f'''[package]
++name = "{spec.composition_crate_name}"
++version = "0.1.0"
++edition = "2024"
++publish = false
++
++[dependencies]
++crm-application-composition = {{ path = "../crm-application-composition" }}
++crm-module-sdk = {{ path = "../crm-module-sdk" }}
++{spec.crate_name} = {{ path = "../../{spec.relative_dir.as_posix()}" }}
++'''
++
++
++def render_composition_lib_rs(spec: ModuleSpec) -> str:
++    return f'''#![forbid(unsafe_code)]
++
++use crm_application_composition::ModuleContributionSet;
++use crm_module_sdk::{{ErrorCategory, SdkError}};
++
++/// Stable identity for the separately owned production-composition boundary.
++pub const CRATE_NAME: &str = "{spec.composition_crate_name}";
++/// The only business module this composition boundary may register.
++pub const MODULE_ID: &str = {spec.rust_crate_name}::MODULE_ID;
++
++/// Fail-closed scaffold entrypoint. Replace this function with exact route and
++/// worker contributions before wiring the module into a production process.
++pub fn contribute_to(_contributions: &mut ModuleContributionSet) -> Result<(), SdkError> {{
++    Err(SdkError::new(
++        "MODULE_PRODUCTION_CONTRIBUTION_NOT_IMPLEMENTED",
++        ErrorCategory::Internal,
++        false,
++        "The generated module has no reviewed production contribution yet.",
++    )
++    .with_internal_reference(MODULE_ID))
++}}
++
++#[cfg(test)]
++mod tests {{
++    use super::*;
++
++    #[test]
++    fn scaffold_boundary_is_fail_closed() {{
++        let mut contributions = ModuleContributionSet::new();
++        let error = contribute_to(&mut contributions).unwrap_err();
++        assert_eq!(error.code, "MODULE_PRODUCTION_CONTRIBUTION_NOT_IMPLEMENTED");
++        assert_eq!(MODULE_ID, "{spec.module_id}");
++    }}
++}}
++'''
++
++
++def render_composition_readme(spec: ModuleSpec) -> str:
++    return f'''# Production composition boundary for `{spec.module_id}`
++
++This separately owned crate is the only generated location allowed to translate reviewed module contracts and adapters into `ModuleContributionSet` registrations. The scaffold is deliberately fail-closed: `contribute_to` returns `MODULE_PRODUCTION_CONTRIBUTION_NOT_IMPLEMENTED` until exact mutation/query routes and background workers have production implementations and acceptance evidence.
++
++Do not add domain behavior, SQL, transport handling or another module's internals here. Keep business rules in `{spec.relative_dir.as_posix()}` and infrastructure in narrow adapter crates.
++'''
++
++
+ def _render_dependencies(items: tuple[Dependency, ...]) -> str:
+     if not items:
+         return "  required: []"
