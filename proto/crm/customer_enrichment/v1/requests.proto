@@ -19,7 +19,7 @@ message EnrichmentRequest {
   int64 expires_at_unix_ms = 10;
   EnrichmentRequestStatus status = 11;
   uint32 retry_generation = 12;
-  optional ProviderResponseReceiptRef provider_response_receipt_ref = 13;
+  ProviderResponseReceiptRef provider_response_receipt_ref = 13;
   optional string last_safe_failure_code = 14;
   int64 updated_at_unix_ms = 15;
 }
@@ -55,8 +55,8 @@ message GetEnrichmentRequestResponse {
 }
 
 message ListEnrichmentRequestsRequest {
-  optional crm.customer.v1.PartyRef party_ref = 1;
-  optional ProviderProfileVersionRef provider_profile_version_ref = 2;
+  crm.customer.v1.PartyRef party_ref = 1;
+  ProviderProfileVersionRef provider_profile_version_ref = 2;
   optional EnrichmentRequestStatus status = 3;
   int32 page_size = 4;
   string cursor = 5;
