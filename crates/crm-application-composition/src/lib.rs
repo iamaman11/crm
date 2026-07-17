@@ -96,6 +96,96 @@ impl ModuleRuntimeContribution {
     }
 }
 
+
+/// Collects route fragments by their declared owner and emits one deterministic
+/// contribution per module. Production composition roots use this when module
+/// constructors become available in dependency order while preserving the
+/// invariant that `ApplicationCompositionBuilder` sees each module exactly once.
+#[derive(Default)]
+pub struct ModuleContributionSet {
+    modules: BTreeMap<String, ModuleRuntimeContribution>,
+}
+
+impl fmt::Debug for ModuleContributionSet {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ModuleContributionSet")
+            .field("module_ids", &self.modules.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+impl ModuleContributionSet {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add_mutations(
+        &mut self,
+        definitions: impl IntoIterator<Item = CapabilityDefinition>,
+        validator: Arc<dyn CapabilitySemanticValidator>,
+        executor: Arc<dyn TransactionalCapabilityExecutor>,
+    ) -> Result<&mut Self, CompositionError> {
+        for definition in definitions {
+            let module_id = definition.owner_module_id.clone();
+            let key = module_id.as_str().to_owned();
+            let contribution = self
+                .modules
+                .entry(key)
+                .or_insert_with(|| ModuleRuntimeContribution::new(module_id));
+            contribution.mutations.push(MutationRoute {
+                definition,
+                validator: validator.clone(),
+                executor: executor.clone(),
+            });
+        }
+        Ok(self)
+    }
+
+    pub fn add_queries(
+        &mut self,
+        definitions: impl IntoIterator<Item = CapabilityDefinition>,
+        validator: Arc<dyn QuerySemanticValidator>,
+        executor: Arc<dyn QueryExecutor>,
+    ) -> Result<&mut Self, CompositionError> {
+        for definition in definitions {
+            let module_id = definition.owner_module_id.clone();
+            let key = module_id.as_str().to_owned();
+            let contribution = self
+                .modules
+                .entry(key)
+                .or_insert_with(|| ModuleRuntimeContribution::new(module_id));
+            contribution.queries.push(QueryRoute {
+                definition,
+                validator: validator.clone(),
+                executor: executor.clone(),
+            });
+        }
+        Ok(self)
+    }
+
+    pub fn add_empty_module(
+        &mut self,
+        module_id: ModuleId,
+    ) -> Result<&mut Self, CompositionError> {
+        let key = module_id.as_str().to_owned();
+        if self.modules.contains_key(&key) {
+            return Ok(self);
+        }
+        self.modules
+            .insert(key, ModuleRuntimeContribution::new(module_id));
+        Ok(self)
+    }
+
+    pub fn build(self) -> Result<ApplicationComposition, CompositionError> {
+        let mut builder = ApplicationCompositionBuilder::new();
+        for contribution in self.modules.into_values() {
+            builder.add_module(contribution)?;
+        }
+        builder.build()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompositionError {
     DuplicateModule(String),
@@ -962,6 +1052,31 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(*order.lock().unwrap(), vec!["alpha/a", "zeta/b"]);
+    }
+
+
+    #[test]
+    fn contribution_set_merges_route_fragments_without_duplicate_module_registration() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let handler = Arc::new(MutationHandler {
+            calls: Arc::clone(&calls),
+        });
+        let mut set = ModuleContributionSet::new();
+        set.add_mutations(
+            [definition("crm.alpha", "alpha.record.create", true)],
+            handler.clone(),
+            handler.clone(),
+        )
+        .unwrap();
+        set.add_mutations(
+            [definition("crm.alpha", "alpha.record.update", true)],
+            handler.clone(),
+            handler,
+        )
+        .unwrap();
+        let composition = set.build().unwrap();
+        assert_eq!(composition.module_ids(), &BTreeSet::from(["crm.alpha".to_owned()]));
+        assert_eq!(composition.mutation_definitions().len(), 2);
     }
 
     #[test]

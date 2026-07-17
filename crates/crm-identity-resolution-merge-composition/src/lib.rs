@@ -10,7 +10,7 @@
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
-    TransactionalCapabilityExecutor,
+    CapabilitySemanticValidator, TransactionalCapabilityExecutor,
 };
 use crm_core_data::{PostgresDataStore, RecordGetQuery, RelatedRecordListQuery};
 use crm_identity_resolution::{
@@ -144,27 +144,22 @@ impl MergeLineageReferenceReader for PostgresMergeLineageReferenceReader {
 }
 
 #[derive(Clone)]
-pub struct MergeLineageCapabilityExecutor {
+pub struct MergeLineageCapabilitySemanticValidator {
     references: Arc<dyn MergeLineageReferenceReader>,
-    inner: Arc<dyn TransactionalCapabilityExecutor>,
 }
 
-impl fmt::Debug for MergeLineageCapabilityExecutor {
+impl fmt::Debug for MergeLineageCapabilitySemanticValidator {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("MergeLineageCapabilityExecutor")
+            .debug_struct("MergeLineageCapabilitySemanticValidator")
             .field("references", &"MergeLineageReferenceReader")
-            .field("inner", &"TransactionalCapabilityExecutor")
             .finish()
     }
 }
 
-impl MergeLineageCapabilityExecutor {
-    pub fn new(
-        references: Arc<dyn MergeLineageReferenceReader>,
-        inner: Arc<dyn TransactionalCapabilityExecutor>,
-    ) -> Self {
-        Self { references, inner }
+impl MergeLineageCapabilitySemanticValidator {
+    pub fn new(references: Arc<dyn MergeLineageReferenceReader>) -> Self {
+        Self { references }
     }
 
     async fn validate_merge(&self, request: &CapabilityRequest) -> Result<(), SdkError> {
@@ -270,21 +265,53 @@ impl MergeLineageCapabilityExecutor {
     }
 }
 
+impl CapabilitySemanticValidator for MergeLineageCapabilitySemanticValidator {
+    fn validate<'a>(
+        &'a self,
+        definition: &'a CapabilityDefinition,
+        request: &'a CapabilityRequest,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            match definition.capability_id.as_str() {
+                MERGE_CAPABILITY => self.validate_merge(request).await,
+                UNMERGE_CAPABILITY => self.validate_unmerge(request).await,
+                capability if MERGE_MUTATION_CAPABILITY_IDS.contains(&capability) => Ok(()),
+                _ => Err(unsupported_capability()),
+            }
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct MergeLineageCapabilityExecutor {
+    inner: Arc<dyn TransactionalCapabilityExecutor>,
+}
+
+impl fmt::Debug for MergeLineageCapabilityExecutor {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MergeLineageCapabilityExecutor")
+            .field("inner", &"TransactionalCapabilityExecutor")
+            .finish()
+    }
+}
+
+impl MergeLineageCapabilityExecutor {
+    pub fn new(inner: Arc<dyn TransactionalCapabilityExecutor>) -> Self {
+        Self { inner }
+    }
+}
+
 impl TransactionalCapabilityExecutor for MergeLineageCapabilityExecutor {
     fn execute<'a>(
         &'a self,
         definition: &'a CapabilityDefinition,
         request: CapabilityRequest,
     ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
-        Box::pin(async move {
-            match definition.capability_id.as_str() {
-                MERGE_CAPABILITY => self.validate_merge(&request).await?,
-                UNMERGE_CAPABILITY => self.validate_unmerge(&request).await?,
-                capability if MERGE_MUTATION_CAPABILITY_IDS.contains(&capability) => {}
-                _ => return Err(unsupported_capability()),
-            }
-            self.inner.execute(definition, request).await
-        })
+        if !MERGE_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            return Box::pin(async { Err(unsupported_capability()) });
+        }
+        self.inner.execute(definition, request)
     }
 }
 

@@ -9,7 +9,6 @@
 
 mod config;
 mod data_quality_capability_execution;
-mod data_quality_query_registration;
 mod data_quality_registration;
 mod export_artifact_download;
 mod export_artifact_download_http;
@@ -17,15 +16,15 @@ mod export_execution_source;
 mod export_selection_bootstrap;
 mod export_selection_source;
 mod gateway_grpc;
-mod governed_metadata;
+mod native_composition;
 mod platform;
 mod process;
 mod runtime;
 
 pub use config::*;
-pub use data_quality_capability_execution::ApplicationCapabilityExecutorRouter;
-pub use data_quality_query_registration::*;
+pub use data_quality_capability_execution::DataQualityCapabilityExecutor;
 pub use data_quality_registration::*;
+pub use native_composition::*;
 pub use export_artifact_download::*;
 pub(crate) use export_artifact_download_http::export_artifact_download_router;
 pub use export_execution_source::*;

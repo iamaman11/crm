@@ -1,10 +1,8 @@
 use crate::{
-    ApplicationAggregatePlannerRouter, ApplicationCapabilityExecutorRouter, ApplicationConfig,
-    ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,
-    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService, ProcessIdentitySource,
-    SystemClock, application_capability_catalog, application_mutation_definitions,
-    application_query_capability_catalog, application_query_definitions,
-    bootstrap_export_selection_worker_access,
+    ApplicationConfig, ApplicationGatewayService, GovernedPartyExportSelectionSource,
+    PartyExportArtifactDownloadService, PostgresModuleActivation,
+    ProcessIdentitySource, ProductionCompositionDependencies, SystemClock,
+    bootstrap_export_selection_worker_access, build_production_composition,
 };
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -27,24 +25,16 @@ use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityG
 use crm_consents_capability_adapter::{
     MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
 };
-use crm_consents_query_adapter::ConsentQueryAdapter;
 use crm_contact_points_capability_adapter::{
     MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
 };
-use crm_contact_points_query_adapter::ContactPointQueryAdapter;
-use crm_core_data::{
-    PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,
-    PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,
-};
+use crm_core_data::{PostgresDataStore, PostgresImmutableFileArtifactStore};
 use crm_core_events::EventHistoryRequest;
 use crm_customer_360_composition::Customer360ProjectionWorker;
-use crm_customer_360_query_adapter::{
-    Customer360QueryAdapter, MODULE_ID as CUSTOMER_360_MODULE_ID,
-};
+use crm_customer_360_query_adapter::MODULE_ID as CUSTOMER_360_MODULE_ID;
 use crm_customer_accounts_capability_adapter::{
     MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
 };
-use crm_customer_accounts_query_adapter::AccountQueryAdapter;
 use crm_customer_data_operations_capability_adapter::{
     IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
     IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
@@ -52,8 +42,8 @@ use crm_customer_data_operations_capability_adapter::{
     internal_export_selection_capability_definitions,
 };
 use crm_customer_data_operations_execution_composition::{
-    EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyExportSelectionWorker,
-    PartyImportExecutionCoordinator, PartyImportExecutionWorker,
+    EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID,
+    PartyExportSelectionWorker, PartyImportExecutionCoordinator, PartyImportExecutionWorker,
     PostgresImportExecutionOutcomeSink, PostgresImportExecutionSnapshotReader,
     PostgresPartyExportSelectionReader, PostgresPartyExportSelectionSink,
     internal_capability_definitions,
@@ -62,20 +52,15 @@ use crm_customer_data_operations_query_adapter::{
     CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
     PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
-use crm_data_quality_query_adapter::DataQualityQueryAdapter;
 use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
 };
-use crm_identity_resolution_merge_query_adapter::IdentityResolutionMergeQueryAdapter;
-use crm_identity_resolution_query_adapter::IdentityResolutionQueryAdapter;
 use crm_metadata_api_adapter::METADATA_MODULE_ID;
-use crm_metadata_query_adapter::MetadataQueryAdapter;
-use crm_module_registry::ModuleRegistry;
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,
-    SchemaVersion, TenantId, TypedPayload,
+    ActorId, CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource,
+    RecordType, SchemaVersion, TenantId, TypedPayload,
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
@@ -85,20 +70,15 @@ use crm_parties_query_adapter::PartyQueryAdapter;
 use crm_party_relationships_capability_adapter::{
     MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID, RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
 };
-use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;
 use crm_query_runtime::{CursorCodec, QueryGateway};
 use crm_sales_activities_capability_composition::{
-    DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, ProductionQueryRouter,
-    SalesActivitiesLinkDeliveryOutcome, SalesActivitiesLinkEventProcessor,
-    SalesActivitiesLinkEventProcessorConfig, TASK_STATUS_PROJECTION_ID,
+    DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, SalesActivitiesLinkDeliveryOutcome,
+    SalesActivitiesLinkEventProcessor, SalesActivitiesLinkEventProcessorConfig,
+    TASK_STATUS_PROJECTION_ID,
 };
 use crm_sales_activities_link::MODULE_ID as LINK_MODULE_ID;
-use crm_sales_activities_query_adapter::{
-    ACTIVITIES_RECORD_TYPE, SALES_RECORD_TYPE, SalesActivitiesQueryAdapter,
-};
-use crm_search_query_adapter::{SEARCH_MODULE_ID, SearchQueryAdapter};
-use crm_search_runtime::SearchIndexId;
-use semver::Version;
+use crm_sales_activities_query_adapter::{ACTIVITIES_RECORD_TYPE, SALES_RECORD_TYPE};
+use crm_search_query_adapter::SEARCH_MODULE_ID;
 use serde::Serialize;
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -123,7 +103,7 @@ const SEARCH_PAGE_SIZE: u32 = 200;
 #[derive(Clone)]
 pub struct ApplicationComponents {
     pub store: PostgresDataStore,
-    pub module_registry: Arc<ModuleRegistry>,
+    pub module_ids: BTreeSet<String>,
     pub mutation_http: Arc<HttpCapabilityMiddleware>,
     pub mutation_grpc: Arc<GrpcCapabilityMiddleware>,
     pub query_http: Arc<HttpQueryMiddleware>,
@@ -146,7 +126,7 @@ impl fmt::Debug for ApplicationComponents {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ApplicationComponents")
-            .field("module_registry", &"ModuleRegistry")
+            .field("module_count", &self.module_ids.len())
             .field("tenant_count", &self.tenant_ids.len())
             .field("ready", &self.is_ready())
             .finish()
@@ -216,10 +196,37 @@ impl ApplicationRuntime {
 
         let authorization_store = LiveAuthorizationStore::default();
         let visibility_store = LiveQueryVisibilityStore::default();
-        let mutation_definitions = application_mutation_definitions()
-            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let query_definitions = application_query_definitions()
-            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let authorizer = Arc::new(LiveCapabilityAuthorizer::new(
+            authorization_store.clone(),
+            Arc::clone(&clock),
+        ));
+        let visibility_authorizer = Arc::new(LiveQueryVisibilityAuthorizer::new(
+            visibility_store.clone(),
+            Arc::clone(&clock),
+        ));
+        let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
+            .try_into()
+            .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
+        let activation: Arc<dyn crm_application_composition::ModuleActivationPort> = Arc::new(
+            PostgresModuleActivation::new(store.clone(), config.bootstrap_allow_phase6),
+        );
+        let capability_authorizer: Arc<dyn crm_capability_runtime::CapabilityAuthorizer> =
+            authorizer.clone();
+        let query_authorizer: Arc<dyn crm_query_runtime::QueryAuthorizer> = authorizer.clone();
+        let query_visibility: Arc<dyn crm_query_runtime::QueryVisibilityAuthorizer> =
+            visibility_authorizer.clone();
+        let composition = build_production_composition(ProductionCompositionDependencies {
+            store: store.clone(),
+            activation,
+            capability_authorizer,
+            query_authorizer,
+            visibility_authorizer: query_visibility,
+            cursor_key,
+        })
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let module_ids = composition.module_ids().clone();
+        let mutation_definitions = composition.mutation_definitions().to_vec();
+        let query_definitions = composition.query_definitions().to_vec();
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_export_selection_definitions =
@@ -262,25 +269,9 @@ impl ApplicationRuntime {
             )?;
         }
 
-        let authorizer = Arc::new(LiveCapabilityAuthorizer::new(
-            authorization_store,
-            Arc::clone(&clock),
-        ));
-        let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(
-            store.clone(),
-            Arc::new(PostgresTransactionalAggregateExecutor::new(
-                store.clone(),
-                Arc::new(ApplicationAggregatePlannerRouter),
-            )),
-            Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
-            authorizer.clone(),
-        ));
         let mutation_gateway = Arc::new(CapabilityGateway::new(
-            Arc::new(
-                application_capability_catalog()
-                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            ),
-            Arc::new(ContractBoundMutationSemanticValidator),
+            composition.mutation_registry(),
+            composition.mutation_validator(),
             Arc::new(FixedWindowRateLimiter::new(
                 RateLimitPolicyStore::default(),
                 Arc::clone(&clock),
@@ -290,7 +281,7 @@ impl ApplicationRuntime {
                     .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             ),
             authorizer.clone(),
-            mutation_executor,
+            composition.mutation_executor(),
             Arc::clone(&clock),
         ));
 
@@ -314,31 +305,10 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
 
-        let visibility_authorizer = Arc::new(LiveQueryVisibilityAuthorizer::new(
-            visibility_store,
-            Arc::clone(&clock),
-        ));
         let artifact_download_resolver = Arc::new(PartyExportArtifactDownloadResolver::new(
             store.clone(),
             visibility_authorizer.clone(),
         ));
-        let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
-            .try_into()
-            .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
-        let owner_query_adapter = SalesActivitiesQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let party_query_adapter = PartyQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let export_party_query_adapter = PartyQueryAdapter::new(
             store.clone(),
             CursorCodec::new(cursor_key)
@@ -366,97 +336,11 @@ impl ApplicationRuntime {
             )
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
-        let account_query_adapter = AccountQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let contact_point_query_adapter = ContactPointQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let customer_360_query_adapter =
-            Customer360QueryAdapter::new(store.clone(), visibility_authorizer.clone());
-        let consent_query_adapter = ConsentQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let identity_resolution_query_adapter = IdentityResolutionQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let identity_resolution_merge_query_adapter = IdentityResolutionMergeQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let data_quality_query_adapter =
-            DataQualityQueryAdapter::new(store.clone(), visibility_authorizer.clone());
-        let search_query_adapter = SearchQueryAdapter::new(
-            SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            Arc::new(store.clone()),
-            visibility_authorizer,
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let production_query_router =
-            ProductionQueryRouter::new(owner_query_adapter, search_query_adapter);
-        let metadata_query_adapter =
-            MetadataQueryAdapter::new(Arc::new(PostgresMetadataQueryStore::new(store.clone())));
-        let base_query_router = crate::governed_metadata::ApplicationQueryRouter::new(
-            production_query_router,
-            party_query_adapter,
-            account_query_adapter,
-            contact_point_query_adapter,
-            party_relationship_query_adapter,
-            customer_360_query_adapter,
-            consent_query_adapter,
-            identity_resolution_query_adapter,
-            identity_resolution_merge_query_adapter,
-            customer_data_operations_query_adapter,
-            metadata_query_adapter,
-        );
-        let query_router = Arc::new(ApplicationQueryRouter::new(
-            base_query_router,
-            data_quality_query_adapter,
-        ));
         let query_gateway = Arc::new(QueryGateway::new(
-            Arc::new(
-                application_query_capability_catalog()
-                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            ),
-            query_router.clone(),
+            composition.query_registry(),
+            composition.query_validator(),
             authorizer.clone(),
-            query_router,
+            composition.query_executor(),
         ));
 
         let timeout_policy = TimeoutPolicy {
@@ -510,7 +394,7 @@ impl ApplicationRuntime {
         );
         let components = Arc::new(ApplicationComponents {
             store,
-            module_registry: Arc::new(ModuleRegistry::new(Version::new(0, 1, 0))),
+            module_ids,
             mutation_http: Arc::new(HttpCapabilityMiddleware::new(mutation_ingress.clone())),
             mutation_grpc: Arc::new(GrpcCapabilityMiddleware::new(mutation_ingress)),
             query_http: Arc::new(HttpQueryMiddleware::new(query_ingress.clone())),

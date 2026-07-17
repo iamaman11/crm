@@ -11,7 +11,7 @@
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
-    TransactionalCapabilityExecutor,
+    CapabilitySemanticValidator, TransactionalCapabilityExecutor,
 };
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_identity_resolution::{DuplicateCandidateCase, PartyReference};
@@ -113,8 +113,56 @@ impl IdentityResolutionReferenceReader for PostgresIdentityResolutionReferenceRe
 }
 
 #[derive(Clone)]
-pub struct IdentityResolutionCapabilityExecutor {
+pub struct IdentityResolutionCapabilitySemanticValidator {
     references: Arc<dyn IdentityResolutionReferenceReader>,
+}
+
+impl fmt::Debug for IdentityResolutionCapabilitySemanticValidator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("IdentityResolutionCapabilitySemanticValidator")
+            .field("references", &"dyn IdentityResolutionReferenceReader")
+            .finish()
+    }
+}
+
+impl IdentityResolutionCapabilitySemanticValidator {
+    pub fn new(references: Arc<dyn IdentityResolutionReferenceReader>) -> Self {
+        Self { references }
+    }
+}
+
+impl CapabilitySemanticValidator for IdentityResolutionCapabilitySemanticValidator {
+    fn validate<'a>(
+        &'a self,
+        definition: &'a CapabilityDefinition,
+        request: &'a CapabilityRequest,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        if !MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            return Box::pin(async { Err(unsupported_capability()) });
+        }
+        Box::pin(async move {
+            let capability_id = definition.capability_id.as_str();
+            let tenant_id = &request.context.execution.tenant_id;
+            if let Some(scope) = evidence_reference_scope_from_request(capability_id, request)? {
+                validate_evidence_scope(self.references.as_ref(), tenant_id, &scope).await?;
+            }
+            if matches!(capability_id, DISMISS_CAPABILITY | CONFIRM_CAPABILITY) {
+                let case_id = candidate_case_id_from_request(capability_id, request)?;
+                validate_current_candidate_evidence(
+                    self.references.as_ref(),
+                    tenant_id,
+                    case_id.as_str(),
+                )
+                .await?;
+            }
+            Ok(())
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct IdentityResolutionCapabilityExecutor {
     inner: Arc<dyn TransactionalCapabilityExecutor>,
 }
 
@@ -122,18 +170,14 @@ impl fmt::Debug for IdentityResolutionCapabilityExecutor {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("IdentityResolutionCapabilityExecutor")
-            .field("references", &"dyn IdentityResolutionReferenceReader")
             .field("inner", &"dyn TransactionalCapabilityExecutor")
             .finish()
     }
 }
 
 impl IdentityResolutionCapabilityExecutor {
-    pub fn new(
-        references: Arc<dyn IdentityResolutionReferenceReader>,
-        inner: Arc<dyn TransactionalCapabilityExecutor>,
-    ) -> Self {
-        Self { references, inner }
+    pub fn new(inner: Arc<dyn TransactionalCapabilityExecutor>) -> Self {
+        Self { inner }
     }
 }
 
@@ -146,23 +190,7 @@ impl TransactionalCapabilityExecutor for IdentityResolutionCapabilityExecutor {
         if !MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             return Box::pin(async { Err(unsupported_capability()) });
         }
-        Box::pin(async move {
-            let capability_id = definition.capability_id.as_str();
-            let tenant_id = &request.context.execution.tenant_id;
-            if let Some(scope) = evidence_reference_scope_from_request(capability_id, &request)? {
-                validate_evidence_scope(self.references.as_ref(), tenant_id, &scope).await?;
-            }
-            if matches!(capability_id, DISMISS_CAPABILITY | CONFIRM_CAPABILITY) {
-                let case_id = candidate_case_id_from_request(capability_id, &request)?;
-                validate_current_candidate_evidence(
-                    self.references.as_ref(),
-                    tenant_id,
-                    case_id.as_str(),
-                )
-                .await?;
-            }
-            self.inner.execute(definition, request).await
-        })
+        self.inner.execute(definition, request)
     }
 }
 
