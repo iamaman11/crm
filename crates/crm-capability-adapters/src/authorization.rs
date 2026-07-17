@@ -314,8 +314,11 @@ mod tests {
             .unwrap()
         );
         assert!(
-            deployment_denies_capability_from_value(Some("invalid capability"), &capability_id)
-                .is_err()
+            deployment_denies_capability_from_value(
+                Some("invalid\u{1}capability"),
+                &capability_id,
+            )
+            .is_err()
         );
     }
 
