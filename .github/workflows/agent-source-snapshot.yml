@@ -32,11 +32,30 @@ jobs:
             exit 0
           fi
           cat .agent/worker-bootstrap.patch.part.* > /tmp/worker-bootstrap.patch
+          {
+            echo "expected: $(cut -d' ' -f1 .agent/worker-bootstrap.patch.ready)"
+            echo "actual:   $(sha256sum /tmp/worker-bootstrap.patch | cut -d' ' -f1)"
+            echo
+            echo "git apply --check:"
+            git apply --check /tmp/worker-bootstrap.patch
+          } >/tmp/worker-bootstrap-diagnostics.txt 2>&1 || {
+            cat /tmp/worker-bootstrap-diagnostics.txt
+            exit 1
+          }
           sha256sum --check .agent/worker-bootstrap.patch.ready
-          git apply --check /tmp/worker-bootstrap.patch
           git apply --index /tmp/worker-bootstrap.patch
           git rm .agent/worker-bootstrap.patch.part.* .agent/worker-bootstrap.patch.ready .github/workflows/agent-source-snapshot.yml
           echo "apply=true" >> "$GITHUB_OUTPUT"
+      - name: Upload worker bootstrap diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-bootstrap-diagnostics-${{ github.sha }}
+          path: |
+            /tmp/worker-bootstrap-diagnostics.txt
+            /tmp/worker-bootstrap.patch
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Publish worker and bootstrap migration
         if: steps.patch.outputs.apply == 'true'
         env:
