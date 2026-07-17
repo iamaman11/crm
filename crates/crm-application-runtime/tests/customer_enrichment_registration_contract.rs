@@ -1,7 +1,5 @@
 use crm_application_runtime::{application_mutation_definitions, declared_business_module_ids};
-use crm_customer_enrichment_capability_adapter::{
-    MODULE_ID, PUBLISH_PROVIDER_PROFILE_CAPABILITY,
-};
+use crm_customer_enrichment_capability_adapter::{MODULE_ID, PUBLISH_PROVIDER_PROFILE_CAPABILITY};
 
 #[test]
 fn provider_profile_publication_is_the_only_composed_enrichment_route() {
