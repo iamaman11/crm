@@ -60,6 +60,10 @@
   ],
   "empty_runtime_modules": [
     {
+      "module_id": "crm.customer-enrichment",
+      "reason": "Phase 8A.10 foundation owns immutable enrichment definitions and governance evidence but intentionally publishes no runtime capability until compatible Protobuf contracts and exact native production contributions are delivered."
+    },
+    {
       "module_id": "crm.sales-activities-link",
       "reason": "Link module contributes background event delivery but intentionally exposes no public mutation or query route."
     }
