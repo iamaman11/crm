@@ -53,11 +53,8 @@ fn production_routes_exactly_cover_first_party_contract_bindings() {
     let query_definitions = application_query_definitions().unwrap();
     assert_route_kinds_are_disjoint(&mutation_definitions, &query_definitions);
 
-    let runtime_routes = unique_runtime_routes(
-        mutation_definitions
-            .iter()
-            .chain(query_definitions.iter()),
-    );
+    let runtime_routes =
+        unique_runtime_routes(mutation_definitions.iter().chain(query_definitions.iter()));
     let first_party_routes: BTreeSet<RouteCoordinate> = runtime_routes
         .iter()
         .filter(|(module_id, _, _)| manifest_modules.contains(module_id))
@@ -76,7 +73,10 @@ fn production_routes_exactly_cover_first_party_contract_bindings() {
         .collect();
     assert_eq!(
         platform_owners,
-        PLATFORM_ROUTE_OWNERS.into_iter().map(str::to_owned).collect(),
+        PLATFORM_ROUTE_OWNERS
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
         "a non-manifest production route owner requires explicit platform classification"
     );
 
