@@ -31,7 +31,6 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                         "customer_enrichment.mapping.get",
                         "customer_enrichment.mapping.publish",
                         "customer_enrichment.party.display_name.apply",
-                        "customer_enrichment.provider_profile.get",
                         "customer_enrichment.request.cancel",
                         "customer_enrichment.request.create",
                         "customer_enrichment.request.dispatch",
@@ -49,14 +48,18 @@ class ProductionRouteClassificationTests(unittest.TestCase):
         )
         self.assertEqual(empty_modules, {"crm.sales-activities-link"})
         self.assertIn(("crm.search", "search.global.query", "1.0.0"), platform)
-        self.assertNotIn(
-            (
-                "crm.customer-enrichment",
-                "customer_enrichment.provider_profile.publish",
-                "1.0.0",
-            ),
-            non_runtime,
-        )
+        for capability_id in {
+            "customer_enrichment.provider_profile.publish",
+            "customer_enrichment.provider_profile.get",
+        }:
+            self.assertNotIn(
+                (
+                    "crm.customer-enrichment",
+                    capability_id,
+                    "1.0.0",
+                ),
+                non_runtime,
+            )
 
 
 if __name__ == "__main__":
