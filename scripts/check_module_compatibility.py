@@ -5,14 +5,27 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from pathlib import Path
 import re
 import subprocess
 import sys
 from typing import Any
 
-from module_manifest_projection import runtime_manifest_projection
-from validate_module_manifests import ROOT, ManifestError, canonical_json_bytes, strict_yaml_load
+try:
+    from .module_manifest_projection import runtime_manifest_projection
+    from .validate_module_manifests import (
+        ROOT,
+        ManifestError,
+        canonical_json_bytes,
+        strict_yaml_load,
+    )
+except ImportError:  # direct script execution
+    from module_manifest_projection import runtime_manifest_projection
+    from validate_module_manifests import (
+        ROOT,
+        ManifestError,
+        canonical_json_bytes,
+        strict_yaml_load,
+    )
 
 MODULE_PATH_RE = re.compile(r"^modules/[^/]+/module\.yaml$")
 SEMVER_RE = re.compile(
@@ -68,7 +81,10 @@ def compare_manifest_sets(
             )
             continue
 
-        if candidate_version == previous_version and runtime_identity_bytes(candidate) != runtime_identity_bytes(previous):
+        if (
+            candidate_version == previous_version
+            and runtime_identity_bytes(candidate) != runtime_identity_bytes(previous)
+        ):
             errors.append(
                 f"module {module_id}@{candidate_version} runtime manifest changed without a version bump"
             )
@@ -102,7 +118,9 @@ def load_current_manifests() -> dict[str, dict[str, Any]]:
 def load_git_manifests(ref: str) -> dict[str, dict[str, Any]]:
     paths = [
         line.strip()
-        for line in _run_git("ls-tree", "-r", "--name-only", ref, "--", "modules").splitlines()
+        for line in _run_git(
+            "ls-tree", "-r", "--name-only", ref, "--", "modules"
+        ).splitlines()
         if MODULE_PATH_RE.fullmatch(line.strip())
     ]
     manifests: dict[str, dict[str, Any]] = {}
