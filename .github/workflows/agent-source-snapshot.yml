@@ -28,9 +28,9 @@ jobs:
             echo "No complete staged patch is present."
             exit 0
           fi
-          cat .agent/native-composition.patch.gz.b64.part.* | base64 --decode | gzip --decompress > /tmp/native-composition.patch
+          cat .agent/native-composition.patch.part.* > /tmp/native-composition.patch
           git apply --index /tmp/native-composition.patch
-          git rm .agent/native-composition.patch.gz.b64.part.* .agent/native-composition.patch.ready
+          git rm .agent/native-composition.patch.part.* .agent/native-composition.patch.ready
           echo "apply=true" >> "$GITHUB_OUTPUT"
       - name: Publish staged architecture patch
         if: steps.staged.outputs.apply == 'true'
