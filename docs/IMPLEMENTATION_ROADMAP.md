@@ -109,12 +109,12 @@ Completed packets:
 - **8A.6** — reversible merge/unmerge, immutable lineage, provenance and survivorship (#116 / PR #119; merge `d5cb4502ad0c49158e0789d8749dc09160da7895`).
 - **8A.7** — governed immutable import sources, exact server-side parsing/validation, resumable Party import execution, retry recovery and crash/restart process acceptance (#120 / PR #121; merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`).
 - **8A.8** — governed Party export jobs, immutable selection/manifests, deterministic artifacts, exact reconciliation, both execution crash-window recoveries and live-authorized audited artifact disclosure (#123 / PR #130; merge `0e7f9889362533446cc65d95dcf7969a60086a57`).
+- **8A.9** — Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132; merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`).
 
 Active and planned sequence:
 
-1. **8A.9 / #124 — Gate review:** Customer Data Quality Rules, Completeness and Stewardship is implemented in draft PR #132. The Party-focused v1 packet has passed its functional unchanged-head gate and is awaiting synchronized documentation plus the final exact-head gate.
-2. **8A.10 / #125 — Planned:** Governed Customer Enrichment and Provenance.
-3. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
+1. **8A.10 / #125 — Ready:** Governed Customer Enrichment and Provenance is the next customer-master production packet.
+2. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
 Phase 8A is complete only when the customer-master acceptance baseline covers:
 
@@ -128,13 +128,13 @@ Phase 8A is complete only when the customer-master acceptance baseline covers:
 - privacy access/export/restriction/deletion/legal-hold interaction proof;
 - tenant isolation, migrations, compatibility, process acceptance and performance appropriate to the maturity claim.
 
-#### Gate-review 8A.9 delivered boundary
+#### Complete 8A.9 delivered boundary
 
-The packet introduces a distinct `crm.data-quality` owner/coordinator for long-lived quality-governance state. It owns immutable/versioned quality rule sets and completeness profiles, exact source-version-bound outcomes/findings/observations/completeness results, stewardship lifecycle and assignment evidence, immutable remediation attempts and bounded evaluation coordination evidence.
+The merged packet introduces a distinct `crm.data-quality` owner/coordinator for long-lived quality-governance state. It owns immutable/versioned quality rule sets and completeness profiles, exact source-version-bound outcomes/findings/observations/completeness results, stewardship lifecycle and assignment evidence, immutable remediation attempts and bounded evaluation coordination evidence.
 
 It does not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution values. Authoritative Party values are read only through governed owner/query composition, and display-name remediation changes Party state only through the exact `parties.party.update@1.0.0` capability with live authorization, optimistic concurrency, deterministic idempotency and audit evidence.
 
-The 8A.9 gate-review packet proves:
+The merged 8A.9 packet proves:
 
 - immutable published rule/evaluator semantics and deterministic replay;
 - a bounded exact evaluator vocabulary with no arbitrary SQL, user code, filesystem or arbitrary network execution;
@@ -150,9 +150,9 @@ The 8A.9 gate-review packet proves:
 - bounded scans, batches, payloads and per-tenant operational limits;
 - process restart/retry without duplicate findings, assignments, remediation attempts or Party side effects;
 - FORCE RLS, live authorization, field redaction and safe cross-tenant non-disclosure;
-- migration clean apply and the repository database gate;
+- migration clean apply and repository database gates;
 - fresh-PostgreSQL real `crm-api` process acceptance;
-- one unchanged functional source-authored SHA with all 15 applicable workflows green before documentation synchronization.
+- final unchanged source-authored candidate `c066c278edd75b5f78bbfcead792d34164c76ff5` with all 15 applicable workflows green before merge.
 
 ### 8B — product catalog, pricing, CPQ and quote-to-revenue
 
@@ -206,15 +206,13 @@ Enterprise claims require automated and operational evidence, not configuration 
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Finish synchronized roadmap, status, Phase 8 plan, module catalog, issue and PR evidence for #124 / PR #132.
-2. Reach one unchanged source-authored exact-head gate across all 15 applicable workflows after the documentation synchronization.
-3. Move PR #132 from draft to ready only after that final gate is green and no review threads remain.
-4. Merge #132 before representing 8A.9 as **Complete** in `main` documentation or closing #124.
-5. Deliver #125 and #126 in dependency order.
-6. Close Phase 8A only after its full merged acceptance baseline is proven.
-7. Begin Phase 8B / #29 from the completed customer-master baseline.
-8. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
-9. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
+1. Start #125 from merged Phase 8A.9 baseline `8a1664309be9dc0c5e3bf9014cf248b1c3680035` as the single active customer-master production packet.
+2. Freeze enrichment provider, secret-handle, mapping, provenance, review and exact owner-capability application boundaries before publishing public contracts.
+3. Deliver #125 and then #126 in dependency order.
+4. Close Phase 8A only after its full merged acceptance baseline is proven.
+5. Begin Phase 8B / #29 from the completed customer-master baseline.
+6. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
+7. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
 
 ## 11. Documentation hygiene
 
