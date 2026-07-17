@@ -1,14 +1,11 @@
-use crate::governed_metadata::ApplicationCapabilityExecutorRouter as BaseApplicationCapabilityExecutorRouter;
+use crm_application_composition::ModuleActivationPort;
 use crm_capability_adapters::semantic_input_hash;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityAuthorizer, CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     TransactionalCapabilityExecutor,
 };
-use crm_core_data::{
-    PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresTransactionalAggregateExecutor,
-    RecordGetQuery,
-};
+use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor, RecordGetQuery};
 use crm_data_quality_capability_adapter::{
     DataQualityCompletenessProfileCapabilityPlanner, DataQualityEvaluationJobCapabilityPlanner,
     DataQualityRemediationCompletionPlanner, FINDING_RECORD_TYPE, MODULE_ID,
@@ -44,34 +41,29 @@ use std::sync::atomic::{AtomicBool, Ordering};
 static REMEDIATION_FAILPOINT_USED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
-pub struct ApplicationCapabilityExecutorRouter {
+pub struct DataQualityCapabilityExecutor {
     store: PostgresDataStore,
-    base: BaseApplicationCapabilityExecutorRouter,
+    fallback: Arc<dyn TransactionalCapabilityExecutor>,
+    party_update_executor: Arc<dyn TransactionalCapabilityExecutor>,
+    activation: Arc<dyn ModuleActivationPort>,
     capability_authorizer: Arc<dyn CapabilityAuthorizer>,
     query_authorizer: Arc<dyn QueryAuthorizer>,
 }
 
-impl ApplicationCapabilityExecutorRouter {
-    pub fn new<A>(
+impl DataQualityCapabilityExecutor {
+    pub fn new(
         store: PostgresDataStore,
-        aggregate: Arc<PostgresTransactionalAggregateExecutor>,
-        metadata: Arc<PostgresMetadataCapabilityExecutor>,
-        authorizer: Arc<A>,
-    ) -> Self
-    where
-        A: CapabilityAuthorizer + QueryAuthorizer + 'static,
-    {
-        let capability_authorizer: Arc<dyn CapabilityAuthorizer> = authorizer.clone();
-        let query_authorizer: Arc<dyn QueryAuthorizer> = authorizer.clone();
-        let base = BaseApplicationCapabilityExecutorRouter::new(
-            store.clone(),
-            aggregate,
-            metadata,
-            capability_authorizer.clone(),
-        );
+        fallback: Arc<dyn TransactionalCapabilityExecutor>,
+        party_update_executor: Arc<dyn TransactionalCapabilityExecutor>,
+        activation: Arc<dyn ModuleActivationPort>,
+        capability_authorizer: Arc<dyn CapabilityAuthorizer>,
+        query_authorizer: Arc<dyn QueryAuthorizer>,
+    ) -> Self {
         Self {
             store,
-            base,
+            fallback,
+            party_update_executor,
+            activation,
             capability_authorizer,
             query_authorizer,
         }
@@ -114,6 +106,15 @@ impl ApplicationCapabilityExecutorRouter {
             return Err(remediation_evidence_conflict());
         }
         self.ensure_display_name_rule(&request, &finding).await?;
+        let party_module_id =
+            ModuleId::try_new(PARTIES_MODULE_ID).map_err(reference_configuration_error)?;
+        if !self
+            .activation
+            .is_active(&request.context.execution.tenant_id, &party_module_id)
+            .await?
+        {
+            return Err(module_not_active(&party_module_id));
+        }
 
         let identity = PartyDisplayNameRemediationIdentity::derive(
             &request.context.execution.tenant_id,
@@ -182,7 +183,7 @@ impl ApplicationCapabilityExecutorRouter {
         )
         .await?;
         let target_result = self
-            .base
+            .party_update_executor
             .execute(&target_definition, target_request)
             .await?;
         let updated_party = decode_updated_party(target_result)?;
@@ -259,19 +260,24 @@ impl ApplicationCapabilityExecutorRouter {
     }
 }
 
-impl fmt::Debug for ApplicationCapabilityExecutorRouter {
+impl fmt::Debug for DataQualityCapabilityExecutor {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("ApplicationCapabilityExecutorRouter")
+            .debug_struct("DataQualityCapabilityExecutor")
             .field("store", &self.store)
-            .field("base", &self.base)
+            .field("fallback", &"dyn TransactionalCapabilityExecutor")
+            .field(
+                "party_update_executor",
+                &"dyn TransactionalCapabilityExecutor",
+            )
+            .field("activation", &"dyn ModuleActivationPort")
             .field("capability_authorizer", &"dyn CapabilityAuthorizer")
             .field("query_authorizer", &"dyn QueryAuthorizer")
             .finish()
     }
 }
 
-impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
+impl TransactionalCapabilityExecutor for DataQualityCapabilityExecutor {
     fn execute<'a>(
         &'a self,
         definition: &'a CapabilityDefinition,
@@ -340,7 +346,7 @@ impl TransactionalCapabilityExecutor for ApplicationCapabilityExecutorRouter {
             REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY => {
                 Box::pin(async move { self.execute_remediation(definition, request).await })
             }
-            _ => self.base.execute(definition, request),
+            _ => self.fallback.execute(definition, request),
         }
     }
 }
@@ -499,6 +505,16 @@ fn remediation_target_contract_invalid(reference: impl Into<String>) -> SdkError
         "The Party update required by remediation returned invalid evidence.",
     )
     .with_internal_reference(reference.into())
+}
+
+fn module_not_active(module_id: &ModuleId) -> SdkError {
+    SdkError::new(
+        "MODULE_NOT_ACTIVE",
+        ErrorCategory::Conflict,
+        false,
+        "The requested module is not active for this tenant.",
+    )
+    .with_internal_reference(module_id.as_str())
 }
 
 fn reference_configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {

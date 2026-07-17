@@ -1,0 +1,11 @@
+[package]
+name = "crm-contact-points-capability-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-contact-points-capability-adapter = { path = "../crm-contact-points-capability-adapter" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-party-reference-composition = { path = "../crm-party-reference-composition" }

@@ -266,6 +266,26 @@ Before raising readiness beyond `Foundation`, replace this placeholder with the 
 '''
 
 
+
+def render_production_contribution(spec: ModuleSpec) -> str:
+    return f'''# Production contribution boundary for `{spec.module_id}`
+
+This file is a mandatory architecture boundary, not an implementation placeholder inside the pure module core.
+
+Before production readiness, create a separately owned adapter/composition crate that:
+
+- contributes every exact versioned mutation and query coordinate owned by `{spec.module_id}`;
+- performs cross-owner reference reads in pre-authorization semantic validation;
+- gates routes and background workers through `ModuleActivationPort`;
+- contributes deterministic background workers with an explicit phase when applicable;
+- fails startup on duplicate coordinates, owner mismatches or route-kind mismatches;
+- registers exact manifest/binding/production-route parity with an explicit classification for any non-runtime route;
+- requires no edits to central capability, query or worker routers;
+- proves the production path through governed gateway and lifecycle acceptance tests.
+
+The module core must remain infrastructure-neutral and must not depend on the production host.
+'''
+
 def render_acceptance(spec: ModuleSpec) -> str:
     kind_gate = (
         "- [ ] Define authoritative aggregate/value-object invariants and ownership boundaries."
@@ -284,6 +304,7 @@ Scaffold state: **Foundation only**. These TODO gates are intentionally explicit
 - [ ] Add tenant, authorization, idempotency/retry and cross-tenant negative coverage.
 - [ ] Add persistence/projection/search behavior only through platform adapters outside the module core.
 - [ ] Replace `tests/acceptance.rs` with production-path acceptance evidence.
+- [ ] Complete `production/CONTRIBUTION.md` through a separately owned composition boundary.
 - [ ] Add production composition and end-to-end acceptance through governed gateways.
 - [ ] Prove rollback/disable/uninstall behavior appropriate to the module type.
 - [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status and the owning GitHub issue.
@@ -327,6 +348,7 @@ def build_files(spec: ModuleSpec) -> dict[Path, str]:
         base / "MODULE_CATALOG_ENTRY.md": render_catalog_entry(spec),
         base / "contracts" / "README.md": render_contracts_placeholder(spec),
         base / "adapters" / "README.md": render_adapters_placeholder(spec),
+        base / "production" / "CONTRIBUTION.md": render_production_contribution(spec),
         base / "tests" / "acceptance.rs": render_acceptance_test_rs(spec),
         base / "migrations" / ".gitkeep": "",
     }

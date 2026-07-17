@@ -1,16 +1,17 @@
 use crate::{
-    ApplicationAggregatePlannerRouter, ApplicationCapabilityExecutorRouter, ApplicationConfig,
-    ApplicationGatewayService, ApplicationQueryRouter, ContractBoundMutationSemanticValidator,
-    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService, ProcessIdentitySource,
-    SystemClock, application_capability_catalog, application_mutation_definitions,
-    application_query_capability_catalog, application_query_definitions,
-    bootstrap_export_selection_worker_access,
+    ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
+    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
+    PostgresModuleActivation, ProcessIdentitySource, ProductionBackgroundWorkerDependencies,
+    ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
+    build_bootstrap_visibility_registry, build_production_background_workers,
+    build_production_composition,
 };
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use crm_application_composition::BackgroundWorkerRegistry;
 use crm_capability_adapters::{
     AuthorizationGrant, FixedWindowRateLimiter, GatewayCapabilityClient,
     HmacSha256ApprovalVerifier, LiveAuthorizationStore, LiveCapabilityAuthorizer,
@@ -24,33 +25,9 @@ use crm_capability_ingress::{
     HttpQueryMiddleware, HttpQueryRequest, QueryContextResolver, QueryIngress, TimeoutPolicy,
 };
 use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityGateway};
-use crm_consents_capability_adapter::{
-    MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
-};
-use crm_consents_query_adapter::ConsentQueryAdapter;
-use crm_contact_points_capability_adapter::{
-    MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
-};
-use crm_contact_points_query_adapter::ContactPointQueryAdapter;
-use crm_core_data::{
-    PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,
-    PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,
-};
-use crm_core_events::EventHistoryRequest;
+use crm_core_data::{PostgresDataStore, PostgresImmutableFileArtifactStore};
 use crm_customer_360_composition::Customer360ProjectionWorker;
-use crm_customer_360_query_adapter::{
-    Customer360QueryAdapter, MODULE_ID as CUSTOMER_360_MODULE_ID,
-};
-use crm_customer_accounts_capability_adapter::{
-    MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
-};
-use crm_customer_accounts_query_adapter::AccountQueryAdapter;
-use crm_customer_data_operations_capability_adapter::{
-    IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
-    IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
-    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-    internal_export_selection_capability_definitions,
-};
+use crm_customer_data_operations_capability_adapter::internal_export_selection_capability_definitions;
 use crm_customer_data_operations_execution_composition::{
     EXPORT_SELECTION_WORKER_ACTOR_ID, IMPORT_EXECUTION_WORKER_ACTOR_ID, PartyExportSelectionWorker,
     PartyImportExecutionCoordinator, PartyImportExecutionWorker,
@@ -59,46 +36,22 @@ use crm_customer_data_operations_execution_composition::{
     internal_capability_definitions,
 };
 use crm_customer_data_operations_query_adapter::{
-    CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
     PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
-use crm_data_quality_query_adapter::DataQualityQueryAdapter;
-use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
-use crm_identity_resolution_capability_adapter::{
-    MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
-    MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
-};
-use crm_identity_resolution_merge_query_adapter::IdentityResolutionMergeQueryAdapter;
-use crm_identity_resolution_query_adapter::IdentityResolutionQueryAdapter;
-use crm_metadata_api_adapter::METADATA_MODULE_ID;
-use crm_metadata_query_adapter::MetadataQueryAdapter;
-use crm_module_registry::ModuleRegistry;
+use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, Clock, EventType, ModuleId, RandomSource, RecordType,
+    ActorId, CapabilityId, CapabilityVersion, Clock, ModuleId, RandomSource, RecordType,
     SchemaVersion, TenantId, TypedPayload,
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
-    RECORD_TYPE as PARTY_RECORD_TYPE,
 };
 use crm_parties_query_adapter::PartyQueryAdapter;
-use crm_party_relationships_capability_adapter::{
-    MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID, RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
-};
-use crm_party_relationships_query_adapter::PartyRelationshipQueryAdapter;
 use crm_query_runtime::{CursorCodec, QueryGateway};
 use crm_sales_activities_capability_composition::{
-    DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, ProductionQueryRouter,
-    SalesActivitiesLinkDeliveryOutcome, SalesActivitiesLinkEventProcessor,
-    SalesActivitiesLinkEventProcessorConfig, TASK_STATUS_PROJECTION_ID,
+    Phase6ProjectionWorker, SalesActivitiesLinkEventProcessor,
+    SalesActivitiesLinkEventProcessorConfig,
 };
-use crm_sales_activities_link::MODULE_ID as LINK_MODULE_ID;
-use crm_sales_activities_query_adapter::{
-    ACTIVITIES_RECORD_TYPE, SALES_RECORD_TYPE, SalesActivitiesQueryAdapter,
-};
-use crm_search_query_adapter::{SEARCH_MODULE_ID, SearchQueryAdapter};
-use crm_search_runtime::SearchIndexId;
-use semver::Version;
 use serde::Serialize;
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -116,24 +69,15 @@ use tonic_health::ServingStatus;
 const BOOTSTRAP_POLICY_VERSION: &str = "application-bootstrap/v1";
 const BOOTSTRAP_LIFETIME_NANOS: i64 = 365_i64 * 24 * 60 * 60 * 1_000_000_000;
 const BACKGROUND_INTERVAL: Duration = Duration::from_secs(1);
-const LINK_SCAN_PAGE_SIZE: u32 = 200;
-const PROJECTION_PAGE_SIZE: u32 = 200;
-const SEARCH_PAGE_SIZE: u32 = 200;
 
 #[derive(Clone)]
 pub struct ApplicationComponents {
-    pub store: PostgresDataStore,
-    pub module_registry: Arc<ModuleRegistry>,
+    pub module_ids: BTreeSet<String>,
     pub mutation_http: Arc<HttpCapabilityMiddleware>,
     pub mutation_grpc: Arc<GrpcCapabilityMiddleware>,
     pub query_http: Arc<HttpQueryMiddleware>,
     pub query_grpc: Arc<GrpcQueryMiddleware>,
-    pub link_processor: Arc<SalesActivitiesLinkEventProcessor>,
-    pub projection_worker: Arc<Phase6ProjectionWorker>,
-    pub customer_360_worker: Arc<Customer360ProjectionWorker>,
-    pub search_worker: Arc<GlobalSearchWorker>,
-    pub import_execution_worker: Arc<PartyImportExecutionWorker>,
-    pub export_selection_worker: Arc<PartyExportSelectionWorker>,
+    pub background_workers: BackgroundWorkerRegistry,
     pub export_artifact_download: Arc<PartyExportArtifactDownloadService>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
@@ -146,7 +90,7 @@ impl fmt::Debug for ApplicationComponents {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ApplicationComponents")
-            .field("module_registry", &"ModuleRegistry")
+            .field("module_count", &self.module_ids.len())
             .field("tenant_count", &self.tenant_ids.len())
             .field("ready", &self.is_ready())
             .finish()
@@ -216,10 +160,42 @@ impl ApplicationRuntime {
 
         let authorization_store = LiveAuthorizationStore::default();
         let visibility_store = LiveQueryVisibilityStore::default();
-        let mutation_definitions = application_mutation_definitions()
-            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let query_definitions = application_query_definitions()
-            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let authorizer = Arc::new(LiveCapabilityAuthorizer::new(
+            authorization_store.clone(),
+            Arc::clone(&clock),
+        ));
+        let visibility_authorizer = Arc::new(LiveQueryVisibilityAuthorizer::new(
+            visibility_store.clone(),
+            Arc::clone(&clock),
+        ));
+        let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
+            .try_into()
+            .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
+        let activation: Arc<dyn crm_application_composition::ModuleActivationPort> =
+            Arc::new(PostgresModuleActivation::new(store.clone()));
+        let capability_authorizer: Arc<dyn crm_capability_runtime::CapabilityAuthorizer> =
+            authorizer.clone();
+        let query_authorizer: Arc<dyn crm_query_runtime::QueryAuthorizer> = authorizer.clone();
+        let query_visibility: Arc<dyn crm_query_runtime::QueryVisibilityAuthorizer> =
+            visibility_authorizer.clone();
+        let composition = build_production_composition(ProductionCompositionDependencies {
+            store: store.clone(),
+            activation: activation.clone(),
+            capability_authorizer,
+            query_authorizer,
+            visibility_authorizer: query_visibility,
+            cursor_key,
+        })
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let module_ids = composition.module_ids().clone();
+        if config.bootstrap_allow_phase6 {
+            store
+                .bootstrap_activate_published_modules(&config.tenant_ids, &module_ids)
+                .await
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        }
+        let mutation_definitions = composition.mutation_definitions().to_vec();
+        let query_definitions = composition.query_definitions().to_vec();
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_export_selection_definitions =
@@ -262,25 +238,9 @@ impl ApplicationRuntime {
             )?;
         }
 
-        let authorizer = Arc::new(LiveCapabilityAuthorizer::new(
-            authorization_store,
-            Arc::clone(&clock),
-        ));
-        let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(
-            store.clone(),
-            Arc::new(PostgresTransactionalAggregateExecutor::new(
-                store.clone(),
-                Arc::new(ApplicationAggregatePlannerRouter),
-            )),
-            Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
-            authorizer.clone(),
-        ));
         let mutation_gateway = Arc::new(CapabilityGateway::new(
-            Arc::new(
-                application_capability_catalog()
-                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            ),
-            Arc::new(ContractBoundMutationSemanticValidator),
+            composition.mutation_registry(),
+            composition.mutation_validator(),
             Arc::new(FixedWindowRateLimiter::new(
                 RateLimitPolicyStore::default(),
                 Arc::clone(&clock),
@@ -290,7 +250,7 @@ impl ApplicationRuntime {
                     .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             ),
             authorizer.clone(),
-            mutation_executor,
+            composition.mutation_executor(),
             Arc::clone(&clock),
         ));
 
@@ -314,31 +274,10 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
 
-        let visibility_authorizer = Arc::new(LiveQueryVisibilityAuthorizer::new(
-            visibility_store,
-            Arc::clone(&clock),
-        ));
         let artifact_download_resolver = Arc::new(PartyExportArtifactDownloadResolver::new(
             store.clone(),
             visibility_authorizer.clone(),
         ));
-        let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
-            .try_into()
-            .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
-        let owner_query_adapter = SalesActivitiesQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let party_query_adapter = PartyQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let export_party_query_adapter = PartyQueryAdapter::new(
             store.clone(),
             CursorCodec::new(cursor_key)
@@ -366,97 +305,11 @@ impl ApplicationRuntime {
             )
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
-        let account_query_adapter = AccountQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let contact_point_query_adapter = ContactPointQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let customer_360_query_adapter =
-            Customer360QueryAdapter::new(store.clone(), visibility_authorizer.clone());
-        let consent_query_adapter = ConsentQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let identity_resolution_query_adapter = IdentityResolutionQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let identity_resolution_merge_query_adapter = IdentityResolutionMergeQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
-            store.clone(),
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            visibility_authorizer.clone(),
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let data_quality_query_adapter =
-            DataQualityQueryAdapter::new(store.clone(), visibility_authorizer.clone());
-        let search_query_adapter = SearchQueryAdapter::new(
-            SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            Arc::new(store.clone()),
-            visibility_authorizer,
-            CursorCodec::new(cursor_key)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-        let production_query_router =
-            ProductionQueryRouter::new(owner_query_adapter, search_query_adapter);
-        let metadata_query_adapter =
-            MetadataQueryAdapter::new(Arc::new(PostgresMetadataQueryStore::new(store.clone())));
-        let base_query_router = crate::governed_metadata::ApplicationQueryRouter::new(
-            production_query_router,
-            party_query_adapter,
-            account_query_adapter,
-            contact_point_query_adapter,
-            party_relationship_query_adapter,
-            customer_360_query_adapter,
-            consent_query_adapter,
-            identity_resolution_query_adapter,
-            identity_resolution_merge_query_adapter,
-            customer_data_operations_query_adapter,
-            metadata_query_adapter,
-        );
-        let query_router = Arc::new(ApplicationQueryRouter::new(
-            base_query_router,
-            data_quality_query_adapter,
-        ));
         let query_gateway = Arc::new(QueryGateway::new(
-            Arc::new(
-                application_query_capability_catalog()
-                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-            ),
-            query_router.clone(),
+            composition.query_registry(),
+            composition.query_validator(),
             authorizer.clone(),
-            query_router,
+            composition.query_executor(),
         ));
 
         let timeout_policy = TimeoutPolicy {
@@ -508,19 +361,26 @@ impl ApplicationRuntime {
             GlobalSearchWorker::new(store.clone())
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
+        let background_workers =
+            build_production_background_workers(ProductionBackgroundWorkerDependencies {
+                module_ids: module_ids.clone(),
+                activation,
+                store,
+                import_execution_worker,
+                export_selection_worker,
+                link_processor,
+                projection_worker,
+                customer_360_worker,
+                search_worker,
+            })
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let components = Arc::new(ApplicationComponents {
-            store,
-            module_registry: Arc::new(ModuleRegistry::new(Version::new(0, 1, 0))),
+            module_ids,
             mutation_http: Arc::new(HttpCapabilityMiddleware::new(mutation_ingress.clone())),
             mutation_grpc: Arc::new(GrpcCapabilityMiddleware::new(mutation_ingress)),
             query_http: Arc::new(HttpQueryMiddleware::new(query_ingress.clone())),
             query_grpc: Arc::new(GrpcQueryMiddleware::new(query_ingress)),
-            link_processor,
-            projection_worker,
-            customer_360_worker,
-            search_worker,
-            import_execution_worker,
-            export_selection_worker,
+            background_workers,
             export_artifact_download,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
@@ -872,119 +732,15 @@ async fn background_worker_loop(
 async fn run_background_cycle(
     components: &ApplicationComponents,
 ) -> Result<(), ApplicationRuntimeError> {
+    let now_unix_nanos = components.clock.now_unix_nanos();
     for tenant_id in &components.tenant_ids {
         components
-            .import_execution_worker
-            .run_tenant_cycle(tenant_id.clone())
-            .await
-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
-        components
-            .export_selection_worker
-            .run_tenant_cycle(tenant_id.clone())
-            .await
-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
-        scan_link_events(components, tenant_id.clone()).await?;
-        drain_projection(
-            &components.projection_worker,
-            tenant_id.clone(),
-            DEAL_TIMELINE_PROJECTION_ID,
-        )
-        .await?;
-        drain_projection(
-            &components.projection_worker,
-            tenant_id.clone(),
-            TASK_STATUS_PROJECTION_ID,
-        )
-        .await?;
-        drain_customer_360_projection(&components.customer_360_worker, tenant_id.clone()).await?;
-        components
-            .search_worker
-            .ensure_ready(tenant_id.clone(), SEARCH_PAGE_SIZE)
+            .background_workers
+            .run_tenant_cycle(tenant_id.clone(), now_unix_nanos)
             .await
             .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
     }
     Ok(())
-}
-
-async fn drain_customer_360_projection(
-    worker: &Customer360ProjectionWorker,
-    tenant_id: TenantId,
-) -> Result<(), ApplicationRuntimeError> {
-    loop {
-        let result = worker
-            .run_batch(tenant_id.clone(), PROJECTION_PAGE_SIZE)
-            .await
-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
-        if !result.has_more {
-            return Ok(());
-        }
-    }
-}
-
-async fn scan_link_events(
-    components: &ApplicationComponents,
-    tenant_id: TenantId,
-) -> Result<(), ApplicationRuntimeError> {
-    let event_type = EventType::try_new("sales.deal.stage_changed")
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-    let consumer_module_id = ModuleId::try_new(LINK_MODULE_ID)
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
-    let mut after = None;
-    loop {
-        let page = components
-            .store
-            .list_event_history(&EventHistoryRequest {
-                tenant_id: tenant_id.clone(),
-                consumer_module_id: consumer_module_id.clone(),
-                event_types: vec![event_type.clone()],
-                after,
-                page_size: LINK_SCAN_PAGE_SIZE,
-            })
-            .await
-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
-        for delivery in page.deliveries {
-            let outcome = components
-                .link_processor
-                .process(
-                    tenant_id.clone(),
-                    delivery.event_id,
-                    components.clock.now_unix_nanos(),
-                )
-                .await
-                .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
-            if let SalesActivitiesLinkDeliveryOutcome::DeadLettered { error_code } = outcome {
-                return Err(ApplicationRuntimeError::Server(format!(
-                    "link event dead-lettered: {error_code}"
-                )));
-            }
-        }
-        let Some(next) = page.next_cursor else {
-            return Ok(());
-        };
-        after = Some(next);
-    }
-}
-
-async fn drain_projection(
-    worker: &Phase6ProjectionWorker,
-    tenant_id: TenantId,
-    projection_id: &str,
-) -> Result<(), ApplicationRuntimeError> {
-    loop {
-        let result = worker
-            .run_batch(tenant_id.clone(), projection_id, PROJECTION_PAGE_SIZE)
-            .await
-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
-        if !result.has_more {
-            return Ok(());
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-struct BootstrapVisibilityResource<'a> {
-    owner_module_id: &'a str,
-    resource_type: &'a str,
 }
 
 fn bootstrap_application_access(
@@ -996,6 +752,8 @@ fn bootstrap_application_access(
     query_definitions: &[CapabilityDefinition],
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = expiry(now_unix_nanos)?;
+    let visibility = build_bootstrap_visibility_registry()
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
     for tenant_id in &config.tenant_ids {
         for definition in mutation_definitions.iter().chain(query_definitions) {
             authorization_store
@@ -1012,251 +770,18 @@ fn bootstrap_application_access(
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         }
         for definition in query_definitions {
-            match definition.owner_module_id.as_str() {
-                "crm.sales" => upsert_bootstrap_visibility(
+            let resources = visibility
+                .resources_for(definition)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+            for resource in resources {
+                upsert_bootstrap_visibility(
                     visibility_store,
                     config,
                     tenant_id,
                     definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: "crm.sales",
-                        resource_type: SALES_RECORD_TYPE,
-                    },
-                    sales_fields(),
+                    resource,
                     expires_at,
-                )?,
-                "crm.activities" => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: "crm.activities",
-                        resource_type: ACTIVITIES_RECORD_TYPE,
-                    },
-                    task_fields(),
-                    expires_at,
-                )?,
-                PARTIES_MODULE_ID => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: PARTIES_MODULE_ID,
-                        resource_type: PARTY_RECORD_TYPE,
-                    },
-                    party_fields(),
-                    expires_at,
-                )?,
-                ACCOUNTS_MODULE_ID => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: ACCOUNTS_MODULE_ID,
-                        resource_type: ACCOUNT_RECORD_TYPE,
-                    },
-                    account_fields(),
-                    expires_at,
-                )?,
-                CONTACT_POINTS_MODULE_ID => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: CONTACT_POINTS_MODULE_ID,
-                        resource_type: CONTACT_POINT_RECORD_TYPE,
-                    },
-                    contact_point_fields(),
-                    expires_at,
-                )?,
-                CONSENTS_MODULE_ID => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: CONSENTS_MODULE_ID,
-                        resource_type: CONSENT_RECORD_TYPE,
-                    },
-                    consent_fields(),
-                    expires_at,
-                )?,
-                IDENTITY_RESOLUTION_MODULE_ID => {
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
-                            resource_type: IDENTITY_RESOLUTION_RECORD_TYPE,
-                        },
-                        identity_resolution_fields(),
-                        expires_at,
-                    )?;
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: IDENTITY_RESOLUTION_MODULE_ID,
-                            resource_type: IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
-                        },
-                        identity_resolution_merge_fields(),
-                        expires_at,
-                    )?;
-                }
-                PARTY_RELATIONSHIPS_MODULE_ID => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
-                        resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
-                    },
-                    party_relationship_fields(),
-                    expires_at,
-                )?,
-                CUSTOMER_DATA_OPERATIONS_MODULE_ID => {
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-                            resource_type: CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
-                        },
-                        customer_data_import_job_fields(),
-                        expires_at,
-                    )?;
-                    if definition.capability_id.as_str() == LIST_IMPORT_ROWS_CAPABILITY {
-                        upsert_bootstrap_visibility(
-                            visibility_store,
-                            config,
-                            tenant_id,
-                            definition,
-                            BootstrapVisibilityResource {
-                                owner_module_id: CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-                                resource_type: CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
-                            },
-                            customer_data_import_row_fields(),
-                            expires_at,
-                        )?;
-                    }
-                }
-                "crm.data-quality" => upsert_bootstrap_visibility(
-                    visibility_store,
-                    config,
-                    tenant_id,
-                    definition,
-                    BootstrapVisibilityResource {
-                        owner_module_id: "crm.data-quality",
-                        resource_type: "data_quality.party_rule_set_version",
-                    },
-                    ["definition"].into_iter().map(str::to_owned).collect(),
-                    expires_at,
-                )?,
-                METADATA_MODULE_ID => {}
-                CUSTOMER_360_MODULE_ID => {
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: PARTIES_MODULE_ID,
-                            resource_type: PARTY_RECORD_TYPE,
-                        },
-                        customer_360_party_fields(),
-                        expires_at,
-                    )?;
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: ACCOUNTS_MODULE_ID,
-                            resource_type: ACCOUNT_RECORD_TYPE,
-                        },
-                        customer_360_account_fields(),
-                        expires_at,
-                    )?;
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: CONTACT_POINTS_MODULE_ID,
-                            resource_type: CONTACT_POINT_RECORD_TYPE,
-                        },
-                        customer_360_contact_point_fields(),
-                        expires_at,
-                    )?;
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: PARTY_RELATIONSHIPS_MODULE_ID,
-                            resource_type: PARTY_RELATIONSHIP_RECORD_TYPE,
-                        },
-                        customer_360_party_relationship_fields(),
-                        expires_at,
-                    )?;
-                }
-                SEARCH_MODULE_ID => {
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: "crm.sales",
-                            resource_type: SALES_RECORD_TYPE,
-                        },
-                        ["name"].into_iter().map(str::to_owned).collect(),
-                        expires_at,
-                    )?;
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: "crm.activities",
-                            resource_type: ACTIVITIES_RECORD_TYPE,
-                        },
-                        ["subject"].into_iter().map(str::to_owned).collect(),
-                        expires_at,
-                    )?;
-                    upsert_bootstrap_visibility(
-                        visibility_store,
-                        config,
-                        tenant_id,
-                        definition,
-                        BootstrapVisibilityResource {
-                            owner_module_id: PARTIES_MODULE_ID,
-                            resource_type: PARTY_RECORD_TYPE,
-                        },
-                        party_fields(),
-                        expires_at,
-                    )?;
-                }
-                _ => {
-                    return Err(ApplicationRuntimeError::Assembly(
-                        "unsupported bootstrap query owner".to_owned(),
-                    ));
-                }
+                )?;
             }
         }
     }
@@ -1307,8 +832,7 @@ fn upsert_bootstrap_visibility(
     config: &ApplicationConfig,
     tenant_id: &TenantId,
     definition: &CapabilityDefinition,
-    resource: BootstrapVisibilityResource<'_>,
-    allowed_fields: BTreeSet<String>,
+    resource: BootstrapVisibilityResource,
     expires_at: i64,
 ) -> Result<(), ApplicationRuntimeError> {
     visibility_store
@@ -1322,7 +846,7 @@ fn upsert_bootstrap_visibility(
             record_type: RecordType::try_new(resource.resource_type)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
             record_id: None,
-            allowed_fields,
+            allowed_fields: resource.allowed_fields,
             policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
             expires_at_unix_nanos: Some(expires_at),
         })
@@ -1336,185 +860,6 @@ fn expiry(now_unix_nanos: i64) -> Result<i64, ApplicationRuntimeError> {
         .ok_or_else(|| ApplicationRuntimeError::Assembly("bootstrap expiry overflow".to_owned()))
 }
 
-fn sales_fields() -> BTreeSet<String> {
-    [
-        "name",
-        "stage",
-        "amount",
-        "owner",
-        "account",
-        "primary_contact",
-        "expected_close_date",
-        "probability_basis_points",
-        "status",
-        "close_outcome",
-        "created_at",
-        "updated_at",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-fn customer_data_import_job_fields() -> BTreeSet<String> {
-    ["source", "mapping", "status", "counters", "checkpoint"]
-        .into_iter()
-        .map(str::to_owned)
-        .collect()
-}
-
-fn customer_data_import_row_fields() -> BTreeSet<String> {
-    [
-        "row_position",
-        "source_identity",
-        "status",
-        "prepared_party",
-        "diagnostics",
-        "execution",
-        "target_party_ref",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-fn customer_360_party_fields() -> BTreeSet<String> {
-    ["display_name"].into_iter().map(str::to_owned).collect()
-}
-
-fn customer_360_account_fields() -> BTreeSet<String> {
-    ["name", "status"].into_iter().map(str::to_owned).collect()
-}
-
-fn customer_360_contact_point_fields() -> BTreeSet<String> {
-    [
-        "party_ref",
-        "kind",
-        "normalized_value",
-        "status",
-        "preferred",
-        "validity",
-        "verification",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-fn customer_360_party_relationship_fields() -> BTreeSet<String> {
-    ["from_party_ref", "to_party_ref", "status", "validity"]
-        .into_iter()
-        .map(str::to_owned)
-        .collect()
-}
-
-fn party_fields() -> BTreeSet<String> {
-    ["kind", "display_name"]
-        .into_iter()
-        .map(str::to_owned)
-        .collect()
-}
-
-fn account_fields() -> BTreeSet<String> {
-    ["name", "status", "party_associations"]
-        .into_iter()
-        .map(str::to_owned)
-        .collect()
-}
-
-fn contact_point_fields() -> BTreeSet<String> {
-    [
-        "party_ref",
-        "kind",
-        "normalized_value",
-        "display_value",
-        "status",
-        "preferred",
-        "validity",
-        "verification",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-fn consent_fields() -> BTreeSet<String> {
-    [
-        "party_ref",
-        "contact_point_ref",
-        "purpose",
-        "channel",
-        "effect",
-        "legal_basis",
-        "jurisdiction",
-        "source",
-        "evidence_ref",
-        "validity",
-        "status",
-        "resource_version",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-fn identity_resolution_fields() -> BTreeSet<String> {
-    [
-        "party_pair",
-        "evidence_history",
-        "status",
-        "decision_reason",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-fn identity_resolution_merge_fields() -> BTreeSet<String> {
-    [
-        "party_pair",
-        "decision",
-        "survivorship",
-        "status",
-        "unmerge_decision",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-fn party_relationship_fields() -> BTreeSet<String> {
-    [
-        "from_party_ref",
-        "to_party_ref",
-        "relationship_type",
-        "status",
-        "validity",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-fn task_fields() -> BTreeSet<String> {
-    [
-        "subject",
-        "description",
-        "owner",
-        "related_resources",
-        "priority",
-        "status",
-        "due_at",
-        "reminder_at",
-        "completed_at",
-        "created_at",
-        "updated_at",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
 async fn join_task<T>(
     name: &'static str,
     task: tokio::task::JoinHandle<Result<T, ApplicationRuntimeError>>,
@@ -1526,25 +871,6 @@ async fn join_task<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn field_bootstrap_sets_are_nonempty_and_stable() {
-        assert!(sales_fields().contains("name"));
-        assert!(sales_fields().contains("amount"));
-        assert!(party_fields().contains("kind"));
-        assert!(party_fields().contains("display_name"));
-        assert!(account_fields().contains("name"));
-        assert!(account_fields().contains("party_associations"));
-        assert!(contact_point_fields().contains("party_ref"));
-        assert!(contact_point_fields().contains("verification"));
-        assert!(consent_fields().contains("purpose"));
-        assert!(consent_fields().contains("evidence_ref"));
-        assert!(party_relationship_fields().contains("from_party_ref"));
-        assert!(party_relationship_fields().contains("relationship_type"));
-        assert!(party_relationship_fields().contains("validity"));
-        assert!(task_fields().contains("subject"));
-        assert!(task_fields().contains("status"));
-    }
 
     #[test]
     fn expiry_is_strictly_after_now() {

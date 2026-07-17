@@ -1,0 +1,13 @@
+[package]
+name = "crm-application-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-query-runtime = { path = "../crm-query-runtime" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }

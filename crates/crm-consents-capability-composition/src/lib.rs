@@ -9,7 +9,7 @@
 
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
-    TransactionalCapabilityExecutor,
+    CapabilitySemanticValidator, TransactionalCapabilityExecutor,
 };
 use crm_consents::{CommunicationChannel, PartyReference};
 use crm_consents_capability_adapter::{
@@ -118,8 +118,51 @@ impl ConsentReferenceReader for PostgresConsentReferenceReader {
 }
 
 #[derive(Clone)]
-pub struct ConsentCapabilityExecutor {
+pub struct ConsentCapabilitySemanticValidator {
     references: Arc<dyn ConsentReferenceReader>,
+}
+
+impl fmt::Debug for ConsentCapabilitySemanticValidator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ConsentCapabilitySemanticValidator")
+            .field("references", &"dyn ConsentReferenceReader")
+            .finish()
+    }
+}
+
+impl ConsentCapabilitySemanticValidator {
+    pub fn new(references: Arc<dyn ConsentReferenceReader>) -> Self {
+        Self { references }
+    }
+}
+
+impl CapabilitySemanticValidator for ConsentCapabilitySemanticValidator {
+    fn validate<'a>(
+        &'a self,
+        definition: &'a CapabilityDefinition,
+        request: &'a CapabilityRequest,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        if !MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+            return Box::pin(async { Err(unsupported_capability()) });
+        }
+        Box::pin(async move {
+            if definition.capability_id.as_str() == CREATE_CAPABILITY {
+                let scope = referenced_scope_from_create(request)?;
+                validate_reference_scope(
+                    self.references.as_ref(),
+                    &request.context.execution.tenant_id,
+                    &scope,
+                )
+                .await?;
+            }
+            Ok(())
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct ConsentCapabilityExecutor {
     inner: Arc<dyn TransactionalCapabilityExecutor>,
 }
 
@@ -127,18 +170,14 @@ impl fmt::Debug for ConsentCapabilityExecutor {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ConsentCapabilityExecutor")
-            .field("references", &"dyn ConsentReferenceReader")
             .field("inner", &"dyn TransactionalCapabilityExecutor")
             .finish()
     }
 }
 
 impl ConsentCapabilityExecutor {
-    pub fn new(
-        references: Arc<dyn ConsentReferenceReader>,
-        inner: Arc<dyn TransactionalCapabilityExecutor>,
-    ) -> Self {
-        Self { references, inner }
+    pub fn new(inner: Arc<dyn TransactionalCapabilityExecutor>) -> Self {
+        Self { inner }
     }
 }
 
@@ -151,18 +190,7 @@ impl TransactionalCapabilityExecutor for ConsentCapabilityExecutor {
         if !MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
             return Box::pin(async { Err(unsupported_capability()) });
         }
-        Box::pin(async move {
-            if definition.capability_id.as_str() == CREATE_CAPABILITY {
-                let scope = referenced_scope_from_create(&request)?;
-                validate_reference_scope(
-                    self.references.as_ref(),
-                    &request.context.execution.tenant_id,
-                    &scope,
-                )
-                .await?;
-            }
-            self.inner.execute(definition, request).await
-        })
+        self.inner.execute(definition, request)
     }
 }
 

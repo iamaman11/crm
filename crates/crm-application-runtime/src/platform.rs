@@ -1,7 +1,4 @@
-use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator,
-};
-use crm_module_sdk::{Clock, ErrorCategory, PortFuture, RandomSource, SdkError};
+use crm_module_sdk::{Clock, ErrorCategory, RandomSource, SdkError};
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -57,22 +54,6 @@ impl RandomSource for ProcessIdentitySource {
             offset += take;
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct ContractBoundMutationSemanticValidator;
-
-impl CapabilitySemanticValidator for ContractBoundMutationSemanticValidator {
-    fn validate<'a>(
-        &'a self,
-        _definition: &'a CapabilityDefinition,
-        _request: &'a CapabilityRequest,
-    ) -> PortFuture<'a, Result<(), SdkError>> {
-        // Gateway contract matching has already validated exact payload identity.
-        // Domain semantic invariants remain synchronous inside the owner planner
-        // after live authorization and before the first PostgreSQL side effect.
-        Box::pin(async { Ok(()) })
     }
 }
 

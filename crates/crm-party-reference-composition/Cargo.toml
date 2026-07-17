@@ -1,0 +1,10 @@
+[package]
+name = "crm-party-reference-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-core-data = { path = "../crm-core-data" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }

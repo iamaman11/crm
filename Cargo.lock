@@ -279,10 +279,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-application-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-module-sdk",
+ "crm-query-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "crm-application-runtime"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "crm-application-composition",
  "crm-capability-adapters",
  "crm-capability-ingress",
  "crm-capability-plan-support",
@@ -291,12 +302,14 @@ dependencies = [
  "crm-consents-capability-composition",
  "crm-consents-query-adapter",
  "crm-contact-points-capability-adapter",
+ "crm-contact-points-capability-composition",
  "crm-contact-points-query-adapter",
  "crm-core-data",
  "crm-core-events",
  "crm-customer-360-composition",
  "crm-customer-360-query-adapter",
  "crm-customer-accounts-capability-adapter",
+ "crm-customer-accounts-capability-composition",
  "crm-customer-accounts-query-adapter",
  "crm-customer-data-operations-capability-adapter",
  "crm-customer-data-operations-execution-composition",
@@ -313,11 +326,12 @@ dependencies = [
  "crm-identity-resolution-query-adapter",
  "crm-metadata-api-adapter",
  "crm-metadata-query-adapter",
- "crm-module-registry",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-parties-query-adapter",
+ "crm-party-reference-composition",
  "crm-party-relationships-capability-adapter",
+ "crm-party-relationships-capability-composition",
  "crm-party-relationships-projection",
  "crm-party-relationships-query-adapter",
  "crm-proto-contracts",
@@ -331,7 +345,6 @@ dependencies = [
  "prost",
  "prost-build",
  "protoc-bin-vendored",
- "semver",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -477,6 +490,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-contact-points-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-contact-points-capability-adapter",
+ "crm-module-sdk",
+ "crm-party-reference-composition",
+]
+
+[[package]]
 name = "crm-contact-points-query-adapter"
 version = "0.1.0"
 dependencies = [
@@ -611,6 +634,16 @@ dependencies = [
  "crm-proto-contracts",
  "prost",
  "serde_json",
+]
+
+[[package]]
+name = "crm-customer-accounts-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-customer-accounts-capability-adapter",
+ "crm-module-sdk",
+ "crm-party-reference-composition",
 ]
 
 [[package]]
@@ -968,6 +1001,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-party-reference-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-core-data",
+ "crm-module-sdk",
+ "crm-parties-capability-adapter",
+]
+
+[[package]]
 name = "crm-party-relationships"
 version = "0.1.0"
 dependencies = [
@@ -988,6 +1030,16 @@ dependencies = [
  "crm-party-relationships",
  "crm-proto-contracts",
  "prost",
+]
+
+[[package]]
+name = "crm-party-relationships-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-module-sdk",
+ "crm-party-reference-composition",
+ "crm-party-relationships-capability-adapter",
 ]
 
 [[package]]
@@ -2724,9 +2776,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.52.4"
+version = "1.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "317fafbbe3f02fc663dad00ea6186197de963cd4190e86a26d8d0fae095539af"
+checksum = "d988bcd52dbe076d3d46903332f58c912b87a2c49b1428419a5845154762ffee"
 dependencies = [
  "bytes",
  "libc",
@@ -2740,9 +2792,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.7.0"
+version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+checksum = "6328af13490e73a9b4694030fafd93f8c8c6a9dede33e821c3fc63eddf8042ba"
 dependencies = [
  "proc-macro2",
  "quote",

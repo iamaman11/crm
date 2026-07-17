@@ -5,12 +5,13 @@ edition = "2024"
 publish = false
 
 [lints.clippy]
-# The application composition root intentionally wires multiple independent query adapters.
-# Keep the exception local to this crate rather than weakening workspace-wide Clippy policy.
+# Module-specific assembly contributes independent adapters through the generic composition runtime.
+# Keep constructor breadth local to this compile-time composition boundary.
 too_many_arguments = "allow"
 
 [dependencies]
 axum = "0.8"
+crm-application-composition = { path = "../crm-application-composition" }
 crm-capability-adapters = { path = "../crm-capability-adapters" }
 crm-capability-ingress = { path = "../crm-capability-ingress" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
@@ -19,12 +20,14 @@ crm-consents-capability-adapter = { path = "../crm-consents-capability-adapter" 
 crm-consents-capability-composition = { path = "../crm-consents-capability-composition" }
 crm-consents-query-adapter = { path = "../crm-consents-query-adapter" }
 crm-contact-points-capability-adapter = { path = "../crm-contact-points-capability-adapter" }
+crm-contact-points-capability-composition = { path = "../crm-contact-points-capability-composition" }
 crm-contact-points-query-adapter = { path = "../crm-contact-points-query-adapter" }
 crm-core-data = { path = "../crm-core-data" }
 crm-core-events = { path = "../crm-core-events" }
 crm-customer-360-composition = { path = "../crm-customer-360-composition" }
 crm-customer-360-query-adapter = { path = "../crm-customer-360-query-adapter" }
 crm-customer-accounts-capability-adapter = { path = "../crm-customer-accounts-capability-adapter" }
+crm-customer-accounts-capability-composition = { path = "../crm-customer-accounts-capability-composition" }
 crm-customer-accounts-query-adapter = { path = "../crm-customer-accounts-query-adapter" }
 crm-customer-data-operations-capability-adapter = { path = "../crm-customer-data-operations-capability-adapter" }
 crm-customer-data-operations-execution-composition = { path = "../crm-customer-data-operations-execution-composition" }
@@ -41,11 +44,12 @@ crm-identity-resolution-query-adapter = { path = "../crm-identity-resolution-que
 crm-identity-resolution-merge-query-adapter = { path = "../crm-identity-resolution-merge-query-adapter" }
 crm-metadata-api-adapter = { path = "../crm-metadata-api-adapter" }
 crm-metadata-query-adapter = { path = "../crm-metadata-query-adapter" }
-crm-module-registry = { path = "../crm-module-registry" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
 crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
+crm-party-reference-composition = { path = "../crm-party-reference-composition" }
 crm-party-relationships-capability-adapter = { path = "../crm-party-relationships-capability-adapter" }
+crm-party-relationships-capability-composition = { path = "../crm-party-relationships-capability-composition" }
 crm-party-relationships-projection = { path = "../crm-party-relationships-projection" }
 crm-party-relationships-query-adapter = { path = "../crm-party-relationships-query-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
@@ -57,7 +61,6 @@ crm-search-query-adapter = { path = "../crm-search-query-adapter" }
 crm-search-runtime = { path = "../crm-search-runtime" }
 http = "1"
 prost = "0.14"
-semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
