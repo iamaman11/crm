@@ -32,7 +32,7 @@ jobs:
             exit 0
           fi
           {
-            echo "expected: ffc7f9bb37c08f9fe0779cbdf699df87efc9934495df139c5210a204a9fb91f4"
+            echo "expected: 5fe8da09938d4f462cb4df127cbeed4f72f35276b71558eea82a1a6518a03f21"
             echo "actual:   $(sha256sum .agent/native-inventory-api.patch | cut -d' ' -f1)"
             echo
             echo "git apply --check:"
@@ -41,7 +41,7 @@ jobs:
             cat /tmp/native-inventory-diagnostics.txt
             exit 1
           }
-          echo "ffc7f9bb37c08f9fe0779cbdf699df87efc9934495df139c5210a204a9fb91f4  .agent/native-inventory-api.patch" | sha256sum --check
+          echo "5fe8da09938d4f462cb4df127cbeed4f72f35276b71558eea82a1a6518a03f21  .agent/native-inventory-api.patch" | sha256sum --check
           git apply --index .agent/native-inventory-api.patch
           git rm .agent/native-inventory-api.patch .github/workflows/agent-inventory-fix.yml
           echo "apply=true" >> "$GITHUB_OUTPUT"
