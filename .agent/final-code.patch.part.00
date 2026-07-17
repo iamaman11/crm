@@ -1,0 +1,244 @@
+diff --git a/contracts/production-route-classifications.json b/contracts/production-route-classifications.json
+new file mode 100644
+index 0000000..3604eb5
+--- /dev/null
++++ b/contracts/production-route-classifications.json
+@@ -0,0 +1,48 @@
++{
++  "schema_version": "crm.production-route-classifications/v1",
++  "platform_runtime_routes": [
++    {
++      "owner_module_id": "crm.metadata",
++      "id": "metadata.bundle.publish",
++      "version": "1.0.0",
++      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
++    },
++    {
++      "owner_module_id": "crm.metadata",
++      "id": "metadata.revision.activate",
++      "version": "1.0.0",
++      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
++    },
++    {
++      "owner_module_id": "crm.metadata",
++      "id": "metadata.revision.rollback",
++      "version": "1.0.0",
++      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
++    },
++    {
++      "owner_module_id": "crm.metadata",
++      "id": "metadata.bundle.impact",
++      "version": "1.0.0",
++      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
++    },
++    {
++      "owner_module_id": "crm.metadata",
++      "id": "metadata.revision.get",
++      "version": "1.0.0",
++      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
++    },
++    {
++      "owner_module_id": "crm.metadata",
++      "id": "metadata.activation.get",
++      "version": "1.0.0",
++      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
++    },
++    {
++      "owner_module_id": "crm.search",
++      "id": "search.global.query",
++      "version": "1.0.0",
++      "reason": "Platform permission-aware global search route outside business module manifests."
++    }
++  ],
++  "non_runtime_contract_routes": []
++}
+diff --git a/crates/crm-application-runtime/src/native_composition.rs b/crates/crm-application-runtime/src/native_composition.rs
+index 2b181cc..4f314b6 100644
+--- a/crates/crm-application-runtime/src/native_composition.rs
++++ b/crates/crm-application-runtime/src/native_composition.rs
+@@ -122,15 +122,11 @@ use std::sync::Arc;
+ #[derive(Debug, Clone)]
+ pub struct PostgresModuleActivation {
+     store: PostgresDataStore,
+-    bootstrap_active: bool,
+ }
+ 
+ impl PostgresModuleActivation {
+-    pub fn new(store: PostgresDataStore, bootstrap_active: bool) -> Self {
+-        Self {
+-            store,
+-            bootstrap_active,
+-        }
++    pub fn new(store: PostgresDataStore) -> Self {
++        Self { store }
+     }
+ }
+ 
+@@ -140,12 +136,7 @@ impl ModuleActivationPort for PostgresModuleActivation {
+         tenant_id: &'a TenantId,
+         module_id: &'a ModuleId,
+     ) -> PortFuture<'a, Result<bool, SdkError>> {
+-        Box::pin(async move {
+-            if self.bootstrap_active {
+-                return Ok(true);
+-            }
+-            self.store.is_module_active(tenant_id, module_id).await
+-        })
++        Box::pin(async move { self.store.is_module_active(tenant_id, module_id).await })
+     }
+ }
+ 
+diff --git a/crates/crm-application-runtime/src/runtime.rs b/crates/crm-application-runtime/src/runtime.rs
+index 9dce563..a58cad0 100644
+--- a/crates/crm-application-runtime/src/runtime.rs
++++ b/crates/crm-application-runtime/src/runtime.rs
+@@ -172,7 +172,7 @@ impl ApplicationRuntime {
+             .try_into()
+             .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
+         let activation: Arc<dyn crm_application_composition::ModuleActivationPort> = Arc::new(
+-            PostgresModuleActivation::new(store.clone(), config.bootstrap_allow_phase6),
++            PostgresModuleActivation::new(store.clone()),
+         );
+         let capability_authorizer: Arc<dyn crm_capability_runtime::CapabilityAuthorizer> =
+             authorizer.clone();
+@@ -189,6 +189,12 @@ impl ApplicationRuntime {
+         })
+         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+         let module_ids = composition.module_ids().clone();
++        if config.bootstrap_allow_phase6 {
++            store
++                .bootstrap_activate_published_modules(&config.tenant_ids, &module_ids)
++                .await
++                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
++        }
+         let mutation_definitions = composition.mutation_definitions().to_vec();
+         let query_definitions = composition.query_definitions().to_vec();
+         let internal_import_outcome_definitions = internal_capability_definitions()
+diff --git a/crates/crm-application-runtime/tests/production_route_parity.rs b/crates/crm-application-runtime/tests/production_route_parity.rs
+new file mode 100644
+index 0000000..777c766
+--- /dev/null
++++ b/crates/crm-application-runtime/tests/production_route_parity.rs
+@@ -0,0 +1,122 @@
++use crm_application_runtime::{application_mutation_definitions, application_query_definitions};
++use serde::Deserialize;
++use std::collections::BTreeSet;
++use std::fs;
++use std::path::PathBuf;
++
++#[derive(Debug, Deserialize)]
++struct ContractBindings {
++    schema_version: String,
++    modules: Vec<BoundModule>,
++}
++
++#[derive(Debug, Deserialize)]
++struct BoundModule {
++    module_id: String,
++    capabilities: Vec<BoundCapability>,
++}
++
++#[derive(Debug, Deserialize)]
++struct BoundCapability {
++    id: String,
++    version: String,
++}
++
++#[derive(Debug, Deserialize)]
++struct RouteClassifications {
++    schema_version: String,
++    platform_runtime_routes: Vec<ClassifiedRoute>,
++    non_runtime_contract_routes: Vec<ClassifiedRoute>,
++}
++
++#[derive(Debug, Deserialize)]
++struct ClassifiedRoute {
++    owner_module_id: String,
++    id: String,
++    version: String,
++    reason: String,
++}
++
++type Coordinate = (String, String, String);
++
++#[test]
++fn governed_contracts_equal_production_routes_exactly() {
++    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
++    let bindings: ContractBindings = serde_json::from_str(
++        &fs::read_to_string(root.join("contracts/module-contract-bindings.json")).unwrap(),
++    )
++    .unwrap();
++    let classifications: RouteClassifications = serde_json::from_str(
++        &fs::read_to_string(root.join("contracts/production-route-classifications.json")).unwrap(),
++    )
++    .unwrap();
++    assert_eq!(bindings.schema_version, "crm.contract-bindings/v1");
++    assert_eq!(
++        classifications.schema_version,
++        "crm.production-route-classifications/v1"
++    );
++
++    let governed = unique(
++        bindings.modules.into_iter().flat_map(|module| {
++            module.capabilities.into_iter().map(move |capability| {
++                (module.module_id.clone(), capability.id, capability.version)
++            })
++        }),
++        "governed contract bindings",
++    );
++    let platform = classified(&classifications.platform_runtime_routes, "platform runtime");
++    let non_runtime = classified(
++        &classifications.non_runtime_contract_routes,
++        "non-runtime contract",
++    );
++    assert!(platform.is_disjoint(&non_runtime), "route classifications overlap");
++    assert!(
++        non_runtime.is_subset(&governed),
++        "non-runtime classifications must name governed contract routes"
++    );
++
++    let mut expected = governed.difference(&non_runtime).cloned().collect::<BTreeSet<_>>();
++    expected.extend(platform);
++    let actual = unique(
++        application_mutation_definitions()
++            .unwrap()
++            .into_iter()
++            .chain(application_query_definitions().unwrap())
++            .map(|definition| {
++                (
++                    definition.owner_module_id.as_str().to_owned(),
++                    definition.capability_id.as_str().to_owned(),
++                    definition.capability_version.as_str().to_owned(),
++                )
++            }),
++        "production route inventory",
++    );
++
++    assert_eq!(expected, actual, "manifest/binding/production route drift");
++}
++
++fn classified(routes: &[ClassifiedRoute], label: &str) -> BTreeSet<Coordinate> {
++    for route in routes {
++        assert!(!route.reason.trim().is_empty(), "{label} classification lacks reason");
++    }
++    unique(
++        routes.iter().map(|route| {
++            (
++                route.owner_module_id.clone(),
++                route.id.clone(),
++                route.version.clone(),
++            )
++        }),
++        label,
++    )
++}
++
++fn unique(
++    coordinates: impl IntoIterator<Item = Coordinate>,
++    label: &str,
++) -> BTreeSet<Coordinate> {
++    let coordinates = coordinates.into_iter().collect::<Vec<_>>();
++    let unique = coordinates.iter().cloned().collect::<BTreeSet<_>>();
++    assert_eq!(coordinates.len(), unique.len(), "duplicate coordinate in {label}");
++    unique
++}
