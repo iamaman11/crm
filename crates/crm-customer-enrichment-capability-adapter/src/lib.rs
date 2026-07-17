@@ -27,10 +27,9 @@ pub use provider_profile_snapshot::provider_profile_from_snapshot;
 pub use semantic_validator::CustomerEnrichmentCapabilitySemanticValidator;
 
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilityRisk};
-use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
+use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordSnapshot, SdkError,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, SdkError,
 };
 
 pub const MODULE_ID: &str = crm_customer_enrichment::MODULE_ID;
@@ -58,55 +57,13 @@ pub const MAPPING_PUBLISHED_EVENT_TYPE: &str = "customer_enrichment.mapping.publ
 pub const MAPPING_PUBLISHED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.MappingVersionPublishedEvent";
 
-pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
-    PUBLISH_PROVIDER_PROFILE_CAPABILITY,
-    PUBLISH_MAPPING_CAPABILITY,
-];
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct CustomerEnrichmentCapabilityPlanner;
-
-impl TransactionalAggregatePlanner for CustomerEnrichmentCapabilityPlanner {
-    fn target(
-        &self,
-        definition: &CapabilityDefinition,
-        request: &CapabilityRequest,
-    ) -> Result<AggregateTarget, SdkError> {
-        match definition.capability_id.as_str() {
-            PUBLISH_PROVIDER_PROFILE_CAPABILITY => {
-                CustomerEnrichmentProviderProfileCapabilityPlanner.target(definition, request)
-            }
-            PUBLISH_MAPPING_CAPABILITY => {
-                CustomerEnrichmentMappingCapabilityPlanner.target(definition, request)
-            }
-            _ => Err(unsupported_capability()),
-        }
-    }
-
-    fn plan(
-        &self,
-        definition: &CapabilityDefinition,
-        request: &CapabilityRequest,
-        current: Option<&RecordSnapshot>,
-    ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        match definition.capability_id.as_str() {
-            PUBLISH_PROVIDER_PROFILE_CAPABILITY => {
-                CustomerEnrichmentProviderProfileCapabilityPlanner
-                    .plan(definition, request, current)
-            }
-            PUBLISH_MAPPING_CAPABILITY => {
-                CustomerEnrichmentMappingCapabilityPlanner.plan(definition, request, current)
-            }
-            _ => Err(unsupported_capability()),
-        }
-    }
-}
+/// Exact mutation routes currently composed into production.
+pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[PUBLISH_PROVIDER_PROFILE_CAPABILITY];
+/// Complete, tested mapping publication foundation awaiting live reference-validator composition.
+pub const PREPARED_MUTATION_CAPABILITY_IDS: &[&str] = &[PUBLISH_MAPPING_CAPABILITY];
 
 pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    Ok(vec![
-        provider_profile_capability_definition()?,
-        mapping_capability_definition()?,
-    ])
+    Ok(vec![provider_profile_capability_definition()?])
 }
 
 pub fn capability_definition() -> Result<CapabilityDefinition, SdkError> {
@@ -170,15 +127,6 @@ fn configuration_error() -> SdkError {
     )
 }
 
-fn unsupported_capability() -> SdkError {
-    SdkError::new(
-        "CUSTOMER_ENRICHMENT_CAPABILITY_UNSUPPORTED",
-        ErrorCategory::Internal,
-        false,
-        "The Customer Enrichment mutation capability is not supported.",
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,25 +134,29 @@ mod tests {
     #[test]
     fn implemented_mutation_catalog_is_exact() {
         let definitions = capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 2);
-        let ids = definitions
-            .iter()
-            .map(|definition| definition.capability_id.as_str())
-            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(definitions.len(), 1);
+        let definition = &definitions[0];
+        assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
         assert_eq!(
-            ids,
-            IMPLEMENTED_MUTATION_CAPABILITY_IDS
-                .iter()
-                .copied()
-                .collect()
+            definition.capability_id.as_str(),
+            PUBLISH_PROVIDER_PROFILE_CAPABILITY
         );
-        for definition in definitions {
-            assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-            assert_eq!(definition.capability_version.as_str(), "1.0.0");
-            assert!(definition.mutation);
-            assert!(definition.requires_idempotency);
-            assert!(!definition.requires_approval);
-            assert_eq!(definition.risk, CapabilityRisk::Medium);
-        }
+        assert_eq!(definition.capability_version.as_str(), "1.0.0");
+        assert!(definition.mutation);
+        assert!(definition.requires_idempotency);
+        assert!(!definition.requires_approval);
+        assert_eq!(definition.risk, CapabilityRisk::Medium);
+        assert_eq!(
+            IMPLEMENTED_MUTATION_CAPABILITY_IDS,
+            &[PUBLISH_PROVIDER_PROFILE_CAPABILITY]
+        );
+    }
+
+    #[test]
+    fn mapping_publication_definition_is_prepared_but_not_composed() {
+        let definition = mapping_capability_definition().unwrap();
+        assert_eq!(definition.capability_id.as_str(), PUBLISH_MAPPING_CAPABILITY);
+        assert_eq!(PREPARED_MUTATION_CAPABILITY_IDS, &[PUBLISH_MAPPING_CAPABILITY]);
+        assert!(!IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&PUBLISH_MAPPING_CAPABILITY));
     }
 }
