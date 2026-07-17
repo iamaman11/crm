@@ -22,7 +22,10 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                 ),
             },
         )
-        self.assertEqual(empty_modules, {"crm.sales-activities-link"})
+        self.assertEqual(
+            empty_modules,
+            {"crm.customer-enrichment", "crm.sales-activities-link"},
+        )
         self.assertIn(("crm.search", "search.global.query", "1.0.0"), platform)
 
 
