@@ -7,6 +7,8 @@ pub mod lifecycle;
 /// Strict bounded canonical persisted-state codecs for governed enrichment evidence.
 #[allow(dead_code, unused_imports)]
 pub mod persistence;
+/// Pure-core governed reads, policy, provider dispatch and owner-application boundaries.
+pub mod ports;
 /// Immutable provider metering and quota evidence plus strict persistence.
 pub mod provider_usage {
     #[cfg(test)]
@@ -29,6 +31,7 @@ pub use lifecycle::{
     derive_suggestion_status,
 };
 pub use persistence::*;
+pub use ports::*;
 pub use provider_usage::*;
 
 /// Stable crate identity for repository tooling.
