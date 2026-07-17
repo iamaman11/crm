@@ -315,6 +315,7 @@ dependencies = [
  "crm-customer-data-operations-execution-composition",
  "crm-customer-data-operations-query-adapter",
  "crm-customer-data-operations-source-composition",
+ "crm-customer-enrichment-capability-adapter",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",
