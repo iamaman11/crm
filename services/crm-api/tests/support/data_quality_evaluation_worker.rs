@@ -23,6 +23,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub struct EvaluationWorkerRuntime {
+    #[allow(dead_code)]
     pub store: PostgresDataStore,
     pub worker: PartyEvaluationStageWorker,
 }
