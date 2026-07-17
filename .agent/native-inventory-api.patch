@@ -2,7 +2,7 @@ diff --git a/crates/crm-application-runtime/src/native_composition.rs b/crates/c
 index eda395a..0000000 100644
 --- a/crates/crm-application-runtime/src/native_composition.rs
 +++ b/crates/crm-application-runtime/src/native_composition.rs
-@@ -159,6 +159,67 @@ pub struct ProductionCompositionDependencies {
+@@ -159,6 +159,53 @@ pub struct ProductionCompositionDependencies {
      pub cursor_key: [u8; 32],
  }
  
