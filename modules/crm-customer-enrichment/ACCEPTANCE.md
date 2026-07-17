@@ -12,6 +12,7 @@ Foundation state: **In progress — not a production vertical slice**. These gat
 - [x] Add pure-core Party snapshot, versioned policy/Consent, sanitized provider-dispatch and exact owner-application port contracts.
 - [x] Add activation-gated native `customer_enrichment.provider_profile.publish@1.0.0` production composition with exact wire/domain conversion and atomic immutable record/idempotency/outbox/audit evidence.
 - [x] Add activation-gated permission-aware `customer_enrichment.provider_profile.get@1.0.0` with tenant-scoped lookup, strict persisted-state validation, fail-closed resource visibility and `definition` field redaction.
+- [x] Add prepared `mapping.publish`/`mapping.get` adapter foundations: strict content-derived provider-profile IDs, immutable mapping planner/persistence/event evidence, tenant-scoped provider-profile semantic validation, strict mapping snapshot decode and permission-aware lookup/redaction. These coordinates intentionally remain non-runtime until their validator/bootstrap visibility contributions are composed.
 - [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
 - [ ] Implement the Party/Consent semantic port adapters plus final live authorization and declarative field visibility.
 - [ ] Add provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
