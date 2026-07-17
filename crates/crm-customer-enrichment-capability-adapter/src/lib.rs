@@ -155,8 +155,14 @@ mod tests {
     #[test]
     fn mapping_publication_definition_is_prepared_but_not_composed() {
         let definition = mapping_capability_definition().unwrap();
-        assert_eq!(definition.capability_id.as_str(), PUBLISH_MAPPING_CAPABILITY);
-        assert_eq!(PREPARED_MUTATION_CAPABILITY_IDS, &[PUBLISH_MAPPING_CAPABILITY]);
+        assert_eq!(
+            definition.capability_id.as_str(),
+            PUBLISH_MAPPING_CAPABILITY
+        );
+        assert_eq!(
+            PREPARED_MUTATION_CAPABILITY_IDS,
+            &[PUBLISH_MAPPING_CAPABILITY]
+        );
         assert!(!IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&PUBLISH_MAPPING_CAPABILITY));
     }
 }
