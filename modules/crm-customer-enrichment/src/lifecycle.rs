@@ -148,10 +148,7 @@ impl RequestPolicyEvidence {
         policy_version: impl Into<String>,
     ) -> Result<Self, SdkError> {
         Ok(Self {
-            purpose_code: canonical_key(
-                purpose_code.into(),
-                "request_policy.purpose_code",
-            )?,
+            purpose_code: canonical_key(purpose_code.into(), "request_policy.purpose_code")?,
             legal_basis_code: canonical_key(
                 legal_basis_code.into(),
                 "request_policy.legal_basis_code",
@@ -571,7 +568,11 @@ pub enum ReplayDisposition {
 
 impl ProviderResponseReceipt {
     pub fn record(draft: ProviderResponseReceiptDraft) -> Result<Self, SdkError> {
-        if draft.canonical_response_digest.iter().all(|byte| *byte == 0) {
+        if draft
+            .canonical_response_digest
+            .iter()
+            .all(|byte| *byte == 0)
+        {
             return Err(invalid(
                 "CUSTOMER_ENRICHMENT_RESPONSE_DIGEST_INVALID",
                 "response.canonical_response_digest",
@@ -792,10 +793,8 @@ impl Suggestion {
         let purpose_code = canonical_key(draft.purpose_code, "suggestion.purpose_code")?;
         let legal_basis_code =
             canonical_key(draft.legal_basis_code, "suggestion.legal_basis_code")?;
-        let permitted_use_class = canonical_key(
-            draft.permitted_use_class,
-            "suggestion.permitted_use_class",
-        )?;
+        let permitted_use_class =
+            canonical_key(draft.permitted_use_class, "suggestion.permitted_use_class")?;
         let residency_region =
             canonical_key(draft.residency_region, "suggestion.residency_region")?;
         let license_id = bounded_identifier(
@@ -1123,7 +1122,11 @@ impl ApplicationAttempt {
                 "suggestion is not fresh at application time",
             ));
         }
-        let owner_capability_id = suggestion.target().target_field.owner_capability_id().to_owned();
+        let owner_capability_id = suggestion
+            .target()
+            .target_field
+            .owner_capability_id()
+            .to_owned();
         let owner_capability_version = suggestion
             .target()
             .target_field
@@ -1139,16 +1142,14 @@ impl ApplicationAttempt {
         };
         let attempt_digest = canonical_digest(APPLICATION_ATTEMPT_ID_DOMAIN, &identity);
         let target_digest = canonical_digest(TARGET_IDEMPOTENCY_DOMAIN, &identity);
-        let target_idempotency_key = IdempotencyKey::try_new(format!(
-            "customer-enrichment-apply-{}",
-            hex(&target_digest)
-        ))
-        .map_err(|_| {
-            internal(
-                "CUSTOMER_ENRICHMENT_TARGET_IDEMPOTENCY_INTERNAL",
-                "could not construct deterministic target idempotency key",
-            )
-        })?;
+        let target_idempotency_key =
+            IdempotencyKey::try_new(format!("customer-enrichment-apply-{}", hex(&target_digest)))
+                .map_err(|_| {
+                internal(
+                    "CUSTOMER_ENRICHMENT_TARGET_IDEMPOTENCY_INTERNAL",
+                    "could not construct deterministic target idempotency key",
+                )
+            })?;
         Ok(Self {
             attempt_id: ApplicationAttemptId::from_digest(&attempt_digest),
             tenant_id,
@@ -1313,9 +1314,7 @@ fn canonical_references(mut values: Vec<String>) -> Result<Vec<String>, SdkError
         return Err(invalid(
             "CUSTOMER_ENRICHMENT_EVIDENCE_REFERENCES_INVALID",
             "suggestion.evidence_references",
-            format!(
-                "evidence references must contain at most {MAX_EVIDENCE_REFERENCES} entries"
-            ),
+            format!("evidence references must contain at most {MAX_EVIDENCE_REFERENCES} entries"),
         ));
     }
     let mut canonical = Vec::with_capacity(values.len());
@@ -1343,9 +1342,7 @@ fn canonical_key(value: String, field: &'static str) -> Result<String, SdkError>
         && value.len() <= 80
         && value.is_ascii()
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'_' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         })
         && value
             .as_bytes()
@@ -1388,10 +1385,7 @@ fn bounded_identifier(
     field: &'static str,
     code: &'static str,
 ) -> Result<String, SdkError> {
-    if value.is_empty()
-        || value.len() > maximum_bytes
-        || value.chars().any(char::is_control)
-    {
+    if value.is_empty() || value.len() > maximum_bytes || value.chars().any(char::is_control) {
         return Err(invalid(
             code,
             field,
@@ -1458,10 +1452,7 @@ fn status_name(status: EnrichmentRequestStatus) -> &'static str {
     }
 }
 
-fn invalid_transition(
-    current: EnrichmentRequestStatus,
-    attempted: &'static str,
-) -> SdkError {
+fn invalid_transition(current: EnrichmentRequestStatus, attempted: &'static str) -> SdkError {
     conflict(
         "CUSTOMER_ENRICHMENT_REQUEST_TRANSITION_INVALID",
         format!(
@@ -1718,8 +1709,7 @@ mod tests {
             Some(700),
         )
         .unwrap();
-        let mut first =
-            ApplicationAttempt::plan(tenant(), &suggestion, &decision, 0, 400).unwrap();
+        let mut first = ApplicationAttempt::plan(tenant(), &suggestion, &decision, 0, 400).unwrap();
         let second = ApplicationAttempt::plan(tenant(), &suggestion, &decision, 0, 400).unwrap();
         assert_eq!(first.attempt_id(), second.attempt_id());
         assert_eq!(
@@ -1739,9 +1729,11 @@ mod tests {
             first.record_outcome(success, 450).unwrap(),
             ReplayDisposition::Duplicate
         );
-        assert!(first
-            .record_outcome(ApplicationOutcome::AuthorizationDenied, 450)
-            .is_err());
+        assert!(
+            first
+                .record_outcome(ApplicationOutcome::AuthorizationDenied, 450)
+                .is_err()
+        );
         assert_eq!(
             derive_suggestion_status(&suggestion, Some(&decision), Some(&first), None, 500),
             SuggestionLifecycleStatus::Applied
