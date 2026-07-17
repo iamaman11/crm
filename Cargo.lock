@@ -279,10 +279,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-application-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-module-sdk",
+ "crm-query-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "crm-application-runtime"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "crm-application-composition",
  "crm-capability-adapters",
  "crm-capability-ingress",
  "crm-capability-plan-support",

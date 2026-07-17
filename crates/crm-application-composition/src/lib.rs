@@ -159,7 +159,9 @@ pub enum CompositionError {
 impl fmt::Display for CompositionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DuplicateModule(module_id) => write!(formatter, "duplicate module contribution {module_id}"),
+            Self::DuplicateModule(module_id) => {
+                write!(formatter, "duplicate module contribution {module_id}")
+            }
             Self::DuplicateMutation((id, version)) => {
                 write!(formatter, "duplicate mutation route {id}@{version}")
             }
@@ -167,7 +169,10 @@ impl fmt::Display for CompositionError {
                 write!(formatter, "duplicate query route {id}@{version}")
             }
             Self::DuplicateWorker((module_id, worker_id)) => {
-                write!(formatter, "duplicate background worker {module_id}/{worker_id}")
+                write!(
+                    formatter,
+                    "duplicate background worker {module_id}/{worker_id}"
+                )
             }
             Self::OwnerMismatch {
                 module_id,
@@ -179,16 +184,27 @@ impl fmt::Display for CompositionError {
                 "module {module_id} cannot contribute {capability_id}@{capability_version} owned by {owner_module_id}"
             ),
             Self::MutationKindMismatch((id, version)) => {
-                write!(formatter, "mutation route {id}@{version} has a query definition")
+                write!(
+                    formatter,
+                    "mutation route {id}@{version} has a query definition"
+                )
             }
             Self::QueryKindMismatch((id, version)) => {
-                write!(formatter, "query route {id}@{version} has a mutation definition")
+                write!(
+                    formatter,
+                    "query route {id}@{version} has a mutation definition"
+                )
             }
             Self::InvalidWorkerId {
                 module_id,
                 worker_id,
-            } => write!(formatter, "invalid background worker id {module_id}/{worker_id}"),
-            Self::Empty => formatter.write_str("application composition must declare at least one module"),
+            } => write!(
+                formatter,
+                "invalid background worker id {module_id}/{worker_id}"
+            ),
+            Self::Empty => {
+                formatter.write_str("application composition must declare at least one module")
+            }
         }
     }
 }
@@ -250,7 +266,11 @@ impl ApplicationCompositionBuilder {
                 });
             }
             let key = (module_id.clone(), contribution.worker_id);
-            if self.workers.insert(key.clone(), contribution.worker).is_some() {
+            if self
+                .workers
+                .insert(key.clone(), contribution.worker)
+                .is_some()
+            {
                 return Err(CompositionError::DuplicateWorker(key));
             }
         }
@@ -298,7 +318,10 @@ impl ApplicationCompositionBuilder {
     }
 }
 
-fn validate_owner(module_id: &str, definition: &CapabilityDefinition) -> Result<(), CompositionError> {
+fn validate_owner(
+    module_id: &str,
+    definition: &CapabilityDefinition,
+) -> Result<(), CompositionError> {
     if definition.owner_module_id.as_str() != module_id {
         return Err(CompositionError::OwnerMismatch {
             module_id: module_id.to_owned(),
@@ -313,9 +336,9 @@ fn validate_owner(module_id: &str, definition: &CapabilityDefinition) -> Result<
 fn valid_worker_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 180
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-'))
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
 }
 
 #[derive(Clone)]
@@ -751,8 +774,8 @@ mod tests {
             calls: Arc::clone(&calls),
         });
         let definition = definition("crm.alpha", "alpha.record.create", true);
-        let contribution = ModuleRuntimeContribution::new(module_id("crm.alpha"))
-            .with_mutation(MutationRoute {
+        let contribution =
+            ModuleRuntimeContribution::new(module_id("crm.alpha")).with_mutation(MutationRoute {
                 definition: definition.clone(),
                 validator: handler.clone(),
                 executor: handler,
@@ -787,14 +810,15 @@ mod tests {
         let mut builder = ApplicationCompositionBuilder::new();
         builder
             .add_module(
-                ModuleRuntimeContribution::new(module_id("crm.alpha"))
-                    .with_mutation(route.clone()),
+                ModuleRuntimeContribution::new(module_id("crm.alpha")).with_mutation(route.clone()),
             )
             .unwrap();
-        let duplicate = builder.add_module(
-            ModuleRuntimeContribution::new(module_id("crm.beta")).with_mutation(route),
-        );
-        assert!(matches!(duplicate, Err(CompositionError::OwnerMismatch { .. })));
+        let duplicate = builder
+            .add_module(ModuleRuntimeContribution::new(module_id("crm.beta")).with_mutation(route));
+        assert!(matches!(
+            duplicate,
+            Err(CompositionError::OwnerMismatch { .. })
+        ));
 
         let mut builder = ApplicationCompositionBuilder::new();
         let result = builder.add_module(
@@ -810,7 +834,10 @@ mod tests {
                     executor: handler,
                 }),
         );
-        assert!(matches!(result, Err(CompositionError::DuplicateMutation(_))));
+        assert!(matches!(
+            result,
+            Err(CompositionError::DuplicateMutation(_))
+        ));
     }
 
     #[tokio::test]
@@ -819,26 +846,24 @@ mod tests {
         let mut builder = ApplicationCompositionBuilder::new();
         builder
             .add_module(
-                ModuleRuntimeContribution::new(module_id("crm.zeta"))
-                    .with_background_worker(
-                        "worker-b",
-                        Arc::new(Worker {
-                            order: Arc::clone(&order),
-                            name: "zeta/b",
-                        }),
-                    ),
+                ModuleRuntimeContribution::new(module_id("crm.zeta")).with_background_worker(
+                    "worker-b",
+                    Arc::new(Worker {
+                        order: Arc::clone(&order),
+                        name: "zeta/b",
+                    }),
+                ),
             )
             .unwrap();
         builder
             .add_module(
-                ModuleRuntimeContribution::new(module_id("crm.alpha"))
-                    .with_background_worker(
-                        "worker-a",
-                        Arc::new(Worker {
-                            order: Arc::clone(&order),
-                            name: "alpha/a",
-                        }),
-                    ),
+                ModuleRuntimeContribution::new(module_id("crm.alpha")).with_background_worker(
+                    "worker-a",
+                    Arc::new(Worker {
+                        order: Arc::clone(&order),
+                        name: "alpha/a",
+                    }),
+                ),
             )
             .unwrap();
         let composition = builder.build().unwrap();
@@ -944,7 +969,10 @@ mod tests {
                     request_started_at_unix_nanos: 1,
                 },
             },
-            input: payload(&definition.owner_module_id.to_string(), &definition.input_contract),
+            input: payload(
+                &definition.owner_module_id.to_string(),
+                &definition.input_contract,
+            ),
             input_hash: [1; 32],
             approval: None,
         }
