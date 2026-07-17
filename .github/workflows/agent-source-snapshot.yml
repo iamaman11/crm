@@ -29,6 +29,8 @@ jobs:
             exit 0
           fi
           cat .agent/native-composition.patch.part.* > /tmp/native-composition.patch
+          sha256sum --check .agent/native-composition.patch.ready
+          git apply --check /tmp/native-composition.patch
           git apply --index /tmp/native-composition.patch
           git rm .agent/native-composition.patch.part.* .agent/native-composition.patch.ready
           echo "apply=true" >> "$GITHUB_OUTPUT"
