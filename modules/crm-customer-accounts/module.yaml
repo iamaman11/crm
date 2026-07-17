@@ -1,58 +1,76 @@
 schema_version: crm.module/v1
 module_id: crm.customer-accounts
-version: "0.2.0"
+version: 0.2.0
 display_name: CRM Customer Accounts
 description: Canonical owner domain for customer and commercial relationships anchored to Parties.
-
 owner:
   team: customer-platform
-  contact: "crm-owner@example.com"
+  contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: modules/crm-customer-accounts
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required:
     - module_id: crm.parties
-      version_range: ">=0.3.0, <1.0.0"
+      version_range: '>=0.3.0, <1.0.0'
   optional: []
   conflicts: []
-
 provides:
   capabilities:
     - id: accounts.account.create
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v1.AccountService.CreateAccount
+        request: crm.accounts.v1.CreateAccountRequest
+        response: crm.accounts.v1.CreateAccountResponse
     - id: accounts.account.update
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v1.AccountService.UpdateAccount
+        request: crm.accounts.v1.UpdateAccountRequest
+        response: crm.accounts.v1.UpdateAccountResponse
     - id: accounts.account.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v1.AccountService.GetAccount
+        request: crm.accounts.v1.GetAccountRequest
+        response: crm.accounts.v1.GetAccountResponse
     - id: accounts.account.list
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v1.AccountService.ListAccounts
+        request: crm.accounts.v1.ListAccountsRequest
+        response: crm.accounts.v1.ListAccountsResponse
   events:
     - id: accounts.account.created
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.accounts.v1.AccountCreatedEvent
     - id: accounts.account.updated
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.accounts.v1.AccountUpdatedEvent
   objects:
     - accounts.account
   ui_extensions: []
-
 consumes:
   capabilities: []
   events: []
-
 storage:
   record_types:
     - accounts.account
   private_state_namespaces:
     - crm.customer-accounts
-
 security:
   data_classes:
     - internal
@@ -60,7 +78,6 @@ security:
     - personal
   network_egress: []
   secret_handles: []
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported

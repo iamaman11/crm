@@ -1,58 +1,76 @@
 schema_version: crm.module/v1
 module_id: crm.parties
-version: "0.3.0"
+version: 0.3.0
 display_name: CRM Parties
 description: Canonical owner domain for person and organization identity.
-
 owner:
   team: customer-platform
-  contact: "crm-owner@example.com"
+  contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: modules/crm-parties
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required: []
   optional: []
   conflicts: []
-
 provides:
   capabilities:
     - id: parties.party.create
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v1.PartyService.CreateParty
+        request: crm.parties.v1.CreatePartyRequest
+        response: crm.parties.v1.CreatePartyResponse
     - id: parties.party.update
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v1.PartyService.UpdateParty
+        request: crm.parties.v1.UpdatePartyRequest
+        response: crm.parties.v1.UpdatePartyResponse
     - id: parties.party.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v1.PartyService.GetParty
+        request: crm.parties.v1.GetPartyRequest
+        response: crm.parties.v1.GetPartyResponse
     - id: parties.party.list
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v1.PartyService.ListParties
+        request: crm.parties.v1.ListPartiesRequest
+        response: crm.parties.v1.ListPartiesResponse
   events:
     - id: parties.party.created
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.parties.v1.PartyCreatedEvent
     - id: parties.party.updated
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.parties.v1.PartyUpdatedEvent
   objects:
     - parties.party
     - parties.person
     - parties.organization
   ui_extensions: []
-
 consumes:
   capabilities: []
   events: []
-
 storage:
   record_types:
     - parties.party
   private_state_namespaces:
     - crm.parties
-
 security:
   data_classes:
     - internal
@@ -60,7 +78,6 @@ security:
     - personal
   network_egress: []
   secret_handles: []
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported

@@ -1,62 +1,88 @@
 schema_version: crm.module/v1
 module_id: crm.contact-points
-version: "0.2.0"
+version: 0.2.0
 display_name: CRM Contact Points
 description: Canonical owner domain for Party-associated email, phone, postal, web and messaging endpoints.
-
 owner:
   team: customer-platform
-  contact: "crm-owner@example.com"
+  contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: modules/crm-contact-points
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required:
     - module_id: crm.parties
-      version_range: ">=0.3.0, <1.0.0"
+      version_range: '>=0.3.0, <1.0.0'
   optional: []
   conflicts: []
-
 provides:
   capabilities:
     - id: contact-points.contact-point.create
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v1.ContactPointService.CreateContactPoint
+        request: crm.contact_points.v1.CreateContactPointRequest
+        response: crm.contact_points.v1.CreateContactPointResponse
     - id: contact-points.contact-point.update
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v1.ContactPointService.UpdateContactPoint
+        request: crm.contact_points.v1.UpdateContactPointRequest
+        response: crm.contact_points.v1.UpdateContactPointResponse
     - id: contact-points.contact-point.verify
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v1.ContactPointService.VerifyContactPoint
+        request: crm.contact_points.v1.VerifyContactPointRequest
+        response: crm.contact_points.v1.VerifyContactPointResponse
     - id: contact-points.contact-point.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v1.ContactPointService.GetContactPoint
+        request: crm.contact_points.v1.GetContactPointRequest
+        response: crm.contact_points.v1.GetContactPointResponse
     - id: contact-points.contact-point.list
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v1.ContactPointService.ListContactPoints
+        request: crm.contact_points.v1.ListContactPointsRequest
+        response: crm.contact_points.v1.ListContactPointsResponse
   events:
     - id: contact-points.contact-point.created
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.contact_points.v1.ContactPointCreatedEvent
     - id: contact-points.contact-point.updated
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.contact_points.v1.ContactPointUpdatedEvent
     - id: contact-points.contact-point.verified
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.contact_points.v1.ContactPointVerifiedEvent
   objects:
     - contact-points.contact_point
   ui_extensions: []
-
 consumes:
   capabilities: []
   events: []
-
 storage:
   record_types:
     - contact-points.contact_point
   private_state_namespaces:
     - crm.contact-points
-
 security:
   data_classes:
     - internal
@@ -64,7 +90,6 @@ security:
     - personal
   network_egress: []
   secret_handles: []
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported

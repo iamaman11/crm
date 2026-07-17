@@ -1,75 +1,71 @@
 schema_version: crm.module/v1
 module_id: crm.customer360
-version: "0.1.0"
+version: 0.1.0
 display_name: CRM Customer 360
 description: Permission-aware rebuildable Party-rooted read composition across authoritative customer-master owners; owns no mutable customer state.
-
 owner:
   team: customer-platform
-  contact: "crm-owner@example.com"
+  contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: crates/crm-customer-360-query-adapter
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required:
     - module_id: crm.parties
-      version_range: ">=0.3.0, <1.0.0"
+      version_range: '>=0.3.0, <1.0.0'
     - module_id: crm.customer-accounts
-      version_range: ">=0.2.0, <1.0.0"
+      version_range: '>=0.2.0, <1.0.0'
     - module_id: crm.contact-points
-      version_range: ">=0.2.0, <1.0.0"
+      version_range: '>=0.2.0, <1.0.0'
     - module_id: crm.party-relationships
-      version_range: ">=0.1.0, <1.0.0"
+      version_range: '>=0.1.0, <1.0.0'
   optional: []
   conflicts: []
-
 provides:
   capabilities:
     - id: customer360.customer.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_360.v1.Customer360Service.GetCustomer360
+        request: crm.customer_360.v1.GetCustomer360Request
+        response: crm.customer_360.v1.GetCustomer360Response
   events: []
   objects: []
   ui_extensions: []
-
 consumes:
   capabilities: []
   events:
     - id: parties.party.created
-      version: "1.0.0"
+      version: 1.0.0
     - id: parties.party.updated
-      version: "1.0.0"
+      version: 1.0.0
     - id: accounts.account.created
-      version: "1.0.0"
+      version: 1.0.0
     - id: accounts.account.updated
-      version: "1.0.0"
+      version: 1.0.0
     - id: contact-points.contact-point.created
-      version: "1.0.0"
+      version: 1.0.0
     - id: contact-points.contact-point.updated
-      version: "1.0.0"
+      version: 1.0.0
     - id: contact-points.contact-point.verified
-      version: "1.0.0"
+      version: 1.0.0
     - id: party-relationships.party-relationship.created
-      version: "1.0.0"
+      version: 1.0.0
     - id: party-relationships.party-relationship.updated
-      version: "1.0.0"
-
+      version: 1.0.0
 storage:
   record_types: []
   private_state_namespaces: []
-
 security:
   data_classes:
     - personal
   network_egress: []
   secret_handles: []
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported

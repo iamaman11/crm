@@ -56,6 +56,11 @@ def command_manifests(_: argparse.Namespace) -> None:
     )
 
 
+def command_contracts(args: argparse.Namespace) -> None:
+    mode = "--write" if args.write else "--check"
+    run([sys.executable, "scripts/generate_contract_bindings.py", mode])
+
+
 def command_format(args: argparse.Namespace) -> None:
     command = ["cargo", "fmt", "--all"]
     if args.check:
@@ -118,6 +123,14 @@ def build_parser() -> argparse.ArgumentParser:
         "manifests", help="validate manifests and Rust normalized-IR parity"
     )
     manifests.set_defaults(handler=command_manifests)
+
+    contracts = subparsers.add_parser(
+        "contracts", help="verify or regenerate module-to-Protobuf contract bindings"
+    )
+    contracts.add_argument(
+        "--write", action="store_true", help="write the canonical generated registry"
+    )
+    contracts.set_defaults(handler=command_contracts)
 
     fmt = subparsers.add_parser(
         "format", help="format Rust sources or check formatting"

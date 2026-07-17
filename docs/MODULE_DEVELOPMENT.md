@@ -106,6 +106,10 @@ python scripts/repo.py architecture
 # module manifests, normalized IR and Rust digest parity
 python scripts/repo.py manifests
 
+# verify or regenerate module-to-Protobuf bindings
+python scripts/repo.py contracts
+python scripts/repo.py contracts --write
+
 # format or check formatting
 python scripts/repo.py format
 python scripts/repo.py format --check
@@ -185,3 +189,18 @@ After generation, follow `DEVELOPMENT_WORKFLOW.md`:
 7. operational and documentation closure.
 
 Move the generated `MODULE_CATALOG_ENTRY.md` content into the normative catalog only when the module identity and ownership decision are accepted. Update readiness only when the corresponding merged acceptance evidence exists.
+
+## 9. Publish contract bindings without a second source of truth
+
+Every item under `provides.capabilities` and `provides.events` must include its exact Protobuf binding. Capability entries use `kind: protobuf_rpc` with RPC/request/response names; event entries use `kind: protobuf_message` with the payload message.
+
+The binding is authoring/build metadata. It is removed from normalized runtime module IR, so runtime lifecycle and installation identity stay independent from Protobuf repository organization.
+
+Never edit `contracts/module-contract-bindings.json` directly. Generate it from all manifests and the compiled descriptor set:
+
+```bash
+python scripts/generate_contract_bindings.py --write
+python scripts/generate_contract_bindings.py --check
+```
+
+`pnpm web:generate` performs the same generation together with browser clients and contract hashes. Contract CI requires exact module-set completeness, descriptor input/output parity and byte-for-byte generated-artifact freshness. See `CONTRACT_BINDING_REGISTRY.md` for the normative architecture and invariants.

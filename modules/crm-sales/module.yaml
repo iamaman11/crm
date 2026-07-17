@@ -1,46 +1,75 @@
 schema_version: crm.module/v1
 module_id: crm.sales
-version: "0.2.0"
+version: 0.2.0
 display_name: CRM Sales
 description: Expert sales domain module owning leads, deals and quotes.
-
 owner:
   team: sales-platform
   contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: modules/crm-sales
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required: []
   optional: []
   conflicts: []
-
 provides:
   capabilities:
     - id: sales.deal.create
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v1.DealService.CreateDeal
+        request: crm.sales.v1.CreateDealRequest
+        response: crm.sales.v1.CreateDealResponse
     - id: sales.deal.update
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v1.DealService.UpdateDeal
+        request: crm.sales.v1.UpdateDealRequest
+        response: crm.sales.v1.UpdateDealResponse
     - id: sales.deal.advance_stage
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v1.DealService.AdvanceStage
+        request: crm.sales.v1.AdvanceStageRequest
+        response: crm.sales.v1.AdvanceStageResponse
     - id: sales.deal.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v1.DealService.GetDeal
+        request: crm.sales.v1.GetDealRequest
+        response: crm.sales.v1.GetDealResponse
     - id: sales.deal.list
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v1.DealService.ListDeals
+        request: crm.sales.v1.ListDealsRequest
+        response: crm.sales.v1.ListDealsResponse
   events:
     - id: sales.deal.created
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.sales.v1.DealCreatedEvent
     - id: sales.deal.updated
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.sales.v1.DealUpdatedEvent
     - id: sales.deal.stage_changed
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.sales.v1.DealStageChangedEvent
   objects:
     - sales.lead
     - sales.deal
@@ -48,19 +77,17 @@ provides:
   ui_extensions:
     - id: sales.pipeline.navigation
       type: navigation.item
-      version: "1.0.0"
+      version: 1.0.0
       permission: sales.deal.read
       fallback: hide
     - id: sales.deal.summary
       type: record_page.panel
-      version: "1.0.0"
+      version: 1.0.0
       permission: sales.deal.read
       fallback: readonly
-
 consumes:
   capabilities: []
   events: []
-
 storage:
   record_types:
     - sales.lead
@@ -68,7 +95,6 @@ storage:
     - sales.quote
   private_state_namespaces:
     - crm.sales
-
 security:
   data_classes:
     - internal
@@ -76,11 +102,9 @@ security:
     - personal
   network_egress: []
   secret_handles: []
-
 quotas:
   maximum_bulk_records: 10000
   maximum_workflow_actions_per_transaction: 100
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported

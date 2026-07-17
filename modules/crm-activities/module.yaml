@@ -1,74 +1,108 @@
 schema_version: crm.module/v1
 module_id: crm.activities
-version: "0.1.0"
+version: 0.1.0
 display_name: CRM Activities
 description: Independent activities domain module owning tasks and reminder state.
-
 owner:
   team: activities-platform
   contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: modules/crm-activities
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required: []
   optional: []
   conflicts: []
-
 provides:
   capabilities:
     - id: activities.task.create
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v1.TaskService.CreateTask
+        request: crm.activities.v1.CreateTaskRequest
+        response: crm.activities.v1.CreateTaskResponse
     - id: activities.task.update
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v1.TaskService.UpdateTask
+        request: crm.activities.v1.UpdateTaskRequest
+        response: crm.activities.v1.UpdateTaskResponse
     - id: activities.task.complete
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v1.TaskService.CompleteTask
+        request: crm.activities.v1.CompleteTaskRequest
+        response: crm.activities.v1.CompleteTaskResponse
     - id: activities.task.schedule_reminder
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v1.TaskService.ScheduleReminder
+        request: crm.activities.v1.ScheduleReminderRequest
+        response: crm.activities.v1.ScheduleReminderResponse
     - id: activities.task.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v1.TaskService.GetTask
+        request: crm.activities.v1.GetTaskRequest
+        response: crm.activities.v1.GetTaskResponse
     - id: activities.task.list
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v1.TaskService.ListTasks
+        request: crm.activities.v1.ListTasksRequest
+        response: crm.activities.v1.ListTasksResponse
   events:
     - id: activities.task.created
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.activities.v1.TaskCreatedEvent
     - id: activities.task.updated
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.activities.v1.TaskUpdatedEvent
     - id: activities.task.completed
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.activities.v1.TaskCompletedEvent
     - id: activities.task.reminder_scheduled
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.activities.v1.TaskReminderScheduledEvent
   objects:
     - activities.task
   ui_extensions:
     - id: activities.tasks.navigation
       type: navigation.item
-      version: "1.0.0"
+      version: 1.0.0
       permission: activities.task.read
       fallback: hide
     - id: activities.related_tasks.panel
       type: record_page.panel
-      version: "1.0.0"
+      version: 1.0.0
       permission: activities.task.read
       fallback: readonly
-
 consumes:
   capabilities: []
   events: []
-
 storage:
   record_types:
     - activities.task
   private_state_namespaces:
     - crm.activities
-
 security:
   data_classes:
     - internal
@@ -76,11 +110,9 @@ security:
     - personal
   network_egress: []
   secret_handles: []
-
 quotas:
   maximum_bulk_records: 10000
   maximum_workflow_actions_per_transaction: 100
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported

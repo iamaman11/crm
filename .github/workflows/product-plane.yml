@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "package.json"
+      - "requirements-dev.txt"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig.base.json"
@@ -11,6 +12,11 @@ on:
       - "apps/web/**"
       - "packages/client/**"
       - "packages/ui/**"
+      - "contracts/module-contract-bindings.json"
+      - "modules/*/module.yaml"
+      - "schemas/module.schema.json"
+      - "scripts/contract_bindings.py"
+      - "scripts/generate_contract_bindings.py"
       - ".github/workflows/product-plane.yml"
       - "scripts/run_e2e.sh"
       - "proto/**"
@@ -21,6 +27,7 @@ on:
   pull_request:
     paths:
       - "package.json"
+      - "requirements-dev.txt"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig.base.json"
@@ -28,6 +35,11 @@ on:
       - "apps/web/**"
       - "packages/client/**"
       - "packages/ui/**"
+      - "contracts/module-contract-bindings.json"
+      - "modules/*/module.yaml"
+      - "schemas/module.schema.json"
+      - "scripts/contract_bindings.py"
+      - "scripts/generate_contract_bindings.py"
       - ".github/workflows/product-plane.yml"
       - "scripts/run_e2e.sh"
       - "proto/**"
@@ -54,6 +66,15 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install contract generation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -67,10 +88,10 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify generated contract hashes are up-to-date
+      - name: Verify generated contract artifacts are up-to-date
         run: |
           pnpm web:generate
-          git diff --exit-code packages/client/src/contract_hashes.ts
+          git diff --exit-code contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts
 
       - name: Run Web typecheck
         run: pnpm web:typecheck
@@ -100,6 +121,7 @@ jobs:
         with:
           name: product-plane-diagnostics
           path: |
+            contracts/module-contract-bindings.json
             packages/client/src/contract_hashes.ts
             product-plane-unit.log
             product-plane-e2e.log

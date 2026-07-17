@@ -19,107 +19,194 @@
     "lifecycle"
   ],
   "properties": {
-    "schema_version": { "const": "crm.module/v1" },
-    "module_id": { "$ref": "#/$defs/moduleId" },
-    "version": { "$ref": "#/$defs/semver" },
-    "display_name": { "type": "string", "minLength": 1, "maxLength": 120 },
-    "description": { "type": "string", "maxLength": 2000 },
+    "schema_version": {
+      "const": "crm.module/v1"
+    },
+    "module_id": {
+      "$ref": "#/$defs/moduleId"
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000
+    },
     "owner": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["team", "contact"],
+      "required": [
+        "team",
+        "contact"
+      ],
       "properties": {
-        "team": { "$ref": "#/$defs/asciiId" },
-        "contact": { "type": "string", "format": "email", "maxLength": 254 },
+        "team": {
+          "$ref": "#/$defs/asciiId"
+        },
+        "contact": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
         "codeowners": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^@[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?$" }
+          "items": {
+            "type": "string",
+            "pattern": "^@[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?$"
+          }
         }
       }
     },
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind"],
+      "required": [
+        "kind"
+      ],
       "properties": {
-        "kind": { "enum": ["in_process", "service", "wasm"] },
-        "entrypoint": { "type": "string", "pattern": "^[A-Za-z0-9_./:-]+$", "maxLength": 240 },
-        "artifact_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        "kind": {
+          "enum": [
+            "in_process",
+            "service",
+            "wasm"
+          ]
+        },
+        "entrypoint": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_./:-]+$",
+          "maxLength": 240
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
       }
     },
     "platform": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["minimum_version"],
+      "required": [
+        "minimum_version"
+      ],
       "properties": {
-        "minimum_version": { "$ref": "#/$defs/semver" },
-        "maximum_exclusive_version": { "$ref": "#/$defs/semver" }
+        "minimum_version": {
+          "$ref": "#/$defs/semver"
+        },
+        "maximum_exclusive_version": {
+          "$ref": "#/$defs/semver"
+        }
       }
     },
     "dependencies": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["required", "optional", "conflicts"],
+      "required": [
+        "required",
+        "optional",
+        "conflicts"
+      ],
       "properties": {
-        "required": { "$ref": "#/$defs/dependencyList" },
-        "optional": { "$ref": "#/$defs/dependencyList" },
+        "required": {
+          "$ref": "#/$defs/dependencyList"
+        },
+        "optional": {
+          "$ref": "#/$defs/dependencyList"
+        },
         "conflicts": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/moduleId" }
+          "items": {
+            "$ref": "#/$defs/moduleId"
+          }
         }
       }
     },
     "provides": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["capabilities", "events", "objects", "ui_extensions"],
+      "required": [
+        "capabilities",
+        "events",
+        "objects",
+        "ui_extensions"
+      ],
       "properties": {
-        "capabilities": { "$ref": "#/$defs/versionedContractList" },
-        "events": { "$ref": "#/$defs/versionedContractList" },
+        "capabilities": {
+          "$ref": "#/$defs/providedCapabilityContractList"
+        },
+        "events": {
+          "$ref": "#/$defs/providedEventContractList"
+        },
         "objects": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/namespacedId" }
+          "items": {
+            "$ref": "#/$defs/namespacedId"
+          }
         },
         "ui_extensions": {
           "type": "array",
-          "items": { "$ref": "#/$defs/uiExtension" }
+          "items": {
+            "$ref": "#/$defs/uiExtension"
+          }
         }
       }
     },
     "consumes": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["capabilities", "events"],
+      "required": [
+        "capabilities",
+        "events"
+      ],
       "properties": {
-        "capabilities": { "$ref": "#/$defs/versionedContractList" },
-        "events": { "$ref": "#/$defs/versionedContractList" }
+        "capabilities": {
+          "$ref": "#/$defs/versionedContractList"
+        },
+        "events": {
+          "$ref": "#/$defs/versionedContractList"
+        }
       }
     },
     "storage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["record_types", "private_state_namespaces"],
+      "required": [
+        "record_types",
+        "private_state_namespaces"
+      ],
       "properties": {
         "record_types": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/namespacedId" }
+          "items": {
+            "$ref": "#/$defs/namespacedId"
+          }
         },
         "private_state_namespaces": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/namespacedId" }
+          "items": {
+            "$ref": "#/$defs/namespacedId"
+          }
         }
       }
     },
     "security": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["data_classes", "network_egress", "secret_handles"],
+      "required": [
+        "data_classes",
+        "network_egress",
+        "secret_handles"
+      ],
       "properties": {
         "data_classes": {
           "type": "array",
@@ -141,33 +228,73 @@
         "network_egress": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^(?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}(?::[0-9]{1,5})?$" }
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}(?::[0-9]{1,5})?$"
+          }
         },
         "secret_handles": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/namespacedId" }
+          "items": {
+            "$ref": "#/$defs/namespacedId"
+          }
         }
       }
     },
     "quotas": {
       "type": "object",
-      "propertyNames": { "$ref": "#/$defs/asciiId" },
-      "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      "propertyNames": {
+        "$ref": "#/$defs/asciiId"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      }
     },
     "lifecycle": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["upgrade_policy", "rollback_policy", "uninstall_policy", "retained_record_types"],
+      "required": [
+        "upgrade_policy",
+        "rollback_policy",
+        "uninstall_policy",
+        "retained_record_types"
+      ],
       "properties": {
-        "upgrade_policy": { "enum": ["automatic_compatible", "manual", "blocked"] },
-        "rollback_policy": { "enum": ["supported", "compensating_only", "not_supported"] },
-        "uninstall_policy": { "enum": ["delete_private_state", "retain_business_records", "blocked_while_referenced"] },
-        "migrations_path": { "type": "string", "pattern": "^[A-Za-z0-9_./-]+$", "maxLength": 240 },
+        "upgrade_policy": {
+          "enum": [
+            "automatic_compatible",
+            "manual",
+            "blocked"
+          ]
+        },
+        "rollback_policy": {
+          "enum": [
+            "supported",
+            "compensating_only",
+            "not_supported"
+          ]
+        },
+        "uninstall_policy": {
+          "enum": [
+            "delete_private_state",
+            "retain_business_records",
+            "blocked_while_referenced"
+          ]
+        },
+        "migrations_path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_./-]+$",
+          "maxLength": 240
+        },
         "retained_record_types": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/namespacedId" }
+          "items": {
+            "$ref": "#/$defs/namespacedId"
+          }
         }
       }
     }
@@ -192,38 +319,162 @@
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
       "maxLength": 80
     },
+    "protobufQualifiedName": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+      "maxLength": 300
+    },
     "dependency": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["module_id", "version_range"],
+      "required": [
+        "module_id",
+        "version_range"
+      ],
       "properties": {
-        "module_id": { "$ref": "#/$defs/moduleId" },
-        "version_range": { "type": "string", "pattern": "^[0-9A-Za-z.*<>=~^| ,+-]{1,120}$" }
+        "module_id": {
+          "$ref": "#/$defs/moduleId"
+        },
+        "version_range": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z.*<>=~^| ,+-]{1,120}$"
+        }
       }
     },
     "dependencyList": {
       "type": "array",
-      "items": { "$ref": "#/$defs/dependency" }
+      "items": {
+        "$ref": "#/$defs/dependency"
+      }
     },
     "versionedContract": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "version"],
+      "required": [
+        "id",
+        "version"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/namespacedId" },
-        "version": { "$ref": "#/$defs/semver" }
+        "id": {
+          "$ref": "#/$defs/namespacedId"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        }
       }
     },
     "versionedContractList": {
       "type": "array",
-      "items": { "$ref": "#/$defs/versionedContract" }
+      "items": {
+        "$ref": "#/$defs/versionedContract"
+      }
+    },
+    "protobufRpcBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "rpc",
+        "request",
+        "response"
+      ],
+      "properties": {
+        "kind": {
+          "const": "protobuf_rpc"
+        },
+        "rpc": {
+          "$ref": "#/$defs/protobufQualifiedName"
+        },
+        "request": {
+          "$ref": "#/$defs/protobufQualifiedName"
+        },
+        "response": {
+          "$ref": "#/$defs/protobufQualifiedName"
+        }
+      }
+    },
+    "protobufMessageBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "const": "protobuf_message"
+        },
+        "message": {
+          "$ref": "#/$defs/protobufQualifiedName"
+        }
+      }
+    },
+    "providedCapabilityContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "binding"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/namespacedId"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        },
+        "binding": {
+          "$ref": "#/$defs/protobufRpcBinding"
+        }
+      }
+    },
+    "providedCapabilityContractList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/providedCapabilityContract"
+      }
+    },
+    "providedEventContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "binding"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/namespacedId"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        },
+        "binding": {
+          "$ref": "#/$defs/protobufMessageBinding"
+        }
+      }
+    },
+    "providedEventContractList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/providedEventContract"
+      }
     },
     "uiExtension": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "version", "permission", "fallback"],
+      "required": [
+        "id",
+        "type",
+        "version",
+        "permission",
+        "fallback"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/namespacedId" },
+        "id": {
+          "$ref": "#/$defs/namespacedId"
+        },
         "type": {
           "enum": [
             "navigation.item",
@@ -236,9 +487,19 @@
             "admin_builder.component"
           ]
         },
-        "version": { "$ref": "#/$defs/semver" },
-        "permission": { "$ref": "#/$defs/namespacedId" },
-        "fallback": { "enum": ["hide", "readonly", "placeholder"] }
+        "version": {
+          "$ref": "#/$defs/semver"
+        },
+        "permission": {
+          "$ref": "#/$defs/namespacedId"
+        },
+        "fallback": {
+          "enum": [
+            "hide",
+            "readonly",
+            "placeholder"
+          ]
+        }
       }
     }
   }

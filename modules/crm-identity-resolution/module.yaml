@@ -1,75 +1,141 @@
 schema_version: crm.module/v1
 module_id: crm.identity-resolution
-version: "0.2.0"
+version: 0.2.0
 display_name: CRM Identity Resolution
 description: Authoritative duplicate-candidate review, reversible merge lineage, canonical Party redirection and survivorship provenance without a competing Party master.
-
 owner:
   team: customer-platform
-  contact: "crm-owner@example.com"
+  contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: modules/crm-identity-resolution
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required:
     - module_id: crm.parties
-      version_range: ">=0.3.0, <1.0.0"
+      version_range: '>=0.3.0, <1.0.0'
   optional: []
   conflicts: []
-
 provides:
   capabilities:
     - id: identity_resolution.candidate.register
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.RegisterDuplicateCandidate
+        request: crm.identity_resolution.v1.RegisterDuplicateCandidateRequest
+        response: crm.identity_resolution.v1.RegisterDuplicateCandidateResponse
     - id: identity_resolution.candidate.evidence.refresh
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.RefreshDuplicateCandidateEvidence
+        request: crm.identity_resolution.v1.RefreshDuplicateCandidateEvidenceRequest
+        response: crm.identity_resolution.v1.RefreshDuplicateCandidateEvidenceResponse
     - id: identity_resolution.candidate.dismiss
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.DismissDuplicateCandidate
+        request: crm.identity_resolution.v1.DismissDuplicateCandidateRequest
+        response: crm.identity_resolution.v1.DismissDuplicateCandidateResponse
     - id: identity_resolution.candidate.confirm_duplicate
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.ConfirmDuplicateCandidate
+        request: crm.identity_resolution.v1.ConfirmDuplicateCandidateRequest
+        response: crm.identity_resolution.v1.ConfirmDuplicateCandidateResponse
     - id: identity_resolution.candidate.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.GetDuplicateCandidateCase
+        request: crm.identity_resolution.v1.GetDuplicateCandidateCaseRequest
+        response: crm.identity_resolution.v1.GetDuplicateCandidateCaseResponse
     - id: identity_resolution.candidate.list_by_party
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.ListDuplicateCandidateCasesByParty
+        request: crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyRequest
+        response: crm.identity_resolution.v1.ListDuplicateCandidateCasesByPartyResponse
     - id: identity_resolution.merge.execute
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.MergeParty
+        request: crm.identity_resolution.v1.MergePartyRequest
+        response: crm.identity_resolution.v1.MergePartyResponse
     - id: identity_resolution.merge.unmerge
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.UnmergeParty
+        request: crm.identity_resolution.v1.UnmergePartyRequest
+        response: crm.identity_resolution.v1.UnmergePartyResponse
     - id: identity_resolution.merge.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.GetMergeOperation
+        request: crm.identity_resolution.v1.GetMergeOperationRequest
+        response: crm.identity_resolution.v1.GetMergeOperationResponse
     - id: identity_resolution.merge.list_by_party
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.ListMergeOperationsByParty
+        request: crm.identity_resolution.v1.ListMergeOperationsByPartyRequest
+        response: crm.identity_resolution.v1.ListMergeOperationsByPartyResponse
     - id: identity_resolution.party.resolve_canonical
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v1.IdentityResolutionService.ResolveCanonicalParty
+        request: crm.identity_resolution.v1.ResolveCanonicalPartyRequest
+        response: crm.identity_resolution.v1.ResolveCanonicalPartyResponse
   events:
     - id: identity_resolution.candidate.registered
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.identity_resolution.v1.DuplicateCandidateRegisteredEvent
     - id: identity_resolution.candidate.evidence_refreshed
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.identity_resolution.v1.DuplicateCandidateEvidenceRefreshedEvent
     - id: identity_resolution.candidate.dismissed
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.identity_resolution.v1.DuplicateCandidateDismissedEvent
     - id: identity_resolution.candidate.confirmed_duplicate
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.identity_resolution.v1.DuplicateCandidateConfirmedEvent
     - id: identity_resolution.party.merged
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.identity_resolution.v1.PartyMergedEvent
     - id: identity_resolution.party.unmerged
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.identity_resolution.v1.PartyUnmergedEvent
   objects:
     - identity_resolution.candidate_case
     - identity_resolution.merge_operation
   ui_extensions: []
-
 consumes:
   capabilities: []
   events: []
-
 storage:
   record_types:
     - identity_resolution.candidate_case
@@ -77,7 +143,6 @@ storage:
   private_state_namespaces:
     - crm.identity-resolution.candidate_case
     - crm.identity-resolution.merge_operation
-
 security:
   data_classes:
     - internal
@@ -85,7 +150,6 @@ security:
     - personal
   network_egress: []
   secret_handles: []
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported
