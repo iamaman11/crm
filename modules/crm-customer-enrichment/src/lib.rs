@@ -1,10 +1,20 @@
 #![forbid(unsafe_code)]
 
 pub mod definitions;
+pub mod lifecycle;
 
 pub use definitions::{
     MappingDraft, MappingNormalization, MappingVersion, MappingVersionId, ProviderProfileDraft,
     ProviderProfileVersion, ProviderProfileVersionId, RawPayloadPolicy, TargetField,
+};
+pub use lifecycle::{
+    derive_suggestion_status, ApplicationAttempt, ApplicationAttemptId, ApplicationOutcome,
+    ApprovalRequirement, EnrichmentRequest, EnrichmentRequestDraft, EnrichmentRequestId,
+    EnrichmentRequestStatus, ProviderResponseClass, ProviderResponseReceipt,
+    ProviderResponseReceiptDraft, ProviderResponseReceiptId, RecordedApplicationOutcome,
+    ReplayDisposition, RequestPolicyEvidence, ReviewDecision, ReviewDecisionId,
+    ReviewDecisionKind, Suggestion, SuggestionDraft, SuggestionId, SuggestionLifecycleStatus,
+    TargetSnapshot,
 };
 
 /// Stable crate identity for repository tooling.
