@@ -70,23 +70,26 @@ def command_conformance(_: argparse.Namespace) -> None:
     run([sys.executable, "scripts/check_production_route_classifications.py"])
     run(
         [
-  sys.executable,
-  "-m",
-  "unittest",
-  "tests/test_native_module_composition.py",
-  "tests/test_production_route_classifications.py",
-  "tests/test_module_scaffolding.py",
+            sys.executable,
+            "-m",
+            "unittest",
+            "tests/test_contract_bindings.py",
+            "tests/test_module_compatibility.py",
+            "tests/test_module_manifest_validation.py",
+            "tests/test_module_scaffolding.py",
+            "tests/test_native_module_composition.py",
+            "tests/test_production_route_classifications.py",
         ]
     )
     run(
         [
-  "cargo",
-  "test",
-  "-p",
-  "crm-application-runtime",
-  "--test",
-  "production_route_parity",
-  "--all-features",
+            "cargo",
+            "test",
+            "-p",
+            "crm-application-runtime",
+            "--test",
+            "production_route_parity",
+            "--all-features",
         ]
     )
 
@@ -193,7 +196,8 @@ def build_parser() -> argparse.ArgumentParser:
     full.set_defaults(handler=command_test_all)
 
     quality = subparsers.add_parser(
-        "quality", help="run architecture, formatting, Clippy and full Rust tests"
+        "quality",
+        help="run conformance, formatting, Clippy and full Rust tests",
     )
     quality.set_defaults(handler=command_quality)
 
