@@ -105,7 +105,7 @@ message GetSuggestionResponse {
 message ListSuggestionsByPartyRequest {
   crm.customer.v1.PartyRef party_ref = 1;
   optional SuggestionLifecycleStatus status = 2;
-  optional ProviderProfileVersionRef provider_profile_version_ref = 3;
+  ProviderProfileVersionRef provider_profile_version_ref = 3;
   int32 page_size = 4;
   string cursor = 5;
 }
