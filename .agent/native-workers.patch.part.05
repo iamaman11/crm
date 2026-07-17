@@ -1,0 +1,295 @@
++    )]
++}
++
++fn parties_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(PARTIES_MODULE_ID, PARTY_RECORD_TYPE, party_fields())]
++}
++
++fn accounts_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        ACCOUNTS_MODULE_ID,
++        ACCOUNT_RECORD_TYPE,
++        account_fields(),
++    )]
++}
++
++fn contact_points_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        CONTACT_POINTS_MODULE_ID,
++        CONTACT_POINT_RECORD_TYPE,
++        contact_point_fields(),
++    )]
++}
++
++fn consents_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        CONSENTS_MODULE_ID,
++        CONSENT_RECORD_TYPE,
++        consent_fields(),
++    )]
++}
++
++fn identity_resolution_visibility(
++    _: &CapabilityDefinition,
++) -> Vec<BootstrapVisibilityResource> {
++    vec![
++        resource(
++            IDENTITY_RESOLUTION_MODULE_ID,
++            IDENTITY_RESOLUTION_RECORD_TYPE,
++            identity_resolution_fields(),
++        ),
++        resource(
++            IDENTITY_RESOLUTION_MODULE_ID,
++            IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
++            identity_resolution_merge_fields(),
++        ),
++    ]
++}
++
++fn party_relationships_visibility(
++    _: &CapabilityDefinition,
++) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        PARTY_RELATIONSHIPS_MODULE_ID,
++        PARTY_RELATIONSHIP_RECORD_TYPE,
++        party_relationship_fields(),
++    )]
++}
++
++fn customer_data_operations_visibility(
++    definition: &CapabilityDefinition,
++) -> Vec<BootstrapVisibilityResource> {
++    let mut resources = vec![resource(
++        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
++        CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
++        customer_data_import_job_fields(),
++    )];
++    if definition.capability_id.as_str() == LIST_IMPORT_ROWS_CAPABILITY {
++        resources.push(resource(
++            CUSTOMER_DATA_OPERATIONS_MODULE_ID,
++            CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
++            customer_data_import_row_fields(),
++        ));
++    }
++    resources
++}
++
++fn data_quality_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        DATA_QUALITY_MODULE_ID,
++        DATA_QUALITY_RULE_SET_RECORD_TYPE,
++        fields(["definition"]),
++    )]
++}
++
++fn no_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    Vec::new()
++}
++
++fn customer_360_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![
++        resource(
++            PARTIES_MODULE_ID,
++            PARTY_RECORD_TYPE,
++            customer_360_party_fields(),
++        ),
++        resource(
++            ACCOUNTS_MODULE_ID,
++            ACCOUNT_RECORD_TYPE,
++            customer_360_account_fields(),
++        ),
++        resource(
++            CONTACT_POINTS_MODULE_ID,
++            CONTACT_POINT_RECORD_TYPE,
++            customer_360_contact_point_fields(),
++        ),
++        resource(
++            PARTY_RELATIONSHIPS_MODULE_ID,
++            PARTY_RELATIONSHIP_RECORD_TYPE,
++            customer_360_party_relationship_fields(),
++        ),
++    ]
++}
++
++fn search_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![
++        resource(SALES_MODULE_ID, SALES_RECORD_TYPE, fields(["name"])),
++        resource(
++            ACTIVITIES_MODULE_ID,
++            ACTIVITIES_RECORD_TYPE,
++            fields(["subject"]),
++        ),
++        resource(PARTIES_MODULE_ID, PARTY_RECORD_TYPE, party_fields()),
++    ]
++}
++
++fn unsupported_owner(module_id: &str) -> SdkError {
++    SdkError::new(
++        "APPLICATION_BOOTSTRAP_VISIBILITY_OWNER_UNSUPPORTED",
++        ErrorCategory::Internal,
++        false,
++        "A production query module has no bootstrap visibility contribution.",
++    )
++    .with_internal_reference(module_id)
++}
++
++fn fields<const N: usize>(values: [&str; N]) -> BTreeSet<String> {
++    values.into_iter().map(str::to_owned).collect()
++}
++
++fn sales_fields() -> BTreeSet<String> {
++    fields([
++        "name",
++        "stage",
++        "amount",
++        "owner",
++        "account",
++        "primary_contact",
++        "expected_close_date",
++        "probability_basis_points",
++        "status",
++        "close_outcome",
++        "created_at",
++        "updated_at",
++    ])
++}
++
++fn customer_data_import_job_fields() -> BTreeSet<String> {
++    fields(["source", "mapping", "status", "counters", "checkpoint"])
++}
++
++fn customer_data_import_row_fields() -> BTreeSet<String> {
++    fields([
++        "row_position",
++        "source_identity",
++        "status",
++        "prepared_party",
++        "diagnostics",
++        "execution",
++        "target_party_ref",
++    ])
++}
++
++fn customer_360_party_fields() -> BTreeSet<String> {
++    fields(["display_name"])
++}
++
++fn customer_360_account_fields() -> BTreeSet<String> {
++    fields(["name", "status"])
++}
++
++fn customer_360_contact_point_fields() -> BTreeSet<String> {
++    fields([
++        "party_ref",
++        "kind",
++        "normalized_value",
++        "status",
++        "preferred",
++        "validity",
++        "verification",
++    ])
++}
++
++fn customer_360_party_relationship_fields() -> BTreeSet<String> {
++    fields(["from_party_ref", "to_party_ref", "status", "validity"])
++}
++
++fn party_fields() -> BTreeSet<String> {
++    fields(["kind", "display_name"])
++}
++
++fn account_fields() -> BTreeSet<String> {
++    fields(["name", "status", "party_associations"])
++}
++
++fn contact_point_fields() -> BTreeSet<String> {
++    fields([
++        "party_ref",
++        "kind",
++        "normalized_value",
++        "display_value",
++        "status",
++        "preferred",
++        "validity",
++        "verification",
++    ])
++}
++
++fn consent_fields() -> BTreeSet<String> {
++    fields([
++        "party_ref",
++        "contact_point_ref",
++        "purpose",
++        "channel",
++        "effect",
++        "legal_basis",
++        "jurisdiction",
++        "source",
++        "evidence_ref",
++        "validity",
++        "status",
++        "resource_version",
++    ])
++}
++
++fn identity_resolution_fields() -> BTreeSet<String> {
++    fields([
++        "party_pair",
++        "evidence_history",
++        "status",
++        "decision_reason",
++    ])
++}
++
++fn identity_resolution_merge_fields() -> BTreeSet<String> {
++    fields([
++        "party_pair",
++        "decision",
++        "survivorship",
++        "status",
++        "unmerge_decision",
++    ])
++}
++
++fn party_relationship_fields() -> BTreeSet<String> {
++    fields([
++        "from_party_ref",
++        "to_party_ref",
++        "relationship_type",
++        "status",
++        "validity",
++    ])
++}
++
++fn task_fields() -> BTreeSet<String> {
++    fields([
++        "subject",
++        "description",
++        "owner",
++        "related_resources",
++        "priority",
++        "status",
++        "due_at",
++        "reminder_at",
++        "completed_at",
++        "created_at",
++        "updated_at",
++    ])
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crm_capability_runtime::{CapabilityRisk, PayloadContract};
++    use crm_module_sdk::{
++        CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, SchemaId,
++        SchemaVersion,
++    };
++
++    fn definition(owner: &str, capability: &str) -> CapabilityDefinition {
++        CapabilityDefinition {
++            capability_id: CapabilityId::try_new(capability).unwrap(),
++            capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
++            owner_module_id: ModuleId::try_new(owner).unwrap(),
++            input_contract: contract(owner, format!("{capability}.request")),
++            output_contract: None,
