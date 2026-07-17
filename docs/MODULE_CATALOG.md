@@ -50,10 +50,11 @@ Only merged `main` state is counted here. Active PR work must not inflate implem
 | `crm.contact-points` | Canonical email/phone/postal/web/messaging endpoints | **Vertical slice** | Create/update/verify/get/list with normalization, verification and preference lifecycle | Broader communication-channel UX and downstream omnichannel use |
 | `crm.party-relationships` | Typed temporal Party-to-Party relationships | **Vertical slice** | Create/update/get/list plus rebuildable hierarchy foundation | Additional governed relationship semantics where justified |
 | `crm.consents` | Purpose/channel-scoped Consent and Communication Authorization | **Vertical slice** | Immutable assertions, grant withdrawal and exact communication-authorization decisions | Broader privacy orchestration and downstream campaign/provider enforcement |
-| `crm.identity-resolution` | Duplicate candidates, merge lineage, survivorship provenance and canonical Party resolution | **Expert expansion** | Duplicate-candidate/reviewer-decision slice plus approval-required reversible merge/unmerge and canonical resolution | Further integration with data quality, enrichment and privacy lifecycle packets |
+| `crm.identity-resolution` | Duplicate candidates, merge lineage, survivorship provenance and canonical Party resolution | **Expert expansion** | Duplicate-candidate/reviewer-decision slice plus approval-required reversible merge/unmerge and canonical resolution | Further integration with enrichment and privacy lifecycle packets |
 | `crm.customer-data-operations` | Governed customer-data import/export jobs and evidence; not customer-master record ownership | **Expert expansion** | Immutable import sources and parsing/validation, resumable Party import/retry recovery, governed Party export selection/manifests, deterministic artifacts/reconciliation, both export crash-window recoveries and live-authorized audited artifact disclosure | Additional resource-type import/export profiles and later privacy-lifecycle interactions where explicitly coordinated |
+| `crm.data-quality` | Customer-data quality governance coordinator; not customer-master value ownership | **Vertical slice** | Immutable Party rule sets/profiles, exact-version evaluation, findings/observations, completeness, stewardship and governed Party remediation with restart/crash recovery | Additional owner-resource profiles, enrichment interaction and later privacy-lifecycle coordination where explicitly governed |
 
-Current implemented authoritative/coordination module count: **9**.
+Current implemented authoritative/coordination module count: **10**.
 
 ## 4. Implemented link module
 
@@ -61,7 +62,7 @@ Current implemented authoritative/coordination module count: **9**.
 |---|---|---|---|
 | `crm.sales-activities-link` | Optional link module | **Production integration slice — Complete** | Consumes versioned Sales stage-change events through restart-safe governed delivery, checks installation lifecycle and invokes Activities only through the governed capability gateway with durable retry/dead-letter state and target idempotency |
 
-Current counted business-module total: **10** — nine authoritative/coordination modules plus one optional link module.
+Current counted business-module total: **11** — ten authoritative/coordination modules plus one optional link module.
 
 ## 5. Independently governed read composition
 
@@ -117,24 +118,22 @@ Owns governed customer-data operation aggregates and evidence only:
 
 It does not own Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution records. Target mutations invoke exact governed owner capabilities; export selection/execution reads use governed owner-domain query/composition boundaries rather than direct cross-module storage bypass; artifact disclosure repeats live authorization and retention/integrity checks.
 
-### `crm.customer360`
+### `crm.data-quality`
 
-Owns only rebuildable read composition and permission-aware assembly.
-
-### Gate-review `crm.data-quality`
-
-Phase 8A.9 / #124 and draft PR #132 implement a distinct owner/coordinator for long-lived quality-governance state. The implementation has a qualifying production vertical slice and passed its functional gate, but it is **not counted as implemented until PR #132 is merged to `main`**.
-
-Delivered ownership on the active PR:
+Owns long-lived customer-data quality governance state:
 
 - immutable/versioned Party quality rule sets and completeness profiles;
-- deterministic evaluation coordination and exact staged Party evidence;
-- immutable rule outcomes, findings, observations and completeness results;
+- deterministic evaluation jobs and exact staged Party evidence;
+- immutable rule outcomes, logical findings, exact-version observations and completeness results;
 - stewardship assignment, acknowledgement and waiver state;
 - immutable governed Party-remediation attempt evidence;
 - bounded diagnostics, reconciliation and restart/retry evidence.
 
 It does not own authoritative customer values. Authoritative Party values remain with `crm.parties`; quality evaluation reads them through governed boundaries and remediation re-enters the exact `parties.party.update@1.0.0` owner capability.
+
+### `crm.customer360`
+
+Owns only rebuildable read composition and permission-aware assembly.
 
 ## 7. Phase 8A packet accounting
 
@@ -148,19 +147,19 @@ Completed:
 - 8A.6 — reversible merge/unmerge, provenance and survivorship through PR #119.
 - 8A.7 — Customer Import Jobs and Resumable Execution through PR #121 / merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
 - 8A.8 — Customer Export Jobs, Artifacts and Reconciliation Evidence through PR #130 / merge `0e7f9889362533446cc65d95dcf7969a60086a57`.
+- 8A.9 — Customer Data Quality Rules, Completeness and Stewardship through PR #132 / merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`.
 
-Gate review:
+Ready:
 
-- 8A.9 / #124 / draft PR #132 — Customer Data Quality Rules, Completeness and Stewardship.
+- 8A.10 / #125 — Governed Customer Enrichment and Provenance.
 
 Planned:
 
-- 8A.10 / #125 — Governed Customer Enrichment and Provenance.
 - 8A.11 / #126 — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
-## 8. `crm.data-quality` merge accounting — Phase 8A.9
+## 8. `crm.data-quality` merged readiness — Phase 8A.9
 
-The implementation qualifies for a vertical-slice readiness assessment only after merge because it includes:
+The module qualifies as a **Vertical slice** because merged `main` includes:
 
 - immutable rule-set and completeness-profile publication;
 - deterministic exact-version Party evaluation and restart-safe materialization;
@@ -179,8 +178,6 @@ Required boundaries remain:
 - exact authoritative resource-version evidence;
 - remediation only through exact governed owner capabilities;
 - process restart/retry without duplicate findings, assignments, attempts or owner side effects.
-
-The counted authoritative/coordination module total remains **9**, and the counted business-module total remains **10**, until PR #132 is merged.
 
 ## 9. Mandatory commercial lifecycle owner domains
 
@@ -213,7 +210,7 @@ Tracked by Phase 8 / #11 and `CRM_CAPABILITY_COVERAGE.md`:
 - projects and configurable work management;
 - documents and e-signature;
 - analytics, reporting and performance management;
-- enrichment and privacy lifecycle after the Data Quality packet merges;
+- enrichment and privacy lifecycle;
 - workflow, approvals and human tasks;
 - collaboration and personal productivity.
 
@@ -248,4 +245,4 @@ Current count of **product-complete expert modules: 0**.
 
 A module is not product-complete merely because a crate, schema, manifest or one backend path exists. Product-complete status requires applicable domain breadth, governed APIs, persistence, authorization, audit, product UX and production/operational evidence.
 
-The final universal CRM will contain substantially more than the current ten counted business modules. The exact final count is driven by authoritative ownership boundaries rather than an arbitrary target.
+The final universal CRM will contain substantially more than the current eleven counted business modules. The exact final count is driven by authoritative ownership boundaries rather than an arbitrary target.
