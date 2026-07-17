@@ -5,7 +5,7 @@ Foundation state: **In progress — not a production vertical slice**. These gat
 - [x] Freeze immutable module identity, owned evidence records and retain-on-uninstall semantics.
 - [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
 - [ ] Publish compatible `crm.customer_enrichment.v1` Protobuf contracts and generated manifest bindings.
-- [ ] Implement immutable provider-profile and mapping-version invariants.
+- [x] Implement immutable provider-profile and mapping-version invariants with deterministic content-derived identities, bounded metadata and focused unit coverage.
 - [ ] Implement deterministic request, response-receipt, suggestion, review and application-attempt behavior with strict persisted-state conversion.
 - [ ] Add governed public and worker-only capability/query adapters.
 - [ ] Add pre-authorization Party/Consent semantic ports and final live authorization/visibility.
