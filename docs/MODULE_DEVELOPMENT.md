@@ -187,10 +187,11 @@ After generation, follow `DEVELOPMENT_WORKFLOW.md`:
 1. ownership and invariants;
 2. public contracts;
 3. application ports/use cases;
-4. infrastructure adapters outside the module core;
-5. production composition;
-6. acceptance tests;
-7. operational and documentation closure.
+4. module-owned production contribution contract;
+5. infrastructure adapters outside the module core;
+6. exact-coordinate composition registration and durable activation;
+7. acceptance tests;
+8. operational and documentation closure.
 
 Move the generated `MODULE_CATALOG_ENTRY.md` content into the normative catalog only when the module identity and ownership decision are accepted. Update readiness only when the corresponding merged acceptance evidence exists.
 
