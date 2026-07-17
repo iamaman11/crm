@@ -1,0 +1,252 @@
+-            self.party_relationships.execute(definition, request)
+-        } else if CUSTOMER_360_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+-            self.customer_360.execute(definition, request)
+-        } else if CONSENT_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
+-            self.consents.execute(definition, request)
+-        } else if IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS
+-            .contains(&definition.capability_id.as_str())
+-        {
+-            self.identity_resolution.execute(definition, request)
+-        } else if IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS
+-            .contains(&definition.capability_id.as_str())
+-        {
+-            self.identity_resolution_merge.execute(definition, request)
+-        } else if CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS
+-            .contains(&definition.capability_id.as_str())
+-        {
+-            self.customer_data_operations.execute(definition, request)
+-        } else {
+-            self.production.execute(definition, request)
+-        }
+-    }
+-}
+-
+-fn catalog_error(error: impl fmt::Display) -> SdkError {
+-    SdkError::new(
+-        "APPLICATION_CAPABILITY_CATALOG_CONFIGURATION_INVALID",
+-        ErrorCategory::Internal,
+-        false,
+-        "The application capability catalog configuration is invalid.",
+-    )
+-    .with_internal_reference(error.to_string())
+-}
+-
+-#[cfg(test)]
+-mod tests {
+-    use super::*;
+-    use crm_sales_activities_capability_composition::PRODUCTION_MUTATION_CAPABILITY_IDS;
+-    use crm_sales_activities_query_adapter::PRODUCTION_QUERY_CAPABILITY_IDS;
+-    use crm_search_query_adapter::SEARCH_QUERY_CAPABILITY;
+-
+-    #[test]
+-    fn application_catalogs_extend_existing_product_coordinates_without_replacing_them() {
+-        let mutations = application_mutation_definitions().unwrap();
+-        assert_eq!(
+-            mutations.len(),
+-            PRODUCTION_MUTATION_CAPABILITY_IDS.len()
+-                + PARTY_MUTATION_CAPABILITY_IDS.len()
+-                + ACCOUNT_MUTATION_CAPABILITY_IDS.len()
+-                + CONTACT_POINT_MUTATION_CAPABILITY_IDS.len()
+-                + PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS.len()
+-                + CONSENT_MUTATION_CAPABILITY_IDS.len()
+-                + IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS.len()
+-                + CUSTOMER_DATA_OPERATIONS_MUTATION_CAPABILITY_IDS.len()
+-                - 2
+-                + CUSTOMER_DATA_OPERATIONS_SOURCE_MUTATION_CAPABILITY_IDS.len()
+-                + METADATA_MUTATION_CAPABILITY_IDS.len()
+-        );
+-        for coordinate in PRODUCTION_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| { definition.capability_id.as_str() == coordinate })
+-            );
+-        }
+-        for coordinate in PARTY_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in ACCOUNT_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in CONTACT_POINT_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in PARTY_RELATIONSHIP_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in CONSENT_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in IDENTITY_RESOLUTION_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in CUSTOMER_DATA_OPERATIONS_SOURCE_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        assert!(
+-            mutations
+-                .iter()
+-                .all(|definition| definition.capability_id.as_str()
+-                    != CREATE_PARTY_IMPORT_JOB_CAPABILITY)
+-        );
+-        assert!(
+-            mutations
+-                .iter()
+-                .all(|definition| definition.capability_id.as_str()
+-                    != VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY)
+-        );
+-        for coordinate in METADATA_MUTATION_CAPABILITY_IDS {
+-            assert!(
+-                mutations
+-                    .iter()
+-                    .any(|definition| { definition.capability_id.as_str() == coordinate })
+-            );
+-        }
+-
+-        let queries = application_query_definitions().unwrap();
+-        assert_eq!(
+-            queries.len(),
+-            PRODUCTION_QUERY_CAPABILITY_IDS.len()
+-                + 1
+-                + PARTY_QUERY_CAPABILITY_IDS.len()
+-                + ACCOUNT_QUERY_CAPABILITY_IDS.len()
+-                + CONTACT_POINT_QUERY_CAPABILITY_IDS.len()
+-                + PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS.len()
+-                + CUSTOMER_360_QUERY_CAPABILITY_IDS.len()
+-                + CONSENT_QUERY_CAPABILITY_IDS.len()
+-                + IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS.len()
+-                + IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS.len()
+-                + CUSTOMER_DATA_OPERATIONS_QUERY_CAPABILITY_IDS.len()
+-                + METADATA_QUERY_CAPABILITY_IDS.len()
+-        );
+-        assert!(
+-            queries
+-                .iter()
+-                .any(|definition| { definition.capability_id.as_str() == SEARCH_QUERY_CAPABILITY })
+-        );
+-        for coordinate in PARTY_QUERY_CAPABILITY_IDS {
+-            assert!(
+-                queries
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in ACCOUNT_QUERY_CAPABILITY_IDS {
+-            assert!(
+-                queries
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in CONTACT_POINT_QUERY_CAPABILITY_IDS {
+-            assert!(
+-                queries
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in PARTY_RELATIONSHIP_QUERY_CAPABILITY_IDS {
+-            assert!(
+-                queries
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in CONSENT_QUERY_CAPABILITY_IDS {
+-            assert!(
+-                queries
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in IDENTITY_RESOLUTION_QUERY_CAPABILITY_IDS {
+-            assert!(
+-                queries
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in IDENTITY_RESOLUTION_MERGE_QUERY_CAPABILITY_IDS {
+-            assert!(
+-                queries
+-                    .iter()
+-                    .any(|definition| definition.capability_id.as_str() == coordinate)
+-            );
+-        }
+-        for coordinate in METADATA_QUERY_CAPABILITY_IDS {
+-            assert!(
+-                queries
+-                    .iter()
+-                    .any(|definition| { definition.capability_id.as_str() == coordinate })
+-            );
+-        }
+-    }
+-}
+diff --git a/crates/crm-application-runtime/src/lib.rs b/crates/crm-application-runtime/src/lib.rs
+index 7c48702..e94cdc3 100644
+--- a/crates/crm-application-runtime/src/lib.rs
++++ b/crates/crm-application-runtime/src/lib.rs
+@@ -9,7 +9,6 @@
+ 
+ mod config;
+ mod data_quality_capability_execution;
+-mod data_quality_query_registration;
+ mod data_quality_registration;
+ mod export_artifact_download;
+ mod export_artifact_download_http;
+@@ -17,15 +16,15 @@ mod export_execution_source;
+ mod export_selection_bootstrap;
+ mod export_selection_source;
+ mod gateway_grpc;
+-mod governed_metadata;
++mod native_composition;
+ mod platform;
+ mod process;
+ mod runtime;
+ 
+ pub use config::*;
+-pub use data_quality_capability_execution::ApplicationCapabilityExecutorRouter;
+-pub use data_quality_query_registration::*;
++pub use data_quality_capability_execution::DataQualityCapabilityExecutor;
+ pub use data_quality_registration::*;
++pub use native_composition::*;
+ pub use export_artifact_download::*;
+ pub(crate) use export_artifact_download_http::export_artifact_download_router;
+ pub use export_execution_source::*;
+diff --git a/crates/crm-application-runtime/src/platform.rs b/crates/crm-application-runtime/src/platform.rs
+index 0271ff0..35fe5de 100644
+--- a/crates/crm-application-runtime/src/platform.rs
++++ b/crates/crm-application-runtime/src/platform.rs
+@@ -1,7 +1,4 @@
+-use crm_capability_runtime::{
+-    CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator,
+-};
+-use crm_module_sdk::{Clock, ErrorCategory, PortFuture, RandomSource, SdkError};
