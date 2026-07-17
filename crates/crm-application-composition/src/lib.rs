@@ -24,7 +24,6 @@ use std::sync::Arc;
 pub const CRATE_NAME: &str = "crm-application-composition";
 
 type Coordinate = (String, String);
-type WorkerCoordinate = (String, String);
 
 fn coordinate(definition: &CapabilityDefinition) -> Coordinate {
     (
