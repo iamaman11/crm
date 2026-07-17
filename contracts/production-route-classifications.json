@@ -44,7 +44,20 @@
       "reason": "Platform permission-aware global search route outside business module manifests."
     }
   ],
-  "non_runtime_contract_routes": [],
+  "non_runtime_contract_routes": [
+    {
+      "owner_module_id": "crm.customer-data-operations",
+      "id": "customer_data.import.party.create",
+      "version": "1.0.0",
+      "reason": "Legacy client-preparsed import contract retained for compatibility; production exposes only the governed source-artifact job creation route."
+    },
+    {
+      "owner_module_id": "crm.customer-data-operations",
+      "id": "customer_data.import.party.rows.validate",
+      "version": "1.0.0",
+      "reason": "Legacy client-preparsed row-validation contract retained for compatibility; production validates rows only through the governed source-artifact route."
+    }
+  ],
   "empty_runtime_modules": [
     {
       "module_id": "crm.sales-activities-link",
