@@ -1,0 +1,58 @@
+diff --git a/crates/crm-application-runtime/src/native_composition.rs b/crates/crm-application-runtime/src/native_composition.rs
+index eda395a..0000000 100644
+--- a/crates/crm-application-runtime/src/native_composition.rs
++++ b/crates/crm-application-runtime/src/native_composition.rs
+@@ -159,6 +159,67 @@ pub struct ProductionCompositionDependencies {
+     pub cursor_key: [u8; 32],
+ }
+ 
++/// Returns the exact public mutation inventory assembled from module-owned
++/// definition factories. This compatibility API is intentionally data-only:
++/// production dispatch is owned exclusively by `ApplicationComposition`.
++pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
++    let mut definitions = sales_activities_capability_definitions()?;
++    definitions.extend(party_capability_definitions()?);
++    definitions.extend(account_capability_definitions()?);
++    definitions.extend(contact_point_capability_definitions()?);
++    definitions.extend(party_relationship_capability_definitions()?);
++    definitions.extend(consent_capability_definitions()?);
++    definitions.extend(identity_resolution_capability_definitions()?);
++    definitions.extend(
++        customer_data_operations_capability_definitions()?
++            .into_iter()
++            .filter(|definition| {
++                !matches!(
++                    definition.capability_id.as_str(),
++                    CREATE_PARTY_IMPORT_JOB_CAPABILITY | VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY
++                )
++            }),
++    );
++    definitions.extend(customer_data_operations_source_capability_definitions()?);
++    definitions.extend(data_quality_capability_definitions()?);
++    definitions.extend(metadata_mutation_capability_definitions()?);
++    Ok(definitions)
++}
++
++/// Returns the exact public query inventory assembled from module-owned
++/// definition factories. It exists for tests, bootstrap grants and parity
++/// checks; it is not a router and performs no runtime dispatch.
++pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
++    let mut definitions = sales_activities_query_capability_definitions()?;
++    definitions.extend(party_query_capability_definitions()?);
++    definitions.extend(account_query_capability_definitions()?);
++    definitions.extend(contact_point_query_capability_definitions()?);
++    definitions.extend(party_relationship_query_capability_definitions()?);
++    definitions.extend(customer_360_query_capability_definitions()?);
++    definitions.extend(consent_query_capability_definitions()?);
++    definitions.extend(identity_resolution_query_capability_definitions()?);
++    definitions.extend(identity_resolution_merge_query_capability_definitions()?);
++    definitions.extend(customer_data_operations_query_capability_definitions()?);
++    definitions.extend(data_quality_query_capability_definitions()?);
++    definitions.push(search_query_capability_definition()?);
++    definitions.extend(metadata_query_capability_definitions()?);
++    Ok(definitions)
++}
++
+ pub fn build_production_composition(
+     dependencies: ProductionCompositionDependencies,
+ ) -> Result<ApplicationComposition, SdkError> {
