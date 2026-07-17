@@ -3,6 +3,7 @@ use crm_application_composition::{
     ActivationGatedMutationValidator, ActivationGatedQueryValidator, ApplicationComposition,
     ModuleActivationPort, ModuleContributionSet, NoopMutationSemanticValidator,
 };
+use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::{
     CapabilityAuthorizer, CapabilityDefinition, CapabilitySemanticValidator,
     TransactionalCapabilityExecutor,
@@ -187,6 +188,10 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
 /// Returns the exact public query inventory assembled from module-owned
 /// definition factories. It exists for tests, bootstrap grants and parity
 /// checks; it is not a router and performs no runtime dispatch.
+pub fn application_capability_catalog() -> Result<CapabilityCatalog, SdkError> {
+    CapabilityCatalog::new(application_mutation_definitions()?).map_err(configuration_error)
+}
+
 pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = sales_activities_query_capability_definitions()?;
     definitions.extend(party_query_capability_definitions()?);
@@ -233,7 +238,7 @@ pub fn build_production_composition(
         &mut contributions,
         party_capability_definitions()?,
         Arc::new(NoopMutationSemanticValidator),
-        party_executor,
+        party_executor.clone(),
         activation.clone(),
     )?;
 
@@ -346,6 +351,8 @@ pub fn build_production_composition(
         Arc::new(DataQualityCapabilityExecutor::new(
             store.clone(),
             data_quality_fallback,
+            party_executor,
+            activation.clone(),
             capability_authorizer.clone(),
             query_authorizer.clone(),
         ));

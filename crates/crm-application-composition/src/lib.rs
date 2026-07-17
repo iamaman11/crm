@@ -714,11 +714,89 @@ pub trait TenantBackgroundWorker: Send + Sync {
     ) -> PortFuture<'a, Result<(), SdkError>>;
 }
 
+/// Stable process-wide ordering for background work. Modules choose a phase,
+/// while module and worker identifiers provide deterministic ordering inside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BackgroundWorkerPhase(u16);
+
+impl BackgroundWorkerPhase {
+    pub const SOURCE_INGESTION: Self = Self(100);
+    pub const DOMAIN_LINKING: Self = Self(200);
+    pub const PROJECTION: Self = Self(300);
+    pub const DERIVED_VIEW: Self = Self(400);
+    pub const SEARCH_INDEX: Self = Self(500);
+    pub const DEFAULT: Self = Self(1_000);
+
+    pub const fn new(order: u16) -> Self {
+        Self(order)
+    }
+
+    pub const fn order(self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Clone)]
+pub struct ActivationGatedBackgroundWorker {
+    activation: Arc<dyn ModuleActivationPort>,
+    module_id: ModuleId,
+    inner: Arc<dyn TenantBackgroundWorker>,
+}
+
+impl fmt::Debug for ActivationGatedBackgroundWorker {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ActivationGatedBackgroundWorker")
+            .field("module_id", &self.module_id)
+            .field("activation", &"dyn ModuleActivationPort")
+            .field("inner", &"dyn TenantBackgroundWorker")
+            .finish()
+    }
+}
+
+impl ActivationGatedBackgroundWorker {
+    pub fn new(
+        activation: Arc<dyn ModuleActivationPort>,
+        module_id: ModuleId,
+        inner: Arc<dyn TenantBackgroundWorker>,
+    ) -> Self {
+        Self {
+            activation,
+            module_id,
+            inner,
+        }
+    }
+}
+
+impl TenantBackgroundWorker for ActivationGatedBackgroundWorker {
+    fn run_tenant_cycle<'a>(
+        &'a self,
+        tenant_id: TenantId,
+        now_unix_nanos: i64,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            if !self
+                .activation
+                .is_active(&tenant_id, &self.module_id)
+                .await?
+            {
+                return Ok(());
+            }
+            self.inner
+                .run_tenant_cycle(tenant_id, now_unix_nanos)
+                .await
+        })
+    }
+}
+
+type WorkerIdentity = (String, String);
+type ScheduledWorkerCoordinate = (BackgroundWorkerPhase, String, String);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BackgroundCompositionError {
     UndeclaredModule(String),
-    DuplicateWorker(WorkerCoordinate),
-    InvalidWorkerId(WorkerCoordinate),
+    DuplicateWorker(WorkerIdentity),
+    InvalidWorkerId(WorkerIdentity),
 }
 
 impl fmt::Display for BackgroundCompositionError {
@@ -750,7 +828,8 @@ impl Error for BackgroundCompositionError {}
 
 pub struct BackgroundWorkerRegistryBuilder {
     modules: BTreeSet<String>,
-    workers: BTreeMap<WorkerCoordinate, Arc<dyn TenantBackgroundWorker>>,
+    worker_identities: BTreeSet<WorkerIdentity>,
+    workers: BTreeMap<ScheduledWorkerCoordinate, Arc<dyn TenantBackgroundWorker>>,
 }
 
 impl fmt::Debug for BackgroundWorkerRegistryBuilder {
@@ -767,6 +846,7 @@ impl BackgroundWorkerRegistryBuilder {
     pub fn new(modules: impl IntoIterator<Item = String>) -> Self {
         Self {
             modules: modules.into_iter().collect(),
+            worker_identities: BTreeSet::new(),
             workers: BTreeMap::new(),
         }
     }
@@ -777,18 +857,29 @@ impl BackgroundWorkerRegistryBuilder {
         worker_id: impl Into<String>,
         worker: Arc<dyn TenantBackgroundWorker>,
     ) -> Result<&mut Self, BackgroundCompositionError> {
+        self.add_in_phase(BackgroundWorkerPhase::DEFAULT, module_id, worker_id, worker)
+    }
+
+    pub fn add_in_phase(
+        &mut self,
+        phase: BackgroundWorkerPhase,
+        module_id: ModuleId,
+        worker_id: impl Into<String>,
+        worker: Arc<dyn TenantBackgroundWorker>,
+    ) -> Result<&mut Self, BackgroundCompositionError> {
         let module_id = module_id.as_str().to_owned();
         let worker_id = worker_id.into();
         if !self.modules.contains(&module_id) {
             return Err(BackgroundCompositionError::UndeclaredModule(module_id));
         }
-        let key = (module_id, worker_id);
-        if !valid_worker_id(&key.1) {
-            return Err(BackgroundCompositionError::InvalidWorkerId(key));
+        let identity = (module_id.clone(), worker_id.clone());
+        if !valid_worker_id(&worker_id) {
+            return Err(BackgroundCompositionError::InvalidWorkerId(identity));
         }
-        if self.workers.insert(key.clone(), worker).is_some() {
-            return Err(BackgroundCompositionError::DuplicateWorker(key));
+        if !self.worker_identities.insert(identity.clone()) {
+            return Err(BackgroundCompositionError::DuplicateWorker(identity));
         }
+        self.workers.insert((phase, module_id, worker_id), worker);
         Ok(self)
     }
 
@@ -809,7 +900,7 @@ fn valid_worker_id(value: &str) -> bool {
 
 #[derive(Clone)]
 pub struct BackgroundWorkerRegistry {
-    workers: Arc<BTreeMap<WorkerCoordinate, Arc<dyn TenantBackgroundWorker>>>,
+    workers: Arc<BTreeMap<ScheduledWorkerCoordinate, Arc<dyn TenantBackgroundWorker>>>,
 }
 
 impl fmt::Debug for BackgroundWorkerRegistry {
@@ -833,7 +924,15 @@ impl BackgroundWorkerRegistry {
     pub fn coordinates(&self) -> impl Iterator<Item = (&str, &str)> {
         self.workers
             .keys()
-            .map(|(module_id, worker_id)| (module_id.as_str(), worker_id.as_str()))
+            .map(|(_, module_id, worker_id)| (module_id.as_str(), worker_id.as_str()))
+    }
+
+    pub fn scheduled_coordinates(
+        &self,
+    ) -> impl Iterator<Item = (BackgroundWorkerPhase, &str, &str)> {
+        self.workers.keys().map(|(phase, module_id, worker_id)| {
+            (*phase, module_id.as_str(), worker_id.as_str())
+        })
     }
 
     pub async fn run_tenant_cycle(
@@ -844,7 +943,7 @@ impl BackgroundWorkerRegistry {
         if now_unix_nanos <= 0 {
             return Err(composition_invalid("background cycle time is invalid"));
         }
-        for ((module_id, worker_id), worker) in self.workers.iter() {
+        for ((phase, module_id, worker_id), worker) in self.workers.iter() {
             worker
                 .run_tenant_cycle(tenant_id.clone(), now_unix_nanos)
                 .await
@@ -856,7 +955,8 @@ impl BackgroundWorkerRegistry {
                         "A background module worker failed.",
                     )
                     .with_internal_reference(format!(
-                        "module={module_id};worker={worker_id};error={}",
+                        "phase={};module={module_id};worker={worker_id};error={}",
+                        phase.order(),
                         error.code
                     ))
                 })?;
@@ -1048,6 +1148,59 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(*order.lock().unwrap(), vec!["alpha/a", "zeta/b"]);
+    }
+
+    #[tokio::test]
+    async fn background_worker_phases_precede_module_sort_order() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let modules = BTreeSet::from(["crm.alpha".to_owned(), "crm.zeta".to_owned()]);
+        let mut builder = BackgroundWorkerRegistryBuilder::new(modules);
+        builder
+            .add_in_phase(
+                BackgroundWorkerPhase::SEARCH_INDEX,
+                module_id("crm.alpha"),
+                "search",
+                Arc::new(Worker {
+                    order: Arc::clone(&order),
+                    value: "search",
+                }),
+            )
+            .unwrap();
+        builder
+            .add_in_phase(
+                BackgroundWorkerPhase::SOURCE_INGESTION,
+                module_id("crm.zeta"),
+                "ingestion",
+                Arc::new(Worker {
+                    order: Arc::clone(&order),
+                    value: "ingestion",
+                }),
+            )
+            .unwrap();
+        builder
+            .build()
+            .run_tenant_cycle(TenantId::try_new("tenant-a").unwrap(), 1)
+            .await
+            .unwrap();
+        assert_eq!(*order.lock().unwrap(), vec!["ingestion", "search"]);
+    }
+
+    #[tokio::test]
+    async fn inactive_background_worker_is_skipped_before_inner_execution() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let gated = ActivationGatedBackgroundWorker::new(
+            Arc::new(Activation(false)),
+            module_id("crm.alpha"),
+            Arc::new(Worker {
+                order: Arc::clone(&order),
+                value: "should-not-run",
+            }),
+        );
+        gated
+            .run_tenant_cycle(TenantId::try_new("tenant-a").unwrap(), 1)
+            .await
+            .unwrap();
+        assert!(order.lock().unwrap().is_empty());
     }
 
     #[test]
