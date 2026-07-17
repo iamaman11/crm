@@ -2,6 +2,7 @@
 
 pub mod definitions;
 pub mod lifecycle;
+/// Strict bounded canonical persisted-state codecs for governed enrichment evidence.
 #[allow(unused_imports)]
 pub mod persistence;
 
