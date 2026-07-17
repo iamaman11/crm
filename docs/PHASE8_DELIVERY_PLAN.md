@@ -78,20 +78,17 @@ Merge commit: `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
 
 Implemented:
 
-- `crm.customer-data-operations` as the governed owner of import-job/source/mapping/row/checkpoint evidence;
+- `crm.customer-data-operations` ownership of import-job/source/mapping/row/checkpoint evidence;
 - immutable source artifacts with sequential chunks, replay protection, exact byte length and SHA-256 finalization;
-- immutable source-system identity and parser/import profile;
+- immutable source-system identity and parser/import profiles;
 - explicit separation of source external identifiers from canonical CRM Party IDs;
 - server-side parsing and validation of finalized source bytes;
-- true dry-run proof with zero Party records, Party target idempotency, Party outbox or Party mutation-audit side effects;
+- true dry-run proof with zero Party-side effects;
 - deterministic row identity and target Party idempotency;
-- exact Party owner-capability execution through `GatewayCapabilityClient` with no direct Party storage writes;
-- durable success, invalid-skip, retryable-failure, checkpoint and completion evidence;
-- distinct restart-stable business transaction identities for target mutations and import-owned outcomes;
-- fresh-PostgreSQL process proof for target-success/checkpoint crash recovery without duplicate Party creation;
-- fresh-PostgreSQL process proof for durable retryable target failure without checkpoint advancement followed by successful restart/retry recovery;
-- tenant non-disclosure, field visibility and signed-cursor tamper rejection;
-- all applicable exact-head workflows green before merge.
+- exact Party owner-capability execution with no direct Party storage writes;
+- durable outcomes, checkpoints, completion and retry evidence;
+- fresh-PostgreSQL crash/restart process acceptance;
+- tenant non-disclosure, field visibility and signed-cursor tamper rejection.
 
 ### 8A.8 — Customer Export Jobs, Artifacts and Reconciliation Evidence — Complete
 
@@ -100,116 +97,99 @@ Merge commit: `0e7f9889362533446cc65d95dcf7969a60086a57`.
 
 Implemented:
 
-- immutable versioned Party export specifications with bounded maximum resource count;
-- atomic first-start creation of one immutable creation-time selection boundary and durable progress;
-- restart-safe opaque keyset continuation and deterministic Party creation ordering;
-- deterministic manifest items bound to exact `PartyRef + resource_version` evidence and an exact boundary-bound manifest digest;
-- governed Party selection/execution reads with separate top-level authorization and per-resource/field visibility;
-- deterministic exclusion of not-visible, version-changed or unavailable selected resources;
+- immutable versioned Party export specifications and bounded selection;
+- deterministic manifest items bound to exact Party resource versions;
+- governed Party selection/execution reads with live authorization and field visibility;
 - deterministic spreadsheet-safe UTF-8 CSV canonicalization;
-- approval-required production Party export execution;
-- deterministic staged artifact chunks and per-manifest-position outcome identities;
-- checkpoint advancement only from a contiguous durable outcome prefix;
-- exact reconciliation `selected = emitted + excluded_not_visible + excluded_version_changed + excluded_unavailable`;
-- deterministic immutable artifact identity, chunk/hash/size evidence and replay-safe finalization;
-- recovery from chunk-written/outcome-checkpoint-missing and artifact-finalized/completion-missing crash windows without duplicate logical artifacts;
-- live-authorized, per-resource-visible, retention-aware, integrity-verified and audited artifact disclosure;
-- rejection of unauthenticated, cross-tenant, cancelled/not-ready and expired artifact disclosure;
-- fresh-PostgreSQL real `crm-api` process acceptance;
-- all 14 applicable workflows green together on unchanged human-authored candidate `f219d9b418ed07a9328bb44d36cfb9f321ad9be3` before merge.
+- approval-required production execution;
+- replay-safe artifact chunks, outcomes, checkpoints and finalization;
+- exact reconciliation and both required crash-window recoveries;
+- live-authorized, retention-aware, integrity-verified and audited disclosure;
+- fresh-PostgreSQL real `crm-api` process acceptance.
 
 Exported bytes remain derived artifacts and never become authoritative customer-master state.
 
-### 8A.9 — Customer Data Quality Rules, Completeness and Stewardship — Ready
+### 8A.9 — Customer Data Quality Rules, Completeness and Stewardship — Gate review
 
 Issue: #124  
+Implementation: draft PR #132  
 Depends on: completed #123 / merged PR #130 (`0e7f9889362533446cc65d95dcf7969a60086a57`)
 
-This is the **next customer-master production packet**. It becomes **In progress** only when its implementation branch/draft PR is created from the synchronized post-8A.8 `main` baseline.
+The Party-focused v1 implementation is delivered and has passed its functional unchanged-head gate. It remains **Gate review**, not **Complete**, until synchronized documentation passes a final exact-head gate and PR #132 is merged.
 
-#### Ownership boundary
+#### Delivered ownership boundary
 
-Introduce a distinct `crm.data-quality` owner/coordinator for long-lived quality-governance state.
+`crm.data-quality` owns only:
 
-`crm.data-quality` may own only:
-
-- immutable/versioned quality rule-set definitions;
+- immutable/versioned Party quality rule-set definitions;
 - immutable/versioned completeness-profile definitions;
-- deterministic evaluation-run identity plus bounded checkpoint/retry evidence where asynchronous evaluation is required;
-- quality finding identity, exact evaluated owner/resource/resource-version evidence, rule version, severity and lifecycle;
-- completeness result identity, exact component lineage and deterministic score evidence;
-- stewardship case/queue assignment, triage status and remediation-attempt evidence;
-- bounded safe diagnostics and reconciliation counters.
+- deterministic evaluation-job and exact staged Party evidence;
+- immutable rule outcomes and exact completeness-result lineage;
+- deterministic finding identities and immutable observations;
+- stewardship assignment, acknowledgement, waiver and remediation-attempt evidence;
+- bounded diagnostics, reconciliation and retry/process evidence.
 
-It must not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution state. It does not own import/export artifacts, enrichment-provider payloads or a generic enterprise workflow engine.
+It does not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution state. Authoritative Party values are read only through governed owner/query composition. Party mutation occurs only through the exact `parties.party.update@1.0.0` owner capability.
 
-Authoritative values are read only through governed owner/query composition ports with tenant/RLS and live authorization. No direct cross-module table reads or writes are permitted. Remediation may change owner state only by invoking an exact governed owner capability with normal authorization, optimistic concurrency, idempotency, approval and audit semantics.
+#### Delivered safety and semantics
 
-#### Frozen safety strategy
-
-Before public contract publication, the first v1 architecture must preserve these rules:
+The v1 packet proves:
 
 1. published rule/evaluator versions are immutable and cannot be silently reinterpreted;
-2. rule execution uses a bounded declarative vocabulary or exact built-in evaluator identities;
-3. arbitrary SQL, user code/scripts, filesystem access, arbitrary network access and unbounded expressions are forbidden;
-4. every finding and completeness result binds exact authoritative owner/resource/resource-version evidence;
-5. stale findings are not silently treated as current after the authoritative resource version changes;
-6. deterministic reevaluation must not create duplicate logical current findings;
-7. historical evaluation/finding evidence is retained when status becomes acknowledged, remediated, waived or stale/superseded;
-8. completeness uses deterministic integer/fixed-point semantics with exact component lineage and reconciliation;
-9. stewardship assignment/triage/remediation uses optimistic concurrency and bounded lifecycle transitions;
-10. remediation results are separate evidence and cannot rewrite the original evaluation truth;
-11. search, Customer 360 and projections may assist discovery but are not authoritative quality evidence without exact authoritative source-version lineage;
-12. process restart/retry cannot duplicate findings, assignments or owner side effects.
+2. evaluation uses exact bounded built-in evaluator identities;
+3. arbitrary SQL, scripts, filesystem access, arbitrary network access and unbounded expressions are absent;
+4. every outcome, finding, observation and completeness result binds exact authoritative Party resource-version evidence;
+5. deterministic reevaluation does not create duplicate logical current findings;
+6. historical evidence remains immutable across open, acknowledged, waived, remediated and reopened lifecycle transitions;
+7. completeness uses deterministic integer scoring with exact component/outcome lineage;
+8. stewardship mutations use optimistic finding versions and exact-current-observation preconditions;
+9. stale Party/remediation evidence fails with a conflict;
+10. remediation result evidence remains separate from historical evaluation truth;
+11. signed list cursors are bound to tenant, actor, capability/version, filters, sort and page size;
+12. live authorization, resource/field visibility, field redaction, FORCE RLS and cross-tenant non-disclosure are enforced;
+13. process restart/retry cannot duplicate findings, observations, assignments, remediation attempts or Party side effects.
 
-#### Initial production vertical slice
+#### Delivered application surface
 
-The first v1 implementation proves the architecture against canonical Party quality before broadening to additional customer-master owners. The contract must remain additively extensible without introducing a generic untyped record dump or executable rule surface.
+- evaluation-job get;
+- finding get;
+- finding list by Party;
+- assigned-finding list;
+- completeness-result get;
+- immutable definition gets;
+- assign, acknowledge and waive finding mutations;
+- governed Party display-name remediation;
+- deterministic target idempotency and immutable remediation-attempt output;
+- target-success/outcome-missing crash recovery;
+- pass-driven reevaluation to `REMEDIATED`.
 
-The implementation branch must freeze before public contract publication:
+#### Acceptance evidence
 
-- exact Party evaluator/rule kinds included in v1;
-- deterministic rule-set/version identity;
-- deterministic finding identity and reevaluation semantics;
-- completeness profile component and score canonicalization;
-- authoritative Party read port and source-version binding;
-- stewardship lifecycle and exact remediation capability boundary;
-- event/outbox model and replay semantics;
-- persistence, FORCE RLS, migration rollback/reapply and retention behavior;
-- application-runtime worker scheduling, fairness, retry and readiness behavior;
-- fresh-PostgreSQL real `crm-api` process acceptance.
+Source-authored functional candidate `29381433c992716f16ef3098f6acd73cfa2d2298` passed all 15 applicable workflows unchanged, including:
 
-#### Non-negotiable acceptance gates
+- Contract and Governance checks;
+- current Cargo lockfile, rustfmt, Clippy and all workspace tests;
+- Database and Application Runtime checks;
+- eight fresh-PostgreSQL Data Quality process scenarios;
+- signed cursor tamper rejection;
+- authorization denial, field redaction and cross-tenant concealment for evaluation get;
+- stewardship concurrency and lifecycle behavior;
+- governed remediation crash recovery with no duplicate Party update;
+- strict persisted remediation evidence and FORCE RLS.
 
-- deterministic rule evaluation and exact replay;
-- published rule versions cannot be reinterpreted silently;
-- no arbitrary code/SQL/network/filesystem execution path;
-- no direct cross-owner storage mutation or read bypass;
-- every finding/completeness result binds exact authoritative source-version evidence;
-- stale source-version/remediation conflict proof;
-- deterministic reevaluation without duplicate logical current findings;
-- historical finding/evaluation evidence retained across lifecycle changes;
-- permission-aware field/resource disclosure and cross-tenant non-disclosure;
-- exact completeness score/component reconciliation;
-- stewardship assignment and lifecycle concurrency proof;
-- remediation invokes only exact governed owner capabilities and preserves normal authorization/idempotency/audit behavior;
-- process restart/retry without duplicate findings, assignments or owner side effects;
-- bounded scans, batches, payloads and per-tenant operational limits;
-- migration clean apply, reverse rollback and reapply;
-- fresh-PostgreSQL real `crm-api` process acceptance;
-- Contract, Governance, Rust, Database, Application Runtime and every other applicable workflow green on one unchanged final SHA.
+Documentation changes after that candidate invalidate the exact-SHA evidence. The synchronized head must pass the same final gate before PR #132 leaves draft.
 
 ### 8A.10 — Governed Customer Enrichment and Provenance — Planned
 
 Issue: #125  
-Depends on: #124
+Depends on: merged #124 / PR #132
 
 Deliver provider adapter boundaries, secret handles, versioned mappings, source/freshness/licensing provenance, review/approval policy where required and exact owner-capability application of accepted changes.
 
 ### 8A.11 — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — Planned
 
 Issue: #126  
-Depends on: #123, #124, #125
+Depends on: #123, merged #124 and #125
 
 Deliver governed privacy request lifecycle, access/export, live restriction enforcement, owner-aware deletion/anonymization planning, retention/legal-hold conflict handling and downstream search/projection convergence with immutable evidence preservation where required.
 
