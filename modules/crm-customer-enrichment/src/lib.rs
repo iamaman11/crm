@@ -1,11 +1,13 @@
 #![forbid(unsafe_code)]
 
+/// Strict immutable provider-profile and mapping persisted-state codecs.
 pub mod definition_persistence;
 pub mod definitions;
 pub mod lifecycle;
 /// Strict bounded canonical persisted-state codecs for governed enrichment evidence.
 #[allow(dead_code, unused_imports)]
 pub mod persistence;
+/// Immutable provider metering and quota evidence plus strict persistence.
 pub mod provider_usage;
 
 pub use definition_persistence::*;
