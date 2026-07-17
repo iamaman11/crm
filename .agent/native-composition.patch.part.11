@@ -1,0 +1,302 @@
++    let identity_aggregate = aggregate_executor(store.clone(), IdentityResolutionCapabilityPlanner);
++    let identity_definitions = identity_resolution_capability_definitions()?;
++    let candidate_definitions = select_definitions(
++        &identity_definitions,
++        &CANDIDATE_MUTATION_CAPABILITY_IDS,
++    );
++    let merge_definitions = select_definitions(
++        &identity_definitions,
++        &MERGE_MUTATION_CAPABILITY_IDS,
++    );
++    add_activated_mutations(
++        &mut contributions,
++        candidate_definitions,
++        Arc::new(IdentityResolutionCapabilitySemanticValidator::new(Arc::new(
++            PostgresIdentityResolutionReferenceReader::new(store.clone()),
++        ))),
++        Arc::new(IdentityResolutionCapabilityExecutor::new(
++            identity_aggregate.clone(),
++        )),
++        activation.clone(),
++    )?;
++    add_activated_mutations(
++        &mut contributions,
++        merge_definitions,
++        Arc::new(MergeLineageCapabilitySemanticValidator::new(Arc::new(
++            PostgresMergeLineageReferenceReader::new(store.clone()),
++        ))),
++        Arc::new(MergeLineageCapabilityExecutor::new(identity_aggregate)),
++        activation.clone(),
++    )?;
++
++    let customer_data_operations_executor =
++        aggregate_executor(store.clone(), CustomerDataOperationsCapabilityPlanner);
++    let customer_data_operations_definitions = customer_data_operations_capability_definitions()?
++        .into_iter()
++        .filter(|definition| {
++            !matches!(
++                definition.capability_id.as_str(),
++                CREATE_PARTY_IMPORT_JOB_CAPABILITY | VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY
++            )
++        })
++        .collect::<Vec<_>>();
++    add_activated_mutations(
++        &mut contributions,
++        customer_data_operations_definitions,
++        Arc::new(NoopMutationSemanticValidator),
++        customer_data_operations_executor,
++        activation.clone(),
++    )?;
++    let source_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
++        CustomerDataOperationsSourceExecutor::new(
++            store.clone(),
++            Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),
++            capability_authorizer.clone(),
++        ),
++    );
++    add_activated_mutations(
++        &mut contributions,
++        customer_data_operations_source_capability_definitions()?,
++        Arc::new(NoopMutationSemanticValidator),
++        source_executor,
++        activation.clone(),
++    )?;
++
++    let data_quality_fallback =
++        aggregate_executor(store.clone(), DataQualityAggregatePlanner);
++    let data_quality_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
++        DataQualityCapabilityExecutor::new(
++            store.clone(),
++            data_quality_fallback,
++            capability_authorizer.clone(),
++            query_authorizer.clone(),
++        ),
++    );
++    add_activated_mutations(
++        &mut contributions,
++        data_quality_capability_definitions()?,
++        Arc::new(NoopMutationSemanticValidator),
++        data_quality_executor,
++        activation.clone(),
++    )?;
++
++    contributions.add_mutations(
++        metadata_mutation_capability_definitions()?,
++        Arc::new(NoopMutationSemanticValidator),
++        Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
++    )?;
++
++    let sales_activities_queries = Arc::new(SalesActivitiesQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        sales_activities_query_capability_definitions()?,
++        sales_activities_queries,
++        activation.clone(),
++    )?;
++
++    let party_queries = Arc::new(PartyQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        party_query_capability_definitions()?,
++        party_queries,
++        activation.clone(),
++    )?;
++
++    let account_queries = Arc::new(AccountQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        account_query_capability_definitions()?,
++        account_queries,
++        activation.clone(),
++    )?;
++
++    let contact_point_queries = Arc::new(ContactPointQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        contact_point_query_capability_definitions()?,
++        contact_point_queries,
++        activation.clone(),
++    )?;
++
++    let relationship_queries = Arc::new(PartyRelationshipQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        party_relationship_query_capability_definitions()?,
++        relationship_queries,
++        activation.clone(),
++    )?;
++
++    let customer_360_queries = Arc::new(Customer360QueryAdapter::new(
++        store.clone(),
++        visibility_authorizer.clone(),
++    ));
++    add_activated_queries(
++        &mut contributions,
++        customer_360_query_capability_definitions()?,
++        customer_360_queries,
++        activation.clone(),
++    )?;
++
++    let consent_queries = Arc::new(ConsentQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        consent_query_capability_definitions()?,
++        consent_queries,
++        activation.clone(),
++    )?;
++
++    let identity_queries = Arc::new(IdentityResolutionQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        identity_resolution_query_capability_definitions()?,
++        identity_queries,
++        activation.clone(),
++    )?;
++
++    let identity_merge_queries = Arc::new(IdentityResolutionMergeQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        identity_resolution_merge_query_capability_definitions()?,
++        identity_merge_queries,
++        activation.clone(),
++    )?;
++
++    let customer_data_queries = Arc::new(CustomerDataOperationsQueryAdapter::new(
++        store.clone(),
++        cursor(cursor_key)?,
++        visibility_authorizer.clone(),
++    )?);
++    add_activated_queries(
++        &mut contributions,
++        customer_data_operations_query_capability_definitions()?,
++        customer_data_queries,
++        activation.clone(),
++    )?;
++
++    let data_quality_queries = Arc::new(DataQualityQueryAdapter::new(
++        store.clone(),
++        visibility_authorizer.clone(),
++    ));
++    add_activated_queries(
++        &mut contributions,
++        data_quality_query_capability_definitions()?,
++        data_quality_queries,
++        activation,
++    )?;
++
++    let search_queries = Arc::new(SearchQueryAdapter::new(
++        SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID).map_err(configuration_error)?,
++        Arc::new(store.clone()),
++        visibility_authorizer,
++        cursor(cursor_key)?,
++    )?);
++    contributions.add_queries(
++        [search_query_capability_definition()?],
++        search_queries.clone(),
++        search_queries,
++    )?;
++
++    let metadata_queries = Arc::new(MetadataQueryAdapter::new(Arc::new(
++        PostgresMetadataQueryStore::new(store),
++    )));
++    contributions.add_queries(
++        metadata_query_capability_definitions()?,
++        metadata_queries.clone(),
++        metadata_queries,
++    )?;
++
++    contributions.add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)?;
++    contributions.build().map_err(composition_error)
++}
++
++fn aggregate_executor<P>(
++    store: PostgresDataStore,
++    planner: P,
++) -> Arc<dyn TransactionalCapabilityExecutor>
++where
++    P: TransactionalAggregatePlanner + 'static,
++{
++    Arc::new(PostgresTransactionalAggregateExecutor::new(
++        store,
++        Arc::new(planner),
++    ))
++}
++
++fn add_activated_mutations(
++    contributions: &mut ModuleContributionSet,
++    definitions: Vec<CapabilityDefinition>,
++    validator: Arc<dyn CapabilitySemanticValidator>,
++    executor: Arc<dyn TransactionalCapabilityExecutor>,
++    activation: Arc<dyn ModuleActivationPort>,
++) -> Result<(), SdkError> {
++    let validator: Arc<dyn CapabilitySemanticValidator> =
++        Arc::new(ActivationGatedMutationValidator::new(activation, validator));
++    contributions
++        .add_mutations(definitions, validator, executor)
++        .map(|_| ())
++        .map_err(composition_error)
++}
++
++fn add_activated_queries<T>(
++    contributions: &mut ModuleContributionSet,
++    definitions: Vec<CapabilityDefinition>,
++    adapter: Arc<T>,
++    activation: Arc<dyn ModuleActivationPort>,
++) -> Result<(), SdkError>
++where
++    T: QuerySemanticValidator + QueryExecutor + 'static,
++{
++    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(
++        ActivationGatedQueryValidator::new(activation, adapter.clone()),
++    );
++    let executor: Arc<dyn QueryExecutor> = adapter;
++    contributions
++        .add_queries(definitions, validator, executor)
++        .map(|_| ())
++        .map_err(composition_error)
++}
++
++fn select_definitions(
++    definitions: &[CapabilityDefinition],
++    capability_ids: &[&str],
++) -> Vec<CapabilityDefinition> {
++    definitions
++        .iter()
++        .filter(|definition| capability_ids.contains(&definition.capability_id.as_str()))
++        .cloned()
++        .collect()
++}
++
++fn cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {
