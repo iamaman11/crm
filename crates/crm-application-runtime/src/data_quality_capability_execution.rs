@@ -1,3 +1,4 @@
+use crm_application_composition::ModuleActivationPort;
 use crm_capability_adapters::semantic_input_hash;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
@@ -43,6 +44,8 @@ static REMEDIATION_FAILPOINT_USED: AtomicBool = AtomicBool::new(false);
 pub struct DataQualityCapabilityExecutor {
     store: PostgresDataStore,
     fallback: Arc<dyn TransactionalCapabilityExecutor>,
+    party_update_executor: Arc<dyn TransactionalCapabilityExecutor>,
+    activation: Arc<dyn ModuleActivationPort>,
     capability_authorizer: Arc<dyn CapabilityAuthorizer>,
     query_authorizer: Arc<dyn QueryAuthorizer>,
 }
@@ -51,12 +54,16 @@ impl DataQualityCapabilityExecutor {
     pub fn new(
         store: PostgresDataStore,
         fallback: Arc<dyn TransactionalCapabilityExecutor>,
+        party_update_executor: Arc<dyn TransactionalCapabilityExecutor>,
+        activation: Arc<dyn ModuleActivationPort>,
         capability_authorizer: Arc<dyn CapabilityAuthorizer>,
         query_authorizer: Arc<dyn QueryAuthorizer>,
     ) -> Self {
         Self {
             store,
             fallback,
+            party_update_executor,
+            activation,
             capability_authorizer,
             query_authorizer,
         }
@@ -99,6 +106,15 @@ impl DataQualityCapabilityExecutor {
             return Err(remediation_evidence_conflict());
         }
         self.ensure_display_name_rule(&request, &finding).await?;
+        let party_module_id = ModuleId::try_new(PARTIES_MODULE_ID)
+            .map_err(reference_configuration_error)?;
+        if !self
+            .activation
+            .is_active(&request.context.execution.tenant_id, &party_module_id)
+            .await?
+        {
+            return Err(module_not_active(&party_module_id));
+        }
 
         let identity = PartyDisplayNameRemediationIdentity::derive(
             &request.context.execution.tenant_id,
@@ -167,7 +183,7 @@ impl DataQualityCapabilityExecutor {
         )
         .await?;
         let target_result = self
-            .fallback
+            .party_update_executor
             .execute(&target_definition, target_request)
             .await?;
         let updated_party = decode_updated_party(target_result)?;
@@ -250,6 +266,11 @@ impl fmt::Debug for DataQualityCapabilityExecutor {
             .debug_struct("DataQualityCapabilityExecutor")
             .field("store", &self.store)
             .field("fallback", &"dyn TransactionalCapabilityExecutor")
+            .field(
+                "party_update_executor",
+                &"dyn TransactionalCapabilityExecutor",
+            )
+            .field("activation", &"dyn ModuleActivationPort")
             .field("capability_authorizer", &"dyn CapabilityAuthorizer")
             .field("query_authorizer", &"dyn QueryAuthorizer")
             .finish()
@@ -484,6 +505,16 @@ fn remediation_target_contract_invalid(reference: impl Into<String>) -> SdkError
         "The Party update required by remediation returned invalid evidence.",
     )
     .with_internal_reference(reference.into())
+}
+
+fn module_not_active(module_id: &ModuleId) -> SdkError {
+    SdkError::new(
+        "MODULE_NOT_ACTIVE",
+        ErrorCategory::Conflict,
+        false,
+        "The requested module is not active for this tenant.",
+    )
+    .with_internal_reference(module_id.as_str())
 }
 
 fn reference_configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {

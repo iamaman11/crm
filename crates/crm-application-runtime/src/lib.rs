@@ -7,6 +7,8 @@
 //! modules remain outside the process host and are reached only through their
 //! published composition/adapters.
 
+mod background;
+mod bootstrap_visibility;
 mod config;
 mod data_quality_capability_execution;
 mod data_quality_registration;
@@ -21,6 +23,12 @@ mod platform;
 mod process;
 mod runtime;
 
+pub(crate) use background::{
+    ProductionBackgroundWorkerDependencies, build_production_background_workers,
+};
+pub(crate) use bootstrap_visibility::{
+    BootstrapVisibilityResource, build_bootstrap_visibility_registry,
+};
 pub use config::*;
 pub use data_quality_capability_execution::DataQualityCapabilityExecutor;
 pub use data_quality_registration::*;
