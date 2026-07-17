@@ -15,6 +15,10 @@ use crm_customer_data_operations_capability_adapter::{
     MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
 };
 use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
+use crm_customer_enrichment_capability_adapter::{
+    MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID,
+    PROVIDER_PROFILE_VERSION_RECORD_TYPE as CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_RECORD_TYPE,
+};
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
@@ -90,6 +94,11 @@ pub(crate) fn build_bootstrap_visibility_registry() -> Result<BootstrapVisibilit
         &mut providers,
         CUSTOMER_DATA_OPERATIONS_MODULE_ID,
         customer_data_operations_visibility,
+    )?;
+    register(
+        &mut providers,
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        customer_enrichment_visibility,
     )?;
     register(
         &mut providers,
@@ -218,6 +227,14 @@ fn customer_data_operations_visibility(
         ));
     }
     resources
+}
+
+fn customer_enrichment_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
+    vec![resource(
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_RECORD_TYPE,
+        fields(["definition"]),
+    )]
 }
 
 fn data_quality_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
@@ -476,6 +493,19 @@ mod tests {
             ))
             .unwrap();
         assert_eq!(rows.len(), 2);
+
+        let enrichment = registry
+            .resources_for(&definition(
+                CUSTOMER_ENRICHMENT_MODULE_ID,
+                "customer_enrichment.provider_profile.get",
+            ))
+            .unwrap();
+        assert_eq!(enrichment.len(), 1);
+        assert_eq!(
+            enrichment[0].resource_type,
+            CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_RECORD_TYPE
+        );
+        assert_eq!(enrichment[0].allowed_fields, fields(["definition"]));
     }
 
     #[test]
