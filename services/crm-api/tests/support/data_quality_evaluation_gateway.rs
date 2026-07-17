@@ -20,6 +20,7 @@ pub fn mutation_definition(capability_id: &str) -> CapabilityDefinition {
         .unwrap_or_else(|| panic!("missing mutation definition: {capability_id}"))
 }
 
+#[allow(dead_code)]
 pub fn query_definition(capability_id: &str) -> CapabilityDefinition {
     application_query_definitions()
         .expect("valid application query definitions")
@@ -86,6 +87,7 @@ pub async fn mutate_for_tenant(
         .map(|response| response.into_inner())
 }
 
+#[allow(dead_code)]
 pub async fn query(
     client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
     definition: &CapabilityDefinition,
@@ -94,6 +96,7 @@ pub async fn query(
     query_for_tenant(client, definition, input, TENANT).await
 }
 
+#[allow(dead_code)]
 pub async fn query_for_tenant(
     client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
     definition: &CapabilityDefinition,
