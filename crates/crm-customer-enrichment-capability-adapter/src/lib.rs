@@ -28,9 +28,7 @@ pub use semantic_validator::CustomerEnrichmentCapabilitySemanticValidator;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilityRisk};
-use crm_core_data::{
-    AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner,
-};
+use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordSnapshot, SdkError,
 };
@@ -92,8 +90,10 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentCapabilityPlanner {
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
         match definition.capability_id.as_str() {
-            PUBLISH_PROVIDER_PROFILE_CAPABILITY => CustomerEnrichmentProviderProfileCapabilityPlanner
-                .plan(definition, request, current),
+            PUBLISH_PROVIDER_PROFILE_CAPABILITY => {
+                CustomerEnrichmentProviderProfileCapabilityPlanner
+                    .plan(definition, request, current)
+            }
             PUBLISH_MAPPING_CAPABILITY => {
                 CustomerEnrichmentMappingCapabilityPlanner.plan(definition, request, current)
             }

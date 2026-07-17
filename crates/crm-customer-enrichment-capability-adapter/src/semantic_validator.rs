@@ -38,10 +38,9 @@ impl CapabilitySemanticValidator for CustomerEnrichmentCapabilitySemanticValidat
         let mapping = decode_mapping(request);
         Box::pin(async move {
             let mapping = mapping?;
-            let provider_profile_id = RecordId::try_new(
-                mapping.provider_profile_version_id().as_str().to_owned(),
-            )
-            .map_err(configuration_error)?;
+            let provider_profile_id =
+                RecordId::try_new(mapping.provider_profile_version_id().as_str().to_owned())
+                    .map_err(configuration_error)?;
             let snapshot = self
                 .store
                 .get_record_for_query(&RecordGetQuery {
@@ -65,7 +64,9 @@ impl CapabilitySemanticValidator for CustomerEnrichmentCapabilitySemanticValidat
     }
 }
 
-fn decode_mapping(request: &CapabilityRequest) -> Result<crm_customer_enrichment::MappingVersion, SdkError> {
+fn decode_mapping(
+    request: &CapabilityRequest,
+) -> Result<crm_customer_enrichment::MappingVersion, SdkError> {
     let command: wire::PublishMappingVersionRequest = support::decode_request_with_data_class(
         request,
         MODULE_ID,

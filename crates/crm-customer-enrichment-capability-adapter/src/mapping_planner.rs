@@ -9,10 +9,11 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_customer_enrichment::{
-    DEFINITION_STATE_RETENTION_POLICY_ID, DEFINITION_STATE_SCHEMA_VERSION, MAPPING_VERSION_RECORD_TYPE,
-    MAPPING_VERSION_STATE_MAXIMUM_BYTES, MAPPING_VERSION_STATE_SCHEMA_ID, MappingDraft,
-    MappingNormalization, MappingVersion, ProviderProfileVersionId, TargetField,
-    encode_mapping_version_state, mapping_version_state_descriptor_hash,
+    DEFINITION_STATE_RETENTION_POLICY_ID, DEFINITION_STATE_SCHEMA_VERSION,
+    MAPPING_VERSION_RECORD_TYPE, MAPPING_VERSION_STATE_MAXIMUM_BYTES,
+    MAPPING_VERSION_STATE_SCHEMA_ID, MappingDraft, MappingNormalization, MappingVersion,
+    ProviderProfileVersionId, TargetField, encode_mapping_version_state,
+    mapping_version_state_descriptor_hash,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, SdkError};
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
@@ -105,12 +106,13 @@ pub fn mapping_from_definition(
             "Mapping definition is required",
         )
     })?;
-    let provider_profile_version_ref = definition.provider_profile_version_ref.ok_or_else(|| {
-        SdkError::invalid_argument(
-            "customer_enrichment.mapping.definition.provider_profile_version_ref",
-            "Provider-profile version reference is required",
-        )
-    })?;
+    let provider_profile_version_ref =
+        definition.provider_profile_version_ref.ok_or_else(|| {
+            SdkError::invalid_argument(
+                "customer_enrichment.mapping.definition.provider_profile_version_ref",
+                "Provider-profile version reference is required",
+            )
+        })?;
     MappingVersion::publish(MappingDraft {
         mapping_key: definition.mapping_key,
         provider_profile_version_id: provider_profile_version_id_from_external(
@@ -150,7 +152,9 @@ pub fn provider_profile_version_id_from_external(
     value: String,
 ) -> Result<ProviderProfileVersionId, SdkError> {
     const PREFIX: &str = "enrichment-provider-profile-";
-    let suffix = value.strip_prefix(PREFIX).ok_or_else(invalid_provider_profile_id)?;
+    let suffix = value
+        .strip_prefix(PREFIX)
+        .ok_or_else(invalid_provider_profile_id)?;
     if suffix.len() != 64
         || !suffix
             .bytes()
@@ -158,7 +162,8 @@ pub fn provider_profile_version_id_from_external(
     {
         return Err(invalid_provider_profile_id());
     }
-    serde_json::from_value(serde_json::Value::String(value)).map_err(|_| invalid_provider_profile_id())
+    serde_json::from_value(serde_json::Value::String(value))
+        .map_err(|_| invalid_provider_profile_id())
 }
 
 pub fn mapping_persisted_contract() -> PersistedPayloadContract<'static> {
@@ -304,11 +309,13 @@ mod tests {
     fn provider_profile_identity_format_is_strict() {
         assert!(provider_profile_version_id_from_external(profile_id()).is_ok());
         assert!(provider_profile_version_id_from_external("bad".to_owned()).is_err());
-        assert!(provider_profile_version_id_from_external(format!(
-            "enrichment-provider-profile-{}",
-            "A".repeat(64)
-        ))
-        .is_err());
+        assert!(
+            provider_profile_version_id_from_external(format!(
+                "enrichment-provider-profile-{}",
+                "A".repeat(64)
+            ))
+            .is_err()
+        );
     }
 
     #[test]
@@ -316,7 +323,10 @@ mod tests {
         let mapping = mapping_from_definition(Some(definition())).unwrap();
         let payload = mapping_persisted_payload(&mapping).unwrap();
         assert_eq!(payload.schema_id.as_str(), MAPPING_VERSION_STATE_SCHEMA_ID);
-        assert_eq!(payload.schema_version.as_str(), DEFINITION_STATE_SCHEMA_VERSION);
+        assert_eq!(
+            payload.schema_version.as_str(),
+            DEFINITION_STATE_SCHEMA_VERSION
+        );
         assert_eq!(payload.data_class, DataClass::Confidential);
     }
 }

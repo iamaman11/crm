@@ -31,10 +31,8 @@ pub const GET_MAPPING_CAPABILITY: &str = "customer_enrichment.mapping.get";
 pub const GET_MAPPING_REQUEST_SCHEMA: &str = "crm.customer_enrichment.v1.GetMappingVersionRequest";
 pub const GET_MAPPING_RESPONSE_SCHEMA: &str =
     "crm.customer_enrichment.v1.GetMappingVersionResponse";
-pub const QUERY_CAPABILITY_IDS: &[&str] = &[
-    GET_PROVIDER_PROFILE_CAPABILITY,
-    GET_MAPPING_CAPABILITY,
-];
+pub const QUERY_CAPABILITY_IDS: &[&str] =
+    &[GET_PROVIDER_PROFILE_CAPABILITY, GET_MAPPING_CAPABILITY];
 
 #[derive(Clone)]
 pub struct CustomerEnrichmentQueryAdapter {
@@ -55,7 +53,12 @@ impl CustomerEnrichmentQueryAdapter {
             decode_input(request, GET_PROVIDER_PROFILE_REQUEST_SCHEMA)?;
         let record_id = provider_profile_record_id(command.provider_profile_version_ref)?;
         let snapshot = self
-            .get_visible_snapshot(request, provider_profile_record_type()?, record_id, provider_profile_not_found)
+            .get_visible_snapshot(
+                request,
+                provider_profile_record_type()?,
+                record_id,
+                provider_profile_not_found,
+            )
             .await?;
         let visibility = self
             .visibility
@@ -76,15 +79,17 @@ impl CustomerEnrichmentQueryAdapter {
         )
     }
 
-    async fn execute_get_mapping(
-        &self,
-        request: &QueryRequest,
-    ) -> Result<TypedPayload, SdkError> {
+    async fn execute_get_mapping(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
         let command: wire::GetMappingVersionRequest =
             decode_input(request, GET_MAPPING_REQUEST_SCHEMA)?;
         let record_id = mapping_record_id(command.mapping_version_ref)?;
         let snapshot = self
-            .get_visible_snapshot(request, mapping_record_type()?, record_id, mapping_not_found)
+            .get_visible_snapshot(
+                request,
+                mapping_record_type()?,
+                record_id,
+                mapping_not_found,
+            )
             .await?;
         let visibility = self
             .visibility
