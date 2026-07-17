@@ -20,6 +20,7 @@ members = [
   "crates/crm-metadata-query-adapter",
   "crates/crm-capability-runtime",
   "crates/crm-capability-adapters",
+  "crates/crm-application-composition",
   "crates/crm-activities-capability-adapter",
   "crates/crm-capability-ingress",
   "crates/crm-proto-contracts",
