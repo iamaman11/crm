@@ -5,10 +5,11 @@ use crm_data_quality_capability_adapter::{
     ACKNOWLEDGE_FINDING_CAPABILITY, ASSIGN_FINDING_CAPABILITY,
     REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY, WAIVE_FINDING_CAPABILITY,
 };
+use crm_parties_capability_adapter::UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY;
 use sqlx::PgPool;
 
 pub async fn register_evaluation_capabilities(admin: &PgPool) {
-    register(
+    register_data_quality(
         admin,
         REQUEST_EVALUATION,
         "crm.data_quality.v1.DataQualityService",
@@ -18,7 +19,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "medium",
     )
     .await;
-    register(
+    register_data_quality(
         admin,
         INTERNAL_STAGE,
         "crm.data_quality.v1.InternalDataQualityWorker",
@@ -28,7 +29,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "medium",
     )
     .await;
-    register(
+    register_data_quality(
         admin,
         INTERNAL_MATERIALIZE,
         "crm.data_quality.v1.InternalDataQualityWorker",
@@ -38,7 +39,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "medium",
     )
     .await;
-    register(
+    register_data_quality(
         admin,
         ASSIGN_FINDING_CAPABILITY,
         "crm.data_quality.v1.DataQualityService",
@@ -48,7 +49,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "medium",
     )
     .await;
-    register(
+    register_data_quality(
         admin,
         ACKNOWLEDGE_FINDING_CAPABILITY,
         "crm.data_quality.v1.DataQualityService",
@@ -58,7 +59,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "medium",
     )
     .await;
-    register(
+    register_data_quality(
         admin,
         WAIVE_FINDING_CAPABILITY,
         "crm.data_quality.v1.DataQualityService",
@@ -68,7 +69,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "medium",
     )
     .await;
-    register(
+    register_data_quality(
         admin,
         REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY,
         "crm.data_quality.v1.DataQualityService",
@@ -78,11 +79,47 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         "high",
     )
     .await;
+    register_capability(
+        admin,
+        PARTY_UPDATE_CAPABILITY,
+        "crm.parties",
+        "crm.parties.v1.PartiesService",
+        "UpdateParty",
+        "ef",
+        "f0",
+        "medium",
+    )
+    .await;
 }
 
-async fn register(
+#[allow(clippy::too_many_arguments)]
+async fn register_data_quality(
     admin: &PgPool,
     capability_id: &str,
+    service_name: &str,
+    method_name: &str,
+    input_byte: &str,
+    output_byte: &str,
+    risk_level: &str,
+) {
+    register_capability(
+        admin,
+        capability_id,
+        "crm.data-quality",
+        service_name,
+        method_name,
+        input_byte,
+        output_byte,
+        risk_level,
+    )
+    .await;
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn register_capability(
+    admin: &PgPool,
+    capability_id: &str,
+    owner_module_id: &str,
     service_name: &str,
     method_name: &str,
     input_byte: &str,
@@ -97,13 +134,14 @@ async fn register(
            ai_callable, marketplace_callable, bulk_allowed, export_allowed,
            data_classes_touched
          ) VALUES (
-           $1, '1.0.0', 'crm.data-quality', '0.1.0', $2, $3,
-           decode(repeat($4, 32), 'hex'), decode(repeat($5, 32), 'hex'),
-           $6, true, true, false, false, false, false, false,
+           $1, '1.0.0', $2, '0.1.0', $3, $4,
+           decode(repeat($5, 32), 'hex'), decode(repeat($6, 32), 'hex'),
+           $7, true, true, false, false, false, false, false,
            ARRAY['personal']::text[]
          ) ON CONFLICT (capability_id, capability_version) DO NOTHING",
     )
     .bind(capability_id)
+    .bind(owner_module_id)
     .bind(service_name)
     .bind(method_name)
     .bind(input_byte)
