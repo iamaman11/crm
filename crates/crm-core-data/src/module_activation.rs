@@ -1,0 +1,215 @@
+use crate::postgres::PostgresDataStore;
+use crm_module_sdk::{ErrorCategory, SdkError, TenantId};
+use sha2::{Digest, Sha256};
+use sqlx::Row;
+use std::collections::BTreeSet;
+
+const BOOTSTRAP_INSTALL_PROFILE: &[u8] = b"crm.bootstrap-module-installation/v1";
+
+#[derive(Debug)]
+struct BootstrapExecutionContext {
+    actor_id: String,
+    request_id: String,
+    capability_id: String,
+    capability_version: String,
+    business_transaction_id: String,
+}
+
+impl PostgresDataStore {
+    /// Activates every published production module for explicitly configured
+    /// bootstrap tenants. Runtime activation still reads only
+    /// `crm.module_installations`; this method provisions that authoritative
+    /// lifecycle state instead of bypassing it in process memory.
+    pub async fn bootstrap_activate_published_modules(
+        &self,
+        tenant_ids: &BTreeSet<TenantId>,
+        module_ids: &BTreeSet<String>,
+    ) -> Result<(), SdkError> {
+        let requested_modules: Vec<String> = module_ids.iter().cloned().collect();
+        for tenant_id in tenant_ids {
+            self.bootstrap_activate_tenant_modules(tenant_id, &requested_modules)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn bootstrap_activate_tenant_modules(
+        &self,
+        tenant_id: &TenantId,
+        module_ids: &[String],
+    ) -> Result<(), SdkError> {
+        let mut transaction = self.pool().begin().await.map_err(database_unavailable)?;
+        sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
+            .bind(tenant_id.as_str())
+            .execute(&mut *transaction)
+            .await
+            .map_err(database_unavailable)?;
+
+        let context_row = sqlx::query(
+            r#"
+            SELECT actor_id, request_id, capability_id, capability_version,
+                   business_transaction_id
+            FROM crm.business_transactions
+            WHERE tenant_id = $1
+            ORDER BY committed_at DESC, business_transaction_id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(tenant_id.as_str())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(database_unavailable)?
+        .ok_or_else(|| bootstrap_context_missing(tenant_id))?;
+        let context = BootstrapExecutionContext {
+            actor_id: context_row.try_get("actor_id").map_err(stored_value_invalid)?,
+            request_id: context_row.try_get("request_id").map_err(stored_value_invalid)?,
+            capability_id: context_row
+                .try_get("capability_id")
+                .map_err(stored_value_invalid)?,
+            capability_version: context_row
+                .try_get("capability_version")
+                .map_err(stored_value_invalid)?,
+            business_transaction_id: context_row
+                .try_get("business_transaction_id")
+                .map_err(stored_value_invalid)?,
+        };
+        bind_bootstrap_context(&mut transaction, tenant_id, &context).await?;
+
+        let version_rows = sqlx::query(
+            r#"
+            SELECT DISTINCT ON (module_id) module_id, version
+            FROM crm.module_versions
+            WHERE module_id = ANY($1::text[])
+            ORDER BY module_id, published_at DESC, version DESC
+            "#,
+        )
+        .bind(module_ids.to_vec())
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(database_unavailable)?;
+
+        for row in version_rows {
+            let module_id: String = row.try_get("module_id").map_err(stored_value_invalid)?;
+            let version: String = row.try_get("version").map_err(stored_value_invalid)?;
+            let install_id = format!("bootstrap:{module_id}");
+            let grant_digest = bootstrap_grant_digest(tenant_id.as_str(), &module_id, &version);
+            sqlx::query(
+                r#"
+                INSERT INTO crm.module_installations (
+                  tenant_id, install_id, module_id, current_version, status,
+                  generation, grant_set_digest, last_business_transaction_id
+                )
+                VALUES ($1, $2, $3, $4, 'active', 1, $5, $6)
+                ON CONFLICT (tenant_id, module_id) DO UPDATE SET
+                  install_id = EXCLUDED.install_id,
+                  previous_version = CASE
+                    WHEN crm.module_installations.current_version <> EXCLUDED.current_version
+                    THEN crm.module_installations.current_version
+                    ELSE crm.module_installations.previous_version
+                  END,
+                  current_version = EXCLUDED.current_version,
+                  status = 'active',
+                  pending_version = NULL,
+                  generation = CASE
+                    WHEN crm.module_installations.current_version <> EXCLUDED.current_version
+                      OR crm.module_installations.status <> 'active'
+                    THEN crm.module_installations.generation + 1
+                    ELSE crm.module_installations.generation
+                  END,
+                  failure_code = NULL,
+                  grant_set_digest = EXCLUDED.grant_set_digest,
+                  last_business_transaction_id = EXCLUDED.last_business_transaction_id,
+                  updated_at = CASE
+                    WHEN crm.module_installations.current_version <> EXCLUDED.current_version
+                      OR crm.module_installations.status <> 'active'
+                      OR crm.module_installations.grant_set_digest <> EXCLUDED.grant_set_digest
+                    THEN clock_timestamp()
+                    ELSE crm.module_installations.updated_at
+                  END
+                "#,
+            )
+            .bind(tenant_id.as_str())
+            .bind(install_id)
+            .bind(module_id)
+            .bind(version)
+            .bind(grant_digest.as_slice())
+            .bind(&context.business_transaction_id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(database_unavailable)?;
+        }
+
+        transaction.commit().await.map_err(database_unavailable)?;
+        Ok(())
+    }
+}
+
+async fn bind_bootstrap_context(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: &TenantId,
+    context: &BootstrapExecutionContext,
+) -> Result<(), SdkError> {
+    sqlx::query(
+        r#"
+        SELECT
+          set_config('app.tenant_id', $1, true),
+          set_config('app.actor_id', $2, true),
+          set_config('app.request_id', $3, true),
+          set_config('app.capability_id', $4, true),
+          set_config('app.capability_version', $5, true),
+          set_config('app.business_transaction_id', $6, true)
+        "#,
+    )
+    .bind(tenant_id.as_str())
+    .bind(&context.actor_id)
+    .bind(&context.request_id)
+    .bind(&context.capability_id)
+    .bind(&context.capability_version)
+    .bind(&context.business_transaction_id)
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_unavailable)?;
+    Ok(())
+}
+
+fn bootstrap_grant_digest(tenant_id: &str, module_id: &str, version: &str) -> [u8; 32] {
+    let mut digest = Sha256::new();
+    digest.update(BOOTSTRAP_INSTALL_PROFILE);
+    digest.update([0]);
+    digest.update(tenant_id.as_bytes());
+    digest.update([0]);
+    digest.update(module_id.as_bytes());
+    digest.update([0]);
+    digest.update(version.as_bytes());
+    digest.finalize().into()
+}
+
+fn bootstrap_context_missing(tenant_id: &TenantId) -> SdkError {
+    SdkError::new(
+        "APPLICATION_BOOTSTRAP_TRANSACTION_CONTEXT_MISSING",
+        ErrorCategory::Dependency,
+        false,
+        "The bootstrap tenant has no durable business transaction context.",
+    )
+    .with_internal_reference(tenant_id.as_str())
+}
+
+fn database_unavailable(error: sqlx::Error) -> SdkError {
+    SdkError::new(
+        "APPLICATION_MODULE_INSTALLATION_DATABASE_UNAVAILABLE",
+        ErrorCategory::Unavailable,
+        true,
+        "Module installation state could not be persisted.",
+    )
+    .with_internal_reference(error.to_string())
+}
+
+fn stored_value_invalid(error: sqlx::Error) -> SdkError {
+    SdkError::new(
+        "APPLICATION_BOOTSTRAP_TRANSACTION_CONTEXT_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The bootstrap transaction context stored in PostgreSQL is invalid.",
+    )
+    .with_internal_reference(error.to_string())
+}

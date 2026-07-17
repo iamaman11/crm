@@ -1,0 +1,54 @@
+{
+  "schema_version": "crm.production-route-classifications/v1",
+  "platform_runtime_routes": [
+    {
+      "owner_module_id": "crm.metadata",
+      "id": "metadata.bundle.publish",
+      "version": "1.0.0",
+      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
+    },
+    {
+      "owner_module_id": "crm.metadata",
+      "id": "metadata.revision.activate",
+      "version": "1.0.0",
+      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
+    },
+    {
+      "owner_module_id": "crm.metadata",
+      "id": "metadata.revision.rollback",
+      "version": "1.0.0",
+      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
+    },
+    {
+      "owner_module_id": "crm.metadata",
+      "id": "metadata.bundle.impact",
+      "version": "1.0.0",
+      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
+    },
+    {
+      "owner_module_id": "crm.metadata",
+      "id": "metadata.revision.get",
+      "version": "1.0.0",
+      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
+    },
+    {
+      "owner_module_id": "crm.metadata",
+      "id": "metadata.activation.get",
+      "version": "1.0.0",
+      "reason": "Platform-governed Admin Studio metadata route outside business module manifests."
+    },
+    {
+      "owner_module_id": "crm.search",
+      "id": "search.global.query",
+      "version": "1.0.0",
+      "reason": "Platform permission-aware global search route outside business module manifests."
+    }
+  ],
+  "non_runtime_contract_routes": [],
+  "empty_runtime_modules": [
+    {
+      "module_id": "crm.sales-activities-link",
+      "reason": "Link module contributes background event delivery but intentionally exposes no public mutation or query route."
+    }
+  ]
+}

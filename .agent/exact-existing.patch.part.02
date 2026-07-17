@@ -1,0 +1,204 @@
++  ),
++  (
++    'crm.sales-activities-link',
++    '0.1.0',
++    'crm.cjson/v1',
++    decode(repeat('d0', 32), 'hex'),
++    '{"platform":"sales-activities-link"}'::jsonb,
++    clock_timestamp(),
++    'platform'
+   );
+ 
+ INSERT INTO crm.capability_registry (
+@@ -279,6 +306,62 @@ VALUES (
+ );
+ COMMIT;
+ 
++BEGIN;
++SET LOCAL app.tenant_id = 'tenant-b';
++SET LOCAL app.actor_id = 'actor-b';
++SET LOCAL app.request_id = 'request-bootstrap-b';
++SET LOCAL app.capability_id = 'test.record.mutate';
++SET LOCAL app.capability_version = '1.0.0';
++SET LOCAL app.business_transaction_id = 'tx-bootstrap-b';
++
++INSERT INTO crm.actors (
++  tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id
++) VALUES (
++  'tenant-b', 'actor-b', 'service', 'active', 'Tenant B bootstrap actor', 'tx-bootstrap-b'
++);
++
++INSERT INTO crm.idempotency_records (
++  tenant_id, idempotency_scope, idempotency_key, request_hash, status,
++  business_transaction_id, expires_at
++) VALUES (
++  'tenant-b', 'test.record.mutate@1.0.0', 'bootstrap-b',
++  decode(repeat('12', 32), 'hex'), 'completed', 'tx-bootstrap-b',
++  clock_timestamp() + interval '1 day'
++);
++
++INSERT INTO crm.outbox_events (
++  tenant_id, event_id, business_transaction_id, aggregate_type, aggregate_id,
++  aggregate_version, event_sequence, event_type, deduplication_key, schema_id,
++  schema_version, descriptor_hash, data_class, payload_encoding,
++  maximum_payload_size, retention_policy_id, payload_bytes, occurred_at
++) VALUES (
++  'tenant-b', 'event-bootstrap-b', 'tx-bootstrap-b', 'crm.actor', 'actor-b',
++  1, 1, 'actor.created', 'bootstrap-b', 'crm.actor.created.v1', '1.0.0',
++  decode(repeat('21', 32), 'hex'), 'internal', 'protobuf', 16, 'standard',
++  decode('02', 'hex'), clock_timestamp()
++);
++
++INSERT INTO crm.audit_records (
++  tenant_id, audit_sequence, audit_record_id, business_transaction_id, actor_id,
++  capability_id, capability_version, canonicalization_profile, previous_hash,
++  record_hash, canonical_envelope, occurred_at
++) VALUES (
++  'tenant-b', 1, 'audit-bootstrap-b', 'tx-bootstrap-b', 'actor-b',
++  'test.record.mutate', '1.0.0', 'crm.cjson/v1',
++  decode(repeat('00', 32), 'hex'), decode(repeat('13', 32), 'hex'),
++  convert_to('{"audit":"bootstrap-b"}', 'UTF8'), clock_timestamp()
++);
++
++INSERT INTO crm.business_transactions (
++  tenant_id, business_transaction_id, actor_id, request_id, capability_id,
++  capability_version, expected_outbox_events, expected_audit_records,
++  expected_idempotency_records
++) VALUES (
++  'tenant-b', 'tx-bootstrap-b', 'actor-b', 'request-bootstrap-b',
++  'test.record.mutate', '1.0.0', 1, 1, 1
++);
++COMMIT;
++
+ DO $$
+ DECLARE
+   visible_count integer;
+diff --git a/docs/ARCHITECTURE_READINESS.md b/docs/ARCHITECTURE_READINESS.md
+index d4f0ffd..65a19d7 100644
+--- a/docs/ARCHITECTURE_READINESS.md
++++ b/docs/ARCHITECTURE_READINESS.md
+@@ -1,8 +1,8 @@
+ # Architecture Readiness Gate
+ 
+-Status: **Blocked until PR #135 completes issue #134**.
++Status: **Verification pending on PR #135 exact-head CI**.
+ 
+-The CRM may continue maintenance and integrity work, but new product-module expansion must not merge while production composition still has incomplete route parity, incomplete module lifecycle authority or incomplete golden scaffolding.
++The CRM may continue maintenance and integrity work, but new product-module expansion must not merge until the completed integrity mechanisms pass together on one unchanged exact SHA.
+ 
+ ## Verified progress in PR #135
+ 
+@@ -12,7 +12,7 @@ Background processing now assembles through one deterministic, phase-ordered reg
+ 
+ Bootstrap query visibility now resolves through declarative module contributions rather than a central `owner_module_id` switch. Data Quality remediation dispatches nested Party mutation through the exact Party executor and verifies Party activation before the nested authoritative operation.
+ 
+-These milestones do **not** make the architecture ready by themselves. Authoritative persisted installation lifecycle, mechanical manifest/binding/production-route parity, golden scaffolding and one unchanged all-green exact SHA remain mandatory.
++These mechanisms now include authoritative persisted installation lifecycle, exact manifest/binding/production-route parity and golden scaffolding. They do **not** make the architecture ready until one unchanged exact SHA passes every applicable workflow.
+ 
+ Architecture readiness is proven only when all of the following hold together on one exact commit:
+ 
+@@ -28,3 +28,14 @@ Architecture readiness is proven only when all of the following hold together on
+ 10. All applicable workflows pass together on one unchanged exact SHA.
+ 
+ No marker may be suppressed or allowlisted merely to make the gate green. The corresponding legacy wiring must be removed through a real module-owned replacement.
++
++
++## Implemented integrity mechanisms
++
++- Production mutations and queries are assembled from exact module-owned contributions.
++- Tenant route and worker activation reads `crm.module_installations`; bootstrap provisions durable active installations instead of bypassing lifecycle state.
++- Background workers and bootstrap visibility are deterministic contribution registries.
++- `production_route_parity` compares compiled production coordinates with governed bindings and explicit exact-route classifications.
++- The module scaffold emits `production/CONTRIBUTION.md` so new modules cannot omit the production boundary.
++
++Readiness remains blocked until every applicable workflow is green on one unchanged human-authored SHA.
+diff --git a/docs/MODULE_DEVELOPMENT.md b/docs/MODULE_DEVELOPMENT.md
+index 5b934c6..3932868 100644
+--- a/docs/MODULE_DEVELOPMENT.md
++++ b/docs/MODULE_DEVELOPMENT.md
+@@ -204,3 +204,9 @@ python scripts/generate_contract_bindings.py --check
+ ```
+ 
+ `pnpm web:generate` performs the same generation together with browser clients and contract hashes. Contract CI requires exact module-set completeness, descriptor input/output parity and byte-for-byte generated-artifact freshness. See `CONTRACT_BINDING_REGISTRY.md` for the normative architecture and invariants.
++
++## Production contribution boundary
++
++Every generated module contains `production/CONTRIBUTION.md`. The pure module core does not wire itself into the process host. A separately owned adapter/composition crate contributes exact versioned mutation/query routes, pre-authorization semantic validation, activation-gated workers and deterministic worker phases. Adding a module must not require edits to central routers.
++
++Compiled production coordinates are checked against `contracts/module-contract-bindings.json`. Platform-owned routes and any intentionally non-runtime governed coordinate must be listed individually, with a reason, in `contracts/production-route-classifications.json`; owner-wide or pattern allowlists are forbidden.
+diff --git a/scripts/scaffold_module.py b/scripts/scaffold_module.py
+index d0454b6..839d910 100644
+--- a/scripts/scaffold_module.py
++++ b/scripts/scaffold_module.py
+@@ -266,6 +266,26 @@ Before raising readiness beyond `Foundation`, replace this placeholder with the
+ '''
+ 
+ 
++
++def render_production_contribution(spec: ModuleSpec) -> str:
++    return f'''# Production contribution boundary for `{spec.module_id}`
++
++This file is a mandatory architecture boundary, not an implementation placeholder inside the pure module core.
++
++Before production readiness, create a separately owned adapter/composition crate that:
++
++- contributes every exact versioned mutation and query coordinate owned by `{spec.module_id}`;
++- performs cross-owner reference reads in pre-authorization semantic validation;
++- gates routes and background workers through `ModuleActivationPort`;
++- contributes deterministic background workers with an explicit phase when applicable;
++- fails startup on duplicate coordinates, owner mismatches or route-kind mismatches;
++- registers exact manifest/binding/production-route parity with an explicit classification for any non-runtime route;
++- requires no edits to central capability, query or worker routers;
++- proves the production path through governed gateway and lifecycle acceptance tests.
++
++The module core must remain infrastructure-neutral and must not depend on the production host.
++'''
++
+ def render_acceptance(spec: ModuleSpec) -> str:
+     kind_gate = (
+         "- [ ] Define authoritative aggregate/value-object invariants and ownership boundaries."
+@@ -284,6 +304,7 @@ Scaffold state: **Foundation only**. These TODO gates are intentionally explicit
+ - [ ] Add tenant, authorization, idempotency/retry and cross-tenant negative coverage.
+ - [ ] Add persistence/projection/search behavior only through platform adapters outside the module core.
+ - [ ] Replace `tests/acceptance.rs` with production-path acceptance evidence.
++- [ ] Complete `production/CONTRIBUTION.md` through a separately owned composition boundary.
+ - [ ] Add production composition and end-to-end acceptance through governed gateways.
+ - [ ] Prove rollback/disable/uninstall behavior appropriate to the module type.
+ - [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status and the owning GitHub issue.
+@@ -327,6 +348,7 @@ def build_files(spec: ModuleSpec) -> dict[Path, str]:
+         base / "MODULE_CATALOG_ENTRY.md": render_catalog_entry(spec),
+         base / "contracts" / "README.md": render_contracts_placeholder(spec),
+         base / "adapters" / "README.md": render_adapters_placeholder(spec),
++        base / "production" / "CONTRIBUTION.md": render_production_contribution(spec),
+         base / "tests" / "acceptance.rs": render_acceptance_test_rs(spec),
+         base / "migrations" / ".gitkeep": "",
+     }
+diff --git a/tests/test_module_scaffolding.py b/tests/test_module_scaffolding.py
+index e41aba8..a888421 100644
+--- a/tests/test_module_scaffolding.py
++++ b/tests/test_module_scaffolding.py
+@@ -87,6 +87,9 @@ members = [
+             self.assertIn(Path("modules/crm-customer/module.yaml"), changed)
+             self.assertIn(Path("modules/crm-customer/contracts/README.md"), changed)
+             self.assertIn(Path("modules/crm-customer/adapters/README.md"), changed)
++            self.assertIn(
++                Path("modules/crm-customer/production/CONTRIBUTION.md"), changed
++            )
+             self.assertIn(Path("modules/crm-customer/tests/acceptance.rs"), changed)
+ 
+             manifest_path = root / "modules/crm-customer/module.yaml"
+@@ -108,6 +111,14 @@ members = [
+                 "retain_business_records",
+             )
+ 
++            contribution = (
++                root / "modules/crm-customer/production/CONTRIBUTION.md"
++            ).read_text(encoding="utf-8")
++            self.assertIn("crm.customer", contribution)
++            self.assertIn("ModuleActivationPort", contribution)
++            self.assertIn("pre-authorization semantic validation", contribution)
++            self.assertIn("no edits to central", contribution)
++
+             acceptance = (
+                 root / "modules/crm-customer/tests/acceptance.rs"
+             ).read_text(encoding="utf-8")

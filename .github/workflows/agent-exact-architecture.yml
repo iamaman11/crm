@@ -1,0 +1,45 @@
+name: Agent Exact Architecture Apply
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/agent-exact-architecture.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-exact-architecture-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Apply exact architecture delta
+        id: packet
+        shell: bash
+        run: |
+          cat .agent/exact-existing.patch.part.* > /tmp/exact-existing.patch
+          echo "27c46dc0bbb911b53524158909fbafefd2dd5abe1981de261bf15c34e14f1139  /tmp/exact-existing.patch" | sha256sum --check
+          git apply --check /tmp/exact-existing.patch
+          git apply --index /tmp/exact-existing.patch
+          git rm .agent/exact-existing.patch.part.* .github/workflows/agent-exact-architecture.yml
+          git rm -f .agent/final-code.patch.part.* .agent/final-code.patch.ready
+          git rm -f .github/workflows/agent-final-architecture.yml .github/workflows/agent-current-source.yml .github/workflows/agent-final-source-snapshot.yml
+          echo "apply=true" >> "$GITHUB_OUTPUT"
+      - name: Publish final architecture delta
+        if: steps.packet.outputs.apply == 'true'
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "Complete lifecycle parity and module scaffolding gates"
+          git push origin "HEAD:${HEAD_BRANCH}"
