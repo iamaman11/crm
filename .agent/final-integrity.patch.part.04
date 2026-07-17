@@ -1,0 +1,319 @@
+-+This file is a mandatory architecture boundary, not an implementation placeholder inside the pure module core.
+-+
+-+Before production readiness, create a separately owned adapter/composition crate that:
+-+
+-+- contributes every exact versioned mutation and query coordinate owned by `{spec.module_id}`;
+-+- performs cross-owner reference reads in pre-authorization semantic validation;
+-+- gates routes and background workers through `ModuleActivationPort`;
+-+- contributes deterministic background workers with an explicit phase when applicable;
+-+- fails startup on duplicate coordinates, owner mismatches or route-kind mismatches;
+-+- registers exact manifest/binding/production-route parity with an explicit classification for any non-runtime route;
+-+- requires no edits to central capability, query or worker routers;
+-+- proves the production path through governed gateway and lifecycle acceptance tests.
+-+
+-+The module core must remain infrastructure-neutral and must not depend on the production host.
+-+'''
+-+
+- def render_acceptance(spec: ModuleSpec) -> str:
+-     kind_gate = (
+-         "- [ ] Define authoritative aggregate/value-object invariants and ownership boundaries."
+-@@ -284,6 +304,7 @@ Scaffold state: **Foundation only**. These TODO gates are intentionally explicit
+- - [ ] Add tenant, authorization, idempotency/retry and cross-tenant negative coverage.
+- - [ ] Add persistence/projection/search behavior only through platform adapters outside the module core.
+- - [ ] Replace `tests/acceptance.rs` with production-path acceptance evidence.
+-+- [ ] Complete `production/CONTRIBUTION.md` through a separately owned composition boundary.
+- - [ ] Add production composition and end-to-end acceptance through governed gateways.
+- - [ ] Prove rollback/disable/uninstall behavior appropriate to the module type.
+- - [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status and the owning GitHub issue.
+-@@ -327,6 +348,7 @@ def build_files(spec: ModuleSpec) -> dict[Path, str]:
+-         base / "MODULE_CATALOG_ENTRY.md": render_catalog_entry(spec),
+-         base / "contracts" / "README.md": render_contracts_placeholder(spec),
+-         base / "adapters" / "README.md": render_adapters_placeholder(spec),
+-+        base / "production" / "CONTRIBUTION.md": render_production_contribution(spec),
+-         base / "tests" / "acceptance.rs": render_acceptance_test_rs(spec),
+-         base / "migrations" / ".gitkeep": "",
+-     }
+-diff --git a/tests/test_module_scaffolding.py b/tests/test_module_scaffolding.py
+-index e41aba8..a888421 100644
+---- a/tests/test_module_scaffolding.py
+-+++ b/tests/test_module_scaffolding.py
+-@@ -87,6 +87,9 @@ members = [
+-             self.assertIn(Path("modules/crm-customer/module.yaml"), changed)
+-             self.assertIn(Path("modules/crm-customer/contracts/README.md"), changed)
+-             self.assertIn(Path("modules/crm-customer/adapters/README.md"), changed)
+-+            self.assertIn(
+-+                Path("modules/crm-customer/production/CONTRIBUTION.md"), changed
+-+            )
+-             self.assertIn(Path("modules/crm-customer/tests/acceptance.rs"), changed)
+- 
+-             manifest_path = root / "modules/crm-customer/module.yaml"
+-@@ -108,6 +111,14 @@ members = [
+-                 "retain_business_records",
+-             )
+- 
+-+            contribution = (
+-+                root / "modules/crm-customer/production/CONTRIBUTION.md"
+-+            ).read_text(encoding="utf-8")
+-+            self.assertIn("crm.customer", contribution)
+-+            self.assertIn("ModuleActivationPort", contribution)
+-+            self.assertIn("pre-authorization semantic validation", contribution)
+-+            self.assertIn("no edits to central", contribution)
+-+
+-             acceptance = (
+-                 root / "modules/crm-customer/tests/acceptance.rs"
+-             ).read_text(encoding="utf-8")
+-diff --git a/tests/test_production_route_classifications.py b/tests/test_production_route_classifications.py
+-new file mode 100644
+-index 0000000..2a4ebaa
+---- /dev/null
+-+++ b/tests/test_production_route_classifications.py
+-@@ -0,0 +1,15 @@
+-+import unittest
+-+
+-+from scripts.check_production_route_classifications import load_and_validate
+-+
+-+
+-+class ProductionRouteClassificationTests(unittest.TestCase):
+-+    def test_exact_classifications_are_well_formed(self) -> None:
+-+        platform, non_runtime = load_and_validate()
+-+        self.assertEqual(len(platform), 7)
+-+        self.assertEqual(non_runtime, set())
+-+        self.assertIn(("crm.search", "search.global.query", "1.0.0"), platform)
+-+
+-+
+-+if __name__ == "__main__":
+-+    unittest.main()
+-diff --git a/.agent/final-code.patch.ready b/.agent/final-code.patch.ready
+-deleted file mode 100644
+-index 8acd9fa..0000000
+---- a/.agent/final-code.patch.ready
+-+++ /dev/null
+-@@ -1 +0,0 @@
+--c9f5865fce893adb3f6761bc3918540272d5b857775cbddc62f1d4b1974b8d0f  /tmp/final-code.patch
+-diff --git a/.github/workflows/agent-final-architecture.yml b/.github/workflows/agent-final-architecture.yml
+-deleted file mode 100644
+-index 79814db..0000000
+---- a/.github/workflows/agent-final-architecture.yml
+-+++ /dev/null
+-@@ -1,65 +0,0 @@
+--name: Agent Final Architecture Apply
+--
+--on:
+--  pull_request:
+--    paths:
+--      - ".github/workflows/agent-final-architecture.yml"
+--      - ".agent/final-code.patch.ready"
+--
+--permissions:
+--  contents: write
+--
+--concurrency:
+--  group: agent-final-architecture-${{ github.event.pull_request.number }}
+--  cancel-in-progress: true
+--
+--jobs:
+--  apply:
+--    if: github.event.pull_request.head.repo.full_name == github.repository
+--    runs-on: ubuntu-latest
+--    timeout-minutes: 5
+--    steps:
+--      - uses: actions/checkout@v7
+--        with:
+--          ref: ${{ github.head_ref }}
+--          fetch-depth: 0
+--      - name: Apply verified final architecture packet
+--        id: packet
+--        shell: bash
+--        run: |
+--          if [ ! -f .agent/final-code.patch.ready ]; then
+--            echo "apply=false" >> "$GITHUB_OUTPUT"
+--            exit 0
+--          fi
+--          cat .agent/final-code.patch.part.* > /tmp/final-code.patch
+--          {
+--            echo "expected: $(cut -d' ' -f1 .agent/final-code.patch.ready)"
+--            echo "actual:   $(sha256sum /tmp/final-code.patch | cut -d' ' -f1)"
+--            echo
+--            echo "git apply --check:"
+--            git apply --check /tmp/final-code.patch
+--          } >/tmp/final-architecture-diagnostics.txt 2>&1 || {
+--            cat /tmp/final-architecture-diagnostics.txt
+--            exit 1
+--          }
+--          sha256sum --check .agent/final-code.patch.ready
+--          git apply --index /tmp/final-code.patch
+--          git rm .agent/final-code.patch.part.* .agent/final-code.patch.ready .github/workflows/agent-final-architecture.yml
+--          echo "apply=true" >> "$GITHUB_OUTPUT"
+--      - name: Upload final packet diagnostics
+--        if: always()
+--        uses: actions/upload-artifact@v4
+--        with:
+--          name: final-architecture-diagnostics-${{ github.sha }}
+--          path: /tmp/final-architecture-diagnostics.txt
+--          if-no-files-found: ignore
+--          retention-days: 1
+--      - name: Publish final architecture packet
+--        if: steps.packet.outputs.apply == 'true'
+--        env:
+--          HEAD_BRANCH: ${{ github.head_ref }}
+--        run: |
+--          git config user.name "github-actions[bot]"
+--          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+--          git commit -m "Complete lifecycle parity and module scaffolding gates"
+--          git push origin "HEAD:${HEAD_BRANCH}"
+-diff --git a/.github/workflows/agent-final-source-snapshot.yml b/.github/workflows/agent-final-source-snapshot.yml
+-deleted file mode 100644
+-index 1fa5529..0000000
+---- a/.github/workflows/agent-final-source-snapshot.yml
+-+++ /dev/null
+-@@ -1,26 +0,0 @@
+--name: Agent Final Source Snapshot
+--
+--on:
+--  pull_request:
+--    paths:
+--      - ".github/workflows/agent-final-source-snapshot.yml"
+--
+--permissions:
+--  contents: read
+--
+--jobs:
+--  snapshot:
+--    runs-on: ubuntu-latest
+--    timeout-minutes: 5
+--    steps:
+--      - uses: actions/checkout@v7
+--        with:
+--          ref: ${{ github.head_ref }}
+--      - name: Create exact-head source snapshot
+--        run: tar --exclude=.git -czf /tmp/crm-final-source.tgz .
+--      - uses: actions/upload-artifact@v4
+--        with:
+--          name: crm-final-source-${{ github.sha }}
+--          path: /tmp/crm-final-source.tgz
+--          if-no-files-found: error
+--          retention-days: 1
+-diff --git a/.github/workflows/governance.yml b/.github/workflows/governance.yml
+-index b58d826..3c214d4 100644
+---- a/.github/workflows/governance.yml
+-+++ b/.github/workflows/governance.yml
+-@@ -92,6 +92,6 @@ jobs:
+-       - name: Verify Rust runtime IR and digest parity
+-         run: cargo run --quiet -p crm-module-manifest --bin validate-module-manifest -- build/module-ir/*.json
+-       - name: Test strict format, compatibility, projection, dependency and scaffolding enforcement
+--        run: python -m unittest tests/test_contract_bindings.py tests/test_module_compatibility.py tests/test_module_manifest_validation.py tests/test_module_scaffolding.py
+-+        run: python -m unittest tests/test_contract_bindings.py tests/test_module_compatibility.py tests/test_module_manifest_validation.py tests/test_module_scaffolding.py tests/test_production_route_classifications.py
+-       - name: Enforce architecture boundaries
+-         run: python scripts/check_architecture.py
+-diff --git a/contracts/production-route-classifications.json b/contracts/production-route-classifications.json
+-new file mode 100644
+-index 0000000..586fb35
+---- /dev/null
+-+++ b/contracts/production-route-classifications.json
+-@@ -0,0 +1,13 @@
+-+{
+-+  "schema_version": "crm.production-route-classifications/v1",
+-+  "platform_runtime_routes": [
+-+    {"owner_module_id":"crm.metadata","id":"metadata.bundle.publish","version":"1.0.0","reason":"Platform-governed Admin Studio metadata route outside business module manifests."},
+-+    {"owner_module_id":"crm.metadata","id":"metadata.revision.activate","version":"1.0.0","reason":"Platform-governed Admin Studio metadata route outside business module manifests."},
+-+    {"owner_module_id":"crm.metadata","id":"metadata.revision.rollback","version":"1.0.0","reason":"Platform-governed Admin Studio metadata route outside business module manifests."},
+-+    {"owner_module_id":"crm.metadata","id":"metadata.bundle.impact","version":"1.0.0","reason":"Platform-governed Admin Studio metadata route outside business module manifests."},
+-+    {"owner_module_id":"crm.metadata","id":"metadata.revision.get","version":"1.0.0","reason":"Platform-governed Admin Studio metadata route outside business module manifests."},
+-+    {"owner_module_id":"crm.metadata","id":"metadata.activation.get","version":"1.0.0","reason":"Platform-governed Admin Studio metadata route outside business module manifests."},
+-+    {"owner_module_id":"crm.search","id":"search.global.query","version":"1.0.0","reason":"Platform permission-aware global search route outside business module manifests."}
+-+  ],
+-+  "non_runtime_contract_routes": []
+-+}
+-diff --git a/crates/crm-application-runtime/src/native_composition.rs b/crates/crm-application-runtime/src/native_composition.rs
+-index 2b181cc..4f314b6 100644
+---- a/crates/crm-application-runtime/src/native_composition.rs
+-+++ b/crates/crm-application-runtime/src/native_composition.rs
+-@@ -122,15 +122,11 @@ use std::sync::Arc;
+- #[derive(Debug, Clone)]
+- pub struct PostgresModuleActivation {
+-     store: PostgresDataStore,
+--    bootstrap_active: bool,
+- }
+- 
+- impl PostgresModuleActivation {
+--    pub fn new(store: PostgresDataStore, bootstrap_active: bool) -> Self {
+--        Self {
+--            store,
+--            bootstrap_active,
+--        }
+-+    pub fn new(store: PostgresDataStore) -> Self {
+-+        Self { store }
+-     }
+- }
+- 
+-@@ -140,12 +136,7 @@ impl ModuleActivationPort for PostgresModuleActivation {
+-         tenant_id: &'a TenantId,
+-         module_id: &'a ModuleId,
+-     ) -> PortFuture<'a, Result<bool, SdkError>> {
+--        Box::pin(async move {
+--            if self.bootstrap_active {
+--                return Ok(true);
+--            }
+--            self.store.is_module_active(tenant_id, module_id).await
+--        })
+-+        Box::pin(async move { self.store.is_module_active(tenant_id, module_id).await })
+-     }
+- }
+- 
+-diff --git a/crates/crm-application-runtime/src/runtime.rs b/crates/crm-application-runtime/src/runtime.rs
+-index d3266af..67de883 100644
+---- a/crates/crm-application-runtime/src/runtime.rs
+-+++ b/crates/crm-application-runtime/src/runtime.rs
+-@@ -172,7 +172,7 @@ impl ApplicationRuntime {
+-             .try_into()
+-             .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
+-         let activation: Arc<dyn crm_application_composition::ModuleActivationPort> = Arc::new(
+--            PostgresModuleActivation::new(store.clone(), config.bootstrap_allow_phase6),
+-+            PostgresModuleActivation::new(store.clone()),
+-         );
+-         let capability_authorizer: Arc<dyn crm_capability_runtime::CapabilityAuthorizer> =
+-             authorizer.clone();
+-diff --git a/crates/crm-application-runtime/tests/production_route_parity.rs b/crates/crm-application-runtime/tests/production_route_parity.rs
+-index 92e853d..cd09f9c 100644
+---- a/crates/crm-application-runtime/tests/production_route_parity.rs
+-+++ b/crates/crm-application-runtime/tests/production_route_parity.rs
+-@@ -1,144 +1,65 @@
+- use crm_application_runtime::{application_mutation_definitions, application_query_definitions};
+- use crm_capability_runtime::CapabilityDefinition;
+- use serde::Deserialize;
+--use std::collections::{BTreeMap, BTreeSet};
+-+use std::collections::BTreeSet;
+- use std::fs;
+- use std::path::PathBuf;
+- 
+--const PLATFORM_ROUTE_OWNERS: [&str; 2] = ["crm.metadata", "crm.search"];
+--const FIRST_PARTY_EMPTY_ROUTE_MODULES: [&str; 1] = ["crm.sales-activities-link"];
+--
+--type RouteCoordinate = (String, String, String);
+-+type Coordinate = (String, String, String);
+- 
+- #[derive(Debug, Deserialize)]
+--struct BindingRegistry {
+--    modules: Vec<BindingModule>,
+--}
+--
+-+struct ContractBindings { schema_version: String, modules: Vec<BoundModule> }
+- #[derive(Debug, Deserialize)]
+--struct BindingModule {
+--    module_id: String,
+--    capabilities: Vec<BindingCapability>,
+--}
+--
+-+struct BoundModule { module_id: String, capabilities: Vec<BoundCapability> }
+-+#[derive(Debug, Deserialize)]
+-+struct BoundCapability { id: String, version: String }
+- #[derive(Debug, Deserialize)]
+--struct BindingCapability {
+--    id: String,
+--    version: String,
+-+struct RouteClassifications {
+-+    schema_version: String,
+-+    platform_runtime_routes: Vec<ClassifiedRoute>,
+-+    non_runtime_contract_routes: Vec<ClassifiedRoute>,
+- }
+-+#[derive(Debug, Deserialize)]
