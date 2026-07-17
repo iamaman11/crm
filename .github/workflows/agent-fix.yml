@@ -32,7 +32,7 @@ jobs:
             exit 0
           fi
           {
-            echo "expected: 165b256454391162ca12b51278265e2d51d0c7dd739c9bb2ee8c6e7dba7c4d1e"
+            echo "expected: 3dcefc3bb58d6d5f05ac0608d39a75591268c2c0e39e15ce5e999422659ff49a"
             echo "actual:   $(sha256sum .agent/native-composition-clippy-fix.patch | cut -d' ' -f1)"
             echo
             echo "git apply --check:"
@@ -41,7 +41,7 @@ jobs:
             cat /tmp/native-composition-fix-diagnostics.txt
             exit 1
           }
-          echo "165b256454391162ca12b51278265e2d51d0c7dd739c9bb2ee8c6e7dba7c4d1e  .agent/native-composition-clippy-fix.patch" | sha256sum --check
+          echo "3dcefc3bb58d6d5f05ac0608d39a75591268c2c0e39e15ce5e999422659ff49a  .agent/native-composition-clippy-fix.patch" | sha256sum --check
           git apply --index .agent/native-composition-clippy-fix.patch
           git rm .agent/native-composition-clippy-fix.patch .github/workflows/agent-fix.yml
           echo "apply=true" >> "$GITHUB_OUTPUT"
