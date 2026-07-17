@@ -7,7 +7,7 @@ use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_customer_enrichment::PROVIDER_PROFILE_VERSION_RECORD_TYPE;
 use crm_customer_enrichment_capability_adapter::{
-    provider_profile_from_snapshot, provider_profile_to_wire, MODULE_ID,
+    MODULE_ID, provider_profile_from_snapshot, provider_profile_to_wire,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
@@ -35,10 +35,7 @@ pub struct CustomerEnrichmentQueryAdapter {
 }
 
 impl CustomerEnrichmentQueryAdapter {
-    pub fn new(
-        store: PostgresDataStore,
-        visibility: Arc<dyn QueryVisibilityAuthorizer>,
-    ) -> Self {
+    pub fn new(store: PostgresDataStore, visibility: Arc<dyn QueryVisibilityAuthorizer>) -> Self {
         Self { store, visibility }
     }
 

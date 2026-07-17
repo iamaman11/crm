@@ -1,6 +1,6 @@
-use crate::{provider_profile_persisted_contract, PROVIDER_PROFILE_VERSION_RECORD_TYPE};
+use crate::{PROVIDER_PROFILE_VERSION_RECORD_TYPE, provider_profile_persisted_contract};
 use crm_capability_plan_support as support;
-use crm_customer_enrichment::{decode_provider_profile_version_state, ProviderProfileVersion};
+use crm_customer_enrichment::{ProviderProfileVersion, decode_provider_profile_version_state};
 use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, SdkError};
 
 /// Rehydrates one immutable provider-profile snapshot after exact persisted-contract validation.
@@ -10,7 +10,9 @@ pub fn provider_profile_from_snapshot(
     if snapshot.reference.record_type.as_str() != PROVIDER_PROFILE_VERSION_RECORD_TYPE
         || snapshot.version != 1
     {
-        return Err(invalid_snapshot("record type or immutable version is invalid"));
+        return Err(invalid_snapshot(
+            "record type or immutable version is invalid",
+        ));
     }
     let bytes = support::persisted_json_bytes_with_data_class(
         snapshot,
