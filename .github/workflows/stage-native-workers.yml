@@ -1,0 +1,40 @@
+name: Stage Native Worker Composition
+
+on:
+  push:
+    branches:
+      - agent/native-module-composition-stage-workers
+    paths:
+      - ".agent/native-workers.patch.ready"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-workers-stage
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/native-module-composition-stage-workers
+          fetch-depth: 0
+      - name: Verify and apply native worker packet
+        shell: bash
+        run: |
+          cat .agent/native-workers.patch.part.* > /tmp/native-workers.patch
+          sha256sum --check .agent/native-workers.patch.ready
+          git apply --check /tmp/native-workers.patch
+          git apply --index /tmp/native-workers.patch
+          git rm .agent/native-workers.patch.part.* .agent/native-workers.patch.ready
+          git rm .github/workflows/stage-native-workers.yml
+      - name: Publish staged packet
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "Compose production background workers by module"
+          git push origin HEAD:agent/native-module-composition-stage-workers
