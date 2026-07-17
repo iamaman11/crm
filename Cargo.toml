@@ -25,6 +25,7 @@ members = [
   "crates/crm-capability-ingress",
   "crates/crm-proto-contracts",
   "crates/crm-capability-plan-support",
+  "crates/crm-customer-enrichment-capability-adapter",
   "crates/crm-query-runtime",
   "crates/crm-projection-runtime",
   "crates/crm-search-runtime",
