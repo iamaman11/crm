@@ -36,10 +36,8 @@ pub const GET_MAPPING_RESPONSE_SCHEMA: &str =
 pub const QUERY_CAPABILITY_IDS: &[&str] = &[GET_PROVIDER_PROFILE_CAPABILITY];
 /// Complete, tested mapping lookup foundation awaiting bootstrap visibility composition.
 pub const PREPARED_QUERY_CAPABILITY_IDS: &[&str] = &[GET_MAPPING_CAPABILITY];
-const SUPPORTED_QUERY_CAPABILITY_IDS: &[&str] = &[
-    GET_PROVIDER_PROFILE_CAPABILITY,
-    GET_MAPPING_CAPABILITY,
-];
+const SUPPORTED_QUERY_CAPABILITY_IDS: &[&str] =
+    &[GET_PROVIDER_PROFILE_CAPABILITY, GET_MAPPING_CAPABILITY];
 
 #[derive(Clone)]
 pub struct CustomerEnrichmentQueryAdapter {
@@ -389,7 +387,10 @@ mod tests {
         assert_eq!(definitions.len(), 1);
         let definition = &definitions[0];
         assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-        assert_eq!(definition.capability_id.as_str(), GET_PROVIDER_PROFILE_CAPABILITY);
+        assert_eq!(
+            definition.capability_id.as_str(),
+            GET_PROVIDER_PROFILE_CAPABILITY
+        );
         assert_eq!(definition.capability_version.as_str(), "1.0.0");
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);
