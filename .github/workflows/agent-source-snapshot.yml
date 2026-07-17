@@ -1,0 +1,26 @@
+name: Agent Source Snapshot
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/agent-source-snapshot.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Create exact-head source snapshot
+        run: tar --exclude=.git -czf /tmp/crm-source.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crm-source-${{ github.sha }}
+          path: /tmp/crm-source.tgz
+          if-no-files-found: error
+          retention-days: 1
