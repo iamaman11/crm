@@ -13,6 +13,7 @@ concurrency:
   group: agent-patch-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+# Temporary branch-only workflow; removed after the verified migration commit.
 jobs:
   apply:
     if: github.event.pull_request.head.repo.full_name == github.repository
