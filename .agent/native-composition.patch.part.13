@@ -1,0 +1,181 @@
++crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+diff --git a/crates/crm-party-reference-composition/src/lib.rs b/crates/crm-party-reference-composition/src/lib.rs
+new file mode 100644
+index 0000000..e590558
+--- /dev/null
++++ b/crates/crm-party-reference-composition/src/lib.rs
+@@ -0,0 +1,66 @@
++#![forbid(unsafe_code)]
++
++//! Shared application-side Party reference reader.
++//!
++//! Owner modules consume stable Party references but never read Party storage.
++//! Application composition uses this port before final live authorization to
++//! conceal missing and cross-tenant references behind one bounded result.
++
++use crm_core_data::{PostgresDataStore, RecordGetQuery};
++use crm_module_sdk::{ModuleId, PortFuture, RecordId, RecordType, SdkError, TenantId};
++use crm_parties_capability_adapter::{MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE};
++
++pub trait PartyReferenceReader: Send + Sync {
++    fn exists<'a>(
++        &'a self,
++        tenant_id: &'a TenantId,
++        party_id: &'a str,
++    ) -> PortFuture<'a, Result<bool, SdkError>>;
++}
++
++#[derive(Debug, Clone)]
++pub struct PostgresPartyReferenceReader {
++    store: PostgresDataStore,
++}
++
++impl PostgresPartyReferenceReader {
++    pub fn new(store: PostgresDataStore) -> Self {
++        Self { store }
++    }
++}
++
++impl PartyReferenceReader for PostgresPartyReferenceReader {
++    fn exists<'a>(
++        &'a self,
++        tenant_id: &'a TenantId,
++        party_id: &'a str,
++    ) -> PortFuture<'a, Result<bool, SdkError>> {
++        Box::pin(async move {
++            let owner_module_id = ModuleId::try_new(PARTIES_MODULE_ID).map_err(configuration_error)?;
++            let record_type = RecordType::try_new(RECORD_TYPE).map_err(configuration_error)?;
++            let record_id = RecordId::try_new(party_id).map_err(configuration_error)?;
++            Ok(self
++                .store
++                .get_record_for_query(&RecordGetQuery {
++                    tenant_id: tenant_id.clone(),
++                    owner_module_id,
++                    record_type,
++                    record_id,
++                })
++                .await?
++                .is_some())
++        })
++    }
++}
++
++fn configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
++    SdkError::new(
++        "PARTY_REFERENCE_CONFIGURATION_INVALID",
++        crm_module_sdk::ErrorCategory::Internal,
++        false,
++        "The Party reference validation boundary is not configured safely.",
++    )
++    .with_internal_reference(error.to_string())
++}
++
++pub const CRATE_NAME: &str = "crm-party-reference-composition";
+diff --git a/crates/crm-party-relationships-capability-composition/Cargo.toml b/crates/crm-party-relationships-capability-composition/Cargo.toml
+new file mode 100644
+index 0000000..729a54a
+--- /dev/null
++++ b/crates/crm-party-relationships-capability-composition/Cargo.toml
+@@ -0,0 +1,11 @@
++[package]
++name = "crm-party-relationships-capability-composition"
++version = "0.1.0"
++edition = "2024"
++publish = false
++
++[dependencies]
++crm-capability-runtime = { path = "../crm-capability-runtime" }
++crm-module-sdk = { path = "../crm-module-sdk" }
++crm-party-reference-composition = { path = "../crm-party-reference-composition" }
++crm-party-relationships-capability-adapter = { path = "../crm-party-relationships-capability-adapter" }
+diff --git a/crates/crm-party-relationships-capability-composition/src/lib.rs b/crates/crm-party-relationships-capability-composition/src/lib.rs
+new file mode 100644
+index 0000000..b827f79
+--- /dev/null
++++ b/crates/crm-party-relationships-capability-composition/src/lib.rs
+@@ -0,0 +1,85 @@
++#![forbid(unsafe_code)]
++
++//! Pre-authorization application validation for Party Relationship endpoints.
++
++use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator};
++use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
++use crm_party_reference_composition::PartyReferenceReader;
++use crm_party_relationships_capability_adapter::{
++    CREATE_CAPABILITY, MUTATION_CAPABILITY_IDS, referenced_party_ids_from_create,
++};
++use std::collections::BTreeSet;
++use std::fmt;
++use std::sync::Arc;
++
++#[derive(Clone)]
++pub struct PartyRelationshipReferenceSemanticValidator {
++    parties: Arc<dyn PartyReferenceReader>,
++}
++
++impl fmt::Debug for PartyRelationshipReferenceSemanticValidator {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        formatter
++            .debug_struct("PartyRelationshipReferenceSemanticValidator")
++            .field("parties", &"dyn PartyReferenceReader")
++            .finish()
++    }
++}
++
++impl PartyRelationshipReferenceSemanticValidator {
++    pub fn new(parties: Arc<dyn PartyReferenceReader>) -> Self {
++        Self { parties }
++    }
++}
++
++impl CapabilitySemanticValidator for PartyRelationshipReferenceSemanticValidator {
++    fn validate<'a>(
++        &'a self,
++        definition: &'a CapabilityDefinition,
++        request: &'a CapabilityRequest,
++    ) -> PortFuture<'a, Result<(), SdkError>> {
++        if !MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()) {
++            return Box::pin(async { Err(unsupported_capability()) });
++        }
++        if definition.capability_id.as_str() != CREATE_CAPABILITY {
++            return Box::pin(async { Ok(()) });
++        }
++        let references = referenced_party_ids_from_create(request);
++        Box::pin(async move {
++            let unique = references?
++                .into_iter()
++                .map(|reference| reference.as_str().to_owned())
++                .collect::<BTreeSet<_>>();
++            for party_id in unique {
++                if !self
++                    .parties
++                    .exists(&request.context.execution.tenant_id, &party_id)
++                    .await?
++                {
++                    return Err(reference_unavailable());
++                }
++            }
++            Ok(())
++        })
++    }
++}
++
++fn reference_unavailable() -> SdkError {
++    SdkError::new(
++        "PARTY_RELATIONSHIPS_PARTY_REFERENCE_UNAVAILABLE",
++        ErrorCategory::InvalidArgument,
++        false,
++        "One or more referenced Parties are unavailable.",
++    )
++}
++
++fn unsupported_capability() -> SdkError {
++    SdkError::new(
++        "PARTY_RELATIONSHIPS_COMPOSITION_CAPABILITY_UNSUPPORTED",
++        ErrorCategory::Internal,
++        false,
++        "The Party Relationship mutation capability is not configured for this composition boundary.",
++    )
++}
++
++pub const CRATE_NAME: &str = "crm-party-relationships-capability-composition";
