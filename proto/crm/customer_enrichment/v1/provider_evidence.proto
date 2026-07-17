@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v1;
+
+import "crm/customer_enrichment/v1/enrichment_types.proto";
+import "crm/customer_enrichment/v1/reference.proto";
+
+message ProviderResponseReceipt {
+  ProviderResponseReceiptRef provider_response_receipt_ref = 1;
+  EnrichmentRequestRef enrichment_request_ref = 2;
+  ProviderProfileVersionRef provider_profile_version_ref = 3;
+  MappingVersionRef mapping_version_ref = 4;
+  string replay_key = 5;
+  optional string provider_correlation_id = 6;
+  ProviderResponseClass response_class = 7;
+  bytes canonical_response_digest = 8;
+  optional int64 provider_observed_at_unix_ms = 9;
+  int64 retrieved_at_unix_ms = 10;
+  uint64 metered_units = 11;
+  optional string protected_evidence_reference = 12;
+}
+
+message ProviderUsageEntry {
+  ProviderUsageEntryRef provider_usage_entry_ref = 1;
+  EnrichmentRequestRef enrichment_request_ref = 2;
+  optional ProviderResponseReceiptRef provider_response_receipt_ref = 3;
+  ProviderProfileVersionRef provider_profile_version_ref = 4;
+  ProviderUsageKind kind = 5;
+  uint64 metered_units = 6;
+  optional string quota_bucket = 7;
+  optional uint64 quota_remaining = 8;
+  optional int64 provider_observed_at_unix_ms = 9;
+  int64 recorded_at_unix_ms = 10;
+  optional string safe_provider_code = 11;
+}
+
+message ProviderResponseRecordedEvent {
+  ProviderResponseReceipt provider_response_receipt = 1;
+}
+
+message ProviderUsageRecordedEvent {
+  ProviderUsageEntry provider_usage_entry = 1;
+}
