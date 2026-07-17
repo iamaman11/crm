@@ -1,9 +1,7 @@
 name: Agent Source Snapshot
 
 on:
-  push:
-    branches:
-      - agent/native-module-composition
+  pull_request:
     paths:
       - ".github/workflows/agent-source-snapshot.yml"
       - "Cargo.toml"
