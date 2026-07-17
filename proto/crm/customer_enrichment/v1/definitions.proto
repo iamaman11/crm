@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v1;
+
+import "crm/customer_enrichment/v1/enrichment_types.proto";
+import "crm/customer_enrichment/v1/reference.proto";
+
+enum MappingNormalization {
+  MAPPING_NORMALIZATION_UNSPECIFIED = 0;
+  MAPPING_NORMALIZATION_CANONICAL_PARTY_DISPLAY_NAME_V1 = 1;
+}
+
+message ProviderProfileDefinition {
+  string provider_key = 1;
+  string adapter_kind = 2;
+  string adapter_contract_version = 3;
+  repeated EnrichmentTargetField supported_target_fields = 4;
+  repeated string purpose_codes = 5;
+  string license_id = 6;
+  string permitted_use_class = 7;
+  string residency_region = 8;
+  uint32 retention_days = 9;
+  RawProviderPayloadPolicy raw_payload_policy = 10;
+  repeated string credential_handle_aliases = 11;
+  int64 effective_at_unix_ms = 12;
+  optional int64 expires_at_unix_ms = 13;
+}
+
+message ProviderProfileVersion {
+  ProviderProfileVersionRef provider_profile_version_ref = 1;
+  ProviderProfileDefinition definition = 2;
+}
+
+message MappingDefinition {
+  string mapping_key = 1;
+  ProviderProfileVersionRef provider_profile_version_ref = 2;
+  string provider_response_field_path = 3;
+  EnrichmentTargetField target_field = 4;
+  MappingNormalization normalization = 5;
+  uint32 maximum_suggestions_per_response = 6;
+  bool confidence_required = 7;
+}
+
+message MappingVersion {
+  MappingVersionRef mapping_version_ref = 1;
+  MappingDefinition definition = 2;
+}
+
+message PublishProviderProfileVersionRequest {
+  ProviderProfileDefinition definition = 1;
+}
+
+message PublishProviderProfileVersionResponse {
+  ProviderProfileVersion provider_profile_version = 1;
+}
+
+message GetProviderProfileVersionRequest {
+  ProviderProfileVersionRef provider_profile_version_ref = 1;
+}
+
+message GetProviderProfileVersionResponse {
+  ProviderProfileVersion provider_profile_version = 1;
+}
+
+message PublishMappingVersionRequest {
+  MappingDefinition definition = 1;
+}
+
+message PublishMappingVersionResponse {
+  MappingVersion mapping_version = 1;
+}
+
+message GetMappingVersionRequest {
+  MappingVersionRef mapping_version_ref = 1;
+}
+
+message GetMappingVersionResponse {
+  MappingVersion mapping_version = 1;
+}
+
+message ProviderProfileVersionPublishedEvent {
+  ProviderProfileVersion provider_profile_version = 1;
+}
+
+message MappingVersionPublishedEvent {
+  MappingVersion mapping_version = 1;
+}
