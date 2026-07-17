@@ -1,0 +1,199 @@
++                link_processor,
++                projection_worker,
++                customer_360_worker,
++                search_worker,
++            },
++        )
++        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+         let components = Arc::new(ApplicationComponents {
+-            store,
+             module_ids,
+             mutation_http: Arc::new(HttpCapabilityMiddleware::new(mutation_ingress.clone())),
+             mutation_grpc: Arc::new(GrpcCapabilityMiddleware::new(mutation_ingress)),
+             query_http: Arc::new(HttpQueryMiddleware::new(query_ingress.clone())),
+             query_grpc: Arc::new(GrpcQueryMiddleware::new(query_ingress)),
+-            link_processor,
+-            projection_worker,
+-            customer_360_worker,
+-            search_worker,
+-            import_execution_worker,
+-            export_selection_worker,
++            background_workers,
+             export_artifact_download,
+             readiness: Arc::new(AtomicBool::new(false)),
+             workers_healthy: Arc::new(AtomicBool::new(true)),
+@@ -756,121 +728,17 @@ async fn background_worker_loop(
+ async fn run_background_cycle(
+     components: &ApplicationComponents,
+ ) -> Result<(), ApplicationRuntimeError> {
++    let now_unix_nanos = components.clock.now_unix_nanos();
+     for tenant_id in &components.tenant_ids {
+         components
+-            .import_execution_worker
+-            .run_tenant_cycle(tenant_id.clone())
+-            .await
+-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+-        components
+-            .export_selection_worker
+-            .run_tenant_cycle(tenant_id.clone())
+-            .await
+-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+-        scan_link_events(components, tenant_id.clone()).await?;
+-        drain_projection(
+-            &components.projection_worker,
+-            tenant_id.clone(),
+-            DEAL_TIMELINE_PROJECTION_ID,
+-        )
+-        .await?;
+-        drain_projection(
+-            &components.projection_worker,
+-            tenant_id.clone(),
+-            TASK_STATUS_PROJECTION_ID,
+-        )
+-        .await?;
+-        drain_customer_360_projection(&components.customer_360_worker, tenant_id.clone()).await?;
+-        components
+-            .search_worker
+-            .ensure_ready(tenant_id.clone(), SEARCH_PAGE_SIZE)
++            .background_workers
++            .run_tenant_cycle(tenant_id.clone(), now_unix_nanos)
+             .await
+             .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+     }
+     Ok(())
+ }
+ 
+-async fn drain_customer_360_projection(
+-    worker: &Customer360ProjectionWorker,
+-    tenant_id: TenantId,
+-) -> Result<(), ApplicationRuntimeError> {
+-    loop {
+-        let result = worker
+-            .run_batch(tenant_id.clone(), PROJECTION_PAGE_SIZE)
+-            .await
+-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+-        if !result.has_more {
+-            return Ok(());
+-        }
+-    }
+-}
+-
+-async fn scan_link_events(
+-    components: &ApplicationComponents,
+-    tenant_id: TenantId,
+-) -> Result<(), ApplicationRuntimeError> {
+-    let event_type = EventType::try_new("sales.deal.stage_changed")
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-    let consumer_module_id = ModuleId::try_new(LINK_MODULE_ID)
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-    let mut after = None;
+-    loop {
+-        let page = components
+-            .store
+-            .list_event_history(&EventHistoryRequest {
+-                tenant_id: tenant_id.clone(),
+-                consumer_module_id: consumer_module_id.clone(),
+-                event_types: vec![event_type.clone()],
+-                after,
+-                page_size: LINK_SCAN_PAGE_SIZE,
+-            })
+-            .await
+-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+-        for delivery in page.deliveries {
+-            let outcome = components
+-                .link_processor
+-                .process(
+-                    tenant_id.clone(),
+-                    delivery.event_id,
+-                    components.clock.now_unix_nanos(),
+-                )
+-                .await
+-                .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+-            if let SalesActivitiesLinkDeliveryOutcome::DeadLettered { error_code } = outcome {
+-                return Err(ApplicationRuntimeError::Server(format!(
+-                    "link event dead-lettered: {error_code}"
+-                )));
+-            }
+-        }
+-        let Some(next) = page.next_cursor else {
+-            return Ok(());
+-        };
+-        after = Some(next);
+-    }
+-}
+-
+-async fn drain_projection(
+-    worker: &Phase6ProjectionWorker,
+-    tenant_id: TenantId,
+-    projection_id: &str,
+-) -> Result<(), ApplicationRuntimeError> {
+-    loop {
+-        let result = worker
+-            .run_batch(tenant_id.clone(), projection_id, PROJECTION_PAGE_SIZE)
+-            .await
+-            .map_err(|error| ApplicationRuntimeError::Server(error.to_string()))?;
+-        if !result.has_more {
+-            return Ok(());
+-        }
+-    }
+-}
+-
+-#[derive(Clone, Copy)]
+-struct BootstrapVisibilityResource<'a> {
+-    owner_module_id: &'a str,
+-    resource_type: &'a str,
+-}
+-
+ fn bootstrap_application_access(
+     config: &ApplicationConfig,
+     now_unix_nanos: i64,
+@@ -880,6 +748,8 @@ fn bootstrap_application_access(
+     query_definitions: &[CapabilityDefinition],
+ ) -> Result<(), ApplicationRuntimeError> {
+     let expires_at = expiry(now_unix_nanos)?;
++    let visibility = build_bootstrap_visibility_registry()
++        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+     for tenant_id in &config.tenant_ids {
+         for definition in mutation_definitions.iter().chain(query_definitions) {
+             authorization_store
+@@ -896,251 +766,18 @@ fn bootstrap_application_access(
+                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+         }
+         for definition in query_definitions {
+-            match definition.owner_module_id.as_str() {
+-                "crm.sales" => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: "crm.sales",
+-                        resource_type: SALES_RECORD_TYPE,
+-                    },
+-                    sales_fields(),
+-                    expires_at,
+-                )?,
+-                "crm.activities" => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: "crm.activities",
+-                        resource_type: ACTIVITIES_RECORD_TYPE,
+-                    },
+-                    task_fields(),
+-                    expires_at,
+-                )?,
+-                PARTIES_MODULE_ID => upsert_bootstrap_visibility(
+-                    visibility_store,
+-                    config,
+-                    tenant_id,
+-                    definition,
+-                    BootstrapVisibilityResource {
+-                        owner_module_id: PARTIES_MODULE_ID,
+-                        resource_type: PARTY_RECORD_TYPE,
+-                    },
+-                    party_fields(),
+-                    expires_at,
+-                )?,
