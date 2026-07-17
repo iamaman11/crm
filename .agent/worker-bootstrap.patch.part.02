@@ -1,0 +1,319 @@
++    inner: Arc<GlobalSearchWorker>,
++}
++
++impl GlobalSearchBackgroundWorker {
++    fn new(inner: Arc<GlobalSearchWorker>) -> Self {
++        Self { inner }
++    }
++}
++
++impl fmt::Debug for GlobalSearchBackgroundWorker {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        formatter
++            .debug_struct("GlobalSearchBackgroundWorker")
++            .finish_non_exhaustive()
++    }
++}
++
++impl TenantBackgroundWorker for GlobalSearchBackgroundWorker {
++    fn run_tenant_cycle<'a>(
++        &'a self,
++        tenant_id: TenantId,
++        _now_unix_nanos: i64,
++    ) -> PortFuture<'a, Result<(), SdkError>> {
++        Box::pin(async move {
++            self.inner
++                .ensure_ready(tenant_id, SEARCH_PAGE_SIZE)
++                .await
++                .map(|_| ())
++                .map_err(|error| worker_error("GLOBAL_SEARCH", error))
++        })
++    }
++}
++
++fn worker_error(prefix: &str, error: impl fmt::Display) -> SdkError {
++    SdkError::new(
++        format!("APPLICATION_{prefix}_WORKER_FAILED"),
++        ErrorCategory::Unavailable,
++        true,
++        "A module background worker failed.",
++    )
++    .with_internal_reference(error.to_string())
++}
++
++fn background_composition_error(error: impl fmt::Display) -> SdkError {
++    SdkError::new(
++        "APPLICATION_BACKGROUND_COMPOSITION_INVALID",
++        ErrorCategory::Internal,
++        false,
++        "The production background-worker composition is invalid.",
++    )
++    .with_internal_reference(error.to_string())
++}
++
++fn configuration_error(error: impl fmt::Display) -> SdkError {
++    SdkError::new(
++        "APPLICATION_BACKGROUND_CONFIGURATION_INVALID",
++        ErrorCategory::Internal,
++        false,
++        "The production background-worker configuration is invalid.",
++    )
++    .with_internal_reference(error.to_string())
++}
+diff --git a/crates/crm-application-runtime/src/bootstrap_visibility.rs b/crates/crm-application-runtime/src/bootstrap_visibility.rs
+new file mode 100644
+index 0000000..6d7b4ee
+--- /dev/null
++++ b/crates/crm-application-runtime/src/bootstrap_visibility.rs
+@@ -0,0 +1,492 @@
++use crm_capability_runtime::CapabilityDefinition;
++use crm_consents_capability_adapter::{
++    MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
++};
++use crm_contact_points_capability_adapter::{
++    MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
++};
++use crm_customer_360_query_adapter::MODULE_ID as CUSTOMER_360_MODULE_ID;
++use crm_customer_accounts_capability_adapter::{
++    MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
++};
++use crm_customer_data_operations_capability_adapter::{
++    IMPORT_JOB_RECORD_TYPE as CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
++    IMPORT_ROW_RECORD_TYPE as CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
++    MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID,
++};
++use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
++use crm_identity_resolution_capability_adapter::{
++    MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
++    MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
++};
++use crm_metadata_api_adapter::METADATA_MODULE_ID;
++use crm_module_sdk::{ErrorCategory, SdkError};
++use crm_parties_capability_adapter::{
++    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
++};
++use crm_party_relationships_capability_adapter::{
++    MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID, RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
++};
++use crm_sales_activities_query_adapter::{ACTIVITIES_RECORD_TYPE, SALES_RECORD_TYPE};
++use crm_search_query_adapter::SEARCH_MODULE_ID;
++use std::collections::{BTreeMap, BTreeSet};
++
++const SALES_MODULE_ID: &str = "crm.sales";
++const ACTIVITIES_MODULE_ID: &str = "crm.activities";
++const DATA_QUALITY_MODULE_ID: &str = "crm.data-quality";
++const DATA_QUALITY_RULE_SET_RECORD_TYPE: &str = "data_quality.party_rule_set_version";
++
++type VisibilityProvider = fn(&CapabilityDefinition) -> Vec<BootstrapVisibilityResource>;
++
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub(crate) struct BootstrapVisibilityResource {
++    pub owner_module_id: &'static str,
++    pub resource_type: &'static str,
++    pub allowed_fields: BTreeSet<String>,
++}
++
++#[derive(Debug, Clone)]
++pub(crate) struct BootstrapVisibilityRegistry {
++    providers: BTreeMap<&'static str, VisibilityProvider>,
++}
++
++impl BootstrapVisibilityRegistry {
++    pub fn resources_for(
++        &self,
++        definition: &CapabilityDefinition,
++    ) -> Result<Vec<BootstrapVisibilityResource>, SdkError> {
++        self.providers
++            .get(definition.owner_module_id.as_str())
++            .copied()
++            .map(|provider| provider(definition))
++            .ok_or_else(|| unsupported_owner(definition.owner_module_id.as_str()))
++    }
++}
++
++pub(crate) fn build_bootstrap_visibility_registry(
++) -> Result<BootstrapVisibilityRegistry, SdkError> {
++    let mut providers = BTreeMap::new();
++    register(&mut providers, SALES_MODULE_ID, sales_visibility)?;
++    register(&mut providers, ACTIVITIES_MODULE_ID, activities_visibility)?;
++    register(&mut providers, PARTIES_MODULE_ID, parties_visibility)?;
++    register(&mut providers, ACCOUNTS_MODULE_ID, accounts_visibility)?;
++    register(
++        &mut providers,
++        CONTACT_POINTS_MODULE_ID,
++        contact_points_visibility,
++    )?;
++    register(&mut providers, CONSENTS_MODULE_ID, consents_visibility)?;
++    register(
++        &mut providers,
++        IDENTITY_RESOLUTION_MODULE_ID,
++        identity_resolution_visibility,
++    )?;
++    register(
++        &mut providers,
++        PARTY_RELATIONSHIPS_MODULE_ID,
++        party_relationships_visibility,
++    )?;
++    register(
++        &mut providers,
++        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
++        customer_data_operations_visibility,
++    )?;
++    register(
++        &mut providers,
++        DATA_QUALITY_MODULE_ID,
++        data_quality_visibility,
++    )?;
++    register(&mut providers, METADATA_MODULE_ID, no_visibility)?;
++    register(
++        &mut providers,
++        CUSTOMER_360_MODULE_ID,
++        customer_360_visibility,
++    )?;
++    register(&mut providers, SEARCH_MODULE_ID, search_visibility)?;
++    Ok(BootstrapVisibilityRegistry { providers })
++}
++
++fn register(
++    providers: &mut BTreeMap<&'static str, VisibilityProvider>,
++    module_id: &'static str,
++    provider: VisibilityProvider,
++) -> Result<(), SdkError> {
++    if providers.insert(module_id, provider).is_some() {
++        return Err(SdkError::new(
++            "APPLICATION_BOOTSTRAP_VISIBILITY_DUPLICATE",
++            ErrorCategory::Internal,
++            false,
++            "A bootstrap visibility contribution was registered more than once.",
++        )
++        .with_internal_reference(module_id));
++    }
++    Ok(())
++}
++
++fn resource(
++    owner_module_id: &'static str,
++    resource_type: &'static str,
++    allowed_fields: BTreeSet<String>,
++) -> BootstrapVisibilityResource {
++    BootstrapVisibilityResource {
++        owner_module_id,
++        resource_type,
++        allowed_fields,
++    }
++}
++
++fn sales_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(SALES_MODULE_ID, SALES_RECORD_TYPE, sales_fields())]
++}
++
++fn activities_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        ACTIVITIES_MODULE_ID,
++        ACTIVITIES_RECORD_TYPE,
++        task_fields(),
++    )]
++}
++
++fn parties_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(PARTIES_MODULE_ID, PARTY_RECORD_TYPE, party_fields())]
++}
++
++fn accounts_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        ACCOUNTS_MODULE_ID,
++        ACCOUNT_RECORD_TYPE,
++        account_fields(),
++    )]
++}
++
++fn contact_points_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        CONTACT_POINTS_MODULE_ID,
++        CONTACT_POINT_RECORD_TYPE,
++        contact_point_fields(),
++    )]
++}
++
++fn consents_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        CONSENTS_MODULE_ID,
++        CONSENT_RECORD_TYPE,
++        consent_fields(),
++    )]
++}
++
++fn identity_resolution_visibility(
++    _: &CapabilityDefinition,
++) -> Vec<BootstrapVisibilityResource> {
++    vec![
++        resource(
++            IDENTITY_RESOLUTION_MODULE_ID,
++            IDENTITY_RESOLUTION_RECORD_TYPE,
++            identity_resolution_fields(),
++        ),
++        resource(
++            IDENTITY_RESOLUTION_MODULE_ID,
++            IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
++            identity_resolution_merge_fields(),
++        ),
++    ]
++}
++
++fn party_relationships_visibility(
++    _: &CapabilityDefinition,
++) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        PARTY_RELATIONSHIPS_MODULE_ID,
++        PARTY_RELATIONSHIP_RECORD_TYPE,
++        party_relationship_fields(),
++    )]
++}
++
++fn customer_data_operations_visibility(
++    definition: &CapabilityDefinition,
++) -> Vec<BootstrapVisibilityResource> {
++    let mut resources = vec![resource(
++        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
++        CUSTOMER_DATA_IMPORT_JOB_RECORD_TYPE,
++        customer_data_import_job_fields(),
++    )];
++    if definition.capability_id.as_str() == LIST_IMPORT_ROWS_CAPABILITY {
++        resources.push(resource(
++            CUSTOMER_DATA_OPERATIONS_MODULE_ID,
++            CUSTOMER_DATA_IMPORT_ROW_RECORD_TYPE,
++            customer_data_import_row_fields(),
++        ));
++    }
++    resources
++}
++
++fn data_quality_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![resource(
++        DATA_QUALITY_MODULE_ID,
++        DATA_QUALITY_RULE_SET_RECORD_TYPE,
++        fields(["definition"]),
++    )]
++}
++
++fn no_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    Vec::new()
++}
++
++fn customer_360_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
++    vec![
++        resource(
++            PARTIES_MODULE_ID,
++            PARTY_RECORD_TYPE,
++            customer_360_party_fields(),
++        ),
++        resource(
++            ACCOUNTS_MODULE_ID,
++            ACCOUNT_RECORD_TYPE,
++            customer_360_account_fields(),
++        ),
++        resource(
++            CONTACT_POINTS_MODULE_ID,
++            CONTACT_POINT_RECORD_TYPE,
++            customer_360_contact_point_fields(),
++        ),
