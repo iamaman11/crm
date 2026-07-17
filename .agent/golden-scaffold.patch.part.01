@@ -1,0 +1,64 @@
+@@ -284,6 +353,7 @@ Scaffold state: **Foundation only**. These TODO gates are intentionally explicit
+ - [ ] Add tenant, authorization, idempotency/retry and cross-tenant negative coverage.
+ - [ ] Add persistence/projection/search behavior only through platform adapters outside the module core.
+ - [ ] Replace `tests/acceptance.rs` with production-path acceptance evidence.
++- [ ] Replace the fail-closed `{spec.composition_relative_dir.as_posix()}` entrypoint with exact module-owned route and worker contributions.
+ - [ ] Add production composition and end-to-end acceptance through governed gateways.
+ - [ ] Prove rollback/disable/uninstall behavior appropriate to the module type.
+ - [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status and the owning GitHub issue.
+@@ -318,6 +388,7 @@ def render_catalog_entry(spec: ModuleSpec) -> str:
+ 
+ def build_files(spec: ModuleSpec) -> dict[Path, str]:
+     base = spec.relative_dir
++    composition = spec.composition_relative_dir
+     return {
+         base / "Cargo.toml": render_cargo_toml(spec),
+         base / "module.yaml": render_manifest(spec),
+@@ -329,6 +400,9 @@ def build_files(spec: ModuleSpec) -> dict[Path, str]:
+         base / "adapters" / "README.md": render_adapters_placeholder(spec),
+         base / "tests" / "acceptance.rs": render_acceptance_test_rs(spec),
+         base / "migrations" / ".gitkeep": "",
++        composition / "Cargo.toml": render_composition_cargo_toml(spec),
++        composition / "README.md": render_composition_readme(spec),
++        composition / "src" / "lib.rs": render_composition_lib_rs(spec),
+     }
+ 
+ 
+@@ -365,8 +439,13 @@ def scaffold(root: Path, spec: ModuleSpec, *, dry_run: bool = False) -> list[Pat
+     validate_spec(spec)
+     root = root.resolve()
+     module_dir = root / spec.relative_dir
+-    if module_dir.exists():
+-        raise ScaffoldError(f"target module directory already exists: {spec.relative_dir}")
++    composition_dir = root / spec.composition_relative_dir
++    for target in (module_dir, composition_dir):
++        if target.exists():
++            relative_target = target.relative_to(root)
++            raise ScaffoldError(
++                f"target scaffold directory already exists: {relative_target}"
++            )
+ 
+     cargo_path = root / "Cargo.toml"
+     if not cargo_path.exists():
+@@ -376,6 +455,9 @@ def scaffold(root: Path, spec: ModuleSpec, *, dry_run: bool = False) -> list[Pat
+     workspace_content = update_workspace_members(
+         cargo_path.read_text(encoding="utf-8"), spec.relative_dir.as_posix()
+     )
++    workspace_content = update_workspace_members(
++        workspace_content, spec.composition_relative_dir.as_posix()
++    )
+     planned = [Path("Cargo.toml"), *sorted(files)]
+     if dry_run:
+         return planned
+@@ -388,11 +470,13 @@ def scaffold(root: Path, spec: ModuleSpec, *, dry_run: bool = False) -> list[Pat
+             path.write_text(content, encoding="utf-8")
+         cargo_path.write_text(workspace_content, encoding="utf-8")
+     except Exception:
+-        # Avoid leaving a partially generated module when a write fails. The workspace
+-        # file is written last, so removing the module directory restores the prior state.
++        # Avoid leaving a partial business module or composition boundary when a write
++        # fails. The workspace file is written last, so removing both roots restores
++        # the prior state.
+         import shutil
+ 
+         shutil.rmtree(module_dir, ignore_errors=True)
