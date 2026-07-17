@@ -56,13 +56,111 @@
       "id": "customer_data.import.party.rows.validate",
       "version": "1.0.0",
       "reason": "Legacy client-preparsed row-validation contract retained for compatibility; production validates rows only through the governed source-artifact route."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.application.outcome.record",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 worker-only contract is published and descriptor-checked, but its activation-gated native outcome-recovery contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.mapping.get",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its permission-aware native query contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.mapping.publish",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its governed native capability contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.party.display_name.apply",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but exact Party revalidation, live authorization and owner-capability invocation are not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.provider_profile.get",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its permission-aware native query contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.provider_profile.publish",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its governed native capability contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.request.cancel",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its governed native lifecycle contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.request.create",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but Party/Consent pre-authorization and native persistence contribution are not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.request.dispatch",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 worker-only contract is published and descriptor-checked, but its activation-gated provider-dispatch contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.request.get",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its permission-aware native query contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.request.list",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but signed pagination, visibility and native query contribution are not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.response.record",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 worker-only contract is published and descriptor-checked, but its provider-response reconciliation and durable evidence contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.suggestion.accept",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but review policy, approval and live authorization adapters are not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.suggestion.get",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its permission-aware native query contribution is not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.suggestion.list_by_party",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but signed pagination, field redaction and native query contribution are not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.suggestion.reject",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but review policy and live authorization adapters are not implemented yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.suggestions.materialize",
+      "version": "1.0.0",
+      "reason": "Phase 8A.10 worker-only contract is published and descriptor-checked, but its activation-gated mapping and suggestion-materialization contribution is not implemented yet."
     }
   ],
   "empty_runtime_modules": [
-    {
-      "module_id": "crm.customer-enrichment",
-      "reason": "Phase 8A.10 foundation owns immutable enrichment definitions and governance evidence but intentionally publishes no runtime capability until compatible Protobuf contracts and exact native production contributions are delivered."
-    },
     {
       "module_id": "crm.sales-activities-link",
       "reason": "Link module contributes background event delivery but intentionally exposes no public mutation or query route."
