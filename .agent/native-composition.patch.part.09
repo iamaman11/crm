@@ -1,7 +1,3 @@
-+impl MergeLineageCapabilitySemanticValidator {
-+    pub fn new(references: Arc<dyn MergeLineageReferenceReader>) -> Self {
-+        Self { references }
-     }
  
      async fn validate_merge(&self, request: &CapabilityRequest) -> Result<(), SdkError> {
 @@ -270,24 +265,56 @@ impl MergeLineageCapabilityExecutor {
