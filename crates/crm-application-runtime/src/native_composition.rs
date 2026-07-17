@@ -54,6 +54,10 @@ use crm_customer_data_operations_source_composition::{
     CustomerDataOperationsSourceExecutor,
     source_capability_definitions as customer_data_operations_source_capability_definitions,
 };
+use crm_customer_enrichment_capability_adapter::{
+    CustomerEnrichmentProviderProfileCapabilityPlanner,
+    capability_definitions as customer_enrichment_capability_definitions,
+};
 use crm_data_quality_capability_adapter::capability_definitions as data_quality_capability_definitions;
 use crm_data_quality_query_adapter::{
     DataQualityQueryAdapter,
@@ -172,6 +176,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     );
     definitions.extend(customer_data_operations_source_capability_definitions()?);
     definitions.extend(data_quality_capability_definitions()?);
+    definitions.extend(customer_enrichment_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
     Ok(definitions)
 }
@@ -352,6 +357,18 @@ pub fn build_production_composition(
         data_quality_capability_definitions()?,
         Arc::new(NoopMutationSemanticValidator),
         data_quality_executor,
+        activation.clone(),
+    )?;
+
+    let customer_enrichment_executor = aggregate_executor(
+        store.clone(),
+        CustomerEnrichmentProviderProfileCapabilityPlanner,
+    );
+    add_activated_mutations(
+        &mut contributions,
+        customer_enrichment_capability_definitions()?,
+        Arc::new(NoopMutationSemanticValidator),
+        customer_enrichment_executor,
         activation.clone(),
     )?;
 
@@ -622,6 +639,7 @@ pub fn declared_business_module_ids() -> BTreeSet<String> {
         "crm.contact-points",
         "crm.customer-accounts",
         "crm.customer-data-operations",
+        "crm.customer-enrichment",
         "crm.customer360",
         "crm.data-quality",
         "crm.identity-resolution",
