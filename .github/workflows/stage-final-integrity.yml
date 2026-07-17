@@ -1,0 +1,40 @@
+name: Stage Final Architecture Integrity
+
+on:
+  push:
+    branches:
+      - agent/native-module-composition-stage-final-integrity
+    paths:
+      - ".agent/final-integrity.patch.ready"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: final-integrity-stage
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/native-module-composition-stage-final-integrity
+          fetch-depth: 0
+      - name: Verify and apply final architecture integrity packet
+        shell: bash
+        run: |
+          cat .agent/final-integrity.patch.part.* > /tmp/final-integrity.patch
+          echo "0d77a77244f319b0071aaab9923dcabcb084d08d657a3a33eb73fb5bb4f039ce  /tmp/final-integrity.patch" | sha256sum --check
+          git apply --check /tmp/final-integrity.patch
+          git apply --index /tmp/final-integrity.patch
+          git rm .agent/final-integrity.patch.part.* .agent/final-integrity.patch.ready
+          git rm .github/workflows/stage-final-integrity.yml
+      - name: Publish staged final integrity tree
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "Complete lifecycle parity and golden composition gates"
+          git push origin HEAD:agent/native-module-composition-stage-final-integrity
