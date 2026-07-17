@@ -1,11 +1,14 @@
 #![forbid(unsafe_code)]
 
+pub mod definition_persistence;
 pub mod definitions;
 pub mod lifecycle;
 /// Strict bounded canonical persisted-state codecs for governed enrichment evidence.
 #[allow(dead_code, unused_imports)]
 pub mod persistence;
+pub mod provider_usage;
 
+pub use definition_persistence::*;
 pub use definitions::{
     MappingDraft, MappingNormalization, MappingVersion, MappingVersionId, ProviderProfileDraft,
     ProviderProfileVersion, ProviderProfileVersionId, RawPayloadPolicy, TargetField,
@@ -20,6 +23,7 @@ pub use lifecycle::{
     derive_suggestion_status,
 };
 pub use persistence::*;
+pub use provider_usage::*;
 
 /// Stable crate identity for repository tooling.
 pub const CRATE_NAME: &str = "crm-customer-enrichment";
