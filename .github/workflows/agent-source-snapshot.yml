@@ -52,7 +52,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-composition-patch-diagnostics-${{ github.sha }}
-          path: /tmp/native-composition-diagnostics.txt
+          path: |
+            /tmp/native-composition-diagnostics.txt
+            /tmp/native-composition.patch
           if-no-files-found: ignore
           retention-days: 1
       - name: Publish staged architecture patch
