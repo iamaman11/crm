@@ -115,20 +115,19 @@ pub fn provider_profile_from_definition(
         .into_iter()
         .map(target_field_from_wire)
         .collect::<Result<Vec<_>, _>>()?;
-    let raw_payload_policy = match wire::RawProviderPayloadPolicy::try_from(
-        definition.raw_payload_policy,
-    ) {
-        Ok(wire::RawProviderPayloadPolicy::DigestOnly) => RawPayloadPolicy::DigestOnly,
-        Ok(wire::RawProviderPayloadPolicy::GovernedProtectedEvidence) => {
-            RawPayloadPolicy::GovernedProtectedEvidence
-        }
-        Ok(wire::RawProviderPayloadPolicy::Unspecified) | Err(_) => {
-            return Err(SdkError::invalid_argument(
-                "customer_enrichment.provider_profile.definition.raw_payload_policy",
-                "Provider raw-payload policy is unsupported",
-            ));
-        }
-    };
+    let raw_payload_policy =
+        match wire::RawProviderPayloadPolicy::try_from(definition.raw_payload_policy) {
+            Ok(wire::RawProviderPayloadPolicy::DigestOnly) => RawPayloadPolicy::DigestOnly,
+            Ok(wire::RawProviderPayloadPolicy::GovernedProtectedEvidence) => {
+                RawPayloadPolicy::GovernedProtectedEvidence
+            }
+            Ok(wire::RawProviderPayloadPolicy::Unspecified) | Err(_) => {
+                return Err(SdkError::invalid_argument(
+                    "customer_enrichment.provider_profile.definition.raw_payload_policy",
+                    "Provider raw-payload policy is unsupported",
+                ));
+            }
+        };
 
     ProviderProfileVersion::publish(ProviderProfileDraft {
         provider_key: definition.provider_key,
@@ -225,12 +224,10 @@ pub fn provider_profile_record_ref(
 fn target_field_from_wire(value: i32) -> Result<TargetField, SdkError> {
     match wire::EnrichmentTargetField::try_from(value) {
         Ok(wire::EnrichmentTargetField::PartyDisplayName) => Ok(TargetField::PartyDisplayName),
-        Ok(wire::EnrichmentTargetField::Unspecified) | Err(_) => {
-            Err(SdkError::invalid_argument(
-                "customer_enrichment.provider_profile.definition.supported_target_fields",
-                "Provider target field is unsupported",
-            ))
-        }
+        Ok(wire::EnrichmentTargetField::Unspecified) | Err(_) => Err(SdkError::invalid_argument(
+            "customer_enrichment.provider_profile.definition.supported_target_fields",
+            "Provider target field is unsupported",
+        )),
     }
 }
 
@@ -263,7 +260,9 @@ fn ensure_definition(
         || definition.owner_module_id.as_str() != MODULE_ID
         || definition.capability_id.as_str() != request.context.execution.capability_id.as_str()
     {
-        return Err(invalid_plan("capability definition does not match request context"));
+        return Err(invalid_plan(
+            "capability definition does not match request context",
+        ));
     }
     Ok(())
 }

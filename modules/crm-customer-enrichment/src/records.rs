@@ -33,7 +33,9 @@ mod tests {
             APPLICATION_ATTEMPT_RECORD_TYPE,
             PROVIDER_USAGE_ENTRY_RECORD_TYPE,
         ];
-        let unique = record_types.into_iter().collect::<std::collections::BTreeSet<_>>();
+        let unique = record_types
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(unique.len(), 8);
         assert!(
             unique
