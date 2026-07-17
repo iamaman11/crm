@@ -23,7 +23,7 @@ message ProviderResponseReceipt {
 message ProviderUsageEntry {
   ProviderUsageEntryRef provider_usage_entry_ref = 1;
   EnrichmentRequestRef enrichment_request_ref = 2;
-  optional ProviderResponseReceiptRef provider_response_receipt_ref = 3;
+  ProviderResponseReceiptRef provider_response_receipt_ref = 3;
   ProviderProfileVersionRef provider_profile_version_ref = 4;
   ProviderUsageKind kind = 5;
   uint64 metered_units = 6;
