@@ -48,8 +48,16 @@ class ModuleSpec:
         return self.crate_name.replace("-", "_")
 
     @property
+    def composition_crate_name(self) -> str:
+        return f"{self.crate_name}-composition"
+
+    @property
     def relative_dir(self) -> Path:
         return Path("modules") / self.crate_name
+
+    @property
+    def composition_relative_dir(self) -> Path:
+        return Path("crates") / self.composition_crate_name
 
 
 def _quoted(value: str) -> str:
@@ -116,6 +124,67 @@ publish = false
 [dependencies]
 crm-core-contracts = {{ path = "../../crates/crm-core-contracts" }}
 crm-module-sdk = {{ path = "../../crates/crm-module-sdk" }}
+'''
+
+
+def render_composition_cargo_toml(spec: ModuleSpec) -> str:
+    return f'''[package]
+name = "{spec.composition_crate_name}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-application-composition = {{ path = "../crm-application-composition" }}
+crm-module-sdk = {{ path = "../crm-module-sdk" }}
+{spec.crate_name} = {{ path = "../../{spec.relative_dir.as_posix()}" }}
+'''
+
+
+def render_composition_lib_rs(spec: ModuleSpec) -> str:
+    return f'''#![forbid(unsafe_code)]
+
+use crm_application_composition::ModuleContributionSet;
+use crm_module_sdk::{{ErrorCategory, SdkError}};
+
+/// Stable identity for the separately owned production-composition boundary.
+pub const CRATE_NAME: &str = "{spec.composition_crate_name}";
+/// The only business module this composition boundary may register.
+pub const MODULE_ID: &str = {spec.rust_crate_name}::MODULE_ID;
+
+/// Fail-closed scaffold entrypoint. Replace this function with exact route and
+/// worker contributions before wiring the module into a production process.
+pub fn contribute_to(_contributions: &mut ModuleContributionSet) -> Result<(), SdkError> {{
+    Err(SdkError::new(
+        "MODULE_PRODUCTION_CONTRIBUTION_NOT_IMPLEMENTED",
+        ErrorCategory::Internal,
+        false,
+        "The generated module has no reviewed production contribution yet.",
+    )
+    .with_internal_reference(MODULE_ID))
+}}
+
+#[cfg(test)]
+mod tests {{
+    use super::*;
+
+    #[test]
+    fn scaffold_boundary_is_fail_closed() {{
+        let mut contributions = ModuleContributionSet::new();
+        let error = contribute_to(&mut contributions).unwrap_err();
+        assert_eq!(error.code, "MODULE_PRODUCTION_CONTRIBUTION_NOT_IMPLEMENTED");
+        assert_eq!(MODULE_ID, "{spec.module_id}");
+    }}
+}}
+'''
+
+
+def render_composition_readme(spec: ModuleSpec) -> str:
+    return f'''# Production composition boundary for `{spec.module_id}`
+
+This separately owned crate is the only generated location allowed to translate reviewed module contracts and adapters into `ModuleContributionSet` registrations. The scaffold is deliberately fail-closed: `contribute_to` returns `MODULE_PRODUCTION_CONTRIBUTION_NOT_IMPLEMENTED` until exact mutation/query routes and background workers have production implementations and acceptance evidence.
+
+Do not add domain behavior, SQL, transport handling or another module's internals here. Keep business rules in `{spec.relative_dir.as_posix()}` and infrastructure in narrow adapter crates.
 '''
 
 
@@ -284,6 +353,7 @@ Scaffold state: **Foundation only**. These TODO gates are intentionally explicit
 - [ ] Add tenant, authorization, idempotency/retry and cross-tenant negative coverage.
 - [ ] Add persistence/projection/search behavior only through platform adapters outside the module core.
 - [ ] Replace `tests/acceptance.rs` with production-path acceptance evidence.
+- [ ] Replace the fail-closed `{spec.composition_relative_dir.as_posix()}` entrypoint with exact module-owned route and worker contributions.
 - [ ] Add production composition and end-to-end acceptance through governed gateways.
 - [ ] Prove rollback/disable/uninstall behavior appropriate to the module type.
 - [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status and the owning GitHub issue.
@@ -318,6 +388,7 @@ def render_catalog_entry(spec: ModuleSpec) -> str:
 
 def build_files(spec: ModuleSpec) -> dict[Path, str]:
     base = spec.relative_dir
+    composition = spec.composition_relative_dir
     return {
         base / "Cargo.toml": render_cargo_toml(spec),
         base / "module.yaml": render_manifest(spec),
@@ -329,6 +400,9 @@ def build_files(spec: ModuleSpec) -> dict[Path, str]:
         base / "adapters" / "README.md": render_adapters_placeholder(spec),
         base / "tests" / "acceptance.rs": render_acceptance_test_rs(spec),
         base / "migrations" / ".gitkeep": "",
+        composition / "Cargo.toml": render_composition_cargo_toml(spec),
+        composition / "README.md": render_composition_readme(spec),
+        composition / "src" / "lib.rs": render_composition_lib_rs(spec),
     }
 
 
@@ -365,8 +439,13 @@ def scaffold(root: Path, spec: ModuleSpec, *, dry_run: bool = False) -> list[Pat
     validate_spec(spec)
     root = root.resolve()
     module_dir = root / spec.relative_dir
-    if module_dir.exists():
-        raise ScaffoldError(f"target module directory already exists: {spec.relative_dir}")
+    composition_dir = root / spec.composition_relative_dir
+    for target in (module_dir, composition_dir):
+        if target.exists():
+            relative_target = target.relative_to(root)
+            raise ScaffoldError(
+                f"target scaffold directory already exists: {relative_target}"
+            )
 
     cargo_path = root / "Cargo.toml"
     if not cargo_path.exists():
@@ -375,6 +454,9 @@ def scaffold(root: Path, spec: ModuleSpec, *, dry_run: bool = False) -> list[Pat
     files = build_files(spec)
     workspace_content = update_workspace_members(
         cargo_path.read_text(encoding="utf-8"), spec.relative_dir.as_posix()
+    )
+    workspace_content = update_workspace_members(
+        workspace_content, spec.composition_relative_dir.as_posix()
     )
     planned = [Path("Cargo.toml"), *sorted(files)]
     if dry_run:
@@ -388,11 +470,13 @@ def scaffold(root: Path, spec: ModuleSpec, *, dry_run: bool = False) -> list[Pat
             path.write_text(content, encoding="utf-8")
         cargo_path.write_text(workspace_content, encoding="utf-8")
     except Exception:
-        # Avoid leaving a partially generated module when a write fails. The workspace
-        # file is written last, so removing the module directory restores the prior state.
+        # Avoid leaving a partial business module or composition boundary when a write
+        # fails. The workspace file is written last, so removing both roots restores
+        # the prior state.
         import shutil
 
         shutil.rmtree(module_dir, ignore_errors=True)
+        shutil.rmtree(composition_dir, ignore_errors=True)
         raise
     return planned
 

@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import tomllib
 import unittest
+from unittest.mock import patch
 
 from scripts.scaffold_module import (
     Dependency,
@@ -29,7 +30,13 @@ class ModuleScaffoldingTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def _write_stub_crate(self, root: Path, relative_path: str, package_name: str) -> None:
+    def _write_stub_crate(
+        self,
+        root: Path,
+        relative_path: str,
+        package_name: str,
+        lib_content: str = "#![forbid(unsafe_code)]\n",
+    ) -> None:
         crate = root / relative_path
         (crate / "src").mkdir(parents=True)
         (crate / "Cargo.toml").write_text(
@@ -41,16 +48,14 @@ publish = false
 ''',
             encoding="utf-8",
         )
-        (crate / "src" / "lib.rs").write_text(
-            "#![forbid(unsafe_code)]\n",
-            encoding="utf-8",
-        )
+        (crate / "src" / "lib.rs").write_text(lib_content, encoding="utf-8")
 
     def _compilable_workspace(self, temporary_root: Path) -> None:
         (temporary_root / "Cargo.toml").write_text(
             '''[workspace]
 resolver = "2"
 members = [
+  "crates/crm-application-composition",
   "crates/crm-core-contracts",
   "crates/crm-module-sdk",
 ]
@@ -66,6 +71,43 @@ members = [
             temporary_root,
             "crates/crm-module-sdk",
             "crm-module-sdk",
+            lib_content='''#![forbid(unsafe_code)]
+
+#[derive(Debug, Clone, Copy)]
+pub enum ErrorCategory { Internal }
+
+#[derive(Debug, Clone)]
+pub struct SdkError { pub code: String }
+
+impl SdkError {
+    pub fn new(
+        code: impl Into<String>,
+        _category: ErrorCategory,
+        _retryable: bool,
+        _message: impl Into<String>,
+    ) -> Self {
+        Self { code: code.into() }
+    }
+
+    pub fn with_internal_reference(self, _reference: impl Into<String>) -> Self {
+        self
+    }
+}
+''',
+        )
+        self._write_stub_crate(
+            temporary_root,
+            "crates/crm-application-composition",
+            "crm-application-composition",
+            lib_content='''#![forbid(unsafe_code)]
+
+#[derive(Debug, Default)]
+pub struct ModuleContributionSet;
+
+impl ModuleContributionSet {
+    pub fn new() -> Self { Self }
+}
+''',
         )
 
     def test_owner_scaffold_is_schema_valid_and_registered_after_existing_modules(self) -> None:
@@ -88,6 +130,9 @@ members = [
             self.assertIn(Path("modules/crm-customer/contracts/README.md"), changed)
             self.assertIn(Path("modules/crm-customer/adapters/README.md"), changed)
             self.assertIn(Path("modules/crm-customer/tests/acceptance.rs"), changed)
+            self.assertIn(
+                Path("crates/crm-customer-composition/src/lib.rs"), changed
+            )
 
             manifest_path = root / "modules/crm-customer/module.yaml"
             manifest = strict_yaml_load(
@@ -113,6 +158,14 @@ members = [
             ).read_text(encoding="utf-8")
             self.assertIn("#[ignore =", acceptance)
             self.assertIn("production_acceptance_todo", acceptance)
+            production_boundary = (
+                root / "crates/crm-customer-composition/src/lib.rs"
+            ).read_text(encoding="utf-8")
+            self.assertIn("pub fn contribute_to", production_boundary)
+            self.assertIn(
+                "MODULE_PRODUCTION_CONTRIBUTION_NOT_IMPLEMENTED",
+                production_boundary,
+            )
 
             cargo = (root / "Cargo.toml").read_text(encoding="utf-8")
             self.assertLess(
@@ -121,6 +174,10 @@ members = [
             )
             self.assertLess(
                 cargo.index('"modules/crm-customer"'),
+                cargo.index('"crates/crm-customer-composition"'),
+            )
+            self.assertLess(
+                cargo.index('"crates/crm-customer-composition"'),
                 cargo.index('"services/crm-api"'),
             )
 
@@ -144,8 +201,7 @@ members = [
                 [
                     "cargo",
                     "check",
-                    "-p",
-                    "crm-customer",
+                    "--workspace",
                     "--all-targets",
                     "--quiet",
                 ],
@@ -179,6 +235,20 @@ members = [
                 if dependency.startswith("crm-")
             }
             self.assertLessEqual(internal, set(policy["allowed_module_prefixes"]))
+
+            composition_cargo = tomllib.loads(
+                (root / "crates/crm-customer-composition/Cargo.toml").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                set(composition_cargo["dependencies"]),
+                {
+                    "crm-application-composition",
+                    "crm-module-sdk",
+                    "crm-customer",
+                },
+            )
 
     def test_link_scaffold_requires_two_dependencies_and_owns_no_records(self) -> None:
         invalid = ModuleSpec(
@@ -256,9 +326,66 @@ members = [
             changed = scaffold(root, spec, dry_run=True)
             self.assertIn(Path("Cargo.toml"), changed)
             self.assertFalse((root / "modules/crm-customer").exists())
+            self.assertFalse(
+                (root / "crates/crm-customer-composition").exists()
+            )
             self.assertEqual(
                 (root / "Cargo.toml").read_text(encoding="utf-8"), before
             )
+
+
+    def test_existing_composition_directory_is_never_overwritten(self) -> None:
+        spec = ModuleSpec(
+            kind="owner",
+            module_id="crm.customer",
+            display_name="CRM Customer",
+            team="customer-platform",
+            contact="crm-owner@example.com",
+            objects=("customer.party",),
+            required_dependencies=(),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._workspace(root)
+            existing = root / "crates/crm-customer-composition"
+            existing.mkdir(parents=True)
+            marker = existing / "keep.txt"
+            marker.write_text("do not replace", encoding="utf-8")
+            with self.assertRaisesRegex(ScaffoldError, "already exists"):
+                scaffold(root, spec)
+            self.assertEqual(marker.read_text(encoding="utf-8"), "do not replace")
+            self.assertFalse((root / "modules/crm-customer").exists())
+
+    def test_partial_write_removes_both_scaffold_roots_and_preserves_workspace(self) -> None:
+        spec = ModuleSpec(
+            kind="owner",
+            module_id="crm.customer",
+            display_name="CRM Customer",
+            team="customer-platform",
+            contact="crm-owner@example.com",
+            objects=("customer.party",),
+            required_dependencies=(),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._workspace(root)
+            cargo_path = root / "Cargo.toml"
+            before = cargo_path.read_text(encoding="utf-8")
+            original_write_text = Path.write_text
+            failing_path = root / "crates/crm-customer-composition/README.md"
+
+            def fail_composition_readme(path: Path, data: str, *args, **kwargs):
+                if path == failing_path:
+                    raise OSError("injected scaffold write failure")
+                return original_write_text(path, data, *args, **kwargs)
+
+            with patch.object(Path, "write_text", new=fail_composition_readme):
+                with self.assertRaisesRegex(OSError, "injected scaffold write failure"):
+                    scaffold(root, spec)
+
+            self.assertFalse((root / "modules/crm-customer").exists())
+            self.assertFalse((root / "crates/crm-customer-composition").exists())
+            self.assertEqual(cargo_path.read_text(encoding="utf-8"), before)
 
     def test_existing_module_directory_is_never_overwritten(self) -> None:
         spec = ModuleSpec(
