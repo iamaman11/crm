@@ -1,0 +1,208 @@
++        let query_definitions = composition.query_definitions().to_vec();
+         let internal_import_outcome_definitions = internal_capability_definitions()
+             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+         let internal_export_selection_definitions =
+@@ -262,25 +269,9 @@ impl ApplicationRuntime {
+             )?;
+         }
+ 
+-        let authorizer = Arc::new(LiveCapabilityAuthorizer::new(
+-            authorization_store,
+-            Arc::clone(&clock),
+-        ));
+-        let mutation_executor = Arc::new(ApplicationCapabilityExecutorRouter::new(
+-            store.clone(),
+-            Arc::new(PostgresTransactionalAggregateExecutor::new(
+-                store.clone(),
+-                Arc::new(ApplicationAggregatePlannerRouter),
+-            )),
+-            Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
+-            authorizer.clone(),
+-        ));
+         let mutation_gateway = Arc::new(CapabilityGateway::new(
+-            Arc::new(
+-                application_capability_catalog()
+-                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            ),
+-            Arc::new(ContractBoundMutationSemanticValidator),
++            composition.mutation_registry(),
++            composition.mutation_validator(),
+             Arc::new(FixedWindowRateLimiter::new(
+                 RateLimitPolicyStore::default(),
+                 Arc::clone(&clock),
+@@ -290,7 +281,7 @@ impl ApplicationRuntime {
+                     .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+             ),
+             authorizer.clone(),
+-            mutation_executor,
++            composition.mutation_executor(),
+             Arc::clone(&clock),
+         ));
+ 
+@@ -314,31 +305,10 @@ impl ApplicationRuntime {
+             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+         );
+ 
+-        let visibility_authorizer = Arc::new(LiveQueryVisibilityAuthorizer::new(
+-            visibility_store,
+-            Arc::clone(&clock),
+-        ));
+         let artifact_download_resolver = Arc::new(PartyExportArtifactDownloadResolver::new(
+             store.clone(),
+             visibility_authorizer.clone(),
+         ));
+-        let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
+-            .try_into()
+-            .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
+-        let owner_query_adapter = SalesActivitiesQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let party_query_adapter = PartyQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+         let export_party_query_adapter = PartyQueryAdapter::new(
+             store.clone(),
+             CursorCodec::new(cursor_key)
+@@ -366,97 +336,11 @@ impl ApplicationRuntime {
+             )
+             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+         );
+-        let account_query_adapter = AccountQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let contact_point_query_adapter = ContactPointQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let party_relationship_query_adapter = PartyRelationshipQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let customer_360_query_adapter =
+-            Customer360QueryAdapter::new(store.clone(), visibility_authorizer.clone());
+-        let consent_query_adapter = ConsentQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let identity_resolution_query_adapter = IdentityResolutionQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let identity_resolution_merge_query_adapter = IdentityResolutionMergeQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let customer_data_operations_query_adapter = CustomerDataOperationsQueryAdapter::new(
+-            store.clone(),
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            visibility_authorizer.clone(),
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let data_quality_query_adapter =
+-            DataQualityQueryAdapter::new(store.clone(), visibility_authorizer.clone());
+-        let search_query_adapter = SearchQueryAdapter::new(
+-            SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            Arc::new(store.clone()),
+-            visibility_authorizer,
+-            CursorCodec::new(cursor_key)
+-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-        )
+-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+-        let production_query_router =
+-            ProductionQueryRouter::new(owner_query_adapter, search_query_adapter);
+-        let metadata_query_adapter =
+-            MetadataQueryAdapter::new(Arc::new(PostgresMetadataQueryStore::new(store.clone())));
+-        let base_query_router = crate::governed_metadata::ApplicationQueryRouter::new(
+-            production_query_router,
+-            party_query_adapter,
+-            account_query_adapter,
+-            contact_point_query_adapter,
+-            party_relationship_query_adapter,
+-            customer_360_query_adapter,
+-            consent_query_adapter,
+-            identity_resolution_query_adapter,
+-            identity_resolution_merge_query_adapter,
+-            customer_data_operations_query_adapter,
+-            metadata_query_adapter,
+-        );
+-        let query_router = Arc::new(ApplicationQueryRouter::new(
+-            base_query_router,
+-            data_quality_query_adapter,
+-        ));
+         let query_gateway = Arc::new(QueryGateway::new(
+-            Arc::new(
+-                application_query_capability_catalog()
+-                    .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+-            ),
+-            query_router.clone(),
++            composition.query_registry(),
++            composition.query_validator(),
+             authorizer.clone(),
+-            query_router,
++            composition.query_executor(),
+         ));
+ 
+         let timeout_policy = TimeoutPolicy {
+@@ -510,7 +394,7 @@ impl ApplicationRuntime {
+         );
+         let components = Arc::new(ApplicationComponents {
+             store,
+-            module_registry: Arc::new(ModuleRegistry::new(Version::new(0, 1, 0))),
++            module_ids,
+             mutation_http: Arc::new(HttpCapabilityMiddleware::new(mutation_ingress.clone())),
+             mutation_grpc: Arc::new(GrpcCapabilityMiddleware::new(mutation_ingress)),
+             query_http: Arc::new(HttpQueryMiddleware::new(query_ingress.clone())),
+diff --git a/crates/crm-consents-capability-composition/src/lib.rs b/crates/crm-consents-capability-composition/src/lib.rs
+index 719e857..c7b26bb 100644
+--- a/crates/crm-consents-capability-composition/src/lib.rs
++++ b/crates/crm-consents-capability-composition/src/lib.rs
+@@ -9,7 +9,7 @@
+ 
+ use crm_capability_runtime::{
+     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
+-    TransactionalCapabilityExecutor,
++    CapabilitySemanticValidator, TransactionalCapabilityExecutor,
+ };
+ use crm_consents::{CommunicationChannel, PartyReference};
+ use crm_consents_capability_adapter::{
+@@ -118,42 +118,37 @@ impl ConsentReferenceReader for PostgresConsentReferenceReader {
+ }
+ 
+ #[derive(Clone)]
+-pub struct ConsentCapabilityExecutor {
++pub struct ConsentCapabilitySemanticValidator {
+     references: Arc<dyn ConsentReferenceReader>,
+-    inner: Arc<dyn TransactionalCapabilityExecutor>,
+ }
+ 
+-impl fmt::Debug for ConsentCapabilityExecutor {
++impl fmt::Debug for ConsentCapabilitySemanticValidator {
