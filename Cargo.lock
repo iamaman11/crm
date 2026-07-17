@@ -757,6 +757,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "prost",
+ "serde_json",
 ]
 
 [[package]]
