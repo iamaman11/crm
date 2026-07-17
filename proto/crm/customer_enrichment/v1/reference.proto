@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v1;
+
+message ProviderProfileVersionRef {
+  string provider_profile_version_id = 1;
+}
+
+message MappingVersionRef {
+  string mapping_version_id = 1;
+}
+
+message EnrichmentRequestRef {
+  string enrichment_request_id = 1;
+}
+
+message ProviderResponseReceiptRef {
+  string provider_response_receipt_id = 1;
+}
+
+message SuggestionRef {
+  string suggestion_id = 1;
+}
+
+message ReviewDecisionRef {
+  string review_decision_id = 1;
+}
+
+message ApplicationAttemptRef {
+  string application_attempt_id = 1;
+}
+
+message ProviderUsageEntryRef {
+  string provider_usage_entry_id = 1;
+}
