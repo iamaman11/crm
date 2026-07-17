@@ -21,9 +21,9 @@ Before changing code, read these sources in order:
 
 When descriptive documents disagree, the precedence is:
 
-`SYSTEM_INVARIANTS` → accepted ADRs and published contracts → `IMPLEMENTATION_ROADMAP` → `PROJECT_STATUS` → issue text → README.
+`SYSTEM_INVARIANTS` → accepted ADRs and published contracts → `ARCHITECTURE_READINESS` → `IMPLEMENTATION_ROADMAP` → `PROJECT_STATUS` → issue text → README.
 
-Process documents govern how work is performed but never override architecture invariants or published contracts.
+Process documents govern how work is performed but never override architecture invariants, published contracts or the accepted non-regression baseline.
 
 Do not infer completion from a directory name, manifest declaration or old issue text. Completion requires merged implementation plus the phase acceptance gates.
 
@@ -104,13 +104,13 @@ A public endpoint must terminate at a governed ingress boundary. Public transpor
 Mutation path:
 
 ```text
-authentication → tenant/actor context → exact capability → validation/policy → live authorization → transactional execution
+authentication → tenant/actor context → exact module-owned capability/version route → durable module activation → typed and pre-authorization semantic validation → policy/approval → live authorization → transactional execution
 ```
 
 Query path:
 
 ```text
-authentication → tenant/actor context → exact query → validation → live authorization/visibility → authoritative read
+authentication → tenant/actor context → exact module-owned query/version route → durable module activation → typed and pre-authorization semantic validation → live authorization/visibility → authoritative read
 ```
 
 Never share mutation-only idempotency or business-transaction fields with query contracts.
