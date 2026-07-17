@@ -61,8 +61,12 @@ impl PostgresDataStore {
         .map_err(database_unavailable)?
         .ok_or_else(|| bootstrap_context_missing(tenant_id))?;
         let context = BootstrapExecutionContext {
-            actor_id: context_row.try_get("actor_id").map_err(stored_value_invalid)?,
-            request_id: context_row.try_get("request_id").map_err(stored_value_invalid)?,
+            actor_id: context_row
+                .try_get("actor_id")
+                .map_err(stored_value_invalid)?,
+            request_id: context_row
+                .try_get("request_id")
+                .map_err(stored_value_invalid)?,
             capability_id: context_row
                 .try_get("capability_id")
                 .map_err(stored_value_invalid)?,

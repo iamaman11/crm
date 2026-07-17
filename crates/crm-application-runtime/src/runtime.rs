@@ -171,9 +171,8 @@ impl ApplicationRuntime {
         let cursor_key: [u8; 32] = config.cursor_signing_key[..32]
             .try_into()
             .map_err(|_| ApplicationRuntimeError::Assembly("cursor key is invalid".to_owned()))?;
-        let activation: Arc<dyn crm_application_composition::ModuleActivationPort> = Arc::new(
-            PostgresModuleActivation::new(store.clone()),
-        );
+        let activation: Arc<dyn crm_application_composition::ModuleActivationPort> =
+            Arc::new(PostgresModuleActivation::new(store.clone()));
         let capability_authorizer: Arc<dyn crm_capability_runtime::CapabilityAuthorizer> =
             authorizer.clone();
         let query_authorizer: Arc<dyn crm_query_runtime::QueryAuthorizer> = authorizer.clone();

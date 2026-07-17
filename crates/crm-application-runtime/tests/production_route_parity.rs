@@ -113,9 +113,8 @@ fn production_routes_exactly_cover_governed_bindings_and_exact_classifications()
     let mutation_definitions = application_mutation_definitions().unwrap();
     let query_definitions = application_query_definitions().unwrap();
     assert_route_kinds_are_disjoint(&mutation_definitions, &query_definitions);
-    let actual_routes = unique_runtime_routes(
-        mutation_definitions.iter().chain(query_definitions.iter()),
-    );
+    let actual_routes =
+        unique_runtime_routes(mutation_definitions.iter().chain(query_definitions.iter()));
 
     let mut expected_routes = governed_routes
         .difference(&non_runtime_routes)
@@ -129,8 +128,10 @@ fn production_routes_exactly_cover_governed_bindings_and_exact_classifications()
 }
 
 fn binding_registry() -> BindingRegistry {
-    serde_json::from_slice(&fs::read(root().join("contracts/module-contract-bindings.json")).unwrap())
-        .unwrap()
+    serde_json::from_slice(
+        &fs::read(root().join("contracts/module-contract-bindings.json")).unwrap(),
+    )
+    .unwrap()
 }
 
 fn route_classifications() -> RouteClassifications {
@@ -182,7 +183,10 @@ fn unique_modules(modules: &[ClassifiedModule]) -> BTreeSet<String> {
 fn unique_runtime_routes<'a>(
     definitions: impl IntoIterator<Item = &'a CapabilityDefinition>,
 ) -> BTreeSet<RouteCoordinate> {
-    unique_routes(definitions.into_iter().map(route_coordinate), "production routes")
+    unique_routes(
+        definitions.into_iter().map(route_coordinate),
+        "production routes",
+    )
 }
 
 fn unique_routes(
@@ -191,7 +195,11 @@ fn unique_routes(
 ) -> BTreeSet<RouteCoordinate> {
     let routes = routes.into_iter().collect::<Vec<_>>();
     let unique = routes.iter().cloned().collect::<BTreeSet<_>>();
-    assert_eq!(routes.len(), unique.len(), "duplicate coordinate in {label}");
+    assert_eq!(
+        routes.len(),
+        unique.len(),
+        "duplicate coordinate in {label}"
+    );
     unique
 }
 
