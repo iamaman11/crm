@@ -7,11 +7,12 @@ This document is the concise human-readable status page. It is not the normative
 Authoritative references:
 
 1. `SYSTEM_INVARIANTS.md` — absolute architecture rules.
-2. `DELIVERY_GOVERNANCE.md` — source-of-truth, packet-state and synchronization policy.
-3. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
-4. `PHASE8_DELIVERY_PLAN.md` — detailed active Phase 8 packet sequence.
-5. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
-6. `MODULE_CATALOG.md` — business-module ownership and readiness accounting.
+2. `ARCHITECTURE_READINESS.md` — accepted native-composition non-regression baseline.
+3. `DELIVERY_GOVERNANCE.md` — source-of-truth, packet-state and synchronization policy.
+4. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
+5. `PHASE8_DELIVERY_PLAN.md` — detailed active Phase 8 packet sequence.
+6. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
+7. `MODULE_CATALOG.md` — business-module ownership and readiness accounting.
 
 ## Current position
 
