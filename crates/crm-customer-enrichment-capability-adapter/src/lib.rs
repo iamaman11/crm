@@ -7,12 +7,14 @@
 //! Party reads and owner mutation remain outside this crate.
 
 mod provider_profile_planner;
+mod provider_profile_snapshot;
 
 pub use provider_profile_planner::{
     CustomerEnrichmentProviderProfileCapabilityPlanner, provider_profile_from_definition,
     provider_profile_persisted_contract, provider_profile_persisted_payload,
     provider_profile_record_ref, provider_profile_to_wire,
 };
+pub use provider_profile_snapshot::provider_profile_from_snapshot;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
