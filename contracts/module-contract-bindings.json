@@ -463,6 +463,11 @@
       ]
     },
     {
+      "module_id": "crm.customer-enrichment",
+      "capabilities": [],
+      "events": []
+    },
+    {
       "module_id": "crm.customer360",
       "capabilities": [
         {

@@ -2,8 +2,7 @@ use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, SdkError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-const PROVIDER_PROFILE_ID_DOMAIN: &[u8] =
-    b"crm.customer-enrichment.provider-profile-version/v1";
+const PROVIDER_PROFILE_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.provider-profile-version/v1";
 const MAPPING_VERSION_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.mapping-version/v1";
 
 const MAX_CANONICAL_KEY_BYTES: usize = 80;
@@ -166,10 +165,8 @@ impl ProviderProfileVersion {
             draft.permitted_use_class,
             "provider_profile.permitted_use_class",
         )?;
-        let residency_region = canonical_key(
-            draft.residency_region,
-            "provider_profile.residency_region",
-        )?;
+        let residency_region =
+            canonical_key(draft.residency_region, "provider_profile.residency_region")?;
         if draft.retention_days > MAX_RETENTION_DAYS {
             return Err(invalid(
                 "CUSTOMER_ENRICHMENT_RETENTION_INVALID",
@@ -341,9 +338,7 @@ impl MappingVersion {
             draft.provider_response_field_path,
             "mapping.provider_response_field_path",
         )?;
-        if !(1..=MAX_SUGGESTIONS_PER_RESPONSE)
-            .contains(&draft.maximum_suggestions_per_response)
-        {
+        if !(1..=MAX_SUGGESTIONS_PER_RESPONSE).contains(&draft.maximum_suggestions_per_response) {
             return Err(invalid(
                 "CUSTOMER_ENRICHMENT_MAXIMUM_SUGGESTIONS_INVALID",
                 "mapping.maximum_suggestions_per_response",
@@ -538,7 +533,11 @@ fn canonical_policy_text(
     code: &'static str,
 ) -> Result<String, SdkError> {
     if value.chars().any(char::is_control) {
-        return Err(invalid(code, field, "policy text must not contain control characters"));
+        return Err(invalid(
+            code,
+            field,
+            "policy text must not contain control characters",
+        ));
     }
     let canonical = value.split_whitespace().collect::<Vec<_>>().join(" ");
     if canonical.is_empty() || canonical.len() > MAX_POLICY_TEXT_BYTES {
@@ -553,10 +552,7 @@ fn canonical_policy_text(
     Ok(canonical)
 }
 
-fn canonical_provider_field_path(
-    value: String,
-    field: &'static str,
-) -> Result<String, SdkError> {
+fn canonical_provider_field_path(value: String, field: &'static str) -> Result<String, SdkError> {
     if value.is_empty()
         || value.len() > MAX_PROVIDER_FIELD_PATH_BYTES
         || !value.is_ascii()
@@ -573,8 +569,8 @@ fn canonical_provider_field_path(
 }
 
 fn canonical_digest<T: Serialize>(domain: &[u8], value: &T) -> Vec<u8> {
-    let encoded = serde_json::to_vec(value)
-        .expect("canonical customer-enrichment definition must serialize");
+    let encoded =
+        serde_json::to_vec(value).expect("canonical customer-enrichment definition must serialize");
     let mut hasher = Sha256::new();
     hasher.update(domain);
     hasher.update((encoded.len() as u64).to_be_bytes());
@@ -618,7 +614,10 @@ mod tests {
             adapter_kind: "registry_http_v1".to_owned(),
             adapter_contract_version: "1.0.0".to_owned(),
             supported_target_fields: vec![TargetField::PartyDisplayName],
-            purpose_codes: vec!["customer_profile_enrichment".to_owned(), "due_diligence".to_owned()],
+            purpose_codes: vec![
+                "customer_profile_enrichment".to_owned(),
+                "due_diligence".to_owned(),
+            ],
             license_id: "Registry commercial data licence v3".to_owned(),
             permitted_use_class: "customer_master_review".to_owned(),
             residency_region: "eu".to_owned(),
@@ -639,7 +638,10 @@ mod tests {
         assert_eq!(first.version_id(), second.version_id());
         assert_eq!(
             first.purpose_codes(),
-            &["customer_profile_enrichment".to_owned(), "due_diligence".to_owned()]
+            &[
+                "customer_profile_enrichment".to_owned(),
+                "due_diligence".to_owned()
+            ]
         );
     }
 
