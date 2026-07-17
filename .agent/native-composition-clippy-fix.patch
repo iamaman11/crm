@@ -12,7 +12,7 @@ index b495520..6dcf4d1 100644
              .await?;
          let updated_party = decode_updated_party(target_result)?;
 diff --git a/crates/crm-application-runtime/src/native_composition.rs b/crates/crm-application-runtime/src/native_composition.rs
-index 23d3191..9aaa4ac 100644
+index bcbc568..9aaa4ac 100644
 --- a/crates/crm-application-runtime/src/native_composition.rs
 +++ b/crates/crm-application-runtime/src/native_composition.rs
 @@ -320,11 +320,13 @@ pub fn build_production_composition(
@@ -34,7 +34,7 @@ index 23d3191..9aaa4ac 100644
  
      let sales_activities_queries = Arc::new(SalesActivitiesQueryAdapter::new(
          store.clone(),
-@@ -462,22 +464,28 @@ pub fn build_production_composition(
+@@ -462,23 +464,28 @@ pub fn build_production_composition(
          visibility_authorizer,
          cursor(cursor_key)?,
      )?);
@@ -67,8 +67,8 @@ index 23d3191..9aaa4ac 100644
 +        )
 +        .map_err(composition_error)?;
  
--    contributions.add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)?;
-+    contributions
+     contributions
+-        .add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)?;
 +        .add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)
 +        .map_err(composition_error)?;
      contributions.build().map_err(composition_error)
