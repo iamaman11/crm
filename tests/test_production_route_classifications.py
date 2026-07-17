@@ -20,12 +20,35 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                     "customer_data.import.party.rows.validate",
                     "1.0.0",
                 ),
+                *{
+                    (
+                        "crm.customer-enrichment",
+                        capability_id,
+                        "1.0.0",
+                    )
+                    for capability_id in {
+                        "customer_enrichment.application.outcome.record",
+                        "customer_enrichment.mapping.get",
+                        "customer_enrichment.mapping.publish",
+                        "customer_enrichment.party.display_name.apply",
+                        "customer_enrichment.provider_profile.get",
+                        "customer_enrichment.provider_profile.publish",
+                        "customer_enrichment.request.cancel",
+                        "customer_enrichment.request.create",
+                        "customer_enrichment.request.dispatch",
+                        "customer_enrichment.request.get",
+                        "customer_enrichment.request.list",
+                        "customer_enrichment.response.record",
+                        "customer_enrichment.suggestion.accept",
+                        "customer_enrichment.suggestion.get",
+                        "customer_enrichment.suggestion.list_by_party",
+                        "customer_enrichment.suggestion.reject",
+                        "customer_enrichment.suggestions.materialize",
+                    }
+                },
             },
         )
-        self.assertEqual(
-            empty_modules,
-            {"crm.customer-enrichment", "crm.sales-activities-link"},
-        )
+        self.assertEqual(empty_modules, {"crm.sales-activities-link"})
         self.assertIn(("crm.search", "search.global.query", "1.0.0"), platform)
 
 
