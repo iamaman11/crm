@@ -510,9 +510,9 @@ fn canonical_key(value: String, field: &'static str) -> Result<String, SdkError>
 }
 
 fn canonical_version(value: String, field: &'static str) -> Result<String, SdkError> {
-    let valid_bytes = value.bytes().all(|byte| {
-        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+')
-    });
+    let valid_bytes = value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+'));
     if value.is_empty() || value.len() > MAX_VERSION_BYTES || !value.is_ascii() || !valid_bytes {
         return Err(invalid(
             "CUSTOMER_ENRICHMENT_VERSION_INVALID",
