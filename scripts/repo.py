@@ -61,6 +61,36 @@ def command_contracts(args: argparse.Namespace) -> None:
     run([sys.executable, "scripts/generate_contract_bindings.py", mode])
 
 
+def command_conformance(_: argparse.Namespace) -> None:
+    """Run the permanent native modular-architecture preflight."""
+    command_architecture(argparse.Namespace())
+    command_manifests(argparse.Namespace())
+    command_contracts(argparse.Namespace(write=False))
+    run([sys.executable, "scripts/check_native_module_composition.py"])
+    run([sys.executable, "scripts/check_production_route_classifications.py"])
+    run(
+        [
+  sys.executable,
+  "-m",
+  "unittest",
+  "tests/test_native_module_composition.py",
+  "tests/test_production_route_classifications.py",
+  "tests/test_module_scaffolding.py",
+        ]
+    )
+    run(
+        [
+  "cargo",
+  "test",
+  "-p",
+  "crm-application-runtime",
+  "--test",
+  "production_route_parity",
+  "--all-features",
+        ]
+    )
+
+
 def command_format(args: argparse.Namespace) -> None:
     command = ["cargo", "fmt", "--all"]
     if args.check:
@@ -91,7 +121,7 @@ def command_test_all(_: argparse.Namespace) -> None:
 
 
 def command_quality(_: argparse.Namespace) -> None:
-    command_architecture(argparse.Namespace())
+    command_conformance(argparse.Namespace())
     command_format(argparse.Namespace(check=True))
     run(
         [
@@ -131,6 +161,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--write", action="store_true", help="write the canonical generated registry"
     )
     contracts.set_defaults(handler=command_contracts)
+
+    conformance = subparsers.add_parser(
+        "conformance",
+        help="run native composition, manifest, contract, scaffold and route-parity gates",
+    )
+    conformance.set_defaults(handler=command_conformance)
 
     fmt = subparsers.add_parser(
         "format", help="format Rust sources or check formatting"
