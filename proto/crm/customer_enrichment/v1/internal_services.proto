@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v1;
+
+import "crm/customer_enrichment/v1/internal.proto";
+
+// Worker-only lifecycle surface. These RPCs are never published through public ingress catalogs.
+service CustomerEnrichmentWorkerService {
+  rpc DispatchEnrichmentRequest(DispatchEnrichmentRequestRequest) returns (DispatchEnrichmentRequestResponse);
+  rpc RecordProviderResponse(RecordProviderResponseRequest) returns (RecordProviderResponseResponse);
+  rpc MaterializeSuggestions(MaterializeSuggestionsRequest) returns (MaterializeSuggestionsResponse);
+  rpc RecordApplicationOutcome(RecordApplicationOutcomeRequest) returns (RecordApplicationOutcomeResponse);
+}
