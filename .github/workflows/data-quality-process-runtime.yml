@@ -1,0 +1,202 @@
+name: Data Quality Process Runtime CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/data_quality/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-data-quality-capability-adapter/**"
+      - "crates/crm-data-quality-query-adapter/**"
+      - "crates/crm-data-quality-source-composition/**"
+      - "modules/crm-data-quality/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/0014_data_quality_adapter.sql"
+      - "database/tests/0015_data_quality_completeness_profile_adapter.sql"
+      - "scripts/prepare_data_quality_process_database.sh"
+      - ".github/workflows/data-quality-process-runtime.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/data_quality/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-data-quality-capability-adapter/**"
+      - "crates/crm-data-quality-query-adapter/**"
+      - "crates/crm-data-quality-source-composition/**"
+      - "modules/crm-data-quality/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/0014_data_quality_adapter.sql"
+      - "database/tests/0015_data_quality_completeness_profile_adapter.sql"
+      - "scripts/prepare_data_quality_process_database.sh"
+      - ".github/workflows/data-quality-process-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  data-quality-process-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_data_quality_process_runtime_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5439:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_data_quality_process_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5439
+      PGDATABASE: crm_data_quality_process_runtime_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5439/crm_data_quality_process_runtime_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5439/crm_data_quality_process_runtime_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Prepare fresh Data Quality process database
+        run: bash scripts/prepare_data_quality_process_database.sh
+      - name: Verify immutable Data Quality definitions through real crm-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > database/data-quality-process-runtime.log
+          : > database/data-quality-process-runtime-health.log
+          (
+            while true; do
+              while IFS= read -r port; do
+                [ -z "${port}" ] && continue
+                {
+                  echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) port=${port} ==="
+                  curl --max-time 1 --silent --show-error --include \
+                    "http://127.0.0.1:${port}/readyz" || true
+                  echo
+                } >> database/data-quality-process-runtime-health.log 2>&1
+              done < <(
+                ss -H -ltnp 2>/dev/null \
+                  | awk '/crm-api/ { address=$4; sub(/^.*:/, "", address); print address }' \
+                  | sort -u
+              )
+              sleep 1
+            done
+          ) &
+          health_probe_pid=$!
+          trap 'kill "${health_probe_pid}" 2>/dev/null || true' EXIT
+
+          run_process_test() {
+            local test_name="$1"
+            echo "=== ${test_name} ===" | tee -a database/data-quality-process-runtime.log
+            bash scripts/prepare_data_quality_process_database.sh
+            set +e
+            cargo test -p crm-api --test "${test_name}" -- --nocapture 2>&1 \
+              | tee -a database/data-quality-process-runtime.log
+            local test_status=${PIPESTATUS[0]}
+            set -e
+            return "${test_status}"
+          }
+
+          run_process_test data_quality_process_e2e
+          run_process_test data_quality_query_process_e2e
+          run_process_test data_quality_completeness_profile_process_e2e
+          run_process_test data_quality_field_redaction_process_e2e
+          run_process_test data_quality_party_source_process_e2e
+          run_process_test data_quality_evaluation_stage_process_e2e
+          run_process_test data_quality_completion_surface_process_e2e
+          run_process_test data_quality_evaluation_get_policy_process_e2e
+
+          kill "${health_probe_pid}" 2>/dev/null || true
+          wait "${health_probe_pid}" 2>/dev/null || true
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          {
+            echo "=== data-quality records ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, owner_module_id, record_type, record_id, version,
+                     created_at, updated_at, deleted_at
+                FROM crm.records
+               WHERE owner_module_id = 'crm.data-quality'
+               ORDER BY tenant_id, record_type, record_id;
+            "
+            echo "=== data-quality outbox events ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, event_type, aggregate_type, aggregate_id,
+                     aggregate_version, occurred_at
+                FROM crm.outbox_events
+               WHERE event_type LIKE 'data_quality.%'
+               ORDER BY tenant_id, occurred_at, aggregate_id;
+            "
+            echo "=== data-quality audits ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, audit_sequence, audit_record_id,
+                     business_transaction_id, actor_id, capability_id,
+                     capability_version, canonicalization_profile, occurred_at
+                FROM crm.audit_records
+               WHERE capability_id LIKE 'data_quality.%'
+               ORDER BY tenant_id, audit_sequence;
+            "
+          } > database/data-quality-process-runtime-state.log 2>&1
+
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/data-quality-process-runtime-postgres.log 2>&1
+          else
+            echo "PostgreSQL service container was not found." > database/data-quality-process-runtime-postgres.log
+            docker ps -a >> database/data-quality-process-runtime-postgres.log 2>&1
+          fi
+      - name: Upload Data Quality process diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-quality-process-runtime-diagnostics
+          path: |
+            database/data-quality-process-runtime.log
+            database/data-quality-process-runtime-health.log
+            database/data-quality-process-runtime-state.log
+            database/data-quality-process-runtime-postgres.log
+            services/crm-api/tests/data_quality_process_e2e.rs
+            services/crm-api/tests/data_quality_query_process_e2e.rs
+            services/crm-api/tests/data_quality_completeness_profile_process_e2e.rs
+            services/crm-api/tests/data_quality_field_redaction_process_e2e.rs
+            services/crm-api/tests/data_quality_party_source_process_e2e.rs
+            services/crm-api/tests/data_quality_evaluation_stage_process_e2e.rs
+            services/crm-api/tests/data_quality_completion_surface_process_e2e.rs
+            services/crm-api/tests/data_quality_evaluation_get_policy_process_e2e.rs
+            services/crm-api/tests/support/data_quality_evaluation_*.rs
+            database/tests/0014_data_quality_adapter.sql
+            database/tests/0015_data_quality_completeness_profile_adapter.sql
+            scripts/prepare_data_quality_process_database.sh
+            crates/crm-data-quality-capability-adapter/
+            crates/crm-data-quality-query-adapter/
+            crates/crm-data-quality-source-composition/
+            crates/crm-application-runtime/src/data_quality_capability_execution.rs
+            crates/crm-application-runtime/src/data_quality_registration.rs
+            crates/crm-application-runtime/src/data_quality_query_registration.rs
+          if-no-files-found: error
+          retention-days: 7

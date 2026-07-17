@@ -4,9 +4,13 @@ use crm_module_sdk::{
 };
 use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::error::Error;
 use std::fmt;
 use std::sync::{Arc, RwLock};
+
+const HIDDEN_FIELDS_ENV: &str = "CRM_QUERY_HIDDEN_FIELDS";
+const FIELD_CEILING_POLICY_VERSION: &str = "deployment-field-ceiling/v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct VisibilityKey {
@@ -17,6 +21,80 @@ struct VisibilityKey {
     owner_module_id: ModuleId,
     record_type: RecordType,
     record_id: Option<RecordId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct FieldCeilingKey {
+    capability_id: CapabilityId,
+    owner_module_id: ModuleId,
+    record_type: RecordType,
+}
+
+#[derive(Debug, Clone, Default)]
+struct FieldVisibilityCeiling {
+    hidden_fields: BTreeMap<FieldCeilingKey, BTreeSet<String>>,
+}
+
+impl FieldVisibilityCeiling {
+    fn from_environment() -> Result<Self, QueryVisibilityStoreError> {
+        Self::parse(env::var(HIDDEN_FIELDS_ENV).ok().as_deref())
+    }
+
+    fn parse(value: Option<&str>) -> Result<Self, QueryVisibilityStoreError> {
+        let Some(value) = value else {
+            return Ok(Self::default());
+        };
+        let mut hidden_fields = BTreeMap::<FieldCeilingKey, BTreeSet<String>>::new();
+        for entry in value
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+        {
+            let mut parts = entry.split('|').map(str::trim);
+            let capability_id = parts.next().ok_or_else(invalid_field_ceiling)?;
+            let owner_module_id = parts.next().ok_or_else(invalid_field_ceiling)?;
+            let record_type = parts.next().ok_or_else(invalid_field_ceiling)?;
+            let field = parts.next().ok_or_else(invalid_field_ceiling)?;
+            if parts.next().is_some() || field.is_empty() || field.chars().any(char::is_control) {
+                return Err(invalid_field_ceiling());
+            }
+            let key = FieldCeilingKey {
+                capability_id: CapabilityId::try_new(capability_id)
+                    .map_err(|_| invalid_field_ceiling())?,
+                owner_module_id: ModuleId::try_new(owner_module_id)
+                    .map_err(|_| invalid_field_ceiling())?,
+                record_type: RecordType::try_new(record_type)
+                    .map_err(|_| invalid_field_ceiling())?,
+            };
+            hidden_fields
+                .entry(key)
+                .or_default()
+                .insert(field.to_owned());
+        }
+        Ok(Self { hidden_fields })
+    }
+
+    fn apply(&self, grant: &mut QueryVisibilityGrant) -> bool {
+        let key = FieldCeilingKey {
+            capability_id: grant.capability_id.clone(),
+            owner_module_id: grant.owner_module_id.clone(),
+            record_type: grant.record_type.clone(),
+        };
+        let Some(hidden_fields) = self.hidden_fields.get(&key) else {
+            return false;
+        };
+        let previous_len = grant.allowed_fields.len();
+        grant
+            .allowed_fields
+            .retain(|field| !hidden_fields.contains(field));
+        grant.allowed_fields.len() != previous_len
+    }
+}
+
+fn invalid_field_ceiling() -> QueryVisibilityStoreError {
+    QueryVisibilityStoreError::InvalidConfiguration(
+        "query hidden-field entries must be capability|owner|record_type|field",
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +149,7 @@ impl QueryVisibilityGrant {
 
 #[derive(Debug)]
 pub enum QueryVisibilityStoreError {
+    InvalidConfiguration(&'static str),
     InvalidGrant(&'static str),
     Poisoned,
 }
@@ -78,7 +157,9 @@ pub enum QueryVisibilityStoreError {
 impl fmt::Display for QueryVisibilityStoreError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidGrant(message) => formatter.write_str(message),
+            Self::InvalidConfiguration(message) | Self::InvalidGrant(message) => {
+                formatter.write_str(message)
+            }
             Self::Poisoned => formatter.write_str("query visibility store lock is poisoned"),
         }
     }
@@ -92,14 +173,45 @@ struct QueryVisibilityState {
     grants: BTreeMap<VisibilityKey, QueryVisibilityGrant>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct LiveQueryVisibilityStore {
     state: Arc<RwLock<QueryVisibilityState>>,
+    field_ceiling: Arc<FieldVisibilityCeiling>,
+    configuration_valid: bool,
+}
+
+impl Default for LiveQueryVisibilityStore {
+    fn default() -> Self {
+        match FieldVisibilityCeiling::from_environment() {
+            Ok(field_ceiling) => Self {
+                state: Arc::new(RwLock::new(QueryVisibilityState::default())),
+                field_ceiling: Arc::new(field_ceiling),
+                configuration_valid: true,
+            },
+            Err(_) => Self {
+                state: Arc::new(RwLock::new(QueryVisibilityState::default())),
+                field_ceiling: Arc::new(FieldVisibilityCeiling::default()),
+                configuration_valid: false,
+            },
+        }
+    }
 }
 
 impl LiveQueryVisibilityStore {
-    pub fn upsert(&self, grant: QueryVisibilityGrant) -> Result<u64, QueryVisibilityStoreError> {
+    pub fn upsert(
+        &self,
+        mut grant: QueryVisibilityGrant,
+    ) -> Result<u64, QueryVisibilityStoreError> {
+        if !self.configuration_valid {
+            return Err(QueryVisibilityStoreError::InvalidConfiguration(
+                "query visibility deployment configuration is invalid",
+            ));
+        }
         grant.validate()?;
+        if self.field_ceiling.apply(&mut grant) {
+            grant.policy_version =
+                format!("{}+{FIELD_CEILING_POLICY_VERSION}", grant.policy_version);
+        }
         let mut state = self
             .state
             .write()
@@ -119,6 +231,15 @@ impl LiveQueryVisibilityStore {
             state.revision = state.revision.saturating_add(1);
         }
         Ok(removed)
+    }
+
+    #[cfg(test)]
+    fn with_field_ceiling(field_ceiling: FieldVisibilityCeiling) -> Self {
+        Self {
+            state: Arc::new(RwLock::new(QueryVisibilityState::default())),
+            field_ceiling: Arc::new(field_ceiling),
+            configuration_valid: true,
+        }
     }
 }
 
@@ -247,6 +368,47 @@ mod tests {
             .unwrap();
         assert!(fallback.resource_visible);
         assert!(!fallback.allows_field("amount"));
+    }
+
+    #[tokio::test]
+    async fn deployment_ceiling_can_hide_fields_without_hiding_the_resource() {
+        let ceiling =
+            FieldVisibilityCeiling::parse(Some("sales.deal.get|crm.sales|sales.deal|amount"))
+                .unwrap();
+        let store = LiveQueryVisibilityStore::with_field_ceiling(ceiling);
+        store
+            .upsert(grant(
+                None,
+                BTreeSet::from(["name".to_owned(), "amount".to_owned()]),
+            ))
+            .unwrap();
+        let authorizer = LiveQueryVisibilityAuthorizer::new(store, Arc::new(FixedClock::new(100)));
+        let decision = authorizer
+            .authorize_visibility(&request(), &resource("deal-1"))
+            .await
+            .unwrap();
+        assert!(decision.resource_visible);
+        assert!(decision.allows_field("name"));
+        assert!(!decision.allows_field("amount"));
+        assert!(
+            decision
+                .policy_version
+                .contains(FIELD_CEILING_POLICY_VERSION)
+        );
+    }
+
+    #[test]
+    fn hidden_field_configuration_is_explicit_and_strict() {
+        assert!(FieldVisibilityCeiling::parse(Some("missing-separators")).is_err());
+        assert!(
+            FieldVisibilityCeiling::parse(Some("sales.deal.get|crm.sales|sales.deal|")).is_err()
+        );
+        assert!(
+            FieldVisibilityCeiling::parse(Some(
+                "sales.deal.get|crm.sales|sales.deal|amount|unexpected"
+            ))
+            .is_err()
+        );
     }
 
     fn grant(record_id: Option<&str>, allowed_fields: BTreeSet<String>) -> QueryVisibilityGrant {

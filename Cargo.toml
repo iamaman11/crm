@@ -52,6 +52,9 @@ members = [
   "crates/crm-customer-data-operations-query-adapter",
   "crates/crm-customer-data-operations-execution-composition",
   "crates/crm-customer-data-operations-source-composition",
+  "crates/crm-data-quality-capability-adapter",
+  "crates/crm-data-quality-query-adapter",
+  "crates/crm-data-quality-source-composition",
   "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
   "crates/crm-sales-activities-link-contract-adapter",
@@ -66,6 +69,7 @@ members = [
   "modules/crm-consents",
   "modules/crm-identity-resolution",
   "modules/crm-customer-data-operations",
+  "modules/crm-data-quality",
   "services/crm-api",
 ]
 

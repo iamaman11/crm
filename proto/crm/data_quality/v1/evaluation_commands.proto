@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/data_quality/v1/completeness.proto";
+import "crm/data_quality/v1/evaluation_types.proto";
+import "crm/data_quality/v1/reference.proto";
+
+message RequestPartyEvaluationRequest {
+  PartyEvaluationJobRef evaluation_job_ref = 1;
+  crm.customer.v1.PartyRef party_ref = 2;
+  PartyRuleSetVersionRef rule_set_version_ref = 3;
+  PartyCompletenessProfileVersionRef completeness_profile_version_ref = 4;
+}
+
+message RequestPartyEvaluationResponse {
+  PartyEvaluationJob evaluation_job = 1;
+}
+
+message GetPartyEvaluationJobRequest {
+  PartyEvaluationJobRef evaluation_job_ref = 1;
+}
+
+message GetPartyEvaluationJobResponse {
+  PartyEvaluationJob evaluation_job = 1;
+}
+
+message PartyEvaluationRequestedEvent {
+  PartyEvaluationJob evaluation_job = 1;
+}
+
+message PartyEvaluationCompletedEvent {
+  PartyEvaluationJob evaluation_job = 1;
+}

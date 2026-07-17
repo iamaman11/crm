@@ -7,9 +7,12 @@ use crm_module_sdk::{
 };
 use crm_query_runtime::{QueryAuthorizer, QueryRequest};
 use std::collections::BTreeMap;
+use std::env;
 use std::error::Error;
 use std::fmt;
 use std::sync::{Arc, RwLock};
+
+const DENIED_CAPABILITIES_ENV: &str = "CRM_AUTHORIZATION_DENIED_CAPABILITIES";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct AuthorizationKey {
@@ -56,6 +59,7 @@ impl AuthorizationGrant {
 
 #[derive(Debug)]
 pub enum AuthorizationStoreError {
+    InvalidConfiguration(String),
     InvalidGrant(&'static str),
     Poisoned,
 }
@@ -63,6 +67,7 @@ pub enum AuthorizationStoreError {
 impl fmt::Display for AuthorizationStoreError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidConfiguration(message) => formatter.write_str(message),
             Self::InvalidGrant(message) => formatter.write_str(message),
             Self::Poisoned => formatter.write_str("authorization store lock is poisoned"),
         }
@@ -85,6 +90,9 @@ pub struct LiveAuthorizationStore {
 impl LiveAuthorizationStore {
     pub fn upsert(&self, grant: AuthorizationGrant) -> Result<u64, AuthorizationStoreError> {
         grant.validate()?;
+        if deployment_denies_capability(&grant.capability_id)? {
+            return self.revision();
+        }
         let mut state = self
             .state
             .write()
@@ -124,6 +132,42 @@ impl LiveAuthorizationStore {
             .map(|state| state.revision)
             .map_err(|_| AuthorizationStoreError::Poisoned)
     }
+}
+
+fn deployment_denies_capability(
+    capability_id: &CapabilityId,
+) -> Result<bool, AuthorizationStoreError> {
+    match env::var(DENIED_CAPABILITIES_ENV) {
+        Ok(value) => deployment_denies_capability_from_value(Some(&value), capability_id),
+        Err(env::VarError::NotPresent) => Ok(false),
+        Err(env::VarError::NotUnicode(_)) => Err(AuthorizationStoreError::InvalidConfiguration(
+            format!("{DENIED_CAPABILITIES_ENV} must be valid UTF-8"),
+        )),
+    }
+}
+
+fn deployment_denies_capability_from_value(
+    value: Option<&str>,
+    capability_id: &CapabilityId,
+) -> Result<bool, AuthorizationStoreError> {
+    let Some(value) = value else {
+        return Ok(false);
+    };
+    for entry in value
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+    {
+        let denied = CapabilityId::try_new(entry).map_err(|error| {
+            AuthorizationStoreError::InvalidConfiguration(format!(
+                "{DENIED_CAPABILITIES_ENV} contains an invalid capability ID: {error}"
+            ))
+        })?;
+        if &denied == capability_id {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[derive(Clone)]
@@ -251,6 +295,32 @@ mod tests {
         IdempotencyKey, ModuleExecutionContext, PayloadEncoding, RequestId, RetentionPolicyId,
         SchemaId, SchemaVersion, TraceId, TypedPayload,
     };
+
+    #[test]
+    fn deployment_ceiling_parses_exact_capability_ids() {
+        let capability_id = CapabilityId::try_new("crm.sales.deal.get").unwrap();
+        assert!(
+            deployment_denies_capability_from_value(
+                Some("crm.sales.deal.create, crm.sales.deal.get"),
+                &capability_id,
+            )
+            .unwrap()
+        );
+        assert!(
+            !deployment_denies_capability_from_value(
+                Some("crm.sales.deal.create"),
+                &capability_id,
+            )
+            .unwrap()
+        );
+        assert!(
+            deployment_denies_capability_from_value(
+                Some("invalid\u{1}capability"),
+                &capability_id,
+            )
+            .is_err()
+        );
+    }
 
     #[tokio::test]
     async fn revocation_is_visible_to_the_next_live_decision() {

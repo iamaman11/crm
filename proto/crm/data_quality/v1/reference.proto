@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+message PartyRuleSetVersionRef {
+  string rule_set_version_id = 1;
+}
+
+message PartyRuleOutcomeRef {
+  string rule_outcome_id = 1;
+}
+
+message PartyCompletenessResultRef {
+  string completeness_result_id = 1;
+}

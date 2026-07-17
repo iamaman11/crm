@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+enum QualitySeverity {
+  QUALITY_SEVERITY_UNSPECIFIED = 0;
+  QUALITY_SEVERITY_INFO = 1;
+  QUALITY_SEVERITY_WARNING = 2;
+  QUALITY_SEVERITY_ERROR = 3;
+  QUALITY_SEVERITY_CRITICAL = 4;
+}
+
+enum PartyQualityEvaluatorSemanticVersion {
+  PARTY_QUALITY_EVALUATOR_SEMANTIC_VERSION_UNSPECIFIED = 0;
+  PARTY_QUALITY_EVALUATOR_SEMANTIC_VERSION_V1 = 1;
+}
+
+message PartyDisplayNameMinUtf8BytesEvaluator {
+  uint32 minimum_utf8_bytes = 1;
+}
+
+message PartyDisplayNamePlaceholderExactAsciiCasefoldEvaluator {
+  repeated string placeholder_tokens = 1;
+}
+
+message PartyQualityRule {
+  string rule_key = 1;
+  QualitySeverity severity = 2;
+  oneof evaluator {
+    PartyDisplayNameMinUtf8BytesEvaluator display_name_min_utf8_bytes = 3;
+    PartyDisplayNamePlaceholderExactAsciiCasefoldEvaluator display_name_placeholder_exact_ascii_casefold = 4;
+  }
+  string title = 5;
+  string remediation_guidance = 6;
+}

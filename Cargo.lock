@@ -260,9 +260,14 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-360-composition",
+ "crm-data-quality",
+ "crm-data-quality-capability-adapter",
+ "crm-data-quality-source-composition",
  "crm-module-sdk",
+ "crm-parties-query-adapter",
  "crm-party-relationships-projection",
  "crm-proto-contracts",
+ "crm-query-runtime",
  "crm-sales-activities-capability-composition",
  "prost",
  "reqwest",
@@ -280,6 +285,7 @@ dependencies = [
  "axum",
  "crm-capability-adapters",
  "crm-capability-ingress",
+ "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-consents-capability-adapter",
  "crm-consents-capability-composition",
@@ -296,6 +302,9 @@ dependencies = [
  "crm-customer-data-operations-execution-composition",
  "crm-customer-data-operations-query-adapter",
  "crm-customer-data-operations-source-composition",
+ "crm-data-quality-capability-adapter",
+ "crm-data-quality-query-adapter",
+ "crm-data-quality-source-composition",
  "crm-global-search-composition",
  "crm-identity-resolution-capability-adapter",
  "crm-identity-resolution-capability-composition",
@@ -311,6 +320,7 @@ dependencies = [
  "crm-party-relationships-capability-adapter",
  "crm-party-relationships-projection",
  "crm-party-relationships-query-adapter",
+ "crm-proto-contracts",
  "crm-query-runtime",
  "crm-sales-activities-capability-composition",
  "crm-sales-activities-link",
@@ -688,6 +698,62 @@ dependencies = [
  "crm-customer-data-operations-capability-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
+]
+
+[[package]]
+name = "crm-data-quality"
+version = "0.1.0"
+dependencies = [
+ "crm-module-sdk",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-data-quality-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-data-quality",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
+]
+
+[[package]]
+name = "crm-data-quality-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-data-quality",
+ "crm-data-quality-capability-adapter",
+ "crm-module-sdk",
+ "crm-parties-query-adapter",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
+]
+
+[[package]]
+name = "crm-data-quality-source-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-adapters",
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-data-quality",
+ "crm-data-quality-capability-adapter",
+ "crm-module-sdk",
+ "crm-parties-query-adapter",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
 ]
 
 [[package]]
@@ -2658,9 +2724,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.52.3"
+version = "1.52.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
+checksum = "317fafbbe3f02fc663dad00ea6186197de963cd4190e86a26d8d0fae095539af"
 dependencies = [
  "bytes",
  "libc",

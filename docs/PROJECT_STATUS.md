@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-15
+Status date: 2026-07-17
 
 This document is the concise human-readable status page. It is not the normative roadmap.
 
@@ -15,7 +15,7 @@ Authoritative references:
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is the active expert owner-domain program. Phase 8A.8 is merged and complete. Phase 8A.9 is Ready and is the next customer-master production packet.**
+**Phases 0.1–7 are complete. Phase 8A is the active expert owner-domain program. Phase 8A.8 is merged and complete. Phase 8A.9 is implemented in draft PR #132 and is in Gate review.**
 
 Current Phase 8A execution baseline:
 
@@ -32,34 +32,44 @@ Current Phase 8A execution baseline:
 - **8A.6 — Complete:** approval-required reversible merge/unmerge, immutable lineage, survivorship provenance and canonical Party resolution (#116 / PR #119; merge `d5cb4502ad0c49158e0789d8749dc09160da7895`).
 - **8A.7 — Complete:** governed immutable source artifacts, server-side import parsing/validation, resumable Party import execution, retry recovery and crash/restart process proof (#120 / PR #121; merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`).
 - **8A.8 — Complete:** governed Party export jobs, immutable selection/manifests, deterministic artifacts, exact reconciliation, both execution crash-window recoveries and live-authorized audited artifact disclosure (#123 / PR #130; merge `0e7f9889362533446cc65d95dcf7969a60086a57`).
-- **8A.9 — Ready:** Customer Data Quality Rules, Completeness and Stewardship (#124).
+- **8A.9 — Gate review:** Customer Data Quality Rules, Completeness and Stewardship (#124 / draft PR #132).
 - **8A.10 — Planned:** Governed Customer Enrichment and Provenance (#125).
 - **8A.11 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold (#126).
 
 The active dependency lane is:
 
-`8A.9 -> 8A.10 -> 8A.11 -> Phase 8A closure -> 8B`
+`8A.9 merge -> 8A.10 -> 8A.11 -> Phase 8A closure -> 8B`
 
-A later packet may have architecture preparation, but it is not the active production merge target until its prerequisite is merged and it is verified against the accepted baseline.
+A later packet may have architecture preparation, but it is not the active production merge target until its prerequisite is merged and verified against the accepted baseline.
 
-## Ready packet — Phase 8A.9
+## Gate-review packet — Phase 8A.9
 
-Issue #124 is the next customer-master production packet. It becomes **In progress** only when its implementation branch/draft PR is created from the synchronized post-8A.8 `main` baseline.
+Issue #124 and draft PR #132 implement the Party-focused v1 Data Quality production packet through a distinct `crm.data-quality` owner/coordinator.
 
-The intended ownership boundary is a distinct `crm.data-quality` owner/coordinator for long-lived quality-governance state:
+Delivered owner state and process behavior include:
 
-- immutable/versioned quality rule-set and completeness-profile definitions;
-- deterministic evaluation-run/checkpoint evidence where asynchronous evaluation is required;
-- quality findings bound to exact authoritative owner/resource/resource-version evidence;
-- completeness results with exact component lineage and deterministic integer/fixed-point scoring;
-- stewardship case/queue assignment, triage and remediation-attempt evidence;
-- bounded safe diagnostics and reconciliation counters.
+- immutable/versioned rule-set and completeness-profile definitions;
+- bounded exact evaluator identities with deterministic evaluation and replay;
+- durable staged Party evidence bound to an exact authoritative Party resource version;
+- immutable rule outcomes and exact completeness component lineage;
+- deterministic logical findings and immutable observations;
+- open, acknowledged, waived, remediated and reopened finding lifecycle without deleting history;
+- deterministic integer completeness scoring;
+- restart-safe materialization and `STAGED -> COMPLETED` only after durable outcomes, findings, observations and completeness evidence exist.
 
-It does **not** own Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution values. Authoritative values remain with their owner modules. Data Quality reads them only through governed owner/query composition ports, and remediation may mutate owner state only by invoking an exact governed owner capability with normal authorization, optimistic concurrency, idempotency, approval and audit semantics.
+Delivered governed application surfaces include:
 
-The first production vertical slice should prove this architecture against canonical Party quality before broadening to additional customer-master owners. It must use a bounded declarative or exact built-in evaluator vocabulary and reject arbitrary SQL, user code, unbounded expressions, filesystem access and arbitrary network execution.
+- evaluation, finding and completeness-result reads;
+- finding lists with signed pagination bound to tenant, actor, capability/version, filter, sort and page size;
+- live authorization, field redaction and safe cross-tenant non-disclosure;
+- assign, acknowledge and waive mutations with optimistic finding-version and exact-current-observation preconditions;
+- governed Party display-name remediation through `parties.party.update@1.0.0`;
+- deterministic target idempotency, immutable remediation-attempt evidence and recovery from the target-success/outcome-missing crash window;
+- pass-driven reevaluation that transitions the current finding to `REMEDIATED` without rewriting historical truth.
 
-Required proof includes deterministic rule/version identity, exact source-version-bound findings, stale-version handling, deterministic reevaluation without duplicate logical current findings, historical lifecycle retention, permission-aware disclosure, exact completeness reconciliation, stewardship concurrency, governed remediation, restart-safe processing, FORCE RLS, migration rollback/reapply and fresh-PostgreSQL real `crm-api` acceptance.
+The functional source-authored candidate `29381433c992716f16ef3098f6acd73cfa2d2298` passed all 15 applicable workflows unchanged, including Rust architecture/lockfile/rustfmt/Clippy/workspace tests and eight fresh-PostgreSQL Data Quality process scenarios covering signed pagination, authorization denial, redaction, cross-tenant behavior, stewardship, FORCE RLS and remediation crash recovery.
+
+Documentation synchronization invalidates that exact-SHA evidence. The packet remains in **Gate review** until the synchronized source-authored head passes the same final gate. It must not be represented as **Complete** until PR #132 is merged.
 
 ## Implemented platform and product foundations
 
@@ -83,7 +93,7 @@ The repository contains a production-composed modular CRM platform foundation wi
 
 ## Implemented customer-master foundations
 
-Merged `main` now includes production paths for:
+Merged `main` contains production paths through Phase 8A.8 for:
 
 - canonical Party identity create/update/get/list/search;
 - Customer Account lifecycle and typed Party associations;
@@ -106,13 +116,15 @@ Merged `main` now includes production paths for:
 - chunk-written/outcome-missing and artifact-finalized/completion-missing crash recovery;
 - live-authorized, retention-aware, integrity-verified and audited artifact disclosure.
 
+The Phase 8A.9 implementation exists on PR #132 but is not yet counted as merged production state.
+
 ## Product completeness reality
 
 The project is **not yet a complete universal CRM**.
 
 `CRM_CAPABILITY_COVERAGE.md` remains the product-scope guardrail. Major required capability families still include:
 
-- Phase 8A data quality, enrichment and privacy lifecycle;
+- Phase 8A enrichment and privacy lifecycle after the Data Quality packet merges;
 - Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts and Subscriptions;
 - broader Sales and Activities expert expansion;
 - communications and omnichannel;
@@ -148,11 +160,9 @@ See `DELIVERY_GOVERNANCE.md` for the normative control rules.
 
 ## Immediate next actions
 
-1. Merge the documentation/governance synchronization that records completed 8A.8 and the Ready 8A.9 baseline.
-2. Start #124 from that synchronized `main` baseline as the single active Phase 8A production packet.
-3. Freeze the first Party-focused v1 evaluator/rule vocabulary, deterministic rule/finding/completeness identities and stewardship/remediation semantics before publishing public contracts.
-4. Deliver the pure `crm.data-quality` owner model and strict deterministic persistence without direct cross-owner storage access.
-5. Compose governed Party reads, deterministic evaluation/reevaluation, permission-aware finding/completeness/stewardship queries and exact owner-capability remediation.
-6. Prove stale-version conflicts, restart/retry idempotency, bounded execution, tenant isolation, migration rollback/reapply and fresh-PostgreSQL real `crm-api` process acceptance.
-7. Reach one unchanged exact candidate SHA with every applicable workflow green before 8A.9 leaves Gate review.
-8. Continue sequentially through #125 and #126, close Phase 8A only after its full acceptance baseline is merged, then begin Phase 8B / #29.
+1. Finish synchronized `PROJECT_STATUS`, Phase 8 plan, module catalog, issue #124 and PR #132 evidence.
+2. Reach one unchanged source-authored exact-head candidate with all 15 applicable workflows green after the documentation synchronization.
+3. Confirm PR #132 remains mergeable with no unresolved review threads.
+4. Move PR #132 from draft to ready only after the final gate succeeds.
+5. Merge PR #132 before marking 8A.9 **Complete** or closing #124.
+6. Continue sequentially through #125 and #126, close Phase 8A only after its full acceptance baseline is merged, then begin Phase 8B / #29.

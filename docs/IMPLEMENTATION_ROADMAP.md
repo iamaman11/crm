@@ -112,7 +112,7 @@ Completed packets:
 
 Active and planned sequence:
 
-1. **8A.9 / #124 — Ready:** Customer Data Quality Rules, Completeness and Stewardship. This is the next customer-master production packet.
+1. **8A.9 / #124 — Gate review:** Customer Data Quality Rules, Completeness and Stewardship is implemented in draft PR #132. The Party-focused v1 packet has passed its functional unchanged-head gate and is awaiting synchronized documentation plus the final exact-head gate.
 2. **8A.10 / #125 — Planned:** Governed Customer Enrichment and Provenance.
 3. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
@@ -128,29 +128,31 @@ Phase 8A is complete only when the customer-master acceptance baseline covers:
 - privacy access/export/restriction/deletion/legal-hold interaction proof;
 - tenant isolation, migrations, compatibility, process acceptance and performance appropriate to the maturity claim.
 
-#### Ready 8A.9 contract boundary
+#### Gate-review 8A.9 delivered boundary
 
-The next packet introduces a distinct `crm.data-quality` owner/coordinator for long-lived quality-governance state. It may own immutable/versioned quality rule sets and completeness profiles, exact source-version-bound findings and completeness results, stewardship lifecycle/assignment evidence and bounded evaluation coordination evidence.
+The packet introduces a distinct `crm.data-quality` owner/coordinator for long-lived quality-governance state. It owns immutable/versioned quality rule sets and completeness profiles, exact source-version-bound outcomes/findings/observations/completeness results, stewardship lifecycle and assignment evidence, immutable remediation attempts and bounded evaluation coordination evidence.
 
-It must not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution values. Authoritative values are read only through governed owner/query composition ports, and remediation may change owner state only through an exact governed owner capability with normal authorization, optimistic concurrency, idempotency, approval and audit semantics.
+It does not own or copy authoritative mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution values. Authoritative Party values are read only through governed owner/query composition, and display-name remediation changes Party state only through the exact `parties.party.update@1.0.0` capability with live authorization, optimistic concurrency, deterministic idempotency and audit evidence.
 
-The 8A.9 production packet must prove:
+The 8A.9 gate-review packet proves:
 
 - immutable published rule/evaluator semantics and deterministic replay;
-- a bounded declarative or exact built-in evaluator vocabulary with no arbitrary SQL, user code, filesystem or arbitrary network execution;
-- exact owner/resource/resource-version evidence for every finding and completeness result;
+- a bounded exact evaluator vocabulary with no arbitrary SQL, user code, filesystem or arbitrary network execution;
+- exact owner/resource/resource-version evidence for every outcome, finding, observation and completeness result;
 - deterministic logical finding identity and reevaluation without duplicate current findings;
-- explicit historical lifecycle for current, acknowledged, remediated, waived and stale/superseded evidence without deleting evaluation history;
-- deterministic integer/fixed-point completeness scoring with exact component lineage and reconciliation;
-- permission-aware finding, completeness and stewardship disclosure;
-- stewardship assignment and remediation with optimistic concurrency;
+- explicit historical lifecycle for open, acknowledged, waived, remediated and reopened evidence without deleting evaluation history;
+- deterministic integer completeness scoring with exact component/outcome lineage and reconciliation;
+- permission-aware finding, completeness and stewardship disclosure with signed context-bound pagination;
+- stewardship assign, acknowledge and waive mutations with optimistic finding-version and exact-current-observation preconditions;
 - stale source-version/remediation conflict proof;
 - no direct cross-owner storage reads or writes;
+- governed Party display-name remediation with immutable attempt evidence and exact target replay after the target-success/outcome-missing crash window;
 - bounded scans, batches, payloads and per-tenant operational limits;
-- process restart/retry without duplicate findings, assignments or owner side effects;
-- migration clean apply, reverse rollback and reapply;
+- process restart/retry without duplicate findings, assignments, remediation attempts or Party side effects;
+- FORCE RLS, live authorization, field redaction and safe cross-tenant non-disclosure;
+- migration clean apply and the repository database gate;
 - fresh-PostgreSQL real `crm-api` process acceptance;
-- one unchanged exact final SHA with all applicable gates green.
+- one unchanged functional source-authored SHA with all 15 applicable workflows green before documentation synchronization.
 
 ### 8B — product catalog, pricing, CPQ and quote-to-revenue
 
@@ -204,17 +206,15 @@ Enterprise claims require automated and operational evidence, not configuration 
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Merge the documentation/governance synchronization that records completed 8A.8 and the Ready 8A.9 baseline.
-2. Start #124 from the synchronized post-8A.8 `main` baseline as the single active customer-master production packet.
-3. Freeze the first Party-focused v1 rule/evaluator vocabulary, deterministic rule/finding/completeness identities and stewardship/remediation boundaries before publishing public contracts.
-4. Deliver the pure `crm.data-quality` owner model, strict deterministic persistence and governed Party read/evaluation composition without direct cross-owner storage access.
-5. Prove deterministic reevaluation, stale-version handling, permission-aware disclosure, stewardship lifecycle, governed remediation and restart-safe process behavior on fresh PostgreSQL.
-6. Reach one unchanged exact-head final gate across every applicable workflow before 8A.9 leaves Gate review.
-7. Deliver #125 and #126 in dependency order.
-8. Close Phase 8A only after its full merged acceptance baseline is proven.
-9. Begin Phase 8B / #29 from the completed customer-master baseline.
-10. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
-11. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
+1. Finish synchronized roadmap, status, Phase 8 plan, module catalog, issue and PR evidence for #124 / PR #132.
+2. Reach one unchanged source-authored exact-head gate across all 15 applicable workflows after the documentation synchronization.
+3. Move PR #132 from draft to ready only after that final gate is green and no review threads remain.
+4. Merge #132 before representing 8A.9 as **Complete** in `main` documentation or closing #124.
+5. Deliver #125 and #126 in dependency order.
+6. Close Phase 8A only after its full merged acceptance baseline is proven.
+7. Begin Phase 8B / #29 from the completed customer-master baseline.
+8. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
+9. Begin Phase 9 and Phase 10 only through their governed boundaries; neither may bypass domain ownership or platform invariants.
 
 ## 11. Documentation hygiene
 

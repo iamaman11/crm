@@ -26,7 +26,7 @@ The following do not count as business modules:
 - Protobuf packages;
 - SQL migrations;
 - generic search/projection infrastructure;
-- unmerged module skeletons.
+- unmerged module implementations.
 
 ## 2. Readiness states
 
@@ -121,19 +121,20 @@ It does not own Party, Account, Contact Point, Party Relationship, Consent or Id
 
 Owns only rebuildable read composition and permission-aware assembly.
 
-### Planned `crm.data-quality`
+### Gate-review `crm.data-quality`
 
-Phase 8A.9 / #124 plans a distinct owner/coordinator for long-lived quality-governance state. It is **not counted as implemented until merged `main` contains a qualifying runtime module**.
+Phase 8A.9 / #124 and draft PR #132 implement a distinct owner/coordinator for long-lived quality-governance state. The implementation has a qualifying production vertical slice and passed its functional gate, but it is **not counted as implemented until PR #132 is merged to `main`**.
 
-Intended ownership:
+Delivered ownership on the active PR:
 
-- immutable/versioned quality rule sets and completeness profiles;
-- exact source-version-bound quality findings and completeness results;
-- deterministic evaluation coordination evidence where required;
-- stewardship case/queue assignment, triage and remediation-attempt evidence;
-- bounded safe diagnostics and reconciliation counters.
+- immutable/versioned Party quality rule sets and completeness profiles;
+- deterministic evaluation coordination and exact staged Party evidence;
+- immutable rule outcomes, findings, observations and completeness results;
+- stewardship assignment, acknowledgement and waiver state;
+- immutable governed Party-remediation attempt evidence;
+- bounded diagnostics, reconciliation and restart/retry evidence.
 
-It will not own authoritative customer values. Authoritative values remain with their existing owner modules; quality evaluation reads them through governed boundaries and remediation re-enters exact owner capabilities.
+It does not own authoritative customer values. Authoritative Party values remain with `crm.parties`; quality evaluation reads them through governed boundaries and remediation re-enters the exact `parties.party.update@1.0.0` owner capability.
 
 ## 7. Phase 8A packet accounting
 
@@ -148,41 +149,38 @@ Completed:
 - 8A.7 — Customer Import Jobs and Resumable Execution through PR #121 / merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
 - 8A.8 — Customer Export Jobs, Artifacts and Reconciliation Evidence through PR #130 / merge `0e7f9889362533446cc65d95dcf7969a60086a57`.
 
-Ready:
+Gate review:
 
-- 8A.9 / #124 — Customer Data Quality Rules, Completeness and Stewardship.
+- 8A.9 / #124 / draft PR #132 — Customer Data Quality Rules, Completeness and Stewardship.
 
 Planned:
 
 - 8A.10 / #125 — Governed Customer Enrichment and Provenance.
 - 8A.11 / #126 — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
-## 8. Planned `crm.data-quality` owner — Phase 8A.9
+## 8. `crm.data-quality` merge accounting — Phase 8A.9
 
-The next production packet introduces a dedicated quality-governance module only because the state has a distinct long-lived ownership boundary that does not fit customer import/export jobs or any authoritative customer-value owner.
+The implementation qualifies for a vertical-slice readiness assessment only after merge because it includes:
 
-Allowed ownership:
+- immutable rule-set and completeness-profile publication;
+- deterministic exact-version Party evaluation and restart-safe materialization;
+- exact outcome/finding/observation/completeness lineage;
+- permission-aware reads and signed pagination;
+- stewardship assign, acknowledge and waive mutations;
+- governed Party display-name remediation with deterministic idempotency and crash recovery;
+- FORCE RLS, authorization, redaction, cross-tenant and fresh-PostgreSQL process proof.
 
-- immutable/versioned rule-set and completeness-profile definitions;
-- deterministic evaluation-run/checkpoint evidence where needed;
-- exact rule/source-version-bound findings;
-- deterministic completeness results and component lineage;
-- stewardship assignment, triage and remediation-attempt evidence;
-- bounded safe diagnostics and reconciliation counters.
-
-Required boundaries:
+Required boundaries remain:
 
 - no ownership of mutable Party, Account, Contact Point, Party Relationship, Consent or Identity Resolution values;
-- no generic arbitrary-code, SQL, filesystem or arbitrary-network rule execution surface;
+- no arbitrary-code, SQL, filesystem or arbitrary-network rule execution surface;
 - no direct cross-module storage reads or writes;
-- published evaluator/rule versions are immutable;
-- every finding/completeness result binds exact authoritative resource-version evidence;
-- stale findings cannot silently remain current after owner-version changes;
-- remediation invokes only exact governed owner capabilities;
-- permission-aware disclosure, FORCE RLS, tenant isolation and bounded execution are mandatory;
-- process restart/retry cannot duplicate logical findings, assignments or owner side effects.
+- immutable published evaluator/rule versions;
+- exact authoritative resource-version evidence;
+- remediation only through exact governed owner capabilities;
+- process restart/retry without duplicate findings, assignments, attempts or owner side effects.
 
-The module count remains unchanged until this planned module is actually merged with the required production vertical slice.
+The counted authoritative/coordination module total remains **9**, and the counted business-module total remains **10**, until PR #132 is merged.
 
 ## 9. Mandatory commercial lifecycle owner domains
 
@@ -215,7 +213,7 @@ Tracked by Phase 8 / #11 and `CRM_CAPABILITY_COVERAGE.md`:
 - projects and configurable work management;
 - documents and e-signature;
 - analytics, reporting and performance management;
-- data quality, enrichment and privacy lifecycle;
+- enrichment and privacy lifecycle after the Data Quality packet merges;
 - workflow, approvals and human tasks;
 - collaboration and personal productivity.
 

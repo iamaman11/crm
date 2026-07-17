@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+import "crm/data_quality/v1/quality_types.proto";
+import "crm/data_quality/v1/reference.proto";
+
+message PartyRuleSetDefinition {
+  PartyQualityEvaluatorSemanticVersion evaluator_semantic_version = 1;
+  repeated PartyQualityRule rules = 2;
+}
+
+message PartyRuleSetVersion {
+  PartyRuleSetVersionRef rule_set_version_ref = 1;
+  PartyRuleSetDefinition definition = 2;
+  reserved 3, 4;
+}
+
+message PublishPartyRuleSetVersionRequest {
+  PartyRuleSetDefinition definition = 1;
+}
+
+message PublishPartyRuleSetVersionResponse {
+  PartyRuleSetVersion rule_set_version = 1;
+}
+
+message GetPartyRuleSetVersionRequest {
+  PartyRuleSetVersionRef rule_set_version_ref = 1;
+}
+
+message GetPartyRuleSetVersionResponse {
+  PartyRuleSetVersion rule_set_version = 1;
+}
+
+message PartyRuleSetVersionPublishedEvent {
+  PartyRuleSetVersion rule_set_version = 1;
+}
