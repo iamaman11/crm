@@ -5,8 +5,9 @@ use crm_data_quality_capability_adapter::{
     ACKNOWLEDGE_FINDING_CAPABILITY, ASSIGN_FINDING_CAPABILITY,
     REMEDIATE_PARTY_DISPLAY_NAME_CAPABILITY, WAIVE_FINDING_CAPABILITY,
 };
-use crm_parties_capability_adapter::UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY;
 use sqlx::PgPool;
+
+const PARTY_UPDATE_CAPABILITY: &str = "parties.party.update";
 
 pub async fn register_evaluation_capabilities(admin: &PgPool) {
     register_data_quality(
