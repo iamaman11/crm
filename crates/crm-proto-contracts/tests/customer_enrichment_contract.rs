@@ -1,6 +1,4 @@
-use crm_proto_contracts::crm::{
-    customer::v1 as customer, customer_enrichment::v1 as enrichment,
-};
+use crm_proto_contracts::crm::{customer::v1 as customer, customer_enrichment::v1 as enrichment};
 use crm_proto_contracts::message_descriptor_hash;
 use prost::Message;
 
