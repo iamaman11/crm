@@ -1,0 +1,7 @@
+-        assert!(task_fields().contains("subject"));
+-        assert!(task_fields().contains("status"));
+-    }
+-
+     #[test]
+     fn expiry_is_strictly_after_now() {
+         assert!(expiry(100).unwrap() > 100);
