@@ -31,11 +31,28 @@ jobs:
             echo "apply=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          {
+            echo "expected: 165b256454391162ca12b51278265e2d51d0c7dd739c9bb2ee8c6e7dba7c4d1e"
+            echo "actual:   $(sha256sum .agent/native-composition-clippy-fix.patch | cut -d' ' -f1)"
+            echo
+            echo "git apply --check:"
+            git apply --check .agent/native-composition-clippy-fix.patch
+          } >/tmp/native-composition-fix-diagnostics.txt 2>&1 || {
+            cat /tmp/native-composition-fix-diagnostics.txt
+            exit 1
+          }
           echo "165b256454391162ca12b51278265e2d51d0c7dd739c9bb2ee8c6e7dba7c4d1e  .agent/native-composition-clippy-fix.patch" | sha256sum --check
-          git apply --check .agent/native-composition-clippy-fix.patch
           git apply --index .agent/native-composition-clippy-fix.patch
           git rm .agent/native-composition-clippy-fix.patch .github/workflows/agent-fix.yml
           echo "apply=true" >> "$GITHUB_OUTPUT"
+      - name: Upload fix diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-composition-fix-diagnostics-${{ github.sha }}
+          path: /tmp/native-composition-fix-diagnostics.txt
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Publish verified fix
         if: steps.fix.outputs.apply == 'true'
         env:
