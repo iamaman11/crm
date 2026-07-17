@@ -1,50 +1,165 @@
 schema_version: crm.module/v1
 module_id: crm.data-quality
-version: "0.1.0"
+version: 0.1.0
 display_name: CRM Data Quality
 description: Governed versioned quality rules, exact source-version findings, deterministic completeness evidence and stewardship lifecycle without owning customer-master values.
-
 owner:
   team: customer-platform
-  contact: "crm-owner@example.com"
+  contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: modules/crm-data-quality
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required:
     - module_id: crm.parties
-      version_range: ">=0.3.0, <1.0.0"
+      version_range: '>=0.3.0, <1.0.0'
   optional: []
   conflicts: []
-
 provides:
   capabilities:
     - id: data_quality.party.rule_set.publish
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityDefinitionService.PublishPartyRuleSetVersion
+        request: crm.data_quality.v1.PublishPartyRuleSetVersionRequest
+        response: crm.data_quality.v1.PublishPartyRuleSetVersionResponse
     - id: data_quality.party.rule_set.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityDefinitionService.GetPartyRuleSetVersion
+        request: crm.data_quality.v1.GetPartyRuleSetVersionRequest
+        response: crm.data_quality.v1.GetPartyRuleSetVersionResponse
     - id: data_quality.party.completeness_profile.publish
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityDefinitionService.PublishPartyCompletenessProfileVersion
+        request: crm.data_quality.v1.PublishPartyCompletenessProfileVersionRequest
+        response: crm.data_quality.v1.PublishPartyCompletenessProfileVersionResponse
     - id: data_quality.party.completeness_profile.get
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityDefinitionService.GetPartyCompletenessProfileVersion
+        request: crm.data_quality.v1.GetPartyCompletenessProfileVersionRequest
+        response: crm.data_quality.v1.GetPartyCompletenessProfileVersionResponse
     - id: data_quality.party.evaluation.request
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityEvaluationService.RequestPartyEvaluation
+        request: crm.data_quality.v1.RequestPartyEvaluationRequest
+        response: crm.data_quality.v1.RequestPartyEvaluationResponse
+    - id: data_quality.party.evaluation.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityEvaluationService.GetPartyEvaluationJob
+        request: crm.data_quality.v1.GetPartyEvaluationJobRequest
+        response: crm.data_quality.v1.GetPartyEvaluationJobResponse
+    - id: data_quality.party.completeness.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityEvaluationService.GetPartyCompletenessResult
+        request: crm.data_quality.v1.GetPartyCompletenessResultRequest
+        response: crm.data_quality.v1.GetPartyCompletenessResultResponse
+    - id: data_quality.finding.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityFindingService.GetDataQualityFinding
+        request: crm.data_quality.v1.GetDataQualityFindingRequest
+        response: crm.data_quality.v1.GetDataQualityFindingResponse
+    - id: data_quality.finding.list_by_party
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityFindingService.ListDataQualityFindingsByParty
+        request: crm.data_quality.v1.ListDataQualityFindingsByPartyRequest
+        response: crm.data_quality.v1.ListDataQualityFindingsByPartyResponse
+    - id: data_quality.finding.list_assigned
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityFindingService.ListAssignedDataQualityFindings
+        request: crm.data_quality.v1.ListAssignedDataQualityFindingsRequest
+        response: crm.data_quality.v1.ListAssignedDataQualityFindingsResponse
+    - id: data_quality.finding.assign
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityFindingService.AssignDataQualityFinding
+        request: crm.data_quality.v1.AssignDataQualityFindingRequest
+        response: crm.data_quality.v1.AssignDataQualityFindingResponse
+    - id: data_quality.finding.acknowledge
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityFindingService.AcknowledgeDataQualityFinding
+        request: crm.data_quality.v1.AcknowledgeDataQualityFindingRequest
+        response: crm.data_quality.v1.AcknowledgeDataQualityFindingResponse
+    - id: data_quality.finding.waive
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityFindingService.WaiveDataQualityFinding
+        request: crm.data_quality.v1.WaiveDataQualityFindingRequest
+        response: crm.data_quality.v1.WaiveDataQualityFindingResponse
+    - id: data_quality.party.display_name.remediate
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v1.DataQualityRemediationService.RemediatePartyDisplayName
+        request: crm.data_quality.v1.RemediatePartyDisplayNameRequest
+        response: crm.data_quality.v1.RemediatePartyDisplayNameResponse
   events:
     - id: data_quality.party.rule_set.published
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.data_quality.v1.PartyRuleSetVersionPublishedEvent
     - id: data_quality.party.completeness_profile.published
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.data_quality.v1.PartyCompletenessProfileVersionPublishedEvent
     - id: data_quality.party.evaluation.requested
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.data_quality.v1.PartyEvaluationRequestedEvent
     - id: data_quality.party.evaluation.staged
-      version: "1.0.0"
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.data_quality.v1.PartyEvaluationStagedEvent
+    - id: data_quality.party.evaluation.materialized
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.data_quality.v1.PartyEvaluationMaterializedEvent
+    - id: data_quality.finding.status_changed
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.data_quality.v1.DataQualityFindingStatusChangedEvent
+    - id: data_quality.finding.assignment_changed
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.data_quality.v1.DataQualityFindingAssignmentChangedEvent
+    - id: data_quality.party.remediation.completed
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.data_quality.v1.PartyDisplayNameRemediationCompletedEvent
   objects:
     - data_quality.party_rule_set_version
     - data_quality.party_completeness_profile_version
@@ -56,11 +171,9 @@ provides:
     - data_quality.party_completeness_result
     - data_quality.remediation_attempt
   ui_extensions: []
-
 consumes:
   capabilities: []
   events: []
-
 storage:
   record_types:
     - data_quality.party_rule_set_version
@@ -82,7 +195,6 @@ storage:
     - crm.data-quality.finding_observation
     - crm.data-quality.party_completeness_result
     - crm.data-quality.remediation_attempt
-
 security:
   data_classes:
     - internal
@@ -90,7 +202,6 @@ security:
     - personal
   network_egress: []
   secret_handles: []
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported

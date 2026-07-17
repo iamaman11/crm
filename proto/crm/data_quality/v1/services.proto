@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package crm.data_quality.v1;
+
+import "crm/data_quality/v1/completeness.proto";
+import "crm/data_quality/v1/completeness_result.proto";
+import "crm/data_quality/v1/evaluation_commands.proto";
+import "crm/data_quality/v1/finding_commands.proto";
+import "crm/data_quality/v1/remediation.proto";
+import "crm/data_quality/v1/rule_set.proto";
+
+// Public immutable definition publication and lookup surface.
+service DataQualityDefinitionService {
+  rpc PublishPartyRuleSetVersion(PublishPartyRuleSetVersionRequest) returns (PublishPartyRuleSetVersionResponse);
+  rpc GetPartyRuleSetVersion(GetPartyRuleSetVersionRequest) returns (GetPartyRuleSetVersionResponse);
+  rpc PublishPartyCompletenessProfileVersion(PublishPartyCompletenessProfileVersionRequest) returns (PublishPartyCompletenessProfileVersionResponse);
+  rpc GetPartyCompletenessProfileVersion(GetPartyCompletenessProfileVersionRequest) returns (GetPartyCompletenessProfileVersionResponse);
+}
+
+// Public evaluation lifecycle and derived completeness lookup surface.
+service DataQualityEvaluationService {
+  rpc RequestPartyEvaluation(RequestPartyEvaluationRequest) returns (RequestPartyEvaluationResponse);
+  rpc GetPartyEvaluationJob(GetPartyEvaluationJobRequest) returns (GetPartyEvaluationJobResponse);
+  rpc GetPartyCompletenessResult(GetPartyCompletenessResultRequest) returns (GetPartyCompletenessResultResponse);
+}
+
+// Public finding discovery and stewardship surface.
+service DataQualityFindingService {
+  rpc GetDataQualityFinding(GetDataQualityFindingRequest) returns (GetDataQualityFindingResponse);
+  rpc ListDataQualityFindingsByParty(ListDataQualityFindingsByPartyRequest) returns (ListDataQualityFindingsByPartyResponse);
+  rpc ListAssignedDataQualityFindings(ListAssignedDataQualityFindingsRequest) returns (ListAssignedDataQualityFindingsResponse);
+  rpc AssignDataQualityFinding(AssignDataQualityFindingRequest) returns (AssignDataQualityFindingResponse);
+  rpc AcknowledgeDataQualityFinding(AcknowledgeDataQualityFindingRequest) returns (AcknowledgeDataQualityFindingResponse);
+  rpc WaiveDataQualityFinding(WaiveDataQualityFindingRequest) returns (WaiveDataQualityFindingResponse);
+}
+
+// Public governed owner-capability remediation entrypoint.
+service DataQualityRemediationService {
+  rpc RemediatePartyDisplayName(RemediatePartyDisplayNameRequest) returns (RemediatePartyDisplayNameResponse);
+}

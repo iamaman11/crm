@@ -7,7 +7,9 @@
 /database/ @iamaman11
 /architecture-policy.json @iamaman11
 /scripts/check_architecture.py @iamaman11
-/scripts/validate_contract_bindings.py @iamaman11
+/scripts/contract_bindings.py @iamaman11
+/scripts/generate_contract_bindings.py @iamaman11
+/scripts/module_manifest_projection.py @iamaman11
 /scripts/validate_module_manifests.py @iamaman11
 /scripts/compile_module_manifest_ir.py @iamaman11
 /crates/crm-module-manifest/ @iamaman11

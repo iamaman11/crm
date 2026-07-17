@@ -1,60 +1,50 @@
 schema_version: crm.module/v1
 module_id: crm.sales-activities-link
-version: "0.1.0"
+version: 0.1.0
 display_name: CRM Sales Activities Link
 description: Optional link module that reacts to versioned Sales lifecycle events and invokes Activities capabilities without direct cross-module coupling.
-
 owner:
   team: integration-platform
   contact: crm-owner@example.com
   codeowners:
-    - "@iamaman11"
-
+    - '@iamaman11'
 runtime:
   kind: in_process
   entrypoint: modules/crm-sales-activities-link
-
 platform:
-  minimum_version: "0.1.0"
-
+  minimum_version: 0.1.0
 dependencies:
   required:
     - module_id: crm.sales
-      version_range: ">=0.2.0, <1.0.0"
+      version_range: '>=0.2.0, <1.0.0'
     - module_id: crm.activities
-      version_range: ">=0.1.0, <1.0.0"
+      version_range: '>=0.1.0, <1.0.0'
   optional: []
   conflicts: []
-
 provides:
   capabilities: []
   events: []
   objects: []
   ui_extensions: []
-
 consumes:
   capabilities:
     - id: activities.task.create
-      version: "1.0.0"
+      version: 1.0.0
   events:
     - id: sales.deal.stage_changed
-      version: "1.0.0"
-
+      version: 1.0.0
 storage:
   record_types: []
   private_state_namespaces:
     - crm.sales-activities-link
-
 security:
   data_classes:
     - internal
     - confidential
   network_egress: []
   secret_handles: []
-
 quotas:
   maximum_inflight_deliveries: 1000
-
 lifecycle:
   upgrade_policy: manual
   rollback_policy: supported

@@ -7,6 +7,7 @@ import argparse
 from pathlib import Path
 import sys
 
+from module_manifest_projection import runtime_manifest_projection
 from validate_module_manifests import (
     DEFAULT_SCHEMA,
     ROOT,
@@ -64,12 +65,13 @@ def main(argv: list[str] | None = None) -> int:
 
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    for path, manifest in entries:
-        module_id = manifest["module_id"]
+    for path, authoring_manifest in entries:
+        runtime_manifest = runtime_manifest_projection(authoring_manifest)
+        module_id = runtime_manifest["module_id"]
         json_path = output_dir / f"{module_id}.json"
         digest_path = output_dir / f"{module_id}.sha256"
-        json_path.write_bytes(canonical_json_bytes(manifest))
-        digest_path.write_text(canonical_digest(manifest) + "\n", encoding="ascii")
+        json_path.write_bytes(canonical_json_bytes(runtime_manifest))
+        digest_path.write_text(canonical_digest(runtime_manifest) + "\n", encoding="ascii")
         relative_source = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
         print(f"WROTE {json_path} and {digest_path} from {relative_source}")
 

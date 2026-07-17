@@ -7,7 +7,11 @@ on:
       - "contracts/**"
       - "buf.yaml"
       - "buf.gen.yaml"
-      - "scripts/validate_contract_bindings.py"
+      - "schemas/module.schema.json"
+      - "scripts/contract_bindings.py"
+      - "scripts/generate_contract_bindings.py"
+      - "scripts/validate_module_manifests.py"
+      - "tests/test_contract_bindings.py"
       - "requirements-dev.txt"
       - "modules/*/module.yaml"
       - ".github/workflows/contracts.yml"
@@ -17,7 +21,11 @@ on:
       - "contracts/**"
       - "buf.yaml"
       - "buf.gen.yaml"
-      - "scripts/validate_contract_bindings.py"
+      - "schemas/module.schema.json"
+      - "scripts/contract_bindings.py"
+      - "scripts/generate_contract_bindings.py"
+      - "scripts/validate_module_manifests.py"
+      - "tests/test_contract_bindings.py"
       - "requirements-dev.txt"
       - "modules/*/module.yaml"
       - ".github/workflows/contracts.yml"
@@ -45,7 +53,7 @@ jobs:
         with:
           version: 1.50.1
           setup_only: true
-      - name: Build, format, lint, bind and breaking checks
+      - name: Build, format, lint, generate and breaking checks
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         shell: bash
@@ -64,14 +72,19 @@ jobs:
           buf lint proto >contract-diagnostics/lint.txt 2>&1
           lint_status=$?
 
+          python -m unittest tests/test_contract_bindings.py \
+            >contract-diagnostics/bindings-unit.txt 2>&1
+          bindings_unit_status=$?
+
           bindings_status=0
           if [ "${build_status}" -eq 0 ]; then
-            python scripts/validate_contract_bindings.py \
+            python scripts/generate_contract_bindings.py \
+              --check \
               --descriptor-set contract-diagnostics/crm-schema.binpb \
               >contract-diagnostics/bindings.txt 2>&1
             bindings_status=$?
           else
-            echo "Binding validation skipped because descriptor build failed" \
+            echo "Binding generation skipped because descriptor build failed" \
               >contract-diagnostics/bindings.txt
             bindings_status=1
           fi
@@ -91,6 +104,7 @@ jobs:
             contract-diagnostics/build.txt \
             contract-diagnostics/format.diff \
             contract-diagnostics/lint.txt \
+            contract-diagnostics/bindings-unit.txt \
             contract-diagnostics/bindings.txt \
             contract-diagnostics/breaking.txt; do
             echo "::group::${report}"
@@ -98,13 +112,13 @@ jobs:
             echo "::endgroup::"
           done
 
-          printf 'build=%s format=%s lint=%s bindings=%s breaking=%s\n' \
+          printf 'build=%s format=%s lint=%s bindings_unit=%s bindings=%s breaking=%s\n' \
             "${build_status}" "${format_status}" "${lint_status}" \
-            "${bindings_status}" "${breaking_status}"
+            "${bindings_unit_status}" "${bindings_status}" "${breaking_status}"
 
           if [ "${build_status}" -ne 0 ] || [ "${format_status}" -ne 0 ] || \
-             [ "${lint_status}" -ne 0 ] || [ "${bindings_status}" -ne 0 ] || \
-             [ "${breaking_status}" -ne 0 ]; then
+             [ "${lint_status}" -ne 0 ] || [ "${bindings_unit_status}" -ne 0 ] || \
+             [ "${bindings_status}" -ne 0 ] || [ "${breaking_status}" -ne 0 ]; then
             exit 1
           fi
       - name: Upload contract diagnostics

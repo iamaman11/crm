@@ -8,9 +8,10 @@
     "pnpm": ">=11.12.0 <12"
   },
   "scripts": {
-    "web:generate": "buf generate --template buf.gen.web.yaml && cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts",
+    "contracts:generate": "python scripts/generate_contract_bindings.py --write",
+    "web:generate": "buf generate --template buf.gen.web.yaml && python scripts/generate_contract_bindings.py --write && cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts",
     "gen": "pnpm web:generate",
-    "gen:diff": "git diff --exit-code packages/client/src/contract_hashes.ts",
+    "gen:diff": "git diff --exit-code contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts",
     "web:typecheck": "pnpm web:generate && pnpm -r --if-present typecheck",
     "web:lint": "pnpm -r --if-present lint",
     "web:test": "pnpm -r --if-present test",
