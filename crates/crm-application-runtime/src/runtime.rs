@@ -49,10 +49,10 @@ use crm_customer_data_operations_execution_composition::{
     internal_capability_definitions,
 };
 use crm_customer_data_operations_query_adapter::{
-    CustomerDataOperationsQueryAdapter, LIST_IMPORT_ROWS_CAPABILITY,
+    LIST_IMPORT_ROWS_CAPABILITY,
     PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
-use crm_global_search_composition::{GLOBAL_SEARCH_INDEX_ID, GlobalSearchWorker};
+use crm_global_search_composition::GlobalSearchWorker;
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,

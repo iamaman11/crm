@@ -310,11 +310,13 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    contributions.add_mutations(
-        metadata_mutation_capability_definitions()?,
-        Arc::new(NoopMutationSemanticValidator),
-        Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
-    )?;
+    contributions
+        .add_mutations(
+            metadata_mutation_capability_definitions()?,
+            Arc::new(NoopMutationSemanticValidator),
+            Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
+        )
+        .map_err(composition_error)?;
 
     let sales_activities_queries = Arc::new(SalesActivitiesQueryAdapter::new(
         store.clone(),
@@ -452,23 +454,28 @@ pub fn build_production_composition(
         visibility_authorizer,
         cursor(cursor_key)?,
     )?);
-    contributions.add_queries(
-        [search_query_capability_definition()?],
-        search_queries.clone(),
-        search_queries,
-    )?;
+    contributions
+        .add_queries(
+            [search_query_capability_definition()?],
+            search_queries.clone(),
+            search_queries,
+        )
+        .map_err(composition_error)?;
 
     let metadata_queries = Arc::new(MetadataQueryAdapter::new(Arc::new(
         PostgresMetadataQueryStore::new(store),
     )));
-    contributions.add_queries(
-        metadata_query_capability_definitions()?,
-        metadata_queries.clone(),
-        metadata_queries,
-    )?;
+    contributions
+        .add_queries(
+            metadata_query_capability_definitions()?,
+            metadata_queries.clone(),
+            metadata_queries,
+        )
+        .map_err(composition_error)?;
 
     contributions
-        .add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)?;
+        .add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)
+        .map_err(composition_error)?;
     contributions.build().map_err(composition_error)
 }
 

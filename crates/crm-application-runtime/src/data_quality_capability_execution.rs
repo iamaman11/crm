@@ -167,7 +167,7 @@ impl DataQualityCapabilityExecutor {
         )
         .await?;
         let target_result = self
-            .base
+            .fallback
             .execute(&target_definition, target_request)
             .await?;
         let updated_party = decode_updated_party(target_result)?;
