@@ -7,6 +7,8 @@
 /database/ @iamaman11
 /architecture-policy.json @iamaman11
 /scripts/check_architecture.py @iamaman11
+/scripts/check_module_compatibility.py @iamaman11
+/scripts/check_native_module_composition.py @iamaman11
 /scripts/contract_bindings.py @iamaman11
 /scripts/generate_contract_bindings.py @iamaman11
 /scripts/module_manifest_projection.py @iamaman11
@@ -15,6 +17,8 @@
 /crates/crm-module-manifest/ @iamaman11
 /crates/crm-module-sdk/ @iamaman11
 /crates/crm-module-registry/ @iamaman11
+/crates/crm-application-composition/ @iamaman11
+/crates/crm-application-runtime/ @iamaman11
 /crates/crm-capability-runtime/ @iamaman11
 /crates/crm-capability-adapters/ @iamaman11
 /crates/crm-capability-ingress/ @iamaman11
@@ -22,10 +26,18 @@
 /crates/crm-capability-plan-support/ @iamaman11
 /crates/crm-activities-capability-adapter/ @iamaman11
 /crates/crm-sales-capability-adapter/ @iamaman11
+/crates/crm-party-reference-composition/ @iamaman11
+/crates/crm-customer-accounts-capability-composition/ @iamaman11
+/crates/crm-contact-points-capability-composition/ @iamaman11
+/crates/crm-party-relationships-capability-composition/ @iamaman11
+/crates/crm-consents-capability-composition/ @iamaman11
+/crates/crm-identity-resolution-capability-composition/ @iamaman11
+/crates/crm-identity-resolution-merge-composition/ @iamaman11
 /crates/crm-core-data/ @iamaman11
 /crates/crm-core-events/ @iamaman11
 /crates/crm-core-permissions/ @iamaman11
 /modules/ @iamaman11
+/docs/ARCHITECTURE_READINESS.md @iamaman11
 /docs/IMPLEMENTATION_ROADMAP.md @iamaman11
 /docs/adr/ @iamaman11
 /.github/workflows/ @iamaman11
