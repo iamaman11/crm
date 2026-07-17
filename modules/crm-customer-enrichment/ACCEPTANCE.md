@@ -11,6 +11,7 @@ Foundation state: **In progress — not a production vertical slice**. These gat
 - [x] Add strict bounded canonical persisted-state conversion, schema descriptors, exact re-encoding and corruption rejection for all eight manifest-owned enrichment record types.
 - [x] Add pure-core Party snapshot, versioned policy/Consent, sanitized provider-dispatch and exact owner-application port contracts.
 - [x] Add activation-gated native `customer_enrichment.provider_profile.publish@1.0.0` production composition with exact wire/domain conversion and atomic immutable record/idempotency/outbox/audit evidence.
+- [x] Add activation-gated permission-aware `customer_enrichment.provider_profile.get@1.0.0` with tenant-scoped lookup, strict persisted-state validation, fail-closed resource visibility and `definition` field redaction.
 - [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
 - [ ] Implement the Party/Consent semantic port adapters plus final live authorization and declarative field visibility.
 - [ ] Add provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
@@ -19,7 +20,7 @@ Foundation state: **In progress — not a production vertical slice**. These gat
 - [ ] Add deterministic activation-gated dispatch, reconciliation, materialization, expiry, application and outcome-recovery workers.
 - [ ] Prove provider replay, conflicting response, quota, circuit/failure and provider-disabled behavior across adapters and process acceptance; pure-domain replay, quota-shape and conflicting-evidence proof is complete.
 - [ ] Prove provider-dispatch, response-materialization and target-success/outcome-missing crash recovery.
-- [ ] Add permission-aware get/list surfaces, signed pagination and field redaction.
+- [ ] Add remaining permission-aware get/list surfaces, signed pagination and field redaction.
 - [ ] Replace `tests/acceptance.rs` with real production-path evidence.
 - [ ] Complete `production/CONTRIBUTION.md` through separately owned adapter/composition crates with exact route parity.
 - [ ] Add fresh-PostgreSQL real `crm-api` success, denial, stale, replay, failure, disable/uninstall and cross-tenant process scenarios.
