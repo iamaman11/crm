@@ -84,6 +84,7 @@ pub async fn register_evaluation_capabilities(admin: &PgPool) {
         admin,
         PARTY_UPDATE_CAPABILITY,
         "crm.parties",
+        "0.3.0",
         "crm.parties.v1.PartiesService",
         "UpdateParty",
         "ef",
@@ -107,6 +108,7 @@ async fn register_data_quality(
         admin,
         capability_id,
         "crm.data-quality",
+        "0.1.0",
         service_name,
         method_name,
         input_byte,
@@ -121,6 +123,7 @@ async fn register_capability(
     admin: &PgPool,
     capability_id: &str,
     owner_module_id: &str,
+    owner_module_version: &str,
     service_name: &str,
     method_name: &str,
     input_byte: &str,
@@ -135,14 +138,15 @@ async fn register_capability(
            ai_callable, marketplace_callable, bulk_allowed, export_allowed,
            data_classes_touched
          ) VALUES (
-           $1, '1.0.0', $2, '0.1.0', $3, $4,
-           decode(repeat($5, 32), 'hex'), decode(repeat($6, 32), 'hex'),
-           $7, true, true, false, false, false, false, false,
+           $1, '1.0.0', $2, $3, $4, $5,
+           decode(repeat($6, 32), 'hex'), decode(repeat($7, 32), 'hex'),
+           $8, true, true, false, false, false, false, false,
            ARRAY['personal']::text[]
          ) ON CONFLICT (capability_id, capability_version) DO NOTHING",
     )
     .bind(capability_id)
     .bind(owner_module_id)
+    .bind(owner_module_version)
     .bind(service_name)
     .bind(method_name)
     .bind(input_byte)
