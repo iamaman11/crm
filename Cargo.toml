@@ -75,6 +75,7 @@ members = [
   "modules/crm-identity-resolution",
   "modules/crm-customer-data-operations",
   "modules/crm-data-quality",
+  "modules/crm-customer-enrichment",
   "services/crm-api",
 ]
 
