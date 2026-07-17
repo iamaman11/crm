@@ -10,8 +10,7 @@ pub const PROVIDER_USAGE_ENTRY_STATE_MAXIMUM_BYTES: u64 = 32 * 1024;
 pub const PROVIDER_USAGE_ENTRY_STATE_RETENTION_POLICY_ID: &str =
     "crm.customer_enrichment.provider_usage";
 
-const PROVIDER_USAGE_ENTRY_ID_DOMAIN: &[u8] =
-    b"crm.customer-enrichment.provider-usage-entry/v1";
+const PROVIDER_USAGE_ENTRY_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.provider-usage-entry/v1";
 const PROVIDER_USAGE_ENTRY_STATE_DESCRIPTOR: &[u8] = b"crm.customer-enrichment.provider_usage_entry.state/v1:usage_entry_id,request_id,response_receipt_id,provider_profile_version_id,kind,metered_units,quota_bucket,quota_remaining,provider_observed_at_unix_ms,recorded_at_unix_ms,safe_provider_code";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -189,14 +188,11 @@ impl ProviderUsageEntry {
 
     fn validate_persisted(&self) -> Result<(), SdkError> {
         self.validate_semantics().map_err(persisted_domain_error)?;
-        if self
-            .quota_bucket
-            .as_ref()
-            .is_some_and(|value| canonical_key(value.clone(), "provider_usage.quota_bucket").is_err())
-            || self.safe_provider_code.as_ref().is_some_and(|value| {
-                canonical_key(value.clone(), "provider_usage.safe_provider_code").is_err()
-            })
-        {
+        if self.quota_bucket.as_ref().is_some_and(|value| {
+            canonical_key(value.clone(), "provider_usage.quota_bucket").is_err()
+        }) || self.safe_provider_code.as_ref().is_some_and(|value| {
+            canonical_key(value.clone(), "provider_usage.safe_provider_code").is_err()
+        }) {
             return Err(persisted_error(
                 "persisted provider usage contains non-canonical bounded codes",
             ));
@@ -264,9 +260,7 @@ fn canonical_key(value: String, field: &'static str) -> Result<String, SdkError>
         && value.len() <= 80
         && value.is_ascii()
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'_' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         })
         && value
             .as_bytes()
@@ -307,9 +301,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn validate_size(bytes: &[u8]) -> Result<(), SdkError> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX)
-        > PROVIDER_USAGE_ENTRY_STATE_MAXIMUM_BYTES
-    {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PROVIDER_USAGE_ENTRY_STATE_MAXIMUM_BYTES {
         return Err(persisted_error(format!(
             "provider usage state exceeds the maximum of {PROVIDER_USAGE_ENTRY_STATE_MAXIMUM_BYTES} bytes"
         )));
@@ -398,12 +390,7 @@ mod tests {
             tenant_id: TenantId::try_new("tenant-a").unwrap(),
             requested_by: ActorId::try_new("worker-1").unwrap(),
             idempotency_key: IdempotencyKey::try_new("request-usage-1").unwrap(),
-            target: TargetSnapshot::try_new(
-                "party-123",
-                7,
-                TargetField::PartyDisplayName,
-            )
-            .unwrap(),
+            target: TargetSnapshot::try_new("party-123", 7, TargetField::PartyDisplayName).unwrap(),
             provider_profile_version_id: provider.version_id().clone(),
             mapping_version_id: mapping.version_id().clone(),
             requested_fields: vec![TargetField::PartyDisplayName],
@@ -494,13 +481,9 @@ mod tests {
         .unwrap();
         let mut json: Value =
             serde_json::from_slice(&encode_provider_usage_entry_state(&entry).unwrap()).unwrap();
-        json["usage_entry_id"] = Value::String(format!(
-            "enrichment-provider-usage-{}",
-            "0".repeat(64)
-        ));
-        assert!(
-            decode_provider_usage_entry_state(&serde_json::to_vec(&json).unwrap()).is_err()
-        );
+        json["usage_entry_id"] =
+            Value::String(format!("enrichment-provider-usage-{}", "0".repeat(64)));
+        assert!(decode_provider_usage_entry_state(&serde_json::to_vec(&json).unwrap()).is_err());
     }
 
     #[test]

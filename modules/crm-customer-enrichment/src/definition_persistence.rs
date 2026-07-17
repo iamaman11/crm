@@ -7,15 +7,13 @@ use sha2::{Digest, Sha256};
 
 pub const PROVIDER_PROFILE_VERSION_STATE_SCHEMA_ID: &str =
     "crm.customer-enrichment.provider_profile_version.state";
-pub const MAPPING_VERSION_STATE_SCHEMA_ID: &str =
-    "crm.customer-enrichment.mapping_version.state";
+pub const MAPPING_VERSION_STATE_SCHEMA_ID: &str = "crm.customer-enrichment.mapping_version.state";
 pub const DEFINITION_STATE_SCHEMA_VERSION: &str = "1.0.0";
 pub const PROVIDER_PROFILE_VERSION_STATE_MAXIMUM_BYTES: u64 = 32 * 1024;
 pub const MAPPING_VERSION_STATE_MAXIMUM_BYTES: u64 = 16 * 1024;
 pub const DEFINITION_STATE_RETENTION_POLICY_ID: &str = "crm.customer_enrichment.definition";
 
-const PROVIDER_PROFILE_ID_DOMAIN: &[u8] =
-    b"crm.customer-enrichment.provider-profile-version/v1";
+const PROVIDER_PROFILE_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.provider-profile-version/v1";
 const MAPPING_VERSION_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.mapping-version/v1";
 
 const PROVIDER_PROFILE_STATE_DESCRIPTOR: &[u8] = b"crm.customer-enrichment.provider_profile_version.state/v1:version_id,provider_key,adapter_kind,adapter_contract_version,supported_target_fields,purpose_codes,license_id,permitted_use_class,residency_region,retention_days,raw_payload_policy,credential_handle_aliases,effective_at_unix_ms,expires_at_unix_ms";
@@ -315,9 +313,7 @@ fn canonical_key(value: &str, label: &str) -> Result<(), SdkError> {
         && value.len() <= 80
         && value.is_ascii()
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'_' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         })
         && value
             .as_bytes()
@@ -497,7 +493,10 @@ mod tests {
             provider
         );
         let mapping_bytes = encode_mapping_version_state(&mapping).unwrap();
-        assert_eq!(decode_mapping_version_state(&mapping_bytes).unwrap(), mapping);
+        assert_eq!(
+            decode_mapping_version_state(&mapping_bytes).unwrap(),
+            mapping
+        );
     }
 
     #[test]
@@ -515,9 +514,7 @@ mod tests {
         let mut mapping_json: Value =
             serde_json::from_slice(&encode_mapping_version_state(&mapping).unwrap()).unwrap();
         mapping_json["unexpected"] = Value::Bool(true);
-        assert!(
-            decode_mapping_version_state(&serde_json::to_vec(&mapping_json).unwrap()).is_err()
-        );
+        assert!(decode_mapping_version_state(&serde_json::to_vec(&mapping_json).unwrap()).is_err());
     }
 
     #[test]
