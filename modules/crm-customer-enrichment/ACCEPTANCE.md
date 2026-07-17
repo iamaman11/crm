@@ -6,14 +6,15 @@ Foundation state: **In progress — not a production vertical slice**. These gat
 - [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
 - [ ] Publish compatible `crm.customer_enrichment.v1` Protobuf contracts and generated manifest bindings.
 - [x] Implement immutable provider-profile and mapping-version invariants with deterministic content-derived identities, bounded metadata and focused unit coverage.
-- [ ] Implement deterministic request, response-receipt, suggestion, review and application-attempt behavior with strict persisted-state conversion.
+- [x] Implement deterministic request, response-receipt, suggestion, review and application-attempt domain behavior with strict state transitions, replay conflict detection, freshness/expiry semantics, approval binding and target idempotency planning.
+- [ ] Add strict persisted-state conversion and corruption rejection for every enrichment record type.
 - [ ] Add governed public and worker-only capability/query adapters.
 - [ ] Add pre-authorization Party/Consent semantic ports and final live authorization/visibility.
 - [ ] Add provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
 - [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof.
-- [ ] Add exact `parties.party.update@1.0.0` application with stale-version rejection and deterministic target idempotency.
+- [ ] Add exact `parties.party.update@1.0.0` invocation with stale-version rejection and deterministic target idempotency.
 - [ ] Add deterministic activation-gated dispatch, reconciliation, materialization, expiry, application and outcome-recovery workers.
-- [ ] Prove provider replay, conflicting response, quota, circuit/failure and provider-disabled behavior.
+- [ ] Prove provider replay, conflicting response, quota, circuit/failure and provider-disabled behavior across adapters and process acceptance; pure-domain duplicate/conflict evidence is complete.
 - [ ] Prove provider-dispatch, response-materialization and target-success/outcome-missing crash recovery.
 - [ ] Add permission-aware get/list surfaces, signed pagination and field redaction.
 - [ ] Replace `tests/acceptance.rs` with real production-path evidence.
