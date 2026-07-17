@@ -8,7 +8,11 @@ pub mod lifecycle;
 #[allow(dead_code, unused_imports)]
 pub mod persistence;
 /// Immutable provider metering and quota evidence plus strict persistence.
-pub mod provider_usage;
+pub mod provider_usage {
+    #[cfg(test)]
+    use crate::TargetField;
+    include!("provider_usage.rs");
+}
 
 pub use definition_persistence::*;
 pub use definitions::{
