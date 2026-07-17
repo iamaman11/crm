@@ -31,8 +31,15 @@ pub const GET_MAPPING_CAPABILITY: &str = "customer_enrichment.mapping.get";
 pub const GET_MAPPING_REQUEST_SCHEMA: &str = "crm.customer_enrichment.v1.GetMappingVersionRequest";
 pub const GET_MAPPING_RESPONSE_SCHEMA: &str =
     "crm.customer_enrichment.v1.GetMappingVersionResponse";
-pub const QUERY_CAPABILITY_IDS: &[&str] =
-    &[GET_PROVIDER_PROFILE_CAPABILITY, GET_MAPPING_CAPABILITY];
+
+/// Exact query routes currently composed into production.
+pub const QUERY_CAPABILITY_IDS: &[&str] = &[GET_PROVIDER_PROFILE_CAPABILITY];
+/// Complete, tested mapping lookup foundation awaiting bootstrap visibility composition.
+pub const PREPARED_QUERY_CAPABILITY_IDS: &[&str] = &[GET_MAPPING_CAPABILITY];
+const SUPPORTED_QUERY_CAPABILITY_IDS: &[&str] = &[
+    GET_PROVIDER_PROFILE_CAPABILITY,
+    GET_MAPPING_CAPABILITY,
+];
 
 #[derive(Clone)]
 pub struct CustomerEnrichmentQueryAdapter {
@@ -195,10 +202,7 @@ impl QueryExecutor for CustomerEnrichmentQueryAdapter {
 }
 
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    Ok(vec![
-        provider_profile_query_capability_definition()?,
-        mapping_query_capability_definition()?,
-    ])
+    Ok(vec![provider_profile_query_capability_definition()?])
 }
 
 pub fn query_capability_definition() -> Result<CapabilityDefinition, SdkError> {
@@ -314,7 +318,7 @@ fn mapping_record_id(value: Option<wire::MappingVersionRef>) -> Result<RecordId,
 
 fn ensure_definition(definition: &CapabilityDefinition) -> Result<(), SdkError> {
     if definition.owner_module_id.as_str() != MODULE_ID
-        || !QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
+        || !SUPPORTED_QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         || definition.capability_version.as_str() != support::CONTRACT_VERSION
         || definition.mutation
     {
@@ -380,21 +384,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn definition_query_catalog_is_exact() {
+    fn implemented_query_catalog_is_exact() {
         let definitions = query_capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 2);
-        let ids = definitions
-            .iter()
-            .map(|definition| definition.capability_id.as_str())
-            .collect::<std::collections::BTreeSet<_>>();
-        assert_eq!(ids, QUERY_CAPABILITY_IDS.iter().copied().collect());
-        for definition in definitions {
-            assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-            assert_eq!(definition.capability_version.as_str(), "1.0.0");
-            assert!(!definition.mutation);
-            assert!(!definition.requires_idempotency);
-            assert!(!definition.requires_approval);
-            assert_eq!(definition.risk, CapabilityRisk::Low);
-        }
+        assert_eq!(definitions.len(), 1);
+        let definition = &definitions[0];
+        assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
+        assert_eq!(definition.capability_id.as_str(), GET_PROVIDER_PROFILE_CAPABILITY);
+        assert_eq!(definition.capability_version.as_str(), "1.0.0");
+        assert!(!definition.mutation);
+        assert!(!definition.requires_idempotency);
+        assert!(!definition.requires_approval);
+        assert_eq!(definition.risk, CapabilityRisk::Low);
+        assert_eq!(QUERY_CAPABILITY_IDS, &[GET_PROVIDER_PROFILE_CAPABILITY]);
+    }
+
+    #[test]
+    fn mapping_lookup_definition_is_prepared_but_not_composed() {
+        let definition = mapping_query_capability_definition().unwrap();
+        assert_eq!(definition.capability_id.as_str(), GET_MAPPING_CAPABILITY);
+        assert_eq!(PREPARED_QUERY_CAPABILITY_IDS, &[GET_MAPPING_CAPABILITY]);
+        assert!(!QUERY_CAPABILITY_IDS.contains(&GET_MAPPING_CAPABILITY));
     }
 }
