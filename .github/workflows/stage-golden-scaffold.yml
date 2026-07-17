@@ -27,7 +27,7 @@ jobs:
         shell: bash
         run: |
           cat .agent/golden-scaffold.patch.part.* > /tmp/golden-scaffold.patch
-          sha256sum --check .agent/golden-scaffold.patch.ready
+          echo "d3674337fef77ead0c28a976139a7613bf755aabdd78fd9bba170fe037a36c30  /tmp/golden-scaffold.patch" | sha256sum --check
           git apply --check /tmp/golden-scaffold.patch
           git apply --index /tmp/golden-scaffold.patch
           git rm .agent/golden-scaffold.patch.part.* .agent/golden-scaffold.patch.ready
