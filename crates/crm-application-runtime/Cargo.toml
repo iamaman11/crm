@@ -5,12 +5,13 @@ edition = "2024"
 publish = false
 
 [lints.clippy]
-# The application composition root intentionally wires multiple independent query adapters.
-# Keep the exception local to this crate rather than weakening workspace-wide Clippy policy.
+# Module-specific assembly contributes independent adapters through the generic composition runtime.
+# Keep constructor breadth local to this compile-time composition boundary.
 too_many_arguments = "allow"
 
 [dependencies]
 axum = "0.8"
+crm-application-composition = { path = "../crm-application-composition" }
 crm-capability-adapters = { path = "../crm-capability-adapters" }
 crm-capability-ingress = { path = "../crm-capability-ingress" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
