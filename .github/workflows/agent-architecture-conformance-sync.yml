@@ -1,0 +1,728 @@
+name: Agent Architecture Conformance Sync
+
+on:
+  push:
+    branches:
+      - docs/architecture-conformance-baseline
+    paths:
+      - .github/workflows/agent-architecture-conformance-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: docs/architecture-conformance-baseline
+          fetch-depth: 0
+      - name: Synchronize normative architecture controls
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"expected source block missing in {path}: {old[:120]!r}")
+              target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          def write(path: str, content: str) -> None:
+              Path(path).write_text(content, encoding="utf-8")
+
+          write(
+              "docs/ARCHITECTURE_READINESS.md",
+              '''# Architecture Readiness Baseline
+
+Status: **Ready for modular product development**  
+Accepted implementation: issue #134 / PR #135  
+Merged baseline: `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`  
+Exact verification head: `c73a3eb830893477a4d535acc9383e006d74367d`
+
+This document records the accepted non-regression baseline for continued CRM development. It does not claim that the universal CRM product is complete; it confirms that the production architecture is prepared for further owner-domain and link-module delivery without returning to central business routing or hidden lifecycle bypasses.
+
+## Proven guarantees
+
+The accepted baseline provides:
+
+- deterministic module-owned mutation and query contributions;
+- generic exact-coordinate routing with startup rejection for duplicates, owner mismatches, route-kind mismatches and incomplete handlers;
+- tenant route and worker activation backed by durable `crm.module_installations` state;
+- pre-authorization cross-owner semantic validation before final live authorization;
+- deterministic, phase-ordered, activation-gated background worker contributions;
+- declarative bootstrap visibility contributions;
+- exact manifest/binding/production-route parity with individually reasoned classifications;
+- immutable module publication compatibility enforcement;
+- golden scaffolding with a mandatory `production/CONTRIBUTION.md` boundary;
+- structural readiness checks that reject legacy central routers, fixed worker wiring and lifecycle bypasses.
+
+All 15 applicable workflows passed together on the unchanged human-authored verification head before PR #135 merged.
+
+## Non-regression contract
+
+Future changes MUST preserve all of the following:
+
+1. Business behavior enters production through explicit module-owned contributions, never a central capability-ID or concrete-adapter switch.
+2. Public mutation/query dispatch uses exact owner, identifier, version and route-kind coordinates.
+3. Durable tenant installation state is the runtime authority for module activation; bootstrap may provision that state but MUST NOT bypass it.
+4. Cross-owner reads needed to establish request semantics occur before final authorization; authoritative executors do not perform unrelated awaited validation after authorization and before their side effect.
+5. Background workers are contributed by modules, assigned deterministic phases and activation-gated per tenant.
+6. Every governed contract coordinate has exactly one production route or one exact documented non-runtime classification; owner-wide and pattern allowlists are forbidden.
+7. New modules use the golden scaffold and do not require edits to generic router or worker algorithms.
+8. Any source or documentation change invalidates prior exact-SHA evidence until all applicable checks pass again.
+
+## Required development entry point
+
+Every new delivery packet must begin from current `main`, read `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `DEVELOPMENT_WORKFLOW.md`, `MODULE_DEVELOPMENT.md` and its active issue, then identify:
+
+- authoritative ownership and stable references;
+- exact public contract coordinates;
+- module-owned routes, validators and workers;
+- durable installation/disable/uninstall behavior;
+- persistence, authorization, audit, idempotency and rollback semantics;
+- route-parity/classification impact;
+- required unit, PostgreSQL, process, browser and operational acceptance.
+
+Use `python scripts/repo.py conformance` for the permanent local architecture preflight and run all specialized GitHub workflows affected by the packet. Architecture readiness remains valid only while these mechanical gates stay green.
+''',
+          )
+
+          replace(
+              "docs/SYSTEM_INVARIANTS.md",
+              "## 11. Conformance gates\n",
+              '''## 11. Native production composition
+
+59. Every public production mutation route, query route and background worker MUST enter the process through an explicit deterministic module-owned contribution.
+60. Generic router and worker algorithms MUST NOT branch on business capability IDs, query IDs, owner-module IDs or concrete adapter types. Adding a module MUST NOT require changing generic dispatch or worker algorithms.
+61. Production routing MUST resolve exact owner, identifier, version and route kind. Duplicate coordinates, owner mismatches, kind mismatches and incomplete handlers MUST fail application assembly.
+62. Durable tenant module-installation state MUST be the runtime authority for route and worker activation. Bootstrap MAY provision durable installation state but MUST NOT create an in-memory activation bypass.
+63. Cross-owner reads required to establish request semantics MUST occur in pre-authorization semantic validation. After final live authorization, an authoritative executor MUST NOT perform unrelated awaited validation before its side effect.
+64. Every governed capability and query coordinate MUST have exactly one production route or one explicit exact non-runtime classification with a reason. Owner-wide, prefix and pattern allowlists are forbidden.
+65. Background workers MUST have deterministic module ownership, ordering/phase semantics, tenant activation checks, bounded work and retry/idempotency evidence.
+66. Golden scaffolding and permanent CI MUST enforce the production-contribution boundary so future modules cannot silently omit routing, activation, worker or acceptance obligations.
+
+## 12. Conformance gates
+''',
+          )
+          replace(
+              "docs/SYSTEM_INVARIANTS.md",
+              "- architecture dependency-boundary checks;\n- formatting, linting and automated tests;",
+              "- architecture dependency-boundary checks;\n- native module composition, exact production-route parity and classification checks;\n- durable module-activation and deterministic worker-registry acceptance where affected;\n- formatting, linting and automated tests;",
+          )
+          replace(
+              "docs/SYSTEM_INVARIANTS.md",
+              "- reproducible artifact digest generation.\n",
+              "- reproducible artifact digest generation;\n- all applicable specialized workflows green on one unchanged exact review SHA.\n",
+          )
+
+          replace(
+              "docs/APPLICATION_ARCHITECTURE.md",
+              '''Future product-plane structure may be introduced when Phase 7 starts:
+
+```text
+apps/
+  web/                        # product shell
+packages/
+  ui/                         # design system and shared UI primitives
+  client/                     # generated/typed API client boundary
+```
+
+Do not create frontend directories before there is executable Phase 7 scope and ownership.
+''',
+              '''The product plane is established under `apps/` and shared typed packages under `packages/`. Product-plane code remains outside authoritative domain ownership and must use generated/governed client boundaries rather than private backend types.
+''',
+          )
+          replace(
+              "docs/APPLICATION_ARCHITECTURE.md",
+              '''→ exact capability/version
+→ typed + semantic validation
+→ rate/approval policy
+''',
+              '''→ exact module-owned capability/version route
+→ durable tenant module-activation check
+→ typed + pre-authorization semantic validation
+→ rate/approval policy
+''',
+          )
+          replace(
+              "docs/APPLICATION_ARCHITECTURE.md",
+              '''→ exact query/version
+→ typed + semantic validation
+→ live authorization
+''',
+              '''→ exact module-owned query/version route
+→ durable tenant module-activation check
+→ typed + pre-authorization semantic validation
+→ live authorization
+''',
+          )
+          replace(
+              "docs/APPLICATION_ARCHITECTURE.md",
+              '''## 5. Composition boundaries
+
+The final `crm-api` service should be assembled in explicit stages:
+
+```text
+configuration
+→ infrastructure resources
+→ platform stores/adapters
+→ module publication/install state
+→ capability/query catalogs
+→ owner adapter compositions
+→ auth/policy runtime
+→ ingress
+→ HTTP/gRPC servers
+→ health/readiness
+→ shutdown/drain
+```
+
+Construction failures are startup failures. Invalid production configuration must not degrade silently into partially governed behavior.
+''',
+              '''## 5. Composition boundaries
+
+The production `crm-api` service is assembled in explicit stages:
+
+```text
+configuration
+→ infrastructure resources
+→ platform stores/adapters
+→ published module identities and durable installation state
+→ module-owned mutation/query/visibility/worker contributions
+→ exact-coordinate route and worker registries
+→ manifest/binding/production parity validation
+→ auth/policy runtime
+→ ingress
+→ HTTP/gRPC servers
+→ health/readiness
+→ shutdown/drain
+```
+
+Construction failures are startup failures. Invalid production configuration, duplicate coordinates, missing handlers, invalid ownership or route-kind drift must not degrade silently into partially governed behavior.
+
+### 5.1 Native module contribution model
+
+Each in-process business or link module owns an explicit production contribution boundary. Depending on its role, that contribution contains:
+
+- exact versioned mutation and query definitions;
+- pre-authorization semantic validators;
+- planner/executor or query-adapter bindings;
+- declarative visibility contributions;
+- background workers with deterministic phases;
+- module identity needed for durable tenant activation.
+
+Generic registries perform exact-coordinate dispatch and deterministic worker iteration. They do not contain business capability-ID, query-ID, module-ID or concrete-adapter switches. A new module may require an explicit contribution registration at the composition boundary, but it must not require modification of generic router or worker algorithms.
+
+`crm.module_installations` is authoritative for tenant activation. Bootstrap may create durable active installations for configured bootstrap tenants; it may not bypass persisted lifecycle state.
+
+Compiled production coordinates are mechanically compared with governed module contract bindings. Platform routes and intentionally non-runtime coordinates are classified individually with reasons; broad allowlists are forbidden.
+''',
+          )
+          replace(
+              "docs/APPLICATION_ARCHITECTURE.md",
+              "- application composition;\n- user-facing experience",
+              "- module-owned production contribution, durable activation and exact route parity;\n- application composition;\n- user-facing experience",
+          )
+
+          replace(
+              "docs/DEVELOPMENT_WORKFLOW.md",
+              '''1. ownership and invariants
+2. public contracts
+3. application ports/use cases
+4. infrastructure adapters
+5. composition
+6. acceptance tests
+7. operational and documentation closure
+''',
+              '''1. ownership and invariants
+2. public contracts
+3. application ports/use cases
+4. module-owned production contribution contract
+5. infrastructure adapters
+6. exact-coordinate composition registration
+7. acceptance tests
+8. operational and documentation closure
+''',
+          )
+          replace(
+              "docs/DEVELOPMENT_WORKFLOW.md",
+              "- no forbidden cross-module or infrastructure dependency is introduced.\n",
+              "- no forbidden cross-module or infrastructure dependency is introduced;\n- exact route/worker ownership, durable activation and classification impacts are identified;\n- generic router and worker algorithms remain free of business switches.\n",
+          )
+          replace(
+              "docs/DEVELOPMENT_WORKFLOW.md",
+              "- exact production path;\n- failure and rollback behavior;",
+              "- exact production path and module-owned contribution coordinates;\n- tenant activation, worker-phase and route-classification impact;\n- failure and rollback behavior;",
+          )
+          replace(
+              "docs/DEVELOPMENT_WORKFLOW.md",
+              '''module manifest
+published contracts
+domain aggregates and value objects
+application commands/queries and ports
+capability/query adapters
+persistence and external adapters
+composition registration
+unit/integration/PostgreSQL acceptance
+''',
+              '''module manifest
+published contracts
+domain aggregates and value objects
+application commands/queries and ports
+pre-authorization semantic validators
+capability/query adapters
+persistence and external adapters
+module-owned production contribution
+exact-coordinate composition registration and durable activation
+unit/integration/PostgreSQL/process acceptance
+''',
+          )
+          replace(
+              "docs/DEVELOPMENT_WORKFLOW.md",
+              "- exact typed money, time, identity and lifecycle semantics.\n",
+              "- exact typed money, time, identity and lifecycle semantics;\n- module-owned route/worker contributions with no central business switches;\n- exact manifest/binding/production-route parity and individually reasoned classifications.\n",
+          )
+
+          replace(
+              "docs/MODULE_DEVELOPMENT.md",
+              "Status: **Phase 7 foundation**  \nTracked by: issue #56 and parent Phase 7 issue #10.\n",
+              "Status: **Normative golden-module workflow**  \nFoundation: issue #56 / Phase 7; native production contribution baseline: issue #134 / PR #135.\n",
+          )
+          replace(
+              "docs/MODULE_DEVELOPMENT.md",
+              "  adapters/README.md\n  tests/acceptance.rs",
+              "  adapters/README.md\n  production/CONTRIBUTION.md\n  tests/acceptance.rs",
+          )
+          replace(
+              "docs/MODULE_DEVELOPMENT.md",
+              '''# architecture dependency/source boundaries
+python scripts/repo.py architecture
+
+# module manifests, normalized IR and Rust digest parity
+''',
+              '''# full native architecture conformance preflight
+python scripts/repo.py conformance
+
+# focused architecture dependency/source boundaries
+python scripts/repo.py architecture
+
+# module manifests, normalized IR and Rust digest parity
+''',
+          )
+          replace(
+              "docs/MODULE_DEVELOPMENT.md",
+              '''Every generated module contains `production/CONTRIBUTION.md`. The pure module core does not wire itself into the process host. A separately owned adapter/composition crate contributes exact versioned mutation/query routes, pre-authorization semantic validation, activation-gated workers and deterministic worker phases. Adding a module must not require edits to central routers.
+
+Compiled production coordinates are checked against `contracts/module-contract-bindings.json`. Platform-owned routes and any intentionally non-runtime governed coordinate must be listed individually, with a reason, in `contracts/production-route-classifications.json`; owner-wide or pattern allowlists are forbidden.
+''',
+              '''Every generated module contains `production/CONTRIBUTION.md`. The pure module core does not wire itself into the process host. A separately owned adapter/composition crate contributes exact versioned mutation/query routes, pre-authorization semantic validation, activation-gated workers and deterministic worker phases. Adding a module must not require edits to generic router or worker algorithms.
+
+Before a generated module can claim a production vertical slice, its contribution must prove:
+
+1. exact owner/identifier/version/kind definitions;
+2. complete validator and handler bindings with startup failure on mismatch;
+3. durable tenant installation, disable and uninstall behavior;
+4. pre-authorization cross-owner validation through governed ports only;
+5. deterministic worker phases, bounded work and retry/idempotency where workers exist;
+6. route-parity coverage or an exact reasoned non-runtime classification;
+7. focused, PostgreSQL and real-process acceptance plus synchronized module/roadmap status.
+
+Compiled production coordinates are checked against `contracts/module-contract-bindings.json`. Platform-owned routes and any intentionally non-runtime governed coordinate must be listed individually, with a reason, in `contracts/production-route-classifications.json`; owner-wide or pattern allowlists are forbidden.
+''',
+          )
+
+          replace(
+              "AGENTS.md",
+              '''1. `docs/SYSTEM_INVARIANTS.md` — absolute architecture rules.
+2. `docs/IMPLEMENTATION_ROADMAP.md` — normative delivery sequence and current phase.
+3. `docs/PROJECT_STATUS.md` — concise current state and next executable steps.
+4. `docs/APPLICATION_ARCHITECTURE.md` — layer model, dependency direction and composition boundaries.
+5. `docs/MODULE_CATALOG.md` — what counts as a module and which business domains exist or are planned.
+6. `docs/DEVELOPMENT_WORKFLOW.md` — coherent delivery packets, checkpoints, PR and commit policy.
+7. `docs/MULTI_AGENT_DEVELOPMENT.md` — exact-SHA handoff and independent local verification protocol when more than one agent participates.
+8. `docs/CODEX_AGENT_QUALIFICATION.md` — persistent local checkout, responsibility levels and qualification rules for a Codex local agent when applicable.
+9. `docs/MODULE_DEVELOPMENT.md` — golden owner/link module scaffolding and permanent repository commands.
+10. Relevant accepted ADRs under `docs/adr/`.
+11. The GitHub issue for the active slice.
+''',
+              '''1. `docs/SYSTEM_INVARIANTS.md` — absolute architecture rules.
+2. `docs/ARCHITECTURE_READINESS.md` — accepted native-composition non-regression baseline.
+3. `docs/IMPLEMENTATION_ROADMAP.md` — normative delivery sequence and current phase.
+4. `docs/PROJECT_STATUS.md` — concise current state and next executable steps.
+5. `docs/APPLICATION_ARCHITECTURE.md` — layer model, dependency direction and composition boundaries.
+6. `docs/MODULE_CATALOG.md` — what counts as a module and which business domains exist or are planned.
+7. `docs/DEVELOPMENT_WORKFLOW.md` — coherent delivery packets, checkpoints, PR and commit policy.
+8. `docs/MULTI_AGENT_DEVELOPMENT.md` — exact-SHA handoff and independent local verification protocol when more than one agent participates.
+9. `docs/CODEX_AGENT_QUALIFICATION.md` — persistent local checkout, responsibility levels and qualification rules for a Codex local agent when applicable.
+10. `docs/MODULE_DEVELOPMENT.md` — golden owner/link module scaffolding and permanent repository commands.
+11. Relevant accepted ADRs under `docs/adr/`.
+12. The GitHub issue for the active slice.
+''',
+          )
+          replace(
+              "AGENTS.md",
+              '''1. Identify the single authoritative owner domain.
+2. Update or create the module manifest only if ownership/contracts really change.
+3. Add typed domain invariants with no infrastructure access.
+4. Publish or evolve versioned Protobuf contracts compatibly.
+5. Add persisted-state conversion separately from public wire contracts.
+6. Add deterministic capability/query adapters.
+7. Compose through the governed gateway/ingress boundary.
+8. Add PostgreSQL and transport acceptance for tenant isolation, authorization, replay/conflict and rollback as applicable.
+9. Add projection/search behavior only as rebuildable read state.
+10. Update roadmap/status/module catalog in the same PR when scope or completion changes.
+''',
+              '''1. Identify the single authoritative owner domain.
+2. Update or create the module manifest only if ownership/contracts really change.
+3. Add typed domain invariants with no infrastructure access.
+4. Publish or evolve versioned Protobuf contracts compatibly.
+5. Add persisted-state conversion separately from public wire contracts.
+6. Add deterministic capability/query adapters and pre-authorization semantic validators.
+7. Contribute exact versioned routes and workers through the module-owned production boundary.
+8. Use durable tenant module-installation state for activation; never add a bootstrap bypass.
+9. Compose through generic exact-coordinate gateway/ingress registries without business switches.
+10. Add PostgreSQL and transport acceptance for tenant isolation, authorization, replay/conflict, disable/uninstall and rollback as applicable.
+11. Add projection/search behavior only as rebuildable read state.
+12. Update contract parity/classifications and roadmap/status/module catalog in the same PR when scope or completion changes.
+''',
+          )
+          replace(
+              "AGENTS.md",
+              '''`services/crm-api` is the production composition root. It may wire platform components, configuration and process lifecycle, but it must depend on business functionality through governed composition/runtime boundaries rather than importing owner-domain internals directly.
+
+The executable service must eventually own:
+
+- configuration validation;
+- PostgreSQL pool/runtime adapter construction;
+- module and capability/query catalog composition;
+- authentication and policy adapter composition;
+- HTTP and gRPC server startup;
+- health/readiness endpoints;
+- observability and graceful shutdown.
+
+Business rules remain outside the service.
+''',
+              '''`services/crm-api` is the production composition root. It wires platform components, configuration and process lifecycle, but depends on business functionality through governed module-owned composition/runtime boundaries rather than owner-domain internals.
+
+The executable service owns:
+
+- configuration validation;
+- PostgreSQL pool/runtime adapter construction;
+- durable module publication/installation activation;
+- exact mutation/query/visibility contribution assembly;
+- deterministic activation-gated worker assembly;
+- authentication and policy adapter composition;
+- HTTP and gRPC server startup;
+- health/readiness endpoints;
+- observability and graceful shutdown.
+
+Generic router and worker algorithms must not branch on business IDs or concrete adapters. Business rules remain outside the service. A new module may register a contribution but must not require a new central dispatch branch.
+''',
+          )
+          replace(
+              "AGENTS.md",
+              "Run the applicable gates, not a hand-picked subset:\n",
+              "Run `python scripts/repo.py conformance` as the permanent local architecture preflight, then run the applicable gates, not a hand-picked subset:\n",
+          )
+
+          replace(
+              "docs/DELIVERY_GOVERNANCE.md",
+              '''1. `SYSTEM_INVARIANTS.md` — absolute architecture and conformance rules.
+2. `IMPLEMENTATION_ROADMAP.md` — normative phase map and dependency order.
+3. `PHASE8_DELIVERY_PLAN.md` — detailed packet sequence for the active expert-domain program.
+4. `CRM_CAPABILITY_COVERAGE.md` — completeness guardrail for the target CRM product.
+5. `MODULE_CATALOG.md` — business-module ownership and readiness accounting.
+6. `PROJECT_STATUS.md` — concise current snapshot for humans.
+7. GitHub parent/packet issues — executable scope and acceptance for a delivery packet.
+8. Pull requests — implementation state for one reviewable packet.
+''',
+              '''1. `SYSTEM_INVARIANTS.md` — absolute architecture and conformance rules.
+2. `ARCHITECTURE_READINESS.md` — accepted native-composition non-regression baseline.
+3. `IMPLEMENTATION_ROADMAP.md` — normative phase map and dependency order.
+4. `PHASE8_DELIVERY_PLAN.md` — detailed packet sequence for the active expert-domain program.
+5. `CRM_CAPABILITY_COVERAGE.md` — completeness guardrail for the target CRM product.
+6. `MODULE_CATALOG.md` — business-module ownership and readiness accounting.
+7. `PROJECT_STATUS.md` — concise current snapshot for humans.
+8. GitHub parent/packet issues — executable scope and acceptance for a delivery packet.
+9. Pull requests — implementation state for one reviewable packet.
+''',
+          )
+          replace(
+              "docs/DELIVERY_GOVERNANCE.md",
+              '''1. **8A.7 / #120 / PR #121** — Customer Import Jobs and Resumable Execution — **Complete**.
+2. **8A.8 / #123 / PR #130** — Customer Export Jobs, Artifacts and Reconciliation Evidence — **Complete**.
+3. **8A.9 / #124** — Customer Data Quality Rules, Completeness and Stewardship — **Ready** and next in the lane.
+4. **8A.10 / #125** — Governed Customer Enrichment and Provenance — **Planned**.
+5. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **Planned**.
+6. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
+''',
+              '''1. **8A.7 / #120 / PR #121** — Customer Import Jobs and Resumable Execution — **Complete**.
+2. **8A.8 / #123 / PR #130** — Customer Export Jobs, Artifacts and Reconciliation Evidence — **Complete**.
+3. **8A.9 / #124 / PR #132** — Customer Data Quality Rules, Completeness and Stewardship — **Complete**.
+4. **Architecture integrity / #134 / PR #135** — native module composition and lifecycle gating — **Complete**.
+5. **8A.10 / #125** — Governed Customer Enrichment and Provenance — **Ready** and next in the lane.
+6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **Planned**.
+7. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
+''',
+          )
+          replace(
+              "docs/DELIVERY_GOVERNANCE.md",
+              "- owner-domain and cross-owner boundaries are explicit;\n- public contract/versioning implications are identified;",
+              "- owner-domain and cross-owner boundaries are explicit;\n- module-owned route/validator/worker contributions and durable activation behavior are explicit;\n- public contract/versioning and production-route classification implications are identified;",
+          )
+          replace(
+              "docs/DELIVERY_GOVERNANCE.md",
+              "- no unresolved blocking review thread or known gate defect remains.\n",
+              "- native composition readiness and production-route parity pass when module/runtime scope is affected;\n- no unresolved blocking review thread or known gate defect remains.\n",
+          )
+          old_baseline = '''## 10. Current control baseline
+
+As of 2026-07-15:
+
+- Phases 0.1–7 are complete.
+- Phase 8A is active.
+- Phase 8A.6 is merged and complete through PR #119 / merge commit `d5cb4502ad0c49158e0789d8749dc09160da7895`.
+- Phase 8A.7 is merged and complete through PR #121 / merge commit `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
+- Phase 8A.8 is merged and complete through PR #130 / merge commit `0e7f9889362533446cc65d95dcf7969a60086a57`.
+- Phase 8A.9 / #124 is **Ready** and is the next customer-master production packet.
+- The intended 8A.9 ownership boundary is a distinct `crm.data-quality` module for versioned rules, findings, completeness evidence and stewardship lifecycle. It does not own authoritative customer values and remediation must re-enter exact owner capabilities.
+- PR #118 remains superseded by merged PR #119 and is not an active delivery path.
+- Follow-on customer-master packets are #125 and #126 in that order, followed by Phase 8A closure and Phase 8B / #29.
+
+This baseline must be updated whenever the active packet or merged completion state changes.
+'''
+          new_baseline = '''## 10. Current control baseline
+
+As of 2026-07-17:
+
+- Phases 0.1–7 are complete and Phase 8A is active.
+- Phase 8A.6 is complete through PR #119 / merge `d5cb4502ad0c49158e0789d8749dc09160da7895`.
+- Phase 8A.7 is complete through PR #121 / merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
+- Phase 8A.8 is complete through PR #130 / merge `0e7f9889362533446cc65d95dcf7969a60086a57`.
+- Phase 8A.9 is complete through PR #132 / merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`.
+- Native module composition and lifecycle gating are complete through issue #134 / PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`.
+- Phase 8A.10 / #125 is **Ready** and is the next customer-master production packet from the accepted architecture baseline.
+- Phase 8A.11 / #126 remains planned after #125, followed by Phase 8A closure and Phase 8B / #29.
+- PR #118 remains superseded by merged PR #119 and is not an active delivery path.
+
+This baseline must be updated whenever the active packet or merged completion state changes.
+'''
+          replace("docs/DELIVERY_GOVERNANCE.md", old_baseline, new_baseline)
+
+          replace(
+              "docs/PROJECT_STATUS.md",
+              "`8A.10 -> 8A.11 -> Phase 8A closure -> 8B`\n\nA later packet",
+              '''`8A.10 -> 8A.11 -> Phase 8A closure -> 8B`
+
+The accepted architecture baseline is issue #134 / PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`. It provides module-owned exact-coordinate routing, durable activation, pre-authorization cross-owner semantics, deterministic workers, exact route parity and golden production scaffolding. Phase 8A.10 must build on this baseline rather than the older post-8A.9 commit directly.
+
+A later packet''',
+          )
+          replace(
+              "docs/PROJECT_STATUS.md",
+              "- real application composition and deployable `services/crm-api` process acceptance;\n",
+              "- native module-owned exact-coordinate application composition and deployable `services/crm-api` process acceptance;\n- durable tenant module activation and deterministic activation-gated worker composition;\n- mechanical manifest/binding/production-route parity and immutable publication compatibility;\n",
+          )
+          replace(
+              "docs/PROJECT_STATUS.md",
+              "- exact-SHA final evidence for every merge candidate;\n",
+              "- exact module-owned route/validator/worker contributions with no central business switches;\n- durable installation-state activation and exact route classifications;\n- exact-SHA final evidence for every merge candidate;\n",
+          )
+          replace(
+              "docs/PROJECT_STATUS.md",
+              '''1. Start #125 from merged Phase 8A.9 baseline `8a1664309be9dc0c5e3bf9014cf248b1c3680035`.
+2. Freeze governed enrichment provider, secret-handle, mapping, provenance, licensing and owner-capability application boundaries.
+''',
+              '''1. Start #125 from accepted native-composition baseline `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`.
+2. Freeze enrichment ownership, module contribution, provider adapter, secret-handle, mapping, provenance, licensing, activation and exact owner-capability application boundaries before implementation.
+''',
+          )
+
+          replace(
+              "docs/IMPLEMENTATION_ROADMAP.md",
+              '''### Phase 7 — Complete
+
+Delivered golden module tooling, generalized projection runtime, permission-aware global search, typed web product shell, immutable tenant-authorized metadata, Admin Studio publication/rollback and trusted-code UI-extension failure isolation.
+
+Untrusted third-party execution remains Phase 10.
+''',
+              '''### Phase 7 — Complete
+
+Delivered golden module tooling, generalized projection runtime, permission-aware global search, typed web product shell, immutable tenant-authorized metadata, Admin Studio publication/rollback and trusted-code UI-extension failure isolation.
+
+### Native application-composition integrity — Complete
+
+Issue #134 / PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8` completed module-owned exact-coordinate routing, durable tenant activation, pre-authorization cross-owner validation, deterministic worker contributions, exact production-route parity, immutable compatibility gates and production contribution scaffolding. This is the required baseline for all subsequent Phase 8 modules.
+
+Untrusted third-party execution remains Phase 10.
+''',
+          )
+          replace(
+              "docs/IMPLEMENTATION_ROADMAP.md",
+              "1. **8A.10 / #125 — Ready:** Governed Customer Enrichment and Provenance is the next customer-master production packet.\n",
+              "1. **8A.10 / #125 — Ready:** Governed Customer Enrichment and Provenance is the next customer-master production packet, based on completed architecture integrity issue #134 / PR #135.\n",
+          )
+          replace(
+              "docs/IMPLEMENTATION_ROADMAP.md",
+              "1. Start #125 from merged Phase 8A.9 baseline `8a1664309be9dc0c5e3bf9014cf248b1c3680035` as the single active customer-master production packet.\n",
+              "1. Start #125 from accepted native-composition baseline `023fa5ef1d510d5bcc32222c739e6d58e5696fb8` as the single active customer-master production packet.\n",
+          )
+
+          replace(
+              "docs/PHASE8_DELIVERY_PLAN.md",
+              "- exact process/browser/operational acceptance gates.\n",
+              "- module-owned mutation/query/worker contributions and durable activation semantics;\n- exact route-parity/classification impact with no central business switches;\n- exact process/browser/operational acceptance gates.\n",
+          )
+          replace(
+              "docs/PHASE8_DELIVERY_PLAN.md",
+              "Depends on: completed #124 / merged PR #132 (`8a1664309be9dc0c5e3bf9014cf248b1c3680035`)\n\nThis is the next customer-master production packet.\n",
+              "Depends on: completed #124 / merged PR #132 and completed architecture integrity #134 / merged PR #135 (`023fa5ef1d510d5bcc32222c739e6d58e5696fb8`)\n\nThis is the next customer-master production packet and must branch from the accepted native-composition baseline.\n",
+          )
+          replace(
+              "docs/PHASE8_DELIVERY_PLAN.md",
+              "Deliver provider adapter boundaries, secret handles, versioned mappings, source/freshness/licensing provenance, review/approval policy where required and exact owner-capability application of accepted changes.\n",
+              "Deliver a distinct enrichment ownership boundary, module-owned production contributions, provider adapter boundaries, secret handles, versioned mappings, source/freshness/licensing provenance, review/approval policy where required and exact owner-capability application of accepted changes. Provider I/O remains an infrastructure adapter and must not enter the pure business core.\n",
+          )
+
+          write(
+              ".github/pull_request_template.md",
+              '''## Summary
+
+## Requirement IDs and dependencies
+
+## Architecture result
+- Authoritative owner/domain:
+- Exact production path:
+- Module contribution coordinates:
+- Remaining scope not claimed:
+
+## Architecture conformance
+- [ ] Domain/application code depends inward only; no business module gained DB, broker, arbitrary HTTP, secret-store, object-storage or LLM-provider clients.
+- [ ] No business module imports another module's internals or storage.
+- [ ] Mutations, queries and workers enter production through explicit module-owned contributions.
+- [ ] Generic router/worker algorithms contain no new business capability, query, module-ID or concrete-adapter switch.
+- [ ] Tenant route/worker activation uses durable `crm.module_installations` state with no bootstrap bypass.
+- [ ] Cross-owner semantic reads occur before final authorization; authoritative executors perform no unrelated awaited validation before side effects.
+- [ ] Every governed coordinate has exactly one production route or one exact reasoned classification; no owner-wide/pattern allowlist was added.
+- [ ] Capability, query, permission, idempotency, event, audit and typed error contracts are preserved.
+- [ ] Protobuf and published module changes pass compatibility/immutability checks.
+- [ ] Migration, disable, uninstall, rollback and recovery implications are documented and tested.
+
+## Acceptance evidence
+- [ ] Focused domain/unit tests
+- [ ] Architecture conformance preflight: `python scripts/repo.py conformance`
+- [ ] Rust formatting, Clippy and workspace tests
+- [ ] Contract and Governance CI when applicable
+- [ ] Database and real-process/runtime CI when applicable
+- [ ] Product-plane typecheck/lint/unit/E2E when applicable
+- [ ] Security, tenant-isolation, authorization and cross-tenant negative evidence
+- [ ] Performance/operational evidence when relevant
+- [ ] Documentation, roadmap, module catalog, issue and PR state synchronized
+
+## Exact-head verification
+- Candidate SHA:
+- Applicable workflows:
+- [ ] All applicable workflows passed on this unchanged SHA.
+- [ ] No unresolved blocking review thread or known gate defect remains.
+''',
+          )
+
+          replace(
+              "scripts/repo.py",
+              '''def command_contracts(args: argparse.Namespace) -> None:
+    mode = "--write" if args.write else "--check"
+    run([sys.executable, "scripts/generate_contract_bindings.py", mode])
+
+
+def command_format(args: argparse.Namespace) -> None:
+''',
+              '''def command_contracts(args: argparse.Namespace) -> None:
+    mode = "--write" if args.write else "--check"
+    run([sys.executable, "scripts/generate_contract_bindings.py", mode])
+
+
+def command_conformance(_: argparse.Namespace) -> None:
+    """Run the permanent native modular-architecture preflight."""
+    command_architecture(argparse.Namespace())
+    command_manifests(argparse.Namespace())
+    command_contracts(argparse.Namespace(write=False))
+    run([sys.executable, "scripts/check_native_module_composition.py"])
+    run([sys.executable, "scripts/check_production_route_classifications.py"])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "unittest",
+            "tests/test_native_module_composition.py",
+            "tests/test_production_route_classifications.py",
+            "tests/test_module_scaffolding.py",
+        ]
+    )
+    run(
+        [
+            "cargo",
+            "test",
+            "-p",
+            "crm-application-runtime",
+            "--test",
+            "production_route_parity",
+            "--all-features",
+        ]
+    )
+
+
+def command_format(args: argparse.Namespace) -> None:
+''',
+          )
+          replace(
+              "scripts/repo.py",
+              "def command_quality(_: argparse.Namespace) -> None:\n    command_architecture(argparse.Namespace())\n",
+              "def command_quality(_: argparse.Namespace) -> None:\n    command_conformance(argparse.Namespace())\n",
+          )
+          replace(
+              "scripts/repo.py",
+              '''    contracts.set_defaults(handler=command_contracts)
+
+    fmt = subparsers.add_parser(
+''',
+              '''    contracts.set_defaults(handler=command_contracts)
+
+    conformance = subparsers.add_parser(
+        "conformance",
+        help="run native composition, manifest, contract, scaffold and route-parity gates",
+    )
+    conformance.set_defaults(handler=command_conformance)
+
+    fmt = subparsers.add_parser(
+''',
+          )
+          PY
+          python -m py_compile scripts/repo.py
+          python scripts/check_architecture.py
+          python scripts/check_native_module_composition.py
+          python scripts/check_production_route_classifications.py
+          git diff --check
+      - name: Publish synchronized architecture controls
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            AGENTS.md \
+            .github/pull_request_template.md \
+            docs/ARCHITECTURE_READINESS.md \
+            docs/SYSTEM_INVARIANTS.md \
+            docs/APPLICATION_ARCHITECTURE.md \
+            docs/DEVELOPMENT_WORKFLOW.md \
+            docs/MODULE_DEVELOPMENT.md \
+            docs/DELIVERY_GOVERNANCE.md \
+            docs/PROJECT_STATUS.md \
+            docs/IMPLEMENTATION_ROADMAP.md \
+            docs/PHASE8_DELIVERY_PLAN.md \
+            scripts/repo.py
+          git commit -m "Synchronize architecture conformance baseline"
+          git push origin HEAD:docs/architecture-conformance-baseline
