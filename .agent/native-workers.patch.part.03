@@ -1,0 +1,240 @@
++        Arc::new(GlobalSearchBackgroundWorker::new(search_worker)),
++    )?;
++
++    Ok(builder.build())
++}
++
++fn add_worker(
++    builder: &mut BackgroundWorkerRegistryBuilder,
++    activation: Arc<dyn ModuleActivationPort>,
++    phase: BackgroundWorkerPhase,
++    owner_module_id: &str,
++    worker_id: &str,
++    worker: Arc<dyn TenantBackgroundWorker>,
++) -> Result<(), SdkError> {
++    let module_id = ModuleId::try_new(owner_module_id).map_err(configuration_error)?;
++    let gated: Arc<dyn TenantBackgroundWorker> = Arc::new(
++        ActivationGatedBackgroundWorker::new(activation, module_id.clone(), worker),
++    );
++    builder
++        .add_in_phase(phase, module_id, worker_id, gated)
++        .map(|_| ())
++        .map_err(background_composition_error)
++}
++
++#[derive(Clone)]
++struct ImportExecutionBackgroundWorker {
++    inner: Arc<PartyImportExecutionWorker>,
++}
++
++impl ImportExecutionBackgroundWorker {
++    fn new(inner: Arc<PartyImportExecutionWorker>) -> Self {
++        Self { inner }
++    }
++}
++
++impl fmt::Debug for ImportExecutionBackgroundWorker {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        formatter
++            .debug_struct("ImportExecutionBackgroundWorker")
++            .finish_non_exhaustive()
++    }
++}
++
++impl TenantBackgroundWorker for ImportExecutionBackgroundWorker {
++    fn run_tenant_cycle<'a>(
++        &'a self,
++        tenant_id: TenantId,
++        _now_unix_nanos: i64,
++    ) -> PortFuture<'a, Result<(), SdkError>> {
++        Box::pin(async move {
++            self.inner
++                .run_tenant_cycle(tenant_id)
++                .await
++                .map(|_| ())
++                .map_err(|error| worker_error("IMPORT_EXECUTION", error))
++        })
++    }
++}
++
++#[derive(Clone)]
++struct ExportSelectionBackgroundWorker {
++    inner: Arc<PartyExportSelectionWorker>,
++}
++
++impl ExportSelectionBackgroundWorker {
++    fn new(inner: Arc<PartyExportSelectionWorker>) -> Self {
++        Self { inner }
++    }
++}
++
++impl fmt::Debug for ExportSelectionBackgroundWorker {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        formatter
++            .debug_struct("ExportSelectionBackgroundWorker")
++            .finish_non_exhaustive()
++    }
++}
++
++impl TenantBackgroundWorker for ExportSelectionBackgroundWorker {
++    fn run_tenant_cycle<'a>(
++        &'a self,
++        tenant_id: TenantId,
++        _now_unix_nanos: i64,
++    ) -> PortFuture<'a, Result<(), SdkError>> {
++        Box::pin(async move {
++            self.inner
++                .run_tenant_cycle(tenant_id)
++                .await
++                .map(|_| ())
++                .map_err(|error| worker_error("EXPORT_SELECTION", error))
++        })
++    }
++}
++
++#[derive(Clone)]
++struct SalesActivitiesLinkBackgroundWorker {
++    store: PostgresDataStore,
++    processor: Arc<SalesActivitiesLinkEventProcessor>,
++}
++
++impl SalesActivitiesLinkBackgroundWorker {
++    fn new(store: PostgresDataStore, processor: Arc<SalesActivitiesLinkEventProcessor>) -> Self {
++        Self { store, processor }
++    }
++}
++
++impl fmt::Debug for SalesActivitiesLinkBackgroundWorker {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        formatter
++            .debug_struct("SalesActivitiesLinkBackgroundWorker")
++            .field("store", &self.store)
++            .finish_non_exhaustive()
++    }
++}
++
++impl TenantBackgroundWorker for SalesActivitiesLinkBackgroundWorker {
++    fn run_tenant_cycle<'a>(
++        &'a self,
++        tenant_id: TenantId,
++        now_unix_nanos: i64,
++    ) -> PortFuture<'a, Result<(), SdkError>> {
++        Box::pin(async move {
++            let event_type = EventType::try_new("sales.deal.stage_changed")
++                .map_err(configuration_error)?;
++            let consumer_module_id = ModuleId::try_new(LINK_MODULE_ID)
++                .map_err(configuration_error)?;
++            let mut after = None;
++            loop {
++                let page = self
++                    .store
++                    .list_event_history(&EventHistoryRequest {
++                        tenant_id: tenant_id.clone(),
++                        consumer_module_id: consumer_module_id.clone(),
++                        event_types: vec![event_type.clone()],
++                        after,
++                        page_size: LINK_SCAN_PAGE_SIZE,
++                    })
++                    .await?;
++                for delivery in page.deliveries {
++                    let outcome = self
++                        .processor
++                        .process(tenant_id.clone(), delivery.event_id, now_unix_nanos)
++                        .await
++                        .map_err(|error| worker_error("SALES_ACTIVITIES_LINK", error))?;
++                    if let SalesActivitiesLinkDeliveryOutcome::DeadLettered { error_code } = outcome
++                    {
++                        return Err(SdkError::new(
++                            "SALES_ACTIVITIES_LINK_DEAD_LETTERED",
++                            ErrorCategory::Unavailable,
++                            true,
++                            "A Sales-to-Activities event delivery was dead-lettered.",
++                        )
++                        .with_internal_reference(error_code));
++                    }
++                }
++                let Some(next) = page.next_cursor else {
++                    return Ok(());
++                };
++                after = Some(next);
++            }
++        })
++    }
++}
++
++#[derive(Clone)]
++struct Phase6ProjectionBackgroundWorker {
++    inner: Arc<Phase6ProjectionWorker>,
++    projection_id: &'static str,
++}
++
++impl Phase6ProjectionBackgroundWorker {
++    fn new(inner: Arc<Phase6ProjectionWorker>, projection_id: &'static str) -> Self {
++        Self {
++            inner,
++            projection_id,
++        }
++    }
++}
++
++impl fmt::Debug for Phase6ProjectionBackgroundWorker {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        formatter
++            .debug_struct("Phase6ProjectionBackgroundWorker")
++            .field("projection_id", &self.projection_id)
++            .finish_non_exhaustive()
++    }
++}
++
++impl TenantBackgroundWorker for Phase6ProjectionBackgroundWorker {
++    fn run_tenant_cycle<'a>(
++        &'a self,
++        tenant_id: TenantId,
++        _now_unix_nanos: i64,
++    ) -> PortFuture<'a, Result<(), SdkError>> {
++        Box::pin(async move {
++            loop {
++                let result = self
++                    .inner
++                    .run_batch(tenant_id.clone(), self.projection_id, PROJECTION_PAGE_SIZE)
++                    .await
++                    .map_err(|error| worker_error("PHASE6_PROJECTION", error))?;
++                if !result.has_more {
++                    return Ok(());
++                }
++            }
++        })
++    }
++}
++
++#[derive(Clone)]
++struct Customer360BackgroundWorker {
++    inner: Arc<Customer360ProjectionWorker>,
++}
++
++impl Customer360BackgroundWorker {
++    fn new(inner: Arc<Customer360ProjectionWorker>) -> Self {
++        Self { inner }
++    }
++}
++
++impl fmt::Debug for Customer360BackgroundWorker {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        formatter
++            .debug_struct("Customer360BackgroundWorker")
++            .finish_non_exhaustive()
++    }
++}
++
++impl TenantBackgroundWorker for Customer360BackgroundWorker {
++    fn run_tenant_cycle<'a>(
++        &'a self,
++        tenant_id: TenantId,
++        _now_unix_nanos: i64,
++    ) -> PortFuture<'a, Result<(), SdkError>> {
++        Box::pin(async move {
++            loop {
++                let result = self
++                    .inner
++                    .run_batch(tenant_id.clone(), PROJECTION_PAGE_SIZE)
++                    .await
