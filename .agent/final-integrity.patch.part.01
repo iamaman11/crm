@@ -1,0 +1,144 @@
+-         let internal_import_outcome_definitions = internal_capability_definitions()
+-diff --git a/crates/crm-application-runtime/tests/production_route_parity.rs b/crates/crm-application-runtime/tests/production_route_parity.rs
+-new file mode 100644
+-index 0000000..777c766
+---- /dev/null
+-+++ b/crates/crm-application-runtime/tests/production_route_parity.rs
+-@@ -0,0 +1,122 @@
+-+use crm_application_runtime::{application_mutation_definitions, application_query_definitions};
+-+use serde::Deserialize;
+-+use std::collections::BTreeSet;
+-+use std::fs;
+-+use std::path::PathBuf;
+-+
+-+#[derive(Debug, Deserialize)]
+-+struct ContractBindings {
+-+    schema_version: String,
+-+    modules: Vec<BoundModule>,
+-+}
+-+
+-+#[derive(Debug, Deserialize)]
+-+struct BoundModule {
+-+    module_id: String,
+-+    capabilities: Vec<BoundCapability>,
+-+}
+-+
+-+#[derive(Debug, Deserialize)]
+-+struct BoundCapability {
+-+    id: String,
+-+    version: String,
+-+}
+-+
+-+#[derive(Debug, Deserialize)]
+-+struct RouteClassifications {
+-+    schema_version: String,
+-+    platform_runtime_routes: Vec<ClassifiedRoute>,
+-+    non_runtime_contract_routes: Vec<ClassifiedRoute>,
+-+}
+-+
+-+#[derive(Debug, Deserialize)]
+-+struct ClassifiedRoute {
+-+    owner_module_id: String,
+-+    id: String,
+-+    version: String,
+-+    reason: String,
+-+}
+-+
+-+type Coordinate = (String, String, String);
+-+
+-+#[test]
+-+fn governed_contracts_equal_production_routes_exactly() {
+-+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+-+    let bindings: ContractBindings = serde_json::from_str(
+-+        &fs::read_to_string(root.join("contracts/module-contract-bindings.json")).unwrap(),
+-+    )
+-+    .unwrap();
+-+    let classifications: RouteClassifications = serde_json::from_str(
+-+        &fs::read_to_string(root.join("contracts/production-route-classifications.json")).unwrap(),
+-+    )
+-+    .unwrap();
+-+    assert_eq!(bindings.schema_version, "crm.contract-bindings/v1");
+-+    assert_eq!(
+-+        classifications.schema_version,
+-+        "crm.production-route-classifications/v1"
+-+    );
+-+
+-+    let governed = unique(
+-+        bindings.modules.into_iter().flat_map(|module| {
+-+            module.capabilities.into_iter().map(move |capability| {
+-+                (module.module_id.clone(), capability.id, capability.version)
+-+            })
+-+        }),
+-+        "governed contract bindings",
+-+    );
+-+    let platform = classified(&classifications.platform_runtime_routes, "platform runtime");
+-+    let non_runtime = classified(
+-+        &classifications.non_runtime_contract_routes,
+-+        "non-runtime contract",
+-+    );
+-+    assert!(platform.is_disjoint(&non_runtime), "route classifications overlap");
+-+    assert!(
+-+        non_runtime.is_subset(&governed),
+-+        "non-runtime classifications must name governed contract routes"
+-+    );
+-+
+-+    let mut expected = governed.difference(&non_runtime).cloned().collect::<BTreeSet<_>>();
+-+    expected.extend(platform);
+-+    let actual = unique(
+-+        application_mutation_definitions()
+-+            .unwrap()
+-+            .into_iter()
+-+            .chain(application_query_definitions().unwrap())
+-+            .map(|definition| {
+-+                (
+-+                    definition.owner_module_id.as_str().to_owned(),
+-+                    definition.capability_id.as_str().to_owned(),
+-+                    definition.capability_version.as_str().to_owned(),
+-+                )
+-+            }),
+-+        "production route inventory",
+-+    );
+-+
+-+    assert_eq!(expected, actual, "manifest/binding/production route drift");
+-+}
+-+
+-+fn classified(routes: &[ClassifiedRoute], label: &str) -> BTreeSet<Coordinate> {
+-+    for route in routes {
+-+        assert!(!route.reason.trim().is_empty(), "{label} classification lacks reason");
+-+    }
+-+    unique(
+-+        routes.iter().map(|route| {
+-+            (
+-+                route.owner_module_id.clone(),
+-+                route.id.clone(),
+-+                route.version.clone(),
+-+            )
+-+        }),
+-+        label,
+-+    )
+-+}
+-+
+-+fn unique(
+-+    coordinates: impl IntoIterator<Item = Coordinate>,
+-+    label: &str,
+-+) -> BTreeSet<Coordinate> {
+-+    let coordinates = coordinates.into_iter().collect::<Vec<_>>();
+-+    let unique = coordinates.iter().cloned().collect::<BTreeSet<_>>();
+-+    assert_eq!(coordinates.len(), unique.len(), "duplicate coordinate in {label}");
+-+    unique
+-+}
+-diff --git a/.agent/final-code.patch.part.01 b/.agent/final-code.patch.part.01
+-deleted file mode 100644
+-index 77615f4..0000000
+---- a/.agent/final-code.patch.part.01
+-+++ /dev/null
+-@@ -1,228 +0,0 @@
+--diff --git a/crates/crm-core-data/src/lib.rs b/crates/crm-core-data/src/lib.rs
+--index a1f1313..cd1d1cd 100644
+----- a/crates/crm-core-data/src/lib.rs
+--+++ b/crates/crm-core-data/src/lib.rs
+--@@ -7,6 +7,7 @@ pub mod capability_executor;
+-- mod metadata_capability_executor;
+-- mod metadata_query_store;
+-- mod metadata_store;
+--+mod module_activation;
