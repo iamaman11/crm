@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v1;
+
+import "crm/customer_enrichment/v1/enrichment_types.proto";
+import "crm/customer_enrichment/v1/provider_evidence.proto";
+import "crm/customer_enrichment/v1/reference.proto";
+import "crm/customer_enrichment/v1/requests.proto";
+import "crm/customer_enrichment/v1/suggestions.proto";
+
+// Worker-only dispatch input. Provider-specific request payloads remain infrastructure-owned.
+message DispatchEnrichmentRequestRequest {
+  EnrichmentRequestRef enrichment_request_ref = 1;
+  EnrichmentRequestStatus expected_status = 2;
+  uint32 expected_retry_generation = 3;
+}
+
+message DispatchEnrichmentRequestResponse {
+  EnrichmentRequest enrichment_request = 1;
+}
+
+// Canonical provider evidence only. Raw provider payloads are excluded from this contract.
+message RecordProviderResponseRequest {
+  EnrichmentRequestRef enrichment_request_ref = 1;
+  string replay_key = 2;
+  optional string provider_correlation_id = 3;
+  ProviderResponseClass response_class = 4;
+  bytes canonical_response_digest = 5;
+  optional int64 provider_observed_at_unix_ms = 6;
+  int64 retrieved_at_unix_ms = 7;
+  uint64 metered_units = 8;
+  optional string protected_evidence_reference = 9;
+  optional string safe_provider_code = 10;
+}
+
+message RecordProviderResponseResponse {
+  EnrichmentRequest enrichment_request = 1;
+  ProviderResponseReceipt provider_response_receipt = 2;
+  repeated ProviderUsageEntry provider_usage_entries = 3;
+}
+
+message ProviderSuggestionCandidate {
+  EnrichmentTargetSnapshot target = 1;
+  string proposed_value = 2;
+  optional int64 observed_at_unix_ms = 3;
+  int64 effective_at_unix_ms = 4;
+  int64 fresh_until_unix_ms = 5;
+  int64 expires_at_unix_ms = 6;
+  optional uint32 confidence_basis_points = 7;
+  ProviderPolicyEvidence policy_evidence = 8;
+  repeated string evidence_references = 9;
+}
+
+message MaterializeSuggestionsRequest {
+  EnrichmentRequestRef enrichment_request_ref = 1;
+  ProviderResponseReceiptRef provider_response_receipt_ref = 2;
+  repeated ProviderSuggestionCandidate candidates = 3;
+}
+
+message MaterializeSuggestionsResponse {
+  EnrichmentRequest enrichment_request = 1;
+  repeated Suggestion suggestions = 2;
+}
+
+message RecordApplicationOutcomeRequest {
+  ApplicationAttemptRef application_attempt_ref = 1;
+  ApplicationOutcome outcome = 2;
+  int64 recorded_at_unix_ms = 3;
+}
+
+message RecordApplicationOutcomeResponse {
+  ApplicationAttempt application_attempt = 1;
+}
