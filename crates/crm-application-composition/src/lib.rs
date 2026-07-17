@@ -2,10 +2,9 @@
 
 //! Deterministic first-party module contribution runtime.
 //!
-//! This crate owns application-composition mechanics only. It knows no business
-//! module, transport, database or process-host implementation. A host contributes
-//! exact versioned mutation/query routes and background workers; assembly rejects
-//! duplicate, owner-mismatched or incomplete coordinates before serving traffic.
+//! This crate contains composition mechanics only. It knows no concrete CRM
+//! module, database, transport or process host. Exact versioned routes and
+//! background workers are contributed explicitly and fail closed at assembly.
 
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRegistryPort, CapabilityRequest,
@@ -70,36 +69,11 @@ impl fmt::Debug for QueryRoute {
     }
 }
 
-pub trait TenantBackgroundWorker: Send + Sync {
-    fn run_tenant_cycle<'a>(
-        &'a self,
-        tenant_id: TenantId,
-        now_unix_nanos: i64,
-    ) -> PortFuture<'a, Result<(), SdkError>>;
-}
-
-#[derive(Clone)]
-pub struct BackgroundWorkerContribution {
-    pub worker_id: String,
-    pub worker: Arc<dyn TenantBackgroundWorker>,
-}
-
-impl fmt::Debug for BackgroundWorkerContribution {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("BackgroundWorkerContribution")
-            .field("worker_id", &self.worker_id)
-            .field("worker", &"dyn TenantBackgroundWorker")
-            .finish()
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ModuleRuntimeContribution {
     pub module_id: ModuleId,
     pub mutations: Vec<MutationRoute>,
     pub queries: Vec<QueryRoute>,
-    pub background_workers: Vec<BackgroundWorkerContribution>,
 }
 
 impl ModuleRuntimeContribution {
@@ -108,7 +82,6 @@ impl ModuleRuntimeContribution {
             module_id,
             mutations: Vec::new(),
             queries: Vec::new(),
-            background_workers: Vec::new(),
         }
     }
 
@@ -121,18 +94,6 @@ impl ModuleRuntimeContribution {
         self.queries.push(route);
         self
     }
-
-    pub fn with_background_worker(
-        mut self,
-        worker_id: impl Into<String>,
-        worker: Arc<dyn TenantBackgroundWorker>,
-    ) -> Self {
-        self.background_workers.push(BackgroundWorkerContribution {
-            worker_id: worker_id.into(),
-            worker,
-        });
-        self
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,7 +101,6 @@ pub enum CompositionError {
     DuplicateModule(String),
     DuplicateMutation(Coordinate),
     DuplicateQuery(Coordinate),
-    DuplicateWorker(WorkerCoordinate),
     OwnerMismatch {
         module_id: String,
         capability_id: String,
@@ -149,10 +109,6 @@ pub enum CompositionError {
     },
     MutationKindMismatch(Coordinate),
     QueryKindMismatch(Coordinate),
-    InvalidWorkerId {
-        module_id: String,
-        worker_id: String,
-    },
     Empty,
 }
 
@@ -168,12 +124,6 @@ impl fmt::Display for CompositionError {
             Self::DuplicateQuery((id, version)) => {
                 write!(formatter, "duplicate query route {id}@{version}")
             }
-            Self::DuplicateWorker((module_id, worker_id)) => {
-                write!(
-                    formatter,
-                    "duplicate background worker {module_id}/{worker_id}"
-                )
-            }
             Self::OwnerMismatch {
                 module_id,
                 capability_id,
@@ -184,39 +134,34 @@ impl fmt::Display for CompositionError {
                 "module {module_id} cannot contribute {capability_id}@{capability_version} owned by {owner_module_id}"
             ),
             Self::MutationKindMismatch((id, version)) => {
-                write!(
-                    formatter,
-                    "mutation route {id}@{version} has a query definition"
-                )
+                write!(formatter, "mutation route {id}@{version} has a query definition")
             }
             Self::QueryKindMismatch((id, version)) => {
-                write!(
-                    formatter,
-                    "query route {id}@{version} has a mutation definition"
-                )
+                write!(formatter, "query route {id}@{version} has a mutation definition")
             }
-            Self::InvalidWorkerId {
-                module_id,
-                worker_id,
-            } => write!(
-                formatter,
-                "invalid background worker id {module_id}/{worker_id}"
-            ),
-            Self::Empty => {
-                formatter.write_str("application composition must declare at least one module")
-            }
+            Self::Empty => formatter.write_str("application composition declares no modules"),
         }
     }
 }
 
 impl Error for CompositionError {}
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ApplicationCompositionBuilder {
     modules: BTreeSet<String>,
     mutations: BTreeMap<Coordinate, MutationRoute>,
     queries: BTreeMap<Coordinate, QueryRoute>,
-    workers: BTreeMap<WorkerCoordinate, Arc<dyn TenantBackgroundWorker>>,
+}
+
+impl fmt::Debug for ApplicationCompositionBuilder {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ApplicationCompositionBuilder")
+            .field("modules", &self.modules)
+            .field("mutation_count", &self.mutations.len())
+            .field("query_count", &self.queries.len())
+            .finish()
+    }
 }
 
 impl ApplicationCompositionBuilder {
@@ -257,23 +202,6 @@ impl ApplicationCompositionBuilder {
                 return Err(CompositionError::DuplicateQuery(key));
             }
         }
-
-        for contribution in contribution.background_workers {
-            if !valid_worker_id(&contribution.worker_id) {
-                return Err(CompositionError::InvalidWorkerId {
-                    module_id: module_id.clone(),
-                    worker_id: contribution.worker_id,
-                });
-            }
-            let key = (module_id.clone(), contribution.worker_id);
-            if self
-                .workers
-                .insert(key.clone(), contribution.worker)
-                .is_some()
-            {
-                return Err(CompositionError::DuplicateWorker(key));
-            }
-        }
         Ok(self)
     }
 
@@ -281,18 +209,16 @@ impl ApplicationCompositionBuilder {
         if self.modules.is_empty() {
             return Err(CompositionError::Empty);
         }
-
         let mutation_definitions = self
             .mutations
             .values()
             .map(|route| route.definition.clone())
-            .collect::<Vec<_>>();
+            .collect();
         let query_definitions = self
             .queries
             .values()
             .map(|route| route.definition.clone())
-            .collect::<Vec<_>>();
-
+            .collect();
         Ok(ApplicationComposition {
             module_ids: self.modules,
             mutation_definitions,
@@ -311,17 +237,11 @@ impl ApplicationCompositionBuilder {
             query_executor: Arc::new(QueryExecutorRouter {
                 routes: Arc::new(self.queries),
             }),
-            background_workers: BackgroundWorkerRegistry {
-                workers: Arc::new(self.workers),
-            },
         })
     }
 }
 
-fn validate_owner(
-    module_id: &str,
-    definition: &CapabilityDefinition,
-) -> Result<(), CompositionError> {
+fn validate_owner(module_id: &str, definition: &CapabilityDefinition) -> Result<(), CompositionError> {
     if definition.owner_module_id.as_str() != module_id {
         return Err(CompositionError::OwnerMismatch {
             module_id: module_id.to_owned(),
@@ -331,14 +251,6 @@ fn validate_owner(
         });
     }
     Ok(())
-}
-
-fn valid_worker_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 180
-        && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
-        })
 }
 
 #[derive(Clone)]
@@ -352,7 +264,6 @@ pub struct ApplicationComposition {
     mutation_executor: Arc<MutationExecutorRouter>,
     query_validator: Arc<QueryValidatorRouter>,
     query_executor: Arc<QueryExecutorRouter>,
-    background_workers: BackgroundWorkerRegistry,
 }
 
 impl fmt::Debug for ApplicationComposition {
@@ -360,9 +271,8 @@ impl fmt::Debug for ApplicationComposition {
         formatter
             .debug_struct("ApplicationComposition")
             .field("module_ids", &self.module_ids)
-            .field("mutation_definitions", &self.mutation_definitions.len())
-            .field("query_definitions", &self.query_definitions.len())
-            .field("background_workers", &self.background_workers.len())
+            .field("mutation_count", &self.mutation_definitions.len())
+            .field("query_count", &self.query_definitions.len())
             .finish()
     }
 }
@@ -403,10 +313,6 @@ impl ApplicationComposition {
     pub fn query_executor(&self) -> Arc<dyn QueryExecutor> {
         self.query_executor.clone()
     }
-
-    pub fn background_workers(&self) -> &BackgroundWorkerRegistry {
-        &self.background_workers
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -420,7 +326,7 @@ impl DefinitionRegistry {
             definitions: Arc::new(
                 routes
                     .iter()
-                    .map(|(coordinate, route)| (coordinate.clone(), route.definition.clone()))
+                    .map(|(key, route)| (key.clone(), route.definition.clone()))
                     .collect(),
             ),
         }
@@ -431,7 +337,7 @@ impl DefinitionRegistry {
             definitions: Arc::new(
                 routes
                     .iter()
-                    .map(|(coordinate, route)| (coordinate.clone(), route.definition.clone()))
+                    .map(|(key, route)| (key.clone(), route.definition.clone()))
                     .collect(),
             ),
         }
@@ -465,7 +371,7 @@ impl fmt::Debug for MutationValidatorRouter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("MutationValidatorRouter")
-            .field("routes", &self.routes.len())
+            .field("route_count", &self.routes.len())
             .finish()
     }
 }
@@ -496,7 +402,7 @@ impl fmt::Debug for MutationExecutorRouter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("MutationExecutorRouter")
-            .field("routes", &self.routes.len())
+            .field("route_count", &self.routes.len())
             .finish()
     }
 }
@@ -527,7 +433,7 @@ impl fmt::Debug for QueryValidatorRouter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("QueryValidatorRouter")
-            .field("routes", &self.routes.len())
+            .field("route_count", &self.routes.len())
             .finish()
     }
 }
@@ -558,7 +464,7 @@ impl fmt::Debug for QueryExecutorRouter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("QueryExecutorRouter")
-            .field("routes", &self.routes.len())
+            .field("route_count", &self.routes.len())
             .finish()
     }
 }
@@ -604,6 +510,199 @@ impl QuerySemanticValidator for NoopQuerySemanticValidator {
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async { Ok(()) })
     }
+}
+
+pub trait ModuleActivationPort: Send + Sync {
+    fn is_active<'a>(
+        &'a self,
+        tenant_id: &'a TenantId,
+        module_id: &'a ModuleId,
+    ) -> PortFuture<'a, Result<bool, SdkError>>;
+}
+
+#[derive(Clone)]
+pub struct ActivationGatedMutationValidator {
+    activation: Arc<dyn ModuleActivationPort>,
+    inner: Arc<dyn CapabilitySemanticValidator>,
+}
+
+impl fmt::Debug for ActivationGatedMutationValidator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ActivationGatedMutationValidator")
+            .field("activation", &"dyn ModuleActivationPort")
+            .field("inner", &"dyn CapabilitySemanticValidator")
+            .finish()
+    }
+}
+
+impl ActivationGatedMutationValidator {
+    pub fn new(
+        activation: Arc<dyn ModuleActivationPort>,
+        inner: Arc<dyn CapabilitySemanticValidator>,
+    ) -> Self {
+        Self { activation, inner }
+    }
+}
+
+impl CapabilitySemanticValidator for ActivationGatedMutationValidator {
+    fn validate<'a>(
+        &'a self,
+        definition: &'a CapabilityDefinition,
+        request: &'a CapabilityRequest,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            if !self
+                .activation
+                .is_active(
+                    &request.context.execution.tenant_id,
+                    &definition.owner_module_id,
+                )
+                .await?
+            {
+                return Err(module_not_active(&definition.owner_module_id));
+            }
+            self.inner.validate(definition, request).await
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct ActivationGatedQueryValidator {
+    activation: Arc<dyn ModuleActivationPort>,
+    inner: Arc<dyn QuerySemanticValidator>,
+}
+
+impl fmt::Debug for ActivationGatedQueryValidator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ActivationGatedQueryValidator")
+            .field("activation", &"dyn ModuleActivationPort")
+            .field("inner", &"dyn QuerySemanticValidator")
+            .finish()
+    }
+}
+
+impl ActivationGatedQueryValidator {
+    pub fn new(
+        activation: Arc<dyn ModuleActivationPort>,
+        inner: Arc<dyn QuerySemanticValidator>,
+    ) -> Self {
+        Self { activation, inner }
+    }
+}
+
+impl QuerySemanticValidator for ActivationGatedQueryValidator {
+    fn validate<'a>(
+        &'a self,
+        definition: &'a CapabilityDefinition,
+        request: &'a QueryRequest,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            if !self
+                .activation
+                .is_active(&request.context.tenant_id, &definition.owner_module_id)
+                .await?
+            {
+                return Err(module_not_active(&definition.owner_module_id));
+            }
+            self.inner.validate(definition, request).await
+        })
+    }
+}
+
+pub trait TenantBackgroundWorker: Send + Sync {
+    fn run_tenant_cycle<'a>(
+        &'a self,
+        tenant_id: TenantId,
+        now_unix_nanos: i64,
+    ) -> PortFuture<'a, Result<(), SdkError>>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BackgroundCompositionError {
+    UndeclaredModule(String),
+    DuplicateWorker(WorkerCoordinate),
+    InvalidWorkerId(WorkerCoordinate),
+}
+
+impl fmt::Display for BackgroundCompositionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UndeclaredModule(module_id) => {
+                write!(formatter, "background worker owner {module_id} is undeclared")
+            }
+            Self::DuplicateWorker((module_id, worker_id)) => {
+                write!(formatter, "duplicate background worker {module_id}/{worker_id}")
+            }
+            Self::InvalidWorkerId((module_id, worker_id)) => {
+                write!(formatter, "invalid background worker id {module_id}/{worker_id}")
+            }
+        }
+    }
+}
+
+impl Error for BackgroundCompositionError {}
+
+pub struct BackgroundWorkerRegistryBuilder {
+    modules: BTreeSet<String>,
+    workers: BTreeMap<WorkerCoordinate, Arc<dyn TenantBackgroundWorker>>,
+}
+
+impl fmt::Debug for BackgroundWorkerRegistryBuilder {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BackgroundWorkerRegistryBuilder")
+            .field("modules", &self.modules)
+            .field("workers", &self.workers.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+impl BackgroundWorkerRegistryBuilder {
+    pub fn new(modules: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            modules: modules.into_iter().collect(),
+            workers: BTreeMap::new(),
+        }
+    }
+
+    pub fn add(
+        &mut self,
+        module_id: ModuleId,
+        worker_id: impl Into<String>,
+        worker: Arc<dyn TenantBackgroundWorker>,
+    ) -> Result<&mut Self, BackgroundCompositionError> {
+        let module_id = module_id.as_str().to_owned();
+        let worker_id = worker_id.into();
+        if !self.modules.contains(&module_id) {
+            return Err(BackgroundCompositionError::UndeclaredModule(module_id));
+        }
+        let key = (module_id, worker_id);
+        if !valid_worker_id(&key.1) {
+            return Err(BackgroundCompositionError::InvalidWorkerId(key));
+        }
+        if self.workers.insert(key.clone(), worker).is_some() {
+            return Err(BackgroundCompositionError::DuplicateWorker(key));
+        }
+        Ok(self)
+    }
+
+    pub fn build(self) -> BackgroundWorkerRegistry {
+        BackgroundWorkerRegistry {
+            workers: Arc::new(self.workers),
+        }
+    }
+}
+
+fn valid_worker_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 180
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || matches!(byte, b'.' | b'_' | b'-')
+        })
 }
 
 #[derive(Clone)]
@@ -668,6 +767,16 @@ fn route_unavailable() -> SdkError {
     composition_invalid("runtime route is unavailable")
 }
 
+fn module_not_active(module_id: &ModuleId) -> SdkError {
+    SdkError::new(
+        "MODULE_NOT_ACTIVE",
+        ErrorCategory::Conflict,
+        false,
+        "The requested module is not active for this tenant.",
+    )
+    .with_internal_reference(module_id.as_str())
+}
+
 fn composition_invalid(reference: impl Into<String>) -> SdkError {
     SdkError::new(
         "APPLICATION_COMPOSITION_INVALID",
@@ -683,7 +792,9 @@ mod tests {
     use super::*;
     use crm_capability_runtime::{CapabilityRisk, PayloadContract};
     use crm_module_sdk::{
-        DataClass, PayloadEncoding, RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,
+        ActorId, BusinessTransactionId, CausationId, CorrelationId, DataClass, ExecutionContext,
+        IdempotencyKey, ModuleExecutionContext, PayloadEncoding, RequestId, RetentionPolicyId,
+        SchemaId, SchemaVersion, TraceId, TypedPayload,
     };
     use std::sync::Mutex;
 
@@ -713,45 +824,32 @@ mod tests {
         ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
             Box::pin(async move {
                 self.calls.lock().unwrap().push("execute");
-                Ok(CapabilityExecutionResult { output: None })
-            })
-        }
-    }
-
-    #[derive(Debug)]
-    struct QueryHandler;
-
-    impl QuerySemanticValidator for QueryHandler {
-        fn validate<'a>(
-            &'a self,
-            _definition: &'a CapabilityDefinition,
-            _request: &'a QueryRequest,
-        ) -> PortFuture<'a, Result<(), SdkError>> {
-            Box::pin(async { Ok(()) })
-        }
-    }
-
-    impl QueryExecutor for QueryHandler {
-        fn execute<'a>(
-            &'a self,
-            definition: &'a CapabilityDefinition,
-            _request: QueryRequest,
-        ) -> PortFuture<'a, Result<QueryExecutionResult, SdkError>> {
-            Box::pin(async move {
-                Ok(QueryExecutionResult {
-                    output: payload(
-                        definition.owner_module_id.as_str(),
-                        definition.output_contract.as_ref().unwrap(),
-                    ),
+                Ok(CapabilityExecutionResult {
+                    output: None,
+                    affected_resources: Vec::new(),
+                    replayed: false,
                 })
             })
         }
     }
 
     #[derive(Debug)]
+    struct Activation(bool);
+
+    impl ModuleActivationPort for Activation {
+        fn is_active<'a>(
+            &'a self,
+            _tenant_id: &'a TenantId,
+            _module_id: &'a ModuleId,
+        ) -> PortFuture<'a, Result<bool, SdkError>> {
+            Box::pin(async move { Ok(self.0) })
+        }
+    }
+
+    #[derive(Debug)]
     struct Worker {
         order: Arc<Mutex<Vec<String>>>,
-        name: &'static str,
+        value: &'static str,
     }
 
     impl TenantBackgroundWorker for Worker {
@@ -761,43 +859,100 @@ mod tests {
             _now_unix_nanos: i64,
         ) -> PortFuture<'a, Result<(), SdkError>> {
             Box::pin(async move {
-                self.order.lock().unwrap().push(self.name.to_owned());
+                self.order.lock().unwrap().push(self.value.to_owned());
                 Ok(())
             })
         }
     }
 
     #[tokio::test]
-    async fn routes_exact_coordinates_without_central_switches() {
+    async fn exact_routes_do_not_need_central_capability_switches() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let handler = Arc::new(MutationHandler {
             calls: Arc::clone(&calls),
         });
         let definition = definition("crm.alpha", "alpha.record.create", true);
-        let contribution =
-            ModuleRuntimeContribution::new(module_id("crm.alpha")).with_mutation(MutationRoute {
-                definition: definition.clone(),
-                validator: handler.clone(),
-                executor: handler,
-            });
         let mut builder = ApplicationCompositionBuilder::new();
-        builder.add_module(contribution).unwrap();
+        builder
+            .add_module(
+                ModuleRuntimeContribution::new(module_id("crm.alpha")).with_mutation(
+                    MutationRoute {
+                        definition: definition.clone(),
+                        validator: handler.clone(),
+                        executor: handler,
+                    },
+                ),
+            )
+            .unwrap();
         let composition = builder.build().unwrap();
+        let request = request(&definition);
         composition
             .mutation_validator()
-            .validate(&definition, &mutation_request(&definition))
+            .validate(&definition, &request)
             .await
             .unwrap();
         composition
             .mutation_executor()
-            .execute(&definition, mutation_request(&definition))
+            .execute(&definition, request)
             .await
             .unwrap();
         assert_eq!(*calls.lock().unwrap(), vec!["validate", "execute"]);
     }
 
+    #[tokio::test]
+    async fn inactive_module_fails_before_inner_semantic_validation() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let inner = Arc::new(MutationHandler {
+            calls: Arc::clone(&calls),
+        });
+        let validator = ActivationGatedMutationValidator::new(
+            Arc::new(Activation(false)),
+            inner,
+        );
+        let definition = definition("crm.alpha", "alpha.record.create", true);
+        let error = validator
+            .validate(&definition, &request(&definition))
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, "MODULE_NOT_ACTIVE");
+        assert!(calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn background_workers_run_in_stable_coordinate_order() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let modules = BTreeSet::from(["crm.alpha".to_owned(), "crm.zeta".to_owned()]);
+        let mut builder = BackgroundWorkerRegistryBuilder::new(modules);
+        builder
+            .add(
+                module_id("crm.zeta"),
+                "worker-b",
+                Arc::new(Worker {
+                    order: Arc::clone(&order),
+                    value: "zeta/b",
+                }),
+            )
+            .unwrap();
+        builder
+            .add(
+                module_id("crm.alpha"),
+                "worker-a",
+                Arc::new(Worker {
+                    order: Arc::clone(&order),
+                    value: "alpha/a",
+                }),
+            )
+            .unwrap();
+        builder
+            .build()
+            .run_tenant_cycle(TenantId::try_new("tenant-a").unwrap(), 1)
+            .await
+            .unwrap();
+        assert_eq!(*order.lock().unwrap(), vec!["alpha/a", "zeta/b"]);
+    }
+
     #[test]
-    fn rejects_duplicate_and_owner_mismatched_routes() {
+    fn duplicate_and_owner_mismatched_routes_fail_assembly() {
         let handler = Arc::new(MutationHandler {
             calls: Arc::new(Mutex::new(Vec::new())),
         });
@@ -808,96 +963,23 @@ mod tests {
             executor: handler.clone(),
         };
         let mut builder = ApplicationCompositionBuilder::new();
-        builder
+        let error = builder
             .add_module(
-                ModuleRuntimeContribution::new(module_id("crm.alpha")).with_mutation(route.clone()),
+                ModuleRuntimeContribution::new(module_id("crm.beta"))
+                    .with_mutation(route.clone()),
             )
-            .unwrap();
-        let duplicate = builder
-            .add_module(ModuleRuntimeContribution::new(module_id("crm.beta")).with_mutation(route));
-        assert!(matches!(
-            duplicate,
-            Err(CompositionError::OwnerMismatch { .. })
-        ));
+            .unwrap_err();
+        assert!(matches!(error, CompositionError::OwnerMismatch { .. }));
 
         let mut builder = ApplicationCompositionBuilder::new();
-        let result = builder.add_module(
-            ModuleRuntimeContribution::new(module_id("crm.alpha"))
-                .with_mutation(MutationRoute {
-                    definition: definition.clone(),
-                    validator: handler.clone(),
-                    executor: handler.clone(),
-                })
-                .with_mutation(MutationRoute {
-                    definition,
-                    validator: handler.clone(),
-                    executor: handler,
-                }),
-        );
-        assert!(matches!(
-            result,
-            Err(CompositionError::DuplicateMutation(_))
-        ));
-    }
-
-    #[tokio::test]
-    async fn workers_run_in_stable_module_and_worker_order() {
-        let order = Arc::new(Mutex::new(Vec::new()));
-        let mut builder = ApplicationCompositionBuilder::new();
-        builder
+        let error = builder
             .add_module(
-                ModuleRuntimeContribution::new(module_id("crm.zeta")).with_background_worker(
-                    "worker-b",
-                    Arc::new(Worker {
-                        order: Arc::clone(&order),
-                        name: "zeta/b",
-                    }),
-                ),
+                ModuleRuntimeContribution::new(module_id("crm.alpha"))
+                    .with_mutation(route.clone())
+                    .with_mutation(route),
             )
-            .unwrap();
-        builder
-            .add_module(
-                ModuleRuntimeContribution::new(module_id("crm.alpha")).with_background_worker(
-                    "worker-a",
-                    Arc::new(Worker {
-                        order: Arc::clone(&order),
-                        name: "alpha/a",
-                    }),
-                ),
-            )
-            .unwrap();
-        let composition = builder.build().unwrap();
-        composition
-            .background_workers()
-            .run_tenant_cycle(TenantId::try_new("tenant-a").unwrap(), 1)
-            .await
-            .unwrap();
-        assert_eq!(*order.lock().unwrap(), vec!["alpha/a", "zeta/b"]);
-    }
-
-    #[test]
-    fn query_and_empty_module_contributions_are_explicit() {
-        let definition = definition("crm.read", "read.record.get", false);
-        let handler = Arc::new(QueryHandler);
-        let mut builder = ApplicationCompositionBuilder::new();
-        builder
-            .add_module(
-                ModuleRuntimeContribution::new(module_id("crm.read")).with_query(QueryRoute {
-                    definition,
-                    validator: handler.clone(),
-                    executor: handler,
-                }),
-            )
-            .unwrap();
-        builder
-            .add_module(ModuleRuntimeContribution::new(module_id("crm.link")))
-            .unwrap();
-        let composition = builder.build().unwrap();
-        assert_eq!(
-            composition.module_ids(),
-            &BTreeSet::from(["crm.link".to_owned(), "crm.read".to_owned()])
-        );
-        assert_eq!(composition.query_definitions().len(), 1);
+            .unwrap_err();
+        assert!(matches!(error, CompositionError::DuplicateMutation(_)));
     }
 
     fn module_id(value: &str) -> ModuleId {
@@ -910,7 +992,7 @@ mod tests {
             capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
             owner_module_id: module_id(owner),
             input_contract: contract(owner, format!("{id}.request")),
-            output_contract: (!mutation).then(|| contract(owner, format!("{id}.response"))),
+            output_contract: None,
             risk: CapabilityRisk::Low,
             mutation,
             requires_idempotency: mutation,
@@ -932,25 +1014,21 @@ mod tests {
         }
     }
 
-    fn payload(owner: &str, contract: &PayloadContract) -> TypedPayload {
+    fn payload(definition: &CapabilityDefinition) -> TypedPayload {
         TypedPayload {
-            owner: module_id(owner),
-            schema_id: contract.schema_id.clone(),
-            schema_version: contract.schema_version.clone(),
-            descriptor_hash: contract.descriptor_hash,
+            owner: definition.input_contract.owner.clone(),
+            schema_id: definition.input_contract.schema_id.clone(),
+            schema_version: definition.input_contract.schema_version.clone(),
+            descriptor_hash: definition.input_contract.descriptor_hash,
             data_class: DataClass::Internal,
             encoding: PayloadEncoding::Protobuf,
-            maximum_size_bytes: contract.maximum_size_bytes,
+            maximum_size_bytes: definition.input_contract.maximum_size_bytes,
             retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
             bytes: Vec::new(),
         }
     }
 
-    fn mutation_request(definition: &CapabilityDefinition) -> CapabilityRequest {
-        use crm_module_sdk::{
-            ActorId, BusinessTransactionId, CausationId, CorrelationId, ExecutionContext,
-            IdempotencyKey, ModuleExecutionContext, RequestId, TraceId,
-        };
+    fn request(definition: &CapabilityDefinition) -> CapabilityRequest {
         CapabilityRequest {
             context: ModuleExecutionContext {
                 module_id: definition.owner_module_id.clone(),
@@ -969,10 +1047,7 @@ mod tests {
                     request_started_at_unix_nanos: 1,
                 },
             },
-            input: payload(
-                &definition.owner_module_id.to_string(),
-                &definition.input_contract,
-            ),
+            input: payload(definition),
             input_hash: [1; 32],
             approval: None,
         }
