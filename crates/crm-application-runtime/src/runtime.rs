@@ -49,8 +49,8 @@ use crm_customer_data_operations_execution_composition::{
     internal_capability_definitions,
 };
 use crm_customer_data_operations_query_adapter::{
-    LIST_IMPORT_ROWS_CAPABILITY,
-    PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
+    LIST_IMPORT_ROWS_CAPABILITY, PartyExportArtifactDownloadResolver,
+    artifact_download_capability_definition,
 };
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_identity_resolution_capability_adapter::{
