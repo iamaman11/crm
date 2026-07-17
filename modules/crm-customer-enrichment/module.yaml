@@ -1,0 +1,79 @@
+schema_version: crm.module/v1
+module_id: crm.customer-enrichment
+version: 0.1.0
+display_name: CRM Customer Enrichment
+description: Governed provider-neutral customer enrichment requests, immutable suggestions and provenance, review decisions and exact owner-capability application evidence without owning customer-master values.
+owner:
+  team: customer-platform
+  contact: crm-owner@example.com
+  codeowners:
+    - '@iamaman11'
+runtime:
+  kind: in_process
+  entrypoint: modules/crm-customer-enrichment
+platform:
+  minimum_version: 0.1.0
+dependencies:
+  required:
+    - module_id: crm.parties
+      version_range: '>=0.3.0, <1.0.0'
+  optional: []
+  conflicts: []
+provides:
+  capabilities: []
+  events: []
+  objects:
+    - customer_enrichment.provider_profile_version
+    - customer_enrichment.mapping_version
+    - customer_enrichment.request
+    - customer_enrichment.provider_response_receipt
+    - customer_enrichment.suggestion
+    - customer_enrichment.review_decision
+    - customer_enrichment.application_attempt
+    - customer_enrichment.provider_usage_entry
+  ui_extensions: []
+consumes:
+  capabilities:
+    - id: parties.party.update
+      version: 1.0.0
+  events: []
+storage:
+  record_types:
+    - customer_enrichment.provider_profile_version
+    - customer_enrichment.mapping_version
+    - customer_enrichment.request
+    - customer_enrichment.provider_response_receipt
+    - customer_enrichment.suggestion
+    - customer_enrichment.review_decision
+    - customer_enrichment.application_attempt
+    - customer_enrichment.provider_usage_entry
+  private_state_namespaces:
+    - crm.customer-enrichment.provider_profile_version
+    - crm.customer-enrichment.mapping_version
+    - crm.customer-enrichment.request
+    - crm.customer-enrichment.provider_response_receipt
+    - crm.customer-enrichment.suggestion
+    - crm.customer-enrichment.review_decision
+    - crm.customer-enrichment.application_attempt
+    - crm.customer-enrichment.provider_usage_entry
+security:
+  data_classes:
+    - internal
+    - confidential
+    - personal
+  network_egress: []
+  secret_handles: []
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-customer-enrichment/migrations
+  retained_record_types:
+    - customer_enrichment.provider_profile_version
+    - customer_enrichment.mapping_version
+    - customer_enrichment.request
+    - customer_enrichment.provider_response_receipt
+    - customer_enrichment.suggestion
+    - customer_enrichment.review_decision
+    - customer_enrichment.application_attempt
+    - customer_enrichment.provider_usage_entry
