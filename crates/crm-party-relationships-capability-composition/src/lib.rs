@@ -2,7 +2,9 @@
 
 //! Pre-authorization application validation for Party Relationship endpoints.
 
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator};
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator,
+};
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
 use crm_party_reference_composition::PartyReferenceReader;
 use crm_party_relationships_capability_adapter::{

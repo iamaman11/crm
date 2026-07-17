@@ -2,7 +2,9 @@
 
 //! Pre-authorization application validation for Account Party references.
 
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator};
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator,
+};
 use crm_customer_accounts_capability_adapter::{
     CREATE_CAPABILITY, MUTATION_CAPABILITY_IDS, UPDATE_CAPABILITY,
     referenced_party_ids_from_create, referenced_party_ids_from_update,

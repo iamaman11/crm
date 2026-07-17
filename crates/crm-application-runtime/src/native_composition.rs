@@ -53,9 +53,7 @@ use crm_customer_data_operations_source_composition::{
     CustomerDataOperationsSourceExecutor,
     source_capability_definitions as customer_data_operations_source_capability_definitions,
 };
-use crm_data_quality_capability_adapter::{
-    capability_definitions as data_quality_capability_definitions,
-};
+use crm_data_quality_capability_adapter::capability_definitions as data_quality_capability_definitions;
 use crm_data_quality_query_adapter::{
     DataQualityQueryAdapter,
     query_capability_definitions as data_quality_query_capability_definitions,
@@ -104,8 +102,7 @@ use crm_party_relationships_query_adapter::{
     query_capability_definitions as party_relationship_query_capability_definitions,
 };
 use crm_query_runtime::{
-    CursorCodec, QueryAuthorizer, QueryExecutor, QuerySemanticValidator,
-    QueryVisibilityAuthorizer,
+    CursorCodec, QueryAuthorizer, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer,
 };
 use crm_sales_activities_capability_composition::{
     SalesActivitiesCapabilityPlannerRouter,
@@ -174,10 +171,8 @@ pub fn build_production_composition(
     let mut contributions = ModuleContributionSet::new();
     let parties = Arc::new(PostgresPartyReferenceReader::new(store.clone()));
 
-    let sales_activities_executor = aggregate_executor(
-        store.clone(),
-        SalesActivitiesCapabilityPlannerRouter,
-    );
+    let sales_activities_executor =
+        aggregate_executor(store.clone(), SalesActivitiesCapabilityPlannerRouter);
     add_activated_mutations(
         &mut contributions,
         sales_activities_capability_definitions()?,
@@ -240,20 +235,18 @@ pub fn build_production_composition(
 
     let identity_aggregate = aggregate_executor(store.clone(), IdentityResolutionCapabilityPlanner);
     let identity_definitions = identity_resolution_capability_definitions()?;
-    let candidate_definitions = select_definitions(
-        &identity_definitions,
-        &CANDIDATE_MUTATION_CAPABILITY_IDS,
-    );
-    let merge_definitions = select_definitions(
-        &identity_definitions,
-        &MERGE_MUTATION_CAPABILITY_IDS,
-    );
+    let candidate_definitions =
+        select_definitions(&identity_definitions, &CANDIDATE_MUTATION_CAPABILITY_IDS);
+    let merge_definitions =
+        select_definitions(&identity_definitions, &MERGE_MUTATION_CAPABILITY_IDS);
     add_activated_mutations(
         &mut contributions,
         candidate_definitions,
-        Arc::new(IdentityResolutionCapabilitySemanticValidator::new(Arc::new(
-            PostgresIdentityResolutionReferenceReader::new(store.clone()),
-        ))),
+        Arc::new(IdentityResolutionCapabilitySemanticValidator::new(
+            Arc::new(PostgresIdentityResolutionReferenceReader::new(
+                store.clone(),
+            )),
+        )),
         Arc::new(IdentityResolutionCapabilityExecutor::new(
             identity_aggregate.clone(),
         )),
@@ -287,13 +280,12 @@ pub fn build_production_composition(
         customer_data_operations_executor,
         activation.clone(),
     )?;
-    let source_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        CustomerDataOperationsSourceExecutor::new(
+    let source_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(CustomerDataOperationsSourceExecutor::new(
             store.clone(),
             Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),
             capability_authorizer.clone(),
-        ),
-    );
+        ));
     add_activated_mutations(
         &mut contributions,
         customer_data_operations_source_capability_definitions()?,
@@ -302,16 +294,14 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let data_quality_fallback =
-        aggregate_executor(store.clone(), DataQualityAggregatePlanner);
-    let data_quality_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        DataQualityCapabilityExecutor::new(
+    let data_quality_fallback = aggregate_executor(store.clone(), DataQualityAggregatePlanner);
+    let data_quality_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(DataQualityCapabilityExecutor::new(
             store.clone(),
             data_quality_fallback,
             capability_authorizer.clone(),
             query_authorizer.clone(),
-        ),
-    );
+        ));
     add_activated_mutations(
         &mut contributions,
         data_quality_capability_definitions()?,
@@ -477,7 +467,8 @@ pub fn build_production_composition(
         metadata_queries,
     )?;
 
-    contributions.add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)?;
+    contributions
+        .add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)?;
     contributions.build().map_err(composition_error)
 }
 
@@ -518,9 +509,10 @@ fn add_activated_queries<T>(
 where
     T: QuerySemanticValidator + QueryExecutor + 'static,
 {
-    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(
-        ActivationGatedQueryValidator::new(activation, adapter.clone()),
-    );
+    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(ActivationGatedQueryValidator::new(
+        activation,
+        adapter.clone(),
+    ));
     let executor: Arc<dyn QueryExecutor> = adapter;
     contributions
         .add_queries(definitions, validator, executor)

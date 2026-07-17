@@ -96,7 +96,6 @@ impl ModuleRuntimeContribution {
     }
 }
 
-
 /// Collects route fragments by their declared owner and emits one deterministic
 /// contribution per module. Production composition roots use this when module
 /// constructors become available in dependency order while preserving the
@@ -164,10 +163,7 @@ impl ModuleContributionSet {
         Ok(self)
     }
 
-    pub fn add_empty_module(
-        &mut self,
-        module_id: ModuleId,
-    ) -> Result<&mut Self, CompositionError> {
+    pub fn add_empty_module(&mut self, module_id: ModuleId) -> Result<&mut Self, CompositionError> {
         let key = module_id.as_str().to_owned();
         if self.modules.contains_key(&key) {
             return Ok(self);
@@ -1054,7 +1050,6 @@ mod tests {
         assert_eq!(*order.lock().unwrap(), vec!["alpha/a", "zeta/b"]);
     }
 
-
     #[test]
     fn contribution_set_merges_route_fragments_without_duplicate_module_registration() {
         let calls = Arc::new(Mutex::new(Vec::new()));
@@ -1075,7 +1070,10 @@ mod tests {
         )
         .unwrap();
         let composition = set.build().unwrap();
-        assert_eq!(composition.module_ids(), &BTreeSet::from(["crm.alpha".to_owned()]));
+        assert_eq!(
+            composition.module_ids(),
+            &BTreeSet::from(["crm.alpha".to_owned()])
+        );
         assert_eq!(composition.mutation_definitions().len(), 2);
     }
 

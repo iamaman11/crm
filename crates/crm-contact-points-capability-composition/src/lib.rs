@@ -2,7 +2,9 @@
 
 //! Pre-authorization application validation for Contact Point Party references.
 
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator};
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilityRequest, CapabilitySemanticValidator,
+};
 use crm_contact_points_capability_adapter::{
     CREATE_CAPABILITY, MUTATION_CAPABILITY_IDS, referenced_party_id_from_create,
 };
@@ -48,10 +50,7 @@ impl CapabilitySemanticValidator for ContactPointPartyReferenceSemanticValidator
             let reference = reference?;
             if self
                 .parties
-                .exists(
-                    &request.context.execution.tenant_id,
-                    reference.as_str(),
-                )
+                .exists(&request.context.execution.tenant_id, reference.as_str())
                 .await?
             {
                 Ok(())

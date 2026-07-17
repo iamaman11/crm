@@ -36,7 +36,8 @@ impl PartyReferenceReader for PostgresPartyReferenceReader {
         party_id: &'a str,
     ) -> PortFuture<'a, Result<bool, SdkError>> {
         Box::pin(async move {
-            let owner_module_id = ModuleId::try_new(PARTIES_MODULE_ID).map_err(configuration_error)?;
+            let owner_module_id =
+                ModuleId::try_new(PARTIES_MODULE_ID).map_err(configuration_error)?;
             let record_type = RecordType::try_new(RECORD_TYPE).map_err(configuration_error)?;
             let record_id = RecordId::try_new(party_id).map_err(configuration_error)?;
             Ok(self
