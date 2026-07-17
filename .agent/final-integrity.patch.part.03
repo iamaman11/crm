@@ -1,0 +1,348 @@
+-+                    ELSE crm.module_installations.previous_version
+-+                  END,
+-+                  current_version = EXCLUDED.current_version,
+-+                  status = 'active',
+-+                  pending_version = NULL,
+-+                  generation = CASE
+-+                    WHEN crm.module_installations.current_version <> EXCLUDED.current_version
+-+                      OR crm.module_installations.status <> 'active'
+-+                    THEN crm.module_installations.generation + 1
+-+                    ELSE crm.module_installations.generation
+-+                  END,
+-+                  failure_code = NULL,
+-+                  grant_set_digest = EXCLUDED.grant_set_digest,
+-+                  last_business_transaction_id = EXCLUDED.last_business_transaction_id,
+-+                  updated_at = CASE
+-+                    WHEN crm.module_installations.current_version <> EXCLUDED.current_version
+-+                      OR crm.module_installations.status <> 'active'
+-+                      OR crm.module_installations.grant_set_digest <> EXCLUDED.grant_set_digest
+-+                    THEN clock_timestamp()
+-+                    ELSE crm.module_installations.updated_at
+-+                  END
+-+                "#,
+-+            )
+-+            .bind(tenant_id.as_str())
+-+            .bind(install_id)
+-+            .bind(module_id)
+-+            .bind(version)
+-+            .bind(grant_digest.as_slice())
+-+            .bind(&context.business_transaction_id)
+-+            .execute(&mut *transaction)
+-+            .await
+-+            .map_err(database_unavailable)?;
+-+        }
+-+
+-+        transaction.commit().await.map_err(database_unavailable)?;
+-+        Ok(())
+-+    }
+-+}
+-+
+-+async fn bind_bootstrap_context(
+-+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+-+    tenant_id: &TenantId,
+-+    context: &BootstrapExecutionContext,
+-+) -> Result<(), SdkError> {
+-+    sqlx::query(
+-+        r#"
+-+        SELECT
+-+          set_config('app.tenant_id', $1, true),
+-+          set_config('app.actor_id', $2, true),
+-+          set_config('app.request_id', $3, true),
+-+          set_config('app.capability_id', $4, true),
+-+          set_config('app.capability_version', $5, true),
+-+          set_config('app.business_transaction_id', $6, true)
+-+        "#,
+-+    )
+-+    .bind(tenant_id.as_str())
+-+    .bind(&context.actor_id)
+-+    .bind(&context.request_id)
+-+    .bind(&context.capability_id)
+-+    .bind(&context.capability_version)
+-+    .bind(&context.business_transaction_id)
+-+    .execute(&mut **transaction)
+-+    .await
+-+    .map_err(database_unavailable)?;
+-+    Ok(())
+-+}
+-+
+-+fn bootstrap_grant_digest(tenant_id: &str, module_id: &str, version: &str) -> [u8; 32] {
+-+    let mut digest = Sha256::new();
+-+    digest.update(BOOTSTRAP_INSTALL_PROFILE);
+-+    digest.update([0]);
+-+    digest.update(tenant_id.as_bytes());
+-+    digest.update([0]);
+-+    digest.update(module_id.as_bytes());
+-+    digest.update([0]);
+-+    digest.update(version.as_bytes());
+-+    digest.finalize().into()
+-+}
+-+
+-+fn bootstrap_context_missing(tenant_id: &TenantId) -> SdkError {
+-+    SdkError::new(
+-+        "APPLICATION_BOOTSTRAP_TRANSACTION_CONTEXT_MISSING",
+-+        ErrorCategory::Dependency,
+-+        false,
+-+        "The bootstrap tenant has no durable business transaction context.",
+-+    )
+-+    .with_internal_reference(tenant_id.as_str())
+-+}
+-+
+-+fn database_unavailable(error: sqlx::Error) -> SdkError {
+-+    SdkError::new(
+-+        "APPLICATION_MODULE_INSTALLATION_DATABASE_UNAVAILABLE",
+-+        ErrorCategory::Unavailable,
+-+        true,
+-+        "Module installation state could not be persisted.",
+-+    )
+-+    .with_internal_reference(error.to_string())
+-+}
+-+
+-+fn stored_value_invalid(error: sqlx::Error) -> SdkError {
+-+    SdkError::new(
+-+        "APPLICATION_BOOTSTRAP_TRANSACTION_CONTEXT_INVALID",
+-+        ErrorCategory::Internal,
+-diff --git a/.agent/final-code.patch.part.02 b/.agent/final-code.patch.part.02
+-deleted file mode 100644
+-index 70cb817..0000000
+---- a/.agent/final-code.patch.part.02
+-+++ /dev/null
+-@@ -1,200 +0,0 @@
+--+        false,
+--+        "The bootstrap transaction context stored in PostgreSQL is invalid.",
+--+    )
+--+    .with_internal_reference(error.to_string())
+--+}
+--diff --git a/database/tests/0001_platform_foundation.sql b/database/tests/0001_platform_foundation.sql
+--index 5f3cded..c319ef5 100644
+----- a/database/tests/0001_platform_foundation.sql
+--+++ b/database/tests/0001_platform_foundation.sql
+--@@ -32,6 +32,33 @@ VALUES
+--     '{"platform":"metadata"}'::jsonb,
+--     clock_timestamp(),
+--     'platform'
+--+  ),
+--+  (
+--+    'crm.search',
+--+    '1.0.0',
+--+    'crm.cjson/v1',
+--+    decode(repeat('ce', 32), 'hex'),
+--+    '{"platform":"search"}'::jsonb,
+--+    clock_timestamp(),
+--+    'platform'
+--+  ),
+--+  (
+--+    'crm.customer360',
+--+    '0.1.0',
+--+    'crm.cjson/v1',
+--+    decode(repeat('cf', 32), 'hex'),
+--+    '{"platform":"customer360"}'::jsonb,
+--+    clock_timestamp(),
+--+    'platform'
+--+  ),
+--+  (
+--+    'crm.sales-activities-link',
+--+    '0.1.0',
+--+    'crm.cjson/v1',
+--+    decode(repeat('d0', 32), 'hex'),
+--+    '{"platform":"sales-activities-link"}'::jsonb,
+--+    clock_timestamp(),
+--+    'platform'
+--   );
+-- 
+-- INSERT INTO crm.capability_registry (
+--@@ -279,6 +306,62 @@ VALUES (
+-- );
+-- COMMIT;
+-- 
+--+BEGIN;
+--+SET LOCAL app.tenant_id = 'tenant-b';
+--+SET LOCAL app.actor_id = 'actor-b';
+--+SET LOCAL app.request_id = 'request-bootstrap-b';
+--+SET LOCAL app.capability_id = 'test.record.mutate';
+--+SET LOCAL app.capability_version = '1.0.0';
+--+SET LOCAL app.business_transaction_id = 'tx-bootstrap-b';
+--+
+--+INSERT INTO crm.actors (
+--+  tenant_id, actor_id, actor_type, status, display_name, last_business_transaction_id
+--+) VALUES (
+--+  'tenant-b', 'actor-b', 'service', 'active', 'Tenant B bootstrap actor', 'tx-bootstrap-b'
+--+);
+--+
+--+INSERT INTO crm.idempotency_records (
+--+  tenant_id, idempotency_scope, idempotency_key, request_hash, status,
+--+  business_transaction_id, expires_at
+--+) VALUES (
+--+  'tenant-b', 'test.record.mutate@1.0.0', 'bootstrap-b',
+--+  decode(repeat('12', 32), 'hex'), 'completed', 'tx-bootstrap-b',
+--+  clock_timestamp() + interval '1 day'
+--+);
+--+
+--+INSERT INTO crm.outbox_events (
+--+  tenant_id, event_id, business_transaction_id, aggregate_type, aggregate_id,
+--+  aggregate_version, event_sequence, event_type, deduplication_key, schema_id,
+--+  schema_version, descriptor_hash, data_class, payload_encoding,
+--+  maximum_payload_size, retention_policy_id, payload_bytes, occurred_at
+--+) VALUES (
+--+  'tenant-b', 'event-bootstrap-b', 'tx-bootstrap-b', 'crm.actor', 'actor-b',
+--+  1, 1, 'actor.created', 'bootstrap-b', 'crm.actor.created.v1', '1.0.0',
+--+  decode(repeat('21', 32), 'hex'), 'internal', 'protobuf', 16, 'standard',
+--+  decode('02', 'hex'), clock_timestamp()
+--+);
+--+
+--+INSERT INTO crm.audit_records (
+--+  tenant_id, audit_sequence, audit_record_id, business_transaction_id, actor_id,
+--+  capability_id, capability_version, canonicalization_profile, previous_hash,
+--+  record_hash, canonical_envelope, occurred_at
+--+) VALUES (
+--+  'tenant-b', 1, 'audit-bootstrap-b', 'tx-bootstrap-b', 'actor-b',
+--+  'test.record.mutate', '1.0.0', 'crm.cjson/v1',
+--+  decode(repeat('00', 32), 'hex'), decode(repeat('13', 32), 'hex'),
+--+  convert_to('{"audit":"bootstrap-b"}', 'UTF8'), clock_timestamp()
+--+);
+--+
+--+INSERT INTO crm.business_transactions (
+--+  tenant_id, business_transaction_id, actor_id, request_id, capability_id,
+--+  capability_version, expected_outbox_events, expected_audit_records,
+--+  expected_idempotency_records
+--+) VALUES (
+--+  'tenant-b', 'tx-bootstrap-b', 'actor-b', 'request-bootstrap-b',
+--+  'test.record.mutate', '1.0.0', 1, 1, 1
+--+);
+--+COMMIT;
+--+
+-- DO $$
+-- DECLARE
+--   visible_count integer;
+--diff --git a/docs/ARCHITECTURE_READINESS.md b/docs/ARCHITECTURE_READINESS.md
+--index be0c496..d5a689d 100644
+----- a/docs/ARCHITECTURE_READINESS.md
+--+++ b/docs/ARCHITECTURE_READINESS.md
+--@@ -1,6 +1,6 @@
+-- # Architecture Readiness Gate
+-- 
+---Status: **Blocked until PR #135 completes issue #134**.
+--+Status: **Verification pending on PR #135 exact-head CI**.
+-- 
+-- The CRM may continue maintenance and integrity work, but new product-module expansion must not merge while production composition still depends on fixed process worker fields, central bootstrap visibility mapping, incomplete route parity or incomplete module lifecycle authority.
+-- 
+--@@ -24,3 +24,13 @@ Architecture readiness is proven only when all of the following hold together on
+-- 10. All applicable workflows pass together on one unchanged exact SHA.
+-- 
+-- No marker may be suppressed or allowlisted merely to make the gate green. The corresponding legacy wiring must be removed through a real module-owned replacement.
+--+
+--+## Implemented integrity mechanisms
+--+
+--+- Production mutations and queries are assembled from exact module contributions.
+--+- Tenant route and worker activation reads `crm.module_installations`; bootstrap provisions durable active installations instead of bypassing lifecycle state.
+--+- Background workers and bootstrap visibility are deterministic contribution registries.
+--+- `production_route_parity` compares compiled production coordinates with governed bindings and explicit exact-route classifications.
+--+- The module scaffold emits `production/CONTRIBUTION.md` so new modules cannot omit the production boundary.
+--+
+--+Readiness remains blocked until every applicable workflow is green on one unchanged human-authored SHA.
+--diff --git a/docs/MODULE_DEVELOPMENT.md b/docs/MODULE_DEVELOPMENT.md
+--index 5b934c6..3932868 100644
+----- a/docs/MODULE_DEVELOPMENT.md
+--+++ b/docs/MODULE_DEVELOPMENT.md
+--@@ -204,3 +204,9 @@ python scripts/generate_contract_bindings.py --check
+-- ```
+-- 
+-- `pnpm web:generate` performs the same generation together with browser clients and contract hashes. Contract CI requires exact module-set completeness, descriptor input/output parity and byte-for-byte generated-artifact freshness. See `CONTRACT_BINDING_REGISTRY.md` for the normative architecture and invariants.
+--+
+--+## Production contribution boundary
+--+
+--+Every generated module contains `production/CONTRIBUTION.md`. The pure module core does not wire itself into the process host. A separately owned adapter/composition crate contributes exact versioned mutation/query routes, pre-authorization semantic validation, activation-gated workers and deterministic worker phases. Adding a module must not require edits to central routers.
+--+
+--+Compiled production coordinates are checked against `contracts/module-contract-bindings.json`. Platform-owned routes and any intentionally non-runtime governed coordinate must be listed individually, with a reason, in `contracts/production-route-classifications.json`; owner-wide or pattern allowlists are forbidden.
+--diff --git a/scripts/check_production_route_classifications.py b/scripts/check_production_route_classifications.py
+--new file mode 100644
+--index 0000000..139f329
+----- /dev/null
+--+++ b/scripts/check_production_route_classifications.py
+--@@ -0,0 +1,69 @@
+--+#!/usr/bin/env python3
+--+"""Validate exact production route classifications against governed bindings."""
+--+
+--+from __future__ import annotations
+--+
+--+import json
+--+from pathlib import Path
+--+
+--+ROOT = Path(__file__).resolve().parents[1]
+--+BINDINGS = ROOT / "contracts/module-contract-bindings.json"
+--+CLASSIFICATIONS = ROOT / "contracts/production-route-classifications.json"
+--+
+--+
+--+def coordinate(route: dict[str, object]) -> tuple[str, str, str]:
+--+    values = tuple(str(route.get(key, "")).strip() for key in ("owner_module_id", "id", "version"))
+--+    if not all(values):
+--+        raise ValueError(f"route classification has an empty coordinate: {route!r}")
+--+    return values
+--+
+--+
+--+def load_and_validate() -> tuple[set[tuple[str, str, str]], set[tuple[str, str, str]]]:
+--+    bindings = json.loads(BINDINGS.read_text(encoding="utf-8"))
+--+    classifications = json.loads(CLASSIFICATIONS.read_text(encoding="utf-8"))
+--+    if bindings.get("schema_version") != "crm.contract-bindings/v1":
+--+        raise ValueError("unexpected contract binding schema version")
+--+    if classifications.get("schema_version") != "crm.production-route-classifications/v1":
+--+        raise ValueError("unexpected production route classification schema version")
+--+
+--+    governed = {
+--+        (module["module_id"], capability["id"], capability["version"])
+--+        for module in bindings["modules"]
+--+        for capability in module["capabilities"]
+--+    }
+--+    groups: dict[str, set[tuple[str, str, str]]] = {}
+--+    for key in ("platform_runtime_routes", "non_runtime_contract_routes"):
+--+        routes = classifications.get(key)
+--+        if not isinstance(routes, list):
+--+            raise ValueError(f"{key} must be a list")
+--+        coordinates = []
+--+        for route in routes:
+--+            if not isinstance(route, dict) or not str(route.get("reason", "")).strip():
+--+                raise ValueError(f"{key} entry requires a non-empty reason")
+--+            coordinates.append(coordinate(route))
+--+        if len(coordinates) != len(set(coordinates)):
+--+            raise ValueError(f"duplicate exact coordinate in {key}")
+--+        groups[key] = set(coordinates)
+--+
+--+    platform = groups["platform_runtime_routes"];
+-diff --git a/.agent/final-code.patch.part.03 b/.agent/final-code.patch.part.03
+-deleted file mode 100644
+-index d17c5f3..0000000
+---- a/.agent/final-code.patch.part.03
+-+++ /dev/null
+-@@ -1,118 +0,0 @@
+--+    non_runtime = groups["non_runtime_contract_routes"]
+--+    if platform & non_runtime:
+--+        raise ValueError("platform and non-runtime classifications overlap")
+--+    if platform & governed:
+--+        raise ValueError("platform runtime classifications must be outside governed business bindings")
+--+    if not non_runtime <= governed:
+--+        raise ValueError("non-runtime classifications must name governed binding coordinates")
+--+    return platform, non_runtime
+--+
+--+
+--+def main() -> int:
+--+    platform, non_runtime = load_and_validate()
+--+    print(
+--+        "Production route classifications valid: "
+--+        f"{len(platform)} platform routes, {len(non_runtime)} non-runtime routes."
+--+    )
+--+    return 0
+--+
+--+
+--+if __name__ == "__main__":
+--+    raise SystemExit(main())
+--diff --git a/scripts/scaffold_module.py b/scripts/scaffold_module.py
+--index d0454b6..839d910 100644
+----- a/scripts/scaffold_module.py
+--+++ b/scripts/scaffold_module.py
+--@@ -266,6 +266,26 @@ Before raising readiness beyond `Foundation`, replace this placeholder with the
+-- '''
+-- 
+-- 
+--+
+--+def render_production_contribution(spec: ModuleSpec) -> str:
+--+    return f'''# Production contribution boundary for `{spec.module_id}`
+--+
