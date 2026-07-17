@@ -2,13 +2,17 @@
 
 Status: **Blocked until PR #135 completes issue #134**.
 
-The CRM may continue maintenance and integrity work, but new product-module expansion must not merge while production composition still depends on fixed process worker fields, central bootstrap visibility mapping, incomplete route parity or incomplete module lifecycle authority.
+The CRM may continue maintenance and integrity work, but new product-module expansion must not merge while production composition still has incomplete route parity, incomplete module lifecycle authority or incomplete golden scaffolding.
 
 ## Verified progress in PR #135
 
 The production mutation/query route layer now assembles exact module-owned contributions through `crm-application-composition`. Central mutation planner, capability executor and query routers have been removed from the production path; tenant activation gates wrap business routes; and Accounts, Contact Points, Party Relationships, Consents and Identity Resolution perform cross-owner reference validation before final live authorization.
 
-This milestone does **not** make the architecture ready by itself. Background-worker composition, declarative bootstrap visibility, mechanical manifest/binding/production parity and golden scaffolding remain mandatory.
+Background processing now assembles through one deterministic, phase-ordered registry. Import execution, export selection, Sales-to-Activities linking, Sales and Activities projections, Customer 360 projection and global search are module-owned contributions guarded by tenant module activation. `ApplicationComponents` no longer owns fixed worker fields or invokes a hard-coded worker sequence.
+
+Bootstrap query visibility now resolves through declarative module contributions rather than a central `owner_module_id` switch. Data Quality remediation dispatches nested Party mutation through the exact Party executor and verifies Party activation before the nested authoritative operation.
+
+These milestones do **not** make the architecture ready by themselves. Authoritative persisted installation lifecycle, mechanical manifest/binding/production-route parity, golden scaffolding and one unchanged all-green exact SHA remain mandatory.
 
 Architecture readiness is proven only when all of the following hold together on one exact commit:
 
