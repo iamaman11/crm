@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v1;
+
+import "crm/customer_enrichment/v1/definitions.proto";
+import "crm/customer_enrichment/v1/requests.proto";
+import "crm/customer_enrichment/v1/suggestions.proto";
+
+// Public immutable provider-profile and mapping publication and lookup surface.
+service CustomerEnrichmentDefinitionService {
+  rpc PublishProviderProfileVersion(PublishProviderProfileVersionRequest) returns (PublishProviderProfileVersionResponse);
+  rpc GetProviderProfileVersion(GetProviderProfileVersionRequest) returns (GetProviderProfileVersionResponse);
+  rpc PublishMappingVersion(PublishMappingVersionRequest) returns (PublishMappingVersionResponse);
+  rpc GetMappingVersion(GetMappingVersionRequest) returns (GetMappingVersionResponse);
+}
+
+// Public governed enrichment request lifecycle and lookup surface.
+service CustomerEnrichmentRequestService {
+  rpc CreateEnrichmentRequest(CreateEnrichmentRequestRequest) returns (CreateEnrichmentRequestResponse);
+  rpc CancelEnrichmentRequest(CancelEnrichmentRequestRequest) returns (CancelEnrichmentRequestResponse);
+  rpc GetEnrichmentRequest(GetEnrichmentRequestRequest) returns (GetEnrichmentRequestResponse);
+  rpc ListEnrichmentRequests(ListEnrichmentRequestsRequest) returns (ListEnrichmentRequestsResponse);
+}
+
+// Public suggestion discovery, review and exact Party display-name application surface.
+service CustomerEnrichmentSuggestionService {
+  rpc GetSuggestion(GetSuggestionRequest) returns (GetSuggestionResponse);
+  rpc ListSuggestionsByParty(ListSuggestionsByPartyRequest) returns (ListSuggestionsByPartyResponse);
+  rpc AcceptSuggestion(AcceptSuggestionRequest) returns (AcceptSuggestionResponse);
+  rpc RejectSuggestion(RejectSuggestionRequest) returns (RejectSuggestionResponse);
+  rpc ApplyPartyDisplayNameSuggestion(ApplyPartyDisplayNameSuggestionRequest) returns (ApplyPartyDisplayNameSuggestionResponse);
+}
