@@ -1,3 +1,7 @@
+#[path = "request_dispatch_planner.rs"]
+mod dispatch_planner;
+pub use dispatch_planner::CustomerEnrichmentRequestDispatchPlanner;
+
 use crate::{
     MODULE_ID, enrichment_request_from_snapshot, enrichment_request_persisted_payload,
     enrichment_request_to_wire,
