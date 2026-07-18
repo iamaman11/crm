@@ -32,7 +32,6 @@ use crm_proto_contracts::crm::{customer::v1 as customer, customer_enrichment::v1
 use serde::Deserialize;
 
 pub const CRATE_NAME: &str = "crm-customer-enrichment-review-adapter";
-
 pub const ACCEPT_SUGGESTION_CAPABILITY: &str = "customer_enrichment.suggestion.accept";
 pub const ACCEPT_SUGGESTION_REQUEST_SCHEMA: &str =
     "crm.customer_enrichment.v1.AcceptSuggestionRequest";
@@ -46,7 +45,6 @@ pub const REJECT_SUGGESTION_RESPONSE_SCHEMA: &str =
 pub const SUGGESTION_REVIEWED_EVENT_TYPE: &str = "customer_enrichment.suggestion.reviewed";
 pub const SUGGESTION_REVIEWED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.SuggestionReviewedEvent";
-
 pub const REVIEW_CAPABILITY_IDS: &[&str] = &[
     ACCEPT_SUGGESTION_CAPABILITY,
     REJECT_SUGGESTION_CAPABILITY,
@@ -126,12 +124,13 @@ impl CustomerEnrichmentSuggestionReviewPlanner {
         let decided_at_unix_ms = request_started_at_unix_ms(request)?;
         match definition.capability_id.as_str() {
             ACCEPT_SUGGESTION_CAPABILITY => {
-                let command: wire::AcceptSuggestionRequest = support::decode_request_with_data_class(
-                    request,
-                    MODULE_ID,
-                    ACCEPT_SUGGESTION_REQUEST_SCHEMA,
-                    DataClass::Personal,
-                )?;
+                let command: wire::AcceptSuggestionRequest =
+                    support::decode_request_with_data_class(
+                        request,
+                        MODULE_ID,
+                        ACCEPT_SUGGESTION_REQUEST_SCHEMA,
+                        DataClass::Personal,
+                    )?;
                 ensure_suggestion_ref(command.suggestion_ref, &self.suggestion)?;
                 ensure_expected_binding(
                     command.expected_party_resource_version,
@@ -154,12 +153,13 @@ impl CustomerEnrichmentSuggestionReviewPlanner {
                 )
             }
             REJECT_SUGGESTION_CAPABILITY => {
-                let command: wire::RejectSuggestionRequest = support::decode_request_with_data_class(
-                    request,
-                    MODULE_ID,
-                    REJECT_SUGGESTION_REQUEST_SCHEMA,
-                    DataClass::Personal,
-                )?;
+                let command: wire::RejectSuggestionRequest =
+                    support::decode_request_with_data_class(
+                        request,
+                        MODULE_ID,
+                        REJECT_SUGGESTION_REQUEST_SCHEMA,
+                        DataClass::Personal,
+                    )?;
                 ensure_suggestion_ref(command.suggestion_ref, &self.suggestion)?;
                 ensure_expected_binding(
                     command.expected_party_resource_version,
@@ -192,7 +192,7 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentSuggestionReviewPlanner
         let decision = self.decision(definition, request)?;
         Ok(AggregateTarget {
             reference: review_decision_record_ref(&decision)?,
-            presence: AggregatePresence::MustNotExist,
+            presence: AggregatePresence::MustBeAbsent,
         })
     }
 
@@ -233,25 +233,21 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentSuggestionReviewPlanner
             )?,
             _ => return Err(unsupported_capability()),
         };
-        let event_payload = support::protobuf_payload(
-            MODULE_ID,
-            SUGGESTION_REVIEWED_EVENT_SCHEMA,
-            DataClass::Personal,
-            &wire::SuggestionReviewedEvent {
-                suggestion: Some(public_suggestion),
-                review_decision: Some(public_decision),
-            },
-        )?;
-        let event = support::event_evidence_with_payload(
+        let event = support::event_evidence_with_data_class(
             request,
             decision_reference.clone(),
+            MODULE_ID,
             EventSpec {
                 event_type: SUGGESTION_REVIEWED_EVENT_TYPE,
                 event_schema_id: SUGGESTION_REVIEWED_EVENT_SCHEMA,
                 aggregate_version: 1,
                 previous_version: None,
             },
-            event_payload,
+            DataClass::Personal,
+            &wire::SuggestionReviewedEvent {
+                suggestion: Some(public_suggestion),
+                review_decision: Some(public_decision),
+            },
         )?;
         Ok(CapabilityBatchExecutionPlan {
             batch: BatchMutationPlan {
@@ -276,7 +272,7 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentSuggestionReviewPlanner
     }
 }
 
-pub fn suggestion_persisted_contract() -> PersistedPayloadContract {
+pub fn suggestion_persisted_contract() -> PersistedPayloadContract<'static> {
     PersistedPayloadContract {
         owner: MODULE_ID,
         schema_id: SUGGESTION_STATE_SCHEMA_ID,
@@ -287,7 +283,7 @@ pub fn suggestion_persisted_contract() -> PersistedPayloadContract {
     }
 }
 
-pub fn review_decision_persisted_contract() -> PersistedPayloadContract {
+pub fn review_decision_persisted_contract() -> PersistedPayloadContract<'static> {
     PersistedPayloadContract {
         owner: MODULE_ID,
         schema_id: REVIEW_DECISION_STATE_SCHEMA_ID,
