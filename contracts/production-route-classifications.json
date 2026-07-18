@@ -77,12 +77,6 @@
     },
     {
       "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.request.create",
-      "version": "1.0.0",
-      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but Party/Consent pre-authorization and native persistence contribution are not implemented yet."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.request.dispatch",
       "version": "1.0.0",
       "reason": "Phase 8A.10 worker-only contract is published and descriptor-checked, but its activation-gated provider-dispatch contribution is not implemented yet."
