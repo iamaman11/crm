@@ -33,6 +33,7 @@ members = [
   "crates/crm-customer-enrichment-worker-composition",
   "crates/crm-customer-enrichment-materialization-adapter",
   "crates/crm-customer-enrichment-materialization-composition",
+  "crates/crm-customer-enrichment-review-adapter",
   "crates/crm-query-runtime",
   "crates/crm-projection-runtime",
   "crates/crm-search-runtime",
