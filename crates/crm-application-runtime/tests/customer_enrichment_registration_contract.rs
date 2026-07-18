@@ -2,7 +2,8 @@ use crm_application_runtime::{
     application_mutation_definitions, application_query_definitions, declared_business_module_ids,
 };
 use crm_customer_enrichment_capability_adapter::{
-    MODULE_ID, PUBLISH_MAPPING_CAPABILITY, PUBLISH_PROVIDER_PROFILE_CAPABILITY,
+    CREATE_ENRICHMENT_REQUEST_CAPABILITY, MODULE_ID, PUBLISH_MAPPING_CAPABILITY,
+    PUBLISH_PROVIDER_PROFILE_CAPABILITY,
 };
 use crm_customer_enrichment_query_adapter::{
     GET_MAPPING_CAPABILITY, GET_PROVIDER_PROFILE_CAPABILITY,
@@ -10,14 +11,14 @@ use crm_customer_enrichment_query_adapter::{
 use std::collections::BTreeSet;
 
 #[test]
-fn definition_publications_are_the_only_composed_enrichment_mutations() {
+fn definition_publications_and_request_creation_are_the_composed_enrichment_mutations() {
     let enrichment_definitions = application_mutation_definitions()
         .unwrap()
         .into_iter()
         .filter(|definition| definition.owner_module_id.as_str() == MODULE_ID)
         .collect::<Vec<_>>();
 
-    assert_eq!(enrichment_definitions.len(), 2);
+    assert_eq!(enrichment_definitions.len(), 3);
     assert_eq!(
         enrichment_definitions
             .iter()
@@ -26,6 +27,7 @@ fn definition_publications_are_the_only_composed_enrichment_mutations() {
         [
             PUBLISH_PROVIDER_PROFILE_CAPABILITY,
             PUBLISH_MAPPING_CAPABILITY,
+            CREATE_ENRICHMENT_REQUEST_CAPABILITY,
         ]
         .into_iter()
         .collect()
