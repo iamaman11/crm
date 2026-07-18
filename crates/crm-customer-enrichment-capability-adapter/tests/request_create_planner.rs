@@ -1,5 +1,5 @@
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityRequest, request_create_capability_definition};
+use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::{AggregatePresence, TransactionalAggregatePlanner};
 use crm_customer_enrichment_capability_adapter::{
     CREATE_ENRICHMENT_REQUEST_CAPABILITY, CREATE_ENRICHMENT_REQUEST_REQUEST_SCHEMA,
@@ -100,7 +100,10 @@ fn target_locks_the_exact_party_aggregate() {
         .unwrap();
 
     assert_eq!(target.presence, AggregatePresence::MustExist);
-    assert_eq!(target.reference.record_type.as_str(), REQUEST_PARTY_SOURCE_RECORD_TYPE);
+    assert_eq!(
+        target.reference.record_type.as_str(),
+        REQUEST_PARTY_SOURCE_RECORD_TYPE
+    );
     assert_eq!(target.reference.record_id.as_str(), "party-request-1");
 }
 
