@@ -67,8 +67,6 @@ members = [
   "crates/crm-sales-activities-capability-composition",
   "crates/crm-sales-activities-link-contract-adapter",
   "crates/crm-sales-activities-query-adapter",
-  "crates/crm-search-query-adapter",
-  "crates/crm-search-runtime",
   "modules/crm-sales",
   "modules/crm-activities",
   "modules/crm-sales-activities-link",
