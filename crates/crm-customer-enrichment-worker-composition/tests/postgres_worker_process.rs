@@ -27,7 +27,7 @@ use crm_module_sdk::{
     ModuleId, PortFuture, RecordId, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -130,10 +130,9 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
     assert_eq!(request_snapshot.version, 3);
 
     assert_eq!(
-        count(
+        scalar(
             &admin,
-            "crm.records",
-            "owner_module_id = 'crm.customer-enrichment'"
+            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND owner_module_id = 'crm.customer-enrichment'",
         )
         .await,
         5
@@ -141,7 +140,7 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
     assert_eq!(
         scalar(
             &admin,
-            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.enrichment_request'"
+            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.enrichment_request'",
         )
         .await,
         1
@@ -149,7 +148,7 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
     assert_eq!(
         scalar(
             &admin,
-            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_receipt'"
+            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_receipt'",
         )
         .await,
         1
@@ -157,43 +156,39 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
     assert_eq!(
         scalar(
             &admin,
-            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_usage_entry'"
+            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_usage_entry'",
         )
         .await,
         3
     );
     assert_eq!(
-        count(
+        scalar(
             &admin,
-            "crm.outbox_events",
-            "event_type LIKE 'customer_enrichment.%'"
+            "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = 'tenant-a' AND event_type LIKE 'customer_enrichment.%'",
         )
         .await,
         7
     );
     assert_eq!(
-        count(
+        scalar(
             &admin,
-            "crm.audit_records",
-            "capability_id LIKE 'customer_enrichment.%'"
+            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id LIKE 'customer_enrichment.%'",
         )
         .await,
         7
     );
     assert_eq!(
-        count(
+        scalar(
             &admin,
-            "crm.idempotency_records",
-            "idempotency_scope LIKE 'customer_enrichment.%@1.0.0'"
+            "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = 'tenant-a' AND idempotency_scope LIKE 'customer_enrichment.%@1.0.0'",
         )
         .await,
         3
     );
     assert_eq!(
-        count(
+        scalar(
             &admin,
-            "crm.business_transactions",
-            "capability_id LIKE 'customer_enrichment.%'"
+            "SELECT count(*)::bigint FROM crm.business_transactions WHERE tenant_id = 'tenant-a' AND capability_id LIKE 'customer_enrichment.%'",
         )
         .await,
         3
@@ -274,7 +269,7 @@ fn fixture() -> Fixture {
         20,
     )
     .unwrap();
-    let dispatch_request = dispatch_capability_request(&created_request, &provider_request);
+    let dispatch_request = dispatch_capability_request(&created_request);
     Fixture {
         created_request,
         provider_request: provider_request.clone(),
@@ -330,10 +325,7 @@ async fn seed_request(
     Ok(())
 }
 
-fn dispatch_capability_request(
-    request: &EnrichmentRequest,
-    provider: &ProviderDispatchRequest,
-) -> CapabilityRequest {
+fn dispatch_capability_request(request: &EnrichmentRequest) -> CapabilityRequest {
     let definition = request_dispatch_capability_definition().unwrap();
     let input = support::protobuf_payload(
         MODULE_ID,
@@ -409,21 +401,9 @@ fn worker_context(
     }
 }
 
-async fn count(pool: &PgPool, table: &str, predicate: &str) -> i64 {
-    scalar(
-        pool,
-        &format!(
-            "SELECT count(*)::bigint FROM {table} WHERE tenant_id = 'tenant-a' AND {predicate}"
-        ),
-    )
-    .await
-}
-
-async fn scalar(pool: &PgPool, query: &str) -> i64 {
-    sqlx::query(query)
+async fn scalar(pool: &PgPool, query: &'static str) -> i64 {
+    sqlx::query_scalar::<_, i64>(query)
         .fetch_one(pool)
         .await
         .expect("query worker evidence")
-        .try_get::<i64, _>(0)
-        .expect("decode worker evidence count")
 }
