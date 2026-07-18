@@ -792,6 +792,7 @@ dependencies = [
  "crm-customer-enrichment-capability-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
+ "prost",
  "serde",
  "serde_json",
 ]
