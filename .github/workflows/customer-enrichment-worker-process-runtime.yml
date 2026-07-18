@@ -121,7 +121,8 @@ jobs:
               SELECT tenant_id, idempotency_scope, idempotency_key, status,
                      business_transaction_id, created_at, expires_at
                 FROM crm.idempotency_records
-               WHERE idempotency_scope LIKE 'customer_enrichment.%@1.0.0'
+               WHERE idempotency_scope = 'customer_enrichment.request.seed@1.0.0'
+                  OR idempotency_scope LIKE 'capability:customer_enrichment.%:1.0.0'
                ORDER BY tenant_id, idempotency_scope, idempotency_key;
             "
             echo "=== Customer Enrichment business transactions ==="
