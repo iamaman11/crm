@@ -16,6 +16,8 @@ Current production route inventory: **2 mutations + 2 permission-aware queries**
 - [x] Add activation-gated permission-aware `customer_enrichment.provider_profile.get@1.0.0` with tenant-scoped lookup, strict persisted-state validation, fail-closed resource visibility and `definition` field redaction.
 - [x] Add activation-gated native `customer_enrichment.mapping.publish@1.0.0` with atomic governed provider-profile `MustExist` locking, persisted identity and target-field support validation, immutable mapping persistence, idempotency, outbox and audit evidence.
 - [x] Add activation-gated permission-aware `customer_enrichment.mapping.get@1.0.0` with tenant-scoped lookup, strict mapping-state rehydration, live referenced-provider-profile visibility, not-found hiding and declarative `definition` redaction.
+- [x] Add the non-runtime `request.create` planner foundation with deterministic identity, canonical Personal persisted state, Party access-path relationship and atomic idempotency/outbox/audit planning.
+- [ ] Wire `request.create` through its separate Party/Consent pre-authorization composition and only then move the coordinate into the production mutation inventory.
 - [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
 - [ ] Implement the Party/Consent semantic port adapters plus final live authorization and declarative field visibility.
 - [ ] Add provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
