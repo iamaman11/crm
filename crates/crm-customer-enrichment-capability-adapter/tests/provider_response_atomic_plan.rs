@@ -1,5 +1,5 @@
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityRequest, CapabilityDefinition};
+use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{AggregatePresence, RecordMutation, TransactionalAggregatePlanner};
 use crm_customer_enrichment::{
     ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequest, EnrichmentRequestDraft,
@@ -81,10 +81,9 @@ fn zero_metered_units_emit_only_response_received_usage() {
     assert_eq!(plan.batch.records.len(), 3);
     assert_eq!(plan.batch.events.len(), 3);
     assert_eq!(plan.batch.audits.len(), 3);
-    let output = wire::RecordProviderResponseResponse::decode(
-        plan.output.unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let output =
+        wire::RecordProviderResponseResponse::decode(plan.output.unwrap().bytes.as_slice())
+            .unwrap();
     assert_eq!(output.provider_usage_entries.len(), 1);
     assert_eq!(
         output.provider_usage_entries[0].kind,
@@ -159,10 +158,7 @@ fn fixture(
                 correlation_id: CorrelationId::try_new("correlation-1").unwrap(),
                 causation_id: CausationId::try_new("causation-1").unwrap(),
                 trace_id: TraceId::try_new("trace-1").unwrap(),
-                capability_id: CapabilityId::try_new(
-                    definition.capability_id.as_str(),
-                )
-                .unwrap(),
+                capability_id: CapabilityId::try_new(definition.capability_id.as_str()).unwrap(),
                 capability_version: CapabilityVersion::try_new(
                     definition.capability_version.as_str(),
                 )
