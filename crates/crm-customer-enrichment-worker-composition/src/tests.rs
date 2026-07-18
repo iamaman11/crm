@@ -6,9 +6,9 @@ use crm_customer_enrichment::{
     prepare_provider_dispatch_attempt,
 };
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityVersion, CausationId, CorrelationId, ExecutionContext,
-    IdempotencyKey, ModuleExecutionContext, ModuleId, PortFuture, RecordId, RequestId, SchemaVersion,
-    TenantId, TraceId,
+    ActorId, BusinessTransactionId, CapabilityVersion, CausationId, CorrelationId,
+    ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PortFuture, RecordId,
+    RequestId, SchemaVersion, TenantId, TraceId,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_enrichment::v1 as wire};
 use std::sync::Mutex;
