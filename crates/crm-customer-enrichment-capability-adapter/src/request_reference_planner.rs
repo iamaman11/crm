@@ -1,10 +1,11 @@
 use crate::{
-    CustomerEnrichmentRequestCreateCapabilityPlanner, ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_SCHEMA,
-    ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_TYPE, MODULE_ID, ProviderResponseEvidence,
-    REQUEST_PARTY_SOURCE_RECORD_TYPE, RECORD_PROVIDER_RESPONSE_CAPABILITY,
+    CustomerEnrichmentRequestCreateCapabilityPlanner,
+    ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_SCHEMA, ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_TYPE,
+    MODULE_ID, ProviderResponseEvidence, RECORD_PROVIDER_RESPONSE_CAPABILITY,
     RECORD_PROVIDER_RESPONSE_REQUEST_SCHEMA, RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA,
-    ResponseExpectation, enrichment_request_from_create_request, enrichment_request_from_snapshot,
-    enrichment_request_persisted_payload, enrichment_request_to_wire, prepare_provider_response,
+    REQUEST_PARTY_SOURCE_RECORD_TYPE, ResponseExpectation, enrichment_request_from_create_request,
+    enrichment_request_from_snapshot, enrichment_request_persisted_payload,
+    enrichment_request_to_wire, prepare_provider_response,
 };
 use crm_capability_plan_support::{self as support, EventSpec, PersistedPayloadContract};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
@@ -13,13 +14,13 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_customer_enrichment::{
-    ENRICHMENT_REQUEST_RECORD_TYPE, LIFECYCLE_STATE_RETENTION_POLICY_ID,
+    ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequestStatus, LIFECYCLE_STATE_RETENTION_POLICY_ID,
     LIFECYCLE_STATE_SCHEMA_VERSION, PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE,
     PROVIDER_RESPONSE_RECEIPT_STATE_MAXIMUM_BYTES, PROVIDER_RESPONSE_RECEIPT_STATE_SCHEMA_ID,
     PROVIDER_USAGE_ENTRY_RECORD_TYPE, PROVIDER_USAGE_ENTRY_STATE_MAXIMUM_BYTES,
     PROVIDER_USAGE_ENTRY_STATE_RETENTION_POLICY_ID, PROVIDER_USAGE_ENTRY_STATE_SCHEMA_ID,
-    PROVIDER_USAGE_ENTRY_STATE_SCHEMA_VERSION, EnrichmentRequestStatus, ProviderResponseClass,
-    ProviderResponseReceipt, ProviderUsageEntry, ProviderUsageEntryDraft, ProviderUsageKind,
+    PROVIDER_USAGE_ENTRY_STATE_SCHEMA_VERSION, ProviderResponseClass, ProviderResponseReceipt,
+    ProviderUsageEntry, ProviderUsageEntryDraft, ProviderUsageKind,
     encode_provider_response_receipt_state, encode_provider_usage_entry_state,
     provider_response_receipt_state_descriptor_hash, provider_usage_entry_state_descriptor_hash,
 };
@@ -596,10 +597,7 @@ fn ensure_response_definition(
 
 fn non_negative_time(value: i64, field: &'static str) -> Result<u64, SdkError> {
     u64::try_from(value).map_err(|_| {
-        SdkError::invalid_argument(
-            field,
-            "Provider response timestamps must not be negative",
-        )
+        SdkError::invalid_argument(field, "Provider response timestamps must not be negative")
     })
 }
 
