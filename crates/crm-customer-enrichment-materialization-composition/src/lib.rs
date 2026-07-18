@@ -23,6 +23,7 @@ use crm_customer_enrichment_materialization_adapter::{
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordRef, SdkError};
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
+use serde::Deserialize;
 use std::sync::Arc;
 
 /// Stable crate identity for architecture tooling.
@@ -76,9 +77,14 @@ impl PostgresCustomerEnrichmentSuggestionMaterializationWorker {
                     "customer_enrichment.provider_response_receipt_ref.provider_response_receipt_id",
                 )?,
             )
-            .await?
+            .await
+            .map_err(|error| store_read_failed(error.to_string()))?
             .ok_or_else(receipt_not_found)?;
-        let receipt = receipt_from_snapshot(&receipt_snapshot)?;
+        let ReceiptDependency {
+            receipt,
+            provider_profile_version_id,
+            mapping_version_id,
+        } = receipt_from_snapshot(&receipt_snapshot)?;
         if receipt.request_id().as_str() != request_ref.enrichment_request_id {
             return Err(dependency_conflict(
                 "CUSTOMER_ENRICHMENT_MATERIALIZATION_REQUEST_RECEIPT_CONFLICT",
@@ -92,11 +98,12 @@ impl PostgresCustomerEnrichmentSuggestionMaterializationWorker {
                 &request.context,
                 &record_ref(
                     PROVIDER_PROFILE_VERSION_RECORD_TYPE,
-                    receipt.provider_profile_version_id().as_str(),
+                    &provider_profile_version_id,
                     "customer_enrichment.provider_profile_version_ref.provider_profile_version_id",
                 )?,
             )
-            .await?
+            .await
+            .map_err(|error| store_read_failed(error.to_string()))?
             .ok_or_else(profile_not_found)?;
         let mapping_snapshot = self
             .store
@@ -104,11 +111,12 @@ impl PostgresCustomerEnrichmentSuggestionMaterializationWorker {
                 &request.context,
                 &record_ref(
                     MAPPING_VERSION_RECORD_TYPE,
-                    receipt.mapping_version_id().as_str(),
+                    &mapping_version_id,
                     "customer_enrichment.mapping_version_ref.mapping_version_id",
                 )?,
             )
-            .await?
+            .await
+            .map_err(|error| store_read_failed(error.to_string()))?
             .ok_or_else(mapping_not_found)?;
 
         let profile = provider_profile_from_snapshot(&profile_snapshot)?;
@@ -121,9 +129,21 @@ impl PostgresCustomerEnrichmentSuggestionMaterializationWorker {
     }
 }
 
+struct ReceiptDependency {
+    receipt: ProviderResponseReceipt,
+    provider_profile_version_id: String,
+    mapping_version_id: String,
+}
+
+#[derive(Deserialize)]
+struct ReceiptLineageView {
+    provider_profile_version_id: String,
+    mapping_version_id: String,
+}
+
 fn receipt_from_snapshot(
     snapshot: &crm_module_sdk::RecordSnapshot,
-) -> Result<ProviderResponseReceipt, SdkError> {
+) -> Result<ReceiptDependency, SdkError> {
     if snapshot.reference.record_type.as_str() != PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE
         || snapshot.version != 1
     {
@@ -149,7 +169,14 @@ fn receipt_from_snapshot(
             "record identity differs from the content-derived receipt identity",
         ));
     }
-    Ok(receipt)
+    let lineage: ReceiptLineageView = serde_json::from_slice(bytes).map_err(|error| {
+        invalid_receipt_snapshot(format!("receipt lineage decode failed: {error}"))
+    })?;
+    Ok(ReceiptDependency {
+        receipt,
+        provider_profile_version_id: lineage.provider_profile_version_id,
+        mapping_version_id: lineage.mapping_version_id,
+    })
 }
 
 fn record_ref(
@@ -193,6 +220,16 @@ fn dependency_not_found(code: &'static str, message: &'static str) -> SdkError {
 
 fn dependency_conflict(code: &'static str, message: &'static str) -> SdkError {
     SdkError::new(code, ErrorCategory::Conflict, false, message)
+}
+
+fn store_read_failed(reference: impl Into<String>) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_MATERIALIZATION_STORE_UNAVAILABLE",
+        ErrorCategory::Unavailable,
+        true,
+        "Customer Enrichment materialization dependencies could not be loaded.",
+    )
+    .with_internal_reference(reference.into())
 }
 
 fn invalid_receipt_snapshot(reference: impl Into<String>) -> SdkError {
