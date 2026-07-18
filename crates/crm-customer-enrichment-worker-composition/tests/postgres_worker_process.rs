@@ -180,7 +180,7 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
     assert_eq!(
         scalar(
             &admin,
-            "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = 'tenant-a' AND idempotency_scope LIKE 'customer_enrichment.%@1.0.0'",
+            "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = 'tenant-a' AND (idempotency_scope = 'customer_enrichment.request.seed@1.0.0' OR idempotency_scope LIKE 'capability:customer_enrichment.%:1.0.0')",
         )
         .await,
         3
