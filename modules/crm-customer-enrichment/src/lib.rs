@@ -13,10 +13,10 @@ pub mod materialization;
 pub mod persistence;
 /// Pure-core governed reads, policy, provider dispatch and owner-application boundaries.
 pub mod ports;
-/// Exact resource-specific final policy boundary for suggestion review.
-pub mod review_policy;
 /// Exact identities for the eight manifest-owned enrichment record types.
 pub mod records;
+/// Exact resource-specific final policy boundary for suggestion review.
+pub mod review_policy;
 /// Immutable provider metering and quota evidence plus strict persistence.
 pub mod provider_usage {
     #[cfg(test)]
