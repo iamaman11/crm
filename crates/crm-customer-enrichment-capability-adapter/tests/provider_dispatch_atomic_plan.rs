@@ -8,8 +8,8 @@ use crm_customer_enrichment::{
     RequestPolicyEvidence, TargetField, TargetSnapshot, decode_provider_usage_entry_state,
 };
 use crm_customer_enrichment_capability_adapter::{
-    CustomerEnrichmentRequestDispatchPlanner, DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA, MODULE_ID,
-    enrichment_request_persisted_payload, request_dispatch_capability_definition,
+    CustomerEnrichmentRequestDispatchPlanner, DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA,
+    MODULE_ID, enrichment_request_persisted_payload, request_dispatch_capability_definition,
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
@@ -48,17 +48,19 @@ fn created_request_dispatch_is_one_valid_atomic_batch() {
     let usage_payload = match &plan.batch.records[1] {
         RecordMutation::Create { reference, payload }
             if reference.record_type.as_str() == "customer_enrichment.provider_usage_entry"
-                && payload.data_class == DataClass::Confidential => payload,
+                && payload.data_class == DataClass::Confidential =>
+        {
+            payload
+        }
         other => panic!("unexpected provider usage mutation: {other:?}"),
     };
     let usage = decode_provider_usage_entry_state(&usage_payload.bytes).unwrap();
     assert_eq!(usage.kind(), ProviderUsageKind::RequestDispatched);
     assert_eq!(usage.metered_units(), 0);
 
-    let output = wire::DispatchEnrichmentRequestResponse::decode(
-        plan.output.unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let output =
+        wire::DispatchEnrichmentRequestResponse::decode(plan.output.unwrap().bytes.as_slice())
+            .unwrap();
     let output = output.enrichment_request.unwrap();
     assert_eq!(
         output.status,
@@ -69,18 +71,16 @@ fn created_request_dispatch_is_one_valid_atomic_batch() {
 
 #[test]
 fn retryable_failure_dispatch_increments_generation_atomically() {
-    let (definition, request, snapshot) =
-        fixture(EnrichmentRequestStatus::FailedRetryable, 0, 0);
+    let (definition, request, snapshot) = fixture(EnrichmentRequestStatus::FailedRetryable, 0, 0);
     let plan = CustomerEnrichmentRequestDispatchPlanner
         .plan(&definition, &request, Some(&snapshot))
         .unwrap();
     plan.batch.validate().unwrap();
-    let output = wire::DispatchEnrichmentRequestResponse::decode(
-        plan.output.unwrap().bytes.as_slice(),
-    )
-    .unwrap()
-    .enrichment_request
-    .unwrap();
+    let output =
+        wire::DispatchEnrichmentRequestResponse::decode(plan.output.unwrap().bytes.as_slice())
+            .unwrap()
+            .enrichment_request
+            .unwrap();
     assert_eq!(
         output.status,
         wire::EnrichmentRequestStatus::Dispatched as i32

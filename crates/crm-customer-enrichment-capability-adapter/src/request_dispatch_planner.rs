@@ -15,8 +15,8 @@ use crm_customer_enrichment::{
     ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequestStatus, PROVIDER_USAGE_ENTRY_RECORD_TYPE,
     PROVIDER_USAGE_ENTRY_STATE_MAXIMUM_BYTES, PROVIDER_USAGE_ENTRY_STATE_RETENTION_POLICY_ID,
     PROVIDER_USAGE_ENTRY_STATE_SCHEMA_ID, PROVIDER_USAGE_ENTRY_STATE_SCHEMA_VERSION,
-    ProviderUsageEntry, ProviderUsageEntryDraft, ProviderUsageKind, encode_provider_usage_entry_state,
-    provider_usage_entry_state_descriptor_hash,
+    ProviderUsageEntry, ProviderUsageEntryDraft, ProviderUsageKind,
+    encode_provider_usage_entry_state, provider_usage_entry_state_descriptor_hash,
 };
 use crm_module_sdk::{
     DataClass, ErrorCategory, RecordId, RecordRef, RecordSnapshot, SdkError, TypedPayload,
