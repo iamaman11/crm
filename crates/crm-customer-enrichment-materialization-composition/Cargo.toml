@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = []
+postgres-integration = []
+
 [dependencies]
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
@@ -16,3 +20,13 @@ crm-proto-contracts = { path = "../crm-proto-contracts" }
 prost = "0.14"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[dev-dependencies]
+crm-capability-ingress = { path = "../crm-capability-ingress" }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[test]]
+name = "postgres_materialization_process"
+path = "tests/postgres_materialization_process.rs"
+required-features = ["postgres-integration"]
