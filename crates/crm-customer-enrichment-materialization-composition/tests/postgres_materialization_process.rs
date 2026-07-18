@@ -337,8 +337,8 @@ async fn seed_record(
     seed: SeedRecord,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let request_hash = semantic_input_hash(&seed.event_payload);
-    let at_unix_nanos = i64::try_from(seed.at_unix_ms * 1_000_000)
-        .expect("seed timestamp fits signed nanoseconds");
+    let at_unix_nanos =
+        i64::try_from(seed.at_unix_ms * 1_000_000).expect("seed timestamp fits signed nanoseconds");
     store
         .create_record(&RecordCreatePlan {
             context: seed_context(seed.suffix, at_unix_nanos),
