@@ -31,6 +31,8 @@ message RecordProviderResponseRequest {
   uint64 metered_units = 8;
   optional string protected_evidence_reference = 9;
   optional string safe_provider_code = 10;
+  // Prevents a delayed response from an earlier dispatch attempt being attached after retry.
+  uint32 expected_retry_generation = 11;
 }
 
 message RecordProviderResponseResponse {
