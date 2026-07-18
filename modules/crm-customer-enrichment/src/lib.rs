@@ -2,6 +2,8 @@
 
 /// Strict immutable provider-profile and mapping persisted-state codecs.
 pub mod definition_persistence;
+/// Deterministic pre-I/O provider dispatch and crash-recovery protocol.
+pub mod dispatch;
 pub mod definitions;
 pub mod lifecycle;
 /// Strict bounded canonical persisted-state codecs for governed enrichment evidence.
@@ -23,6 +25,7 @@ pub use definitions::{
     MappingDraft, MappingNormalization, MappingVersion, MappingVersionId, ProviderProfileDraft,
     ProviderProfileVersion, ProviderProfileVersionId, RawPayloadPolicy, TargetField,
 };
+pub use dispatch::*;
 pub use lifecycle::{
     ApplicationAttempt, ApplicationAttemptId, ApplicationOutcome, ApprovalRequirement,
     EnrichmentRequest, EnrichmentRequestDraft, EnrichmentRequestId, EnrichmentRequestStatus,
