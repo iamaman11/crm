@@ -1,7 +1,7 @@
 use crate::enrichment_request_persisted_contract;
 use crm_capability_plan_support as support;
 use crm_customer_enrichment::{
-    EnrichmentRequest, ENRICHMENT_REQUEST_RECORD_TYPE, decode_enrichment_request_state,
+    ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequest, decode_enrichment_request_state,
 };
 use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, SdkError};
 
