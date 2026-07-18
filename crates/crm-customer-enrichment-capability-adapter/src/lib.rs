@@ -2,9 +2,9 @@
 
 //! Governed mutation adapters for `crm.customer-enrichment`.
 //!
-//! Immutable definition publication uses the shared transactional record/idempotency/outbox/audit
-//! runtime. Provider network I/O, credentials, Party reads and owner mutation remain outside this
-//! crate.
+//! Immutable definition publication and request creation use the shared transactional
+//! record/idempotency/outbox/audit runtime. Provider network I/O, credentials and owner mutation
+//! remain outside this crate; governed Party and Consent pre-authorization is composed separately.
 
 mod mapping_planner;
 mod mapping_reference_planner;
@@ -63,14 +63,11 @@ pub const MAPPING_PUBLISHED_EVENT_TYPE: &str = "customer_enrichment.mapping.publ
 pub const MAPPING_PUBLISHED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.MappingVersionPublishedEvent";
 
-/// Exact mutation coordinates currently safe for direct production registration.
-///
-/// Request creation has a module-owned planner and definition factory, but it is intentionally
-/// excluded until the separate production composition executor performs governed Party and policy
-/// pre-authorization.
+/// Exact mutation coordinates registered by production composition.
 pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
     PUBLISH_PROVIDER_PROFILE_CAPABILITY,
     PUBLISH_MAPPING_CAPABILITY,
+    CREATE_ENRICHMENT_REQUEST_CAPABILITY,
 ];
 
 /// Module-owned planner router. The public type name is retained so production composition does
@@ -125,6 +122,7 @@ pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![
         provider_profile_capability_definition()?,
         mapping_capability_definition()?,
+        request_create_capability_definition()?,
     ])
 }
 
@@ -213,7 +211,7 @@ mod tests {
     #[test]
     fn implemented_mutation_catalog_is_exact() {
         let definitions = capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 2);
+        assert_eq!(definitions.len(), 3);
         let ids = definitions
             .iter()
             .map(|definition| definition.capability_id.as_str())
@@ -236,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn request_create_definition_is_personal_but_not_directly_registered() {
+    fn request_create_definition_is_personal_and_registered() {
         let definition = request_create_capability_definition().unwrap();
         assert_eq!(
             definition.capability_id.as_str(),
@@ -246,8 +244,6 @@ mod tests {
             definition.input_contract.allowed_data_classes,
             vec![DataClass::Personal]
         );
-        assert!(
-            !IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&CREATE_ENRICHMENT_REQUEST_CAPABILITY)
-        );
+        assert!(IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&CREATE_ENRICHMENT_REQUEST_CAPABILITY));
     }
 }
