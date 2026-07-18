@@ -44,13 +44,12 @@ impl PostgresCustomerEnrichmentSuggestionMaterializationWorker {
         request: CapabilityRequest,
     ) -> Result<CapabilityExecutionResult, SdkError> {
         let definition = suggestion_materialization_capability_definition()?;
-        let command: wire::MaterializeSuggestionsRequest =
-            support::decode_request_with_data_class(
-                &request,
-                MODULE_ID,
-                MATERIALIZE_SUGGESTIONS_REQUEST_SCHEMA,
-                DataClass::Personal,
-            )?;
+        let command: wire::MaterializeSuggestionsRequest = support::decode_request_with_data_class(
+            &request,
+            MODULE_ID,
+            MATERIALIZE_SUGGESTIONS_REQUEST_SCHEMA,
+            DataClass::Personal,
+        )?;
         let request_ref = command.enrichment_request_ref.as_ref().ok_or_else(|| {
             SdkError::invalid_argument(
                 "customer_enrichment.enrichment_request_ref",
@@ -114,13 +113,10 @@ impl PostgresCustomerEnrichmentSuggestionMaterializationWorker {
 
         let profile = provider_profile_from_snapshot(&profile_snapshot)?;
         let mapping = mapping_from_snapshot(&mapping_snapshot)?;
-        let planner = CustomerEnrichmentSuggestionMaterializationPlanner::new(
-            receipt, profile, mapping,
-        );
-        let executor = PostgresTransactionalAggregateExecutor::new(
-            self.store.clone(),
-            Arc::new(planner),
-        );
+        let planner =
+            CustomerEnrichmentSuggestionMaterializationPlanner::new(receipt, profile, mapping);
+        let executor =
+            PostgresTransactionalAggregateExecutor::new(self.store.clone(), Arc::new(planner));
         executor.execute(&definition, request).await
     }
 }
@@ -156,7 +152,11 @@ fn receipt_from_snapshot(
     Ok(receipt)
 }
 
-fn record_ref(record_type: &str, record_id: &str, field: &'static str) -> Result<RecordRef, SdkError> {
+fn record_ref(
+    record_type: &str,
+    record_id: &str,
+    field: &'static str,
+) -> Result<RecordRef, SdkError> {
     support::record_ref(
         record_type,
         RecordId::try_new(record_id.to_owned())
