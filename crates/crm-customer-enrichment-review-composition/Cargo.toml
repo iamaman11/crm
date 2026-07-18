@@ -22,6 +22,8 @@ serde_json = "1"
 
 [dev-dependencies]
 crm-capability-ingress = { path = "../crm-capability-ingress" }
+crm-customer-enrichment-suggestion-query-adapter = { path = "../crm-customer-enrichment-suggestion-query-adapter" }
+crm-query-runtime = { path = "../crm-query-runtime" }
 prost = "0.14"
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
