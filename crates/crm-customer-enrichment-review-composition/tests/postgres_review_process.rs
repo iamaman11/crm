@@ -113,20 +113,17 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
         .await
         .expect("seed immutable suggestion");
     let request = accept_request(&suggestion);
-    let executor = PostgresCustomerEnrichmentSuggestionReviewExecutor::new(
-        store,
-        Arc::new(ExactAllowPolicy),
-    );
+    let executor =
+        PostgresCustomerEnrichmentSuggestionReviewExecutor::new(store, Arc::new(ExactAllowPolicy));
 
     let first = executor
         .execute(request.clone())
         .await
         .expect("commit policy-bound review");
     assert!(!first.replayed);
-    let first_output = wire::AcceptSuggestionResponse::decode(
-        first.output.as_ref().unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let first_output =
+        wire::AcceptSuggestionResponse::decode(first.output.as_ref().unwrap().bytes.as_slice())
+            .unwrap();
     let accepted_suggestion = first_output.suggestion.unwrap();
     assert_eq!(
         accepted_suggestion.lifecycle_status,
@@ -148,10 +145,9 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
         .await
         .expect("replay exact policy-bound review");
     assert!(second.replayed);
-    let second_output = wire::AcceptSuggestionResponse::decode(
-        second.output.as_ref().unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let second_output =
+        wire::AcceptSuggestionResponse::decode(second.output.as_ref().unwrap().bytes.as_slice())
+            .unwrap();
     assert_eq!(
         second_output.review_decision.unwrap().review_decision_ref,
         first_decision.review_decision_ref
@@ -179,13 +175,17 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
         .execute(&get_definition, get_request.clone())
         .await
         .unwrap();
-    let get_output = wire::GetSuggestionResponse::decode(get_result.output.bytes.as_slice()).unwrap();
+    let get_output =
+        wire::GetSuggestionResponse::decode(get_result.output.bytes.as_slice()).unwrap();
     assert_eq!(
         get_output.suggestion.unwrap().lifecycle_status,
         wire::SuggestionLifecycleStatus::Accepted as i32
     );
     assert_eq!(
-        get_output.latest_review_decision.unwrap().review_decision_ref,
+        get_output
+            .latest_review_decision
+            .unwrap()
+            .review_decision_ref,
         first_decision.review_decision_ref
     );
     assert!(get_output.latest_application_attempt.is_none());
@@ -293,8 +293,8 @@ fn query_request<M: Message>(
     message: &M,
     request_id: &str,
 ) -> QueryRequest {
-    let input = plan_support::protobuf_payload(MODULE_ID, schema, DataClass::Personal, message)
-        .unwrap();
+    let input =
+        plan_support::protobuf_payload(MODULE_ID, schema, DataClass::Personal, message).unwrap();
     QueryRequest {
         owner_module_id: ModuleId::try_new(MODULE_ID).unwrap(),
         context: QueryExecutionContext {
