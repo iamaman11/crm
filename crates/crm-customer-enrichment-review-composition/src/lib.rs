@@ -118,13 +118,15 @@ pub fn suggestion_review_policy_request(
     }
     let party_resource_version = i64::try_from(state.target.resource_version)
         .map_err(|_| review_state_invalid("Party version exceeds i64"))?;
+    let party_id = RecordId::try_new(state.target.resource_id.clone())
+        .map_err(|error| review_state_invalid(error.to_string()))?;
     Ok(SuggestionReviewPolicyRequest {
         tenant_id: request.context.execution.tenant_id.clone(),
         actor_id: request.context.execution.actor_id.clone(),
         request_identity: request.context.execution.request_id.as_str().to_owned(),
         enrichment_request_id: state.request_id,
         suggestion_id: state.suggestion_id,
-        party_id: state.target.resource_id,
+        party_id,
         party_resource_version,
         target_field: state.target.target_field,
         provider_profile_version_id: state.provider_profile_version_id,
