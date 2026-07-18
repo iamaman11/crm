@@ -246,9 +246,7 @@ fn bounded_coordinate_component(
     {
         return Err(SdkError::invalid_argument(
             field,
-            format!(
-                "value must be non-empty, canonical and no longer than {maximum_bytes} bytes"
-            ),
+            format!("value must be non-empty, canonical and no longer than {maximum_bytes} bytes"),
         ));
     }
     Ok(value)
