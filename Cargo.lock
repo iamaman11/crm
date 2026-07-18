@@ -316,6 +316,7 @@ dependencies = [
  "crm-customer-data-operations-query-adapter",
  "crm-customer-data-operations-source-composition",
  "crm-customer-enrichment-capability-adapter",
+ "crm-customer-enrichment-capability-composition",
  "crm-customer-enrichment-query-adapter",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
@@ -757,7 +758,26 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "prost",
+ "serde",
  "serde_json",
+]
+
+[[package]]
+name = "crm-customer-enrichment-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-consents-capability-adapter",
+ "crm-consents-query-adapter",
+ "crm-core-data",
+ "crm-customer-enrichment",
+ "crm-customer-enrichment-capability-adapter",
+ "crm-module-sdk",
+ "crm-parties-query-adapter",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
 ]
 
 [[package]]

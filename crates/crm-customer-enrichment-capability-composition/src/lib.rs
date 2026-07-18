@@ -83,7 +83,10 @@ impl CustomerEnrichmentCapabilityExecutor {
     ) -> Result<CapabilityExecutionResult, SdkError> {
         let enrichment_request = enrichment_request_from_create_request(&request)?;
         let public_request = enrichment_request_to_wire(&enrichment_request)?;
-        let target = public_request.target.as_ref().ok_or_else(contract_invalid)?;
+        let target = public_request
+            .target
+            .as_ref()
+            .ok_or_else(contract_invalid)?;
         let party_ref = target.party_ref.as_ref().ok_or_else(contract_invalid)?;
         let policy = public_request
             .policy_evidence
@@ -93,12 +96,8 @@ impl CustomerEnrichmentCapabilityExecutor {
             .load_and_validate_definitions(&request, &enrichment_request)
             .await?;
         self.validate_profile_policy(&profile, &mapping, &public_request)?;
-        self.validate_party(
-            &request,
-            &party_ref.party_id,
-            target.party_resource_version,
-        )
-        .await?;
+        self.validate_party(&request, &party_ref.party_id, target.party_resource_version)
+            .await?;
         self.validate_consent(&request, policy, &party_ref.party_id)
             .await?;
         self.request_create.execute(definition, request).await
@@ -163,7 +162,10 @@ impl CustomerEnrichmentCapabilityExecutor {
         mapping: &MappingVersion,
         request: &wire::EnrichmentRequest,
     ) -> Result<(), SdkError> {
-        let policy = request.policy_evidence.as_ref().ok_or_else(contract_invalid)?;
+        let policy = request
+            .policy_evidence
+            .as_ref()
+            .ok_or_else(contract_invalid)?;
         if policy.policy_version != REQUEST_POLICY_VERSION {
             return Err(policy_denied(
                 "policy_version_mismatch",
@@ -236,7 +238,9 @@ impl CustomerEnrichmentCapabilityExecutor {
             "CUSTOMER_ENRICHMENT_PARTY_PERMISSION_DENIED",
         )
         .await?;
-        self.party_queries.validate(&definition, &query_request).await?;
+        self.party_queries
+            .validate(&definition, &query_request)
+            .await?;
         match self
             .party_queries
             .get_for_export_execution(&query_request, &party_id, expected_resource_version)
@@ -284,10 +288,9 @@ impl CustomerEnrichmentCapabilityExecutor {
             .consent_queries
             .execute(&definition, query_request)
             .await?;
-        let response = consent_wire::GetConsentAuthorizationResponse::decode(
-            result.output.bytes.as_slice(),
-        )
-        .map_err(|error| contract_invalid().with_internal_reference(error.to_string()))?;
+        let response =
+            consent_wire::GetConsentAuthorizationResponse::decode(result.output.bytes.as_slice())
+                .map_err(|error| contract_invalid().with_internal_reference(error.to_string()))?;
         let authorization = response
             .authorization
             .ok_or_else(|| consent_denied("consent_authorization_missing"))?;
@@ -382,10 +385,7 @@ fn consent_get_query_request(
                 .map_err(configuration_error)?,
             schema_version: SchemaVersion::try_new(support::CONTRACT_VERSION)
                 .map_err(configuration_error)?,
-            request_started_at_unix_nanos: request
-                .context
-                .execution
-                .request_started_at_unix_nanos,
+            request_started_at_unix_nanos: request.context.execution.request_started_at_unix_nanos,
         },
         input,
         input_hash: normalized_filter_hash([(

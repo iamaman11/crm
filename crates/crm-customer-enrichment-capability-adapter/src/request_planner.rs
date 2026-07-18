@@ -34,8 +34,8 @@ const REQUEST_PARTY_LINK_SCHEMA_ID: &str = "crm.customer-enrichment.request.part
 const REQUEST_PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
 const REQUEST_PARTY_LINK_MAXIMUM_BYTES: u64 = 1_024;
 const REQUEST_PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
-    234, 78, 62, 183, 114, 97, 170, 255, 30, 94, 169, 60, 144, 234, 17, 235, 225, 88,
-    121, 223, 86, 225, 45, 149, 201, 194, 155, 186, 10, 226, 131, 230,
+    234, 78, 62, 183, 114, 97, 170, 255, 30, 94, 169, 60, 144, 234, 17, 235, 225, 88, 121, 223, 86,
+    225, 45, 149, 201, 194, 155, 186, 10, 226, 131, 230,
 ];
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -63,7 +63,9 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentRequestCreateCapability
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
         ensure_definition(definition, request)?;
         if current.is_some() {
-            return Err(invalid_plan("deterministic enrichment request already exists"));
+            return Err(invalid_plan(
+                "deterministic enrichment request already exists",
+            ));
         }
         let enrichment_request = enrichment_request_from_create_request(request)?;
         let aggregate = enrichment_request_record_ref(&enrichment_request)?;
