@@ -77,12 +77,6 @@
     },
     {
       "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.request.list",
-      "version": "1.0.0",
-      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but signed pagination, visibility and native query contribution are not implemented yet."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.response.record",
       "version": "1.0.0",
       "reason": "Phase 8A.10 worker-only contract is published and descriptor-checked, but its provider-response reconciliation and durable evidence contribution is not implemented yet."
