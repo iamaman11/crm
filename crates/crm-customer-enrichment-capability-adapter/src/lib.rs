@@ -38,6 +38,7 @@ pub use semantic_validator::CustomerEnrichmentCapabilitySemanticValidator;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilityRisk};
 use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
+use crm_customer_enrichment::{EnrichmentRequest, EnrichmentRequestStatus};
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordSnapshot, SdkError,
 };
@@ -66,6 +67,44 @@ pub const PUBLISH_MAPPING_RESPONSE_SCHEMA: &str =
 pub const MAPPING_PUBLISHED_EVENT_TYPE: &str = "customer_enrichment.mapping.published";
 pub const MAPPING_PUBLISHED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.MappingVersionPublishedEvent";
+
+pub const DISPATCH_ENRICHMENT_REQUEST_CAPABILITY: &str = "customer_enrichment.request.dispatch";
+pub const DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA: &str =
+    "crm.customer_enrichment.v1.DispatchEnrichmentRequestRequest";
+pub const DISPATCH_ENRICHMENT_REQUEST_RESPONSE_SCHEMA: &str =
+    "crm.customer_enrichment.v1.DispatchEnrichmentRequestResponse";
+
+/// Exact optimistic lifecycle expectation supplied to one provider-dispatch attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DispatchExpectation {
+    pub status: EnrichmentRequestStatus,
+    pub retry_generation: u32,
+}
+
+/// Applies the module-owned transition after infrastructure dispatch has succeeded.
+///
+/// Provider adapter selection, credential resolution, network I/O and payload sanitization remain
+/// infrastructure-owned. This function only verifies the worker's exact optimistic expectation and
+/// advances the deterministic request lifecycle.
+pub fn prepare_request_dispatch(
+    request: &mut EnrichmentRequest,
+    expectation: DispatchExpectation,
+    dispatched_at_unix_ms: u64,
+) -> Result<(), SdkError> {
+    if request.status() != expectation.status
+        || request.retry_generation() != expectation.retry_generation
+    {
+        return Err(dispatch_conflict());
+    }
+    match expectation.status {
+        EnrichmentRequestStatus::Created | EnrichmentRequestStatus::FailedRetryable => {
+            request.queue(dispatched_at_unix_ms)?;
+            request.mark_dispatched(dispatched_at_unix_ms)
+        }
+        EnrichmentRequestStatus::Queued => request.mark_dispatched(dispatched_at_unix_ms),
+        _ => Err(dispatch_conflict()),
+    }
+}
 
 /// Exact mutation coordinates registered by production composition.
 pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
@@ -178,6 +217,17 @@ pub fn request_cancel_capability_definition() -> Result<CapabilityDefinition, Sd
     )
 }
 
+/// Worker-only definition factory retained outside the public production mutation catalog until
+/// exact provider-adapter registry and crash-safe orchestration are composed.
+pub fn request_dispatch_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        DISPATCH_ENRICHMENT_REQUEST_CAPABILITY,
+        DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA,
+        DISPATCH_ENRICHMENT_REQUEST_RESPONSE_SCHEMA,
+        DataClass::Personal,
+    )
+}
+
 fn mutation_definition(
     capability_id: &'static str,
     request_schema: &'static str,
@@ -213,6 +263,15 @@ fn configuration_error() -> SdkError {
         ErrorCategory::Internal,
         false,
         "The Customer Enrichment capability configuration is invalid.",
+    )
+}
+
+fn dispatch_conflict() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_REQUEST_DISPATCH_CONFLICT",
+        ErrorCategory::Conflict,
+        false,
+        "The enrichment request is no longer eligible for this dispatch attempt.",
     )
 }
 
@@ -268,5 +327,19 @@ mod tests {
                 IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
             );
         }
+    }
+
+    #[test]
+    fn dispatch_definition_is_personal_but_remains_outside_production_catalog() {
+        let definition = request_dispatch_capability_definition().unwrap();
+        assert_eq!(
+            definition.capability_id.as_str(),
+            DISPATCH_ENRICHMENT_REQUEST_CAPABILITY
+        );
+        assert_eq!(
+            definition.input_contract.allowed_data_classes,
+            vec![DataClass::Personal]
+        );
+        assert!(!IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()));
     }
 }
