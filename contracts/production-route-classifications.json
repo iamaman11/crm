@@ -65,12 +65,6 @@
     },
     {
       "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.mapping.get",
-      "version": "1.0.0",
-      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its permission-aware native query contribution is not implemented yet."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.party.display_name.apply",
       "version": "1.0.0",
       "reason": "Phase 8A.10 public contract is published and descriptor-checked, but exact Party revalidation, live authorization and owner-capability invocation are not implemented yet."
