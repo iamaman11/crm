@@ -264,8 +264,9 @@ mod tests {
                 definition.input_contract.allowed_data_classes,
                 vec![DataClass::Personal]
             );
-            assert!(IMPLEMENTED_MUTATION_CAPABILITY_IDS
-                .contains(&definition.capability_id.as_str()));
+            assert!(
+                IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
+            );
         }
     }
 }

@@ -96,11 +96,8 @@ impl CustomerEnrichmentQueryAdapter {
     }
 
     async fn execute_get_mapping(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
-        let command: wire::GetMappingVersionRequest = decode_input(
-            request,
-            GET_MAPPING_REQUEST_SCHEMA,
-            DataClass::Confidential,
-        )?;
+        let command: wire::GetMappingVersionRequest =
+            decode_input(request, GET_MAPPING_REQUEST_SCHEMA, DataClass::Confidential)?;
         let record_id = mapping_record_id(command.mapping_version_ref)?;
         let snapshot = self
             .get_snapshot(
@@ -176,9 +173,7 @@ impl CustomerEnrichmentQueryAdapter {
             return Err(enrichment_request_not_found());
         }
         let mut output = enrichment_request_to_wire(&enrichment_request)?;
-        redact_enrichment_request(&mut output, |field| {
-            request_visibility.allows_field(field)
-        });
+        redact_enrichment_request(&mut output, |field| request_visibility.allows_field(field));
         support::protobuf_payload(
             MODULE_ID,
             GET_ENRICHMENT_REQUEST_RESPONSE_SCHEMA,
@@ -257,11 +252,8 @@ impl QuerySemanticValidator for CustomerEnrichmentQueryAdapter {
                     provider_profile_record_id(command.provider_profile_version_ref).map(|_| ())
                 }
                 GET_MAPPING_CAPABILITY => {
-                    let command: wire::GetMappingVersionRequest = decode_input(
-                        request,
-                        GET_MAPPING_REQUEST_SCHEMA,
-                        DataClass::Confidential,
-                    )?;
+                    let command: wire::GetMappingVersionRequest =
+                        decode_input(request, GET_MAPPING_REQUEST_SCHEMA, DataClass::Confidential)?;
                     mapping_record_id(command.mapping_version_ref).map(|_| ())
                 }
                 GET_ENRICHMENT_REQUEST_CAPABILITY => {
