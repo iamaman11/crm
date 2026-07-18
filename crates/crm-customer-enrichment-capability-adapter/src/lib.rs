@@ -38,7 +38,10 @@ pub use semantic_validator::CustomerEnrichmentCapabilitySemanticValidator;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilityRisk};
 use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
-use crm_customer_enrichment::{EnrichmentRequest, EnrichmentRequestStatus};
+use crm_customer_enrichment::{
+    EnrichmentRequest, EnrichmentRequestStatus, ProviderResponseClass, ProviderResponseReceipt,
+    ProviderResponseReceiptDraft,
+};
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordSnapshot, SdkError,
 };
@@ -74,11 +77,37 @@ pub const DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA: &str =
 pub const DISPATCH_ENRICHMENT_REQUEST_RESPONSE_SCHEMA: &str =
     "crm.customer_enrichment.v1.DispatchEnrichmentRequestResponse";
 
+pub const RECORD_PROVIDER_RESPONSE_CAPABILITY: &str = "customer_enrichment.response.record";
+pub const RECORD_PROVIDER_RESPONSE_REQUEST_SCHEMA: &str =
+    "crm.customer_enrichment.v1.RecordProviderResponseRequest";
+pub const RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA: &str =
+    "crm.customer_enrichment.v1.RecordProviderResponseResponse";
+
 /// Exact optimistic lifecycle expectation supplied to one provider-dispatch attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DispatchExpectation {
     pub status: EnrichmentRequestStatus,
     pub retry_generation: u32,
+}
+
+/// Exact optimistic lifecycle expectation supplied to one response-recording attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResponseExpectation {
+    pub status: EnrichmentRequestStatus,
+    pub retry_generation: u32,
+}
+
+/// Sanitized canonical response evidence accepted from infrastructure-owned provider adapters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderResponseEvidence {
+    pub replay_key: String,
+    pub provider_correlation_id: Option<String>,
+    pub response_class: ProviderResponseClass,
+    pub canonical_response_digest: [u8; 32],
+    pub provider_observed_at_unix_ms: Option<u64>,
+    pub retrieved_at_unix_ms: u64,
+    pub metered_units: u64,
+    pub protected_evidence_reference: Option<String>,
 }
 
 /// Applies the module-owned transition after infrastructure dispatch has succeeded.
@@ -104,6 +133,40 @@ pub fn prepare_request_dispatch(
         EnrichmentRequestStatus::Queued => request.mark_dispatched(dispatched_at_unix_ms),
         _ => Err(dispatch_conflict()),
     }
+}
+
+/// Validates immutable sanitized provider evidence and binds it to the exact dispatched request.
+///
+/// Receipt construction happens before request mutation. Invalid digest, timestamp or bounded
+/// evidence therefore leaves the request unchanged. The returned receipt and request transition
+/// are intended to be persisted atomically by the future crash-safe worker composition.
+pub fn prepare_provider_response(
+    request: &mut EnrichmentRequest,
+    expectation: ResponseExpectation,
+    evidence: ProviderResponseEvidence,
+) -> Result<ProviderResponseReceipt, SdkError> {
+    if expectation.status != EnrichmentRequestStatus::Dispatched
+        || request.status() != expectation.status
+        || request.retry_generation() != expectation.retry_generation
+    {
+        return Err(response_conflict());
+    }
+    let retrieved_at_unix_ms = evidence.retrieved_at_unix_ms;
+    let receipt = ProviderResponseReceipt::record(ProviderResponseReceiptDraft {
+        request_id: request.request_id().clone(),
+        provider_profile_version_id: request.provider_profile_version_id().clone(),
+        mapping_version_id: request.mapping_version_id().clone(),
+        replay_key: evidence.replay_key,
+        provider_correlation_id: evidence.provider_correlation_id,
+        response_class: evidence.response_class,
+        canonical_response_digest: evidence.canonical_response_digest,
+        provider_observed_at_unix_ms: evidence.provider_observed_at_unix_ms,
+        retrieved_at_unix_ms,
+        metered_units: evidence.metered_units,
+        protected_evidence_reference: evidence.protected_evidence_reference,
+    })?;
+    request.record_response(receipt.receipt_id().clone(), retrieved_at_unix_ms)?;
+    Ok(receipt)
 }
 
 /// Exact mutation coordinates registered by production composition.
@@ -228,6 +291,17 @@ pub fn request_dispatch_capability_definition() -> Result<CapabilityDefinition, 
     )
 }
 
+/// Worker-only definition factory retained outside the public production mutation catalog until
+/// response receipts, request transition and usage evidence are persisted in one crash-safe unit.
+pub fn provider_response_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        RECORD_PROVIDER_RESPONSE_CAPABILITY,
+        RECORD_PROVIDER_RESPONSE_REQUEST_SCHEMA,
+        RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA,
+        DataClass::Personal,
+    )
+}
+
 fn mutation_definition(
     capability_id: &'static str,
     request_schema: &'static str,
@@ -272,6 +346,15 @@ fn dispatch_conflict() -> SdkError {
         ErrorCategory::Conflict,
         false,
         "The enrichment request is no longer eligible for this dispatch attempt.",
+    )
+}
+
+fn response_conflict() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_RESPONSE_EXPECTATION_CONFLICT",
+        ErrorCategory::Conflict,
+        false,
+        "The enrichment request no longer matches this provider response attempt.",
     )
 }
 
@@ -343,6 +426,33 @@ mod tests {
         .unwrap()
     }
 
+    fn dispatched_request() -> EnrichmentRequest {
+        let mut request = enrichment_request();
+        prepare_request_dispatch(
+            &mut request,
+            DispatchExpectation {
+                status: EnrichmentRequestStatus::Created,
+                retry_generation: 0,
+            },
+            2,
+        )
+        .unwrap();
+        request
+    }
+
+    fn response_evidence() -> ProviderResponseEvidence {
+        ProviderResponseEvidence {
+            replay_key: "provider-response-1".to_owned(),
+            provider_correlation_id: Some("correlation-1".to_owned()),
+            response_class: ProviderResponseClass::Success,
+            canonical_response_digest: [7; 32],
+            provider_observed_at_unix_ms: Some(2),
+            retrieved_at_unix_ms: 3,
+            metered_units: 1,
+            protected_evidence_reference: None,
+        }
+    }
+
     #[test]
     fn implemented_mutation_catalog_is_exact() {
         let definitions = capability_definitions().unwrap();
@@ -385,17 +495,17 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_definition_is_personal_but_remains_outside_production_catalog() {
-        let definition = request_dispatch_capability_definition().unwrap();
-        assert_eq!(
-            definition.capability_id.as_str(),
-            DISPATCH_ENRICHMENT_REQUEST_CAPABILITY
-        );
-        assert_eq!(
-            definition.input_contract.allowed_data_classes,
-            vec![DataClass::Personal]
-        );
-        assert!(!IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()));
+    fn worker_definitions_are_personal_but_remain_outside_production_catalog() {
+        for definition in [
+            request_dispatch_capability_definition().unwrap(),
+            provider_response_capability_definition().unwrap(),
+        ] {
+            assert_eq!(
+                definition.input_contract.allowed_data_classes,
+                vec![DataClass::Personal]
+            );
+            assert!(!IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()));
+        }
     }
 
     #[test]
@@ -463,5 +573,62 @@ mod tests {
         assert_eq!(error.code, "CUSTOMER_ENRICHMENT_REQUEST_DISPATCH_CONFLICT");
         assert_eq!(request.status(), EnrichmentRequestStatus::Created);
         assert_eq!(request.retry_generation(), 0);
+    }
+
+    #[test]
+    fn valid_provider_response_creates_receipt_and_binds_request() {
+        let mut request = dispatched_request();
+        let receipt = prepare_provider_response(
+            &mut request,
+            ResponseExpectation {
+                status: EnrichmentRequestStatus::Dispatched,
+                retry_generation: 0,
+            },
+            response_evidence(),
+        )
+        .unwrap();
+        assert_eq!(request.status(), EnrichmentRequestStatus::ResponseRecorded);
+        assert_eq!(request.response_receipt_id(), Some(receipt.receipt_id()));
+        assert_eq!(receipt.request_id(), request.request_id());
+        assert_eq!(receipt.canonical_response_digest(), &[7; 32]);
+    }
+
+    #[test]
+    fn stale_response_expectation_is_rejected_without_mutation() {
+        let mut request = dispatched_request();
+        let error = prepare_provider_response(
+            &mut request,
+            ResponseExpectation {
+                status: EnrichmentRequestStatus::Dispatched,
+                retry_generation: 1,
+            },
+            response_evidence(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.code,
+            "CUSTOMER_ENRICHMENT_RESPONSE_EXPECTATION_CONFLICT"
+        );
+        assert_eq!(request.status(), EnrichmentRequestStatus::Dispatched);
+        assert!(request.response_receipt_id().is_none());
+    }
+
+    #[test]
+    fn invalid_response_evidence_leaves_request_dispatched() {
+        let mut request = dispatched_request();
+        let mut evidence = response_evidence();
+        evidence.canonical_response_digest = [0; 32];
+        let error = prepare_provider_response(
+            &mut request,
+            ResponseExpectation {
+                status: EnrichmentRequestStatus::Dispatched,
+                retry_generation: 0,
+            },
+            evidence,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_RESPONSE_DIGEST_INVALID");
+        assert_eq!(request.status(), EnrichmentRequestStatus::Dispatched);
+        assert!(request.response_receipt_id().is_none());
     }
 }
