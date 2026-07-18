@@ -3,9 +3,9 @@
 //! Production pre-authorization and execution composition for Customer Enrichment requests.
 //!
 //! Request creation performs separate governed Party and Consent reads, strict immutable
-//! provider/mapping validation and a versioned fail-closed policy decision before delegating to the
-//! shared transactional aggregate executor. This crate owns no authoritative Party or Consent
-//! state and never bypasses their query boundaries.
+//! provider/mapping validation and a versioned fail-closed policy decision. Request cancellation
+//! revalidates live Party visibility before the exact request row is locked and transitioned. This
+//! crate owns no authoritative Party or Consent state and never bypasses their query boundaries.
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
@@ -19,11 +19,15 @@ use crm_consents_query_adapter::{
     query_capability_definition as consent_query_definition,
 };
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
-use crm_customer_enrichment::{MappingVersion, ProviderProfileVersion, TargetField};
+use crm_customer_enrichment::{
+    ENRICHMENT_REQUEST_RECORD_TYPE, MappingVersion, ProviderProfileVersion, TargetField,
+};
 use crm_customer_enrichment_capability_adapter::{
-    CREATE_ENRICHMENT_REQUEST_CAPABILITY, MAPPING_VERSION_RECORD_TYPE, MODULE_ID,
-    PROVIDER_PROFILE_VERSION_RECORD_TYPE, enrichment_request_from_create_request,
-    enrichment_request_to_wire, mapping_from_snapshot, provider_profile_from_snapshot,
+    CANCEL_ENRICHMENT_REQUEST_CAPABILITY, CREATE_ENRICHMENT_REQUEST_CAPABILITY,
+    MAPPING_VERSION_RECORD_TYPE, MODULE_ID, PROVIDER_PROFILE_VERSION_RECORD_TYPE,
+    cancel_request_record_ref, enrichment_request_from_create_request,
+    enrichment_request_from_snapshot, enrichment_request_to_wire, mapping_from_snapshot,
+    provider_profile_from_snapshot,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PortFuture, RecordId,
@@ -46,6 +50,8 @@ pub const REQUEST_POLICY_VERSION: &str = "request-policy-v1";
 const CONSENT_LEGAL_BASIS_CODE: &str = "consent";
 const LEGITIMATE_INTEREST_LEGAL_BASIS_CODE: &str = "legitimate_interest";
 const DISPLAY_NAME_FIELD: &str = "display_name";
+const PARTIES_MODULE_ID: &str = "crm.parties";
+const PARTY_RECORD_TYPE: &str = "parties.party";
 
 #[derive(Clone)]
 pub struct CustomerEnrichmentCapabilityExecutor {
@@ -96,11 +102,41 @@ impl CustomerEnrichmentCapabilityExecutor {
             .load_and_validate_definitions(&request, &enrichment_request)
             .await?;
         self.validate_profile_policy(&profile, &mapping, &public_request)?;
-        self.validate_party(&request, &party_ref.party_id, target.party_resource_version)
-            .await?;
+        self.validate_party(
+            &request,
+            &party_ref.party_id,
+            target.party_resource_version,
+            true,
+        )
+        .await?;
         self.validate_consent(&request, policy, &party_ref.party_id)
             .await?;
         self.request_create.execute(definition, request).await
+    }
+
+    async fn execute_cancel(
+        &self,
+        definition: &CapabilityDefinition,
+        request: CapabilityRequest,
+    ) -> Result<CapabilityExecutionResult, SdkError> {
+        let request_reference = cancel_request_record_ref(&request)?;
+        let snapshot = self
+            .store
+            .get_record_for_query(&RecordGetQuery {
+                tenant_id: request.context.execution.tenant_id.clone(),
+                owner_module_id: module_id(MODULE_ID)?,
+                record_type: record_type(ENRICHMENT_REQUEST_RECORD_TYPE)?,
+                record_id: request_reference.record_id,
+            })
+            .await?
+            .ok_or_else(enrichment_request_not_found)?;
+        let enrichment_request = enrichment_request_from_snapshot(&snapshot)?;
+        self.validate_current_party_visibility(
+            &request,
+            enrichment_request.target().resource_id.as_str(),
+        )
+        .await?;
+        self.fallback.execute(definition, request).await
     }
 
     async fn load_and_validate_definitions(
@@ -209,11 +245,32 @@ impl CustomerEnrichmentCapabilityExecutor {
         Ok(())
     }
 
+    async fn validate_current_party_visibility(
+        &self,
+        request: &CapabilityRequest,
+        party_id: &str,
+    ) -> Result<(), SdkError> {
+        let party_id = RecordId::try_new(party_id).map_err(|_| target_unavailable())?;
+        let snapshot = self
+            .store
+            .get_record_for_query(&RecordGetQuery {
+                tenant_id: request.context.execution.tenant_id.clone(),
+                owner_module_id: module_id(PARTIES_MODULE_ID)?,
+                record_type: record_type(PARTY_RECORD_TYPE)?,
+                record_id: party_id.clone(),
+            })
+            .await?
+            .ok_or_else(target_unavailable)?;
+        self.validate_party(request, party_id.as_str(), snapshot.version, false)
+            .await
+    }
+
     async fn validate_party(
         &self,
         request: &CapabilityRequest,
         party_id: &str,
         expected_resource_version: i64,
+        require_display_name: bool,
     ) -> Result<(), SdkError> {
         if expected_resource_version <= 0 {
             return Err(stale_target());
@@ -247,7 +304,7 @@ impl CustomerEnrichmentCapabilityExecutor {
             .await?
         {
             PartyExportExecutionRead::Visible { allowed_fields, .. }
-                if allowed_fields.contains(DISPLAY_NAME_FIELD) =>
+                if !require_display_name || allowed_fields.contains(DISPLAY_NAME_FIELD) =>
             {
                 Ok(())
             }
@@ -324,10 +381,14 @@ impl TransactionalCapabilityExecutor for CustomerEnrichmentCapabilityExecutor {
         definition: &'a CapabilityDefinition,
         request: CapabilityRequest,
     ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
-        if definition.capability_id.as_str() == CREATE_ENRICHMENT_REQUEST_CAPABILITY {
-            Box::pin(async move { self.execute_create(definition, request).await })
-        } else {
-            self.fallback.execute(definition, request)
+        match definition.capability_id.as_str() {
+            CREATE_ENRICHMENT_REQUEST_CAPABILITY => {
+                Box::pin(async move { self.execute_create(definition, request).await })
+            }
+            CANCEL_ENRICHMENT_REQUEST_CAPABILITY => {
+                Box::pin(async move { self.execute_cancel(definition, request).await })
+            }
+            _ => self.fallback.execute(definition, request),
         }
     }
 }
@@ -498,6 +559,15 @@ fn target_unavailable() -> SdkError {
         ErrorCategory::NotFound,
         false,
         "The requested resource was not found.",
+    )
+}
+
+fn enrichment_request_not_found() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_REQUEST_NOT_FOUND",
+        ErrorCategory::NotFound,
+        false,
+        "The requested enrichment request was not found.",
     )
 }
 
