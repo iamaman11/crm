@@ -318,6 +318,7 @@ dependencies = [
  "crm-customer-enrichment-capability-adapter",
  "crm-customer-enrichment-capability-composition",
  "crm-customer-enrichment-query-adapter",
+ "crm-customer-enrichment-request-list-query-adapter",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",
@@ -782,6 +783,21 @@ dependencies = [
 
 [[package]]
 name = "crm-customer-enrichment-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-enrichment",
+ "crm-customer-enrichment-capability-adapter",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
+]
+
+[[package]]
+name = "crm-customer-enrichment-request-list-query-adapter"
 version = "0.1.0"
 dependencies = [
  "crm-capability-plan-support",
