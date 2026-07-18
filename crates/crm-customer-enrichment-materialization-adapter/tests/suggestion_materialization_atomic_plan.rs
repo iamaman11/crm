@@ -7,9 +7,7 @@ use crm_customer_enrichment::{
     ProviderResponseClass, ProviderResponseReceipt, ProviderResponseReceiptDraft, RawPayloadPolicy,
     RequestPolicyEvidence, TargetField, TargetSnapshot,
 };
-use crm_customer_enrichment_capability_adapter::{
-    MODULE_ID, enrichment_request_persisted_payload,
-};
+use crm_customer_enrichment_capability_adapter::{MODULE_ID, enrichment_request_persisted_payload};
 use crm_customer_enrichment_materialization_adapter::{
     CustomerEnrichmentSuggestionMaterializationPlanner, MATERIALIZE_SUGGESTIONS_REQUEST_SCHEMA,
     suggestion_materialization_capability_definition,
@@ -27,7 +25,9 @@ fn success_materialization_is_one_atomic_batch() {
     let fixture = fixture(ProviderResponseClass::Success, success_candidates(), None);
     let planner = planner(&fixture);
 
-    let target = planner.target(&fixture.definition, &fixture.request).unwrap();
+    let target = planner
+        .target(&fixture.definition, &fixture.request)
+        .unwrap();
     assert_eq!(target.reference, fixture.snapshot.reference);
     assert_eq!(target.presence, AggregatePresence::MustExist);
 
@@ -60,10 +60,9 @@ fn success_materialization_is_one_atomic_batch() {
         ));
     }
 
-    let output = wire::MaterializeSuggestionsResponse::decode(
-        plan.output.unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let output =
+        wire::MaterializeSuggestionsResponse::decode(plan.output.unwrap().bytes.as_slice())
+            .unwrap();
     assert_eq!(output.suggestions.len(), 2);
     assert_eq!(
         output.enrichment_request.unwrap().status,
@@ -100,10 +99,9 @@ fn no_match_updates_only_the_request() {
     assert_eq!(plan.batch.audits.len(), 1);
     assert!(plan.batch.relationships.is_empty());
 
-    let output = wire::MaterializeSuggestionsResponse::decode(
-        plan.output.unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let output =
+        wire::MaterializeSuggestionsResponse::decode(plan.output.unwrap().bytes.as_slice())
+            .unwrap();
     assert!(output.suggestions.is_empty());
     assert_eq!(
         output.enrichment_request.unwrap().status,
@@ -143,10 +141,7 @@ fn stale_candidate_target_is_rejected_before_batch_creation() {
             Some(&fixture.snapshot),
         )
         .unwrap_err();
-    assert_eq!(
-        error.code,
-        "CUSTOMER_ENRICHMENT_CANDIDATE_TARGET_CONFLICT"
-    );
+    assert_eq!(error.code, "CUSTOMER_ENRICHMENT_CANDIDATE_TARGET_CONFLICT");
 }
 
 struct Fixture {
@@ -279,8 +274,7 @@ fn fixture(
                     definition.capability_version.as_str(),
                 )
                 .unwrap(),
-                idempotency_key: IdempotencyKey::try_new("materialization-idempotency-1")
-                    .unwrap(),
+                idempotency_key: IdempotencyKey::try_new("materialization-idempotency-1").unwrap(),
                 business_transaction_id: BusinessTransactionId::try_new("materialization-tx-1")
                     .unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
@@ -303,10 +297,16 @@ fn fixture(
 }
 
 fn success_candidates() -> Vec<wire::ProviderSuggestionCandidate> {
-    vec![candidate("Zeta Company", 8_000), candidate("Alpha Company", 9_000)]
+    vec![
+        candidate("Zeta Company", 8_000),
+        candidate("Alpha Company", 9_000),
+    ]
 }
 
-fn candidate(proposed_value: &str, confidence_basis_points: u32) -> wire::ProviderSuggestionCandidate {
+fn candidate(
+    proposed_value: &str,
+    confidence_basis_points: u32,
+) -> wire::ProviderSuggestionCandidate {
     wire::ProviderSuggestionCandidate {
         target: Some(wire::EnrichmentTargetSnapshot {
             party_ref: Some(customer::PartyRef {
