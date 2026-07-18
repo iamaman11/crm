@@ -4,7 +4,6 @@ use crate::{
 };
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::Deserialize;
-use std::collections::BTreeSet;
 
 /// One provider-neutral candidate after infrastructure has parsed and sanitized the raw response.
 #[derive(Debug, Clone, PartialEq, Eq)]
