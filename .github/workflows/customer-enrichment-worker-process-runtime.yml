@@ -13,6 +13,8 @@ on:
       - "crates/crm-customer-enrichment-capability-adapter/**"
       - "crates/crm-customer-enrichment-provider-registry/**"
       - "crates/crm-customer-enrichment-worker-composition/**"
+      - "crates/crm-customer-enrichment-materialization-adapter/**"
+      - "crates/crm-customer-enrichment-materialization-composition/**"
       - "modules/crm-customer-enrichment/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
@@ -31,6 +33,8 @@ on:
       - "crates/crm-customer-enrichment-capability-adapter/**"
       - "crates/crm-customer-enrichment-provider-registry/**"
       - "crates/crm-customer-enrichment-worker-composition/**"
+      - "crates/crm-customer-enrichment-materialization-adapter/**"
+      - "crates/crm-customer-enrichment-materialization-composition/**"
       - "modules/crm-customer-enrichment/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
@@ -44,7 +48,7 @@ permissions:
 jobs:
   customer-enrichment-worker-process-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:17-alpine
@@ -74,17 +78,29 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Prepare fresh Customer Enrichment worker database
+      - name: Prepare fresh Customer Enrichment provider-worker database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify durable Customer Enrichment provider worker
         shell: bash
         run: |
           set -euo pipefail
+          : > database/customer-enrichment-worker-process-runtime.log
           cargo test \
             -p crm-customer-enrichment-worker-composition \
             --features postgres-integration \
             --test postgres_worker_process \
-            -- --nocapture 2>&1 | tee database/customer-enrichment-worker-process-runtime.log
+            -- --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+      - name: Prepare fresh Customer Enrichment materialization database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify durable Customer Enrichment materialization worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-customer-enrichment-materialization-composition \
+            --features postgres-integration \
+            --test postgres_materialization_process \
+            -- --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -121,7 +137,10 @@ jobs:
               SELECT tenant_id, idempotency_scope, idempotency_key, status,
                      business_transaction_id, created_at, expires_at
                 FROM crm.idempotency_records
-               WHERE idempotency_scope = 'customer_enrichment.request.seed@1.0.0'
+               WHERE idempotency_scope IN (
+                       'customer_enrichment.request.seed@1.0.0',
+                       'customer_enrichment.materialization.seed@1.0.0'
+                     )
                   OR idempotency_scope LIKE 'capability:customer_enrichment.%:1.0.0'
                ORDER BY tenant_id, idempotency_scope, idempotency_key;
             "
@@ -153,6 +172,8 @@ jobs:
             database/customer-enrichment-worker-process-runtime-state.log
             database/customer-enrichment-worker-process-runtime-postgres.log
             crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs
+            crates/crm-customer-enrichment-materialization-adapter/
+            crates/crm-customer-enrichment-materialization-composition/
             database/tests/0016_customer_enrichment_worker.sql
             scripts/prepare_customer_enrichment_worker_process_database.sh
           if-no-files-found: error
