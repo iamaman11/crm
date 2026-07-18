@@ -13,3 +13,4 @@ crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichmen
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
