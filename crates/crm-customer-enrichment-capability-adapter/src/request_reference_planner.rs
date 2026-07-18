@@ -11,7 +11,7 @@ use crm_capability_plan_support::{self as support, EventSpec, PersistedPayloadCo
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{
     AggregatePresence, AggregateTarget, BatchMutationPlan, CapabilityBatchExecutionPlan,
-    RecordMutation, TransactionalAggregatePlanner,
+    EventEvidence, RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_customer_enrichment::{
     ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequestStatus, LIFECYCLE_STATE_RETENTION_POLICY_ID,
@@ -279,7 +279,7 @@ fn provider_usage_events(
     request: &CapabilityRequest,
     references: &[RecordRef],
     usage_entries: Vec<wire::ProviderUsageEntry>,
-) -> Result<Vec<crm_module_sdk::EventEvidence>, SdkError> {
+) -> Result<Vec<EventEvidence>, SdkError> {
     references
         .iter()
         .zip(usage_entries)
