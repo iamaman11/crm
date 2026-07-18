@@ -33,10 +33,13 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentRequestReferencePlanner
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
         let enrichment_request = enrichment_request_from_create_request(request)?;
-        let expected_reference = party_record_ref(enrichment_request.target().resource_id.as_str())?;
+        let expected_reference =
+            party_record_ref(enrichment_request.target().resource_id.as_str())?;
         let snapshot = current.ok_or_else(target_unavailable)?;
         let expected_version = i64::try_from(enrichment_request.target().resource_version)
-            .map_err(|_| stale_target("requested Party resource version exceeds the storage range"))?;
+            .map_err(|_| {
+                stale_target("requested Party resource version exceeds the storage range")
+            })?;
         if snapshot.reference != expected_reference || snapshot.version != expected_version {
             return Err(stale_target(
                 "locked Party snapshot differs from the exact request target version",

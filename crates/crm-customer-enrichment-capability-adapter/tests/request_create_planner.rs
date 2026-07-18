@@ -56,14 +56,11 @@ fn capability_request() -> CapabilityRequest {
                 correlation_id: CorrelationId::try_new("correlation-request-1").unwrap(),
                 causation_id: CausationId::try_new("causation-request-1").unwrap(),
                 trace_id: TraceId::try_new("trace-request-1").unwrap(),
-                capability_id: CapabilityId::try_new(CREATE_ENRICHMENT_REQUEST_CAPABILITY)
-                    .unwrap(),
+                capability_id: CapabilityId::try_new(CREATE_ENRICHMENT_REQUEST_CAPABILITY).unwrap(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
                 idempotency_key: IdempotencyKey::try_new("idempotency-request-1").unwrap(),
-                business_transaction_id: BusinessTransactionId::try_new(
-                    "transaction-request-1",
-                )
-                .unwrap(),
+                business_transaction_id: BusinessTransactionId::try_new("transaction-request-1")
+                    .unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 request_started_at_unix_nanos: 1_000_000_000,
             },
