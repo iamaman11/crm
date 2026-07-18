@@ -23,17 +23,21 @@ Current production route inventory: **4 mutations + 4 permission-aware queries**
 - [x] Add non-runtime deterministic worker foundation for `customer_enrichment.request.dispatch@1.0.0` and `customer_enrichment.response.record@1.0.0`: exact status and retry-generation expectations, deterministic dispatch transitions, immutable sanitized receipt creation and exact request binding.
 - [x] Add a non-runtime atomic response batch planner: exact request lock, `expected_retry_generation`, request update, immutable receipt, ResponseReceived and optional BillableUnits evidence, idempotency, outbox and per-record audits. Integration tests prove metered and zero-meter batches, exact record/event/audit counts, stale generation rejection and invalid-digest rejection.
 - [x] Add non-runtime dispatch recovery foundation with exact adapter kind/version, exact registry boundary, generation-bound deterministic provider key, profile and Party version validation, durable Dispatched state before provider invocation, and recovery that rebuilds the same request. Focused tests cover recovery identity, retries, stale inputs and closed deadlines.
+- [x] Add immutable exact-coordinate provider registry and durable non-runtime worker composition with commit-before-I/O ordering, sanitized response validation, deterministic response identity and crash-safe replay.
+- [x] Add fresh-PostgreSQL Customer Enrichment worker process acceptance proving seed → dispatch → provider → response and repeated replay with one request, one receipt, three usage rows, seven events, seven audits, three exact idempotency rows and three transactions without duplicates.
+- [x] Add pure deterministic suggestion materialization over exact request/receipt/profile/mapping lineage with response-class rules, mapping count/confidence constraints, exact provider-policy evidence, protected-evidence linkage, deterministic suggestion ordering/deduplication and no partial request mutation.
+- [ ] Add the atomic non-runtime `customer_enrichment.suggestions.materialize@1.0.0` planner and immutable-dependency worker composition.
 - [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
 - [ ] Implement the remaining Party/Consent semantic port adapters plus final live authorization and declarative field visibility.
-- [ ] Add provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
-- [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof.
+- [ ] Add concrete provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
+- [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof for remaining records.
 - [ ] Add exact `parties.party.update@1.0.0` invocation with stale-version rejection and deterministic target idempotency.
-- [ ] Add deterministic activation-gated dispatch, reconciliation, materialization, expiry, application and outcome-recovery workers.
-- [ ] Prove provider replay, conflicting response, quota, circuit/failure and provider-disabled behavior across adapters and process acceptance; pure-domain replay, quota-shape and conflicting-evidence proof is complete.
-- [ ] Prove provider-dispatch, response-materialization and target-success/outcome-missing crash recovery.
+- [ ] Add deterministic activation-gated reconciliation, review, expiry, application and outcome-recovery workers.
+- [ ] Prove provider replay, conflicting response, quota, circuit/failure and provider-disabled behavior across concrete adapters; exact registry and worker replay process proof is complete.
+- [ ] Prove response-materialization and target-success/outcome-missing crash recovery.
 - [ ] Add remaining permission-aware list surfaces, signed pagination and field redaction.
 - [ ] Replace `tests/acceptance.rs` with real production-path evidence.
 - [ ] Complete `production/CONTRIBUTION.md` through separately owned adapter/composition crates with exact route parity.
-- [ ] Add fresh-PostgreSQL real `crm-api` success, denial, stale, replay, failure, disable/uninstall and cross-tenant process scenarios.
+- [ ] Add remaining fresh-PostgreSQL real `crm-api` success, denial, stale, failure, disable/uninstall and cross-tenant process scenarios.
 - [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status, issue #125 and PR evidence.
 - [ ] Pass all applicable exact-head Contract, Governance, Rust, Database, Application Runtime, Product Plane and enrichment process workflows.
