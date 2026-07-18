@@ -1,5 +1,5 @@
 use crate::{
-    CustomerEnrichmentRequestCreateCapabilityPlanner,
+    CREATE_ENRICHMENT_REQUEST_CAPABILITY, CustomerEnrichmentRequestCreateCapabilityPlanner,
     ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_SCHEMA, ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_TYPE,
     MODULE_ID, ProviderResponseEvidence, RECORD_PROVIDER_RESPONSE_CAPABILITY,
     RECORD_PROVIDER_RESPONSE_REQUEST_SCHEMA, RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA,
@@ -39,22 +39,23 @@ const PROVIDER_USAGE_RECORDED_EVENT_TYPE: &str = "customer_enrichment.provider_u
 const PROVIDER_USAGE_RECORDED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.ProviderUsageRecordedEvent";
 
-/// Locks the exact Party aggregate before the immutable request record, relationship, outbox,
-/// idempotency and audit evidence are created in the same database transaction.
+/// Module-owned reference-lock router for request creation and the non-runtime response worker.
+/// Production composition currently registers only request creation; response planning remains
+/// reachable for a future infrastructure worker without entering the public mutation inventory.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CustomerEnrichmentRequestReferencePlanner;
 
 impl TransactionalAggregatePlanner for CustomerEnrichmentRequestReferencePlanner {
     fn target(
         &self,
-        _definition: &CapabilityDefinition,
+        definition: &CapabilityDefinition,
         request: &CapabilityRequest,
     ) -> Result<AggregateTarget, SdkError> {
-        let enrichment_request = enrichment_request_from_create_request(request)?;
-        Ok(AggregateTarget {
-            reference: party_record_ref(enrichment_request.target().resource_id.as_str())?,
-            presence: AggregatePresence::MustExist,
-        })
+        match definition.capability_id.as_str() {
+            CREATE_ENRICHMENT_REQUEST_CAPABILITY => request_create_target(request),
+            RECORD_PROVIDER_RESPONSE_CAPABILITY => provider_response_target(definition, request),
+            _ => Err(unsupported_reference_capability()),
+        }
     }
 
     fn plan(
@@ -63,223 +64,246 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentRequestReferencePlanner
         request: &CapabilityRequest,
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        let enrichment_request = enrichment_request_from_create_request(request)?;
-        let expected_reference =
-            party_record_ref(enrichment_request.target().resource_id.as_str())?;
-        let snapshot = current.ok_or_else(target_unavailable)?;
-        let expected_version = i64::try_from(enrichment_request.target().resource_version)
-            .map_err(|_| {
-                stale_target("requested Party resource version exceeds the storage range")
-            })?;
-        if snapshot.reference != expected_reference || snapshot.version != expected_version {
-            return Err(stale_target(
-                "locked Party snapshot differs from the exact request target version",
-            ));
+        match definition.capability_id.as_str() {
+            CREATE_ENRICHMENT_REQUEST_CAPABILITY => {
+                plan_request_create(definition, request, current)
+            }
+            RECORD_PROVIDER_RESPONSE_CAPABILITY => {
+                plan_provider_response(definition, request, current)
+            }
+            _ => Err(unsupported_reference_capability()),
         }
-        CustomerEnrichmentRequestCreateCapabilityPlanner.plan(definition, request, None)
     }
 }
 
-/// Atomic post-provider-I/O planner. Provider selection, credential resolution and network I/O
-/// happen before this planner. The planner locks one exact request and commits request state,
-/// immutable receipt, provider-usage evidence, idempotency, outbox and audit in one transaction.
-/// It remains outside production routing until the infrastructure worker owns the pre-I/O and
-/// crash-window protocol.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct CustomerEnrichmentProviderResponseReferencePlanner;
+fn request_create_target(request: &CapabilityRequest) -> Result<AggregateTarget, SdkError> {
+    let enrichment_request = enrichment_request_from_create_request(request)?;
+    Ok(AggregateTarget {
+        reference: party_record_ref(enrichment_request.target().resource_id.as_str())?,
+        presence: AggregatePresence::MustExist,
+    })
+}
 
-impl TransactionalAggregatePlanner for CustomerEnrichmentProviderResponseReferencePlanner {
-    fn target(
-        &self,
-        definition: &CapabilityDefinition,
-        request: &CapabilityRequest,
-    ) -> Result<AggregateTarget, SdkError> {
-        ensure_response_definition(definition, request)?;
-        Ok(AggregateTarget {
-            reference: provider_response_request_record_ref(request)?,
-            presence: AggregatePresence::MustExist,
-        })
+fn plan_request_create(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    current: Option<&RecordSnapshot>,
+) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+    let enrichment_request = enrichment_request_from_create_request(request)?;
+    let expected_reference = party_record_ref(enrichment_request.target().resource_id.as_str())?;
+    let snapshot = current.ok_or_else(target_unavailable)?;
+    let expected_version = i64::try_from(enrichment_request.target().resource_version)
+        .map_err(|_| stale_target("requested Party resource version exceeds the storage range"))?;
+    if snapshot.reference != expected_reference || snapshot.version != expected_version {
+        return Err(stale_target(
+            "locked Party snapshot differs from the exact request target version",
+        ));
+    }
+    CustomerEnrichmentRequestCreateCapabilityPlanner.plan(definition, request, None)
+}
+
+fn provider_response_target(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+) -> Result<AggregateTarget, SdkError> {
+    ensure_response_definition(definition, request)?;
+    Ok(AggregateTarget {
+        reference: provider_response_request_record_ref(request)?,
+        presence: AggregatePresence::MustExist,
+    })
+}
+
+/// Commits one provider response after provider I/O has completed successfully.
+///
+/// The exact request row is locked and the request update, immutable response receipt,
+/// ResponseReceived/BillableUnits evidence, idempotency, outbox and audits are one batch.
+/// Provider selection, credentials, network I/O and crash-window orchestration remain external.
+fn plan_provider_response(
+    definition: &CapabilityDefinition,
+    request: &CapabilityRequest,
+    current: Option<&RecordSnapshot>,
+) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+    ensure_response_definition(definition, request)?;
+    let command = provider_response_command(request)?;
+    let current = current.ok_or_else(response_request_not_found)?;
+    let expected_reference = provider_response_record_ref_from_command(&command)?;
+    if current.reference != expected_reference || current.version <= 0 {
+        return Err(response_plan_invalid(
+            "locked enrichment request differs from the provider-response target",
+        ));
     }
 
-    fn plan(
-        &self,
-        definition: &CapabilityDefinition,
-        request: &CapabilityRequest,
-        current: Option<&RecordSnapshot>,
-    ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        ensure_response_definition(definition, request)?;
-        let command = provider_response_command(request)?;
-        let current = current.ok_or_else(response_request_not_found)?;
-        let expected_reference = provider_response_record_ref_from_command(&command)?;
-        if current.reference != expected_reference || current.version <= 0 {
-            return Err(response_plan_invalid(
-                "locked enrichment request differs from the provider-response target",
-            ));
-        }
+    let mut enrichment_request = enrichment_request_from_snapshot(current)?;
+    let receipt = prepare_provider_response(
+        &mut enrichment_request,
+        ResponseExpectation {
+            status: EnrichmentRequestStatus::Dispatched,
+            retry_generation: command.expected_retry_generation,
+        },
+        provider_response_evidence(&command)?,
+    )?;
+    let usage_entries = provider_usage_entries(&enrichment_request, &receipt, &command)?;
 
-        let mut enrichment_request = enrichment_request_from_snapshot(current)?;
-        let evidence = provider_response_evidence(&command)?;
-        let receipt = prepare_provider_response(
-            &mut enrichment_request,
-            ResponseExpectation {
-                status: EnrichmentRequestStatus::Dispatched,
-                retry_generation: command.expected_retry_generation,
-            },
-            evidence,
-        )?;
-        let usage_entries = provider_usage_entries(&enrichment_request, &receipt, &command)?;
+    let output_request = enrichment_request_to_wire(&enrichment_request)?;
+    let output_receipt = provider_response_receipt_to_wire(&receipt)?;
+    let output_usage = usage_entries
+        .iter()
+        .map(provider_usage_entry_to_wire)
+        .collect::<Result<Vec<_>, _>>()?;
+    let output = support::protobuf_payload(
+        MODULE_ID,
+        RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA,
+        DataClass::Personal,
+        &wire::RecordProviderResponseResponse {
+            enrichment_request: Some(output_request.clone()),
+            provider_response_receipt: Some(output_receipt.clone()),
+            provider_usage_entries: output_usage.clone(),
+        },
+    )?;
 
-        let output_request = enrichment_request_to_wire(&enrichment_request)?;
-        let output_receipt = provider_response_receipt_to_wire(&receipt)?;
-        let output_usage = usage_entries
+    let next_request_version = current
+        .version
+        .checked_add(1)
+        .ok_or_else(|| response_plan_invalid("enrichment request version overflow"))?;
+    let receipt_reference = provider_response_receipt_record_ref(&receipt)?;
+    let usage_references = usage_entries
+        .iter()
+        .map(provider_usage_entry_record_ref)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut records = vec![
+        RecordMutation::Update {
+            reference: current.reference.clone(),
+            expected_version: current.version,
+            payload: enrichment_request_persisted_payload(&enrichment_request)?,
+        },
+        RecordMutation::Create {
+            reference: receipt_reference.clone(),
+            payload: provider_response_receipt_persisted_payload(&receipt)?,
+        },
+    ];
+    records.extend(
+        usage_entries
             .iter()
-            .map(provider_usage_entry_to_wire)
-            .collect::<Result<Vec<_>, _>>()?;
-        let output = support::protobuf_payload(
-            MODULE_ID,
-            RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA,
-            DataClass::Personal,
-            &wire::RecordProviderResponseResponse {
-                enrichment_request: Some(output_request.clone()),
-                provider_response_receipt: Some(output_receipt.clone()),
-                provider_usage_entries: output_usage.clone(),
-            },
-        )?;
-
-        let next_request_version = current
-            .version
-            .checked_add(1)
-            .ok_or_else(|| response_plan_invalid("enrichment request version overflow"))?;
-        let receipt_reference = provider_response_receipt_record_ref(&receipt)?;
-        let usage_references = usage_entries
-            .iter()
-            .map(provider_usage_entry_record_ref)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let mut records = vec![
-            RecordMutation::Update {
-                reference: current.reference.clone(),
-                expected_version: current.version,
-                payload: enrichment_request_persisted_payload(&enrichment_request)?,
-            },
-            RecordMutation::Create {
-                reference: receipt_reference.clone(),
-                payload: provider_response_receipt_persisted_payload(&receipt)?,
-            },
-        ];
-        records.extend(
-            usage_entries
-                .iter()
-                .zip(&usage_references)
-                .map(|(usage, reference)| {
-                    Ok(RecordMutation::Create {
-                        reference: reference.clone(),
-                        payload: provider_usage_entry_persisted_payload(usage)?,
-                    })
+            .zip(&usage_references)
+            .map(|(usage, reference)| {
+                Ok(RecordMutation::Create {
+                    reference: reference.clone(),
+                    payload: provider_usage_entry_persisted_payload(usage)?,
                 })
-                .collect::<Result<Vec<_>, SdkError>>()?,
-        );
+            })
+            .collect::<Result<Vec<_>, SdkError>>()?,
+    );
 
-        let mut events = vec![
+    let mut events = vec![
+        support::event_evidence_with_data_class(
+            request,
+            current.reference.clone(),
+            MODULE_ID,
+            EventSpec {
+                event_type: ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_TYPE,
+                event_schema_id: ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_SCHEMA,
+                aggregate_version: next_request_version,
+                previous_version: Some(current.version),
+            },
+            DataClass::Personal,
+            &wire::EnrichmentRequestStatusChangedEvent {
+                enrichment_request: Some(output_request),
+            },
+        )?,
+        support::event_evidence_with_data_class(
+            request,
+            receipt_reference.clone(),
+            MODULE_ID,
+            EventSpec {
+                event_type: PROVIDER_RESPONSE_RECORDED_EVENT_TYPE,
+                event_schema_id: PROVIDER_RESPONSE_RECORDED_EVENT_SCHEMA,
+                aggregate_version: 1,
+                previous_version: None,
+            },
+            DataClass::Personal,
+            &wire::ProviderResponseRecordedEvent {
+                provider_response_receipt: Some(output_receipt),
+            },
+        )?,
+    ];
+    events.extend(provider_usage_events(
+        request,
+        &usage_references,
+        output_usage,
+    )?);
+
+    let mut audits = vec![support::audit_intent(
+        request,
+        &current.reference,
+        next_request_version,
+        definition.capability_id.as_str(),
+        &output.bytes,
+    )?];
+    audits.push(support::audit_intent(
+        request,
+        &receipt_reference,
+        1,
+        definition.capability_id.as_str(),
+        &output.bytes,
+    )?);
+    audits.extend(
+        usage_references
+            .iter()
+            .map(|reference| {
+                support::audit_intent(
+                    request,
+                    reference,
+                    1,
+                    definition.capability_id.as_str(),
+                    &output.bytes,
+                )
+            })
+            .collect::<Result<Vec<_>, SdkError>>()?,
+    );
+
+    Ok(CapabilityBatchExecutionPlan {
+        batch: BatchMutationPlan {
+            context: request.context.clone(),
+            records,
+            relationships: Vec::new(),
+            events,
+            idempotency: support::capability_idempotency(definition, request)?,
+            audits,
+        },
+        output: Some(output),
+    })
+}
+
+fn provider_usage_events(
+    request: &CapabilityRequest,
+    references: &[RecordRef],
+    usage_entries: Vec<wire::ProviderUsageEntry>,
+) -> Result<Vec<crm_module_sdk::EventEvidence>, SdkError> {
+    references
+        .iter()
+        .zip(usage_entries)
+        .map(|(reference, usage)| {
             support::event_evidence_with_data_class(
                 request,
-                current.reference.clone(),
+                reference.clone(),
                 MODULE_ID,
                 EventSpec {
-                    event_type: ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_TYPE,
-                    event_schema_id: ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_SCHEMA,
-                    aggregate_version: next_request_version,
-                    previous_version: Some(current.version),
-                },
-                DataClass::Personal,
-                &wire::EnrichmentRequestStatusChangedEvent {
-                    enrichment_request: Some(output_request),
-                },
-            )?,
-            support::event_evidence_with_data_class(
-                request,
-                receipt_reference.clone(),
-                MODULE_ID,
-                EventSpec {
-                    event_type: PROVIDER_RESPONSE_RECORDED_EVENT_TYPE,
-                    event_schema_id: PROVIDER_RESPONSE_RECORDED_EVENT_SCHEMA,
+                    event_type: PROVIDER_USAGE_RECORDED_EVENT_TYPE,
+                    event_schema_id: PROVIDER_USAGE_RECORDED_EVENT_SCHEMA,
                     aggregate_version: 1,
                     previous_version: None,
                 },
-                DataClass::Personal,
-                &wire::ProviderResponseRecordedEvent {
-                    provider_response_receipt: Some(output_receipt),
+                DataClass::Confidential,
+                &wire::ProviderUsageRecordedEvent {
+                    provider_usage_entry: Some(usage),
                 },
-            )?,
-        ];
-        events.extend(
-            usage_references
-                .iter()
-                .zip(output_usage)
-                .map(|(reference, usage)| {
-                    support::event_evidence_with_data_class(
-                        request,
-                        reference.clone(),
-                        MODULE_ID,
-                        EventSpec {
-                            event_type: PROVIDER_USAGE_RECORDED_EVENT_TYPE,
-                            event_schema_id: PROVIDER_USAGE_RECORDED_EVENT_SCHEMA,
-                            aggregate_version: 1,
-                            previous_version: None,
-                        },
-                        DataClass::Confidential,
-                        &wire::ProviderUsageRecordedEvent {
-                            provider_usage_entry: Some(usage),
-                        },
-                    )
-                })
-                .collect::<Result<Vec<_>, SdkError>>()?,
-        );
-
-        let mut audits = vec![support::audit_intent(
-            request,
-            &current.reference,
-            next_request_version,
-            definition.capability_id.as_str(),
-            &output.bytes,
-        )?];
-        audits.push(support::audit_intent(
-            request,
-            &receipt_reference,
-            1,
-            definition.capability_id.as_str(),
-            &output.bytes,
-        )?);
-        audits.extend(
-            usage_references
-                .iter()
-                .map(|reference| {
-                    support::audit_intent(
-                        request,
-                        reference,
-                        1,
-                        definition.capability_id.as_str(),
-                        &output.bytes,
-                    )
-                })
-                .collect::<Result<Vec<_>, SdkError>>()?,
-        );
-
-        Ok(CapabilityBatchExecutionPlan {
-            batch: BatchMutationPlan {
-                context: request.context.clone(),
-                records,
-                relationships: Vec::new(),
-                events,
-                idempotency: support::capability_idempotency(definition, request)?,
-                audits,
-            },
-            output: Some(output),
+            )
         })
-    }
+        .collect()
 }
 
-pub fn provider_response_request_record_ref(
+fn provider_response_request_record_ref(
     request: &CapabilityRequest,
 ) -> Result<RecordRef, SdkError> {
     provider_response_record_ref_from_command(&provider_response_command(request)?)
@@ -649,6 +673,15 @@ fn response_plan_invalid(reference: impl Into<String>) -> SdkError {
         "The provider response could not be committed safely.",
     )
     .with_internal_reference(reference.into())
+}
+
+fn unsupported_reference_capability() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_REFERENCE_CAPABILITY_UNSUPPORTED",
+        ErrorCategory::Internal,
+        false,
+        "The Customer Enrichment reference-lock capability is not supported.",
+    )
 }
 
 fn configuration_error(error: impl std::fmt::Display) -> SdkError {
