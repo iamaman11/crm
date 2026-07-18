@@ -6,6 +6,8 @@ pub mod definitions;
 /// Deterministic pre-I/O provider dispatch and crash-recovery protocol.
 pub mod dispatch;
 pub mod lifecycle;
+/// Deterministic immutable suggestion materialization over exact governed lineage.
+pub mod materialization;
 /// Strict bounded canonical persisted-state codecs for governed enrichment evidence.
 #[allow(dead_code, unused_imports)]
 pub mod persistence;
@@ -35,6 +37,7 @@ pub use lifecycle::{
     SuggestionDraft, SuggestionId, SuggestionLifecycleStatus, TargetSnapshot,
     derive_suggestion_status,
 };
+pub use materialization::*;
 pub use persistence::*;
 pub use ports::*;
 pub use provider_usage::*;
