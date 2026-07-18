@@ -62,7 +62,10 @@ pub(crate) async fn execute(
         &reviews,
     )
     .await?;
-    response(items, cursor::encode_next(adapter, &binding, next.as_ref())?)
+    response(
+        items,
+        cursor::encode_next(adapter, &binding, next.as_ref())?,
+    )
 }
 
 pub(super) fn matches(

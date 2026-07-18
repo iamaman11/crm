@@ -35,10 +35,8 @@ use std::sync::Arc;
 
 pub const CRATE_NAME: &str = "crm-customer-enrichment-suggestion-query-adapter";
 pub const GET_SUGGESTION_CAPABILITY: &str = "customer_enrichment.suggestion.get";
-pub const GET_SUGGESTION_REQUEST_SCHEMA: &str =
-    "crm.customer_enrichment.v1.GetSuggestionRequest";
-pub const GET_SUGGESTION_RESPONSE_SCHEMA: &str =
-    "crm.customer_enrichment.v1.GetSuggestionResponse";
+pub const GET_SUGGESTION_REQUEST_SCHEMA: &str = "crm.customer_enrichment.v1.GetSuggestionRequest";
+pub const GET_SUGGESTION_RESPONSE_SCHEMA: &str = "crm.customer_enrichment.v1.GetSuggestionResponse";
 pub const LIST_SUGGESTIONS_BY_PARTY_CAPABILITY: &str =
     "customer_enrichment.suggestion.list_by_party";
 pub const LIST_SUGGESTIONS_BY_PARTY_REQUEST_SCHEMA: &str =
@@ -112,9 +110,7 @@ impl CustomerEnrichmentSuggestionQueryAdapter {
         let latest_review_decision = latest_review
             .map(|review| {
                 let mut output = review_decision_to_wire(&review.decision)?;
-                redact_review_decision(&mut output, |field| {
-                    review.visibility.allows_field(field)
-                });
+                redact_review_decision(&mut output, |field| review.visibility.allows_field(field));
                 Ok(output)
             })
             .transpose()?;
@@ -187,7 +183,9 @@ impl CustomerEnrichmentSuggestionQueryAdapter {
                 let suggestion_id = public
                     .suggestion_ref
                     .as_ref()
-                    .ok_or_else(|| query_state_invalid("review decision has no suggestion reference"))?
+                    .ok_or_else(|| {
+                        query_state_invalid("review decision has no suggestion reference")
+                    })?
                     .suggestion_id
                     .clone();
                 let decision_id = public
@@ -463,10 +461,7 @@ pub(crate) fn redact_suggestion(
     }
 }
 
-fn redact_review_decision(
-    output: &mut wire::ReviewDecision,
-    allows_field: impl Fn(&str) -> bool,
-) {
+fn redact_review_decision(output: &mut wire::ReviewDecision, allows_field: impl Fn(&str) -> bool) {
     if !allows_field("suggestion_ref") {
         output.suggestion_ref = None;
     }

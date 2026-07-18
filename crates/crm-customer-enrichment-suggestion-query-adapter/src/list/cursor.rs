@@ -1,4 +1,6 @@
-use crate::{CustomerEnrichmentSuggestionQueryAdapter, query_configuration_invalid, suggestion_record_type};
+use crate::{
+    CustomerEnrichmentSuggestionQueryAdapter, query_configuration_invalid, suggestion_record_type,
+};
 use crm_core_data::{RecordQueryContinuation, RecordQuerySort};
 use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
 use crm_proto_contracts::crm::{customer::v1::PartyRef, customer_enrichment::v1 as wire};
@@ -41,12 +43,12 @@ pub(super) fn profile_id(
 
 pub(super) fn status(value: i32) -> Result<i32, SdkError> {
     match wire::SuggestionLifecycleStatus::try_from(value) {
-        Ok(wire::SuggestionLifecycleStatus::Unspecified) | Err(_) => Err(
-            SdkError::invalid_argument(
+        Ok(wire::SuggestionLifecycleStatus::Unspecified) | Err(_) => {
+            Err(SdkError::invalid_argument(
                 "customer_enrichment.suggestion.list.status",
                 "Status must be a supported non-unspecified suggestion status",
-            ),
-        ),
+            ))
+        }
         Ok(_) => Ok(value),
     }
 }
@@ -87,7 +89,10 @@ pub(super) fn binding(
         resource_type: suggestion_record_type()?,
         normalized_filter_hash: normalized_filter_hash([
             ("party_id", party_id.as_str().as_bytes()),
-            ("provider_profile_version_id", profile_id.as_str().as_bytes()),
+            (
+                "provider_profile_version_id",
+                profile_id.as_str().as_bytes(),
+            ),
             ("status", status.as_slice()),
         ]),
         sort_id: RecordQuerySort::UpdatedAtDescending.id().to_owned(),
