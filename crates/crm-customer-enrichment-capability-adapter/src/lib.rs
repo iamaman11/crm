@@ -287,6 +287,61 @@ fn unsupported_capability() -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_customer_enrichment::{
+        EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
+        ProviderProfileDraft, ProviderProfileVersion, RawPayloadPolicy, RequestPolicyEvidence,
+        TargetField, TargetSnapshot,
+    };
+    use crm_module_sdk::{ActorId, IdempotencyKey, TenantId};
+
+    fn enrichment_request() -> EnrichmentRequest {
+        let profile = ProviderProfileVersion::publish(ProviderProfileDraft {
+            provider_key: "provider".to_owned(),
+            adapter_kind: "adapter".to_owned(),
+            adapter_contract_version: "1.0.0".to_owned(),
+            supported_target_fields: vec![TargetField::PartyDisplayName],
+            purpose_codes: vec!["enrichment".to_owned()],
+            license_id: "license-v1".to_owned(),
+            permitted_use_class: "customer_data".to_owned(),
+            residency_region: "eu".to_owned(),
+            retention_days: 30,
+            raw_payload_policy: RawPayloadPolicy::DigestOnly,
+            credential_handle_aliases: vec!["provider_key".to_owned()],
+            effective_at_unix_ms: 1,
+            expires_at_unix_ms: None,
+        })
+        .unwrap();
+        let mapping = MappingVersion::publish(MappingDraft {
+            mapping_key: "display_name".to_owned(),
+            provider_profile_version_id: profile.version_id().clone(),
+            provider_response_field_path: "person.display_name".to_owned(),
+            target_field: TargetField::PartyDisplayName,
+            normalization: MappingNormalization::CanonicalPartyDisplayNameV1,
+            maximum_suggestions_per_response: 1,
+            confidence_required: false,
+        })
+        .unwrap();
+        EnrichmentRequest::create(EnrichmentRequestDraft {
+            tenant_id: TenantId::try_new("tenant-a").unwrap(),
+            requested_by: ActorId::try_new("worker-a").unwrap(),
+            idempotency_key: IdempotencyKey::try_new("dispatch-test").unwrap(),
+            target: TargetSnapshot::try_new("party-a", 1, TargetField::PartyDisplayName).unwrap(),
+            provider_profile_version_id: profile.version_id().clone(),
+            mapping_version_id: mapping.version_id().clone(),
+            requested_fields: vec![TargetField::PartyDisplayName],
+            policy_evidence: RequestPolicyEvidence::try_new(
+                "enrichment",
+                "legitimate_interest",
+                None,
+                "request-policy-v1",
+            )
+            .unwrap(),
+            created_at_unix_ms: 1,
+            deadline_at_unix_ms: 100,
+            expires_at_unix_ms: 200,
+        })
+        .unwrap()
+    }
 
     #[test]
     fn implemented_mutation_catalog_is_exact() {
@@ -341,5 +396,72 @@ mod tests {
             vec![DataClass::Personal]
         );
         assert!(!IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&definition.capability_id.as_str()));
+    }
+
+    #[test]
+    fn created_request_transitions_directly_to_dispatched() {
+        let mut request = enrichment_request();
+        prepare_request_dispatch(
+            &mut request,
+            DispatchExpectation {
+                status: EnrichmentRequestStatus::Created,
+                retry_generation: 0,
+            },
+            2,
+        )
+        .unwrap();
+        assert_eq!(request.status(), EnrichmentRequestStatus::Dispatched);
+        assert_eq!(request.retry_generation(), 0);
+    }
+
+    #[test]
+    fn queued_request_transitions_to_dispatched() {
+        let mut request = enrichment_request();
+        request.queue(2).unwrap();
+        prepare_request_dispatch(
+            &mut request,
+            DispatchExpectation {
+                status: EnrichmentRequestStatus::Queued,
+                retry_generation: 0,
+            },
+            3,
+        )
+        .unwrap();
+        assert_eq!(request.status(), EnrichmentRequestStatus::Dispatched);
+        assert_eq!(request.retry_generation(), 0);
+    }
+
+    #[test]
+    fn retryable_request_increments_generation_before_dispatch() {
+        let mut request = enrichment_request();
+        request.fail_retryable("provider_timeout", 2).unwrap();
+        prepare_request_dispatch(
+            &mut request,
+            DispatchExpectation {
+                status: EnrichmentRequestStatus::FailedRetryable,
+                retry_generation: 0,
+            },
+            3,
+        )
+        .unwrap();
+        assert_eq!(request.status(), EnrichmentRequestStatus::Dispatched);
+        assert_eq!(request.retry_generation(), 1);
+    }
+
+    #[test]
+    fn stale_dispatch_expectation_is_rejected_without_mutation() {
+        let mut request = enrichment_request();
+        let error = prepare_request_dispatch(
+            &mut request,
+            DispatchExpectation {
+                status: EnrichmentRequestStatus::Queued,
+                retry_generation: 0,
+            },
+            2,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_REQUEST_DISPATCH_CONFLICT");
+        assert_eq!(request.status(), EnrichmentRequestStatus::Created);
+        assert_eq!(request.retry_generation(), 0);
     }
 }
