@@ -1,6 +1,8 @@
-use crate::{enrichment_request_persisted_contract, ENRICHMENT_REQUEST_RECORD_TYPE};
+use crate::enrichment_request_persisted_contract;
 use crm_capability_plan_support as support;
-use crm_customer_enrichment::{decode_enrichment_request_state, EnrichmentRequest};
+use crm_customer_enrichment::{
+    EnrichmentRequest, ENRICHMENT_REQUEST_RECORD_TYPE, decode_enrichment_request_state,
+};
 use crm_module_sdk::{DataClass, ErrorCategory, RecordSnapshot, SdkError};
 
 /// Rehydrates one mutable enrichment-request snapshot after exact persisted-contract validation.
