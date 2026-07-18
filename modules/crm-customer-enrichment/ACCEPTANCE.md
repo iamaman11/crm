@@ -2,7 +2,7 @@
 
 Foundation state: **In progress — not a production vertical slice**. These gates block any completion or readiness claim.
 
-Current production route inventory: **2 mutations + 2 permission-aware queries**; the remaining 13 published coordinates stay individually non-runtime.
+Current production route inventory: **3 mutations + 2 permission-aware queries**; the remaining 12 published coordinates stay individually non-runtime.
 
 - [x] Freeze immutable module identity, owned evidence records and retain-on-uninstall semantics.
 - [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
@@ -16,10 +16,9 @@ Current production route inventory: **2 mutations + 2 permission-aware queries**
 - [x] Add activation-gated permission-aware `customer_enrichment.provider_profile.get@1.0.0` with tenant-scoped lookup, strict persisted-state validation, fail-closed resource visibility and `definition` field redaction.
 - [x] Add activation-gated native `customer_enrichment.mapping.publish@1.0.0` with atomic governed provider-profile `MustExist` locking, persisted identity and target-field support validation, immutable mapping persistence, idempotency, outbox and audit evidence.
 - [x] Add activation-gated permission-aware `customer_enrichment.mapping.get@1.0.0` with tenant-scoped lookup, strict mapping-state rehydration, live referenced-provider-profile visibility, not-found hiding and declarative `definition` redaction.
-- [x] Add the non-runtime `request.create` planner foundation with deterministic identity, canonical Personal persisted state, Party access-path relationship, exact Party row/version locking and atomic idempotency/outbox/audit planning.
-- [ ] Wire `request.create` through its separate Party/Consent pre-authorization composition and only then move the coordinate into the production mutation inventory.
+- [x] Add activation-gated native `customer_enrichment.request.create@1.0.0` with deterministic identity, canonical Personal persisted state, immutable mapping/profile validation, versioned purpose/legal-basis policy, governed Party and optional Consent reads, exact Party row/version locking, Party access-path relationship and atomic idempotency/outbox/audit evidence.
 - [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
-- [ ] Implement the Party/Consent semantic port adapters plus final live authorization and declarative field visibility.
+- [ ] Implement the remaining Party/Consent semantic port adapters plus final live authorization and declarative field visibility.
 - [ ] Add provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
 - [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof.
 - [ ] Add exact `parties.party.update@1.0.0` invocation with stale-version rejection and deterministic target idempotency.
