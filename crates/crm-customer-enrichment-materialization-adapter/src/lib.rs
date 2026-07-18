@@ -16,11 +16,11 @@ use crm_core_data::{
 };
 use crm_customer_enrichment::{
     ENRICHMENT_REQUEST_RECORD_TYPE, LIFECYCLE_STATE_RETENTION_POLICY_ID,
-    LIFECYCLE_STATE_SCHEMA_VERSION, MappingVersion, ProviderProfileVersion, ProviderResponseReceipt,
-    SUGGESTION_RECORD_TYPE, SUGGESTION_STATE_MAXIMUM_BYTES, SUGGESTION_STATE_SCHEMA_ID, Suggestion,
-    SuggestionCandidateDraft, SuggestionLifecycleStatus, TargetField, TargetSnapshot,
-    derive_suggestion_status, encode_suggestion_state, materialize_suggestions,
-    suggestion_state_descriptor_hash,
+    LIFECYCLE_STATE_SCHEMA_VERSION, MappingVersion, ProviderProfileVersion,
+    ProviderResponseReceipt, SUGGESTION_RECORD_TYPE, SUGGESTION_STATE_MAXIMUM_BYTES,
+    SUGGESTION_STATE_SCHEMA_ID, Suggestion, SuggestionCandidateDraft, SuggestionLifecycleStatus,
+    TargetField, TargetSnapshot, derive_suggestion_status, encode_suggestion_state,
+    materialize_suggestions, suggestion_state_descriptor_hash,
 };
 use crm_customer_enrichment_capability_adapter::{
     ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_SCHEMA, ENRICHMENT_REQUEST_STATUS_CHANGED_EVENT_TYPE,
@@ -37,20 +37,18 @@ use serde::Deserialize;
 /// Stable crate identity for architecture tooling.
 pub const CRATE_NAME: &str = "crm-customer-enrichment-materialization-adapter";
 
-pub const MATERIALIZE_SUGGESTIONS_CAPABILITY: &str =
-    "customer_enrichment.suggestions.materialize";
+pub const MATERIALIZE_SUGGESTIONS_CAPABILITY: &str = "customer_enrichment.suggestions.materialize";
 pub const MATERIALIZE_SUGGESTIONS_REQUEST_SCHEMA: &str =
     "crm.customer_enrichment.v1.MaterializeSuggestionsRequest";
 pub const MATERIALIZE_SUGGESTIONS_RESPONSE_SCHEMA: &str =
     "crm.customer_enrichment.v1.MaterializeSuggestionsResponse";
-pub const SUGGESTION_MATERIALIZED_EVENT_TYPE: &str =
-    "customer_enrichment.suggestion.materialized";
+pub const SUGGESTION_MATERIALIZED_EVENT_TYPE: &str = "customer_enrichment.suggestion.materialized";
 pub const SUGGESTION_MATERIALIZED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.SuggestionMaterializedEvent";
 
 /// Worker-only definition retained outside the public production mutation catalog.
-pub fn suggestion_materialization_capability_definition(
-) -> Result<CapabilityDefinition, SdkError> {
+pub fn suggestion_materialization_capability_definition() -> Result<CapabilityDefinition, SdkError>
+{
     Ok(CapabilityDefinition {
         capability_id: configured(CapabilityId::try_new(MATERIALIZE_SUGGESTIONS_CAPABILITY))?,
         capability_version: configured(CapabilityVersion::try_new(support::CONTRACT_VERSION))?,
@@ -292,7 +290,9 @@ fn ensure_receipt_ref(
     Ok(())
 }
 
-fn request_record_ref(command: &wire::MaterializeSuggestionsRequest) -> Result<RecordRef, SdkError> {
+fn request_record_ref(
+    command: &wire::MaterializeSuggestionsRequest,
+) -> Result<RecordRef, SdkError> {
     let request_ref = command.enrichment_request_ref.as_ref().ok_or_else(|| {
         SdkError::invalid_argument(
             "customer_enrichment.enrichment_request_ref",
@@ -455,10 +455,7 @@ fn suggestion_to_wire(
             state.fresh_until_unix_ms,
             "suggestion fresh-until timestamp",
         )?,
-        expires_at_unix_ms: checked_i64(
-            state.expires_at_unix_ms,
-            "suggestion expiry timestamp",
-        )?,
+        expires_at_unix_ms: checked_i64(state.expires_at_unix_ms, "suggestion expiry timestamp")?,
         confidence_basis_points: state.confidence_basis_points.map(u32::from),
         policy_evidence: Some(wire::ProviderPolicyEvidence {
             license_id: state.license_id,
@@ -469,11 +466,7 @@ fn suggestion_to_wire(
         }),
         evidence_references: state.evidence_references,
         lifecycle_status: suggestion_status_to_wire(derive_suggestion_status(
-            suggestion,
-            None,
-            None,
-            None,
-            at_unix_ms,
+            suggestion, None, None, None, at_unix_ms,
         )),
         superseded_by_suggestion_ref: None,
     })
@@ -545,9 +538,7 @@ fn suggestion_status_to_wire(value: SuggestionLifecycleStatus) -> i32 {
         SuggestionLifecycleStatus::Accepted => wire::SuggestionLifecycleStatus::Accepted as i32,
         SuggestionLifecycleStatus::Rejected => wire::SuggestionLifecycleStatus::Rejected as i32,
         SuggestionLifecycleStatus::Expired => wire::SuggestionLifecycleStatus::Expired as i32,
-        SuggestionLifecycleStatus::Superseded => {
-            wire::SuggestionLifecycleStatus::Superseded as i32
-        }
+        SuggestionLifecycleStatus::Superseded => wire::SuggestionLifecycleStatus::Superseded as i32,
         SuggestionLifecycleStatus::Applied => wire::SuggestionLifecycleStatus::Applied as i32,
         SuggestionLifecycleStatus::ApplicationFailedRetryable => {
             wire::SuggestionLifecycleStatus::ApplicationFailedRetryable as i32
