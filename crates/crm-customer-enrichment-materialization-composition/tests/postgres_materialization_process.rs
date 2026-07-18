@@ -3,8 +3,8 @@ use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan};
 use crm_customer_enrichment::{
-    LIFECYCLE_STATE_RETENTION_POLICY_ID, LIFECYCLE_STATE_SCHEMA_VERSION, EnrichmentRequest,
-    EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
+    EnrichmentRequest, EnrichmentRequestDraft, LIFECYCLE_STATE_RETENTION_POLICY_ID,
+    LIFECYCLE_STATE_SCHEMA_VERSION, MappingDraft, MappingNormalization, MappingVersion,
     PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE, PROVIDER_RESPONSE_RECEIPT_STATE_MAXIMUM_BYTES,
     PROVIDER_RESPONSE_RECEIPT_STATE_SCHEMA_ID, ProviderProfileDraft, ProviderProfileVersion,
     ProviderResponseClass, ProviderResponseReceipt, ProviderResponseReceiptDraft, RawPayloadPolicy,
@@ -401,7 +401,10 @@ fn materialization_request(fixture: &Fixture) -> CapabilityRequest {
     }
 }
 
-fn candidate(proposed_value: &str, confidence_basis_points: u32) -> wire::ProviderSuggestionCandidate {
+fn candidate(
+    proposed_value: &str,
+    confidence_basis_points: u32,
+) -> wire::ProviderSuggestionCandidate {
     wire::ProviderSuggestionCandidate {
         target: Some(wire::EnrichmentTargetSnapshot {
             party_ref: Some(customer::PartyRef {

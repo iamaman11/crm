@@ -801,6 +801,7 @@ dependencies = [
 name = "crm-customer-enrichment-materialization-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-capability-ingress",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
@@ -812,6 +813,8 @@ dependencies = [
  "prost",
  "serde",
  "serde_json",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]
