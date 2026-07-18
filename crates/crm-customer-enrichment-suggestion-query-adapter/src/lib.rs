@@ -22,7 +22,7 @@ use crm_customer_enrichment_review_adapter::{
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
-    PortFuture, RecordId, RecordRef, RecordType, SdkError, TypedPayload,
+    PortFuture, RecordId, RecordType, SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use crm_query_runtime::{
