@@ -494,7 +494,7 @@ fn decode_after(
         sort_value,
         record_id: continuation.record_id,
     };
-    after.validate().map_err(|error| cursor_error(error))?;
+    after.validate().map_err(cursor_error)?;
     Ok(Some(after))
 }
 
