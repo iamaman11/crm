@@ -11,6 +11,7 @@ mod mapping_reference_planner;
 mod mapping_snapshot;
 mod provider_profile_planner;
 mod provider_profile_snapshot;
+mod request_planner;
 mod semantic_validator;
 
 pub use mapping_planner::{
@@ -25,6 +26,7 @@ pub use provider_profile_planner::{
     provider_profile_persisted_payload, provider_profile_record_ref, provider_profile_to_wire,
 };
 pub use provider_profile_snapshot::provider_profile_from_snapshot;
+pub use request_planner::*;
 pub use semantic_validator::CustomerEnrichmentCapabilitySemanticValidator;
 
 use crm_capability_plan_support as support;
@@ -59,6 +61,11 @@ pub const MAPPING_PUBLISHED_EVENT_TYPE: &str = "customer_enrichment.mapping.publ
 pub const MAPPING_PUBLISHED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.MappingVersionPublishedEvent";
 
+/// Exact mutation coordinates currently safe for direct production registration.
+///
+/// Request creation has a module-owned planner and definition factory, but it is intentionally
+/// excluded until the separate production composition executor performs governed Party and policy
+/// pre-authorization.
 pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
     PUBLISH_PROVIDER_PROFILE_CAPABILITY,
     PUBLISH_MAPPING_CAPABILITY,
@@ -83,6 +90,9 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentProviderProfileCapabili
             PUBLISH_MAPPING_CAPABILITY => {
                 CustomerEnrichmentMappingReferencePlanner.target(definition, request)
             }
+            CREATE_ENRICHMENT_REQUEST_CAPABILITY => {
+                CustomerEnrichmentRequestCreateCapabilityPlanner.target(definition, request)
+            }
             _ => Err(unsupported_capability()),
         }
     }
@@ -100,6 +110,9 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentProviderProfileCapabili
             }
             PUBLISH_MAPPING_CAPABILITY => {
                 CustomerEnrichmentMappingReferencePlanner.plan(definition, request, current)
+            }
+            CREATE_ENRICHMENT_REQUEST_CAPABILITY => {
+                CustomerEnrichmentRequestCreateCapabilityPlanner.plan(definition, request, current)
             }
             _ => Err(unsupported_capability()),
         }
@@ -122,6 +135,7 @@ pub fn provider_profile_capability_definition() -> Result<CapabilityDefinition, 
         PUBLISH_PROVIDER_PROFILE_CAPABILITY,
         PUBLISH_PROVIDER_PROFILE_REQUEST_SCHEMA,
         PUBLISH_PROVIDER_PROFILE_RESPONSE_SCHEMA,
+        DataClass::Confidential,
     )
 }
 
@@ -130,6 +144,16 @@ pub fn mapping_capability_definition() -> Result<CapabilityDefinition, SdkError>
         PUBLISH_MAPPING_CAPABILITY,
         PUBLISH_MAPPING_REQUEST_SCHEMA,
         PUBLISH_MAPPING_RESPONSE_SCHEMA,
+        DataClass::Confidential,
+    )
+}
+
+pub fn request_create_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        CREATE_ENRICHMENT_REQUEST_CAPABILITY,
+        CREATE_ENRICHMENT_REQUEST_REQUEST_SCHEMA,
+        CREATE_ENRICHMENT_REQUEST_RESPONSE_SCHEMA,
+        DataClass::Personal,
     )
 }
 
@@ -137,20 +161,17 @@ fn mutation_definition(
     capability_id: &'static str,
     request_schema: &'static str,
     response_schema: &'static str,
+    data_class: DataClass,
 ) -> Result<CapabilityDefinition, SdkError> {
     Ok(CapabilityDefinition {
         capability_id: configured(CapabilityId::try_new(capability_id))?,
         capability_version: configured(CapabilityVersion::try_new(support::CONTRACT_VERSION))?,
         owner_module_id: configured(ModuleId::try_new(MODULE_ID))?,
-        input_contract: support::protobuf_contract(
-            MODULE_ID,
-            request_schema,
-            vec![DataClass::Confidential],
-        )?,
+        input_contract: support::protobuf_contract(MODULE_ID, request_schema, vec![data_class])?,
         output_contract: Some(support::protobuf_contract(
             MODULE_ID,
             response_schema,
-            vec![DataClass::Confidential],
+            vec![data_class],
         )?),
         risk: CapabilityRisk::Medium,
         mutation: true,
@@ -210,5 +231,20 @@ mod tests {
             assert!(!definition.requires_approval);
             assert_eq!(definition.risk, CapabilityRisk::Medium);
         }
+    }
+
+    #[test]
+    fn request_create_definition_is_personal_but_not_directly_registered() {
+        let definition = request_create_capability_definition().unwrap();
+        assert_eq!(
+            definition.capability_id.as_str(),
+            CREATE_ENRICHMENT_REQUEST_CAPABILITY
+        );
+        assert_eq!(
+            definition.input_contract.allowed_data_classes,
+            vec![DataClass::Personal]
+        );
+        assert!(!IMPLEMENTED_MUTATION_CAPABILITY_IDS
+            .contains(&CREATE_ENRICHMENT_REQUEST_CAPABILITY));
     }
 }
