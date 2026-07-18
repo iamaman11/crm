@@ -10,6 +10,7 @@ use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use crm_query_runtime::QueryRequest;
 use std::collections::BTreeMap;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn collect(
     adapter: &CustomerEnrichmentSuggestionQueryAdapter,
     request: &QueryRequest,
