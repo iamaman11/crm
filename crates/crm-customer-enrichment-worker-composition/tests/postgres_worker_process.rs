@@ -1,9 +1,7 @@
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::CapabilityRequest;
-use crm_core_data::{
-    AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan,
-};
+use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan};
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, EnrichmentRequestStatus, MappingDraft,
     MappingNormalization, MappingVersion, PartySnapshot, ProviderDispatchExpectation,
@@ -14,7 +12,8 @@ use crm_customer_enrichment::{
 use crm_customer_enrichment_capability_adapter::{
     DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA, ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA,
     ENRICHMENT_REQUEST_CREATED_EVENT_TYPE, MODULE_ID, enrichment_request_persisted_payload,
-    enrichment_request_record_ref, enrichment_request_to_wire, request_dispatch_capability_definition,
+    enrichment_request_record_ref, enrichment_request_to_wire,
+    request_dispatch_capability_definition,
 };
 use crm_customer_enrichment_provider_registry::{
     ExactProviderAdapterRegistry, ProviderAdapterRegistration,
@@ -79,8 +78,8 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
         eprintln!("skipping PostgreSQL worker process because DATABASE_URL is absent");
         return;
     };
-    let admin_database_url =
-        std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
+    let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
+        .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
     let store = PostgresDataStore::connect(&database_url, 6)
         .await
         .expect("connect worker store");
@@ -94,18 +93,13 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
         .expect("seed canonical Created request");
 
     let calls = Arc::new(AtomicUsize::new(0));
-    let registry = ExactProviderAdapterRegistry::try_new([
-        ProviderAdapterRegistration::enabled(
-            fixture.provider_request.adapter_coordinate.clone(),
-            ReplaySafeProvider {
-                expected_key: fixture
-                    .provider_request
-                    .provider_idempotency_key
-                    .clone(),
-                calls: calls.clone(),
-            },
-        ),
-    ])
+    let registry = ExactProviderAdapterRegistry::try_new([ProviderAdapterRegistration::enabled(
+        fixture.provider_request.adapter_coordinate.clone(),
+        ReplaySafeProvider {
+            expected_key: fixture.provider_request.provider_idempotency_key.clone(),
+            calls: calls.clone(),
+        },
+    )])
     .expect("build exact provider registry");
     let worker = CustomerEnrichmentProviderWorker::postgres(store.clone(), Arc::new(registry))
         .expect("compose PostgreSQL worker");
@@ -135,7 +129,15 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
         .expect("request remains present");
     assert_eq!(request_snapshot.version, 3);
 
-    assert_eq!(count(&admin, "crm.records", "owner_module_id = 'crm.customer-enrichment'").await, 5);
+    assert_eq!(
+        count(
+            &admin,
+            "crm.records",
+            "owner_module_id = 'crm.customer-enrichment'"
+        )
+        .await,
+        5
+    );
     assert_eq!(
         scalar(
             &admin,
@@ -160,10 +162,42 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
         .await,
         3
     );
-    assert_eq!(count(&admin, "crm.outbox_events", "event_type LIKE 'customer_enrichment.%'").await, 7);
-    assert_eq!(count(&admin, "crm.audit_records", "capability_id LIKE 'customer_enrichment.%'").await, 7);
-    assert_eq!(count(&admin, "crm.idempotency_records", "idempotency_scope LIKE 'customer_enrichment.%@1.0.0'").await, 3);
-    assert_eq!(count(&admin, "crm.business_transactions", "capability_id LIKE 'customer_enrichment.%'").await, 3);
+    assert_eq!(
+        count(
+            &admin,
+            "crm.outbox_events",
+            "event_type LIKE 'customer_enrichment.%'"
+        )
+        .await,
+        7
+    );
+    assert_eq!(
+        count(
+            &admin,
+            "crm.audit_records",
+            "capability_id LIKE 'customer_enrichment.%'"
+        )
+        .await,
+        7
+    );
+    assert_eq!(
+        count(
+            &admin,
+            "crm.idempotency_records",
+            "idempotency_scope LIKE 'customer_enrichment.%@1.0.0'"
+        )
+        .await,
+        3
+    );
+    assert_eq!(
+        count(
+            &admin,
+            "crm.business_transactions",
+            "capability_id LIKE 'customer_enrichment.%'"
+        )
+        .await,
+        3
+    );
 }
 
 struct Fixture {

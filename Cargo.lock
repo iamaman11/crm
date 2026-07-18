@@ -829,10 +829,12 @@ dependencies = [
  "crm-core-data",
  "crm-customer-enrichment",
  "crm-customer-enrichment-capability-adapter",
+ "crm-customer-enrichment-provider-registry",
  "crm-module-sdk",
  "crm-proto-contracts",
  "prost",
  "sha2 0.10.9",
+ "sqlx",
  "tokio",
 ]
 
