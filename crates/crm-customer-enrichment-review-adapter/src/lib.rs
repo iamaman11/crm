@@ -45,10 +45,8 @@ pub const REJECT_SUGGESTION_RESPONSE_SCHEMA: &str =
 pub const SUGGESTION_REVIEWED_EVENT_TYPE: &str = "customer_enrichment.suggestion.reviewed";
 pub const SUGGESTION_REVIEWED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.SuggestionReviewedEvent";
-pub const REVIEW_CAPABILITY_IDS: &[&str] = &[
-    ACCEPT_SUGGESTION_CAPABILITY,
-    REJECT_SUGGESTION_CAPABILITY,
-];
+pub const REVIEW_CAPABILITY_IDS: &[&str] =
+    &[ACCEPT_SUGGESTION_CAPABILITY, REJECT_SUGGESTION_CAPABILITY];
 
 pub fn review_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![
@@ -570,7 +568,8 @@ fn positive_u64(value: i64, field: &'static str) -> Result<u64, SdkError> {
 }
 
 fn non_negative_u64(value: i64, field: &'static str) -> Result<u64, SdkError> {
-    u64::try_from(value).map_err(|_| SdkError::invalid_argument(field, "Value must not be negative"))
+    u64::try_from(value)
+        .map_err(|_| SdkError::invalid_argument(field, "Value must not be negative"))
 }
 
 fn target_field_to_wire(value: TargetField) -> i32 {

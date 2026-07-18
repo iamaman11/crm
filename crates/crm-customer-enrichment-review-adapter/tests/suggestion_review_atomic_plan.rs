@@ -11,7 +11,8 @@ use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_customer_enrichment_review_adapter::{
     ACCEPT_SUGGESTION_REQUEST_SCHEMA, CustomerEnrichmentSuggestionReviewPlanner,
     REJECT_SUGGESTION_REQUEST_SCHEMA, accept_suggestion_capability_definition,
-    reject_suggestion_capability_definition, suggestion_from_snapshot, suggestion_persisted_payload,
+    reject_suggestion_capability_definition, suggestion_from_snapshot,
+    suggestion_persisted_payload,
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
@@ -25,11 +26,17 @@ use prost::Message;
 fn accepted_suggestion_is_one_immutable_atomic_batch() {
     let suggestion = suggestion(150);
     let definition = accept_suggestion_capability_definition().unwrap();
-    let request = accept_request(&definition, &suggestion, 7, digest(&suggestion), Some("approval-1"), 100, 40);
-    let planner = CustomerEnrichmentSuggestionReviewPlanner::new(
-        suggestion,
-        ApprovalRequirement::Required,
+    let request = accept_request(
+        &definition,
+        &suggestion,
+        7,
+        digest(&suggestion),
+        Some("approval-1"),
+        100,
+        40,
     );
+    let planner =
+        CustomerEnrichmentSuggestionReviewPlanner::new(suggestion, ApprovalRequirement::Required);
 
     let target = planner.target(&definition, &request).unwrap();
     assert_eq!(target.presence, AggregatePresence::MustBeAbsent);
@@ -50,7 +57,8 @@ fn accepted_suggestion_is_one_immutable_atomic_batch() {
             if reference == &target.reference && payload.data_class == DataClass::Personal
     ));
 
-    let output = wire::AcceptSuggestionResponse::decode(plan.output.unwrap().bytes.as_slice()).unwrap();
+    let output =
+        wire::AcceptSuggestionResponse::decode(plan.output.unwrap().bytes.as_slice()).unwrap();
     assert_eq!(
         output.suggestion.unwrap().lifecycle_status,
         wire::SuggestionLifecycleStatus::Accepted as i32
@@ -60,7 +68,10 @@ fn accepted_suggestion_is_one_immutable_atomic_batch() {
         decision.kind,
         wire::SuggestionReviewDecisionKind::Accepted as i32
     );
-    assert_eq!(decision.approval_evidence_reference.as_deref(), Some("approval-1"));
+    assert_eq!(
+        decision.approval_evidence_reference.as_deref(),
+        Some("approval-1")
+    );
 }
 
 #[test]
@@ -68,14 +79,13 @@ fn rejected_suggestion_is_one_immutable_atomic_batch_without_approval() {
     let suggestion = suggestion(150);
     let definition = reject_suggestion_capability_definition().unwrap();
     let request = reject_request(&definition, &suggestion, 7, digest(&suggestion), 40);
-    let planner = CustomerEnrichmentSuggestionReviewPlanner::new(
-        suggestion,
-        ApprovalRequirement::Required,
-    );
+    let planner =
+        CustomerEnrichmentSuggestionReviewPlanner::new(suggestion, ApprovalRequirement::Required);
 
     let plan = planner.plan(&definition, &request, None).unwrap();
     plan.batch.validate().unwrap();
-    let output = wire::RejectSuggestionResponse::decode(plan.output.unwrap().bytes.as_slice()).unwrap();
+    let output =
+        wire::RejectSuggestionResponse::decode(plan.output.unwrap().bytes.as_slice()).unwrap();
     assert_eq!(
         output.suggestion.unwrap().lifecycle_status,
         wire::SuggestionLifecycleStatus::Rejected as i32
@@ -90,11 +100,17 @@ fn rejected_suggestion_is_one_immutable_atomic_batch_without_approval() {
 fn acceptance_requires_policy_approval_evidence() {
     let suggestion = suggestion(150);
     let definition = accept_suggestion_capability_definition().unwrap();
-    let request = accept_request(&definition, &suggestion, 7, digest(&suggestion), None, 100, 40);
-    let planner = CustomerEnrichmentSuggestionReviewPlanner::new(
-        suggestion,
-        ApprovalRequirement::Required,
+    let request = accept_request(
+        &definition,
+        &suggestion,
+        7,
+        digest(&suggestion),
+        None,
+        100,
+        40,
     );
+    let planner =
+        CustomerEnrichmentSuggestionReviewPlanner::new(suggestion, ApprovalRequirement::Required);
 
     let error = planner.target(&definition, &request).unwrap_err();
     assert_eq!(error.code, "CUSTOMER_ENRICHMENT_APPROVAL_REQUIRED");
@@ -113,10 +129,8 @@ fn stale_party_version_is_rejected_before_locking() {
         100,
         40,
     );
-    let planner = CustomerEnrichmentSuggestionReviewPlanner::new(
-        suggestion,
-        ApprovalRequirement::Required,
-    );
+    let planner =
+        CustomerEnrichmentSuggestionReviewPlanner::new(suggestion, ApprovalRequirement::Required);
 
     let error = planner.target(&definition, &request).unwrap_err();
     assert_eq!(error.code, "CUSTOMER_ENRICHMENT_REVIEW_CONFLICT");
@@ -337,8 +351,10 @@ fn request<M: Message>(
                     definition.capability_version.as_str(),
                 )
                 .unwrap(),
-                idempotency_key: IdempotencyKey::try_new(format!("review-idempotency-{at_unix_ms}"))
-                    .unwrap(),
+                idempotency_key: IdempotencyKey::try_new(format!(
+                    "review-idempotency-{at_unix_ms}"
+                ))
+                .unwrap(),
                 business_transaction_id: BusinessTransactionId::try_new(format!(
                     "review-tx-{at_unix_ms}"
                 ))
