@@ -257,6 +257,11 @@ fn provider_usage_entry_to_wire(
     let state: ProviderUsageEntryStateView =
         serde_json::from_slice(&encode_provider_usage_entry_state(usage)?)
             .map_err(|error| invalid_plan(error.to_string()))?;
+    if state.response_receipt_id.is_some() || state.kind != ProviderUsageKind::RequestDispatched {
+        return Err(invalid_plan(
+            "request-dispatch usage evidence has an invalid kind or response binding",
+        ));
+    }
     Ok(wire::ProviderUsageEntry {
         provider_usage_entry_ref: Some(wire::ProviderUsageEntryRef {
             provider_usage_entry_id: state.usage_entry_id,
