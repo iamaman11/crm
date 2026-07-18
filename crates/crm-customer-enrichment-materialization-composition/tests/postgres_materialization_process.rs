@@ -15,7 +15,6 @@ use crm_customer_enrichment_capability_adapter::{
     ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA, ENRICHMENT_REQUEST_CREATED_EVENT_TYPE,
     MAPPING_PUBLISHED_EVENT_SCHEMA, MAPPING_PUBLISHED_EVENT_TYPE, MODULE_ID,
     PROVIDER_PROFILE_PUBLISHED_EVENT_SCHEMA, PROVIDER_PROFILE_PUBLISHED_EVENT_TYPE,
-    PROVIDER_RESPONSE_RECORDED_EVENT_SCHEMA, PROVIDER_RESPONSE_RECORDED_EVENT_TYPE,
     enrichment_request_persisted_payload, enrichment_request_record_ref,
     enrichment_request_to_wire, mapping_persisted_payload, mapping_record_ref, mapping_to_wire,
     provider_profile_persisted_payload, provider_profile_record_ref, provider_profile_to_wire,
@@ -27,8 +26,7 @@ use crm_customer_enrichment_materialization_composition::PostgresCustomerEnrichm
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
     DataClass, DomainEvent, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext,
-    ModuleId, RecordId, RecordRef, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
-    TypedPayload,
+    ModuleId, RecordRef, RequestId, SchemaVersion, SdkError, TenantId, TraceId, TypedPayload,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_enrichment::v1 as wire};
 use prost::Message;
@@ -37,6 +35,10 @@ use sqlx::PgPool;
 const TENANT_ID: &str = "tenant-a";
 const ACTOR_ID: &str = "actor-a";
 const SEED_CAPABILITY: &str = "customer_enrichment.materialization.seed";
+const PROVIDER_RESPONSE_RECORDED_EVENT_TYPE: &str =
+    "customer_enrichment.provider_response.recorded";
+const PROVIDER_RESPONSE_RECORDED_EVENT_SCHEMA: &str =
+    "crm.customer_enrichment.v1.ProviderResponseRecordedEvent";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_materialization_reads_exact_dependencies_and_replays_without_duplicates() {
@@ -335,10 +337,11 @@ async fn seed_record(
     seed: SeedRecord,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let request_hash = semantic_input_hash(&seed.event_payload);
-    let at_unix_nanos = seed.at_unix_ms * 1_000_000;
+    let at_unix_nanos = i64::try_from(seed.at_unix_ms * 1_000_000)
+        .expect("seed timestamp fits signed nanoseconds");
     store
         .create_record(&RecordCreatePlan {
-            context: seed_context(seed.suffix, at_unix_nanos as i64),
+            context: seed_context(seed.suffix, at_unix_nanos),
             record: seed.reference.clone(),
             record_payload: seed.record_payload,
             event_id: format!("materialization-seed-event-{}", seed.suffix),
@@ -359,7 +362,7 @@ async fn seed_record(
                 audit_record_id: format!("materialization-seed-audit-{}", seed.suffix),
                 canonicalization_profile: "crm.cjson/v1".to_owned(),
                 canonical_envelope: format!("{{\"seed\":\"{}\"}}", seed.suffix).into_bytes(),
-                occurred_at_unix_nanos: at_unix_nanos as i64,
+                occurred_at_unix_nanos: at_unix_nanos,
             },
         })
         .await?;
