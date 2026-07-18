@@ -71,12 +71,6 @@
     },
     {
       "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.request.cancel",
-      "version": "1.0.0",
-      "reason": "Phase 8A.10 public contract is published and descriptor-checked, but its governed native lifecycle contribution is not implemented yet."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.request.dispatch",
       "version": "1.0.0",
       "reason": "Phase 8A.10 worker-only contract is published and descriptor-checked, but its activation-gated provider-dispatch contribution is not implemented yet."
