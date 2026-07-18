@@ -140,7 +140,7 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
     assert_eq!(
         scalar(
             &admin,
-            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.enrichment_request'",
+            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.request'",
         )
         .await,
         1
