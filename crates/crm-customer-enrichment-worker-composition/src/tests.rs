@@ -7,8 +7,9 @@ use crm_customer_enrichment::{
     prepare_provider_dispatch_attempt,
 };
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityVersion, CausationId, CorrelationId, ExecutionContext,
-    IdempotencyKey, PortFuture, RecordId, RequestId, SchemaVersion, TenantId, TraceId,
+    ActorId, BusinessTransactionId, CapabilityVersion, CausationId, CorrelationId,
+    ExecutionContext, IdempotencyKey, PortFuture, RecordId, RequestId, SchemaVersion, TenantId,
+    TraceId,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_enrichment::v1 as wire};
 use std::sync::Mutex;
@@ -78,10 +79,10 @@ impl ProviderAdapterRegistryPort for FakeRegistry {
         _request: ProviderDispatchRequest,
     ) -> PortFuture<'a, Result<SanitizedProviderResponse, SdkError>> {
         self.calls.lock().expect("call log lock").push("provider");
-        let result = self.failure.clone().map_or_else(
-            || Ok(self.response.clone()),
-            Err,
-        );
+        let result = self
+            .failure
+            .clone()
+            .map_or_else(|| Ok(self.response.clone()), Err);
         Box::pin(async move { result })
     }
 }
@@ -95,12 +96,7 @@ async fn worker_orders_dispatch_commit_provider_and_response_commit() {
     assert!(!result.dispatch_replayed);
     assert!(!result.response_replayed);
     assert_eq!(
-        result
-            .response
-            .enrichment_request
-            .as_ref()
-            .unwrap()
-            .status,
+        result.response.enrichment_request.as_ref().unwrap().status,
         wire::EnrichmentRequestStatus::ResponseRecorded as i32
     );
     assert_eq!(
@@ -324,12 +320,8 @@ fn worker(
         response,
         failure: None,
     });
-    CustomerEnrichmentProviderWorker::try_new(
-        dispatch_executor,
-        response_executor,
-        registry,
-    )
-    .unwrap()
+    CustomerEnrichmentProviderWorker::try_new(dispatch_executor, response_executor, registry)
+        .unwrap()
 }
 
 fn dispatch_output(provider: &ProviderDispatchRequest) -> Result<TypedPayload, SdkError> {

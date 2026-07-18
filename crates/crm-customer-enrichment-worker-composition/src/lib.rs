@@ -20,9 +20,9 @@ use crm_customer_enrichment::{
 use crm_customer_enrichment_capability_adapter::{
     CustomerEnrichmentRequestDispatchPlanner, CustomerEnrichmentRequestReferencePlanner,
     DISPATCH_ENRICHMENT_REQUEST_CAPABILITY, DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA,
-    DISPATCH_ENRICHMENT_REQUEST_RESPONSE_SCHEMA, MODULE_ID, RECORD_PROVIDER_RESPONSE_REQUEST_SCHEMA,
-    RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA, provider_response_capability_definition,
-    request_dispatch_capability_definition,
+    DISPATCH_ENRICHMENT_REQUEST_RESPONSE_SCHEMA, MODULE_ID,
+    RECORD_PROVIDER_RESPONSE_REQUEST_SCHEMA, RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA,
+    provider_response_capability_definition, request_dispatch_capability_definition,
 };
 use crm_module_sdk::{
     BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, DataClass, ErrorCategory,
@@ -207,21 +207,20 @@ fn validate_work_item(
         ));
     }
 
-    let final_retry_generation = match wire::EnrichmentRequestStatus::try_from(
-        command.expected_status,
-    ) {
-        Ok(wire::EnrichmentRequestStatus::Created)
-        | Ok(wire::EnrichmentRequestStatus::Queued) => command.expected_retry_generation,
-        Ok(wire::EnrichmentRequestStatus::FailedRetryable) => command
-            .expected_retry_generation
-            .checked_add(1)
-            .ok_or_else(|| worker_input_invalid("dispatch retry generation overflow"))?,
-        _ => {
-            return Err(worker_input_invalid(
-                "dispatch expectation must be Created, Queued or FailedRetryable",
-            ));
-        }
-    };
+    let final_retry_generation =
+        match wire::EnrichmentRequestStatus::try_from(command.expected_status) {
+            Ok(wire::EnrichmentRequestStatus::Created)
+            | Ok(wire::EnrichmentRequestStatus::Queued) => command.expected_retry_generation,
+            Ok(wire::EnrichmentRequestStatus::FailedRetryable) => command
+                .expected_retry_generation
+                .checked_add(1)
+                .ok_or_else(|| worker_input_invalid("dispatch retry generation overflow"))?,
+            _ => {
+                return Err(worker_input_invalid(
+                    "dispatch expectation must be Created, Queued or FailedRetryable",
+                ));
+            }
+        };
     if final_retry_generation != item.provider_request.retry_generation
         || item.provider_request.party_resource_version <= 0
         || item.provider_request.deadline_at_unix_ms <= 0
@@ -256,9 +255,12 @@ fn validate_dispatch_output(
         .enrichment_request_ref
         .as_ref()
         .ok_or_else(|| dispatch_output_invalid("dispatch output is missing request identity"))?;
-    let profile_ref = request.provider_profile_version_ref.as_ref().ok_or_else(|| {
-        dispatch_output_invalid("dispatch output is missing provider-profile identity")
-    })?;
+    let profile_ref = request
+        .provider_profile_version_ref
+        .as_ref()
+        .ok_or_else(|| {
+            dispatch_output_invalid("dispatch output is missing provider-profile identity")
+        })?;
     let mapping_ref = request
         .mapping_version_ref
         .as_ref()
@@ -301,7 +303,10 @@ fn validate_sanitized_response(
             "The provider response could not be bound to the dispatch attempt.",
         ));
     }
-    if response.canonical_response_digest.iter().all(|byte| *byte == 0)
+    if response
+        .canonical_response_digest
+        .iter()
+        .all(|byte| *byte == 0)
         || response.retrieved_at_unix_ms < 0
         || response
             .provider_observed_at_unix_ms
@@ -352,7 +357,9 @@ fn build_response_request(
     let started_at = response
         .retrieved_at_unix_ms
         .checked_mul(1_000_000)
-        .ok_or_else(|| worker_input_invalid("provider retrieval timestamp exceeds nanosecond range"))?;
+        .ok_or_else(|| {
+            worker_input_invalid("provider retrieval timestamp exceeds nanosecond range")
+        })?;
     let source = &dispatch_request.context.execution;
     let context = ModuleExecutionContext {
         module_id: definition.owner_module_id.clone(),
@@ -365,9 +372,7 @@ fn build_response_request(
             correlation_id: source.correlation_id.clone(),
             causation_id: configured(CausationId::try_new(source.request_id.as_str()))?,
             trace_id: source.trace_id.clone(),
-            capability_id: configured(CapabilityId::try_new(
-                definition.capability_id.as_str(),
-            ))?,
+            capability_id: configured(CapabilityId::try_new(definition.capability_id.as_str()))?,
             capability_version: configured(CapabilityVersion::try_new(
                 definition.capability_version.as_str(),
             ))?,
@@ -467,10 +472,7 @@ fn response_identity(request: &ProviderDispatchRequest) -> [u8; 32] {
         request.enrichment_request_id.as_str().as_bytes(),
     );
     hash_frame(&mut hasher, &request.retry_generation.to_be_bytes());
-    hash_frame(
-        &mut hasher,
-        request.provider_idempotency_key.as_bytes(),
-    );
+    hash_frame(&mut hasher, request.provider_idempotency_key.as_bytes());
     hasher.finalize().into()
 }
 
@@ -515,9 +517,7 @@ fn hex(bytes: &[u8]) -> String {
     output
 }
 
-fn configured<T>(
-    value: Result<T, crm_module_sdk::IdentifierError>,
-) -> Result<T, SdkError> {
+fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
     value.map_err(|error| worker_input_invalid(error.to_string()))
 }
 

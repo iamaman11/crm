@@ -820,6 +820,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-enrichment-worker-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-ingress",
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-enrichment",
+ "crm-customer-enrichment-capability-adapter",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
+ "sha2 0.10.9",
+ "tokio",
+]
+
+[[package]]
 name = "crm-data-quality"
 version = "0.1.0"
 dependencies = [
