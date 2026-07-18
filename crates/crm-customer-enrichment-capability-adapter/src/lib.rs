@@ -12,6 +12,7 @@ mod mapping_snapshot;
 mod provider_profile_planner;
 mod provider_profile_snapshot;
 mod request_planner;
+mod request_reference_planner;
 mod semantic_validator;
 
 pub use mapping_planner::{
@@ -27,6 +28,7 @@ pub use provider_profile_planner::{
 };
 pub use provider_profile_snapshot::provider_profile_from_snapshot;
 pub use request_planner::*;
+pub use request_reference_planner::CustomerEnrichmentRequestReferencePlanner;
 pub use semantic_validator::CustomerEnrichmentCapabilitySemanticValidator;
 
 use crm_capability_plan_support as support;
@@ -91,7 +93,7 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentProviderProfileCapabili
                 CustomerEnrichmentMappingReferencePlanner.target(definition, request)
             }
             CREATE_ENRICHMENT_REQUEST_CAPABILITY => {
-                CustomerEnrichmentRequestCreateCapabilityPlanner.target(definition, request)
+                CustomerEnrichmentRequestReferencePlanner.target(definition, request)
             }
             _ => Err(unsupported_capability()),
         }
@@ -112,7 +114,7 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentProviderProfileCapabili
                 CustomerEnrichmentMappingReferencePlanner.plan(definition, request, current)
             }
             CREATE_ENRICHMENT_REQUEST_CAPABILITY => {
-                CustomerEnrichmentRequestCreateCapabilityPlanner.plan(definition, request, current)
+                CustomerEnrichmentRequestReferencePlanner.plan(definition, request, current)
             }
             _ => Err(unsupported_capability()),
         }
