@@ -13,6 +13,7 @@ mod provider_profile_planner;
 mod provider_profile_snapshot;
 mod request_planner;
 mod request_reference_planner;
+mod request_snapshot;
 mod semantic_validator;
 
 pub use mapping_planner::{
@@ -29,6 +30,7 @@ pub use provider_profile_planner::{
 pub use provider_profile_snapshot::provider_profile_from_snapshot;
 pub use request_planner::*;
 pub use request_reference_planner::CustomerEnrichmentRequestReferencePlanner;
+pub use request_snapshot::enrichment_request_from_snapshot;
 pub use semantic_validator::CustomerEnrichmentCapabilitySemanticValidator;
 
 use crm_capability_plan_support as support;
