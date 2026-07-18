@@ -118,7 +118,8 @@ fn validate_lineage(
     }
     if request.response_receipt_id() != Some(receipt.receipt_id())
         || receipt.request_id() != request.request_id()
-        || receipt_state.provider_profile_version_id != request.provider_profile_version_id().as_str()
+        || receipt_state.provider_profile_version_id
+            != request.provider_profile_version_id().as_str()
         || receipt_state.mapping_version_id != request.mapping_version_id().as_str()
         || profile.version_id() != request.provider_profile_version_id()
         || mapping.version_id() != request.mapping_version_id()
@@ -204,7 +205,8 @@ fn validate_candidate(
     candidate: &SuggestionCandidateDraft,
     protected_reference: Option<&str>,
 ) -> Result<(), SdkError> {
-    if &candidate.target != request.target() || candidate.target.target_field != mapping.target_field()
+    if &candidate.target != request.target()
+        || candidate.target.target_field != mapping.target_field()
     {
         return Err(materialization_conflict(
             "CUSTOMER_ENRICHMENT_CANDIDATE_TARGET_CONFLICT",
@@ -299,7 +301,8 @@ mod tests {
 
     #[test]
     fn success_materializes_deterministically_and_advances_request_once() {
-        let (mut request, receipt, profile, mapping) = fixture(ProviderResponseClass::Success, true);
+        let (mut request, receipt, profile, mapping) =
+            fixture(ProviderResponseClass::Success, true);
         let second = candidate(&request, "Zeta Company", Some(8_000));
         let first = candidate(&request, "Alpha Company", Some(9_000));
 
@@ -313,24 +316,32 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(request.status(), EnrichmentRequestStatus::SuggestionsMaterialized);
+        assert_eq!(
+            request.status(),
+            EnrichmentRequestStatus::SuggestionsMaterialized
+        );
         assert_eq!(suggestions.len(), 2);
         assert!(suggestions[0].suggestion_id() < suggestions[1].suggestion_id());
     }
 
     #[test]
     fn no_match_advances_with_no_suggestion_records() {
-        let (mut request, receipt, profile, mapping) = fixture(ProviderResponseClass::NoMatch, false);
+        let (mut request, receipt, profile, mapping) =
+            fixture(ProviderResponseClass::NoMatch, false);
         let suggestions =
             materialize_suggestions(&mut request, &receipt, &profile, &mapping, Vec::new(), 40)
                 .unwrap();
         assert!(suggestions.is_empty());
-        assert_eq!(request.status(), EnrichmentRequestStatus::SuggestionsMaterialized);
+        assert_eq!(
+            request.status(),
+            EnrichmentRequestStatus::SuggestionsMaterialized
+        );
     }
 
     #[test]
     fn invalid_candidate_leaves_request_unchanged() {
-        let (mut request, receipt, profile, mapping) = fixture(ProviderResponseClass::Success, true);
+        let (mut request, receipt, profile, mapping) =
+            fixture(ProviderResponseClass::Success, true);
         let before = request.clone();
         let mut invalid = candidate(&request, "Example Company", None);
         invalid.target.resource_version += 1;
@@ -351,7 +362,8 @@ mod tests {
 
     #[test]
     fn duplicate_normalized_candidates_are_rejected_without_mutation() {
-        let (mut request, receipt, profile, mapping) = fixture(ProviderResponseClass::Success, true);
+        let (mut request, receipt, profile, mapping) =
+            fixture(ProviderResponseClass::Success, true);
         let before = request.clone();
         let first = candidate(&request, "Example   Company", Some(9_000));
         let second = candidate(&request, "Example Company", Some(9_000));
