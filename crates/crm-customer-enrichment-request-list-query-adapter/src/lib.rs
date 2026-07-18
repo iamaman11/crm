@@ -8,9 +8,7 @@
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
-use crm_core_data::{
-    PostgresDataStore, RecordListQuery, RecordQueryContinuation, RecordQuerySort,
-};
+use crm_core_data::{PostgresDataStore, RecordListQuery, RecordQueryContinuation, RecordQuerySort};
 use crm_customer_enrichment::{ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequestStatus};
 use crm_customer_enrichment_capability_adapter::{
     MODULE_ID, enrichment_request_from_snapshot, enrichment_request_to_wire,
@@ -109,7 +107,13 @@ impl CustomerEnrichmentRequestListQueryAdapter {
         requested_status: Option<EnrichmentRequestStatus>,
         page_size: u32,
         mut after: Option<RecordQueryContinuation>,
-    ) -> Result<(Vec<wire::EnrichmentRequest>, Option<RecordQueryContinuation>), SdkError> {
+    ) -> Result<
+        (
+            Vec<wire::EnrichmentRequest>,
+            Option<RecordQueryContinuation>,
+        ),
+        SdkError,
+    > {
         let mut output = Vec::with_capacity(page_size as usize);
         let mut scanned = 0_usize;
 
