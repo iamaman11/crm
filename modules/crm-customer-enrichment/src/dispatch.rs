@@ -293,10 +293,10 @@ struct DispatchRequestStateView {
 mod tests {
     use super::*;
     use crate::{
-        EnrichmentRequestDraft, IdempotencyKey, MappingDraft, MappingNormalization, MappingVersion,
+        EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
         ProviderProfileDraft, RawPayloadPolicy, RequestPolicyEvidence, TargetField, TargetSnapshot,
     };
-    use crm_module_sdk::{TenantId, IdempotencyKey as SdkIdempotencyKey};
+    use crm_module_sdk::{IdempotencyKey, TenantId};
 
     fn fixture() -> (EnrichmentRequest, ProviderProfileVersion, PartySnapshot, ActorId) {
         let profile = ProviderProfileVersion::publish(ProviderProfileDraft {
@@ -329,7 +329,7 @@ mod tests {
         let request = EnrichmentRequest::create(EnrichmentRequestDraft {
             tenant_id: TenantId::try_new("tenant-1").unwrap(),
             requested_by: ActorId::try_new("requester-1").unwrap(),
-            idempotency_key: SdkIdempotencyKey::try_new("request-key-1").unwrap(),
+            idempotency_key: IdempotencyKey::try_new("request-key-1").unwrap(),
             target: TargetSnapshot::try_new("party-1", 7, TargetField::PartyDisplayName).unwrap(),
             provider_profile_version_id: profile.version_id().clone(),
             mapping_version_id: mapping.version_id().clone(),
