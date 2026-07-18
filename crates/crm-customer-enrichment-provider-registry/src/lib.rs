@@ -89,7 +89,10 @@ impl ExactProviderAdapterRegistry {
         let mut entries = BTreeMap::new();
         for registration in registrations {
             let coordinate = registration.coordinate;
-            if entries.insert(coordinate.clone(), registration.entry).is_some() {
+            if entries
+                .insert(coordinate.clone(), registration.entry)
+                .is_some()
+            {
                 return Err(duplicate_registration(&coordinate));
             }
         }
@@ -207,20 +210,24 @@ mod tests {
     #[test]
     fn exact_coordinate_resolves_enabled_adapter() {
         let exact = coordinate("1.0.0");
-        let registry = ExactProviderAdapterRegistry::try_new([
-            ProviderAdapterRegistration::enabled(exact.clone(), NoopAdapter),
-        ])
-        .unwrap();
+        let registry =
+            ExactProviderAdapterRegistry::try_new([ProviderAdapterRegistration::enabled(
+                exact.clone(),
+                NoopAdapter,
+            )])
+            .unwrap();
         assert_eq!(registry.len(), 1);
         assert!(registry.resolve_exact(&exact).is_ok());
     }
 
     #[test]
     fn another_contract_version_does_not_fallback() {
-        let registry = ExactProviderAdapterRegistry::try_new([
-            ProviderAdapterRegistration::enabled(coordinate("1.0.0"), NoopAdapter),
-        ])
-        .unwrap();
+        let registry =
+            ExactProviderAdapterRegistry::try_new([ProviderAdapterRegistration::enabled(
+                coordinate("1.0.0"),
+                NoopAdapter,
+            )])
+            .unwrap();
         let error = registry.resolve_exact(&coordinate("1.1.0")).err().unwrap();
         assert_eq!(
             error.code,
@@ -231,10 +238,11 @@ mod tests {
     #[test]
     fn disabled_exact_coordinate_fails_closed() {
         let exact = coordinate("1.0.0");
-        let registry = ExactProviderAdapterRegistry::try_new([
-            ProviderAdapterRegistration::disabled(exact.clone()),
-        ])
-        .unwrap();
+        let registry =
+            ExactProviderAdapterRegistry::try_new([ProviderAdapterRegistration::disabled(
+                exact.clone(),
+            )])
+            .unwrap();
         let error = registry.resolve_exact(&exact).err().unwrap();
         assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PROVIDER_ADAPTER_DISABLED");
     }

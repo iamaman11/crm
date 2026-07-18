@@ -782,6 +782,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-enrichment-provider-registry"
+version = "0.1.0"
+dependencies = [
+ "crm-customer-enrichment",
+ "crm-module-sdk",
+]
+
+[[package]]
 name = "crm-customer-enrichment-query-adapter"
 version = "0.1.0"
 dependencies = [
