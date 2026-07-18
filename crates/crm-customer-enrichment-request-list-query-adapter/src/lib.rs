@@ -2,9 +2,9 @@
 
 //! Signed, permission-aware list query for Customer Enrichment requests.
 //!
-//! The list is bound to an exact Party and provider-profile version. Cursor state is HMAC signed,
-//! tenant/actor/capability/filter/page-size bound and uses stable `(updated_at, record_id)` storage
-//! continuation. Every matching request is strictly rehydrated and re-authorized before disclosure.
+//! Cursor state is integrity-protected and bound to the tenant, actor, capability, filters,
+//! stable storage sort and page size. Every candidate is strictly rehydrated and checked against
+//! live Party and request visibility before disclosure.
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
@@ -34,86 +34,60 @@ pub const LIST_ENRICHMENT_REQUESTS_RESPONSE_SCHEMA: &str =
     "crm.customer_enrichment.v1.ListEnrichmentRequestsResponse";
 
 const PARTY_RECORD_TYPE: &str = "parties.party";
-const DEFAULT_PAGE_SIZE: usize = 50;
-const MAX_PAGE_SIZE: usize = 100;
-const MAX_VISIBILITY_SCAN_RECORDS: usize = 4_096;
+const DEFAULT_PAGE_SIZE: u32 = 50;
+const MAXIMUM_PAGE_SIZE: u32 = 100;
+const MAXIMUM_VISIBILITY_SCAN_RECORDS: usize = 4_096;
 
 #[derive(Clone)]
 pub struct CustomerEnrichmentRequestListQueryAdapter {
     store: PostgresDataStore,
-    cursor: CursorCodec,
+    cursor_codec: CursorCodec,
     visibility: Arc<dyn QueryVisibilityAuthorizer>,
 }
 
 impl CustomerEnrichmentRequestListQueryAdapter {
     pub fn new(
         store: PostgresDataStore,
-        cursor: CursorCodec,
+        cursor_codec: CursorCodec,
         visibility: Arc<dyn QueryVisibilityAuthorizer>,
     ) -> Self {
         Self {
             store,
-            cursor,
+            cursor_codec,
             visibility,
         }
     }
 
     async fn execute_list(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
         let command: wire::ListEnrichmentRequestsRequest = decode_input(request)?;
-        let wire::ListEnrichmentRequestsRequest {
-            party_ref,
-            provider_profile_version_ref,
-            status,
-            page_size,
-            cursor,
-        } = command;
-        let party_id = party_record_id(party_ref)?;
+        let party_id = party_record_id(command.party_ref)?;
         let provider_profile_version_id =
-            provider_profile_record_id(provider_profile_version_ref)?;
-        let requested_status = status.map(validate_status).transpose()?;
-        let page_size = checked_page_size(page_size)?;
-        let status_bytes = requested_status
-            .map(status_to_wire)
-            .unwrap_or(wire::EnrichmentRequestStatus::Unspecified as i32)
-            .to_be_bytes();
-        let filter_hash = normalized_filter_hash([
-            ("party_id", party_id.as_str().as_bytes()),
-            (
-                "provider_profile_version_id",
-                provider_profile_version_id.as_str().as_bytes(),
-            ),
-            ("status", status_bytes.as_slice()),
-        ]);
-        let binding = CursorBinding {
-            tenant_id: request.context.tenant_id.clone(),
-            actor_id: Some(request.context.actor_id.clone()),
-            capability_id: request.context.capability_id.clone(),
-            resource_type: request_record_type()?,
-            normalized_filter_hash: filter_hash,
-            sort: RecordQuerySort::updated_at_desc().cursor_sort(),
-            page_size: u32::try_from(page_size).map_err(configuration_error)?,
-        };
-        let after = if cursor.is_empty() {
-            None
-        } else {
-            Some(cursor_continuation_to_record_query(
-                self.cursor.decode(&cursor, &binding)?,
-            )?)
-        };
+            provider_profile_record_id(command.provider_profile_version_ref)?;
+        let requested_status = command.status.map(validate_status).transpose()?;
+        let page_size = resolve_page_size(command.page_size)?;
+        let binding = cursor_binding(
+            request,
+            &party_id,
+            &provider_profile_version_id,
+            requested_status,
+            page_size,
+        )?;
+        let after = decode_after(self, &command.cursor, &binding)?;
 
         let party_reference = RecordRef {
             record_type: party_record_type()?,
             record_id: party_id.clone(),
         };
-        let party_visibility = self
+        if !self
             .visibility
             .authorize_visibility(request, &party_reference)
-            .await?;
-        if !party_visibility.resource_visible {
+            .await?
+            .resource_visible
+        {
             return list_response(Vec::new(), String::new());
         }
 
-        let (requests, continuation) = self
+        let (requests, next) = self
             .collect_visible_requests(
                 request,
                 &party_id,
@@ -123,13 +97,7 @@ impl CustomerEnrichmentRequestListQueryAdapter {
                 after,
             )
             .await?;
-        let next_cursor = continuation
-            .map(|value| {
-                self.cursor
-                    .encode(&binding, record_query_to_cursor_continuation(value))
-            })
-            .transpose()?
-            .unwrap_or_default();
+        let next_cursor = encode_next(self, &binding, next.as_ref())?;
         list_response(requests, next_cursor)
     }
 
@@ -139,42 +107,43 @@ impl CustomerEnrichmentRequestListQueryAdapter {
         party_id: &RecordId,
         provider_profile_version_id: &RecordId,
         requested_status: Option<EnrichmentRequestStatus>,
-        page_size: usize,
+        page_size: u32,
         mut after: Option<RecordQueryContinuation>,
     ) -> Result<(Vec<wire::EnrichmentRequest>, Option<RecordQueryContinuation>), SdkError> {
-        let mut output = Vec::with_capacity(page_size);
-        let mut scanned = 0usize;
+        let mut output = Vec::with_capacity(page_size as usize);
+        let mut scanned = 0_usize;
+
         loop {
-            let remaining = page_size.saturating_sub(output.len());
+            let remaining = page_size as usize - output.len();
             if remaining == 0 {
+                let anchor = after.clone();
                 let has_more = self
                     .has_more_visible(
                         request,
                         party_id,
                         provider_profile_version_id,
                         requested_status,
-                        after.clone(),
+                        anchor.clone(),
                         &mut scanned,
                     )
                     .await?;
-                return Ok((output, has_more.then_some(after).flatten()));
+                return Ok((output, has_more.then_some(anchor).flatten()));
             }
+
             let page = self
                 .store
                 .list_records_for_query(&RecordListQuery {
                     tenant_id: request.context.tenant_id.clone(),
                     owner_module_id: module_id()?,
                     record_type: request_record_type()?,
-                    page_size: remaining.min(MAX_PAGE_SIZE),
-                    sort: RecordQuerySort::updated_at_desc(),
-                    after,
+                    page_size: u32::try_from(remaining).map_err(configuration_error)?,
+                    sort: RecordQuerySort::UpdatedAtDescending,
+                    after: after.clone(),
                 })
                 .await?;
-            if page.records.is_empty() {
-                return Ok((output, None));
-            }
             scanned = scanned.saturating_add(page.records.len());
-            ensure_scan_bound(scanned)?;
+            enforce_scan_limit(scanned)?;
+
             for snapshot in &page.records {
                 let enrichment_request = enrichment_request_from_snapshot(snapshot)?;
                 if !matches_filters(
@@ -192,12 +161,13 @@ impl CustomerEnrichmentRequestListQueryAdapter {
                 if !visibility.resource_visible {
                     continue;
                 }
-                let mut wire_request = enrichment_request_to_wire(&enrichment_request)?;
-                redact_enrichment_request(&mut wire_request, |field| {
+                let mut output_request = enrichment_request_to_wire(&enrichment_request)?;
+                redact_enrichment_request(&mut output_request, |field| {
                     visibility.allows_field(field)
                 });
-                output.push(wire_request);
+                output.push(output_request);
             }
+
             after = page.next;
             if after.is_none() {
                 return Ok((output, None));
@@ -221,31 +191,27 @@ impl CustomerEnrichmentRequestListQueryAdapter {
                     tenant_id: request.context.tenant_id.clone(),
                     owner_module_id: module_id()?,
                     record_type: request_record_type()?,
-                    page_size: MAX_PAGE_SIZE,
-                    sort: RecordQuerySort::updated_at_desc(),
-                    after,
+                    page_size: MAXIMUM_PAGE_SIZE,
+                    sort: RecordQuerySort::UpdatedAtDescending,
+                    after: after.clone(),
                 })
                 .await?;
-            if page.records.is_empty() {
-                return Ok(false);
-            }
             *scanned = scanned.saturating_add(page.records.len());
-            ensure_scan_bound(*scanned)?;
+            enforce_scan_limit(*scanned)?;
+
             for snapshot in &page.records {
                 let enrichment_request = enrichment_request_from_snapshot(snapshot)?;
-                if !matches_filters(
+                if matches_filters(
                     &enrichment_request,
                     party_id,
                     provider_profile_version_id,
                     requested_status,
-                ) {
-                    continue;
-                }
-                let visibility = self
+                ) && self
                     .visibility
                     .authorize_visibility(request, &snapshot.reference)
-                    .await?;
-                if visibility.resource_visible {
+                    .await?
+                    .resource_visible
+                {
                     return Ok(true);
                 }
             }
@@ -260,7 +226,7 @@ impl std::fmt::Debug for CustomerEnrichmentRequestListQueryAdapter {
         formatter
             .debug_struct("CustomerEnrichmentRequestListQueryAdapter")
             .field("store", &self.store)
-            .field("cursor", &self.cursor)
+            .field("cursor_codec", &self.cursor_codec)
             .field("visibility", &"dyn QueryVisibilityAuthorizer")
             .finish()
     }
@@ -279,31 +245,15 @@ impl QuerySemanticValidator for CustomerEnrichmentRequestListQueryAdapter {
             let provider_profile_version_id =
                 provider_profile_record_id(command.provider_profile_version_ref)?;
             let requested_status = command.status.map(validate_status).transpose()?;
-            let page_size = checked_page_size(command.page_size)?;
-            let status_bytes = requested_status
-                .map(status_to_wire)
-                .unwrap_or(wire::EnrichmentRequestStatus::Unspecified as i32)
-                .to_be_bytes();
-            let filter_hash = normalized_filter_hash([
-                ("party_id", party_id.as_str().as_bytes()),
-                (
-                    "provider_profile_version_id",
-                    provider_profile_version_id.as_str().as_bytes(),
-                ),
-                ("status", status_bytes.as_slice()),
-            ]);
-            let binding = CursorBinding {
-                tenant_id: request.context.tenant_id.clone(),
-                actor_id: Some(request.context.actor_id.clone()),
-                capability_id: request.context.capability_id.clone(),
-                resource_type: request_record_type()?,
-                normalized_filter_hash: filter_hash,
-                sort: RecordQuerySort::updated_at_desc().cursor_sort(),
-                page_size: u32::try_from(page_size).map_err(configuration_error)?,
-            };
-            if !command.cursor.is_empty() {
-                self.cursor.decode(&command.cursor, &binding)?;
-            }
+            let page_size = resolve_page_size(command.page_size)?;
+            let binding = cursor_binding(
+                request,
+                &party_id,
+                &provider_profile_version_id,
+                requested_status,
+                page_size,
+            )?;
+            let _ = decode_after(self, &command.cursor, &binding)?;
             Ok(())
         })
     }
@@ -357,7 +307,7 @@ fn decode_input<T: Message + Default>(request: &QueryRequest) -> Result<T, SdkEr
             != support::message_descriptor_hash(LIST_ENRICHMENT_REQUESTS_REQUEST_SCHEMA)
         || payload.data_class != DataClass::Personal
         || payload.encoding != PayloadEncoding::Protobuf
-        || payload.maximum_size_bytes != support::MAX_PROTOBUF_BYTES
+        || payload.maximum_size_bytes > support::MAX_PROTOBUF_BYTES
         || payload.validate().is_err()
     {
         return Err(SdkError::new(
@@ -377,7 +327,9 @@ fn decode_input<T: Message + Default>(request: &QueryRequest) -> Result<T, SdkEr
     })
 }
 
-fn party_record_id(value: Option<crm_proto_contracts::crm::customer::v1::PartyRef>) -> Result<RecordId, SdkError> {
+fn party_record_id(
+    value: Option<crm_proto_contracts::crm::customer::v1::PartyRef>,
+) -> Result<RecordId, SdkError> {
     let value = value.ok_or_else(|| {
         SdkError::invalid_argument(
             "customer_enrichment.request.list.party_ref",
@@ -465,39 +417,100 @@ fn matches_filters(
     provider_profile_version_id: &RecordId,
     requested_status: Option<EnrichmentRequestStatus>,
 ) -> bool {
-    request.target().resource_id == party_id.as_str()
+    request.target().resource_type == PARTY_RECORD_TYPE
+        && request.target().resource_id == party_id.as_str()
         && request.provider_profile_version_id().as_str() == provider_profile_version_id.as_str()
-        && requested_status.is_none_or(|status| request.status() == status)
+        && requested_status.map(|status| request.status() == status).unwrap_or(true)
 }
 
-fn checked_page_size(value: i32) -> Result<usize, SdkError> {
+fn resolve_page_size(value: i32) -> Result<u32, SdkError> {
     if value < 0 {
         return Err(SdkError::invalid_argument(
             "customer_enrichment.request.list.page_size",
             "Page size must not be negative",
         ));
     }
-    let value = usize::try_from(value).map_err(configuration_error)?;
-    let normalized = if value == 0 { DEFAULT_PAGE_SIZE } else { value };
-    if normalized > MAX_PAGE_SIZE {
+    let value = u32::try_from(value).map_err(configuration_error)?;
+    let resolved = if value == 0 { DEFAULT_PAGE_SIZE } else { value };
+    if resolved > MAXIMUM_PAGE_SIZE {
         return Err(SdkError::invalid_argument(
             "customer_enrichment.request.list.page_size",
-            format!("Page size must not exceed {MAX_PAGE_SIZE}"),
+            format!("Page size must not exceed {MAXIMUM_PAGE_SIZE}"),
         ));
     }
-    Ok(normalized)
+    Ok(resolved)
 }
 
-fn ensure_scan_bound(scanned: usize) -> Result<(), SdkError> {
-    if scanned <= MAX_VISIBILITY_SCAN_RECORDS {
-        return Ok(());
+fn cursor_binding(
+    request: &QueryRequest,
+    party_id: &RecordId,
+    provider_profile_version_id: &RecordId,
+    requested_status: Option<EnrichmentRequestStatus>,
+    page_size: u32,
+) -> Result<CursorBinding, SdkError> {
+    let status = requested_status
+        .map(status_to_wire)
+        .unwrap_or(wire::EnrichmentRequestStatus::Unspecified as i32)
+        .to_be_bytes();
+    Ok(CursorBinding {
+        tenant_id: request.context.tenant_id.clone(),
+        actor_id: Some(request.context.actor_id.clone()),
+        capability_id: request.context.capability_id.clone(),
+        capability_version: request.context.capability_version.clone(),
+        resource_type: request_record_type()?,
+        normalized_filter_hash: normalized_filter_hash([
+            ("party_id", party_id.as_str().as_bytes()),
+            (
+                "provider_profile_version_id",
+                provider_profile_version_id.as_str().as_bytes(),
+            ),
+            ("status", status.as_slice()),
+        ]),
+        sort_id: RecordQuerySort::UpdatedAtDescending.id().to_owned(),
+        page_size,
+    })
+}
+
+fn decode_after(
+    adapter: &CustomerEnrichmentRequestListQueryAdapter,
+    token: &str,
+    binding: &CursorBinding,
+) -> Result<Option<RecordQueryContinuation>, SdkError> {
+    if token.is_empty() {
+        return Ok(None);
     }
-    Err(SdkError::new(
-        "CUSTOMER_ENRICHMENT_REQUEST_LIST_SCAN_LIMIT_EXCEEDED",
-        ErrorCategory::ResourceExhausted,
-        true,
-        "The enrichment request list could not be completed within the bounded visibility scan.",
-    ))
+    let continuation = adapter
+        .cursor_codec
+        .decode(token, binding)
+        .map_err(cursor_error)?;
+    let sort_value = String::from_utf8(continuation.sort_key).map_err(|_| cursor_invalid())?;
+    let after = RecordQueryContinuation {
+        sort_value,
+        record_id: continuation.record_id,
+    };
+    after.validate().map_err(|error| cursor_error(error))?;
+    Ok(Some(after))
+}
+
+fn encode_next(
+    adapter: &CustomerEnrichmentRequestListQueryAdapter,
+    binding: &CursorBinding,
+    next: Option<&RecordQueryContinuation>,
+) -> Result<String, SdkError> {
+    next.map(|next| {
+        adapter
+            .cursor_codec
+            .encode(
+                binding,
+                &CursorContinuation {
+                    sort_key: next.sort_value.as_bytes().to_vec(),
+                    record_id: next.record_id.clone(),
+                },
+            )
+            .map_err(cursor_error)
+    })
+    .transpose()
+    .map(|value| value.unwrap_or_default())
 }
 
 fn list_response(
@@ -563,24 +576,6 @@ fn redact_enrichment_request(
     }
 }
 
-fn cursor_continuation_to_record_query(
-    value: CursorContinuation,
-) -> Result<RecordQueryContinuation, SdkError> {
-    RecordQueryContinuation::try_new(value.time_key, value.record_id).map_err(|error| {
-        SdkError::new(
-            "CUSTOMER_ENRICHMENT_REQUEST_LIST_CURSOR_INVALID",
-            ErrorCategory::InvalidArgument,
-            false,
-            "The enrichment request list cursor is invalid.",
-        )
-        .with_internal_reference(error.to_string())
-    })
-}
-
-fn record_query_to_cursor_continuation(value: RecordQueryContinuation) -> CursorContinuation {
-    CursorContinuation::new(value.time_key().to_owned(), value.record_id().clone())
-}
-
 fn ensure_definition(definition: &CapabilityDefinition) -> Result<(), SdkError> {
     if definition.owner_module_id.as_str() != MODULE_ID
         || definition.capability_id.as_str() != LIST_ENRICHMENT_REQUESTS_CAPABILITY
@@ -605,15 +600,41 @@ fn party_record_type() -> Result<RecordType, SdkError> {
 }
 
 fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
-    value.map_err(|error| configuration_error().with_internal_reference(error.to_string()))
+    value.map_err(configuration_error)
+}
+
+fn enforce_scan_limit(scanned: usize) -> Result<(), SdkError> {
+    if scanned > MAXIMUM_VISIBILITY_SCAN_RECORDS {
+        Err(SdkError::new(
+            "CUSTOMER_ENRICHMENT_REQUEST_LIST_SCAN_LIMIT_EXCEEDED",
+            ErrorCategory::Unavailable,
+            true,
+            "The enrichment request list is temporarily unavailable.",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn cursor_invalid() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_REQUEST_LIST_CURSOR_INVALID",
+        ErrorCategory::InvalidArgument,
+        false,
+        "The enrichment request list cursor is invalid.",
+    )
+}
+
+fn cursor_error(error: impl std::fmt::Display) -> SdkError {
+    cursor_invalid().with_internal_reference(error.to_string())
 }
 
 fn unsupported_query() -> SdkError {
     SdkError::new(
         "CUSTOMER_ENRICHMENT_REQUEST_LIST_UNSUPPORTED",
-        ErrorCategory::InvalidArgument,
+        ErrorCategory::Internal,
         false,
-        "The requested enrichment request list query is not supported.",
+        "The enrichment request list query is not configured.",
     )
 }
 
@@ -652,10 +673,10 @@ mod tests {
 
     #[test]
     fn page_size_and_status_are_bounded() {
-        assert_eq!(checked_page_size(0).unwrap(), DEFAULT_PAGE_SIZE);
-        assert_eq!(checked_page_size(100).unwrap(), 100);
-        assert!(checked_page_size(-1).is_err());
-        assert!(checked_page_size(101).is_err());
+        assert_eq!(resolve_page_size(0).unwrap(), DEFAULT_PAGE_SIZE);
+        assert_eq!(resolve_page_size(100).unwrap(), 100);
+        assert!(resolve_page_size(-1).is_err());
+        assert!(resolve_page_size(101).is_err());
         assert!(validate_status(wire::EnrichmentRequestStatus::Created as i32).is_ok());
         assert!(validate_status(wire::EnrichmentRequestStatus::Unspecified as i32).is_err());
     }
