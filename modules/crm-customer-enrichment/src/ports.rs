@@ -167,6 +167,7 @@ pub struct SanitizedProviderResponse {
     pub retrieved_at_unix_ms: i64,
     pub metered_units: u64,
     pub protected_evidence_reference: Option<String>,
+    pub safe_provider_code: Option<String>,
 }
 
 /// One exact provider adapter implementation.
