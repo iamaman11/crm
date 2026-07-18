@@ -4,7 +4,9 @@ use crm_application_runtime::{
 use crm_customer_enrichment_capability_adapter::{
     MODULE_ID, PUBLISH_MAPPING_CAPABILITY, PUBLISH_PROVIDER_PROFILE_CAPABILITY,
 };
-use crm_customer_enrichment_query_adapter::GET_PROVIDER_PROFILE_CAPABILITY;
+use crm_customer_enrichment_query_adapter::{
+    GET_MAPPING_CAPABILITY, GET_PROVIDER_PROFILE_CAPABILITY,
+};
 use std::collections::BTreeSet;
 
 #[test]
@@ -37,23 +39,29 @@ fn definition_publications_are_the_only_composed_enrichment_mutations() {
 }
 
 #[test]
-fn provider_profile_lookup_is_the_only_composed_enrichment_query() {
+fn definition_lookups_are_the_only_composed_enrichment_queries() {
     let enrichment_definitions = application_query_definitions()
         .unwrap()
         .into_iter()
         .filter(|definition| definition.owner_module_id.as_str() == MODULE_ID)
         .collect::<Vec<_>>();
 
-    assert_eq!(enrichment_definitions.len(), 1);
-    let definition = &enrichment_definitions[0];
+    assert_eq!(enrichment_definitions.len(), 2);
     assert_eq!(
-        definition.capability_id.as_str(),
-        GET_PROVIDER_PROFILE_CAPABILITY
+        enrichment_definitions
+            .iter()
+            .map(|definition| definition.capability_id.as_str())
+            .collect::<BTreeSet<_>>(),
+        [GET_PROVIDER_PROFILE_CAPABILITY, GET_MAPPING_CAPABILITY]
+            .into_iter()
+            .collect()
     );
-    assert_eq!(definition.capability_version.as_str(), "1.0.0");
-    assert!(!definition.mutation);
-    assert!(!definition.requires_idempotency);
-    assert!(!definition.requires_approval);
+    for definition in enrichment_definitions {
+        assert_eq!(definition.capability_version.as_str(), "1.0.0");
+        assert!(!definition.mutation);
+        assert!(!definition.requires_idempotency);
+        assert!(!definition.requires_approval);
+    }
 }
 
 #[test]
