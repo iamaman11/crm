@@ -3,7 +3,9 @@
 //! PostgreSQL composition for non-runtime governed suggestion review.
 
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityExecutionResult, CapabilityRequest, TransactionalCapabilityExecutor};
+use crm_capability_runtime::{
+    CapabilityExecutionResult, CapabilityRequest, TransactionalCapabilityExecutor,
+};
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
 use crm_customer_enrichment::{
     ApprovalRequirement, EnrichmentRequestId, MappingVersionId, ProviderProfileVersionId,
@@ -81,16 +83,11 @@ impl PostgresCustomerEnrichmentSuggestionReviewExecutor {
 
         let policy_request = suggestion_review_policy_request(&request, &suggestion, command.kind)?;
         let policy_decision = self.policy.evaluate(policy_request).await?;
-        let approval_requirement = resolve_policy(
-            &command.policy_version,
-            command.kind,
-            policy_decision,
-        )?;
+        let approval_requirement =
+            resolve_policy(&command.policy_version, command.kind, policy_decision)?;
 
-        let planner = CustomerEnrichmentSuggestionReviewPlanner::new(
-            suggestion,
-            approval_requirement,
-        );
+        let planner =
+            CustomerEnrichmentSuggestionReviewPlanner::new(suggestion, approval_requirement);
         let executor =
             PostgresTransactionalAggregateExecutor::new(self.store.clone(), Arc::new(planner));
         executor.execute(&definition, request).await
@@ -102,8 +99,9 @@ pub fn suggestion_review_policy_request(
     suggestion: &Suggestion,
     decision_kind: ReviewDecisionKind,
 ) -> Result<SuggestionReviewPolicyRequest, SdkError> {
-    let state: SuggestionPolicyState = serde_json::from_slice(&encode_suggestion_state(suggestion)?)
-        .map_err(|error| review_state_invalid(error.to_string()))?;
+    let state: SuggestionPolicyState =
+        serde_json::from_slice(&encode_suggestion_state(suggestion)?)
+            .map_err(|error| review_state_invalid(error.to_string()))?;
     if state.suggestion_id != *suggestion.suggestion_id()
         || state.target != *suggestion.target()
         || state.proposed_value_digest != *suggestion.proposed_value_digest()
