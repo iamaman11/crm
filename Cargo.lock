@@ -875,6 +875,7 @@ dependencies = [
 name = "crm-customer-enrichment-review-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-capability-ingress",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
@@ -883,8 +884,11 @@ dependencies = [
  "crm-customer-enrichment-review-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
+ "prost",
  "serde",
  "serde_json",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]

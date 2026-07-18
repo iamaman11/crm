@@ -1,11 +1,11 @@
 mod support;
 
+use crm_core_data::PostgresDataStore;
 use crm_customer_enrichment::{
     ApprovalRequirement, ReviewDecisionKind, SuggestionReviewPolicyDecision,
     SuggestionReviewPolicyPort, SuggestionReviewPolicyRequest,
 };
 use crm_customer_enrichment_review_composition::PostgresCustomerEnrichmentSuggestionReviewExecutor;
-use crm_core_data::PostgresDataStore;
 use crm_module_sdk::{PortFuture, SdkError};
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use prost::Message;
@@ -63,20 +63,17 @@ async fn postgres_review_is_policy_bound_atomic_and_replay_safe() {
         .await
         .expect("seed immutable suggestion");
     let request = accept_request(&suggestion);
-    let executor = PostgresCustomerEnrichmentSuggestionReviewExecutor::new(
-        store,
-        Arc::new(ExactAllowPolicy),
-    );
+    let executor =
+        PostgresCustomerEnrichmentSuggestionReviewExecutor::new(store, Arc::new(ExactAllowPolicy));
 
     let first = executor
         .execute(request.clone())
         .await
         .expect("commit policy-bound review");
     assert!(!first.replayed);
-    let first_output = wire::AcceptSuggestionResponse::decode(
-        first.output.as_ref().unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let first_output =
+        wire::AcceptSuggestionResponse::decode(first.output.as_ref().unwrap().bytes.as_slice())
+            .unwrap();
     assert_eq!(
         first_output.suggestion.unwrap().lifecycle_status,
         wire::SuggestionLifecycleStatus::Accepted as i32
@@ -97,10 +94,9 @@ async fn postgres_review_is_policy_bound_atomic_and_replay_safe() {
         .await
         .expect("replay exact policy-bound review");
     assert!(second.replayed);
-    let second_output = wire::AcceptSuggestionResponse::decode(
-        second.output.as_ref().unwrap().bytes.as_slice(),
-    )
-    .unwrap();
+    let second_output =
+        wire::AcceptSuggestionResponse::decode(second.output.as_ref().unwrap().bytes.as_slice())
+            .unwrap();
     assert_eq!(
         second_output.review_decision.unwrap().review_decision_ref,
         first_decision.review_decision_ref
