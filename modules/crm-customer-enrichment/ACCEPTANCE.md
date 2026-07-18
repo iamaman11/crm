@@ -2,6 +2,8 @@
 
 Foundation state: **In progress — not a production vertical slice**. These gates block any completion or readiness claim.
 
+Current production route inventory: **2 mutations + 2 permission-aware queries**; the remaining 13 published coordinates stay individually non-runtime.
+
 - [x] Freeze immutable module identity, owned evidence records and retain-on-uninstall semantics.
 - [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
 - [x] Publish compatible `crm.customer_enrichment.v1` Protobuf contracts, typed descriptor tests, generated manifest bindings and client descriptor hashes.
