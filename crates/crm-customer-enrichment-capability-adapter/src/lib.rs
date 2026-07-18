@@ -2,7 +2,7 @@
 
 //! Governed mutation adapters for `crm.customer-enrichment`.
 //!
-//! Immutable definition publication and request creation use the shared transactional
+//! Immutable definition publication and request lifecycle changes use the shared transactional
 //! record/idempotency/outbox/audit runtime. Provider network I/O, credentials and owner mutation
 //! remain outside this crate; governed Party and Consent pre-authorization is composed separately.
 
@@ -11,6 +11,7 @@ mod mapping_reference_planner;
 mod mapping_snapshot;
 mod provider_profile_planner;
 mod provider_profile_snapshot;
+mod request_cancel_planner;
 mod request_planner;
 mod request_reference_planner;
 mod request_snapshot;
@@ -28,6 +29,7 @@ pub use provider_profile_planner::{
     provider_profile_persisted_payload, provider_profile_record_ref, provider_profile_to_wire,
 };
 pub use provider_profile_snapshot::provider_profile_from_snapshot;
+pub use request_cancel_planner::*;
 pub use request_planner::*;
 pub use request_reference_planner::CustomerEnrichmentRequestReferencePlanner;
 pub use request_snapshot::enrichment_request_from_snapshot;
@@ -70,6 +72,7 @@ pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
     PUBLISH_PROVIDER_PROFILE_CAPABILITY,
     PUBLISH_MAPPING_CAPABILITY,
     CREATE_ENRICHMENT_REQUEST_CAPABILITY,
+    CANCEL_ENRICHMENT_REQUEST_CAPABILITY,
 ];
 
 /// Module-owned planner router. The public type name is retained so production composition does
@@ -94,6 +97,9 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentProviderProfileCapabili
             CREATE_ENRICHMENT_REQUEST_CAPABILITY => {
                 CustomerEnrichmentRequestReferencePlanner.target(definition, request)
             }
+            CANCEL_ENRICHMENT_REQUEST_CAPABILITY => {
+                CustomerEnrichmentRequestCancelPlanner.target(definition, request)
+            }
             _ => Err(unsupported_capability()),
         }
     }
@@ -115,6 +121,9 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentProviderProfileCapabili
             CREATE_ENRICHMENT_REQUEST_CAPABILITY => {
                 CustomerEnrichmentRequestReferencePlanner.plan(definition, request, current)
             }
+            CANCEL_ENRICHMENT_REQUEST_CAPABILITY => {
+                CustomerEnrichmentRequestCancelPlanner.plan(definition, request, current)
+            }
             _ => Err(unsupported_capability()),
         }
     }
@@ -125,6 +134,7 @@ pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
         provider_profile_capability_definition()?,
         mapping_capability_definition()?,
         request_create_capability_definition()?,
+        request_cancel_capability_definition()?,
     ])
 }
 
@@ -155,6 +165,15 @@ pub fn request_create_capability_definition() -> Result<CapabilityDefinition, Sd
         CREATE_ENRICHMENT_REQUEST_CAPABILITY,
         CREATE_ENRICHMENT_REQUEST_REQUEST_SCHEMA,
         CREATE_ENRICHMENT_REQUEST_RESPONSE_SCHEMA,
+        DataClass::Personal,
+    )
+}
+
+pub fn request_cancel_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    mutation_definition(
+        CANCEL_ENRICHMENT_REQUEST_CAPABILITY,
+        CANCEL_ENRICHMENT_REQUEST_REQUEST_SCHEMA,
+        CANCEL_ENRICHMENT_REQUEST_RESPONSE_SCHEMA,
         DataClass::Personal,
     )
 }
@@ -213,7 +232,7 @@ mod tests {
     #[test]
     fn implemented_mutation_catalog_is_exact() {
         let definitions = capability_definitions().unwrap();
-        assert_eq!(definitions.len(), 3);
+        assert_eq!(definitions.len(), 4);
         let ids = definitions
             .iter()
             .map(|definition| definition.capability_id.as_str())
@@ -236,18 +255,17 @@ mod tests {
     }
 
     #[test]
-    fn request_create_definition_is_personal_and_registered() {
-        let definition = request_create_capability_definition().unwrap();
-        assert_eq!(
-            definition.capability_id.as_str(),
-            CREATE_ENRICHMENT_REQUEST_CAPABILITY
-        );
-        assert_eq!(
-            definition.input_contract.allowed_data_classes,
-            vec![DataClass::Personal]
-        );
-        assert!(
-            IMPLEMENTED_MUTATION_CAPABILITY_IDS.contains(&CREATE_ENRICHMENT_REQUEST_CAPABILITY)
-        );
+    fn request_lifecycle_definitions_are_personal_and_registered() {
+        for definition in [
+            request_create_capability_definition().unwrap(),
+            request_cancel_capability_definition().unwrap(),
+        ] {
+            assert_eq!(
+                definition.input_contract.allowed_data_classes,
+                vec![DataClass::Personal]
+            );
+            assert!(IMPLEMENTED_MUTATION_CAPABILITY_IDS
+                .contains(&definition.capability_id.as_str()));
+        }
     }
 }
