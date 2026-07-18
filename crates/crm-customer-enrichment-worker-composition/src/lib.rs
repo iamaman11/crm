@@ -26,8 +26,8 @@ use crm_customer_enrichment_capability_adapter::{
 };
 use crm_module_sdk::{
     BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, DataClass, ErrorCategory,
-    IdempotencyKey, ModuleExecutionContext, PayloadEncoding, RequestId, SchemaVersion,
-    SdkError, TypedPayload,
+    IdempotencyKey, ModuleExecutionContext, PayloadEncoding, RequestId, SchemaVersion, SdkError,
+    TypedPayload,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use prost::Message;
