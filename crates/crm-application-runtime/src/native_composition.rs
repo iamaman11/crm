@@ -55,8 +55,7 @@ use crm_customer_data_operations_source_composition::{
     source_capability_definitions as customer_data_operations_source_capability_definitions,
 };
 use crm_customer_enrichment_capability_adapter::{
-    CustomerEnrichmentProviderProfileCapabilityPlanner,
-    CustomerEnrichmentRequestReferencePlanner,
+    CustomerEnrichmentProviderProfileCapabilityPlanner, CustomerEnrichmentRequestReferencePlanner,
     capability_definitions as customer_enrichment_capability_definitions,
 };
 use crm_customer_enrichment_capability_composition::CustomerEnrichmentCapabilityExecutor;
@@ -371,10 +370,8 @@ pub fn build_production_composition(
         store.clone(),
         CustomerEnrichmentProviderProfileCapabilityPlanner,
     );
-    let customer_enrichment_request = aggregate_executor(
-        store.clone(),
-        CustomerEnrichmentRequestReferencePlanner,
-    );
+    let customer_enrichment_request =
+        aggregate_executor(store.clone(), CustomerEnrichmentRequestReferencePlanner);
     let customer_enrichment_party_queries = Arc::new(PartyQueryAdapter::new(
         store.clone(),
         cursor(cursor_key)?,
