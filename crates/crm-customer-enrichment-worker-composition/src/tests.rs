@@ -1,5 +1,4 @@
 use super::*;
-use crm_capability_runtime::CapabilityExecutionResult;
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
     PartySnapshot, ProviderDispatchExpectation, ProviderProfileDraft, ProviderProfileVersion,
@@ -7,22 +6,22 @@ use crm_customer_enrichment::{
     prepare_provider_dispatch_attempt,
 };
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityVersion, CausationId, CorrelationId,
-    ExecutionContext, IdempotencyKey, PortFuture, RecordId, RequestId, SchemaVersion, TenantId,
-    TraceId,
+    ActorId, BusinessTransactionId, CapabilityVersion, CausationId, CorrelationId, ExecutionContext,
+    IdempotencyKey, ModuleExecutionContext, ModuleId, PortFuture, RecordId, RequestId, SchemaVersion,
+    TenantId, TraceId,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_enrichment::v1 as wire};
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ExecutorStage {
+enum Stage {
     Dispatch,
     Response,
 }
 
 #[derive(Clone)]
 struct FakeExecutor {
-    stage: ExecutorStage,
+    stage: Stage,
     provider_request: ProviderDispatchRequest,
     calls: Arc<Mutex<Vec<&'static str>>>,
     captured: Arc<Mutex<Vec<CapabilityRequest>>>,
@@ -39,8 +38,8 @@ impl TransactionalCapabilityExecutor for FakeExecutor {
             .lock()
             .expect("call log lock")
             .push(match self.stage {
-                ExecutorStage::Dispatch => "dispatch_commit",
-                ExecutorStage::Response => "response_commit",
+                Stage::Dispatch => "dispatch_commit",
+                Stage::Response => "response_commit",
             });
         self.captured
             .lock()
@@ -54,8 +53,8 @@ impl TransactionalCapabilityExecutor for FakeExecutor {
                 return Err(error);
             }
             let output = match stage {
-                ExecutorStage::Dispatch => dispatch_output(&provider_request)?,
-                ExecutorStage::Response => response_output(&provider_request, &request)?,
+                Stage::Dispatch => dispatch_output(&provider_request)?,
+                Stage::Response => response_output(&provider_request, &request)?,
             };
             Ok(CapabilityExecutionResult {
                 output: Some(output),
@@ -70,7 +69,6 @@ impl TransactionalCapabilityExecutor for FakeExecutor {
 struct FakeRegistry {
     calls: Arc<Mutex<Vec<&'static str>>>,
     response: SanitizedProviderResponse,
-    failure: Option<SdkError>,
 }
 
 impl ProviderAdapterRegistryPort for FakeRegistry {
@@ -79,24 +77,23 @@ impl ProviderAdapterRegistryPort for FakeRegistry {
         _request: ProviderDispatchRequest,
     ) -> PortFuture<'a, Result<SanitizedProviderResponse, SdkError>> {
         self.calls.lock().expect("call log lock").push("provider");
-        let result = self
-            .failure
-            .clone()
-            .map_or_else(|| Ok(self.response.clone()), Err);
-        Box::pin(async move { result })
+        let response = self.response.clone();
+        Box::pin(async move { Ok(response) })
     }
 }
 
 #[tokio::test]
 async fn worker_orders_dispatch_commit_provider_and_response_commit() {
     let fixture = fixture();
-    let worker = worker(&fixture, None, None, fixture.response.clone());
-    let result = worker.execute(fixture.item.clone()).await.unwrap();
+    let result = worker(&fixture, None, fixture.response.clone())
+        .execute(fixture.item.clone())
+        .await
+        .unwrap();
 
     assert!(!result.dispatch_replayed);
     assert!(!result.response_replayed);
     assert_eq!(
-        result.response.enrichment_request.as_ref().unwrap().status,
+        result.response.enrichment_request.unwrap().status,
         wire::EnrichmentRequestStatus::ResponseRecorded as i32
     );
     assert_eq!(
@@ -114,8 +111,11 @@ async fn provider_is_not_called_when_dispatch_commit_fails() {
         true,
         "The dispatch commit failed.",
     );
-    let worker = worker(&fixture, Some(failure), None, fixture.response.clone());
-    let error = worker.execute(fixture.item.clone()).await.unwrap_err();
+    let error = worker(&fixture, Some(failure), fixture.response.clone())
+        .execute(fixture.item.clone())
+        .await
+        .unwrap_err();
+
     assert_eq!(error.code, "TEST_DISPATCH_COMMIT_FAILED");
     assert_eq!(
         fixture.calls.lock().expect("call log lock").as_slice(),
@@ -124,12 +124,15 @@ async fn provider_is_not_called_when_dispatch_commit_fails() {
 }
 
 #[tokio::test]
-async fn response_commit_is_not_called_for_mismatched_provider_replay_key() {
+async fn mismatched_provider_replay_key_stops_before_response_commit() {
     let fixture = fixture();
     let mut response = fixture.response.clone();
     response.replay_key = "different-provider-attempt".to_owned();
-    let worker = worker(&fixture, None, None, response);
-    let error = worker.execute(fixture.item.clone()).await.unwrap_err();
+    let error = worker(&fixture, None, response)
+        .execute(fixture.item.clone())
+        .await
+        .unwrap_err();
+
     assert_eq!(
         error.code,
         "CUSTOMER_ENRICHMENT_PROVIDER_REPLAY_KEY_MISMATCH"
@@ -141,9 +144,9 @@ async fn response_commit_is_not_called_for_mismatched_provider_replay_key() {
 }
 
 #[tokio::test]
-async fn repeated_work_item_builds_the_same_response_commit_identity() {
+async fn repeated_work_item_builds_identical_response_commit_identity() {
     let fixture = fixture();
-    let worker = worker(&fixture, None, None, fixture.response.clone());
+    let worker = worker(&fixture, None, fixture.response.clone());
     worker.execute(fixture.item.clone()).await.unwrap();
     worker.execute(fixture.item.clone()).await.unwrap();
 
@@ -170,22 +173,7 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
-    let profile = ProviderProfileVersion::publish(ProviderProfileDraft {
-        provider_key: "company_registry".to_owned(),
-        adapter_kind: "registry_http_v1".to_owned(),
-        adapter_contract_version: "1.0.0".to_owned(),
-        supported_target_fields: vec![TargetField::PartyDisplayName],
-        purpose_codes: vec!["customer_profile_enrichment".to_owned()],
-        license_id: "Registry licence".to_owned(),
-        permitted_use_class: "customer_master_review".to_owned(),
-        residency_region: "eu".to_owned(),
-        retention_days: 30,
-        raw_payload_policy: RawPayloadPolicy::DigestOnly,
-        credential_handle_aliases: vec!["registry_primary".to_owned()],
-        effective_at_unix_ms: 1,
-        expires_at_unix_ms: Some(1_000),
-    })
-    .unwrap();
+    let profile = provider_profile();
     let mapping = MappingVersion::publish(MappingDraft {
         mapping_key: "party_display_name".to_owned(),
         provider_profile_version_id: profile.version_id().clone(),
@@ -235,7 +223,55 @@ fn fixture() -> Fixture {
         20,
     )
     .unwrap();
-    let dispatch_definition = request_dispatch_capability_definition().unwrap();
+    let dispatch_request = dispatch_capability_request(&domain, &provider_request);
+    let response = SanitizedProviderResponse {
+        replay_key: provider_request.provider_idempotency_key.clone(),
+        provider_correlation_id: Some("provider-correlation-1".to_owned()),
+        response_class: ProviderResponseClass::Success,
+        canonical_response_digest: [9; 32],
+        provider_observed_at_unix_ms: Some(21),
+        retrieved_at_unix_ms: 22,
+        metered_units: 3,
+        protected_evidence_reference: None,
+        safe_provider_code: Some("success".to_owned()),
+    };
+
+    Fixture {
+        item: ProviderDispatchWorkItem {
+            dispatch_request,
+            provider_request,
+        },
+        response,
+        calls: Arc::new(Mutex::new(Vec::new())),
+        dispatch_requests: Arc::new(Mutex::new(Vec::new())),
+        response_requests: Arc::new(Mutex::new(Vec::new())),
+    }
+}
+
+fn provider_profile() -> ProviderProfileVersion {
+    ProviderProfileVersion::publish(ProviderProfileDraft {
+        provider_key: "company_registry".to_owned(),
+        adapter_kind: "registry_http_v1".to_owned(),
+        adapter_contract_version: "1.0.0".to_owned(),
+        supported_target_fields: vec![TargetField::PartyDisplayName],
+        purpose_codes: vec!["customer_profile_enrichment".to_owned()],
+        license_id: "Registry licence".to_owned(),
+        permitted_use_class: "customer_master_review".to_owned(),
+        residency_region: "eu".to_owned(),
+        retention_days: 30,
+        raw_payload_policy: RawPayloadPolicy::DigestOnly,
+        credential_handle_aliases: vec!["registry_primary".to_owned()],
+        effective_at_unix_ms: 1,
+        expires_at_unix_ms: Some(1_000),
+    })
+    .unwrap()
+}
+
+fn dispatch_capability_request(
+    domain: &EnrichmentRequest,
+    provider: &ProviderDispatchRequest,
+) -> CapabilityRequest {
+    let definition = request_dispatch_capability_definition().unwrap();
     let input = support::protobuf_payload(
         MODULE_ID,
         DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA,
@@ -250,17 +286,17 @@ fn fixture() -> Fixture {
     )
     .unwrap();
     let input_hash = semantic_input_hash(&input);
-    let dispatch_request = CapabilityRequest {
+    CapabilityRequest {
         context: ModuleExecutionContext {
             module_id: ModuleId::try_new(MODULE_ID).unwrap(),
             execution: ExecutionContext {
-                tenant_id: TenantId::try_new("tenant-1").unwrap(),
-                actor_id: ActorId::try_new("worker-actor").unwrap(),
+                tenant_id: provider.tenant_id.clone(),
+                actor_id: provider.actor_id.clone(),
                 request_id: RequestId::try_new("dispatch-request-1").unwrap(),
                 correlation_id: CorrelationId::try_new("correlation-1").unwrap(),
                 causation_id: CausationId::try_new("causation-1").unwrap(),
                 trace_id: TraceId::try_new("trace-1").unwrap(),
-                capability_id: dispatch_definition.capability_id.clone(),
+                capability_id: definition.capability_id.clone(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
                 idempotency_key: IdempotencyKey::try_new("dispatch-idempotency-1").unwrap(),
                 business_transaction_id: BusinessTransactionId::try_new("dispatch-tx-1").unwrap(),
@@ -271,54 +307,31 @@ fn fixture() -> Fixture {
         input,
         input_hash,
         approval: None,
-    };
-    let response = SanitizedProviderResponse {
-        replay_key: provider_request.provider_idempotency_key.clone(),
-        provider_correlation_id: Some("provider-correlation-1".to_owned()),
-        response_class: ProviderResponseClass::Success,
-        canonical_response_digest: [9; 32],
-        provider_observed_at_unix_ms: Some(21),
-        retrieved_at_unix_ms: 22,
-        metered_units: 3,
-        protected_evidence_reference: None,
-        safe_provider_code: Some("success".to_owned()),
-    };
-    Fixture {
-        item: ProviderDispatchWorkItem {
-            dispatch_request,
-            provider_request,
-        },
-        response,
-        calls: Arc::new(Mutex::new(Vec::new())),
-        dispatch_requests: Arc::new(Mutex::new(Vec::new())),
-        response_requests: Arc::new(Mutex::new(Vec::new())),
     }
 }
 
 fn worker(
     fixture: &Fixture,
     dispatch_failure: Option<SdkError>,
-    response_failure: Option<SdkError>,
     response: SanitizedProviderResponse,
 ) -> CustomerEnrichmentProviderWorker {
     let dispatch_executor = Arc::new(FakeExecutor {
-        stage: ExecutorStage::Dispatch,
+        stage: Stage::Dispatch,
         provider_request: fixture.item.provider_request.clone(),
         calls: fixture.calls.clone(),
         captured: fixture.dispatch_requests.clone(),
         failure: dispatch_failure,
     });
     let response_executor = Arc::new(FakeExecutor {
-        stage: ExecutorStage::Response,
+        stage: Stage::Response,
         provider_request: fixture.item.provider_request.clone(),
         calls: fixture.calls.clone(),
         captured: fixture.response_requests.clone(),
-        failure: response_failure,
+        failure: None,
     });
     let registry = Arc::new(FakeRegistry {
         calls: fixture.calls.clone(),
         response,
-        failure: None,
     });
     CustomerEnrichmentProviderWorker::try_new(dispatch_executor, response_executor, registry)
         .unwrap()
