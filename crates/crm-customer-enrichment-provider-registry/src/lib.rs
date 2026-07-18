@@ -67,7 +67,7 @@ impl fmt::Debug for ProviderAdapterRegistration {
             .field("coordinate", &self.coordinate)
             .field(
                 "state",
-                &match self.entry {
+                &match &self.entry {
                     RegistryEntry::Enabled(_) => "enabled",
                     RegistryEntry::Disabled => "disabled",
                 },
@@ -221,7 +221,7 @@ mod tests {
             ProviderAdapterRegistration::enabled(coordinate("1.0.0"), NoopAdapter),
         ])
         .unwrap();
-        let error = registry.resolve_exact(&coordinate("1.1.0")).unwrap_err();
+        let error = registry.resolve_exact(&coordinate("1.1.0")).err().unwrap();
         assert_eq!(
             error.code,
             "CUSTOMER_ENRICHMENT_PROVIDER_ADAPTER_UNAVAILABLE"
@@ -235,7 +235,7 @@ mod tests {
             ProviderAdapterRegistration::disabled(exact.clone()),
         ])
         .unwrap();
-        let error = registry.resolve_exact(&exact).unwrap_err();
+        let error = registry.resolve_exact(&exact).err().unwrap();
         assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PROVIDER_ADAPTER_DISABLED");
     }
 
