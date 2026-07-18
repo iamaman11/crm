@@ -1,0 +1,158 @@
+name: Customer Enrichment Worker Process Runtime CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/customer_enrichment/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-plan-support/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-enrichment-capability-adapter/**"
+      - "crates/crm-customer-enrichment-provider-registry/**"
+      - "crates/crm-customer-enrichment-worker-composition/**"
+      - "modules/crm-customer-enrichment/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0016_customer_enrichment_worker.sql"
+      - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - ".github/workflows/customer-enrichment-worker-process-runtime.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/customer_enrichment/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-plan-support/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-enrichment-capability-adapter/**"
+      - "crates/crm-customer-enrichment-provider-registry/**"
+      - "crates/crm-customer-enrichment-worker-composition/**"
+      - "modules/crm-customer-enrichment/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0016_customer_enrichment_worker.sql"
+      - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - ".github/workflows/customer-enrichment-worker-process-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  customer-enrichment-worker-process-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_enrichment_worker_process_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5442:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_enrichment_worker_process_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5442
+      PGDATABASE: crm_customer_enrichment_worker_process_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Prepare fresh Customer Enrichment worker database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify durable Customer Enrichment provider worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-customer-enrichment-worker-composition \
+            --features postgres-integration \
+            --test postgres_worker_process \
+            -- --nocapture 2>&1 | tee database/customer-enrichment-worker-process-runtime.log
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          {
+            echo "=== Customer Enrichment records ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, owner_module_id, record_type, record_id, version,
+                     created_at, updated_at, deleted_at
+                FROM crm.records
+               WHERE owner_module_id = 'crm.customer-enrichment'
+               ORDER BY tenant_id, record_type, record_id;
+            "
+            echo "=== Customer Enrichment outbox events ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, event_type, aggregate_type, aggregate_id,
+                     aggregate_version, occurred_at
+                FROM crm.outbox_events
+               WHERE event_type LIKE 'customer_enrichment.%'
+               ORDER BY tenant_id, occurred_at, aggregate_id;
+            "
+            echo "=== Customer Enrichment audits ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, audit_sequence, audit_record_id,
+                     business_transaction_id, actor_id, capability_id,
+                     capability_version, canonicalization_profile, occurred_at
+                FROM crm.audit_records
+               WHERE capability_id LIKE 'customer_enrichment.%'
+               ORDER BY tenant_id, audit_sequence;
+            "
+            echo "=== Customer Enrichment idempotency ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, idempotency_scope, idempotency_key, status,
+                     business_transaction_id, created_at, completed_at
+                FROM crm.idempotency_records
+               WHERE idempotency_scope LIKE 'customer_enrichment.%@1.0.0'
+               ORDER BY tenant_id, idempotency_scope, idempotency_key;
+            "
+            echo "=== Customer Enrichment business transactions ==="
+            psql --no-psqlrc --pset pager=off --command "
+              SELECT tenant_id, business_transaction_id, actor_id, request_id,
+                     capability_id, capability_version, expected_outbox_events,
+                     expected_audit_records, expected_idempotency_records, committed_at
+                FROM crm.business_transactions
+               WHERE capability_id LIKE 'customer_enrichment.%'
+               ORDER BY tenant_id, committed_at, business_transaction_id;
+            "
+          } > database/customer-enrichment-worker-process-runtime-state.log 2>&1
+
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/customer-enrichment-worker-process-runtime-postgres.log 2>&1
+          else
+            echo "PostgreSQL service container was not found." > database/customer-enrichment-worker-process-runtime-postgres.log
+            docker ps -a >> database/customer-enrichment-worker-process-runtime-postgres.log 2>&1
+          fi
+      - name: Upload Customer Enrichment worker diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-enrichment-worker-process-runtime-diagnostics
+          path: |
+            database/customer-enrichment-worker-process-runtime.log
+            database/customer-enrichment-worker-process-runtime-state.log
+            database/customer-enrichment-worker-process-runtime-postgres.log
+            crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs
+            database/tests/0016_customer_enrichment_worker.sql
+            scripts/prepare_customer_enrichment_worker_process_database.sh
+          if-no-files-found: error
+          retention-days: 7
