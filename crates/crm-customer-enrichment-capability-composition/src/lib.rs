@@ -9,20 +9,21 @@
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest, TransactionalCapabilityExecutor,
+    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
+    TransactionalCapabilityExecutor,
 };
 use crm_consents_capability_adapter::MODULE_ID as CONSENTS_MODULE_ID;
 use crm_consents_query_adapter::{
     ConsentQueryAdapter, GET_CAPABILITY as CONSENT_GET_CAPABILITY,
-    GET_REQUEST_SCHEMA as CONSENT_GET_REQUEST_SCHEMA, query_capability_definition as consent_query_definition,
+    GET_REQUEST_SCHEMA as CONSENT_GET_REQUEST_SCHEMA,
+    query_capability_definition as consent_query_definition,
 };
 use crm_core_data::{PostgresDataStore, RecordGetQuery};
 use crm_customer_enrichment::{MappingVersion, ProviderProfileVersion, TargetField};
 use crm_customer_enrichment_capability_adapter::{
-    CREATE_ENRICHMENT_REQUEST_CAPABILITY, CustomerEnrichmentRequestCreateCapabilityPlanner,
-    MAPPING_VERSION_RECORD_TYPE, MODULE_ID, PROVIDER_PROFILE_VERSION_RECORD_TYPE,
-    enrichment_request_from_create_request, enrichment_request_to_wire, mapping_from_snapshot,
-    provider_profile_from_snapshot,
+    CREATE_ENRICHMENT_REQUEST_CAPABILITY, MAPPING_VERSION_RECORD_TYPE, MODULE_ID,
+    PROVIDER_PROFILE_VERSION_RECORD_TYPE, enrichment_request_from_create_request,
+    enrichment_request_to_wire, mapping_from_snapshot, provider_profile_from_snapshot,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PortFuture, RecordId,
@@ -41,14 +42,16 @@ use prost::Message;
 use std::fmt;
 use std::sync::Arc;
 
-pub const REQUEST_POLICY_VERSION: &str = "crm.customer-enrichment.request-policy/v1";
+pub const REQUEST_POLICY_VERSION: &str = "request-policy-v1";
 const CONSENT_LEGAL_BASIS_CODE: &str = "consent";
+const LEGITIMATE_INTEREST_LEGAL_BASIS_CODE: &str = "legitimate_interest";
 const DISPLAY_NAME_FIELD: &str = "display_name";
 
 #[derive(Clone)]
 pub struct CustomerEnrichmentCapabilityExecutor {
     store: PostgresDataStore,
     fallback: Arc<dyn TransactionalCapabilityExecutor>,
+    request_create: Arc<dyn TransactionalCapabilityExecutor>,
     party_queries: Arc<PartyQueryAdapter>,
     consent_queries: Arc<ConsentQueryAdapter>,
     query_authorizer: Arc<dyn QueryAuthorizer>,
@@ -58,6 +61,7 @@ impl CustomerEnrichmentCapabilityExecutor {
     pub fn new(
         store: PostgresDataStore,
         fallback: Arc<dyn TransactionalCapabilityExecutor>,
+        request_create: Arc<dyn TransactionalCapabilityExecutor>,
         party_queries: Arc<PartyQueryAdapter>,
         consent_queries: Arc<ConsentQueryAdapter>,
         query_authorizer: Arc<dyn QueryAuthorizer>,
@@ -65,6 +69,7 @@ impl CustomerEnrichmentCapabilityExecutor {
         Self {
             store,
             fallback,
+            request_create,
             party_queries,
             consent_queries,
             query_authorizer,
@@ -96,7 +101,7 @@ impl CustomerEnrichmentCapabilityExecutor {
         .await?;
         self.validate_consent(&request, policy, &party_ref.party_id)
             .await?;
-        self.fallback.execute(definition, request).await
+        self.request_create.execute(definition, request).await
     }
 
     async fn load_and_validate_definitions(
@@ -165,6 +170,15 @@ impl CustomerEnrichmentCapabilityExecutor {
                 "The supplied enrichment policy version is not active.",
             ));
         }
+        if !matches!(
+            policy.legal_basis_code.as_str(),
+            CONSENT_LEGAL_BASIS_CODE | LEGITIMATE_INTEREST_LEGAL_BASIS_CODE
+        ) {
+            return Err(policy_denied(
+                "legal_basis_not_permitted",
+                "The supplied legal basis is not permitted by the active enrichment policy.",
+            ));
+        }
         if !profile
             .purpose_codes()
             .iter()
@@ -183,7 +197,7 @@ impl CustomerEnrichmentCapabilityExecutor {
                 "request fields do not match the immutable mapping target",
             ));
         }
-        let created_at = nonnegative_u64(request.created_at_unix_ms, "created_at_unix_ms")?;
+        let created_at = nonnegative_u64(request.created_at_unix_ms)?;
         if !profile.is_effective_at(created_at) {
             return Err(policy_denied(
                 "provider_profile_not_effective",
@@ -274,9 +288,9 @@ impl CustomerEnrichmentCapabilityExecutor {
             result.output.bytes.as_slice(),
         )
         .map_err(|error| contract_invalid().with_internal_reference(error.to_string()))?;
-        let authorization = response.authorization.ok_or_else(|| {
-            consent_denied("consent_authorization_missing")
-        })?;
+        let authorization = response
+            .authorization
+            .ok_or_else(|| consent_denied("consent_authorization_missing"))?;
         validate_consent_authorization(
             &authorization,
             authorization_id,
@@ -293,6 +307,7 @@ impl fmt::Debug for CustomerEnrichmentCapabilityExecutor {
             .debug_struct("CustomerEnrichmentCapabilityExecutor")
             .field("store", &self.store)
             .field("fallback", &"dyn TransactionalCapabilityExecutor")
+            .field("request_create", &"dyn TransactionalCapabilityExecutor")
             .field("party_queries", &"PartyQueryAdapter")
             .field("consent_queries", &"ConsentQueryAdapter")
             .field("query_authorizer", &"dyn QueryAuthorizer")
@@ -312,27 +327,6 @@ impl TransactionalCapabilityExecutor for CustomerEnrichmentCapabilityExecutor {
             self.fallback.execute(definition, request)
         }
     }
-}
-
-pub fn request_create_executor(
-    store: PostgresDataStore,
-    party_queries: Arc<PartyQueryAdapter>,
-    consent_queries: Arc<ConsentQueryAdapter>,
-    query_authorizer: Arc<dyn QueryAuthorizer>,
-) -> Arc<dyn TransactionalCapabilityExecutor> {
-    let fallback: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        crm_core_data::PostgresTransactionalAggregateExecutor::new(
-            store.clone(),
-            Arc::new(CustomerEnrichmentRequestCreateCapabilityPlanner),
-        ),
-    );
-    Arc::new(CustomerEnrichmentCapabilityExecutor::new(
-        store,
-        fallback,
-        party_queries,
-        consent_queries,
-        query_authorizer,
-    ))
 }
 
 async fn authorize_query(
@@ -361,12 +355,11 @@ fn consent_get_query_request(
     request: &CapabilityRequest,
     authorization_id: &str,
 ) -> Result<QueryRequest, SdkError> {
+    let authorization_id = RecordId::try_new(authorization_id)
+        .map_err(|_| consent_denied("consent_reference_invalid"))?;
     let command = consent_wire::GetConsentAuthorizationRequest {
         authorization_ref: Some(consent_wire::ConsentAuthorizationRef {
-            authorization_id: RecordId::try_new(authorization_id)
-                .map_err(|_| consent_denied("consent_reference_invalid"))?
-                .as_str()
-                .to_owned(),
+            authorization_id: authorization_id.as_str().to_owned(),
         }),
     };
     let input = support::protobuf_payload(
@@ -397,7 +390,7 @@ fn consent_get_query_request(
         input,
         input_hash: normalized_filter_hash([(
             "authorization_id",
-            authorization_id.as_bytes(),
+            authorization_id.as_str().as_bytes(),
         )]),
     })
 }
@@ -451,10 +444,10 @@ fn record_type(value: &str) -> Result<RecordType, SdkError> {
     RecordType::try_new(value).map_err(configuration_error)
 }
 
-fn nonnegative_u64(value: i64, field: &'static str) -> Result<u64, SdkError> {
+fn nonnegative_u64(value: i64) -> Result<u64, SdkError> {
     u64::try_from(value).map_err(|_| {
         SdkError::invalid_argument(
-            format!("customer_enrichment.request.{field}"),
+            "customer_enrichment.request.created_at_unix_ms",
             "timestamp must not be negative",
         )
     })
