@@ -2,9 +2,9 @@
 
 /// Strict immutable provider-profile and mapping persisted-state codecs.
 pub mod definition_persistence;
+pub mod definitions;
 /// Deterministic pre-I/O provider dispatch and crash-recovery protocol.
 pub mod dispatch;
-pub mod definitions;
 pub mod lifecycle;
 /// Strict bounded canonical persisted-state codecs for governed enrichment evidence.
 #[allow(dead_code, unused_imports)]

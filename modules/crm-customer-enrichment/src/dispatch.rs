@@ -298,7 +298,12 @@ mod tests {
     };
     use crm_module_sdk::{IdempotencyKey, TenantId};
 
-    fn fixture() -> (EnrichmentRequest, ProviderProfileVersion, PartySnapshot, ActorId) {
+    fn fixture() -> (
+        EnrichmentRequest,
+        ProviderProfileVersion,
+        PartySnapshot,
+        ActorId,
+    ) {
         let profile = ProviderProfileVersion::publish(ProviderProfileDraft {
             provider_key: "company_registry".to_owned(),
             adapter_kind: "registry_http_v1".to_owned(),
@@ -372,25 +377,23 @@ mod tests {
         .unwrap();
         assert_eq!(request.status(), EnrichmentRequestStatus::Dispatched);
         assert_eq!(prepared.retry_generation, 0);
-        assert_eq!(prepared.adapter_coordinate.adapter_kind(), "registry_http_v1");
+        assert_eq!(
+            prepared.adapter_coordinate.adapter_kind(),
+            "registry_http_v1"
+        );
         assert_eq!(
             prepared.adapter_coordinate.adapter_contract_version(),
             "1.0.0"
         );
 
-        let recovered = recover_provider_dispatch_attempt(
-            &request,
-            0,
-            &profile,
-            &party,
-            actor,
-            21,
-        )
-        .unwrap();
+        let recovered =
+            recover_provider_dispatch_attempt(&request, 0, &profile, &party, actor, 21).unwrap();
         assert_eq!(prepared, recovered);
-        assert!(prepared
-            .provider_idempotency_key
-            .starts_with("enrichment-dispatch-"));
+        assert!(
+            prepared
+                .provider_idempotency_key
+                .starts_with("enrichment-dispatch-")
+        );
     }
 
     #[test]
@@ -437,18 +440,20 @@ mod tests {
         })
         .unwrap();
         let original = request.clone();
-        assert!(prepare_provider_dispatch_attempt(
-            &mut request,
-            ProviderDispatchExpectation {
-                status: EnrichmentRequestStatus::Created,
-                retry_generation: 0,
-            },
-            &other_profile,
-            &party,
-            actor,
-            20,
-        )
-        .is_err());
+        assert!(
+            prepare_provider_dispatch_attempt(
+                &mut request,
+                ProviderDispatchExpectation {
+                    status: EnrichmentRequestStatus::Created,
+                    retry_generation: 0,
+                },
+                &other_profile,
+                &party,
+                actor,
+                20,
+            )
+            .is_err()
+        );
         assert_eq!(request, original);
     }
 
@@ -457,18 +462,20 @@ mod tests {
         let (mut request, profile, mut party, actor) = fixture();
         party.resource_version = 8;
         let original = request.clone();
-        assert!(prepare_provider_dispatch_attempt(
-            &mut request,
-            ProviderDispatchExpectation {
-                status: EnrichmentRequestStatus::Created,
-                retry_generation: 0,
-            },
-            &profile,
-            &party,
-            actor,
-            20,
-        )
-        .is_err());
+        assert!(
+            prepare_provider_dispatch_attempt(
+                &mut request,
+                ProviderDispatchExpectation {
+                    status: EnrichmentRequestStatus::Created,
+                    retry_generation: 0,
+                },
+                &profile,
+                &party,
+                actor,
+                20,
+            )
+            .is_err()
+        );
         assert_eq!(request, original);
     }
 
@@ -476,18 +483,20 @@ mod tests {
     fn closed_dispatch_window_fails_before_request_mutation() {
         let (mut request, profile, party, actor) = fixture();
         let original = request.clone();
-        assert!(prepare_provider_dispatch_attempt(
-            &mut request,
-            ProviderDispatchExpectation {
-                status: EnrichmentRequestStatus::Created,
-                retry_generation: 0,
-            },
-            &profile,
-            &party,
-            actor,
-            100,
-        )
-        .is_err());
+        assert!(
+            prepare_provider_dispatch_attempt(
+                &mut request,
+                ProviderDispatchExpectation {
+                    status: EnrichmentRequestStatus::Created,
+                    retry_generation: 0,
+                },
+                &profile,
+                &party,
+                actor,
+                100,
+            )
+            .is_err()
+        );
         assert_eq!(request, original);
     }
 }
