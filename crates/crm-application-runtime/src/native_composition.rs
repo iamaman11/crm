@@ -56,8 +56,10 @@ use crm_customer_data_operations_source_composition::{
 };
 use crm_customer_enrichment_capability_adapter::{
     CustomerEnrichmentProviderProfileCapabilityPlanner,
+    CustomerEnrichmentRequestReferencePlanner,
     capability_definitions as customer_enrichment_capability_definitions,
 };
+use crm_customer_enrichment_capability_composition::CustomerEnrichmentCapabilityExecutor;
 use crm_customer_enrichment_query_adapter::{
     CustomerEnrichmentQueryAdapter,
     query_capability_definitions as customer_enrichment_query_capability_definitions,
@@ -365,10 +367,33 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let customer_enrichment_executor = aggregate_executor(
+    let customer_enrichment_fallback = aggregate_executor(
         store.clone(),
         CustomerEnrichmentProviderProfileCapabilityPlanner,
     );
+    let customer_enrichment_request = aggregate_executor(
+        store.clone(),
+        CustomerEnrichmentRequestReferencePlanner,
+    );
+    let customer_enrichment_party_queries = Arc::new(PartyQueryAdapter::new(
+        store.clone(),
+        cursor(cursor_key)?,
+        visibility_authorizer.clone(),
+    )?);
+    let customer_enrichment_consent_queries = Arc::new(ConsentQueryAdapter::new(
+        store.clone(),
+        cursor(cursor_key)?,
+        visibility_authorizer.clone(),
+    )?);
+    let customer_enrichment_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(CustomerEnrichmentCapabilityExecutor::new(
+            store.clone(),
+            customer_enrichment_fallback,
+            customer_enrichment_request,
+            customer_enrichment_party_queries,
+            customer_enrichment_consent_queries,
+            query_authorizer.clone(),
+        ));
     add_activated_mutations(
         &mut contributions,
         customer_enrichment_capability_definitions()?,
