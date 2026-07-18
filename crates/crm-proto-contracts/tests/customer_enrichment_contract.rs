@@ -144,6 +144,7 @@ fn internal_response_contract_contains_only_bounded_canonical_evidence() {
         metered_units: 3,
         protected_evidence_reference: Some("governed-evidence-42".to_owned()),
         safe_provider_code: Some("success".to_owned()),
+        expected_retry_generation: 0,
     };
 
     assert_eq!(
