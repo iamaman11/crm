@@ -14,7 +14,8 @@ use crm_customer_enrichment::{
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_customer_enrichment_review_adapter::{
-    REJECT_SUGGESTION_CAPABILITY, REJECT_SUGGESTION_REQUEST_SCHEMA,
+    ACCEPT_SUGGESTION_CAPABILITY, ACCEPT_SUGGESTION_REQUEST_SCHEMA, REJECT_SUGGESTION_CAPABILITY,
+    REJECT_SUGGESTION_REQUEST_SCHEMA, accept_suggestion_capability_definition,
     reject_suggestion_capability_definition,
 };
 use crm_customer_enrichment_review_composition::PostgresCustomerEnrichmentSuggestionReviewExecutor;
@@ -31,18 +32,19 @@ use std::sync::Arc;
 
 pub const PRODUCTION_REVIEW_POLICY_VERSION: &str = "review-policy-v1";
 const DISPLAY_NAME_FIELD: &str = "display_name";
+const MAX_APPROVAL_REFERENCE_BYTES: usize = 240;
 
-/// Returns the exact public mutation inventory after promoting suggestion rejection.
+/// Returns the exact public mutation inventory after promoting suggestion review.
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = native_composition::application_mutation_definitions()?;
     definitions.push(reject_suggestion_capability_definition()?);
+    definitions.push(accept_suggestion_capability_definition()?);
     Ok(definitions)
 }
 
 pub use suggestion_reads::application_query_definitions;
 
-/// Extends the accepted suggestion read surface with exactly one public review mutation.
-/// Acceptance remains non-runtime until its separate promotion slice is complete.
+/// Extends the accepted suggestion read surface with exact accept and reject mutations.
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
@@ -52,7 +54,7 @@ pub fn build_production_composition(
         dependencies.visibility_authorizer.clone(),
     )?);
     let review_policy: Arc<dyn SuggestionReviewPolicyPort> = Arc::new(
-        ProductionSuggestionRejectPolicy::new(party_queries, dependencies.query_authorizer.clone()),
+        ProductionSuggestionReviewPolicy::new(party_queries, dependencies.query_authorizer.clone()),
     );
     let review_executor = Arc::new(PostgresCustomerEnrichmentSuggestionReviewExecutor::new(
         dependencies.store.clone(),
@@ -87,13 +89,16 @@ pub fn build_production_composition(
     let validator: Arc<dyn CapabilitySemanticValidator> =
         Arc::new(ActivationGatedMutationValidator::new(
             dependencies.activation,
-            Arc::new(RejectSuggestionSemanticValidator),
+            Arc::new(ReviewSuggestionSemanticValidator),
         ));
     let executor: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(RejectSuggestionExecutor::new(review_executor));
+        Arc::new(ReviewSuggestionExecutor::new(review_executor));
     contributions
         .add_mutations(
-            [reject_suggestion_capability_definition()?],
+            [
+                reject_suggestion_capability_definition()?,
+                accept_suggestion_capability_definition()?,
+            ],
             validator,
             executor,
         )
@@ -108,87 +113,141 @@ pub fn build_production_composition(
 }
 
 #[derive(Debug, Clone, Copy)]
-struct RejectSuggestionSemanticValidator;
+struct ReviewSuggestionSemanticValidator;
 
-impl CapabilitySemanticValidator for RejectSuggestionSemanticValidator {
+impl CapabilitySemanticValidator for ReviewSuggestionSemanticValidator {
     fn validate<'a>(
         &'a self,
         definition: &'a CapabilityDefinition,
         request: &'a CapabilityRequest,
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
-            if definition.capability_id.as_str() != REJECT_SUGGESTION_CAPABILITY
-                || definition.owner_module_id.as_str() != MODULE_ID
+            if definition.owner_module_id.as_str() != MODULE_ID
                 || request.context.execution.capability_id != definition.capability_id
                 || request.context.execution.capability_version != definition.capability_version
             {
-                return Err(reject_input_invalid(
-                    "request context does not match the exact rejection capability",
+                return Err(review_input_invalid(
+                    "request context does not match the exact suggestion review capability",
                 ));
             }
-            let command: wire::RejectSuggestionRequest = support::decode_request_with_data_class(
-                request,
-                MODULE_ID,
-                REJECT_SUGGESTION_REQUEST_SCHEMA,
-                DataClass::Personal,
-            )?;
-            let suggestion_id = command
-                .suggestion_ref
-                .ok_or_else(|| {
-                    SdkError::invalid_argument(
-                        "customer_enrichment.suggestion_ref",
-                        "Suggestion reference is required",
+            match definition.capability_id.as_str() {
+                ACCEPT_SUGGESTION_CAPABILITY => {
+                    let command: wire::AcceptSuggestionRequest =
+                        support::decode_request_with_data_class(
+                            request,
+                            MODULE_ID,
+                            ACCEPT_SUGGESTION_REQUEST_SCHEMA,
+                            DataClass::Personal,
+                        )?;
+                    validate_review_binding(
+                        command.suggestion_ref,
+                        command.expected_party_resource_version,
+                        command.expected_proposed_value_digest,
+                        &command.policy_version,
+                        &command.safe_reason_code,
+                    )?;
+                    if let Some(reference) = command.approval_evidence_reference {
+                        validate_reference(
+                            &reference,
+                            MAX_APPROVAL_REFERENCE_BYTES,
+                            "customer_enrichment.approval_evidence_reference",
+                        )?;
+                    }
+                    if command
+                        .review_expires_at_unix_ms
+                        .is_some_and(|value| value < 0)
+                    {
+                        return Err(SdkError::invalid_argument(
+                            "customer_enrichment.review_expires_at_unix_ms",
+                            "Review expiry must not be negative",
+                        ));
+                    }
+                    Ok(())
+                }
+                REJECT_SUGGESTION_CAPABILITY => {
+                    let command: wire::RejectSuggestionRequest =
+                        support::decode_request_with_data_class(
+                            request,
+                            MODULE_ID,
+                            REJECT_SUGGESTION_REQUEST_SCHEMA,
+                            DataClass::Personal,
+                        )?;
+                    validate_review_binding(
+                        command.suggestion_ref,
+                        command.expected_party_resource_version,
+                        command.expected_proposed_value_digest,
+                        &command.policy_version,
+                        &command.safe_reason_code,
                     )
-                })?
-                .suggestion_id;
-            RecordId::try_new(suggestion_id).map_err(|error| {
-                SdkError::invalid_argument(
-                    "customer_enrichment.suggestion_ref.suggestion_id",
-                    error.to_string(),
-                )
-            })?;
-            if command.expected_party_resource_version <= 0 {
-                return Err(SdkError::invalid_argument(
-                    "customer_enrichment.expected_party_resource_version",
-                    "Expected Party resource version must be greater than zero",
-                ));
+                }
+                _ => Err(review_input_invalid(
+                    "only exact suggestion acceptance and rejection are configured",
+                )),
             }
-            if command.expected_proposed_value_digest.len() != 32 {
-                return Err(SdkError::invalid_argument(
-                    "customer_enrichment.expected_proposed_value_digest",
-                    "Expected proposed-value digest must contain exactly 32 bytes",
-                ));
-            }
-            validate_token(
-                &command.policy_version,
-                80,
-                "customer_enrichment.policy_version",
-            )?;
-            validate_token(
-                &command.safe_reason_code,
-                80,
-                "customer_enrichment.safe_reason_code",
-            )?;
-            Ok(())
         })
     }
 }
 
+fn validate_review_binding(
+    suggestion_ref: Option<wire::SuggestionRef>,
+    expected_party_resource_version: i64,
+    expected_proposed_value_digest: Vec<u8>,
+    policy_version: &str,
+    safe_reason_code: &str,
+) -> Result<(), SdkError> {
+    let suggestion_id = suggestion_ref
+        .ok_or_else(|| {
+            SdkError::invalid_argument(
+                "customer_enrichment.suggestion_ref",
+                "Suggestion reference is required",
+            )
+        })?
+        .suggestion_id;
+    RecordId::try_new(suggestion_id).map_err(|error| {
+        SdkError::invalid_argument(
+            "customer_enrichment.suggestion_ref.suggestion_id",
+            error.to_string(),
+        )
+    })?;
+    if expected_party_resource_version <= 0 {
+        return Err(SdkError::invalid_argument(
+            "customer_enrichment.expected_party_resource_version",
+            "Expected Party resource version must be greater than zero",
+        ));
+    }
+    if expected_proposed_value_digest.len() != 32 {
+        return Err(SdkError::invalid_argument(
+            "customer_enrichment.expected_proposed_value_digest",
+            "Expected proposed-value digest must contain exactly 32 bytes",
+        ));
+    }
+    validate_token(
+        policy_version,
+        80,
+        "customer_enrichment.policy_version",
+    )?;
+    validate_token(
+        safe_reason_code,
+        80,
+        "customer_enrichment.safe_reason_code",
+    )
+}
+
 #[derive(Clone)]
-struct RejectSuggestionExecutor {
+struct ReviewSuggestionExecutor {
     inner: Arc<PostgresCustomerEnrichmentSuggestionReviewExecutor>,
 }
 
-impl RejectSuggestionExecutor {
+impl ReviewSuggestionExecutor {
     fn new(inner: Arc<PostgresCustomerEnrichmentSuggestionReviewExecutor>) -> Self {
         Self { inner }
     }
 }
 
-impl fmt::Debug for RejectSuggestionExecutor {
+impl fmt::Debug for ReviewSuggestionExecutor {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("RejectSuggestionExecutor")
+            .debug_struct("ReviewSuggestionExecutor")
             .field(
                 "inner",
                 &"PostgresCustomerEnrichmentSuggestionReviewExecutor",
@@ -197,18 +256,20 @@ impl fmt::Debug for RejectSuggestionExecutor {
     }
 }
 
-impl TransactionalCapabilityExecutor for RejectSuggestionExecutor {
+impl TransactionalCapabilityExecutor for ReviewSuggestionExecutor {
     fn execute<'a>(
         &'a self,
         definition: &'a CapabilityDefinition,
         request: CapabilityRequest,
     ) -> PortFuture<'a, Result<CapabilityExecutionResult, SdkError>> {
         Box::pin(async move {
-            if definition.capability_id.as_str() != REJECT_SUGGESTION_CAPABILITY
-                || definition.owner_module_id.as_str() != MODULE_ID
+            if !matches!(
+                definition.capability_id.as_str(),
+                ACCEPT_SUGGESTION_CAPABILITY | REJECT_SUGGESTION_CAPABILITY
+            ) || definition.owner_module_id.as_str() != MODULE_ID
             {
-                return Err(reject_input_invalid(
-                    "executor received a capability other than exact suggestion rejection",
+                return Err(review_input_invalid(
+                    "executor received a capability other than exact suggestion review",
                 ));
             }
             self.inner.execute(request).await
@@ -217,12 +278,12 @@ impl TransactionalCapabilityExecutor for RejectSuggestionExecutor {
 }
 
 #[derive(Clone)]
-struct ProductionSuggestionRejectPolicy {
+struct ProductionSuggestionReviewPolicy {
     party_queries: Arc<PartyQueryAdapter>,
     query_authorizer: Arc<dyn QueryAuthorizer>,
 }
 
-impl ProductionSuggestionRejectPolicy {
+impl ProductionSuggestionReviewPolicy {
     fn new(
         party_queries: Arc<PartyQueryAdapter>,
         query_authorizer: Arc<dyn QueryAuthorizer>,
@@ -234,29 +295,22 @@ impl ProductionSuggestionRejectPolicy {
     }
 }
 
-impl fmt::Debug for ProductionSuggestionRejectPolicy {
+impl fmt::Debug for ProductionSuggestionReviewPolicy {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("ProductionSuggestionRejectPolicy")
+            .debug_struct("ProductionSuggestionReviewPolicy")
             .field("party_queries", &"PartyQueryAdapter")
             .field("query_authorizer", &"dyn QueryAuthorizer")
             .finish()
     }
 }
 
-impl SuggestionReviewPolicyPort for ProductionSuggestionRejectPolicy {
+impl SuggestionReviewPolicyPort for ProductionSuggestionReviewPolicy {
     fn evaluate<'a>(
         &'a self,
         request: SuggestionReviewPolicyRequest,
     ) -> PortFuture<'a, Result<SuggestionReviewPolicyDecision, SdkError>> {
         Box::pin(async move {
-            if request.decision_kind != ReviewDecisionKind::Rejected {
-                return Ok(policy_denied(
-                    &request,
-                    "accept_not_promoted",
-                    "not-promoted",
-                ));
-            }
             if request.target_field != TargetField::PartyDisplayName
                 || !canonical_evidence(&request.purpose_code)
                 || !canonical_evidence(&request.legal_basis_code)
@@ -297,7 +351,10 @@ impl SuggestionReviewPolicyPort for ProductionSuggestionRejectPolicy {
                     Ok(SuggestionReviewPolicyDecision::Allowed {
                         decision_id: policy_decision_id(&request, &authorization.decision_id),
                         policy_version: PRODUCTION_REVIEW_POLICY_VERSION.to_owned(),
-                        acceptance_approval_requirement: ApprovalRequirement::NotRequired,
+                        acceptance_approval_requirement: match request.decision_kind {
+                            ReviewDecisionKind::Accepted => ApprovalRequirement::Required,
+                            ReviewDecisionKind::Rejected => ApprovalRequirement::NotRequired,
+                        },
                     })
                 }
                 PartyExportExecutionRead::VersionChanged => Err(SdkError::new(
@@ -331,6 +388,10 @@ fn policy_denied(
 }
 
 fn policy_decision_id(request: &SuggestionReviewPolicyRequest, evidence: &str) -> String {
+    let decision_kind = match request.decision_kind {
+        ReviewDecisionKind::Accepted => "accepted",
+        ReviewDecisionKind::Rejected => "rejected",
+    };
     let mut hasher = Sha256::new();
     for value in [
         "crm.customer-enrichment.review-policy/v1",
@@ -338,6 +399,7 @@ fn policy_decision_id(request: &SuggestionReviewPolicyRequest, evidence: &str) -
         request.actor_id.as_str(),
         request.suggestion_id.as_str(),
         request.party_id.as_str(),
+        decision_kind,
         evidence,
     ] {
         hasher.update((value.len() as u64).to_be_bytes());
@@ -370,6 +432,20 @@ fn validate_token(value: &str, maximum: usize, field: &'static str) -> Result<()
     Ok(())
 }
 
+fn validate_reference(value: &str, maximum: usize, field: &'static str) -> Result<(), SdkError> {
+    if value.is_empty()
+        || value.len() > maximum
+        || value.trim() != value
+        || value.chars().any(char::is_control)
+    {
+        return Err(SdkError::invalid_argument(
+            field,
+            "Evidence reference is not canonical",
+        ));
+    }
+    Ok(())
+}
+
 fn cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {
     CursorCodec::new(key).map_err(|error| {
         SdkError::new(
@@ -382,12 +458,12 @@ fn cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {
     })
 }
 
-fn reject_input_invalid(reference: impl Into<String>) -> SdkError {
+fn review_input_invalid(reference: impl Into<String>) -> SdkError {
     SdkError::new(
-        "CUSTOMER_ENRICHMENT_SUGGESTION_REJECT_INPUT_INVALID",
+        "CUSTOMER_ENRICHMENT_SUGGESTION_REVIEW_INPUT_INVALID",
         ErrorCategory::InvalidArgument,
         false,
-        "The suggestion rejection input is invalid.",
+        "The suggestion review input is invalid.",
     )
     .with_internal_reference(reference.into())
 }
