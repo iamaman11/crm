@@ -20,6 +20,7 @@ from contract_bindings import (
 )
 
 
+PROMOTION_PREPATCH = Path("scripts/prepare_customer_enrichment_suggestion_get_visibility.py")
 PROMOTION_PATCH = Path("scripts/apply_customer_enrichment_suggestion_get_promotion.py")
 PROMOTION_DIAGNOSTIC = Path("crates/crm-application-runtime/PROMOTION_DIAGNOSTIC.txt")
 
@@ -33,22 +34,24 @@ def build_descriptor(buf: str, proto_root: Path, destination: Path) -> None:
 
 
 def apply_staged_production_promotion() -> None:
-    if not PROMOTION_PATCH.exists():
-        return
-    completed = subprocess.run(
-        [sys.executable, str(PROMOTION_PATCH)],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    if completed.returncode == 0:
+    diagnostics: list[str] = []
+    for patch in (PROMOTION_PREPATCH, PROMOTION_PATCH):
+        if not patch.exists():
+            continue
+        completed = subprocess.run(
+            [sys.executable, str(patch)],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if completed.returncode != 0:
+            details = (completed.stdout + completed.stderr).strip()
+            diagnostics.append(f"{patch} failed ({completed.returncode}):\n{details}")
+            break
+    if not diagnostics:
         PROMOTION_DIAGNOSTIC.unlink(missing_ok=True)
         return
-    details = (completed.stdout + completed.stderr).strip()
-    PROMOTION_DIAGNOSTIC.write_text(
-        f"staged Customer Enrichment promotion failed ({completed.returncode}):\n{details}\n",
-        encoding="utf-8",
-    )
+    PROMOTION_DIAGNOSTIC.write_text("\n\n".join(diagnostics) + "\n", encoding="utf-8")
     print(PROMOTION_DIAGNOSTIC.read_text(encoding="utf-8"), file=sys.stderr)
 
 
