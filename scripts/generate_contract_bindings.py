@@ -23,6 +23,7 @@ from contract_bindings import (
 PROMOTION_PREPATCH = Path("scripts/prepare_customer_enrichment_suggestion_get_visibility.py")
 PROMOTION_PATCH = Path("scripts/apply_customer_enrichment_suggestion_get_promotion.py")
 PROMOTION_DIAGNOSTIC = Path("crates/crm-application-runtime/PROMOTION_DIAGNOSTIC.txt")
+PROMOTION_HOOK_REVISION = 2
 
 
 def build_descriptor(buf: str, proto_root: Path, destination: Path) -> None:
