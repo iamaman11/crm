@@ -1,16 +1,19 @@
 #![forbid(unsafe_code)]
 
-//! PostgreSQL composition for non-runtime governed suggestion application evidence and recovery.
+//! PostgreSQL composition for governed suggestion application evidence, recovery and worker execution.
 //!
 //! The attempt and outcome executors preserve append-once evidence. The orchestration layer commits
 //! the deterministic attempt before policy or owner I/O, invokes only the governed Party boundary,
-//! records one exact outcome and reads completed attempts before replaying external work.
+//! records one exact outcome and reads completed attempts before replaying external work. The
+//! event-driven worker consumes accepted review evidence through a durable checkpoint.
 
 mod orchestration;
 mod owner_application;
+mod worker;
 
 pub use orchestration::*;
 pub use owner_application::*;
+pub use worker::*;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
