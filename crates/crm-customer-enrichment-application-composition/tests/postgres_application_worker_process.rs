@@ -8,6 +8,7 @@ mod process {
         CustomerEnrichmentPartyApplicationWorker, PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID,
     };
     use crm_module_sdk::ModuleId;
+    use std::collections::BTreeSet;
 
     #[derive(Debug, Clone)]
     struct StoreActivation(PostgresDataStore);
