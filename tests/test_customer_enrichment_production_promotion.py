@@ -14,6 +14,7 @@ EXPECTED_RUNTIME_MUTATIONS = {
     "customer_enrichment.request.create@1.0.0",
     "customer_enrichment.request.cancel@1.0.0",
     "customer_enrichment.suggestion.reject@1.0.0",
+    "customer_enrichment.suggestion.accept@1.0.0",
 }
 EXPECTED_RUNTIME_QUERIES = {
     "customer_enrichment.provider_profile.get@1.0.0",
@@ -24,7 +25,6 @@ EXPECTED_RUNTIME_QUERIES = {
     "customer_enrichment.suggestion.list_by_party@1.0.0",
 }
 EXPECTED_PROMOTION = {
-    "customer_enrichment.suggestion.accept@1.0.0": (1, "mutation", "public"),
     "customer_enrichment.party.display_name.apply@1.0.0": (
         1,
         "worker_mutation",
@@ -78,7 +78,7 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
         self.assertEqual(mutations, EXPECTED_RUNTIME_MUTATIONS)
         self.assertEqual(queries, EXPECTED_RUNTIME_QUERIES)
         self.assertTrue(mutations.isdisjoint(queries))
-        self.assertEqual(len(mutations | queries), 11)
+        self.assertEqual(len(mutations | queries), 12)
 
     def test_promotion_coordinates_match_authoritative_non_runtime_set(self) -> None:
         entries = [
@@ -145,10 +145,8 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
                 self.assertIn("disable_uninstall", evidence)
                 self.assertIn("cross_tenant", evidence)
                 self.assertIn("exact_head_17_workflows", evidence)
-                if entry["exposure"] == "worker_only":
-                    self.assertIn("activation_gated_worker_registration", evidence)
-                else:
-                    self.assertIn("activation_gated_registration", evidence)
+                self.assertEqual(entry["exposure"], "worker_only")
+                self.assertIn("activation_gated_worker_registration", evidence)
 
 
 if __name__ == "__main__":
