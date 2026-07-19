@@ -94,5 +94,16 @@ jobs:
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Verify canonical Clippy state
+        id: clippy
+        shell: bash
         run: |
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          set -o pipefail
+          cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1 | tee generated-sync-clippy.txt
+      - name: Upload canonical Clippy diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-sync-clippy-diagnostics
+          path: generated-sync-clippy.txt
+          if-no-files-found: error
+          retention-days: 7
