@@ -221,16 +221,8 @@ fn validate_review_binding(
             "Expected proposed-value digest must contain exactly 32 bytes",
         ));
     }
-    validate_token(
-        policy_version,
-        80,
-        "customer_enrichment.policy_version",
-    )?;
-    validate_token(
-        safe_reason_code,
-        80,
-        "customer_enrichment.safe_reason_code",
-    )
+    validate_token(policy_version, 80, "customer_enrichment.policy_version")?;
+    validate_token(safe_reason_code, 80, "customer_enrichment.safe_reason_code")
 }
 
 #[derive(Clone)]
