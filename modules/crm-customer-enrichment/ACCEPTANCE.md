@@ -2,7 +2,7 @@
 
 Foundation state: **In progress — not a production vertical slice**. These gates block any completion or readiness claim.
 
-Current accepted production route inventory: **5 mutations + 6 permission-aware queries**; the remaining 6 published coordinates stay individually non-runtime. The suggestion read surface and `customer_enrichment.suggestion.reject@1.0.0` promotion are complete. The next promotion coordinate is `customer_enrichment.suggestion.accept@1.0.0`. This inventory is authoritative only on a canonical Generated Sync state and a green exact-head workflow matrix.
+Current accepted production route inventory: **6 mutations + 6 permission-aware queries**; the remaining 5 published coordinates stay individually non-runtime. The complete public suggestion review surface is production-registered. The next promotion coordinate is `customer_enrichment.party.display_name.apply@1.0.0`. This inventory is authoritative only on a canonical Generated Sync state and a green exact-head workflow matrix.
 
 - [x] Freeze immutable module identity, owned evidence records and retain-on-uninstall semantics.
 - [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
@@ -36,6 +36,7 @@ Current accepted production route inventory: **5 mutations + 6 permission-aware 
 - [x] Promote activation-gated `customer_enrichment.suggestion.get@1.0.0` through the exact production composition with get-only adapter construction, Party-first hiding, suggestion/review visibility, field redaction and a fresh-PostgreSQL HTTP process proving success, live authorization denial, cross-tenant rejection, suspended/uninstalling shutdown and side-effect-free reads.
 - [x] Promote activation-gated `customer_enrichment.suggestion.list_by_party@1.0.0` through the production composition with exact Party/profile/status filtering, process-key-bound signed cursor validation, bounded visibility scanning, Party-first empty-page hiding, declarative field redaction and fresh-PostgreSQL HTTP evidence for success, tampered cursor, denial, cross-tenant, suspended/uninstalling and side-effect-free reads.
 - [x] Promote activation-gated `customer_enrichment.suggestion.reject@1.0.0` with governed live Party authorization, exact version/digest binding, atomic review evidence, replay safety and real-process denial/stale/disable/uninstall/cross-tenant proof.
+- [x] Promote activation-gated `customer_enrichment.suggestion.accept@1.0.0` with governed live Party authorization, mandatory approval evidence, exact version/digest binding, atomic review evidence, replay safety and real-process missing-approval/denial/stale/disable/uninstall/cross-tenant proof.
 - [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
 - [ ] Implement the remaining Party/Consent semantic port adapters plus final live authorization and declarative field visibility.
 - [ ] Add concrete provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
