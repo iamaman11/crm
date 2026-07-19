@@ -105,7 +105,10 @@ impl fmt::Debug for PostgresCustomerEnrichmentApplicationOutcomeExecutor {
         formatter
             .debug_struct("PostgresCustomerEnrichmentApplicationOutcomeExecutor")
             .field("store", &self.store)
-            .field("authorizer", &self.authorizer.as_ref().map(|_| "dyn CapabilityAuthorizer"))
+            .field(
+                "authorizer",
+                &self.authorizer.as_ref().map(|_| "dyn CapabilityAuthorizer"),
+            )
             .finish()
     }
 }
@@ -118,10 +121,7 @@ impl PostgresCustomerEnrichmentApplicationOutcomeExecutor {
         }
     }
 
-    pub fn authorized(
-        store: PostgresDataStore,
-        authorizer: Arc<dyn CapabilityAuthorizer>,
-    ) -> Self {
+    pub fn authorized(store: PostgresDataStore, authorizer: Arc<dyn CapabilityAuthorizer>) -> Self {
         Self {
             store,
             authorizer: Some(authorizer),
@@ -180,10 +180,12 @@ impl PostgresCustomerEnrichmentApplicationOutcomeExecutor {
         if decision.allowed {
             return Ok(());
         }
-        Err(application_outcome_permission_denied().with_internal_reference(format!(
-            "decision_id={};reason_code={};policy_version={}",
-            decision.decision_id, decision.reason_code, decision.policy_version
-        )))
+        Err(
+            application_outcome_permission_denied().with_internal_reference(format!(
+                "decision_id={};reason_code={};policy_version={}",
+                decision.decision_id, decision.reason_code, decision.policy_version
+            )),
+        )
     }
 
     async fn load_required(
