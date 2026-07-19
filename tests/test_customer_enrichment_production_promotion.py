@@ -24,12 +24,10 @@ EXPECTED_RUNTIME_QUERIES = {
     "customer_enrichment.suggestion.get@1.0.0",
     "customer_enrichment.suggestion.list_by_party@1.0.0",
 }
+EXPECTED_RUNTIME_WORKERS = {
+    "customer_enrichment.party.display_name.apply@1.0.0",
+}
 EXPECTED_PROMOTION = {
-    "customer_enrichment.party.display_name.apply@1.0.0": (
-        1,
-        "worker_mutation",
-        "worker_only",
-    ),
     "customer_enrichment.application.outcome.record@1.0.0": (
         1,
         "worker_mutation",
@@ -75,10 +73,14 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
         inventory = self.plan["current_runtime_inventory"]
         mutations = set(inventory["mutations"])
         queries = set(inventory["queries"])
+        workers = set(inventory["workers"])
         self.assertEqual(mutations, EXPECTED_RUNTIME_MUTATIONS)
         self.assertEqual(queries, EXPECTED_RUNTIME_QUERIES)
+        self.assertEqual(workers, EXPECTED_RUNTIME_WORKERS)
         self.assertTrue(mutations.isdisjoint(queries))
-        self.assertEqual(len(mutations | queries), 12)
+        self.assertTrue(mutations.isdisjoint(workers))
+        self.assertTrue(queries.isdisjoint(workers))
+        self.assertEqual(len(mutations | queries | workers), 13)
 
     def test_promotion_coordinates_match_authoritative_non_runtime_set(self) -> None:
         entries = [
@@ -96,7 +98,11 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
             if entry["owner_module_id"] == MODULE_ID
         }
         self.assertEqual(planned, classified)
-        runtime = EXPECTED_RUNTIME_MUTATIONS | EXPECTED_RUNTIME_QUERIES
+        runtime = (
+            EXPECTED_RUNTIME_MUTATIONS
+            | EXPECTED_RUNTIME_QUERIES
+            | EXPECTED_RUNTIME_WORKERS
+        )
         self.assertTrue(planned.isdisjoint(runtime))
         self.assertEqual(len(planned | runtime), 17)
 
@@ -122,7 +128,11 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
                 stage_by_coordinate[key] = stage["stage"]
                 entries_by_coordinate[key] = entry
 
-        available_runtime = EXPECTED_RUNTIME_MUTATIONS | EXPECTED_RUNTIME_QUERIES
+        available_runtime = (
+            EXPECTED_RUNTIME_MUTATIONS
+            | EXPECTED_RUNTIME_QUERIES
+            | EXPECTED_RUNTIME_WORKERS
+        )
         for key, entry in entries_by_coordinate.items():
             for dependency in entry["depends_on"]:
                 if dependency in EXTERNAL_DEPENDENCIES or dependency in available_runtime:
