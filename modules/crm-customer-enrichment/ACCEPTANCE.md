@@ -2,7 +2,7 @@
 
 Foundation state: **In progress — not a production vertical slice**. These gates block any completion or readiness claim.
 
-Current accepted production route inventory: **4 mutations + 6 permission-aware queries**; the remaining 7 published coordinates stay individually non-runtime. The suggestion read surface is complete. `customer_enrichment.suggestion.reject@1.0.0` is under production validation and does not enter the accepted inventory until its runtime, policy, process and exact-head evidence are green together.
+Current accepted production route inventory: **4 mutations + 6 permission-aware queries**; the remaining 7 published coordinates stay individually non-runtime. The suggestion read surface is complete. `customer_enrichment.suggestion.reject@1.0.0` is under production validation and does not enter the accepted inventory until its runtime, policy, process and exact-head evidence are green together. Cargo lockfile and canonical formatting are synchronized; strict Clippy validation remains pending.
 
 - [x] Freeze immutable module identity, owned evidence records and retain-on-uninstall semantics.
 - [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
