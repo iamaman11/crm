@@ -18,10 +18,10 @@ use crm_core_data::{
 use crm_customer_enrichment::{
     APPLICATION_ATTEMPT_RECORD_TYPE, APPLICATION_ATTEMPT_STATE_MAXIMUM_BYTES,
     APPLICATION_ATTEMPT_STATE_SCHEMA_ID, ApplicationAttempt, ApplicationOutcome,
-    LIFECYCLE_STATE_RETENTION_POLICY_ID, LIFECYCLE_STATE_SCHEMA_VERSION, RecordedApplicationOutcome,
-    ReplayDisposition, ReviewDecision, Suggestion, SuggestionLifecycleStatus, TargetField,
-    application_attempt_state_descriptor_hash, decode_application_attempt_state,
-    derive_suggestion_status, encode_application_attempt_state,
+    LIFECYCLE_STATE_RETENTION_POLICY_ID, LIFECYCLE_STATE_SCHEMA_VERSION,
+    RecordedApplicationOutcome, ReplayDisposition, ReviewDecision, Suggestion,
+    SuggestionLifecycleStatus, TargetField, application_attempt_state_descriptor_hash,
+    decode_application_attempt_state, derive_suggestion_status, encode_application_attempt_state,
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_customer_enrichment_review_adapter::{
@@ -124,11 +124,7 @@ impl CustomerEnrichmentApplicationAttemptPlanner {
         definition: &CapabilityDefinition,
         request: &CapabilityRequest,
     ) -> Result<ApplicationAttempt, SdkError> {
-        ensure_definition(
-            definition,
-            request,
-            APPLY_PARTY_DISPLAY_NAME_CAPABILITY,
-        )?;
+        ensure_definition(definition, request, APPLY_PARTY_DISPLAY_NAME_CAPABILITY)?;
         let command: wire::ApplyPartyDisplayNameSuggestionRequest =
             support::decode_request_with_data_class(
                 request,
@@ -265,11 +261,7 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentApplicationOutcomePlann
         definition: &CapabilityDefinition,
         request: &CapabilityRequest,
     ) -> Result<AggregateTarget, SdkError> {
-        ensure_definition(
-            definition,
-            request,
-            RECORD_APPLICATION_OUTCOME_CAPABILITY,
-        )?;
+        ensure_definition(definition, request, RECORD_APPLICATION_OUTCOME_CAPABILITY)?;
         Ok(AggregateTarget {
             reference: outcome_attempt_record_ref(request)?,
             presence: AggregatePresence::MustExist,
@@ -282,11 +274,7 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentApplicationOutcomePlann
         request: &CapabilityRequest,
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        ensure_definition(
-            definition,
-            request,
-            RECORD_APPLICATION_OUTCOME_CAPABILITY,
-        )?;
+        ensure_definition(definition, request, RECORD_APPLICATION_OUTCOME_CAPABILITY)?;
         let current = current.ok_or_else(application_attempt_not_found)?;
         let expected_reference = outcome_attempt_record_ref(request)?;
         if current.reference != expected_reference {
@@ -332,15 +320,14 @@ impl TransactionalAggregatePlanner for CustomerEnrichmentApplicationOutcomePlann
                     Some(&self.review_decision),
                     recorded_at_unix_ms,
                 )?;
-                public_suggestion.lifecycle_status = suggestion_status_to_wire(
-                    derive_suggestion_status(
+                public_suggestion.lifecycle_status =
+                    suggestion_status_to_wire(derive_suggestion_status(
                         &self.suggestion,
                         Some(&self.review_decision),
                         Some(&attempt),
                         None,
                         recorded_at_unix_ms,
-                    ),
-                );
+                    ));
                 let event = support::event_evidence_with_data_class(
                     request,
                     current.reference.clone(),
@@ -559,14 +546,12 @@ fn application_outcome_from_wire(
     value: Option<wire::ApplicationOutcome>,
 ) -> Result<ApplicationOutcome, SdkError> {
     use wire::application_outcome::Result as WireResult;
-    let result = value
-        .and_then(|value| value.result)
-        .ok_or_else(|| {
-            SdkError::invalid_argument(
-                "customer_enrichment.outcome",
-                "Application outcome is required",
-            )
-        })?;
+    let result = value.and_then(|value| value.result).ok_or_else(|| {
+        SdkError::invalid_argument(
+            "customer_enrichment.outcome",
+            "Application outcome is required",
+        )
+    })?;
     match result {
         WireResult::Succeeded(value) => Ok(ApplicationOutcome::Succeeded {
             business_transaction_id: BusinessTransactionId::try_new(value.business_transaction_id)
@@ -767,9 +752,7 @@ fn suggestion_status_to_wire(value: SuggestionLifecycleStatus) -> i32 {
     }
 }
 
-fn configured<T>(
-    value: Result<T, crm_module_sdk::IdentifierError>,
-) -> Result<T, SdkError> {
+fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
     value.map_err(|error| {
         SdkError::new(
             "CUSTOMER_ENRICHMENT_APPLICATION_CONFIGURATION_INVALID",
