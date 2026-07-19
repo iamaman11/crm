@@ -48,8 +48,6 @@ const CUSTOMER_ENRICHMENT_REQUEST_RECORD_TYPE: &str = "customer_enrichment.reque
 const CUSTOMER_ENRICHMENT_SUGGESTION_RECORD_TYPE: &str = "customer_enrichment.suggestion";
 const CUSTOMER_ENRICHMENT_REVIEW_DECISION_RECORD_TYPE: &str =
     "customer_enrichment.review_decision";
-const CUSTOMER_ENRICHMENT_SUGGESTION_RECORD_TYPE: &str = "customer_enrichment.suggestion";
-const CUSTOMER_ENRICHMENT_REVIEW_DECISION_RECORD_TYPE: &str = "customer_enrichment.review_decision";
 
 type VisibilityProvider = fn(&CapabilityDefinition) -> Vec<BootstrapVisibilityResource>;
 
@@ -262,6 +260,7 @@ fn customer_enrichment_visibility(
                 CUSTOMER_ENRICHMENT_REQUEST_RECORD_TYPE,
                 customer_enrichment_request_fields(),
             ),
+        ],
         GET_SUGGESTION_CAPABILITY => vec![
             resource(
                 CUSTOMER_ENRICHMENT_MODULE_ID,
