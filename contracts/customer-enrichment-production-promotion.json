@@ -13,7 +13,8 @@
       "customer_enrichment.mapping.get@1.0.0",
       "customer_enrichment.request.get@1.0.0",
       "customer_enrichment.request.list@1.0.0",
-      "customer_enrichment.suggestion.get@1.0.0"
+      "customer_enrichment.suggestion.get@1.0.0",
+      "customer_enrichment.suggestion.list_by_party@1.0.0"
     ]
   },
   "global_invariants": {
@@ -27,34 +28,6 @@
   "promotion_stages": [
     {
       "stage": 1,
-      "name": "suggestion_read_surfaces",
-      "coordinates": [
-        {
-          "id": "customer_enrichment.suggestion.list_by_party",
-          "version": "1.0.0",
-          "route_kind": "query",
-          "exposure": "public",
-          "implementation_crate": "crm-customer-enrichment-suggestion-query-adapter",
-          "depends_on": [
-            "customer_enrichment.suggestion.get@1.0.0"
-          ],
-          "required_evidence": [
-            "activation_gated_registration",
-            "query_authorization",
-            "party_first_empty_page_hiding",
-            "signed_cursor_binding",
-            "bounded_visibility_scan",
-            "declarative_field_redaction",
-            "real_crm_api_success_and_denial",
-            "disable_uninstall",
-            "cross_tenant",
-            "exact_head_17_workflows"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": 2,
       "name": "review_routes",
       "coordinates": [
         {
@@ -81,7 +54,7 @@
       ]
     },
     {
-      "stage": 3,
+      "stage": 2,
       "name": "accepted_suggestion_application",
       "coordinates": [
         {
@@ -150,7 +123,7 @@
       ]
     },
     {
-      "stage": 4,
+      "stage": 3,
       "name": "provider_worker_pipeline",
       "coordinates": [
         {
