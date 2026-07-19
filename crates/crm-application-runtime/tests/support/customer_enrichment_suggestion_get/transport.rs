@@ -1,5 +1,8 @@
 use crm_capability_adapters::{AuthorizationGrant, QueryVisibilityGrant};
-use crm_capability_ingress::{HttpQueryBody, HttpQueryMiddleware, HttpQueryRequest, TENANT_HEADER};
+use crm_capability_ingress::{
+    HttpCapabilityBody, HttpCapabilityMiddleware, HttpCapabilityRequest, HttpQueryBody,
+    HttpQueryMiddleware, HttpQueryRequest, IDEMPOTENCY_KEY_HEADER, TENANT_HEADER,
+};
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_enrichment::Suggestion;
 use crm_module_sdk::{
@@ -80,13 +83,33 @@ pub async fn execute_query<M: Message>(
     message: &M,
     requested_tenant: &'static str,
 ) -> crm_capability_ingress::HttpQueryResponse {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "authorization",
-        HeaderValue::from_str(&format!("Bearer {}", access_token())).unwrap(),
-    );
-    headers.insert(TENANT_HEADER, HeaderValue::from_static(requested_tenant));
+    let mut headers = authenticated_headers(requested_tenant);
     http.handle(HttpQueryRequest {
+        headers: std::mem::take(&mut headers),
+        route: crm_capability_ingress::CapabilityRoute {
+            owner_module_id: definition.owner_module_id.clone(),
+            capability_id: definition.capability_id.clone(),
+            capability_version: definition.capability_version.clone(),
+            schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
+        },
+        input: payload(definition, message),
+    })
+    .await
+}
+
+pub async fn execute_mutation<M: Message>(
+    http: &HttpCapabilityMiddleware,
+    definition: &CapabilityDefinition,
+    message: &M,
+    requested_tenant: &'static str,
+    idempotency_key: &'static str,
+) -> crm_capability_ingress::HttpCapabilityResponse {
+    let mut headers = authenticated_headers(requested_tenant);
+    headers.insert(
+        IDEMPOTENCY_KEY_HEADER,
+        HeaderValue::from_static(idempotency_key),
+    );
+    http.handle(HttpCapabilityRequest {
         headers,
         route: crm_capability_ingress::CapabilityRoute {
             owner_module_id: definition.owner_module_id.clone(),
@@ -94,12 +117,23 @@ pub async fn execute_query<M: Message>(
             capability_version: definition.capability_version.clone(),
             schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
         },
-        input: query_payload(definition, message),
+        input: payload(definition, message),
+        approval: None,
     })
     .await
 }
 
-fn query_payload<M: Message>(definition: &CapabilityDefinition, message: &M) -> TypedPayload {
+fn authenticated_headers(requested_tenant: &'static str) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "authorization",
+        HeaderValue::from_str(&format!("Bearer {}", access_token())).unwrap(),
+    );
+    headers.insert(TENANT_HEADER, HeaderValue::from_static(requested_tenant));
+    headers
+}
+
+fn payload<M: Message>(definition: &CapabilityDefinition, message: &M) -> TypedPayload {
     let payload = TypedPayload {
         owner: definition.input_contract.owner.clone(),
         schema_id: definition.input_contract.schema_id.clone(),
@@ -111,7 +145,7 @@ fn query_payload<M: Message>(definition: &CapabilityDefinition, message: &M) -> 
         retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
         bytes: message.encode_to_vec(),
     };
-    payload.validate().expect("valid suggestion query payload");
+    payload.validate().expect("valid suggestion transport payload");
     payload
 }
 
@@ -122,10 +156,24 @@ pub fn success_payload(body: HttpQueryBody) -> TypedPayload {
     }
 }
 
+pub fn success_mutation_payload(body: HttpCapabilityBody) -> TypedPayload {
+    match body {
+        HttpCapabilityBody::Success(result) => result.output.expect("mutation output"),
+        HttpCapabilityBody::Error(error) => panic!("expected success, got {error:?}"),
+    }
+}
+
 pub fn assert_error_code(body: HttpQueryBody, expected: &str) {
     match body {
         HttpQueryBody::Error(error) => assert_eq!(error.code, expected),
         HttpQueryBody::Success(_) => panic!("expected error code {expected}"),
+    }
+}
+
+pub fn assert_mutation_error_code(body: HttpCapabilityBody, expected: &str) {
+    match body {
+        HttpCapabilityBody::Error(error) => assert_eq!(error.code, expected),
+        HttpCapabilityBody::Success(_) => panic!("expected error code {expected}"),
     }
 }
 
