@@ -155,7 +155,7 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
 
     let visible_queries = CustomerEnrichmentSuggestionQueryAdapter::new(
         query_store.clone(),
-        CursorCodec::new([91; 32]),
+        CursorCodec::new([91; 32]).expect("construct visible review-query cursor codec"),
         Arc::new(ProcessVisibility { hide_party: false }),
     );
     let get_definition = get_suggestion_capability_definition().unwrap();
@@ -220,7 +220,7 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
 
     let hidden_queries = CustomerEnrichmentSuggestionQueryAdapter::new(
         query_store,
-        CursorCodec::new([92; 32]),
+        CursorCodec::new([92; 32]).expect("construct hidden review-query cursor codec"),
         Arc::new(ProcessVisibility { hide_party: true }),
     );
     let hidden_get = hidden_queries
