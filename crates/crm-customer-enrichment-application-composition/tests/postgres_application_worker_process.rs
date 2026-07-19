@@ -5,8 +5,7 @@ mod process {
         ActivationGatedBackgroundWorker, ModuleActivationPort, TenantBackgroundWorker,
     };
     use crm_customer_enrichment_application_composition::{
-        CustomerEnrichmentPartyApplicationWorker,
-        PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID,
+        CustomerEnrichmentPartyApplicationWorker, PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID,
     };
     use crm_module_sdk::{ModuleId, TenantId};
 
