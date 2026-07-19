@@ -61,13 +61,13 @@
       "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.application.outcome.record",
       "version": "1.0.0",
-      "reason": "Deterministic append-once outcome persistence, exact replay/conflict semantics and fresh-PostgreSQL process proof exist non-runtime; activation-gated worker registration and target-success/outcome-missing recovery are not complete."
+      "reason": "Deterministic append-once outcome persistence, exact replay/conflict semantics, final owner-application orchestration and fresh-PostgreSQL target-success/outcome-missing recovery proof exist non-runtime; activation-gated worker registration and broader production acceptance are not complete."
     },
     {
       "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.party.display_name.apply",
       "version": "1.0.0",
-      "reason": "Deterministic pre-I/O application-attempt persistence and the exact governed parties.party.update@1.0.0 boundary with ordinary Party authorization, validation, optimistic locking and stale-version resolution exist non-runtime; final application-policy orchestration, recovery and activation-gated production registration are not complete."
+      "reason": "Deterministic pre-I/O application-attempt persistence, exact OwnerApplication policy evaluation, the governed parties.party.update@1.0.0 boundary and completed-attempt replay suppression exist non-runtime with fresh-PostgreSQL crash-recovery proof; activation-gated production registration and real crm-api acceptance are not complete."
     },
     {
       "owner_module_id": "crm.customer-enrichment",
@@ -85,7 +85,7 @@
       "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.suggestion.accept",
       "version": "1.0.0",
-      "reason": "Resource-specific review policy, approval binding, atomic PostgreSQL review composition, deterministic application evidence and the exact owner-capability boundary are proven non-runtime; public production registration, final orchestration coupling and crash recovery are not complete."
+      "reason": "Resource-specific review policy, approval binding, atomic PostgreSQL review composition, deterministic application evidence, exact owner-capability invocation, final policy orchestration and crash recovery are proven non-runtime; public production registration and real crm-api authorization/disable/uninstall acceptance are not complete."
     },
     {
       "owner_module_id": "crm.customer-enrichment",
