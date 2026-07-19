@@ -35,10 +35,7 @@ mod process {
                     .adapter_coordinate
                     .clone(),
                 ReplaySafeProvider {
-                    expected_key: fixture
-                        .provider_request
-                        .provider_idempotency_key
-                        .clone(),
+                    expected_key: fixture.provider_request.provider_idempotency_key.clone(),
                     calls: calls.clone(),
                 },
             )])
