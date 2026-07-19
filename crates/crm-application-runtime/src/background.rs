@@ -10,6 +10,10 @@ use crm_customer_data_operations_capability_adapter::MODULE_ID as CUSTOMER_DATA_
 use crm_customer_data_operations_execution_composition::{
     PartyExportSelectionWorker, PartyImportExecutionWorker,
 };
+use crm_customer_enrichment_application_composition::{
+    CustomerEnrichmentPartyApplicationWorker, PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID,
+};
+use crm_customer_enrichment_capability_adapter::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{ErrorCategory, EventType, ModuleId, PortFuture, SdkError, TenantId};
 use crm_sales_activities_capability_composition::{
@@ -42,6 +46,7 @@ pub(crate) struct ProductionBackgroundWorkerDependencies {
     pub store: PostgresDataStore,
     pub import_execution_worker: Arc<PartyImportExecutionWorker>,
     pub export_selection_worker: Arc<PartyExportSelectionWorker>,
+    pub customer_enrichment_application_worker: Arc<CustomerEnrichmentPartyApplicationWorker>,
     pub link_processor: Arc<SalesActivitiesLinkEventProcessor>,
     pub projection_worker: Arc<Phase6ProjectionWorker>,
     pub customer_360_worker: Arc<Customer360ProjectionWorker>,
@@ -57,6 +62,7 @@ pub(crate) fn build_production_background_workers(
         store,
         import_execution_worker,
         export_selection_worker,
+        customer_enrichment_application_worker,
         link_processor,
         projection_worker,
         customer_360_worker,
@@ -94,6 +100,14 @@ pub(crate) fn build_production_background_workers(
             store,
             link_processor,
         )),
+    )?;
+    add_worker(
+        &mut builder,
+        activation.clone(),
+        BackgroundWorkerPhase::new(250),
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID,
+        customer_enrichment_application_worker,
     )?;
     add_worker(
         &mut builder,
