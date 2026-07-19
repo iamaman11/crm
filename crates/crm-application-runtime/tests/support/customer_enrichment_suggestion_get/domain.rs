@@ -1,7 +1,11 @@
 use super::{NOW, TENANT, actor, tenant};
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
-use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan};
+use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor};
+use crm_core_data::{
+    AuditIntent, IdempotencyEvidence, PostgresDataStore, PostgresTransactionalAggregateExecutor,
+    RecordCreatePlan,
+};
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
     ProviderProfileDraft, ProviderProfileVersion, ProviderResponseClass, ProviderResponseReceipt,
@@ -17,11 +21,21 @@ use crm_module_sdk::{
     DomainEvent, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
     RequestId, SchemaVersion, TraceId,
 };
-use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
+use crm_parties_capability_adapter::{
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA,
+    MODULE_ID as PARTY_MODULE_ID, PartyCapabilityPlanner,
+    UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY, UPDATE_REQUEST_SCHEMA as PARTY_UPDATE_REQUEST_SCHEMA,
+    capability_definition as party_capability_definition,
+};
+use crm_proto_contracts::crm::{
+    customer::v1 as customer_wire, customer_enrichment::v1 as wire, parties::v1 as party_wire,
+};
 use sqlx::PgPool;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 const SEED_CAPABILITY: &str = "customer_enrichment.review.seed";
+const PARTY_ID: &str = "party-production-suggestion-1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EvidenceCounts {
@@ -74,12 +88,7 @@ pub fn suggestion() -> Suggestion {
         tenant_id: tenant(TENANT),
         requested_by: actor(),
         idempotency_key: IdempotencyKey::try_new("suggestion-production-domain-request").unwrap(),
-        target: TargetSnapshot::try_new(
-            "party-production-suggestion-1",
-            7,
-            TargetField::PartyDisplayName,
-        )
-        .unwrap(),
+        target: TargetSnapshot::try_new(PARTY_ID, 7, TargetField::PartyDisplayName).unwrap(),
         provider_profile_version_id: profile.version_id().clone(),
         mapping_version_id: mapping.version_id().clone(),
         requested_fields: vec![TargetField::PartyDisplayName],
@@ -140,6 +149,7 @@ pub async fn seed_suggestion(
     store: &PostgresDataStore,
     suggestion: &Suggestion,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    seed_party(store).await?;
     let reference = suggestion_record_ref(suggestion.suggestion_id().as_str())?;
     let event_payload = support::protobuf_payload(
         MODULE_ID,
@@ -181,6 +191,102 @@ pub async fn seed_suggestion(
         })
         .await?;
     Ok(())
+}
+
+async fn seed_party(store: &PostgresDataStore) -> Result<(), Box<dyn std::error::Error>> {
+    let executor = PostgresTransactionalAggregateExecutor::new(
+        store.clone(),
+        Arc::new(PartyCapabilityPlanner),
+    );
+    let create_definition = party_capability_definition(PARTY_CREATE_CAPABILITY)?;
+    let create = party_wire::CreatePartyRequest {
+        party_ref: Some(customer_wire::PartyRef {
+            party_id: PARTY_ID.to_owned(),
+        }),
+        kind: party_wire::PartyKind::Organization as i32,
+        display_name: "Production Company Seed".to_owned(),
+    };
+    executor
+        .execute(
+            &create_definition,
+            party_request(
+                &create_definition,
+                PARTY_CREATE_REQUEST_SCHEMA,
+                &create,
+                1,
+            )?,
+        )
+        .await?;
+
+    let update_definition = party_capability_definition(PARTY_UPDATE_CAPABILITY)?;
+    for expected_version in 1_i64..7_i64 {
+        let update = party_wire::UpdatePartyRequest {
+            party_ref: Some(customer_wire::PartyRef {
+                party_id: PARTY_ID.to_owned(),
+            }),
+            expected_version,
+            display_name: format!("Production Company Seed v{}", expected_version + 1),
+        };
+        executor
+            .execute(
+                &update_definition,
+                party_request(
+                    &update_definition,
+                    PARTY_UPDATE_REQUEST_SCHEMA,
+                    &update,
+                    u64::try_from(expected_version + 1)?,
+                )?,
+            )
+            .await?;
+    }
+    Ok(())
+}
+
+fn party_request<M: prost::Message>(
+    definition: &CapabilityDefinition,
+    schema_id: &'static str,
+    message: &M,
+    sequence: u64,
+) -> Result<CapabilityRequest, SdkError> {
+    let input = support::protobuf_payload(PARTY_MODULE_ID, schema_id, DataClass::Personal, message)?;
+    let identity = format!("suggestion-production-party-seed-{sequence}");
+    Ok(CapabilityRequest {
+        context: ModuleExecutionContext {
+            module_id: ModuleId::try_new(PARTY_MODULE_ID).map_err(seed_configuration_error)?,
+            execution: ExecutionContext {
+                tenant_id: tenant(TENANT),
+                actor_id: actor(),
+                request_id: RequestId::try_new(identity.clone()).map_err(seed_configuration_error)?,
+                correlation_id: CorrelationId::try_new(identity.clone())
+                    .map_err(seed_configuration_error)?,
+                causation_id: CausationId::try_new(identity.clone())
+                    .map_err(seed_configuration_error)?,
+                trace_id: TraceId::try_new(identity.clone()).map_err(seed_configuration_error)?,
+                capability_id: definition.capability_id.clone(),
+                capability_version: definition.capability_version.clone(),
+                idempotency_key: IdempotencyKey::try_new(identity.clone())
+                    .map_err(seed_configuration_error)?,
+                business_transaction_id: BusinessTransactionId::try_new(identity)
+                    .map_err(seed_configuration_error)?,
+                schema_version: SchemaVersion::try_new("1.0.0")
+                    .map_err(seed_configuration_error)?,
+                request_started_at_unix_nanos: NOW - 10_000_000 + i64::try_from(sequence).unwrap(),
+            },
+        },
+        input_hash: semantic_input_hash(&input),
+        input,
+        approval: None,
+    })
+}
+
+fn seed_configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_REVIEW_SEED_CONFIGURATION_INVALID",
+        crm_module_sdk::ErrorCategory::Internal,
+        false,
+        "The Customer Enrichment review fixture is invalid.",
+    )
+    .with_internal_reference(error.to_string())
 }
 
 fn seed_context() -> ModuleExecutionContext {
