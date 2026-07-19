@@ -6,6 +6,10 @@
 //! called and appends one exact outcome afterwards. It deliberately does not invoke or bypass the
 //! authoritative Party capability.
 
+mod owner_application;
+
+pub use owner_application::*;
+
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
