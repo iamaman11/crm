@@ -298,10 +298,8 @@ fn context(key: &str, capability: &str, at: i64) -> ModuleExecutionContext {
             capability_id: CapabilityId::try_new(capability).unwrap(),
             capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
             idempotency_key: IdempotencyKey::try_new(format!("{key}-idempotency")).unwrap(),
-            business_transaction_id: BusinessTransactionId::try_new(format!(
-                "{key}-transaction"
-            ))
-            .unwrap(),
+            business_transaction_id: BusinessTransactionId::try_new(format!("{key}-transaction"))
+                .unwrap(),
             schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
             request_started_at_unix_nanos: at,
         },
