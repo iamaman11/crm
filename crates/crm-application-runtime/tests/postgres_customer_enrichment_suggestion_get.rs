@@ -9,8 +9,8 @@ use crm_capability_adapters::{
     LiveQueryVisibilityStore,
 };
 use crm_capability_ingress::{
-    AccessTokenGrant, AccessTokenStore, BearerTokenAuthenticator, HttpQueryBody,
-    HttpQueryMiddleware, QueryContextResolver, QueryIngress, TimeoutPolicy,
+    AccessTokenGrant, AccessTokenStore, BearerTokenAuthenticator, HttpQueryMiddleware,
+    QueryContextResolver, QueryIngress, TimeoutPolicy,
 };
 use crm_core_data::PostgresDataStore;
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
@@ -142,7 +142,7 @@ async fn production_suggestion_get_is_activation_gated_permission_aware_and_side
     assert_eq!(public.proposed_value, "Production Company");
     assert_eq!(
         public.lifecycle_status,
-        wire::SuggestionLifecycleStatus::PendingReview as i32
+        wire::SuggestionLifecycleStatus::Proposed as i32
     );
     assert!(response.latest_review_decision.is_none());
     assert!(response.latest_application_attempt.is_none());
@@ -172,7 +172,7 @@ async fn production_suggestion_get_is_activation_gated_permission_aware_and_side
     assert!(redacted.proposed_value.is_empty());
     assert_eq!(
         redacted.lifecycle_status,
-        wire::SuggestionLifecycleStatus::PendingReview as i32
+        wire::SuggestionLifecycleStatus::Proposed as i32
     );
     visibility_store
         .revoke(&redacted_visibility)
