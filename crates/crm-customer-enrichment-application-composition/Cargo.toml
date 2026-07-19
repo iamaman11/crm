@@ -9,6 +9,7 @@ default = []
 postgres-integration = []
 
 [dependencies]
+crm-capability-ingress = { path = "../crm-capability-ingress" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
@@ -19,17 +20,20 @@ crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 prost = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
-crm-capability-ingress = { path = "../crm-capability-ingress" }
 crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-review-adapter" }
-# Unit tests deserialize opaque domain IDs through serde_json.
-serde = "1"
-serde_json = "1"
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[test]]
 name = "postgres_application_process"
 path = "tests/postgres_application_process.rs"
+required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_application_orchestration_process"
+path = "tests/postgres_application_orchestration_process.rs"
 required-features = ["postgres-integration"]
