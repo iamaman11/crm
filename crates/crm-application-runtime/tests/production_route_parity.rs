@@ -29,6 +29,7 @@ struct BindingCapability {
 struct RouteClassifications {
     schema_version: String,
     platform_runtime_routes: Vec<ClassifiedRoute>,
+    worker_runtime_routes: Vec<ClassifiedRoute>,
     non_runtime_contract_routes: Vec<ClassifiedRoute>,
     empty_runtime_modules: Vec<ClassifiedModule>,
 }
@@ -85,12 +86,18 @@ fn production_routes_exactly_cover_governed_bindings_and_exact_classifications()
         &classifications.platform_runtime_routes,
         "platform runtime routes",
     );
+    let worker_routes = classified_routes(
+        &classifications.worker_runtime_routes,
+        "worker runtime routes",
+    );
     let non_runtime_routes = classified_routes(
         &classifications.non_runtime_contract_routes,
         "non-runtime contract routes",
     );
     assert!(
-        platform_routes.is_disjoint(&non_runtime_routes),
+        platform_routes.is_disjoint(&worker_routes)
+            && platform_routes.is_disjoint(&non_runtime_routes)
+            && worker_routes.is_disjoint(&non_runtime_routes),
         "route classifications overlap"
     );
     assert!(
@@ -98,6 +105,10 @@ fn production_routes_exactly_cover_governed_bindings_and_exact_classifications()
             .iter()
             .all(|(owner, _, _)| !governed_modules.contains(owner)),
         "platform routes may not hide a governed module route"
+    );
+    assert!(
+        worker_routes.is_subset(&governed_routes),
+        "worker runtime routes must name governed coordinates"
     );
     assert!(
         non_runtime_routes.is_subset(&governed_routes),
@@ -116,14 +127,18 @@ fn production_routes_exactly_cover_governed_bindings_and_exact_classifications()
     let actual_routes =
         unique_runtime_routes(mutation_definitions.iter().chain(query_definitions.iter()));
 
-    let mut expected_routes = governed_routes
+    let public_governed_routes = governed_routes
         .difference(&non_runtime_routes)
         .cloned()
+        .collect::<BTreeSet<_>>()
+        .difference(&worker_routes)
+        .cloned()
         .collect::<BTreeSet<_>>();
+    let mut expected_routes = public_governed_routes;
     expected_routes.extend(platform_routes);
     assert_eq!(
         actual_routes, expected_routes,
-        "manifest/binding/production route parity drifted"
+        "manifest/binding/public production route parity drifted"
     );
 }
 
