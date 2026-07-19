@@ -61,13 +61,7 @@
       "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.application.outcome.record",
       "version": "1.0.0",
-      "reason": "Deterministic append-once outcome persistence, exact replay/conflict semantics, final owner-application orchestration and fresh-PostgreSQL target-success/outcome-missing recovery proof exist non-runtime; activation-gated worker registration and broader production acceptance are not complete."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.party.display_name.apply",
-      "version": "1.0.0",
-      "reason": "Deterministic pre-I/O application-attempt persistence, exact OwnerApplication policy evaluation, the governed parties.party.update@1.0.0 boundary and completed-attempt replay suppression exist non-runtime with fresh-PostgreSQL crash-recovery proof; activation-gated production registration and real crm-api acceptance are not complete."
+      "reason": "Deterministic append-once outcome persistence, exact replay/conflict semantics, final owner-application orchestration and fresh-PostgreSQL target-success/outcome-missing recovery proof exist non-runtime; independent activation-gated outcome-recovery worker registration and broader production acceptance are not complete."
     },
     {
       "owner_module_id": "crm.customer-enrichment",
