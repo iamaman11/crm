@@ -89,12 +89,6 @@
     },
     {
       "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.suggestion.list_by_party",
-      "version": "1.0.0",
-      "reason": "Permission-aware Party/profile/status filtering, signed pagination, bounded visibility scanning and PostgreSQL process proof exist non-runtime; the activation-gated production query contribution is not registered yet."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.suggestion.reject",
       "version": "1.0.0",
       "reason": "Resource-specific review policy and atomic PostgreSQL rejection composition are proven non-runtime; public production registration and final route-level live authorization are not complete."
