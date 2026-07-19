@@ -10,6 +10,7 @@
 mod background;
 mod bootstrap_visibility;
 mod config;
+mod customer_enrichment_suggestion_list_promotion;
 mod data_quality_capability_execution;
 mod data_quality_registration;
 mod export_artifact_download;
@@ -30,6 +31,9 @@ pub(crate) use bootstrap_visibility::{
     BootstrapVisibilityResource, build_bootstrap_visibility_registry,
 };
 pub use config::*;
+pub use customer_enrichment_suggestion_list_promotion::{
+    application_query_definitions, build_production_composition,
+};
 pub use data_quality_capability_execution::DataQualityCapabilityExecutor;
 pub use data_quality_registration::*;
 pub use export_artifact_download::*;
@@ -38,7 +42,10 @@ pub use export_execution_source::*;
 pub(crate) use export_selection_bootstrap::bootstrap_export_selection_worker_access;
 pub use export_selection_source::*;
 pub use gateway_grpc::*;
-pub use native_composition::*;
+pub use native_composition::{
+    PostgresModuleActivation, ProductionCompositionDependencies, application_capability_catalog,
+    application_mutation_definitions, declared_business_module_ids,
+};
 pub use platform::*;
 pub use process::*;
 pub use runtime::*;
