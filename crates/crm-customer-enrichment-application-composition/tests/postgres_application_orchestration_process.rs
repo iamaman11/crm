@@ -172,13 +172,14 @@ async fn recovers_owner_success_and_skips_completed_replay() {
         policy.0.lock().unwrap()[0].phase,
         PolicyEvaluationPhase::OwnerApplication
     );
-    let calls = owner.0.lock().unwrap();
-    assert_eq!(calls.len(), 2);
-    assert_eq!(
-        calls[0].target_idempotency_key,
-        calls[1].target_idempotency_key
-    );
-    drop(calls);
+    {
+        let calls = owner.0.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(
+            calls[0].target_idempotency_key,
+            calls[1].target_idempotency_key
+        );
+    }
     assert_eq!(
         scalar(
             &admin,
