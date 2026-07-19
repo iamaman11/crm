@@ -11,6 +11,7 @@ mod background;
 mod bootstrap_visibility;
 mod bootstrap_visibility_overlay;
 mod config;
+mod customer_enrichment_application_worker;
 mod customer_enrichment_reject_promotion;
 mod customer_enrichment_suggestion_list_promotion;
 mod data_quality_capability_execution;
@@ -33,6 +34,10 @@ pub(crate) use bootstrap_visibility_overlay::{
     BootstrapVisibilityResource, build_bootstrap_visibility_registry,
 };
 pub use config::*;
+pub use customer_enrichment_application_worker::{
+    CustomerEnrichmentApplicationWorkerDependencies, OWNER_APPLICATION_POLICY_VERSION,
+    build_customer_enrichment_application_worker,
+};
 pub use customer_enrichment_reject_promotion::{
     PRODUCTION_REVIEW_POLICY_VERSION, application_mutation_definitions,
     application_query_definitions, build_production_composition,
