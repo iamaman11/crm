@@ -20,40 +20,12 @@ from contract_bindings import (
 )
 
 
-PROMOTION_PREPATCH = Path("scripts/prepare_customer_enrichment_suggestion_get_visibility.py")
-PROMOTION_PATCH = Path("scripts/apply_customer_enrichment_suggestion_get_promotion.py")
-PROMOTION_DIAGNOSTIC = Path("crates/crm-application-runtime/PROMOTION_DIAGNOSTIC.txt")
-PROMOTION_HOOK_REVISION = 2
-
-
 def build_descriptor(buf: str, proto_root: Path, destination: Path) -> None:
     command = [buf, "build", str(proto_root), "--output", str(destination)]
     completed = subprocess.run(command, check=False, text=True, capture_output=True)
     if completed.returncode != 0:
         details = (completed.stdout + completed.stderr).strip()
         raise ValueError(f"Buf descriptor build failed ({completed.returncode}):\n{details}")
-
-
-def apply_staged_production_promotion() -> None:
-    diagnostics: list[str] = []
-    for patch in (PROMOTION_PREPATCH, PROMOTION_PATCH):
-        if not patch.exists():
-            continue
-        completed = subprocess.run(
-            [sys.executable, str(patch)],
-            check=False,
-            text=True,
-            capture_output=True,
-        )
-        if completed.returncode != 0:
-            details = (completed.stdout + completed.stderr).strip()
-            diagnostics.append(f"{patch} failed ({completed.returncode}):\n{details}")
-            break
-    if not diagnostics:
-        PROMOTION_DIAGNOSTIC.unlink(missing_ok=True)
-        return
-    PROMOTION_DIAGNOSTIC.write_text("\n\n".join(diagnostics) + "\n", encoding="utf-8")
-    print(PROMOTION_DIAGNOSTIC.read_text(encoding="utf-8"), file=sys.stderr)
 
 
 def write_atomic(path: Path, content: bytes) -> None:
@@ -98,8 +70,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        if args.write:
-            apply_staged_production_promotion()
         manifests = load_authoring_manifests(args.modules_root, args.schema)
         if args.descriptor_set is not None:
             descriptors = load_descriptor_set(args.descriptor_set)
