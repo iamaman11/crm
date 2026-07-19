@@ -17,6 +17,9 @@
       "customer_enrichment.request.list@1.0.0",
       "customer_enrichment.suggestion.get@1.0.0",
       "customer_enrichment.suggestion.list_by_party@1.0.0"
+    ],
+    "workers": [
+      "customer_enrichment.party.display_name.apply@1.0.0"
     ]
   },
   "global_invariants": {
@@ -32,27 +35,6 @@
       "stage": 1,
       "name": "accepted_suggestion_application",
       "coordinates": [
-        {
-          "id": "customer_enrichment.party.display_name.apply",
-          "version": "1.0.0",
-          "route_kind": "worker_mutation",
-          "exposure": "worker_only",
-          "implementation_crate": "crm-customer-enrichment-application-composition",
-          "depends_on": [
-            "customer_enrichment.suggestion.accept@1.0.0",
-            "parties.party.update@1.0.0"
-          ],
-          "required_evidence": [
-            "activation_gated_worker_registration",
-            "owner_application_policy",
-            "governed_exact_owner_capability",
-            "deterministic_target_idempotency",
-            "target_success_outcome_missing_recovery",
-            "disable_uninstall",
-            "cross_tenant",
-            "exact_head_17_workflows"
-          ]
-        },
         {
           "id": "customer_enrichment.application.outcome.record",
           "version": "1.0.0",
