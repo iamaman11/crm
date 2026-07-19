@@ -89,12 +89,6 @@
     },
     {
       "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.suggestion.get",
-      "version": "1.0.0",
-      "reason": "Strict permission-aware suggestion lookup with Party-first hiding, record redaction and PostgreSQL process proof exists non-runtime; its activation-gated production query contribution is not registered yet."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.suggestion.list_by_party",
       "version": "1.0.0",
       "reason": "Permission-aware Party/profile/status filtering, signed pagination, bounded visibility scanning and PostgreSQL process proof exist non-runtime; the activation-gated production query contribution is not registered yet."
