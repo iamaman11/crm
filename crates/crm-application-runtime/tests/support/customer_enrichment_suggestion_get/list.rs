@@ -15,10 +15,7 @@ pub fn list_request(
     )
     .expect("convert strict suggestion fixture");
     wire::ListSuggestionsByPartyRequest {
-        party_ref: public
-            .target
-            .expect("suggestion target")
-            .party_ref,
+        party_ref: public.target.expect("suggestion target").party_ref,
         status: Some(wire::SuggestionLifecycleStatus::Proposed as i32),
         provider_profile_version_ref: public.provider_profile_version_ref,
         page_size,

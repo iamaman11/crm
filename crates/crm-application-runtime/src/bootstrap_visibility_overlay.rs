@@ -32,8 +32,8 @@ impl BootstrapVisibilityRegistry {
     }
 }
 
-pub(crate) fn build_bootstrap_visibility_registry(
-) -> Result<BootstrapVisibilityRegistry, SdkError> {
+pub(crate) fn build_bootstrap_visibility_registry() -> Result<BootstrapVisibilityRegistry, SdkError>
+{
     Ok(BootstrapVisibilityRegistry {
         base: base::build_bootstrap_visibility_registry()?,
     })

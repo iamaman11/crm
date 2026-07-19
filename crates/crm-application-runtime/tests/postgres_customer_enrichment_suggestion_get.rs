@@ -158,10 +158,9 @@ async fn production_suggestion_queries_are_activation_gated_permission_aware_and
 
     let get_success = execute_get(&http, &get_definition, &suggestion, TENANT).await;
     assert_eq!(get_success.status, StatusCode::OK);
-    let get_response = wire::GetSuggestionResponse::decode(
-        success_payload(get_success.body).bytes.as_slice(),
-    )
-    .expect("decode production suggestion response");
+    let get_response =
+        wire::GetSuggestionResponse::decode(success_payload(get_success.body).bytes.as_slice())
+            .expect("decode production suggestion response");
     let public = get_response.suggestion.expect("production suggestion");
     assert_eq!(public.proposed_value, "Production Company");
     assert_eq!(
@@ -292,10 +291,7 @@ async fn production_suggestion_queries_are_activation_gated_permission_aware_and
     )
     .await;
     assert_eq!(list_cross_tenant.status, StatusCode::FORBIDDEN);
-    assert_error_code(
-        list_cross_tenant.body,
-        "AUTHENTICATION_TENANT_FORBIDDEN",
-    );
+    assert_error_code(list_cross_tenant.body, "AUTHENTICATION_TENANT_FORBIDDEN");
 
     for status in ["suspended", "uninstalling"] {
         set_installation_status(&admin, status).await;
@@ -316,10 +312,7 @@ async fn production_suggestion_queries_are_activation_gated_permission_aware_and
         .expect("revoke get suggestion visibility");
     let hidden_get = execute_get(&http, &get_definition, &suggestion, TENANT).await;
     assert_eq!(hidden_get.status, StatusCode::NOT_FOUND);
-    assert_error_code(
-        hidden_get.body,
-        "CUSTOMER_ENRICHMENT_SUGGESTION_NOT_FOUND",
-    );
+    assert_error_code(hidden_get.body, "CUSTOMER_ENRICHMENT_SUGGESTION_NOT_FOUND");
     visibility_store
         .upsert(get_suggestion_visibility)
         .expect("restore get suggestion visibility");

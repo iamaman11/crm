@@ -57,9 +57,10 @@ pub fn build_production_composition(
         cursor(dependencies.cursor_key)?,
         dependencies.visibility_authorizer,
     ));
-    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(
-        ActivationGatedQueryValidator::new(dependencies.activation, adapter.clone()),
-    );
+    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(ActivationGatedQueryValidator::new(
+        dependencies.activation,
+        adapter.clone(),
+    ));
     let executor: Arc<dyn QueryExecutor> = adapter;
     contributions
         .add_queries(
