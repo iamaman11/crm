@@ -397,6 +397,43 @@ fn customer_enrichment_request_fields() -> BTreeSet<String> {
     ])
 }
 
+fn customer_enrichment_suggestion_fields() -> BTreeSet<String> {
+    fields([
+        "enrichment_request_ref",
+        "provider_response_receipt_ref",
+        "provider_profile_version_ref",
+        "mapping_version_ref",
+        "target",
+        "proposed_value",
+        "proposed_value_digest",
+        "observed_at_unix_ms",
+        "retrieved_at_unix_ms",
+        "effective_at_unix_ms",
+        "fresh_until_unix_ms",
+        "expires_at_unix_ms",
+        "confidence_basis_points",
+        "policy_evidence",
+        "evidence_references",
+        "lifecycle_status",
+        "superseded_by_suggestion_ref",
+    ])
+}
+
+fn customer_enrichment_review_decision_fields() -> BTreeSet<String> {
+    fields([
+        "suggestion_ref",
+        "target_party_resource_version",
+        "proposed_value_digest",
+        "reviewed_by_actor_id",
+        "kind",
+        "policy_version",
+        "safe_reason_code",
+        "approval_evidence_reference",
+        "decided_at_unix_ms",
+        "expires_at_unix_ms",
+    ])
+}
+
 fn customer_360_party_fields() -> BTreeSet<String> {
     fields(["display_name"])
 }
@@ -595,6 +632,38 @@ mod tests {
                 )
             );
         }
+
+        let suggestion = registry
+            .resources_for(&definition(
+                CUSTOMER_ENRICHMENT_MODULE_ID,
+                GET_SUGGESTION_CAPABILITY,
+            ))
+            .unwrap();
+        assert_eq!(suggestion.len(), 3);
+        assert_eq!(
+            suggestion[0],
+            resource(
+                CUSTOMER_ENRICHMENT_MODULE_ID,
+                PARTY_RECORD_TYPE,
+                BTreeSet::new(),
+            )
+        );
+        assert_eq!(
+            suggestion[1],
+            resource(
+                CUSTOMER_ENRICHMENT_MODULE_ID,
+                CUSTOMER_ENRICHMENT_SUGGESTION_RECORD_TYPE,
+                customer_enrichment_suggestion_fields(),
+            )
+        );
+        assert_eq!(
+            suggestion[2],
+            resource(
+                CUSTOMER_ENRICHMENT_MODULE_ID,
+                CUSTOMER_ENRICHMENT_REVIEW_DECISION_RECORD_TYPE,
+                customer_enrichment_review_decision_fields(),
+            )
+        );
     }
 
     #[test]

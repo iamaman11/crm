@@ -1,5 +1,0 @@
-scripts/prepare_customer_enrichment_suggestion_get_visibility.py failed (1):
-Traceback (most recent call last):
-  File "/home/runner/work/crm/crm/scripts/prepare_customer_enrichment_suggestion_get_visibility.py", line 89, in <module>
-    raise RuntimeError("expected staged bootstrap module marker is missing")
-RuntimeError: expected staged bootstrap module marker is missing

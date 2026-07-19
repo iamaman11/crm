@@ -2,7 +2,7 @@
 
 This file is a mandatory architecture boundary. The pure module core does not wire itself into the process host and never contains provider SDK, HTTP, credential, SQL or concrete owner-adapter logic.
 
-The exact staged promotion contract is machine-readable at `contracts/customer-enrichment-production-promotion.json`. It is authoritative for the current 4-mutation + 4-query runtime inventory, all nine individually non-runtime coordinates, their route kinds, dependencies and mandatory acceptance evidence. Production coordinates must be promoted in that declared order unless the contract and its validator are changed together on one green exact head.
+The exact staged promotion contract is machine-readable at `contracts/customer-enrichment-production-promotion.json`. It is authoritative for the current 4-mutation + 5-query runtime inventory, all eight individually non-runtime coordinates, their route kinds, dependencies and mandatory acceptance evidence. Production coordinates must be promoted in that declared order unless the contract and its validator are changed together on one green exact head.
 
 Before production readiness, separately owned adapter/composition crates must:
 

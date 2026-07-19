@@ -9,6 +9,7 @@ use crm_customer_enrichment_query_adapter::{
     GET_ENRICHMENT_REQUEST_CAPABILITY, GET_MAPPING_CAPABILITY, GET_PROVIDER_PROFILE_CAPABILITY,
 };
 use crm_customer_enrichment_request_list_query_adapter::LIST_ENRICHMENT_REQUESTS_CAPABILITY;
+use crm_customer_enrichment_suggestion_query_adapter::GET_SUGGESTION_CAPABILITY;
 use std::collections::BTreeSet;
 
 #[test]
@@ -50,7 +51,7 @@ fn definition_and_request_lookups_are_the_composed_enrichment_queries() {
         .filter(|definition| definition.owner_module_id.as_str() == MODULE_ID)
         .collect::<Vec<_>>();
 
-    assert_eq!(enrichment_definitions.len(), 4);
+    assert_eq!(enrichment_definitions.len(), 5);
     assert_eq!(
         enrichment_definitions
             .iter()
@@ -61,6 +62,7 @@ fn definition_and_request_lookups_are_the_composed_enrichment_queries() {
             GET_MAPPING_CAPABILITY,
             GET_ENRICHMENT_REQUEST_CAPABILITY,
             LIST_ENRICHMENT_REQUESTS_CAPABILITY,
+            GET_SUGGESTION_CAPABILITY,
         ]
         .into_iter()
         .collect()
