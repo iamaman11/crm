@@ -1,7 +1,9 @@
 use super::{NOW, TENANT, actor, tenant};
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor};
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
+};
 use crm_core_data::{
     AuditIntent, IdempotencyEvidence, PostgresDataStore, PostgresTransactionalAggregateExecutor,
     RecordCreatePlan,
@@ -22,9 +24,10 @@ use crm_module_sdk::{
     RequestId, SchemaVersion, TraceId,
 };
 use crm_parties_capability_adapter::{
-    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA,
-    MODULE_ID as PARTY_MODULE_ID, PartyCapabilityPlanner,
-    UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY, UPDATE_REQUEST_SCHEMA as PARTY_UPDATE_REQUEST_SCHEMA,
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY,
+    CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA, MODULE_ID as PARTY_MODULE_ID,
+    PartyCapabilityPlanner, UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
+    UPDATE_REQUEST_SCHEMA as PARTY_UPDATE_REQUEST_SCHEMA,
     capability_definition as party_capability_definition,
 };
 use crm_proto_contracts::crm::{
@@ -209,12 +212,7 @@ async fn seed_party(store: &PostgresDataStore) -> Result<(), Box<dyn std::error:
     executor
         .execute(
             &create_definition,
-            party_request(
-                &create_definition,
-                PARTY_CREATE_REQUEST_SCHEMA,
-                &create,
-                1,
-            )?,
+            party_request(&create_definition, PARTY_CREATE_REQUEST_SCHEMA, &create, 1)?,
         )
         .await?;
 
@@ -248,7 +246,8 @@ fn party_request<M: prost::Message>(
     message: &M,
     sequence: u64,
 ) -> Result<CapabilityRequest, SdkError> {
-    let input = support::protobuf_payload(PARTY_MODULE_ID, schema_id, DataClass::Personal, message)?;
+    let input =
+        support::protobuf_payload(PARTY_MODULE_ID, schema_id, DataClass::Personal, message)?;
     let identity = format!("suggestion-production-party-seed-{sequence}");
     Ok(CapabilityRequest {
         context: ModuleExecutionContext {
@@ -256,7 +255,8 @@ fn party_request<M: prost::Message>(
             execution: ExecutionContext {
                 tenant_id: tenant(TENANT),
                 actor_id: actor(),
-                request_id: RequestId::try_new(identity.clone()).map_err(seed_configuration_error)?,
+                request_id: RequestId::try_new(identity.clone())
+                    .map_err(seed_configuration_error)?,
                 correlation_id: CorrelationId::try_new(identity.clone())
                     .map_err(seed_configuration_error)?,
                 causation_id: CausationId::try_new(identity.clone())

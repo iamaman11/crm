@@ -5,8 +5,8 @@ use crm_application_composition::{
 };
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest, CapabilitySemanticValidator,
-    TransactionalCapabilityExecutor,
+    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
+    CapabilitySemanticValidator, TransactionalCapabilityExecutor,
 };
 use crm_customer_enrichment::{
     ApprovalRequirement, ReviewDecisionKind, SuggestionReviewPolicyDecision,
@@ -18,9 +18,7 @@ use crm_customer_enrichment_review_adapter::{
     reject_suggestion_capability_definition,
 };
 use crm_customer_enrichment_review_composition::PostgresCustomerEnrichmentSuggestionReviewExecutor;
-use crm_module_sdk::{
-    DataClass, ErrorCategory, ModuleId, PortFuture, RecordId, SdkError,
-};
+use crm_module_sdk::{DataClass, ErrorCategory, ModuleId, PortFuture, RecordId, SdkError};
 use crm_parties_query_adapter::{
     GET_CAPABILITY as PARTY_GET_CAPABILITY, PartyExportExecutionRead, PartyQueryAdapter,
     export_execution_query_request, query_capability_definition as party_query_definition,
@@ -86,12 +84,11 @@ pub fn build_production_composition(
         )
         .map_err(composition_error)?;
 
-    let validator: Arc<dyn CapabilitySemanticValidator> = Arc::new(
-        ActivationGatedMutationValidator::new(
+    let validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ActivationGatedMutationValidator::new(
             dependencies.activation,
             Arc::new(RejectSuggestionSemanticValidator),
-        ),
-    );
+        ));
     let executor: Arc<dyn TransactionalCapabilityExecutor> =
         Arc::new(RejectSuggestionExecutor::new(review_executor));
     contributions
@@ -192,7 +189,10 @@ impl fmt::Debug for RejectSuggestionExecutor {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("RejectSuggestionExecutor")
-            .field("inner", &"PostgresCustomerEnrichmentSuggestionReviewExecutor")
+            .field(
+                "inner",
+                &"PostgresCustomerEnrichmentSuggestionReviewExecutor",
+            )
             .finish()
     }
 }
@@ -251,7 +251,11 @@ impl SuggestionReviewPolicyPort for ProductionSuggestionRejectPolicy {
     ) -> PortFuture<'a, Result<SuggestionReviewPolicyDecision, SdkError>> {
         Box::pin(async move {
             if request.decision_kind != ReviewDecisionKind::Rejected {
-                return Ok(policy_denied(&request, "accept_not_promoted", "not-promoted"));
+                return Ok(policy_denied(
+                    &request,
+                    "accept_not_promoted",
+                    "not-promoted",
+                ));
             }
             if request.target_field != TargetField::PartyDisplayName
                 || !canonical_evidence(&request.purpose_code)
@@ -284,11 +288,7 @@ impl SuggestionReviewPolicyPort for ProductionSuggestionRejectPolicy {
             self.party_queries.validate(&definition, &query).await?;
             match self
                 .party_queries
-                .get_for_export_execution(
-                    &query,
-                    &request.party_id,
-                    request.party_resource_version,
-                )
+                .get_for_export_execution(&query, &request.party_id, request.party_resource_version)
                 .await?
             {
                 PartyExportExecutionRead::Visible { allowed_fields, .. }

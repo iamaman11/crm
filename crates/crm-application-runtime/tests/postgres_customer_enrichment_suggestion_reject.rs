@@ -170,7 +170,10 @@ async fn production_suggestion_rejection_is_policy_bound_atomic_and_replay_safe(
         capability_gateway,
     ));
     let query_http = HttpQueryMiddleware::new(QueryIngress::new(
-        Arc::new(BearerTokenAuthenticator::new(token_store, Arc::clone(&clock))),
+        Arc::new(BearerTokenAuthenticator::new(
+            token_store,
+            Arc::clone(&clock),
+        )),
         QueryContextResolver::new(
             Arc::clone(&clock),
             Arc::new(DeterministicRandom::from_bytes(128_u8..=255)),
@@ -252,10 +255,7 @@ async fn production_suggestion_rejection_is_policy_bound_atomic_and_replay_safe(
 
     for (status, key) in [
         ("suspended", "suggestion-production-reject-suspended"),
-        (
-            "uninstalling",
-            "suggestion-production-reject-uninstalling",
-        ),
+        ("uninstalling", "suggestion-production-reject-uninstalling"),
     ] {
         set_installation_status(&admin, status).await;
         let inactive = execute_mutation(

@@ -145,7 +145,9 @@ fn payload<M: Message>(definition: &CapabilityDefinition, message: &M) -> TypedP
         retention_policy_id: RetentionPolicyId::try_new("standard").unwrap(),
         bytes: message.encode_to_vec(),
     };
-    payload.validate().expect("valid suggestion transport payload");
+    payload
+        .validate()
+        .expect("valid suggestion transport payload");
     payload
 }
 
