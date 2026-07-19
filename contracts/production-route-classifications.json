@@ -50,6 +50,12 @@
       "id": "customer_enrichment.party.display_name.apply",
       "version": "1.0.0",
       "reason": "Activation-gated Customer Enrichment worker consumes accepted review evidence and invokes the exact governed Party owner capability without exposing a public ingress route."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.application.outcome.record",
+      "version": "1.0.0",
+      "reason": "The activation-gated application worker requires an exact live authorization grant before append-once outcome persistence and proves target-success/outcome-missing recovery without exposing a public ingress route."
     }
   ],
   "non_runtime_contract_routes": [
@@ -64,12 +70,6 @@
       "id": "customer_data.import.party.rows.validate",
       "version": "1.0.0",
       "reason": "Legacy client-preparsed row-validation contract retained for compatibility; production validates rows only through the governed source-artifact route."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.application.outcome.record",
-      "version": "1.0.0",
-      "reason": "Deterministic append-once outcome persistence, exact replay/conflict semantics, final owner-application orchestration and fresh-PostgreSQL target-success/outcome-missing recovery proof exist non-runtime; independent activation-gated outcome-recovery worker registration and broader production acceptance are not complete."
     },
     {
       "owner_module_id": "crm.customer-enrichment",
