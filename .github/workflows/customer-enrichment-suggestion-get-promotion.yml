@@ -1,0 +1,72 @@
+name: Customer Enrichment Suggestion Get Promotion
+
+on:
+  push:
+    branches:
+      - agent/phase8a10-customer-enrichment
+    paths:
+      - scripts/apply_customer_enrichment_suggestion_get_promotion.py
+      - crates/crm-application-runtime/tests/postgres_customer_enrichment_suggestion_get.rs
+      - crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get.rs
+      - crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get/**
+      - .github/workflows/customer-enrichment-suggestion-get-promotion.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out promotion branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Apply exact production promotion
+        run: python scripts/apply_customer_enrichment_suggestion_get_promotion.py
+
+      - name: Canonicalize Rust
+        run: cargo fmt --all
+
+      - name: Verify patch integrity
+        run: git diff --check
+
+      - name: Commit promoted production route
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            Cargo.lock \
+            crates/crm-application-runtime/Cargo.toml \
+            crates/crm-application-runtime/src/bootstrap_visibility.rs \
+            crates/crm-application-runtime/src/native_composition.rs \
+            crates/crm-application-runtime/tests/customer_enrichment_registration_contract.rs \
+            crates/crm-application-runtime/tests/postgres_customer_enrichment_suggestion_get.rs \
+            crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get.rs \
+            crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get \
+            crates/crm-customer-enrichment-suggestion-query-adapter/src/lib.rs \
+            crates/crm-customer-enrichment-suggestion-query-adapter/src/list/cursor.rs \
+            contracts/customer-enrichment-production-promotion.json \
+            contracts/production-route-classifications.json \
+            modules/crm-customer-enrichment/ACCEPTANCE.md \
+            modules/crm-customer-enrichment/production/CONTRIBUTION.md \
+            scripts/run_customer_enrichment_review_process.sh \
+            tests/test_customer_enrichment_production_promotion.py \
+            tests/test_production_route_classifications.py
+          if git diff --cached --quiet; then
+            echo "Promotion already applied"
+          else
+            git commit -m "Promote Customer Enrichment suggestion get query"
+            git push origin HEAD:agent/phase8a10-customer-enrichment
+          fi
