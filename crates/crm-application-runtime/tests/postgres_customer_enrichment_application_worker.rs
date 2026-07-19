@@ -22,6 +22,7 @@ use crm_core_data::{
 use crm_customer_enrichment::{
     APPLICATION_ATTEMPT_RECORD_TYPE, ApprovalRequirement, ReviewDecision, ReviewDecisionKind,
 };
+use crm_customer_enrichment_application_adapter::record_application_outcome_capability_definition;
 use crm_customer_enrichment_application_composition::{
     PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID, PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID,
 };
@@ -109,6 +110,8 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
         .expect("Party update route in production composition");
     let party_get_definition =
         party_query_definition(PARTY_GET_CAPABILITY).expect("Party get definition");
+    let outcome_definition =
+        record_application_outcome_capability_definition().expect("application outcome definition");
     let gateway = Arc::new(CapabilityGateway::new(
         composition.mutation_registry(),
         composition.mutation_validator(),
@@ -124,6 +127,7 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
         CustomerEnrichmentApplicationWorkerDependencies {
             store: store.clone(),
             capabilities: Arc::new(GatewayCapabilityClient::new(gateway)),
+            capability_authorizer: authorizer.clone(),
             query_authorizer: authorizer.clone(),
             visibility_authorizer: visibility_authorizer.clone(),
             clock: Arc::clone(&clock),
@@ -170,10 +174,37 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
         ))
         .expect("grant worker Party visibility");
 
-    let applied = worker
+    let outcome_denied = worker
         .run_cycle(tenant(TENANT), NOW + 3_000_000)
         .await
-        .expect("apply accepted suggestion through production owner gateway");
+        .expect_err("missing outcome grant must fail after Party success");
+    assert_eq!(
+        outcome_denied.code,
+        "CUSTOMER_ENRICHMENT_APPLICATION_OUTCOME_PERMISSION_DENIED"
+    );
+    assert_eq!(application_attempt_version(&admin).await, 1);
+    let party_after_owner_success = party_state(&store, &suggestion).await;
+    assert_eq!(party_after_owner_success.0, 8);
+    assert_eq!(party_after_owner_success.1, suggestion.proposed_value());
+
+    store
+        .reset_projection(
+            &tenant(TENANT),
+            PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID,
+        )
+        .await
+        .expect("reset outcome authorization projection failure");
+    authorization_store
+        .upsert(worker_authorization_grant(
+            &outcome_definition,
+            &worker_actor,
+        ))
+        .expect("grant worker application outcome persistence");
+
+    let applied = worker
+        .run_cycle(tenant(TENANT), NOW + 4_000_000)
+        .await
+        .expect("recover target success and persist exact outcome");
     assert_eq!(applied.reviewed_events, 1);
     assert_eq!(applied.accepted_events, 1);
     assert_eq!(applied.replayed_attempts, 1);
@@ -184,14 +215,14 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
 
     let evidence_after_application = evidence_counts(&admin).await;
     let replay = worker
-        .run_cycle(tenant(TENANT), NOW + 4_000_000)
+        .run_cycle(tenant(TENANT), NOW + 5_000_000)
         .await
         .expect("completed application replay");
     assert_eq!(replay.reviewed_events, 0);
     assert_eq!(evidence_counts(&admin).await, evidence_after_application);
 
     let cross_tenant = worker
-        .run_cycle(tenant(OTHER_TENANT), NOW + 5_000_000)
+        .run_cycle(tenant(OTHER_TENANT), NOW + 6_000_000)
         .await
         .expect("cross-tenant worker scan");
     assert_eq!(cross_tenant.reviewed_events, 0);
