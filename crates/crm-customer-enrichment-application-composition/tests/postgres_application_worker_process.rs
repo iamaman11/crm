@@ -10,6 +10,8 @@ mod process {
     use crm_module_sdk::ModuleId;
     use std::collections::BTreeSet;
 
+    const NOW: i64 = 60_000_000;
+
     #[derive(Debug, Clone)]
     struct StoreActivation(PostgresDataStore);
 
