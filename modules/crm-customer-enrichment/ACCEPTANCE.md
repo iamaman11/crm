@@ -2,7 +2,7 @@
 
 Foundation state: **In progress — not a production vertical slice**. These gates block any completion or readiness claim.
 
-Current accepted production inventory: **6 public mutations + 6 permission-aware queries + 1 activation-gated worker**; the remaining 4 published coordinates stay individually non-runtime. The complete public suggestion review surface and `customer_enrichment.party.display_name.apply@1.0.0` worker are production-registered. The next promotion coordinate is `customer_enrichment.application.outcome.record@1.0.0`. This inventory is authoritative only on a canonical Generated Sync state and a green exact-head workflow matrix.
+Current accepted production inventory: **6 public mutations + 6 permission-aware queries + 2 activation-gated worker coordinates**; the remaining 3 published coordinates stay individually non-runtime. The complete public suggestion review surface, `customer_enrichment.party.display_name.apply@1.0.0` and `customer_enrichment.application.outcome.record@1.0.0` are production-registered without public outcome ingress. The next promotion coordinate is `customer_enrichment.request.dispatch@1.0.0`. This inventory is authoritative only on a canonical Generated Sync state and a green exact-head workflow matrix.
 
 - [x] Freeze immutable module identity, owned evidence records and retain-on-uninstall semantics.
 - [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
@@ -38,11 +38,12 @@ Current accepted production inventory: **6 public mutations + 6 permission-aware
 - [x] Promote activation-gated `customer_enrichment.suggestion.reject@1.0.0` with governed live Party authorization, exact version/digest binding, atomic review evidence, replay safety and real-process denial/stale/disable/uninstall/cross-tenant proof.
 - [x] Promote activation-gated `customer_enrichment.suggestion.accept@1.0.0` with governed live Party authorization, mandatory approval evidence, exact version/digest binding, atomic review evidence, replay safety and real-process missing-approval/denial/stale/disable/uninstall/cross-tenant proof.
 - [x] Promote activation-gated worker-only `customer_enrichment.party.display_name.apply@1.0.0` with durable reviewed-event checkpointing, exact accepted-review and approval binding, live Party policy/visibility authorization, governed `parties.party.update@1.0.0`, pending-attempt recovery, append-once outcome, replay suppression, disable/uninstall and cross-tenant proof.
+- [x] Promote worker-only `customer_enrichment.application.outcome.record@1.0.0` with an exact live authorization grant before append-once persistence, policy/owner causation lineage, target-success/outcome-missing recovery, projection repair, completed-attempt replay suppression, cross-tenant isolation and no public HTTP/gRPC route.
 - [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
 - [ ] Complete remaining Consent semantic scenarios plus final live authorization and declarative field visibility.
 - [ ] Add concrete provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
 - [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof for remaining records.
-- [ ] Add deterministic activation-gated reconciliation, expiry and outcome-recovery workers.
+- [ ] Add deterministic activation-gated provider dispatch, response reconciliation and suggestion materialization/expiry workers.
 - [ ] Prove provider replay, conflicting response, quota, circuit/failure and provider-disabled behavior across concrete adapters; exact registry and worker replay process proof is complete.
 - [ ] Prove remaining response-materialization recovery scenarios; target-success/outcome-missing application recovery is complete in the production application worker.
 - [ ] Replace `tests/acceptance.rs` with real production-path evidence.
