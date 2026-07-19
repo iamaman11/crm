@@ -19,9 +19,9 @@ EXPECTED_RUNTIME_QUERIES = {
     "customer_enrichment.mapping.get@1.0.0",
     "customer_enrichment.request.get@1.0.0",
     "customer_enrichment.request.list@1.0.0",
+    "customer_enrichment.suggestion.get@1.0.0",
 }
 EXPECTED_PROMOTION = {
-    "customer_enrichment.suggestion.get@1.0.0": (1, "query", "public"),
     "customer_enrichment.suggestion.list_by_party@1.0.0": (1, "query", "public"),
     "customer_enrichment.suggestion.reject@1.0.0": (2, "mutation", "public"),
     "customer_enrichment.suggestion.accept@1.0.0": (3, "mutation", "public"),
@@ -78,7 +78,7 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
         self.assertEqual(mutations, EXPECTED_RUNTIME_MUTATIONS)
         self.assertEqual(queries, EXPECTED_RUNTIME_QUERIES)
         self.assertTrue(mutations.isdisjoint(queries))
-        self.assertEqual(len(mutations | queries), 8)
+        self.assertEqual(len(mutations | queries), 9)
 
     def test_promotion_coordinates_match_authoritative_non_runtime_set(self) -> None:
         entries = [
