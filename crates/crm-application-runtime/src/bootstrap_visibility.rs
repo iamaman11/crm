@@ -46,8 +46,7 @@ const DATA_QUALITY_MODULE_ID: &str = "crm.data-quality";
 const DATA_QUALITY_RULE_SET_RECORD_TYPE: &str = "data_quality.party_rule_set_version";
 const CUSTOMER_ENRICHMENT_REQUEST_RECORD_TYPE: &str = "customer_enrichment.request";
 const CUSTOMER_ENRICHMENT_SUGGESTION_RECORD_TYPE: &str = "customer_enrichment.suggestion";
-const CUSTOMER_ENRICHMENT_REVIEW_DECISION_RECORD_TYPE: &str =
-    "customer_enrichment.review_decision";
+const CUSTOMER_ENRICHMENT_REVIEW_DECISION_RECORD_TYPE: &str = "customer_enrichment.review_decision";
 
 type VisibilityProvider = fn(&CapabilityDefinition) -> Vec<BootstrapVisibilityResource>;
 
