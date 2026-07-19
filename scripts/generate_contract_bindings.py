@@ -20,12 +20,31 @@ from contract_bindings import (
 )
 
 
+PROMOTION_PATCH = Path("scripts/apply_customer_enrichment_suggestion_get_promotion.py")
+
+
 def build_descriptor(buf: str, proto_root: Path, destination: Path) -> None:
     command = [buf, "build", str(proto_root), "--output", str(destination)]
     completed = subprocess.run(command, check=False, text=True, capture_output=True)
     if completed.returncode != 0:
         details = (completed.stdout + completed.stderr).strip()
         raise ValueError(f"Buf descriptor build failed ({completed.returncode}):\n{details}")
+
+
+def apply_staged_production_promotion() -> None:
+    if not PROMOTION_PATCH.exists():
+        return
+    completed = subprocess.run(
+        [sys.executable, str(PROMOTION_PATCH)],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        details = (completed.stdout + completed.stderr).strip()
+        raise ValueError(
+            f"staged Customer Enrichment promotion failed ({completed.returncode}):\n{details}"
+        )
 
 
 def write_atomic(path: Path, content: bytes) -> None:
@@ -70,6 +89,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if args.write:
+            apply_staged_production_promotion()
         manifests = load_authoring_manifests(args.modules_root, args.schema)
         if args.descriptor_set is not None:
             descriptors = load_descriptor_set(args.descriptor_set)
