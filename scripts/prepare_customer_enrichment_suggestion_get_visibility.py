@@ -75,16 +75,34 @@ text, visibility_replacements = re.subn(
 )
 if visibility_replacements != 1:
     raise RuntimeError("expected customer_enrichment_visibility function is missing")
-
 path.write_text(text, encoding="utf-8")
 
 lib_path = Path("crates/crm-application-runtime/src/lib.rs")
 lib_text = lib_path.read_text(encoding="utf-8")
-staged_marker = (
-    "// Staged repair hook restores `mod bootstrap_visibility;` before source compilation.\n"
-)
-if staged_marker in lib_text:
-    lib_text = lib_text.replace(staged_marker, "mod bootstrap_visibility;\n", 1)
-elif "mod bootstrap_visibility;\n" not in lib_text:
-    raise RuntimeError("expected staged bootstrap module marker is missing")
+if "mod bootstrap_visibility;\n" not in lib_text:
+    lib_text, marker_replacements = re.subn(
+        r"// Staged repair[^\n]*\n",
+        "mod bootstrap_visibility;\n",
+        lib_text,
+        count=1,
+    )
+    if marker_replacements != 1:
+        raise RuntimeError("expected staged bootstrap module marker is missing")
 lib_path.write_text(lib_text, encoding="utf-8")
+
+patch_path = Path("scripts/apply_customer_enrichment_suggestion_get_promotion.py")
+patch_text = patch_path.read_text(encoding="utf-8")
+old_guard = '    if old not in text:\n        raise RuntimeError(f"expected source fragment missing: {path}")\n'
+new_guard = '''    if old not in text:
+        if (
+            path == "crates/crm-application-runtime/src/bootstrap_visibility.rs"
+            and "GET_SUGGESTION_CAPABILITY => vec![" in text
+        ):
+            return
+        raise RuntimeError(f"expected source fragment missing: {path}")
+'''
+if old_guard in patch_text:
+    patch_text = patch_text.replace(old_guard, new_guard, 1)
+elif new_guard not in patch_text:
+    raise RuntimeError("expected staged promotion guard is missing")
+patch_path.write_text(patch_text, encoding="utf-8")
