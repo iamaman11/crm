@@ -28,7 +28,6 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                     )
                     for capability_id in {
                         "customer_enrichment.application.outcome.record",
-                        "customer_enrichment.party.display_name.apply",
                         "customer_enrichment.request.dispatch",
                         "customer_enrichment.response.record",
                         "customer_enrichment.suggestions.materialize",
@@ -51,6 +50,7 @@ class ProductionRouteClassificationTests(unittest.TestCase):
             "customer_enrichment.suggestion.list_by_party",
             "customer_enrichment.suggestion.reject",
             "customer_enrichment.suggestion.accept",
+            "customer_enrichment.party.display_name.apply",
         }:
             self.assertNotIn(
                 (
