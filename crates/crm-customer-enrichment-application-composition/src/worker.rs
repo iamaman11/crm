@@ -17,8 +17,8 @@ use crm_customer_enrichment_review_adapter::{
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CausationId, DataClass, EventDelivery, EventType,
-    ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding, PortFuture,
-    RequestId, SchemaVersion, SdkError, TenantId,
+    ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    PortFuture, RequestId, SchemaVersion, SdkError, TenantId,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use prost::Message;
@@ -54,7 +54,10 @@ impl fmt::Debug for CustomerEnrichmentPartyApplicationWorker {
         formatter
             .debug_struct("CustomerEnrichmentPartyApplicationWorker")
             .field("store", &self.store)
-            .field("orchestrator", &"CustomerEnrichmentPartyApplicationOrchestrator")
+            .field(
+                "orchestrator",
+                &"CustomerEnrichmentPartyApplicationOrchestrator",
+            )
             .field("actor_id", &self.actor_id)
             .field("page_size", &self.page_size)
             .finish()
@@ -146,8 +149,8 @@ impl CustomerEnrichmentPartyApplicationWorker {
                                     &self.store,
                                     ProjectionFailure {
                                         tenant_id: tenant_id.clone(),
-                                        projection_id:
-                                            PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID.to_owned(),
+                                        projection_id: PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID
+                                            .to_owned(),
                                         event_id: delivery.event_id.clone(),
                                         occurred_at_unix_nanos: delivery.occurred_at_unix_nanos,
                                         failure_code: error.code.clone(),
@@ -205,7 +208,10 @@ impl CustomerEnrichmentPartyApplicationWorker {
         {
             return Err(review_event_invalid());
         }
-        let target = suggestion.target.as_ref().ok_or_else(review_event_invalid)?;
+        let target = suggestion
+            .target
+            .as_ref()
+            .ok_or_else(review_event_invalid)?;
         if wire::EnrichmentTargetField::try_from(target.target_field).ok()
             != Some(wire::EnrichmentTargetField::PartyDisplayName)
             || target.party_resource_version <= 0

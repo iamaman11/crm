@@ -774,6 +774,7 @@ dependencies = [
 name = "crm-customer-enrichment-application-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-ingress",
  "crm-capability-plan-support",
  "crm-capability-runtime",
