@@ -10,6 +10,8 @@ It deliberately separates three phases:
 
 The crate never writes Party-owned records and never invokes Party adapters directly. The only authoritative target remains `parties.party.update@1.0.0`, which a separately owned composition must call through the governed capability boundary using the attempt's deterministic target idempotency key and exact expected Party version.
 
+Persisted attempt version `1` is pending and must have no outcome. Version `2` is terminal or retryable evidence and must contain exactly one recorded outcome.
+
 Exact replay is handled by capability idempotency. A semantically duplicate outcome submitted under a different idempotency key becomes an audited aggregate no-op; conflicting outcome evidence is rejected.
 
 Neither application coordinate is registered in the production route inventory by this crate.
