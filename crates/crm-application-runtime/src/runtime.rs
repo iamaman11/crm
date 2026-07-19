@@ -270,21 +270,18 @@ impl ApplicationRuntime {
             Arc::clone(&clock),
         ));
 
-        let customer_enrichment_application_worker =
-            build_customer_enrichment_application_worker(
-                CustomerEnrichmentApplicationWorkerDependencies {
-                    store: store.clone(),
-                    capabilities: Arc::new(GatewayCapabilityClient::new(Arc::clone(
-                        &mutation_gateway,
-                    ))),
-                    query_authorizer,
-                    visibility_authorizer: query_visibility,
-                    clock: Arc::clone(&clock),
-                    cursor_key,
-                    actor_id: customer_enrichment_application_worker_actor_id,
-                },
-            )
-            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_application_worker = build_customer_enrichment_application_worker(
+            CustomerEnrichmentApplicationWorkerDependencies {
+                store: store.clone(),
+                capabilities: Arc::new(GatewayCapabilityClient::new(Arc::clone(&mutation_gateway))),
+                query_authorizer,
+                visibility_authorizer: query_visibility,
+                clock: Arc::clone(&clock),
+                cursor_key,
+                actor_id: customer_enrichment_application_worker_actor_id,
+            },
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
 
         let import_execution_reader =
             Arc::new(PostgresImportExecutionSnapshotReader::new(store.clone()));
