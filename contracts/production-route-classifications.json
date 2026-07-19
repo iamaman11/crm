@@ -44,6 +44,14 @@
       "reason": "Platform permission-aware global search route outside business module manifests."
     }
   ],
+  "worker_runtime_routes": [
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.party.display_name.apply",
+      "version": "1.0.0",
+      "reason": "Activation-gated Customer Enrichment worker consumes accepted review evidence and invokes the exact governed Party owner capability without exposing a public ingress route."
+    }
+  ],
   "non_runtime_contract_routes": [
     {
       "owner_module_id": "crm.customer-data-operations",
