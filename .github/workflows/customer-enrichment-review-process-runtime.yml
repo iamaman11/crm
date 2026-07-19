@@ -6,6 +6,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "proto/crm/customer_enrichment/**"
+      - "crates/crm-application-runtime/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-plan-support/**"
       - "crates/crm-capability-runtime/**"
@@ -14,6 +15,7 @@ on:
       - "crates/crm-customer-enrichment-review-composition/**"
       - "crates/crm-customer-enrichment-application-adapter/**"
       - "crates/crm-customer-enrichment-application-composition/**"
+      - "crates/crm-customer-enrichment-suggestion-query-adapter/**"
       - "modules/crm-customer-enrichment/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
@@ -27,6 +29,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "proto/crm/customer_enrichment/**"
+      - "crates/crm-application-runtime/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-plan-support/**"
       - "crates/crm-capability-runtime/**"
@@ -35,6 +38,7 @@ on:
       - "crates/crm-customer-enrichment-review-composition/**"
       - "crates/crm-customer-enrichment-application-adapter/**"
       - "crates/crm-customer-enrichment-application-composition/**"
+      - "crates/crm-customer-enrichment-suggestion-query-adapter/**"
       - "modules/crm-customer-enrichment/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
@@ -80,7 +84,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Verify review, application evidence and replay
+      - name: Verify review, application evidence, suggestion lookup and replay
         run: bash scripts/run_customer_enrichment_review_process.sh 2>&1 | tee database/customer-enrichment-review-process-runtime.log
       - name: Capture diagnostics
         if: failure()
@@ -94,10 +98,12 @@ jobs:
           path: |
             database/customer-enrichment-review-process-runtime.log
             database/customer-enrichment-review-process-runtime-state.log
+            crates/crm-application-runtime/
             crates/crm-customer-enrichment-review-adapter/
             crates/crm-customer-enrichment-review-composition/
             crates/crm-customer-enrichment-application-adapter/
             crates/crm-customer-enrichment-application-composition/
+            crates/crm-customer-enrichment-suggestion-query-adapter/
             database/tests/0017_customer_enrichment_review.sql
           if-no-files-found: error
           retention-days: 7
