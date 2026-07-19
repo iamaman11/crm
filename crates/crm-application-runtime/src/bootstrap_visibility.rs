@@ -19,6 +19,10 @@ use crm_customer_enrichment_capability_adapter::{
     MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID,
     PROVIDER_PROFILE_VERSION_RECORD_TYPE as CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_RECORD_TYPE,
 };
+use crm_customer_enrichment_query_adapter::{
+    GET_ENRICHMENT_REQUEST_CAPABILITY, GET_MAPPING_CAPABILITY, GET_PROVIDER_PROFILE_CAPABILITY,
+};
+use crm_customer_enrichment_request_list_query_adapter::LIST_ENRICHMENT_REQUESTS_CAPABILITY;
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
@@ -39,6 +43,7 @@ const SALES_MODULE_ID: &str = "crm.sales";
 const ACTIVITIES_MODULE_ID: &str = "crm.activities";
 const DATA_QUALITY_MODULE_ID: &str = "crm.data-quality";
 const DATA_QUALITY_RULE_SET_RECORD_TYPE: &str = "data_quality.party_rule_set_version";
+const CUSTOMER_ENRICHMENT_REQUEST_RECORD_TYPE: &str = "customer_enrichment.request";
 
 type VisibilityProvider = fn(&CapabilityDefinition) -> Vec<BootstrapVisibilityResource>;
 
@@ -229,12 +234,31 @@ fn customer_data_operations_visibility(
     resources
 }
 
-fn customer_enrichment_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
-    vec![resource(
-        CUSTOMER_ENRICHMENT_MODULE_ID,
-        CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_RECORD_TYPE,
-        fields(["definition"]),
-    )]
+fn customer_enrichment_visibility(
+    definition: &CapabilityDefinition,
+) -> Vec<BootstrapVisibilityResource> {
+    match definition.capability_id.as_str() {
+        GET_PROVIDER_PROFILE_CAPABILITY | GET_MAPPING_CAPABILITY => vec![resource(
+            CUSTOMER_ENRICHMENT_MODULE_ID,
+            CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_RECORD_TYPE,
+            fields(["definition"]),
+        )],
+        GET_ENRICHMENT_REQUEST_CAPABILITY | LIST_ENRICHMENT_REQUESTS_CAPABILITY => vec![
+            // Live visibility keys are scoped by the query owner. These routes use Party visibility
+            // only as a resource-existence gate and disclose no Party fields.
+            resource(
+                CUSTOMER_ENRICHMENT_MODULE_ID,
+                PARTY_RECORD_TYPE,
+                BTreeSet::new(),
+            ),
+            resource(
+                CUSTOMER_ENRICHMENT_MODULE_ID,
+                CUSTOMER_ENRICHMENT_REQUEST_RECORD_TYPE,
+                customer_enrichment_request_fields(),
+            ),
+        ],
+        _ => Vec::new(),
+    }
 }
 
 fn data_quality_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
@@ -330,6 +354,25 @@ fn customer_data_import_row_fields() -> BTreeSet<String> {
         "diagnostics",
         "execution",
         "target_party_ref",
+    ])
+}
+
+fn customer_enrichment_request_fields() -> BTreeSet<String> {
+    fields([
+        "requested_by_actor_id",
+        "target",
+        "provider_profile_version_ref",
+        "mapping_version_ref",
+        "requested_fields",
+        "policy_evidence",
+        "created_at_unix_ms",
+        "deadline_at_unix_ms",
+        "expires_at_unix_ms",
+        "status",
+        "retry_generation",
+        "provider_response_receipt_ref",
+        "last_safe_failure_code",
+        "updated_at_unix_ms",
     ])
 }
 
@@ -494,18 +537,43 @@ mod tests {
             .unwrap();
         assert_eq!(rows.len(), 2);
 
-        let enrichment = registry
-            .resources_for(&definition(
-                CUSTOMER_ENRICHMENT_MODULE_ID,
-                "customer_enrichment.provider_profile.get",
-            ))
-            .unwrap();
-        assert_eq!(enrichment.len(), 1);
-        assert_eq!(
-            enrichment[0].resource_type,
-            CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_RECORD_TYPE
-        );
-        assert_eq!(enrichment[0].allowed_fields, fields(["definition"]));
+        for capability in [GET_PROVIDER_PROFILE_CAPABILITY, GET_MAPPING_CAPABILITY] {
+            let enrichment = registry
+                .resources_for(&definition(CUSTOMER_ENRICHMENT_MODULE_ID, capability))
+                .unwrap();
+            assert_eq!(enrichment.len(), 1);
+            assert_eq!(
+                enrichment[0].resource_type,
+                CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_RECORD_TYPE
+            );
+            assert_eq!(enrichment[0].allowed_fields, fields(["definition"]));
+        }
+
+        for capability in [
+            GET_ENRICHMENT_REQUEST_CAPABILITY,
+            LIST_ENRICHMENT_REQUESTS_CAPABILITY,
+        ] {
+            let enrichment = registry
+                .resources_for(&definition(CUSTOMER_ENRICHMENT_MODULE_ID, capability))
+                .unwrap();
+            assert_eq!(enrichment.len(), 2);
+            assert_eq!(
+                enrichment[0],
+                resource(
+                    CUSTOMER_ENRICHMENT_MODULE_ID,
+                    PARTY_RECORD_TYPE,
+                    BTreeSet::new(),
+                )
+            );
+            assert_eq!(
+                enrichment[1],
+                resource(
+                    CUSTOMER_ENRICHMENT_MODULE_ID,
+                    CUSTOMER_ENRICHMENT_REQUEST_RECORD_TYPE,
+                    customer_enrichment_request_fields(),
+                )
+            );
+        }
     }
 
     #[test]
