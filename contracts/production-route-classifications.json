@@ -83,12 +83,6 @@
     },
     {
       "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.suggestion.accept",
-      "version": "1.0.0",
-      "reason": "Resource-specific review policy, approval binding, atomic PostgreSQL review composition, deterministic application evidence, exact owner-capability invocation, final policy orchestration and crash recovery are proven non-runtime; public production registration and real crm-api authorization/disable/uninstall acceptance are not complete."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.suggestions.materialize",
       "version": "1.0.0",
       "reason": "Deterministic materialization planning, immutable dependency validation and fresh-PostgreSQL replay proof exist non-runtime; activation-gated production worker registration and remaining recovery scenarios are not complete."
