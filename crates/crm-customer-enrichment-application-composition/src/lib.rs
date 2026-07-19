@@ -17,7 +17,7 @@ pub use worker::*;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
+    CapabilityAuthorizer, CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     TransactionalCapabilityExecutor,
 };
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
@@ -36,6 +36,7 @@ use crm_customer_enrichment_application_adapter::{
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordRef, RecordSnapshot, SdkError};
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
+use std::fmt;
 use std::sync::Arc;
 
 pub const CRATE_NAME: &str = "crm-customer-enrichment-application-composition";
@@ -93,14 +94,38 @@ impl PostgresCustomerEnrichmentApplicationAttemptExecutor {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PostgresCustomerEnrichmentApplicationOutcomeExecutor {
     store: PostgresDataStore,
+    authorizer: Option<Arc<dyn CapabilityAuthorizer>>,
+}
+
+impl fmt::Debug for PostgresCustomerEnrichmentApplicationOutcomeExecutor {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PostgresCustomerEnrichmentApplicationOutcomeExecutor")
+            .field("store", &self.store)
+            .field("authorizer", &self.authorizer.as_ref().map(|_| "dyn CapabilityAuthorizer"))
+            .finish()
+    }
 }
 
 impl PostgresCustomerEnrichmentApplicationOutcomeExecutor {
     pub fn new(store: PostgresDataStore) -> Self {
-        Self { store }
+        Self {
+            store,
+            authorizer: None,
+        }
+    }
+
+    pub fn authorized(
+        store: PostgresDataStore,
+        authorizer: Arc<dyn CapabilityAuthorizer>,
+    ) -> Self {
+        Self {
+            store,
+            authorizer: Some(authorizer),
+        }
     }
 
     pub async fn execute(
@@ -109,6 +134,7 @@ impl PostgresCustomerEnrichmentApplicationOutcomeExecutor {
     ) -> Result<CapabilityExecutionResult, SdkError> {
         let definition = record_application_outcome_capability_definition()?;
         ensure_exact_definition(&definition, &request, RECORD_APPLICATION_OUTCOME_CAPABILITY)?;
+        self.authorize(&definition, &request).await?;
         let command: wire::RecordApplicationOutcomeRequest =
             support::decode_request_with_data_class(
                 &request,
@@ -140,6 +166,24 @@ impl PostgresCustomerEnrichmentApplicationOutcomeExecutor {
         PostgresTransactionalAggregateExecutor::new(self.store.clone(), Arc::new(planner))
             .execute(&definition, request)
             .await
+    }
+
+    async fn authorize(
+        &self,
+        definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+    ) -> Result<(), SdkError> {
+        let Some(authorizer) = &self.authorizer else {
+            return Ok(());
+        };
+        let decision = authorizer.authorize(definition, request).await?;
+        if decision.allowed {
+            return Ok(());
+        }
+        Err(application_outcome_permission_denied().with_internal_reference(format!(
+            "decision_id={};reason_code={};policy_version={}",
+            decision.decision_id, decision.reason_code, decision.policy_version
+        )))
     }
 
     async fn load_required(
@@ -251,6 +295,15 @@ fn application_attempt_not_found() -> SdkError {
         ErrorCategory::NotFound,
         false,
         "The requested application attempt was not found.",
+    )
+}
+
+fn application_outcome_permission_denied() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_APPLICATION_OUTCOME_PERMISSION_DENIED",
+        ErrorCategory::Authorization,
+        false,
+        "The application worker is not authorized to persist the application outcome.",
     )
 }
 
