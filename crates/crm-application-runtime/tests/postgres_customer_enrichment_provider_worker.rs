@@ -8,6 +8,9 @@ mod process {
         AuthorizationGrant, LiveAuthorizationStore, LiveCapabilityAuthorizer,
     };
     use crm_capability_runtime::CapabilityDefinition;
+    use crm_customer_enrichment_capability_adapter::{
+        enrichment_request_from_snapshot, record_provider_response_capability_definition,
+    };
     use crm_module_sdk::testing::FixedClock;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -23,15 +26,17 @@ mod process {
             .await
             .unwrap();
 
-        let adapter = Arc::new(TestProviderAdapter::default());
-        let mut registry = ExactProviderAdapterRegistry::builder();
-        registry
-            .register(
-                ProviderAdapterCoordinate::try_new("process-http-v1", "1.0.0").unwrap(),
-                adapter.clone(),
-            )
-            .unwrap();
-        let registry: Arc<dyn ProviderAdapterRegistryPort> = Arc::new(registry.build());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let registry = ExactProviderAdapterRegistry::try_new([
+            ProviderAdapterRegistration::enabled(
+                fixture.work_item.provider_request.adapter_coordinate.clone(),
+                ReplaySafeProvider {
+                    expected_key: fixture.provider_key.clone(),
+                    calls: calls.clone(),
+                },
+            ),
+        ])
+        .unwrap();
         let authorization_store = LiveAuthorizationStore::default();
         let clock: Arc<dyn crm_module_sdk::Clock> = Arc::new(FixedClock::new(30_000_000));
         let authorizer = Arc::new(LiveCapabilityAuthorizer::new(
@@ -41,7 +46,7 @@ mod process {
         let worker = build_customer_enrichment_provider_worker(
             CustomerEnrichmentProviderWorkerDependencies {
                 store: store.clone(),
-                registry,
+                registry: Arc::new(registry),
                 authorizer,
             },
         )
@@ -54,7 +59,7 @@ mod process {
             dispatch_denied.code,
             "CUSTOMER_ENRICHMENT_DISPATCH_PERMISSION_DENIED"
         );
-        assert!(adapter.calls.lock().unwrap().is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
         assert_eq!(
             request_status(&store, &fixture.created_request).await,
             EnrichmentRequestStatus::Created
@@ -68,7 +73,7 @@ mod process {
             response_denied.code,
             "CUSTOMER_ENRICHMENT_RESPONSE_PERMISSION_DENIED"
         );
-        assert_eq!(adapter.calls.lock().unwrap().len(), 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(
             request_status(&store, &fixture.created_request).await,
             EnrichmentRequestStatus::Dispatched
@@ -76,7 +81,7 @@ mod process {
         assert_eq!(
             scalar(
                 &admin,
-                "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-worker-process-a' AND record_type = 'customer_enrichment.provider_response_receipt'",
+                "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_receipt'",
             )
             .await,
             0
@@ -88,13 +93,7 @@ mod process {
         let recovered = worker.execute(fixture.work_item.clone()).await.unwrap();
         assert!(recovered.dispatch_replayed);
         assert!(!recovered.response_replayed);
-        assert_eq!(adapter.calls.lock().unwrap().len(), 2);
-        let calls = adapter.calls.lock().unwrap();
-        assert_eq!(
-            calls[0].provider_idempotency_key,
-            calls[1].provider_idempotency_key
-        );
-        drop(calls);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
         assert_eq!(
             request_status(&store, &fixture.created_request).await,
             EnrichmentRequestStatus::ResponseRecorded
@@ -102,7 +101,7 @@ mod process {
         assert_eq!(
             scalar(
                 &admin,
-                "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-worker-process-a' AND record_type = 'customer_enrichment.provider_response_receipt'",
+                "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_receipt'",
             )
             .await,
             1
