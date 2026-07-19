@@ -160,10 +160,7 @@ impl PartySnapshotPort for GovernedPartySnapshotPort {
                     party_snapshot_invalid().with_internal_reference(error.to_string())
                 })?;
             let party = response.party.ok_or_else(party_snapshot_unavailable)?;
-            let party_id = party
-                .party_ref
-                .ok_or_else(party_snapshot_invalid)?
-                .party_id;
+            let party_id = party.party_ref.ok_or_else(party_snapshot_invalid)?.party_id;
             let resource_version = party
                 .resource_version
                 .ok_or_else(party_snapshot_invalid)?
@@ -258,10 +255,9 @@ impl ProductionOwnerApplicationPolicy {
         .await?;
         self.consent_queries.validate(&definition, &query).await?;
         let result = self.consent_queries.execute(&definition, query).await?;
-        let response = consent_wire::GetConsentAuthorizationResponse::decode(
-            result.output.bytes.as_slice(),
-        )
-        .map_err(|error| policy_invalid(error.to_string()))?;
+        let response =
+            consent_wire::GetConsentAuthorizationResponse::decode(result.output.bytes.as_slice())
+                .map_err(|error| policy_invalid(error.to_string()))?;
         let authorization = response
             .authorization
             .ok_or_else(|| policy_denied_error("consent_authorization_missing"))?;
@@ -357,8 +353,7 @@ fn consent_get_query_request(
                 .map_err(configuration_error)?,
             correlation_id: crm_module_sdk::CorrelationId::try_new(request_id.clone())
                 .map_err(configuration_error)?,
-            trace_id: crm_module_sdk::TraceId::try_new(request_id)
-                .map_err(configuration_error)?,
+            trace_id: crm_module_sdk::TraceId::try_new(request_id).map_err(configuration_error)?,
             capability_id: CapabilityId::try_new(CONSENT_GET_CAPABILITY)
                 .map_err(configuration_error)?,
             capability_version: CapabilityVersion::try_new(support::CONTRACT_VERSION)
@@ -421,10 +416,7 @@ fn validate_consent_authorization(
     Ok(())
 }
 
-fn policy_denied(
-    request: &EnrichmentPolicyRequest,
-    reason: &str,
-) -> EnrichmentPolicyDecision {
+fn policy_denied(request: &EnrichmentPolicyRequest, reason: &str) -> EnrichmentPolicyDecision {
     EnrichmentPolicyDecision::Denied {
         decision_id: policy_decision_id(request, reason),
         policy_version: OWNER_APPLICATION_POLICY_VERSION.to_owned(),
