@@ -109,6 +109,23 @@ mod process {
             .await,
             1
         );
+
+        let replayed = worker.execute(fixture.work_item.clone()).await.unwrap();
+        assert!(replayed.dispatch_replayed);
+        assert!(replayed.response_replayed);
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            request_status(&store, &fixture.created_request).await,
+            EnrichmentRequestStatus::ResponseRecorded
+        );
+        assert_eq!(
+            scalar(
+                &admin,
+                "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_receipt'",
+            )
+            .await,
+            1
+        );
     }
 
     fn worker_grant(definition: &CapabilityDefinition) -> AuthorizationGrant {
