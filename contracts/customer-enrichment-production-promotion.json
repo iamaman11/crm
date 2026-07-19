@@ -19,7 +19,8 @@
       "customer_enrichment.suggestion.list_by_party@1.0.0"
     ],
     "workers": [
-      "customer_enrichment.party.display_name.apply@1.0.0"
+      "customer_enrichment.party.display_name.apply@1.0.0",
+      "customer_enrichment.application.outcome.record@1.0.0"
     ]
   },
   "global_invariants": {
@@ -33,32 +34,6 @@
   "promotion_stages": [
     {
       "stage": 1,
-      "name": "accepted_suggestion_application",
-      "coordinates": [
-        {
-          "id": "customer_enrichment.application.outcome.record",
-          "version": "1.0.0",
-          "route_kind": "worker_mutation",
-          "exposure": "worker_only",
-          "implementation_crate": "crm-customer-enrichment-application-composition",
-          "depends_on": [
-            "customer_enrichment.party.display_name.apply@1.0.0"
-          ],
-          "required_evidence": [
-            "activation_gated_worker_registration",
-            "append_once_outcome",
-            "policy_decision_causation_lineage",
-            "conflicting_outcome_fail_closed",
-            "completed_attempt_replay_suppression",
-            "disable_uninstall",
-            "cross_tenant",
-            "exact_head_17_workflows"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": 2,
       "name": "provider_worker_pipeline",
       "coordinates": [
         {
