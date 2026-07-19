@@ -89,12 +89,6 @@
     },
     {
       "owner_module_id": "crm.customer-enrichment",
-      "id": "customer_enrichment.suggestion.reject",
-      "version": "1.0.0",
-      "reason": "Resource-specific review policy and atomic PostgreSQL rejection composition are proven non-runtime; public production registration and final route-level live authorization are not complete."
-    },
-    {
-      "owner_module_id": "crm.customer-enrichment",
       "id": "customer_enrichment.suggestions.materialize",
       "version": "1.0.0",
       "reason": "Deterministic materialization planning, immutable dependency validation and fresh-PostgreSQL replay proof exist non-runtime; activation-gated production worker registration and remaining recovery scenarios are not complete."
