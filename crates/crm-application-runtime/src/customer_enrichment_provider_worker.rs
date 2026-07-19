@@ -32,26 +32,24 @@ impl fmt::Debug for CustomerEnrichmentProviderWorkerDependencies {
 pub fn build_customer_enrichment_provider_worker(
     dependencies: CustomerEnrichmentProviderWorkerDependencies,
 ) -> Result<CustomerEnrichmentProviderWorker, SdkError> {
-    let dispatch: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        AuthorizedWorkerCapabilityExecutor::new(
+    let dispatch: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(AuthorizedWorkerCapabilityExecutor::new(
             Arc::new(PostgresTransactionalAggregateExecutor::new(
                 dependencies.store.clone(),
                 Arc::new(CustomerEnrichmentRequestDispatchPlanner),
             )),
             dependencies.authorizer.clone(),
             "CUSTOMER_ENRICHMENT_DISPATCH_PERMISSION_DENIED",
-        ),
-    );
-    let response: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        AuthorizedWorkerCapabilityExecutor::new(
+        ));
+    let response: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(AuthorizedWorkerCapabilityExecutor::new(
             Arc::new(PostgresTransactionalAggregateExecutor::new(
                 dependencies.store,
                 Arc::new(CustomerEnrichmentRequestReferencePlanner),
             )),
             dependencies.authorizer,
             "CUSTOMER_ENRICHMENT_RESPONSE_PERMISSION_DENIED",
-        ),
-    );
+        ));
     CustomerEnrichmentProviderWorker::try_new(dispatch, response, dependencies.registry)
 }
 

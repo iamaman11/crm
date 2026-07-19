@@ -49,30 +49,30 @@ mod process {
         let dispatch_definition = request_dispatch_capability_definition().unwrap();
         let response_definition = record_provider_response_capability_definition().unwrap();
 
-        let dispatch_denied = worker
-            .execute(fixture.work_item.clone())
-            .await
-            .unwrap_err();
+        let dispatch_denied = worker.execute(fixture.work_item.clone()).await.unwrap_err();
         assert_eq!(
             dispatch_denied.code,
             "CUSTOMER_ENRICHMENT_DISPATCH_PERMISSION_DENIED"
         );
         assert!(adapter.calls.lock().unwrap().is_empty());
-        assert_eq!(request_status(&store, &fixture.created_request).await, EnrichmentRequestStatus::Created);
+        assert_eq!(
+            request_status(&store, &fixture.created_request).await,
+            EnrichmentRequestStatus::Created
+        );
 
         authorization_store
             .upsert(worker_grant(&dispatch_definition))
             .unwrap();
-        let response_denied = worker
-            .execute(fixture.work_item.clone())
-            .await
-            .unwrap_err();
+        let response_denied = worker.execute(fixture.work_item.clone()).await.unwrap_err();
         assert_eq!(
             response_denied.code,
             "CUSTOMER_ENRICHMENT_RESPONSE_PERMISSION_DENIED"
         );
         assert_eq!(adapter.calls.lock().unwrap().len(), 1);
-        assert_eq!(request_status(&store, &fixture.created_request).await, EnrichmentRequestStatus::Dispatched);
+        assert_eq!(
+            request_status(&store, &fixture.created_request).await,
+            EnrichmentRequestStatus::Dispatched
+        );
         assert_eq!(
             scalar(
                 &admin,
@@ -95,7 +95,10 @@ mod process {
             calls[1].provider_idempotency_key
         );
         drop(calls);
-        assert_eq!(request_status(&store, &fixture.created_request).await, EnrichmentRequestStatus::ResponseRecorded);
+        assert_eq!(
+            request_status(&store, &fixture.created_request).await,
+            EnrichmentRequestStatus::ResponseRecorded
+        );
         assert_eq!(
             scalar(
                 &admin,
@@ -131,6 +134,8 @@ mod process {
             .await
             .unwrap()
             .unwrap();
-        enrichment_request_from_snapshot(&snapshot).unwrap().status()
+        enrichment_request_from_snapshot(&snapshot)
+            .unwrap()
+            .status()
     }
 }
