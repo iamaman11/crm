@@ -9,7 +9,7 @@ mod process {
     };
     use crm_capability_runtime::CapabilityDefinition;
     use crm_customer_enrichment_capability_adapter::{
-        enrichment_request_from_snapshot, record_provider_response_capability_definition,
+        enrichment_request_from_snapshot, provider_response_capability_definition,
     };
     use crm_module_sdk::testing::FixedClock;
 
@@ -35,7 +35,10 @@ mod process {
                     .adapter_coordinate
                     .clone(),
                 ReplaySafeProvider {
-                    expected_key: fixture.provider_key.clone(),
+                    expected_key: fixture
+                        .provider_request
+                        .provider_idempotency_key
+                        .clone(),
                     calls: calls.clone(),
                 },
             )])
@@ -55,7 +58,7 @@ mod process {
         )
         .unwrap();
         let dispatch_definition = request_dispatch_capability_definition().unwrap();
-        let response_definition = record_provider_response_capability_definition().unwrap();
+        let response_definition = provider_response_capability_definition().unwrap();
 
         let dispatch_denied = worker.execute(fixture.work_item.clone()).await.unwrap_err();
         assert_eq!(
