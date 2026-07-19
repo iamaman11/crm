@@ -77,3 +77,14 @@ if visibility_replacements != 1:
     raise RuntimeError("expected customer_enrichment_visibility function is missing")
 
 path.write_text(text, encoding="utf-8")
+
+lib_path = Path("crates/crm-application-runtime/src/lib.rs")
+lib_text = lib_path.read_text(encoding="utf-8")
+staged_marker = (
+    "// Staged repair hook restores `mod bootstrap_visibility;` before source compilation.\n"
+)
+if staged_marker in lib_text:
+    lib_text = lib_text.replace(staged_marker, "mod bootstrap_visibility;\n", 1)
+elif "mod bootstrap_visibility;\n" not in lib_text:
+    raise RuntimeError("expected staged bootstrap module marker is missing")
+lib_path.write_text(lib_text, encoding="utf-8")
