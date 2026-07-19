@@ -12,6 +12,8 @@ on:
       - "crates/crm-core-data/**"
       - "crates/crm-customer-enrichment-review-adapter/**"
       - "crates/crm-customer-enrichment-review-composition/**"
+      - "crates/crm-customer-enrichment-application-adapter/**"
+      - "crates/crm-customer-enrichment-application-composition/**"
       - "modules/crm-customer-enrichment/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
@@ -31,6 +33,8 @@ on:
       - "crates/crm-core-data/**"
       - "crates/crm-customer-enrichment-review-adapter/**"
       - "crates/crm-customer-enrichment-review-composition/**"
+      - "crates/crm-customer-enrichment-application-adapter/**"
+      - "crates/crm-customer-enrichment-application-composition/**"
       - "modules/crm-customer-enrichment/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
@@ -46,7 +50,7 @@ permissions:
 jobs:
   review-process-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17-alpine
@@ -76,12 +80,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Verify policy-bound review and replay
+      - name: Verify review, application evidence and replay
         run: bash scripts/run_customer_enrichment_review_process.sh 2>&1 | tee database/customer-enrichment-review-process-runtime.log
       - name: Capture diagnostics
         if: failure()
         run: |
-          psql --no-psqlrc --pset pager=off --command "SELECT tenant_id, record_type, record_id, version FROM crm.records WHERE owner_module_id = 'crm.customer-enrichment' ORDER BY record_type, record_id" > database/customer-enrichment-review-process-runtime-state.log 2>&1 || true
+          psql --no-psqlrc --pset pager=off --command "SELECT tenant_id, record_type, record_id, version FROM crm.records WHERE owner_module_id = 'crm.customer-enrichment' ORDER BY tenant_id, record_type, record_id" > database/customer-enrichment-review-process-runtime-state.log 2>&1 || true
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -92,6 +96,8 @@ jobs:
             database/customer-enrichment-review-process-runtime-state.log
             crates/crm-customer-enrichment-review-adapter/
             crates/crm-customer-enrichment-review-composition/
+            crates/crm-customer-enrichment-application-adapter/
+            crates/crm-customer-enrichment-application-composition/
             database/tests/0017_customer_enrichment_review.sql
           if-no-files-found: error
           retention-days: 7
