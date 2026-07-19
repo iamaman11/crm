@@ -8,7 +8,7 @@
 //! published composition/adapters.
 
 mod background;
-// Staged repair revision 2 restores `mod bootstrap_visibility;` before compilation.
+mod bootstrap_visibility;
 mod config;
 mod data_quality_capability_execution;
 mod data_quality_registration;
