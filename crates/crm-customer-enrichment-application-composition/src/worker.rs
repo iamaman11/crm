@@ -1,4 +1,5 @@
 use crate::CustomerEnrichmentPartyApplicationOrchestrator;
+use crm_application_composition::TenantBackgroundWorker;
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::CapabilityRequest;
@@ -15,9 +16,9 @@ use crm_customer_enrichment_review_adapter::{
     SUGGESTION_REVIEWED_EVENT_SCHEMA, SUGGESTION_REVIEWED_EVENT_TYPE,
 };
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityVersion, CausationId, CorrelationId, DataClass,
-    EventDelivery, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
-    PayloadEncoding, PortFuture, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
+    ActorId, BusinessTransactionId, CausationId, DataClass, EventDelivery, EventType,
+    ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding, PortFuture,
+    RequestId, SchemaVersion, SdkError, TenantId,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use prost::Message;
@@ -88,7 +89,7 @@ impl CustomerEnrichmentPartyApplicationWorker {
         })
     }
 
-    pub fn run_tenant_cycle<'a>(
+    pub fn run_cycle<'a>(
         &'a self,
         tenant_id: TenantId,
         now_unix_nanos: i64,
@@ -126,13 +127,10 @@ impl CustomerEnrichmentPartyApplicationWorker {
                 if page.deliveries.is_empty() {
                     return Ok(cycle);
                 }
-
+                let next_cursor = page.next_cursor.clone();
                 for delivery in page.deliveries {
                     cycle.reviewed_events = cycle.reviewed_events.saturating_add(1);
-                    let process = self
-                        .process_delivery(&tenant_id, &delivery, now_unix_nanos)
-                        .await;
-                    match process {
+                    match self.process_delivery(&tenant_id, &delivery).await {
                         Ok(DeliveryDisposition::Accepted { attempt_replayed }) => {
                             cycle.accepted_events = cycle.accepted_events.saturating_add(1);
                             if attempt_replayed {
@@ -171,7 +169,7 @@ impl CustomerEnrichmentPartyApplicationWorker {
                     .await?;
                 }
 
-                let Some(next) = page.next_cursor else {
+                let Some(next) = next_cursor else {
                     return Ok(cycle);
                 };
                 after = Some(next);
@@ -183,7 +181,6 @@ impl CustomerEnrichmentPartyApplicationWorker {
         &self,
         tenant_id: &TenantId,
         delivery: &EventDelivery,
-        _now_unix_nanos: i64,
     ) -> Result<DeliveryDisposition, SdkError> {
         let event = decode_reviewed_event(delivery)?;
         let suggestion = event.suggestion.ok_or_else(review_event_invalid)?;
@@ -217,10 +214,8 @@ impl CustomerEnrichmentPartyApplicationWorker {
                 .approval_evidence_reference
                 .as_deref()
                 .is_none_or(str::is_empty)
+            || tenant_id != &delivery.tenant_id
         {
-            return Err(review_event_invalid());
-        }
-        if tenant_id != &delivery.tenant_id {
             return Err(review_event_invalid());
         }
 
@@ -273,13 +268,28 @@ impl CustomerEnrichmentPartyApplicationWorker {
     }
 }
 
+impl TenantBackgroundWorker for CustomerEnrichmentPartyApplicationWorker {
+    fn run_tenant_cycle<'a>(
+        &'a self,
+        tenant_id: TenantId,
+        now_unix_nanos: i64,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            self.run_cycle(tenant_id, now_unix_nanos).await?;
+            Ok(())
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DeliveryDisposition {
     Accepted { attempt_replayed: bool },
     Skipped,
 }
 
-fn decode_reviewed_event(delivery: &EventDelivery) -> Result<wire::SuggestionReviewedEvent, SdkError> {
+fn decode_reviewed_event(
+    delivery: &EventDelivery,
+) -> Result<wire::SuggestionReviewedEvent, SdkError> {
     delivery.validate()?;
     let module_id = module_id()?;
     let contract = support::protobuf_contract(
@@ -337,10 +347,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn worker_identity_and_phase_input_are_canonical() {
+    fn worker_identity_and_coordinate_are_canonical() {
         assert!(ActorId::try_new(PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID).is_ok());
         assert!(EventType::try_new(SUGGESTION_REVIEWED_EVENT_TYPE).is_ok());
-        assert!(CapabilityVersion::try_new("1.0.0").is_ok());
-        assert_eq!(APPLY_PARTY_DISPLAY_NAME_CAPABILITY, "customer_enrichment.party.display_name.apply");
+        assert_eq!(
+            APPLY_PARTY_DISPLAY_NAME_CAPABILITY,
+            "customer_enrichment.party.display_name.apply"
+        );
     }
 }
