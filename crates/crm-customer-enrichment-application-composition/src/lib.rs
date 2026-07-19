@@ -20,8 +20,9 @@ use crm_customer_enrichment_application_adapter::{
     CustomerEnrichmentApplicationAttemptPlanner, CustomerEnrichmentApplicationOutcomePlanner,
     RECORD_APPLICATION_OUTCOME_CAPABILITY, RECORD_APPLICATION_OUTCOME_REQUEST_SCHEMA,
     application_attempt_from_snapshot, application_attempt_to_wire,
-    apply_party_display_name_capability_definition, record_application_outcome_capability_definition,
-    review_from_application_snapshot, suggestion_from_application_snapshot,
+    apply_party_display_name_capability_definition,
+    record_application_outcome_capability_definition, review_from_application_snapshot,
+    suggestion_from_application_snapshot,
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, RecordRef, RecordSnapshot, SdkError};
@@ -98,11 +99,7 @@ impl PostgresCustomerEnrichmentApplicationOutcomeExecutor {
         request: CapabilityRequest,
     ) -> Result<CapabilityExecutionResult, SdkError> {
         let definition = record_application_outcome_capability_definition()?;
-        ensure_exact_definition(
-            &definition,
-            &request,
-            RECORD_APPLICATION_OUTCOME_CAPABILITY,
-        )?;
+        ensure_exact_definition(&definition, &request, RECORD_APPLICATION_OUTCOME_CAPABILITY)?;
         let command: wire::RecordApplicationOutcomeRequest =
             support::decode_request_with_data_class(
                 &request,
@@ -112,7 +109,11 @@ impl PostgresCustomerEnrichmentApplicationOutcomeExecutor {
             )?;
         let attempt_reference = required_attempt_ref(command.application_attempt_ref)?;
         let attempt_snapshot = self
-            .load_required(&request, &attempt_reference, application_attempt_not_found())
+            .load_required(
+                &request,
+                &attempt_reference,
+                application_attempt_not_found(),
+            )
             .await?;
         let attempt = application_attempt_from_snapshot(&attempt_snapshot)?;
         let public_attempt = application_attempt_to_wire(&attempt)?;
@@ -288,7 +289,10 @@ mod tests {
             application_attempt_id: "attempt-a".to_owned(),
         }))
         .unwrap();
-        assert_eq!(attempt.record_type.as_str(), APPLICATION_ATTEMPT_RECORD_TYPE);
+        assert_eq!(
+            attempt.record_type.as_str(),
+            APPLICATION_ATTEMPT_RECORD_TYPE
+        );
         assert_eq!(attempt.record_id.as_str(), "attempt-a");
     }
 }

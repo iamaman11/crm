@@ -11,7 +11,8 @@ use crm_customer_enrichment::{
 };
 use crm_customer_enrichment_application_adapter::{
     APPLY_PARTY_DISPLAY_NAME_REQUEST_SCHEMA, RECORD_APPLICATION_OUTCOME_REQUEST_SCHEMA,
-    apply_party_display_name_capability_definition, record_application_outcome_capability_definition,
+    apply_party_display_name_capability_definition,
+    record_application_outcome_capability_definition,
 };
 use crm_customer_enrichment_application_composition::{
     PostgresCustomerEnrichmentApplicationAttemptExecutor,
@@ -38,8 +39,7 @@ const SUGGESTION_MATERIALIZED_EVENT_TYPE: &str = "customer_enrichment.suggestion
 const SUGGESTION_MATERIALIZED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.SuggestionMaterializedEvent";
 const SUGGESTION_REVIEWED_EVENT_TYPE: &str = "customer_enrichment.suggestion.reviewed";
-const SUGGESTION_REVIEWED_EVENT_SCHEMA: &str =
-    "crm.customer_enrichment.v1.SuggestionReviewedEvent";
+const SUGGESTION_REVIEWED_EVENT_SCHEMA: &str = "crm.customer_enrichment.v1.SuggestionReviewedEvent";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_application_attempt_outcome_replay_and_conflict_are_deterministic() {
@@ -92,7 +92,11 @@ async fn postgres_application_attempt_outcome_replay_and_conflict_are_determinis
     assert_eq!(pending.owner_capability_id, "parties.party.update");
     assert_eq!(pending.owner_capability_version, "1.0.0");
     assert_eq!(pending.application_generation, 0);
-    assert!(pending.target_idempotency_key.starts_with("customer-enrichment-apply-"));
+    assert!(
+        pending
+            .target_idempotency_key
+            .starts_with("customer-enrichment-apply-")
+    );
     assert!(pending.recorded_outcome.is_none());
 
     let replayed_apply = attempt_executor
