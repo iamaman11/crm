@@ -15,3 +15,6 @@ cargo test -p crm-application-runtime --test postgres_customer_enrichment_sugges
 
 bash scripts/prepare_customer_enrichment_worker_process_database.sh
 cargo test -p crm-application-runtime --test postgres_customer_enrichment_suggestion_reject -- --nocapture
+
+bash scripts/prepare_customer_enrichment_worker_process_database.sh
+cargo test -p crm-application-runtime --test postgres_customer_enrichment_suggestion_accept -- --nocapture
