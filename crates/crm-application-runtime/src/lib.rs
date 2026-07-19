@@ -8,7 +8,7 @@
 //! published composition/adapters.
 
 mod background;
-mod bootstrap_visibility;
+// Staged repair hook restores `mod bootstrap_visibility;` before source compilation.
 mod config;
 mod data_quality_capability_execution;
 mod data_quality_registration;
