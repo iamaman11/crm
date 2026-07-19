@@ -23,8 +23,8 @@ use crm_customer_enrichment_application_composition::{
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityClient, CapabilityId, CapabilityVersion,
-    CausationId, Clock, CorrelationId, DataClass, ErrorCategory, ExecutionContext, IdempotencyKey,
+    ActorId, BusinessTransactionId, CapabilityClient, CapabilityId, CapabilityVersion, CausationId,
+    Clock, CorrelationId, DataClass, ErrorCategory, ExecutionContext, IdempotencyKey,
     ModuleExecutionContext, ModuleId, PortFuture, RecordId, RequestId, SchemaVersion, SdkError,
     TenantId, TraceId,
 };
@@ -103,8 +103,8 @@ pub fn build_customer_enrichment_application_worker(
         )),
         outcome_authorization.clone(),
     ));
-    let owner: Arc<dyn PartyDisplayNameApplicationPort> = Arc::new(
-        OutcomeAuthorizingPartyDisplayNameApplicationPort::new(
+    let owner: Arc<dyn PartyDisplayNameApplicationPort> =
+        Arc::new(OutcomeAuthorizingPartyDisplayNameApplicationPort::new(
             Arc::new(GatewayPartyDisplayNameApplicationPort::new(
                 dependencies.capabilities,
                 party_snapshots,
@@ -112,8 +112,7 @@ pub fn build_customer_enrichment_application_worker(
             )?),
             outcome_authorization,
             dependencies.clock.clone(),
-        ),
-    );
+        ));
     let orchestrator = Arc::new(CustomerEnrichmentPartyApplicationOrchestrator::postgres(
         dependencies.store.clone(),
         policy,
@@ -176,7 +175,8 @@ impl ProductionApplicationOutcomeAuthorization {
                 execution: ExecutionContext {
                     tenant_id: tenant_id.clone(),
                     actor_id: actor_id.clone(),
-                    request_id: RequestId::try_new(identity.clone()).map_err(configuration_error)?,
+                    request_id: RequestId::try_new(identity.clone())
+                        .map_err(configuration_error)?,
                     correlation_id: CorrelationId::try_new(identity.clone())
                         .map_err(configuration_error)?,
                     causation_id: CausationId::try_new(identity.clone())
