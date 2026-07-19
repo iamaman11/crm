@@ -1,7 +1,5 @@
 use crm_capability_adapters::{AuthorizationGrant, QueryVisibilityGrant};
-use crm_capability_ingress::{
-    HttpQueryBody, HttpQueryMiddleware, HttpQueryRequest, TENANT_HEADER,
-};
+use crm_capability_ingress::{HttpQueryBody, HttpQueryMiddleware, HttpQueryRequest, TENANT_HEADER};
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_enrichment::Suggestion;
 use crm_module_sdk::{

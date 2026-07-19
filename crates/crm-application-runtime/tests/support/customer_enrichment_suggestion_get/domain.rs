@@ -1,4 +1,4 @@
-use super::{actor, tenant, NOW, TENANT};
+use super::{NOW, TENANT, actor, tenant};
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
 use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan};

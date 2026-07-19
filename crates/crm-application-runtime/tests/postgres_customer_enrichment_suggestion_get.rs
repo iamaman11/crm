@@ -17,8 +17,8 @@ use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_customer_enrichment_suggestion_query_adapter::{
     GET_SUGGESTION_CAPABILITY, get_suggestion_capability_definition,
 };
-use crm_module_sdk::testing::{DeterministicRandom, FixedClock};
 use crm_module_sdk::Clock;
+use crm_module_sdk::testing::{DeterministicRandom, FixedClock};
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use crm_query_runtime::QueryGateway;
 use http::StatusCode;
@@ -135,10 +135,9 @@ async fn production_suggestion_get_is_activation_gated_permission_aware_and_side
 
     let success = execute_get(&http, &definition, &suggestion, TENANT).await;
     assert_eq!(success.status, StatusCode::OK);
-    let response = wire::GetSuggestionResponse::decode(
-        success_payload(success.body).bytes.as_slice(),
-    )
-    .expect("decode production suggestion response");
+    let response =
+        wire::GetSuggestionResponse::decode(success_payload(success.body).bytes.as_slice())
+            .expect("decode production suggestion response");
     let public = response.suggestion.expect("production suggestion");
     assert_eq!(public.proposed_value, "Production Company");
     assert_eq!(
@@ -165,12 +164,11 @@ async fn production_suggestion_get_is_activation_gated_permission_aware_and_side
         .expect("grant redacted suggestion visibility");
     let redacted = execute_get(&http, &definition, &suggestion, TENANT).await;
     assert_eq!(redacted.status, StatusCode::OK);
-    let redacted = wire::GetSuggestionResponse::decode(
-        success_payload(redacted.body).bytes.as_slice(),
-    )
-    .expect("decode redacted suggestion response")
-    .suggestion
-    .expect("redacted suggestion");
+    let redacted =
+        wire::GetSuggestionResponse::decode(success_payload(redacted.body).bytes.as_slice())
+            .expect("decode redacted suggestion response")
+            .suggestion
+            .expect("redacted suggestion");
     assert!(redacted.proposed_value.is_empty());
     assert_eq!(
         redacted.lifecycle_status,
