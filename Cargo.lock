@@ -778,6 +778,7 @@ dependencies = [
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
+ "crm-core-events",
  "crm-customer-enrichment",
  "crm-customer-enrichment-application-adapter",
  "crm-customer-enrichment-capability-adapter",
