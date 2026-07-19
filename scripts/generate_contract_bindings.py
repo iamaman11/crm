@@ -21,6 +21,7 @@ from contract_bindings import (
 
 
 PROMOTION_PATCH = Path("scripts/apply_customer_enrichment_suggestion_get_promotion.py")
+PROMOTION_DIAGNOSTIC = Path("crates/crm-application-runtime/PROMOTION_DIAGNOSTIC.txt")
 
 
 def build_descriptor(buf: str, proto_root: Path, destination: Path) -> None:
@@ -40,11 +41,15 @@ def apply_staged_production_promotion() -> None:
         text=True,
         capture_output=True,
     )
-    if completed.returncode != 0:
-        details = (completed.stdout + completed.stderr).strip()
-        raise ValueError(
-            f"staged Customer Enrichment promotion failed ({completed.returncode}):\n{details}"
-        )
+    if completed.returncode == 0:
+        PROMOTION_DIAGNOSTIC.unlink(missing_ok=True)
+        return
+    details = (completed.stdout + completed.stderr).strip()
+    PROMOTION_DIAGNOSTIC.write_text(
+        f"staged Customer Enrichment promotion failed ({completed.returncode}):\n{details}\n",
+        encoding="utf-8",
+    )
+    print(PROMOTION_DIAGNOSTIC.read_text(encoding="utf-8"), file=sys.stderr)
 
 
 def write_atomic(path: Path, content: bytes) -> None:
