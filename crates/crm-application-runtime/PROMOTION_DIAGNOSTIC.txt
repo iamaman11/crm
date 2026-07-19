@@ -1,4 +1,4 @@
-staged Customer Enrichment promotion failed (1):
+scripts/apply_customer_enrichment_suggestion_get_promotion.py failed (1):
 Traceback (most recent call last):
   File "/home/runner/work/crm/crm/scripts/apply_customer_enrichment_suggestion_get_promotion.py", line 71, in <module>
     replace(
