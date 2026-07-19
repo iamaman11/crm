@@ -52,7 +52,7 @@ def exact_empty_modules(entries: object) -> set[str]:
     return set(module_ids)
 
 
-def load_and_validate() -> tuple[set[Route], set[Route], set[str]]:
+def load_and_validate() -> tuple[set[Route], set[Route], set[Route], set[str]]:
     bindings = json.loads(BINDINGS.read_text(encoding="utf-8"))
     classifications = json.loads(CLASSIFICATIONS.read_text(encoding="utf-8"))
     if bindings.get("schema_version") != "crm.contract-bindings/v1":
@@ -75,18 +75,23 @@ def load_and_validate() -> tuple[set[Route], set[Route], set[str]]:
     platform = exact_routes(
         classifications.get("platform_runtime_routes"), "platform_runtime_routes"
     )
+    workers = exact_routes(
+        classifications.get("worker_runtime_routes"), "worker_runtime_routes"
+    )
     non_runtime = exact_routes(
         classifications.get("non_runtime_contract_routes"),
         "non_runtime_contract_routes",
     )
     empty_modules = exact_empty_modules(classifications.get("empty_runtime_modules"))
 
-    if platform & non_runtime:
-        raise ValueError("platform and non-runtime route classifications overlap")
+    if platform & workers or platform & non_runtime or workers & non_runtime:
+        raise ValueError("production route classifications overlap")
     if any(owner in governed_modules for owner, _, _ in platform):
         raise ValueError(
             "platform runtime classifications must not use governed business module owners"
         )
+    if not workers <= governed:
+        raise ValueError("worker runtime classifications must name governed binding coordinates")
     if not non_runtime <= governed:
         raise ValueError(
             "non-runtime classifications must name governed binding coordinates"
@@ -95,15 +100,15 @@ def load_and_validate() -> tuple[set[Route], set[Route], set[str]]:
         raise ValueError(
             "route-less module classifications must exactly match modules with no bound capabilities"
         )
-    return platform, non_runtime, empty_modules
+    return platform, workers, non_runtime, empty_modules
 
 
 def main() -> int:
-    platform, non_runtime, empty_modules = load_and_validate()
+    platform, workers, non_runtime, empty_modules = load_and_validate()
     print(
         "Production route classifications valid: "
-        f"{len(platform)} platform routes, {len(non_runtime)} non-runtime routes, "
-        f"{len(empty_modules)} route-less modules."
+        f"{len(platform)} platform routes, {len(workers)} worker runtime routes, "
+        f"{len(non_runtime)} non-runtime routes, {len(empty_modules)} route-less modules."
     )
     return 0
 
