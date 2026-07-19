@@ -7,9 +7,8 @@ use crm_application_runtime::{
     build_production_composition,
 };
 use crm_capability_adapters::{
-    AuthorizationGrant, GatewayCapabilityClient, LiveAuthorizationStore,
-    LiveCapabilityAuthorizer, LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore,
-    QueryVisibilityGrant,
+    AuthorizationGrant, GatewayCapabilityClient, LiveAuthorizationStore, LiveCapabilityAuthorizer,
+    LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore, QueryVisibilityGrant,
 };
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as plan_support;
@@ -298,8 +297,7 @@ fn review_seed_context() -> Result<ModuleExecutionContext, SdkError> {
                 "application-worker-review-transaction",
             )
             .map_err(test_configuration_error)?,
-            schema_version: SchemaVersion::try_new("1.0.0")
-                .map_err(test_configuration_error)?,
+            schema_version: SchemaVersion::try_new("1.0.0").map_err(test_configuration_error)?,
             request_started_at_unix_nanos: NOW,
         },
     })
