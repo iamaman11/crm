@@ -40,6 +40,7 @@ use crm_customer_data_operations_execution_composition::{
 use crm_customer_data_operations_query_adapter::{
     PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
+use crm_customer_enrichment_application_adapter::record_application_outcome_capability_definition;
 use crm_customer_enrichment_application_composition::PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID;
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{
@@ -207,6 +208,9 @@ impl ApplicationRuntime {
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let artifact_download_definition = artifact_download_capability_definition()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_application_outcome_definition =
+            record_application_outcome_capability_definition()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let import_execution_worker_actor_id =
             ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
@@ -250,6 +254,7 @@ impl ApplicationRuntime {
                 &visibility_store,
                 &mutation_definitions,
                 &query_definitions,
+                &customer_enrichment_application_outcome_definition,
                 &customer_enrichment_application_worker_actor_id,
             )?;
         }
@@ -274,6 +279,7 @@ impl ApplicationRuntime {
             CustomerEnrichmentApplicationWorkerDependencies {
                 store: store.clone(),
                 capabilities: Arc::new(GatewayCapabilityClient::new(Arc::clone(&mutation_gateway))),
+                capability_authorizer: authorizer.clone(),
                 query_authorizer,
                 visibility_authorizer: query_visibility,
                 clock: Arc::clone(&clock),
@@ -864,6 +870,7 @@ fn bootstrap_customer_enrichment_application_worker_access(
     visibility_store: &LiveQueryVisibilityStore,
     mutation_definitions: &[CapabilityDefinition],
     query_definitions: &[CapabilityDefinition],
+    application_outcome_definition: &CapabilityDefinition,
     worker_actor_id: &ActorId,
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = expiry(now_unix_nanos)?;
@@ -897,7 +904,12 @@ fn bootstrap_customer_enrichment_application_worker_access(
     let visibility = build_bootstrap_visibility_registry()
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
     for tenant_id in &config.tenant_ids {
-        for definition in [party_update, party_get, consent_get] {
+        for definition in [
+            party_update,
+            party_get,
+            consent_get,
+            application_outcome_definition,
+        ] {
             authorization_store
                 .upsert(AuthorizationGrant {
                     tenant_id: tenant_id.clone(),
