@@ -27,16 +27,19 @@ mod process {
             .unwrap();
 
         let calls = Arc::new(AtomicUsize::new(0));
-        let registry = ExactProviderAdapterRegistry::try_new([
-            ProviderAdapterRegistration::enabled(
-                fixture.work_item.provider_request.adapter_coordinate.clone(),
+        let registry =
+            ExactProviderAdapterRegistry::try_new([ProviderAdapterRegistration::enabled(
+                fixture
+                    .work_item
+                    .provider_request
+                    .adapter_coordinate
+                    .clone(),
                 ReplaySafeProvider {
                     expected_key: fixture.provider_key.clone(),
                     calls: calls.clone(),
                 },
-            ),
-        ])
-        .unwrap();
+            )])
+            .unwrap();
         let authorization_store = LiveAuthorizationStore::default();
         let clock: Arc<dyn crm_module_sdk::Clock> = Arc::new(FixedClock::new(30_000_000));
         let authorizer = Arc::new(LiveCapabilityAuthorizer::new(
