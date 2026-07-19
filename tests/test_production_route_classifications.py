@@ -5,8 +5,18 @@ from scripts.check_production_route_classifications import load_and_validate
 
 class ProductionRouteClassificationTests(unittest.TestCase):
     def test_exact_classifications_are_well_formed(self) -> None:
-        platform, non_runtime, empty_modules = load_and_validate()
+        platform, workers, non_runtime, empty_modules = load_and_validate()
         self.assertEqual(len(platform), 7)
+        self.assertEqual(
+            workers,
+            {
+                (
+                    "crm.customer-enrichment",
+                    "customer_enrichment.party.display_name.apply",
+                    "1.0.0",
+                )
+            },
+        )
         self.assertEqual(
             non_runtime,
             {
@@ -50,16 +60,14 @@ class ProductionRouteClassificationTests(unittest.TestCase):
             "customer_enrichment.suggestion.list_by_party",
             "customer_enrichment.suggestion.reject",
             "customer_enrichment.suggestion.accept",
-            "customer_enrichment.party.display_name.apply",
         }:
-            self.assertNotIn(
-                (
-                    "crm.customer-enrichment",
-                    capability_id,
-                    "1.0.0",
-                ),
-                non_runtime,
+            coordinate = (
+                "crm.customer-enrichment",
+                capability_id,
+                "1.0.0",
             )
+            self.assertNotIn(coordinate, workers)
+            self.assertNotIn(coordinate, non_runtime)
 
 
 if __name__ == "__main__":
