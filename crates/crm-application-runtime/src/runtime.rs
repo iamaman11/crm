@@ -1,9 +1,10 @@
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
-    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
-    PostgresModuleActivation, ProcessIdentitySource, ProductionBackgroundWorkerDependencies,
-    ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
-    build_bootstrap_visibility_registry, build_production_background_workers,
+    CustomerEnrichmentApplicationWorkerDependencies, GovernedPartyExportSelectionSource,
+    PartyExportArtifactDownloadService, PostgresModuleActivation, ProcessIdentitySource,
+    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies, SystemClock,
+    bootstrap_export_selection_worker_access, build_bootstrap_visibility_registry,
+    build_customer_enrichment_application_worker, build_production_background_workers,
     build_production_composition,
 };
 use axum::extract::{Path, State};
@@ -25,6 +26,7 @@ use crm_capability_ingress::{
     HttpQueryMiddleware, HttpQueryRequest, QueryContextResolver, QueryIngress, TimeoutPolicy,
 };
 use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityGateway};
+use crm_consents_query_adapter::GET_CAPABILITY as CONSENT_GET_CAPABILITY;
 use crm_core_data::{PostgresDataStore, PostgresImmutableFileArtifactStore};
 use crm_customer_360_composition::Customer360ProjectionWorker;
 use crm_customer_data_operations_capability_adapter::internal_export_selection_capability_definitions;
@@ -38,6 +40,7 @@ use crm_customer_data_operations_execution_composition::{
 use crm_customer_data_operations_query_adapter::{
     PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
+use crm_customer_enrichment_application_composition::PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID;
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, Clock, ModuleId, RandomSource, RecordType,
@@ -45,8 +48,9 @@ use crm_module_sdk::{
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
+    UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
 };
-use crm_parties_query_adapter::PartyQueryAdapter;
+use crm_parties_query_adapter::{GET_CAPABILITY as PARTY_GET_CAPABILITY, PartyQueryAdapter};
 use crm_query_runtime::{CursorCodec, QueryGateway};
 use crm_sales_activities_capability_composition::{
     Phase6ProjectionWorker, SalesActivitiesLinkEventProcessor,
@@ -182,8 +186,8 @@ impl ApplicationRuntime {
             store: store.clone(),
             activation: activation.clone(),
             capability_authorizer,
-            query_authorizer,
-            visibility_authorizer: query_visibility,
+            query_authorizer: query_authorizer.clone(),
+            visibility_authorizer: query_visibility.clone(),
             cursor_key,
         })
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
@@ -208,6 +212,9 @@ impl ApplicationRuntime {
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let export_selection_worker_actor_id =
             ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_application_worker_actor_id =
+            ActorId::try_new(PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         if config.bootstrap_allow_phase6 {
             bootstrap_application_access(
@@ -236,6 +243,15 @@ impl ApplicationRuntime {
                 &internal_export_selection_definitions,
                 &export_selection_worker_actor_id,
             )?;
+            bootstrap_customer_enrichment_application_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &mutation_definitions,
+                &query_definitions,
+                &customer_enrichment_application_worker_actor_id,
+            )?;
         }
 
         let mutation_gateway = Arc::new(CapabilityGateway::new(
@@ -253,6 +269,22 @@ impl ApplicationRuntime {
             composition.mutation_executor(),
             Arc::clone(&clock),
         ));
+
+        let customer_enrichment_application_worker =
+            build_customer_enrichment_application_worker(
+                CustomerEnrichmentApplicationWorkerDependencies {
+                    store: store.clone(),
+                    capabilities: Arc::new(GatewayCapabilityClient::new(Arc::clone(
+                        &mutation_gateway,
+                    ))),
+                    query_authorizer,
+                    visibility_authorizer: query_visibility,
+                    clock: Arc::clone(&clock),
+                    cursor_key,
+                    actor_id: customer_enrichment_application_worker_actor_id,
+                },
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
 
         let import_execution_reader =
             Arc::new(PostgresImportExecutionSnapshotReader::new(store.clone()));
@@ -342,7 +374,7 @@ impl ApplicationRuntime {
         let link_processor = Arc::new(
             SalesActivitiesLinkEventProcessor::new(
                 store.clone(),
-                mutation_gateway,
+                Arc::clone(&mutation_gateway),
                 SalesActivitiesLinkEventProcessorConfig {
                     worker_id: "crm-api-link-worker".to_owned(),
                     worker_actor_id: config.actor_id.clone(),
@@ -368,6 +400,7 @@ impl ApplicationRuntime {
                 store,
                 import_execution_worker,
                 export_selection_worker,
+                customer_enrichment_application_worker,
                 link_processor,
                 projection_worker,
                 customer_360_worker,
@@ -776,7 +809,7 @@ fn bootstrap_application_access(
             for resource in resources {
                 upsert_bootstrap_visibility(
                     visibility_store,
-                    config,
+                    &config.actor_id,
                     tenant_id,
                     definition,
                     resource,
@@ -827,9 +860,82 @@ fn bootstrap_import_execution_worker_access(
     Ok(())
 }
 
+fn bootstrap_customer_enrichment_application_worker_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    visibility_store: &LiveQueryVisibilityStore,
+    mutation_definitions: &[CapabilityDefinition],
+    query_definitions: &[CapabilityDefinition],
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    let party_update = mutation_definitions
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+                && definition.capability_id.as_str() == PARTY_UPDATE_CAPABILITY
+        })
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party update capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    let party_get = query_definitions
+        .iter()
+        .find(|definition| definition.capability_id.as_str() == PARTY_GET_CAPABILITY)
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party get capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    let consent_get = query_definitions
+        .iter()
+        .find(|definition| definition.capability_id.as_str() == CONSENT_GET_CAPABILITY)
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Consent get capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    let visibility = build_bootstrap_visibility_registry()
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+    for tenant_id in &config.tenant_ids {
+        for definition in [party_update, party_get, consent_get] {
+            authorization_store
+                .upsert(AuthorizationGrant {
+                    tenant_id: tenant_id.clone(),
+                    actor_id: worker_actor_id.clone(),
+                    policy_id: definition.authorization_policy_id.clone(),
+                    capability_id: definition.capability_id.clone(),
+                    capability_version: definition.capability_version.clone(),
+                    owner_module_id: definition.owner_module_id.clone(),
+                    policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                    expires_at_unix_nanos: Some(expires_at),
+                })
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        }
+        for definition in [party_get, consent_get] {
+            let resources = visibility
+                .resources_for(definition)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+            for resource in resources {
+                upsert_bootstrap_visibility(
+                    visibility_store,
+                    worker_actor_id,
+                    tenant_id,
+                    definition,
+                    resource,
+                    expires_at,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn upsert_bootstrap_visibility(
     visibility_store: &LiveQueryVisibilityStore,
-    config: &ApplicationConfig,
+    actor_id: &ActorId,
     tenant_id: &TenantId,
     definition: &CapabilityDefinition,
     resource: BootstrapVisibilityResource,
@@ -838,7 +944,7 @@ fn upsert_bootstrap_visibility(
     visibility_store
         .upsert(QueryVisibilityGrant {
             tenant_id: tenant_id.clone(),
-            actor_id: config.actor_id.clone(),
+            actor_id: actor_id.clone(),
             capability_id: definition.capability_id.clone(),
             capability_version: definition.capability_version.clone(),
             owner_module_id: ModuleId::try_new(resource.owner_module_id)
