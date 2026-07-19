@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crm_capability_adapters::{AuthorizationGrant, QueryVisibilityGrant};
 use crm_capability_ingress::{
     HttpCapabilityBody, HttpCapabilityMiddleware, HttpCapabilityRequest, HttpQueryBody,
