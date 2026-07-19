@@ -31,13 +31,14 @@ Current production route inventory: **4 mutations + 4 permission-aware queries**
 - [x] Add non-runtime permission-aware `suggestion.get` and `suggestion.list_by_party` with strict suggestion/review rehydration, Party/profile/status filters, signed cursor, Party-first hiding, declarative record redaction and fresh-PostgreSQL proof that reads are side-effect free. Align bootstrap visibility for all four existing production enrichment queries without expanding route inventory.
 - [x] Add deterministic non-runtime application evidence: persist a pending application attempt before external I/O, append one exact outcome afterwards, preserve strict record versions `1 → 2`, replay exact requests without duplicates, audit semantic duplicates as no-ops and reject conflicting outcomes fail-closed. Fresh-PostgreSQL process evidence covers the complete attempt/outcome lifecycle.
 - [x] Add the governed owner boundary for Party display-name application: invoke only `parties.party.update@1.0.0` through `CapabilityClient`, preserve deterministic target idempotency and business-transaction lineage, reuse ordinary Party authorization/validation/optimistic locking, validate the typed response and affected-resource evidence, and resolve version conflicts through governed `PartySnapshotPort` rather than error-text parsing.
+- [x] Add final non-runtime owner-application orchestration: commit the deterministic attempt before policy or owner I/O, reload current append-once evidence, evaluate exact `OwnerApplication` policy, invoke the governed Party owner only when allowed, and append the exact outcome with policy-decision causation lineage. Fresh-PostgreSQL recovery proves that a target-success/outcome-missing retry uses the same deterministic target idempotency key, while a completed attempt skips both policy and owner I/O.
 - [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
 - [ ] Implement the remaining Party/Consent semantic port adapters plus final live authorization and declarative field visibility.
 - [ ] Add concrete provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
 - [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof for remaining records.
-- [ ] Add deterministic activation-gated reconciliation, expiry, application-orchestration and outcome-recovery workers.
+- [ ] Add deterministic activation-gated reconciliation, expiry and application workers.
 - [ ] Prove provider replay, conflicting response, quota, circuit/failure and provider-disabled behavior across concrete adapters; exact registry and worker replay process proof is complete.
-- [ ] Prove response-materialization and target-success/outcome-missing crash recovery.
+- [ ] Prove remaining response-materialization recovery scenarios; target-success/outcome-missing application recovery is complete non-runtime.
 - [ ] Add remaining permission-aware list surfaces, signed pagination and field redaction.
 - [ ] Replace `tests/acceptance.rs` with real production-path evidence.
 - [ ] Complete `production/CONTRIBUTION.md` through separately owned adapter/composition crates with exact route parity.
