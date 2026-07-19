@@ -9,8 +9,8 @@ use crm_customer_enrichment_capability_adapter::MODULE_ID as CUSTOMER_ENRICHMENT
 use crm_module_sdk::{
     BusinessTransactionId, CapabilityClient, CapabilityId, CapabilityInvocation, CapabilityOutcome,
     CapabilityVersion, CausationId, Clock, CorrelationId, DataClass, ErrorCategory,
-    ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding, PortFuture,
-    RequestId, SchemaVersion, SdkError, TraceId,
+    ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    PortFuture, RequestId, SchemaVersion, SdkError, TraceId,
 };
 use crm_parties_capability_adapter::{
     MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE, UPDATE_CAPABILITY,
@@ -132,10 +132,7 @@ impl PartyDisplayNameApplicationPort for GatewayPartyDisplayNameApplicationPort 
                 Ok(outcome) => {
                     let resulting_version = validate_owner_outcome(&request, outcome)?;
                     Ok(PartyDisplayNameApplicationResult::Applied {
-                        business_transaction_id: request
-                            .application_attempt_id
-                            .as_str()
-                            .to_owned(),
+                        business_transaction_id: request.application_attempt_id.as_str().to_owned(),
                         resulting_party_resource_version: resulting_version,
                     })
                 }
@@ -177,20 +174,12 @@ fn owner_call_context(
         execution: ExecutionContext {
             tenant_id: request.tenant_id.clone(),
             actor_id: request.actor_id.clone(),
-            request_id: configured(RequestId::try_new(
-                request.application_attempt_id.as_str(),
-            ))?,
+            request_id: configured(RequestId::try_new(request.application_attempt_id.as_str()))?,
             correlation_id: configured(CorrelationId::try_new(request.suggestion_id.as_str()))?,
-            causation_id: configured(CausationId::try_new(
-                request.review_decision_id.as_str(),
-            ))?,
+            causation_id: configured(CausationId::try_new(request.review_decision_id.as_str()))?,
             trace_id: configured(TraceId::try_new(request.application_attempt_id.as_str()))?,
-            capability_id: configured(CapabilityId::try_new(
-                APPLY_PARTY_DISPLAY_NAME_CAPABILITY,
-            ))?,
-            capability_version: configured(CapabilityVersion::try_new(
-                support::CONTRACT_VERSION,
-            ))?,
+            capability_id: configured(CapabilityId::try_new(APPLY_PARTY_DISPLAY_NAME_CAPABILITY))?,
+            capability_version: configured(CapabilityVersion::try_new(support::CONTRACT_VERSION))?,
             idempotency_key: configured(IdempotencyKey::try_new(
                 request.target_idempotency_key.as_str(),
             ))?,
@@ -310,9 +299,7 @@ fn nonnegative_unix_ms(now_unix_nanos: i64) -> Result<i64, SdkError> {
     Ok(now_unix_nanos / 1_000_000)
 }
 
-fn configured<T>(
-    result: Result<T, crm_module_sdk::IdentifierError>,
-) -> Result<T, SdkError> {
+fn configured<T>(result: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
     result.map_err(|error| owner_configuration_invalid(error.to_string()))
 }
 
@@ -408,7 +395,10 @@ mod tests {
         let calls = capabilities.calls();
         assert_eq!(calls.len(), 1);
         let call = &calls[0];
-        assert_eq!(call.context.module_id.as_str(), CUSTOMER_ENRICHMENT_MODULE_ID);
+        assert_eq!(
+            call.context.module_id.as_str(),
+            CUSTOMER_ENRICHMENT_MODULE_ID
+        );
         assert_eq!(
             call.context.execution.capability_id.as_str(),
             APPLY_PARTY_DISPLAY_NAME_CAPABILITY
@@ -431,8 +421,8 @@ mod tests {
         );
         assert_eq!(call.request.input.owner.as_str(), PARTIES_MODULE_ID);
         assert_eq!(call.request.input.schema_id.as_str(), UPDATE_REQUEST_SCHEMA);
-        let command = party_wire::UpdatePartyRequest::decode(call.request.input.bytes.as_slice())
-            .unwrap();
+        let command =
+            party_wire::UpdatePartyRequest::decode(call.request.input.bytes.as_slice()).unwrap();
         assert_eq!(command.party_ref.unwrap().party_id, "party-application-1");
         assert_eq!(command.expected_version, 7);
         assert_eq!(command.display_name, "Applied Company");
