@@ -7,7 +7,8 @@
       "customer_enrichment.mapping.publish@1.0.0",
       "customer_enrichment.request.create@1.0.0",
       "customer_enrichment.request.cancel@1.0.0",
-      "customer_enrichment.suggestion.reject@1.0.0"
+      "customer_enrichment.suggestion.reject@1.0.0",
+      "customer_enrichment.suggestion.accept@1.0.0"
     ],
     "queries": [
       "customer_enrichment.provider_profile.get@1.0.0",
@@ -31,28 +32,6 @@
       "stage": 1,
       "name": "accepted_suggestion_application",
       "coordinates": [
-        {
-          "id": "customer_enrichment.suggestion.accept",
-          "version": "1.0.0",
-          "route_kind": "mutation",
-          "exposure": "public",
-          "implementation_crate": "crm-customer-enrichment-review-composition",
-          "depends_on": [
-            "customer_enrichment.suggestion.get@1.0.0"
-          ],
-          "required_evidence": [
-            "activation_gated_registration",
-            "live_party_authorization",
-            "required_approval_evidence",
-            "exact_suggestion_version_digest_binding",
-            "resource_specific_review_policy",
-            "atomic_idempotency_outbox_audit",
-            "real_crm_api_success_denial_stale",
-            "disable_uninstall",
-            "cross_tenant",
-            "exact_head_17_workflows"
-          ]
-        },
         {
           "id": "customer_enrichment.party.display_name.apply",
           "version": "1.0.0",
