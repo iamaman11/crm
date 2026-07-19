@@ -1,0 +1,16 @@
+staged Customer Enrichment promotion failed (1):
+Traceback (most recent call last):
+  File "/home/runner/work/crm/crm/scripts/apply_customer_enrichment_suggestion_get_promotion.py", line 71, in <module>
+    replace(
+    ~~~~~~~^
+        "crates/crm-application-runtime/src/bootstrap_visibility.rs",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        """        _ => Vec::new(),\n    }\n}\n\nfn customer_data_import_job_fields()""",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        """        GET_SUGGESTION_CAPABILITY => vec![\n            resource(\n                CUSTOMER_ENRICHMENT_MODULE_ID,\n                PARTY_RECORD_TYPE,\n                BTreeSet::new(),\n            ),\n            resource(\n                CUSTOMER_ENRICHMENT_MODULE_ID,\n                CUSTOMER_ENRICHMENT_SUGGESTION_RECORD_TYPE,\n                customer_enrichment_suggestion_fields(),\n            ),\n            resource(\n                CUSTOMER_ENRICHMENT_MODULE_ID,\n                CUSTOMER_ENRICHMENT_REVIEW_DECISION_RECORD_TYPE,\n                customer_enrichment_review_decision_fields(),\n            ),\n        ],\n        _ => Vec::new(),\n    }\n}\n\nfn customer_data_import_job_fields()""",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/runner/work/crm/crm/scripts/apply_customer_enrichment_suggestion_get_promotion.py", line 15, in replace
+    raise RuntimeError(f"expected source fragment missing: {path}")
+RuntimeError: expected source fragment missing: crates/crm-application-runtime/src/bootstrap_visibility.rs

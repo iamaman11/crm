@@ -23,6 +23,7 @@ use crm_customer_enrichment_query_adapter::{
     GET_ENRICHMENT_REQUEST_CAPABILITY, GET_MAPPING_CAPABILITY, GET_PROVIDER_PROFILE_CAPABILITY,
 };
 use crm_customer_enrichment_request_list_query_adapter::LIST_ENRICHMENT_REQUESTS_CAPABILITY;
+use crm_customer_enrichment_suggestion_query_adapter::GET_SUGGESTION_CAPABILITY;
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
@@ -44,6 +45,9 @@ const ACTIVITIES_MODULE_ID: &str = "crm.activities";
 const DATA_QUALITY_MODULE_ID: &str = "crm.data-quality";
 const DATA_QUALITY_RULE_SET_RECORD_TYPE: &str = "data_quality.party_rule_set_version";
 const CUSTOMER_ENRICHMENT_REQUEST_RECORD_TYPE: &str = "customer_enrichment.request";
+const CUSTOMER_ENRICHMENT_SUGGESTION_RECORD_TYPE: &str = "customer_enrichment.suggestion";
+const CUSTOMER_ENRICHMENT_REVIEW_DECISION_RECORD_TYPE: &str =
+    "customer_enrichment.review_decision";
 
 type VisibilityProvider = fn(&CapabilityDefinition) -> Vec<BootstrapVisibilityResource>;
 

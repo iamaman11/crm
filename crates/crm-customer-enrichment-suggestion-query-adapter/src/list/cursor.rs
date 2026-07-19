@@ -109,7 +109,7 @@ pub(super) fn decode_after(
         return Ok(None);
     }
     let value = adapter
-        .cursor_codec
+        .cursor_codec()?
         .decode(token, binding)
         .map_err(cursor_error)?;
     let after = RecordQueryContinuation {
@@ -127,7 +127,7 @@ pub(super) fn encode_next(
 ) -> Result<String, SdkError> {
     next.map(|value| {
         adapter
-            .cursor_codec
+            .cursor_codec()?
             .encode(
                 binding,
                 &CursorContinuation {

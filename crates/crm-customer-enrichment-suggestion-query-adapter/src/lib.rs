@@ -56,7 +56,7 @@ pub(crate) const INTERNAL_SCAN_PAGE_SIZE: u32 = 100;
 pub struct CustomerEnrichmentSuggestionQueryAdapter {
     pub(crate) store: PostgresDataStore,
     pub(crate) visibility: Arc<dyn QueryVisibilityAuthorizer>,
-    pub(crate) cursor_codec: crm_query_runtime::CursorCodec,
+    pub(crate) cursor_codec: Option<crm_query_runtime::CursorCodec>,
 }
 
 impl CustomerEnrichmentSuggestionQueryAdapter {
@@ -68,8 +68,25 @@ impl CustomerEnrichmentSuggestionQueryAdapter {
         Self {
             store,
             visibility,
-            cursor_codec,
+            cursor_codec: Some(cursor_codec),
         }
+    }
+
+    pub fn new_get_only(
+        store: PostgresDataStore,
+        visibility: Arc<dyn QueryVisibilityAuthorizer>,
+    ) -> Self {
+        Self {
+            store,
+            visibility,
+            cursor_codec: None,
+        }
+    }
+
+    pub(crate) fn cursor_codec(&self) -> Result<&crm_query_runtime::CursorCodec, SdkError> {
+        self.cursor_codec.as_ref().ok_or_else(|| {
+            query_configuration_invalid("suggestion list cursor codec is not configured")
+        })
     }
 
     async fn execute_get(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
@@ -221,7 +238,7 @@ impl std::fmt::Debug for CustomerEnrichmentSuggestionQueryAdapter {
         formatter
             .debug_struct("CustomerEnrichmentSuggestionQueryAdapter")
             .field("store", &self.store)
-            .field("cursor_codec", &self.cursor_codec)
+            .field("cursor_codec_configured", &self.cursor_codec.is_some())
             .field("visibility", &"dyn QueryVisibilityAuthorizer")
             .finish()
     }

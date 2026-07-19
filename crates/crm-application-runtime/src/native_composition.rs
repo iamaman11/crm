@@ -67,6 +67,9 @@ use crm_customer_enrichment_request_list_query_adapter::{
     CustomerEnrichmentRequestListQueryAdapter,
     query_capability_definition as customer_enrichment_request_list_query_capability_definition,
 };
+use crm_customer_enrichment_suggestion_query_adapter::{
+    CustomerEnrichmentSuggestionQueryAdapter, get_suggestion_capability_definition,
+};
 use crm_data_quality_capability_adapter::capability_definitions as data_quality_capability_definitions;
 use crm_data_quality_query_adapter::{
     DataQualityQueryAdapter,
@@ -210,6 +213,7 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(customer_data_operations_query_capability_definitions()?);
     definitions.extend(customer_enrichment_query_capability_definitions()?);
     definitions.push(customer_enrichment_request_list_query_capability_definition()?);
+    definitions.push(get_suggestion_capability_definition()?);
     definitions.extend(data_quality_query_capability_definitions()?);
     definitions.push(search_query_capability_definition()?);
     definitions.extend(metadata_query_capability_definitions()?);
@@ -552,6 +556,18 @@ pub fn build_production_composition(
         &mut contributions,
         vec![customer_enrichment_request_list_query_capability_definition()?],
         customer_enrichment_request_list_queries,
+        activation.clone(),
+    )?;
+
+    let customer_enrichment_suggestion_get_queries =
+        Arc::new(CustomerEnrichmentSuggestionQueryAdapter::new_get_only(
+            store.clone(),
+            visibility_authorizer.clone(),
+        ));
+    add_activated_queries(
+        &mut contributions,
+        vec![get_suggestion_capability_definition()?],
+        customer_enrichment_suggestion_get_queries,
         activation.clone(),
     )?;
 
