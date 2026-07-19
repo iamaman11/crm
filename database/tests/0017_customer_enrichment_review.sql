@@ -35,6 +35,19 @@ VALUES
     ARRAY['personal', 'confidential']::text[]
   ),
   (
+    'customer_enrichment.application.seed',
+    '1.0.0',
+    'crm.customer-enrichment',
+    '0.1.0',
+    'crm.customer_enrichment.test.ApplicationFixtureService',
+    'SeedEvidence',
+    decode(repeat('65', 32), 'hex'),
+    decode(repeat('66', 32), 'hex'),
+    'medium', true, true, false, false, false, false, false,
+    ARRAY['customer_enrichment.application.seed']::text[],
+    ARRAY['personal', 'confidential']::text[]
+  ),
+  (
     'customer_enrichment.suggestion.accept',
     '1.0.0',
     'crm.customer-enrichment',
@@ -45,6 +58,32 @@ VALUES
     decode(repeat('63', 32), 'hex'),
     'medium', true, true, false, false, false, false, false,
     ARRAY['customer_enrichment.suggestion.accept']::text[],
+    ARRAY['personal', 'confidential']::text[]
+  ),
+  (
+    'customer_enrichment.party.display_name.apply',
+    '1.0.0',
+    'crm.customer-enrichment',
+    '0.1.0',
+    'crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService',
+    'ApplyPartyDisplayNameSuggestion',
+    decode(repeat('67', 32), 'hex'),
+    decode(repeat('68', 32), 'hex'),
+    'high', true, true, false, false, false, false, false,
+    ARRAY['customer_enrichment.party.display_name.apply']::text[],
+    ARRAY['personal', 'confidential']::text[]
+  ),
+  (
+    'customer_enrichment.application.outcome.record',
+    '1.0.0',
+    'crm.customer-enrichment',
+    '0.1.0',
+    'crm.customer_enrichment.v1.CustomerEnrichmentWorkerService',
+    'RecordApplicationOutcome',
+    decode(repeat('69', 32), 'hex'),
+    decode(repeat('6a', 32), 'hex'),
+    'medium', true, true, false, false, false, false, false,
+    ARRAY['customer_enrichment.application.outcome.record']::text[],
     ARRAY['personal', 'confidential']::text[]
   )
 ON CONFLICT (capability_id, capability_version) DO NOTHING;
