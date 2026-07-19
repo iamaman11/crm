@@ -6,5 +6,8 @@ mod list;
 mod transport;
 
 pub use domain::*;
+// The umbrella support module is compiled by both the get/list and reject
+// integration targets; only the read-surface target consumes list helpers.
+#[allow(unused_imports)]
 pub use list::*;
 pub use transport::*;
