@@ -778,6 +778,7 @@ dependencies = [
  "crm-customer-enrichment-capability-adapter",
  "crm-customer-enrichment-review-adapter",
  "crm-module-sdk",
+ "crm-parties-capability-adapter",
  "crm-proto-contracts",
  "prost",
  "sqlx",
