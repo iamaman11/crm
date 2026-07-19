@@ -7,7 +7,7 @@ mod process {
     use crm_customer_enrichment_application_composition::{
         CustomerEnrichmentPartyApplicationWorker, PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID,
     };
-    use crm_module_sdk::{ModuleId, TenantId};
+    use crm_module_sdk::ModuleId;
 
     #[derive(Debug, Clone)]
     struct StoreActivation(PostgresDataStore);
