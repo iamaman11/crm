@@ -3,6 +3,9 @@ use crm_customer_enrichment::Suggestion;
 use crm_customer_enrichment_review_adapter::suggestion_to_wire;
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 
+// This helper is consumed by the get/list process target while the shared
+// support module is also compiled by the separate rejection process target.
+#[allow(dead_code)]
 pub fn list_request(
     suggestion: &Suggestion,
     page_size: i32,
