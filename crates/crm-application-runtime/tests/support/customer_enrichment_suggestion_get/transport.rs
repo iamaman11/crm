@@ -61,6 +61,25 @@ pub async fn execute_get(
     suggestion: &Suggestion,
     requested_tenant: &'static str,
 ) -> crm_capability_ingress::HttpQueryResponse {
+    execute_query(
+        http,
+        definition,
+        &wire::GetSuggestionRequest {
+            suggestion_ref: Some(wire::SuggestionRef {
+                suggestion_id: suggestion.suggestion_id().as_str().to_owned(),
+            }),
+        },
+        requested_tenant,
+    )
+    .await
+}
+
+pub async fn execute_query<M: Message>(
+    http: &HttpQueryMiddleware,
+    definition: &CapabilityDefinition,
+    message: &M,
+    requested_tenant: &'static str,
+) -> crm_capability_ingress::HttpQueryResponse {
     let mut headers = HeaderMap::new();
     headers.insert(
         "authorization",
@@ -75,22 +94,12 @@ pub async fn execute_get(
             capability_version: definition.capability_version.clone(),
             schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
         },
-        input: query_payload(
-            definition,
-            &wire::GetSuggestionRequest {
-                suggestion_ref: Some(wire::SuggestionRef {
-                    suggestion_id: suggestion.suggestion_id().as_str().to_owned(),
-                }),
-            },
-        ),
+        input: query_payload(definition, message),
     })
     .await
 }
 
-fn query_payload(
-    definition: &CapabilityDefinition,
-    message: &wire::GetSuggestionRequest,
-) -> TypedPayload {
+fn query_payload<M: Message>(definition: &CapabilityDefinition, message: &M) -> TypedPayload {
     let payload = TypedPayload {
         owner: definition.input_contract.owner.clone(),
         schema_id: definition.input_contract.schema_id.clone(),
