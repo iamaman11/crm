@@ -12,7 +12,8 @@
       "customer_enrichment.provider_profile.get@1.0.0",
       "customer_enrichment.mapping.get@1.0.0",
       "customer_enrichment.request.get@1.0.0",
-      "customer_enrichment.request.list@1.0.0"
+      "customer_enrichment.request.list@1.0.0",
+      "customer_enrichment.suggestion.get@1.0.0"
     ]
   },
   "global_invariants": {
@@ -28,25 +29,6 @@
       "stage": 1,
       "name": "suggestion_read_surfaces",
       "coordinates": [
-        {
-          "id": "customer_enrichment.suggestion.get",
-          "version": "1.0.0",
-          "route_kind": "query",
-          "exposure": "public",
-          "implementation_crate": "crm-customer-enrichment-suggestion-query-adapter",
-          "depends_on": [],
-          "required_evidence": [
-            "activation_gated_registration",
-            "query_authorization",
-            "party_first_not_found_hiding",
-            "suggestion_and_review_visibility",
-            "declarative_field_redaction",
-            "real_crm_api_success_and_denial",
-            "disable_uninstall",
-            "cross_tenant",
-            "exact_head_17_workflows"
-          ]
-        },
         {
           "id": "customer_enrichment.suggestion.list_by_party",
           "version": "1.0.0",
