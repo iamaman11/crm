@@ -11,6 +11,7 @@ mod background;
 mod bootstrap_visibility;
 mod bootstrap_visibility_overlay;
 mod config;
+mod customer_enrichment_reject_promotion;
 mod customer_enrichment_suggestion_list_promotion;
 mod data_quality_capability_execution;
 mod data_quality_registration;
@@ -32,7 +33,8 @@ pub(crate) use bootstrap_visibility_overlay::{
     BootstrapVisibilityResource, build_bootstrap_visibility_registry,
 };
 pub use config::*;
-pub use customer_enrichment_suggestion_list_promotion::{
+pub use customer_enrichment_reject_promotion::{
+    PRODUCTION_REVIEW_POLICY_VERSION, application_mutation_definitions,
     application_query_definitions, build_production_composition,
 };
 pub use data_quality_capability_execution::DataQualityCapabilityExecutor;
@@ -45,7 +47,7 @@ pub use export_selection_source::*;
 pub use gateway_grpc::*;
 pub use native_composition::{
     PostgresModuleActivation, ProductionCompositionDependencies, application_capability_catalog,
-    application_mutation_definitions, declared_business_module_ids,
+    declared_business_module_ids,
 };
 pub use platform::*;
 pub use process::*;
