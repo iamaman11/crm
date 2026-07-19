@@ -17,7 +17,7 @@ bash scripts/prepare_customer_enrichment_worker_process_database.sh
 cargo test -p crm-application-runtime --test postgres_customer_enrichment_application_worker -- --nocapture
 
 bash scripts/prepare_customer_enrichment_worker_process_database.sh
-cargo test -p crm-application-runtime --test postgres_customer_enrichment_provider_worker -- --nocapture
+cargo test -p crm-application-runtime --test postgres_customer_enrichment_provider_worker process::provider_worker_requires_dispatch_and_response_grants_and_recovers -- --exact --nocapture
 
 bash scripts/prepare_customer_enrichment_worker_process_database.sh
 cargo test -p crm-application-runtime --test postgres_customer_enrichment_suggestion_get -- --nocapture
