@@ -1,0 +1,238 @@
+{
+  "schema_version": "crm.customer-enrichment.production-promotion/v1",
+  "module_id": "crm.customer-enrichment",
+  "current_runtime_inventory": {
+    "mutations": [
+      "customer_enrichment.provider_profile.publish@1.0.0",
+      "customer_enrichment.mapping.publish@1.0.0",
+      "customer_enrichment.request.create@1.0.0",
+      "customer_enrichment.request.cancel@1.0.0"
+    ],
+    "queries": [
+      "customer_enrichment.provider_profile.get@1.0.0",
+      "customer_enrichment.mapping.get@1.0.0",
+      "customer_enrichment.request.get@1.0.0",
+      "customer_enrichment.request.list@1.0.0"
+    ]
+  },
+  "global_invariants": {
+    "activation_gate": "crm.module_installations",
+    "registration_owner": "module_owned_contribution",
+    "central_business_route_switches_allowed": false,
+    "production_readiness_requires_single_exact_head": true,
+    "required_exact_head_workflows": 17,
+    "retain_provenance_on_uninstall": true
+  },
+  "promotion_stages": [
+    {
+      "stage": 1,
+      "name": "suggestion_read_surfaces",
+      "coordinates": [
+        {
+          "id": "customer_enrichment.suggestion.get",
+          "version": "1.0.0",
+          "route_kind": "query",
+          "exposure": "public",
+          "implementation_crate": "crm-customer-enrichment-suggestion-query-adapter",
+          "depends_on": [],
+          "required_evidence": [
+            "activation_gated_registration",
+            "query_authorization",
+            "party_first_not_found_hiding",
+            "suggestion_and_review_visibility",
+            "declarative_field_redaction",
+            "real_crm_api_success_and_denial",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        },
+        {
+          "id": "customer_enrichment.suggestion.list_by_party",
+          "version": "1.0.0",
+          "route_kind": "query",
+          "exposure": "public",
+          "implementation_crate": "crm-customer-enrichment-suggestion-query-adapter",
+          "depends_on": [
+            "customer_enrichment.suggestion.get@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_registration",
+            "query_authorization",
+            "party_first_empty_page_hiding",
+            "signed_cursor_binding",
+            "bounded_visibility_scan",
+            "declarative_field_redaction",
+            "real_crm_api_success_and_denial",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        }
+      ]
+    },
+    {
+      "stage": 2,
+      "name": "review_routes",
+      "coordinates": [
+        {
+          "id": "customer_enrichment.suggestion.reject",
+          "version": "1.0.0",
+          "route_kind": "mutation",
+          "exposure": "public",
+          "implementation_crate": "crm-customer-enrichment-review-composition",
+          "depends_on": [
+            "customer_enrichment.suggestion.get@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_registration",
+            "live_party_authorization",
+            "exact_suggestion_version_digest_binding",
+            "resource_specific_review_policy",
+            "atomic_idempotency_outbox_audit",
+            "real_crm_api_success_denial_stale",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        }
+      ]
+    },
+    {
+      "stage": 3,
+      "name": "accepted_suggestion_application",
+      "coordinates": [
+        {
+          "id": "customer_enrichment.suggestion.accept",
+          "version": "1.0.0",
+          "route_kind": "mutation",
+          "exposure": "public",
+          "implementation_crate": "crm-customer-enrichment-review-composition",
+          "depends_on": [
+            "customer_enrichment.suggestion.get@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_registration",
+            "live_party_authorization",
+            "required_approval_evidence",
+            "exact_suggestion_version_digest_binding",
+            "resource_specific_review_policy",
+            "atomic_idempotency_outbox_audit",
+            "real_crm_api_success_denial_stale",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        },
+        {
+          "id": "customer_enrichment.party.display_name.apply",
+          "version": "1.0.0",
+          "route_kind": "worker_mutation",
+          "exposure": "worker_only",
+          "implementation_crate": "crm-customer-enrichment-application-composition",
+          "depends_on": [
+            "customer_enrichment.suggestion.accept@1.0.0",
+            "parties.party.update@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_worker_registration",
+            "owner_application_policy",
+            "governed_exact_owner_capability",
+            "deterministic_target_idempotency",
+            "target_success_outcome_missing_recovery",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        },
+        {
+          "id": "customer_enrichment.application.outcome.record",
+          "version": "1.0.0",
+          "route_kind": "worker_mutation",
+          "exposure": "worker_only",
+          "implementation_crate": "crm-customer-enrichment-application-composition",
+          "depends_on": [
+            "customer_enrichment.party.display_name.apply@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_worker_registration",
+            "append_once_outcome",
+            "policy_decision_causation_lineage",
+            "conflicting_outcome_fail_closed",
+            "completed_attempt_replay_suppression",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        }
+      ]
+    },
+    {
+      "stage": 4,
+      "name": "provider_worker_pipeline",
+      "coordinates": [
+        {
+          "id": "customer_enrichment.request.dispatch",
+          "version": "1.0.0",
+          "route_kind": "worker_mutation",
+          "exposure": "worker_only",
+          "implementation_crate": "crm-customer-enrichment-worker-composition",
+          "depends_on": [
+            "customer_enrichment.request.create@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_worker_registration",
+            "exact_provider_registry",
+            "provider_disabled",
+            "quota_and_circuit_failure",
+            "sanitized_provider_errors",
+            "restart_recovery",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        },
+        {
+          "id": "customer_enrichment.response.record",
+          "version": "1.0.0",
+          "route_kind": "worker_mutation",
+          "exposure": "worker_only",
+          "implementation_crate": "crm-customer-enrichment-worker-composition",
+          "depends_on": [
+            "customer_enrichment.request.dispatch@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_worker_registration",
+            "conflicting_response_fail_closed",
+            "immutable_receipt_and_usage_evidence",
+            "response_reconciliation",
+            "sanitized_provider_errors",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        },
+        {
+          "id": "customer_enrichment.suggestions.materialize",
+          "version": "1.0.0",
+          "route_kind": "worker_mutation",
+          "exposure": "worker_only",
+          "implementation_crate": "crm-customer-enrichment-materialization-composition",
+          "depends_on": [
+            "customer_enrichment.response.record@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_worker_registration",
+            "immutable_dependency_validation",
+            "deterministic_materialization",
+            "response_materialization_recovery",
+            "expiry_reconciliation",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        }
+      ]
+    }
+  ]
+}
