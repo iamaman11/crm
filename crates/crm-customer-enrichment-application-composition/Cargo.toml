@@ -13,9 +13,11 @@ crm-capability-ingress = { path = "../crm-capability-ingress" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
+crm-core-events = { path = "../crm-core-events" }
 crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
 crm-customer-enrichment-application-adapter = { path = "../crm-customer-enrichment-application-adapter" }
 crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
+crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-review-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
@@ -24,7 +26,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [dev-dependencies]
-crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-review-adapter" }
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
