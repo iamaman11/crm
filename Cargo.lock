@@ -781,6 +781,7 @@ dependencies = [
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
  "prost",
+ "serde_json",
  "sqlx",
  "tokio",
 ]
