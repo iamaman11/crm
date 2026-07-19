@@ -165,6 +165,9 @@ pub fn success_mutation_payload(body: HttpCapabilityBody) -> TypedPayload {
     }
 }
 
+// The query assertion is consumed by the get/list process target while this
+// shared transport module is also compiled by the rejection process target.
+#[allow(dead_code)]
 pub fn assert_error_code(body: HttpQueryBody, expected: &str) {
     match body {
         HttpQueryBody::Error(error) => assert_eq!(error.code, expected),
