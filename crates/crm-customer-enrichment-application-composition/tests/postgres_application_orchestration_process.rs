@@ -1,6 +1,5 @@
 use crm_customer_enrichment_application_composition::{
-    CustomerEnrichmentPartyApplicationOrchestrator,
-    PartyDisplayNameApplicationOrchestrationResult,
+    CustomerEnrichmentPartyApplicationOrchestrator, PartyDisplayNameApplicationOrchestrationResult,
 };
 
 #[test]

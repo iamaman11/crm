@@ -21,8 +21,9 @@ use crm_customer_enrichment_application_adapter::{
     APPLY_PARTY_DISPLAY_NAME_RESPONSE_SCHEMA, RECORD_APPLICATION_OUTCOME_CAPABILITY,
     RECORD_APPLICATION_OUTCOME_REQUEST_SCHEMA, RECORD_APPLICATION_OUTCOME_RESPONSE_SCHEMA,
     application_attempt_from_snapshot, application_attempt_to_wire,
-    apply_party_display_name_capability_definition, record_application_outcome_capability_definition,
-    review_from_application_snapshot, suggestion_from_application_snapshot,
+    apply_party_display_name_capability_definition,
+    record_application_outcome_capability_definition, review_from_application_snapshot,
+    suggestion_from_application_snapshot,
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_module_sdk::{
@@ -311,18 +312,20 @@ fn validate_committed_attempt(
         .suggestion_ref
         .as_ref()
         .ok_or_else(|| orchestration_input_invalid("application command omitted suggestion"))?;
-    let requested_review = command
-        .review_decision_ref
-        .as_ref()
-        .ok_or_else(|| orchestration_input_invalid("application command omitted review decision"))?;
+    let requested_review = command.review_decision_ref.as_ref().ok_or_else(|| {
+        orchestration_input_invalid("application command omitted review decision")
+    })?;
     let output_attempt_id = application_attempt_id(output_attempt)?;
     let current_attempt_id = application_attempt_id(current_attempt)?;
     let current_suggestion = current_attempt.suggestion_ref.as_ref().ok_or_else(|| {
         orchestration_output_invalid("persisted attempt omitted suggestion identity")
     })?;
-    let current_review = current_attempt.review_decision_ref.as_ref().ok_or_else(|| {
-        orchestration_output_invalid("persisted attempt omitted review-decision identity")
-    })?;
+    let current_review = current_attempt
+        .review_decision_ref
+        .as_ref()
+        .ok_or_else(|| {
+            orchestration_output_invalid("persisted attempt omitted review-decision identity")
+        })?;
     let current_target = current_attempt
         .target
         .as_ref()
@@ -353,8 +356,7 @@ fn validate_committed_attempt(
             != evidence.suggestion.proposed_value_digest().as_slice()
         || current_attempt.application_generation != command.application_generation
         || current_attempt.owner_capability_id != PARTY_DISPLAY_NAME_UPDATE_CAPABILITY_ID
-        || current_attempt.owner_capability_version
-            != PARTY_DISPLAY_NAME_UPDATE_CAPABILITY_VERSION
+        || current_attempt.owner_capability_version != PARTY_DISPLAY_NAME_UPDATE_CAPABILITY_VERSION
         || current_attempt.target_idempotency_key
             != evidence
                 .application_attempt
@@ -382,7 +384,11 @@ fn build_policy_request(
     Ok(EnrichmentPolicyRequest {
         tenant_id: request.context.execution.tenant_id.clone(),
         actor_id: request.context.execution.actor_id.clone(),
-        request_identity: evidence.application_attempt.attempt_id().as_str().to_owned(),
+        request_identity: evidence
+            .application_attempt
+            .attempt_id()
+            .as_str()
+            .to_owned(),
         enrichment_request_id: state.request_id,
         party_id,
         target_field: evidence.suggestion.target().target_field,
@@ -533,9 +539,7 @@ fn build_outcome_request(
                 tenant_id: original.context.execution.tenant_id.clone(),
                 actor_id: original.context.execution.actor_id.clone(),
                 request_id: configured(RequestId::try_new(internal_id.as_str()))?,
-                correlation_id: configured(CorrelationId::try_new(
-                    attempt.attempt_id().as_str(),
-                ))?,
+                correlation_id: configured(CorrelationId::try_new(attempt.attempt_id().as_str()))?,
                 causation_id: configured(CausationId::try_new(policy_decision_id))?,
                 trace_id: configured(TraceId::try_new(attempt_id))?,
                 capability_id: configured(CapabilityId::try_new(
@@ -593,10 +597,7 @@ fn validate_completed_attempt(
 }
 
 fn validate_policy_decision(decision: &EnrichmentPolicyDecision) -> Result<(), SdkError> {
-    validate_internal_id(
-        decision.decision_id(),
-        "owner-application policy decision",
-    )?;
+    validate_internal_id(decision.decision_id(), "owner-application policy decision")?;
     validate_version(
         decision.policy_version(),
         "owner-application policy version",
