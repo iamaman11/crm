@@ -269,7 +269,8 @@ async fn seed_review(
                 occurred_at_unix_nanos: NOW,
             },
         })
-        .await?;
+        .await
+        .map_err(|error| test_configuration_error(error.to_string()))?;
     Ok(())
 }
 
