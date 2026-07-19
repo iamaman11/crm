@@ -33,10 +33,13 @@ crm-customer-data-operations-capability-adapter = { path = "../crm-customer-data
 crm-customer-data-operations-execution-composition = { path = "../crm-customer-data-operations-execution-composition" }
 crm-customer-data-operations-query-adapter = { path = "../crm-customer-data-operations-query-adapter" }
 crm-customer-data-operations-source-composition = { path = "../crm-customer-data-operations-source-composition" }
+crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
 crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
 crm-customer-enrichment-capability-composition = { path = "../crm-customer-enrichment-capability-composition" }
 crm-customer-enrichment-query-adapter = { path = "../crm-customer-enrichment-query-adapter" }
 crm-customer-enrichment-request-list-query-adapter = { path = "../crm-customer-enrichment-request-list-query-adapter" }
+crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-review-adapter" }
+crm-customer-enrichment-review-composition = { path = "../crm-customer-enrichment-review-composition" }
 crm-customer-enrichment-suggestion-query-adapter = { path = "../crm-customer-enrichment-suggestion-query-adapter" }
 crm-data-quality-capability-adapter = { path = "../crm-data-quality-capability-adapter" }
 crm-data-quality-query-adapter = { path = "../crm-data-quality-query-adapter" }
@@ -77,8 +80,6 @@ tonic-health = "0.14"
 tonic-prost = "0.14"
 
 [dev-dependencies]
-crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
-crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-review-adapter" }
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 
 [build-dependencies]
