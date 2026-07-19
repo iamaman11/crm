@@ -9,3 +9,6 @@ cargo test -p crm-customer-enrichment-application-composition --features postgre
 
 bash scripts/prepare_customer_enrichment_worker_process_database.sh
 cargo test -p crm-customer-enrichment-application-composition --features postgres-integration --test postgres_application_orchestration_process -- --nocapture
+
+bash scripts/prepare_customer_enrichment_worker_process_database.sh
+cargo test -p crm-application-runtime --test postgres_customer_enrichment_suggestion_get -- --nocapture
