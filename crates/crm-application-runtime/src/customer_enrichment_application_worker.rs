@@ -1,4 +1,6 @@
+use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
+use crm_capability_runtime::{CapabilityAuthorizer, CapabilityRequest};
 use crm_consents_capability_adapter::MODULE_ID as CONSENTS_MODULE_ID;
 use crm_consents_query_adapter::{
     ConsentQueryAdapter, GET_CAPABILITY as CONSENT_GET_CAPABILITY,
@@ -7,22 +9,33 @@ use crm_consents_query_adapter::{
 };
 use crm_core_data::PostgresDataStore;
 use crm_customer_enrichment::{
-    EnrichmentPolicyDecision, EnrichmentPolicyPort, EnrichmentPolicyRequest, PartySnapshot,
-    PartySnapshotPort, PartySnapshotRequest, PolicyEvaluationPhase, TargetField,
+    EnrichmentPolicyDecision, EnrichmentPolicyPort, EnrichmentPolicyRequest,
+    PartyDisplayNameApplicationPort, PartyDisplayNameApplicationRequest,
+    PartyDisplayNameApplicationResult, PartySnapshot, PartySnapshotPort, PartySnapshotRequest,
+    PolicyEvaluationPhase, TargetField,
+};
+use crm_customer_enrichment_application_adapter::{
+    RECORD_APPLICATION_OUTCOME_REQUEST_SCHEMA, record_application_outcome_capability_definition,
 };
 use crm_customer_enrichment_application_composition::{
     CustomerEnrichmentPartyApplicationOrchestrator, CustomerEnrichmentPartyApplicationWorker,
     GatewayPartyDisplayNameApplicationPort,
 };
+use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_module_sdk::{
-    ActorId, CapabilityClient, CapabilityId, CapabilityVersion, Clock, DataClass, ErrorCategory,
-    ModuleId, PortFuture, RecordId, SchemaVersion, SdkError,
+    ActorId, BusinessTransactionId, CapabilityClient, CapabilityId, CapabilityVersion,
+    CausationId, Clock, CorrelationId, DataClass, ErrorCategory, ExecutionContext, IdempotencyKey,
+    ModuleExecutionContext, ModuleId, PortFuture, RecordId, RequestId, SchemaVersion, SdkError,
+    TenantId, TraceId,
 };
 use crm_parties_query_adapter::{
     GET_CAPABILITY as PARTY_GET_CAPABILITY, PartyQueryAdapter, export_execution_query_request,
     query_capability_definition as party_query_definition,
 };
-use crm_proto_contracts::crm::{consents::v1 as consent_wire, parties::v1 as party_wire};
+use crm_proto_contracts::crm::{
+    consents::v1 as consent_wire, customer_enrichment::v1 as enrichment_wire,
+    parties::v1 as party_wire,
+};
 use crm_query_runtime::{
     CursorCodec, QueryAuthorizer, QueryExecutionContext, QueryExecutor, QueryRequest,
     QuerySemanticValidator, QueryVisibilityAuthorizer, normalized_filter_hash,
@@ -39,6 +52,7 @@ const LEGITIMATE_INTEREST_LEGAL_BASIS_CODE: &str = "legitimate_interest";
 pub struct CustomerEnrichmentApplicationWorkerDependencies {
     pub store: PostgresDataStore,
     pub capabilities: Arc<dyn CapabilityClient>,
+    pub capability_authorizer: Arc<dyn CapabilityAuthorizer>,
     pub query_authorizer: Arc<dyn QueryAuthorizer>,
     pub visibility_authorizer: Arc<dyn QueryVisibilityAuthorizer>,
     pub clock: Arc<dyn Clock>,
@@ -52,6 +66,7 @@ impl fmt::Debug for CustomerEnrichmentApplicationWorkerDependencies {
             .debug_struct("CustomerEnrichmentApplicationWorkerDependencies")
             .field("store", &self.store)
             .field("capabilities", &"dyn CapabilityClient")
+            .field("capability_authorizer", &"dyn CapabilityAuthorizer")
             .field("query_authorizer", &"dyn QueryAuthorizer")
             .field("visibility_authorizer", &"dyn QueryVisibilityAuthorizer")
             .field("clock", &"dyn Clock")
@@ -77,16 +92,28 @@ pub fn build_customer_enrichment_application_worker(
         party_queries.clone(),
         dependencies.query_authorizer.clone(),
     ));
-    let policy: Arc<dyn EnrichmentPolicyPort> = Arc::new(ProductionOwnerApplicationPolicy::new(
-        party_queries,
-        consent_queries,
-        dependencies.query_authorizer,
+    let outcome_authorization = Arc::new(ProductionApplicationOutcomeAuthorization::new(
+        dependencies.capability_authorizer,
     ));
-    let owner = Arc::new(GatewayPartyDisplayNameApplicationPort::new(
-        dependencies.capabilities,
-        party_snapshots,
-        dependencies.clock.clone(),
-    )?);
+    let policy: Arc<dyn EnrichmentPolicyPort> = Arc::new(OutcomeAuthorizingPolicy::new(
+        Arc::new(ProductionOwnerApplicationPolicy::new(
+            party_queries,
+            consent_queries,
+            dependencies.query_authorizer,
+        )),
+        outcome_authorization.clone(),
+    ));
+    let owner: Arc<dyn PartyDisplayNameApplicationPort> = Arc::new(
+        OutcomeAuthorizingPartyDisplayNameApplicationPort::new(
+            Arc::new(GatewayPartyDisplayNameApplicationPort::new(
+                dependencies.capabilities,
+                party_snapshots,
+                dependencies.clock.clone(),
+            )?),
+            outcome_authorization,
+            dependencies.clock.clone(),
+        ),
+    );
     let orchestrator = Arc::new(CustomerEnrichmentPartyApplicationOrchestrator::postgres(
         dependencies.store.clone(),
         policy,
@@ -98,6 +125,236 @@ pub fn build_customer_enrichment_application_worker(
         orchestrator,
         dependencies.actor_id,
     )?))
+}
+
+#[derive(Clone)]
+struct ProductionApplicationOutcomeAuthorization {
+    authorizer: Arc<dyn CapabilityAuthorizer>,
+}
+
+impl ProductionApplicationOutcomeAuthorization {
+    fn new(authorizer: Arc<dyn CapabilityAuthorizer>) -> Self {
+        Self { authorizer }
+    }
+
+    async fn authorize(
+        &self,
+        tenant_id: &TenantId,
+        actor_id: &ActorId,
+        application_attempt_id: &str,
+        causation_identity: &str,
+        decided_at_unix_nanos: i64,
+    ) -> Result<(), SdkError> {
+        if decided_at_unix_nanos <= 0 {
+            return Err(configuration_invalid(
+                "application outcome authorization time is invalid",
+            ));
+        }
+        let definition = record_application_outcome_capability_definition()?;
+        let recorded_at_unix_ms = decided_at_unix_nanos / 1_000_000;
+        let input = support::protobuf_payload(
+            MODULE_ID,
+            RECORD_APPLICATION_OUTCOME_REQUEST_SCHEMA,
+            DataClass::Personal,
+            &enrichment_wire::RecordApplicationOutcomeRequest {
+                application_attempt_ref: Some(enrichment_wire::ApplicationAttemptRef {
+                    application_attempt_id: application_attempt_id.to_owned(),
+                }),
+                outcome: None,
+                recorded_at_unix_ms,
+            },
+        )?;
+        let identity = outcome_authorization_identity(
+            tenant_id,
+            actor_id,
+            application_attempt_id,
+            causation_identity,
+        );
+        let request = CapabilityRequest {
+            context: ModuleExecutionContext {
+                module_id: ModuleId::try_new(MODULE_ID).map_err(configuration_error)?,
+                execution: ExecutionContext {
+                    tenant_id: tenant_id.clone(),
+                    actor_id: actor_id.clone(),
+                    request_id: RequestId::try_new(identity.clone()).map_err(configuration_error)?,
+                    correlation_id: CorrelationId::try_new(identity.clone())
+                        .map_err(configuration_error)?,
+                    causation_id: CausationId::try_new(identity.clone())
+                        .map_err(configuration_error)?,
+                    trace_id: TraceId::try_new(identity.clone()).map_err(configuration_error)?,
+                    capability_id: definition.capability_id.clone(),
+                    capability_version: definition.capability_version.clone(),
+                    idempotency_key: IdempotencyKey::try_new(identity.clone())
+                        .map_err(configuration_error)?,
+                    business_transaction_id: BusinessTransactionId::try_new(identity)
+                        .map_err(configuration_error)?,
+                    schema_version: SchemaVersion::try_new(support::CONTRACT_VERSION)
+                        .map_err(configuration_error)?,
+                    request_started_at_unix_nanos: decided_at_unix_nanos,
+                },
+            },
+            input_hash: semantic_input_hash(&input),
+            input,
+            approval: None,
+        };
+        let decision = self.authorizer.authorize(&definition, &request).await?;
+        if decision.allowed {
+            return Ok(());
+        }
+        Err(SdkError::new(
+            "CUSTOMER_ENRICHMENT_APPLICATION_OUTCOME_PERMISSION_DENIED",
+            ErrorCategory::Authorization,
+            false,
+            "The application worker is not authorized to persist the application outcome.",
+        )
+        .with_internal_reference(format!(
+            "decision_id={};reason_code={};policy_version={}",
+            decision.decision_id, decision.reason_code, decision.policy_version
+        )))
+    }
+}
+
+impl fmt::Debug for ProductionApplicationOutcomeAuthorization {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProductionApplicationOutcomeAuthorization")
+            .field("authorizer", &"dyn CapabilityAuthorizer")
+            .finish()
+    }
+}
+
+#[derive(Clone)]
+struct OutcomeAuthorizingPolicy {
+    inner: Arc<dyn EnrichmentPolicyPort>,
+    outcome_authorization: Arc<ProductionApplicationOutcomeAuthorization>,
+}
+
+impl OutcomeAuthorizingPolicy {
+    fn new(
+        inner: Arc<dyn EnrichmentPolicyPort>,
+        outcome_authorization: Arc<ProductionApplicationOutcomeAuthorization>,
+    ) -> Self {
+        Self {
+            inner,
+            outcome_authorization,
+        }
+    }
+}
+
+impl fmt::Debug for OutcomeAuthorizingPolicy {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OutcomeAuthorizingPolicy")
+            .field("inner", &"dyn EnrichmentPolicyPort")
+            .field("outcome_authorization", &self.outcome_authorization)
+            .finish()
+    }
+}
+
+impl EnrichmentPolicyPort for OutcomeAuthorizingPolicy {
+    fn evaluate<'a>(
+        &'a self,
+        request: EnrichmentPolicyRequest,
+    ) -> PortFuture<'a, Result<EnrichmentPolicyDecision, SdkError>> {
+        Box::pin(async move {
+            let decision = self.inner.evaluate(request.clone()).await?;
+            if matches!(decision, EnrichmentPolicyDecision::Denied { .. }) {
+                let decided_at_unix_nanos = request
+                    .evaluated_at_unix_ms
+                    .checked_mul(1_000_000)
+                    .ok_or_else(|| configuration_invalid("outcome policy time overflow"))?;
+                self.outcome_authorization
+                    .authorize(
+                        &request.tenant_id,
+                        &request.actor_id,
+                        &request.request_identity,
+                        decision.decision_id(),
+                        decided_at_unix_nanos,
+                    )
+                    .await?;
+            }
+            Ok(decision)
+        })
+    }
+}
+
+#[derive(Clone)]
+struct OutcomeAuthorizingPartyDisplayNameApplicationPort {
+    inner: Arc<dyn PartyDisplayNameApplicationPort>,
+    outcome_authorization: Arc<ProductionApplicationOutcomeAuthorization>,
+    clock: Arc<dyn Clock>,
+}
+
+impl OutcomeAuthorizingPartyDisplayNameApplicationPort {
+    fn new(
+        inner: Arc<dyn PartyDisplayNameApplicationPort>,
+        outcome_authorization: Arc<ProductionApplicationOutcomeAuthorization>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self {
+            inner,
+            outcome_authorization,
+            clock,
+        }
+    }
+}
+
+impl fmt::Debug for OutcomeAuthorizingPartyDisplayNameApplicationPort {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OutcomeAuthorizingPartyDisplayNameApplicationPort")
+            .field("inner", &"dyn PartyDisplayNameApplicationPort")
+            .field("outcome_authorization", &self.outcome_authorization)
+            .field("clock", &"dyn Clock")
+            .finish()
+    }
+}
+
+impl PartyDisplayNameApplicationPort for OutcomeAuthorizingPartyDisplayNameApplicationPort {
+    fn apply<'a>(
+        &'a self,
+        request: PartyDisplayNameApplicationRequest,
+    ) -> PortFuture<'a, Result<PartyDisplayNameApplicationResult, SdkError>> {
+        Box::pin(async move {
+            let result = self.inner.apply(request.clone()).await?;
+            self.outcome_authorization
+                .authorize(
+                    &request.tenant_id,
+                    &request.actor_id,
+                    request.application_attempt_id.as_str(),
+                    &request.final_authorization_decision_id,
+                    self.clock.now_unix_nanos(),
+                )
+                .await?;
+            Ok(result)
+        })
+    }
+}
+
+fn outcome_authorization_identity(
+    tenant_id: &TenantId,
+    actor_id: &ActorId,
+    application_attempt_id: &str,
+    causation_identity: &str,
+) -> String {
+    let mut hasher = Sha256::new();
+    for value in [
+        "crm.customer-enrichment.application-outcome-authorization/v1",
+        tenant_id.as_str(),
+        actor_id.as_str(),
+        application_attempt_id,
+        causation_identity,
+    ] {
+        hasher.update((value.len() as u64).to_be_bytes());
+        hasher.update(value.as_bytes());
+    }
+    let digest = hasher.finalize();
+    let mut encoded = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(encoded, "{byte:02x}");
+    }
+    format!("application-outcome-authorization-{encoded}")
 }
 
 #[derive(Clone)]
