@@ -807,7 +807,8 @@ fn application_state_invalid(reference: impl Into<String>) -> SdkError {
 #[serde(deny_unknown_fields)]
 struct ApplicationAttemptStateView {
     attempt_id: String,
-    tenant_id: String,
+    #[serde(rename = "tenant_id")]
+    _tenant_id: String,
     suggestion_id: String,
     review_decision_id: String,
     target: ApplicationTargetStateView,
