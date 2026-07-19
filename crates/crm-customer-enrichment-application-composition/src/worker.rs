@@ -351,6 +351,7 @@ fn review_event_invalid() -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_customer_enrichment_application_adapter::APPLY_PARTY_DISPLAY_NAME_CAPABILITY;
 
     #[test]
     fn worker_identity_and_coordinate_are_canonical() {
