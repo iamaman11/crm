@@ -23,6 +23,7 @@ prost = "0.14"
 [dev-dependencies]
 crm-capability-ingress = { path = "../crm-capability-ingress" }
 crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-review-adapter" }
+serde_json = "1"
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
