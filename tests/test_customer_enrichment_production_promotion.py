@@ -26,25 +26,21 @@ EXPECTED_RUNTIME_QUERIES = {
 }
 EXPECTED_RUNTIME_WORKERS = {
     "customer_enrichment.party.display_name.apply@1.0.0",
+    "customer_enrichment.application.outcome.record@1.0.0",
 }
 EXPECTED_PROMOTION = {
-    "customer_enrichment.application.outcome.record@1.0.0": (
+    "customer_enrichment.request.dispatch@1.0.0": (
         1,
         "worker_mutation",
         "worker_only",
     ),
-    "customer_enrichment.request.dispatch@1.0.0": (
-        2,
-        "worker_mutation",
-        "worker_only",
-    ),
     "customer_enrichment.response.record@1.0.0": (
-        2,
+        1,
         "worker_mutation",
         "worker_only",
     ),
     "customer_enrichment.suggestions.materialize@1.0.0": (
-        2,
+        1,
         "worker_mutation",
         "worker_only",
     ),
@@ -80,7 +76,7 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
         self.assertTrue(mutations.isdisjoint(queries))
         self.assertTrue(mutations.isdisjoint(workers))
         self.assertTrue(queries.isdisjoint(workers))
-        self.assertEqual(len(mutations | queries | workers), 13)
+        self.assertEqual(len(mutations | queries | workers), 14)
 
     def test_promotion_coordinates_match_authoritative_non_runtime_set(self) -> None:
         entries = [
@@ -110,10 +106,7 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
         stages = self.plan["promotion_stages"]
         self.assertEqual(
             [(stage["stage"], stage["name"]) for stage in stages],
-            [
-                (1, "accepted_suggestion_application"),
-                (2, "provider_worker_pipeline"),
-            ],
+            [(1, "provider_worker_pipeline")],
         )
         stage_by_coordinate: dict[str, int] = {}
         entries_by_coordinate: dict[str, dict[str, object]] = {}
