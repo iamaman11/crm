@@ -21,7 +21,7 @@ use crm_customer_enrichment_review_adapter::{
 use crm_module_sdk::{
     BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, DataClass,
     DomainEvent, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
-    RequestId, SchemaVersion, TraceId,
+    RequestId, SchemaVersion, SdkError, TraceId,
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY,
