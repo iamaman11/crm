@@ -14,6 +14,9 @@ bash scripts/prepare_customer_enrichment_worker_process_database.sh
 cargo test -p crm-customer-enrichment-application-composition --features postgres-integration --test postgres_application_worker_process process::accepted_review_worker_checkpoints_and_applies_exactly_once -- --exact --nocapture
 
 bash scripts/prepare_customer_enrichment_worker_process_database.sh
+cargo test -p crm-application-runtime --test postgres_customer_enrichment_application_worker -- --nocapture
+
+bash scripts/prepare_customer_enrichment_worker_process_database.sh
 cargo test -p crm-application-runtime --test postgres_customer_enrichment_suggestion_get -- --nocapture
 
 bash scripts/prepare_customer_enrichment_worker_process_database.sh
