@@ -8,7 +8,8 @@ use crm_core_events::{
     EventHistoryRequest, ProjectionEventApplication, ProjectionFailure, ProjectionStore,
 };
 use crm_customer_enrichment_application_adapter::{
-    APPLY_PARTY_DISPLAY_NAME_REQUEST_SCHEMA, apply_party_display_name_capability_definition,
+    APPLY_PARTY_DISPLAY_NAME_CAPABILITY, APPLY_PARTY_DISPLAY_NAME_REQUEST_SCHEMA,
+    apply_party_display_name_capability_definition,
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_customer_enrichment_review_adapter::{
