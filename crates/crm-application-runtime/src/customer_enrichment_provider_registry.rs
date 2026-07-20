@@ -417,7 +417,7 @@ mod tests {
     fn unknown_transport_and_missing_secret_fail_startup_without_value_leakage() {
         let config = enabled_config();
         let error = build_customer_enrichment_provider_registry(
-            &[config.clone()],
+            std::slice::from_ref(&config),
             Arc::new(FixedClock::new(1_000_000_000)),
             Arc::new(StaticProviderTransportCatalog::default()),
             Arc::new(StaticSecretValues {
