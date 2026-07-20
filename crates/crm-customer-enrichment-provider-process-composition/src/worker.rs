@@ -225,9 +225,7 @@ impl CustomerEnrichmentProviderProcessWorker {
         delivery: &EventDelivery,
     ) -> Result<DeliveryDisposition, SdkError> {
         let event = decode_created_event(delivery)?;
-        let created = event
-            .enrichment_request
-            .ok_or_else(created_event_invalid)?;
+        let created = event.enrichment_request.ok_or_else(created_event_invalid)?;
         let request_ref = created
             .enrichment_request_ref
             .as_ref()
@@ -256,8 +254,7 @@ impl CustomerEnrichmentProviderProcessWorker {
         };
         if source.request.request_id().as_str() != request_id.as_str()
             || source.request.tenant_id() != tenant_id
-            || source.provider_profile.version_id()
-                != source.request.provider_profile_version_id()
+            || source.provider_profile.version_id() != source.request.provider_profile_version_id()
         {
             return Err(source_snapshot_invalid());
         }
@@ -311,9 +308,12 @@ fn decode_created_event(
     {
         return Err(created_event_invalid());
     }
-    wire::EnrichmentRequestCreatedEvent::decode(delivery.payload.bytes.as_slice()).map_err(|error| {
-        created_event_invalid().with_internal_reference(format!("created event decode: {error}"))
-    })
+    wire::EnrichmentRequestCreatedEvent::decode(delivery.payload.bytes.as_slice()).map_err(
+        |error| {
+            created_event_invalid()
+                .with_internal_reference(format!("created event decode: {error}"))
+        },
+    )
 }
 
 fn current_time_ms(now_unix_nanos: i64) -> Result<u64, SdkError> {
