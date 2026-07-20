@@ -8,6 +8,9 @@ pub const ENRICHMENT_REQUEST_RECORD_TYPE: &str = "customer_enrichment.request";
 /// Immutable provider response receipt record type.
 pub const PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE: &str =
     "customer_enrichment.provider_response_receipt";
+/// Versioned durable provider-response conflict and operator-resolution evidence record type.
+pub const PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE: &str =
+    "customer_enrichment.provider_response_conflict";
 /// Immutable enrichment suggestion record type.
 pub const SUGGESTION_RECORD_TYPE: &str = "customer_enrichment.suggestion";
 /// Immutable suggestion review-decision record type.
@@ -28,6 +31,7 @@ mod tests {
             MAPPING_VERSION_RECORD_TYPE,
             ENRICHMENT_REQUEST_RECORD_TYPE,
             PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE,
+            PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE,
             SUGGESTION_RECORD_TYPE,
             REVIEW_DECISION_RECORD_TYPE,
             APPLICATION_ATTEMPT_RECORD_TYPE,
@@ -36,7 +40,7 @@ mod tests {
         let unique = record_types
             .into_iter()
             .collect::<std::collections::BTreeSet<_>>();
-        assert_eq!(unique.len(), 8);
+        assert_eq!(unique.len(), 9);
         assert!(
             unique
                 .iter()
