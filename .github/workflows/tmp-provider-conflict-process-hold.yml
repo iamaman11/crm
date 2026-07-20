@@ -58,6 +58,7 @@ jobs:
           set -euo pipefail
           python scripts/tmp_apply_provider_conflict_process_hold.py
           python scripts/tmp_finalize_provider_conflict_process_hold.py
+          python scripts/tmp_fix_provider_conflict_seed_capability.py
           cargo fmt --all
       - name: Reject unexpected patch scope
         shell: bash
