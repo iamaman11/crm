@@ -654,7 +654,7 @@ mod tests {
     ) -> GovernedProviderAdapter {
         let config = RegistryHttpTransportConfig::try_new(
             &endpoint,
-            [endpoint],
+            [endpoint.clone()],
             timeout,
             64 * 1024,
             64 * 1024,
