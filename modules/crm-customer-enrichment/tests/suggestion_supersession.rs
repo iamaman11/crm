@@ -1,10 +1,10 @@
 use crm_customer_enrichment::{
     ApplicationAttempt, ApprovalRequirement, EnrichmentRequest, EnrichmentRequestDraft,
-    MappingDraft, MappingNormalization, MappingVersion, ProviderProfileDraft, ProviderProfileVersion,
-    ProviderResponseClass, ProviderResponseReceipt, ProviderResponseReceiptDraft, RawPayloadPolicy,
-    RequestPolicyEvidence, ReviewDecision, ReviewDecisionKind, Suggestion, SuggestionDraft,
-    SuggestionLifecycleStatus, TargetField, TargetSnapshot, derive_suggestion_status,
-    derive_suggestion_supersession,
+    MappingDraft, MappingNormalization, MappingVersion, ProviderProfileDraft,
+    ProviderProfileVersion, ProviderResponseClass, ProviderResponseReceipt,
+    ProviderResponseReceiptDraft, RawPayloadPolicy, RequestPolicyEvidence, ReviewDecision,
+    ReviewDecisionKind, Suggestion, SuggestionDraft, SuggestionLifecycleStatus, TargetField,
+    TargetSnapshot, derive_suggestion_status, derive_suggestion_supersession,
 };
 use crm_module_sdk::{ActorId, IdempotencyKey, TenantId};
 
@@ -29,8 +29,18 @@ fn newer_exact_logical_proposition_supersedes_older_evidence_deterministically()
 
 #[test]
 fn supersession_precedes_expiry_without_mutating_immutable_provenance() {
-    let older = suggestion("request-old-expired", "replay-old-expired", 200, "Acme Company");
-    let newer = suggestion("request-new-current", "replay-new-current", 300, "Acme Company");
+    let older = suggestion(
+        "request-old-expired",
+        "replay-old-expired",
+        200,
+        "Acme Company",
+    );
+    let newer = suggestion(
+        "request-new-current",
+        "replay-new-current",
+        300,
+        "Acme Company",
+    );
     let original = older.clone();
 
     let status = derive_suggestion_status(
