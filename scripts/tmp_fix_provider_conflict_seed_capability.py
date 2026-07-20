@@ -57,4 +57,26 @@ replace_once(
     "provider conflict persistence seed and conflict audit count",
 )
 
-print("aligned provider conflict fixtures to registered response capability")
+persistence = Path(
+    "crates/crm-customer-enrichment-provider-process-composition/src/conflict_persistence.rs"
+)
+replace_once(
+    persistence,
+    """            if conflict.resolution().is_none() {
+                if unresolved.replace(conflict).is_some() {
+                    return Err(conflict_state_invalid(
+                        "request has more than one unresolved provider-response conflict",
+                    ));
+                }
+            }
+""",
+    """            if conflict.resolution().is_none() && unresolved.replace(conflict).is_some() {
+                return Err(conflict_state_invalid(
+                    "request has more than one unresolved provider-response conflict",
+                ));
+            }
+""",
+    "canonical unresolved conflict lookup shape",
+)
+
+print("aligned provider conflict fixtures and canonical lookup shape")
