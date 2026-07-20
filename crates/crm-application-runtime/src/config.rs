@@ -379,10 +379,8 @@ fn validate_provider_adapters(
                     if !tenant_ids.contains(&binding.tenant_id)
                         || !canonical_handle_alias(&binding.handle_alias)
                         || !canonical_environment_name(&binding.secret_environment)
-                        || !bindings.insert((
-                            binding.tenant_id.clone(),
-                            binding.handle_alias.clone(),
-                        ))
+                        || !bindings
+                            .insert((binding.tenant_id.clone(), binding.handle_alias.clone()))
                     {
                         return Err(provider_adapter_config_invalid());
                     }
@@ -422,9 +420,9 @@ fn canonical_environment_name(value: &str) -> bool {
             .chars()
             .next()
             .is_some_and(|character| character == '_' || character.is_ascii_uppercase())
-        && value
-            .chars()
-            .all(|character| character == '_' || character.is_ascii_uppercase() || character.is_ascii_digit())
+        && value.chars().all(|character| {
+            character == '_' || character.is_ascii_uppercase() || character.is_ascii_digit()
+        })
 }
 
 fn provider_adapter_config_invalid() -> ApplicationConfigError {
@@ -495,7 +493,10 @@ mod tests {
         );
         assert!(format!("{parsed:?}").contains("REGISTRY_PRIMARY_TOKEN"));
         assert!(!format!("{parsed:?}").contains("provider-secret-value"));
-        assert_eq!(parsed[1].state, CustomerEnrichmentProviderAdapterState::Disabled);
+        assert_eq!(
+            parsed[1].state,
+            CustomerEnrichmentProviderAdapterState::Disabled
+        );
     }
 
     #[test]

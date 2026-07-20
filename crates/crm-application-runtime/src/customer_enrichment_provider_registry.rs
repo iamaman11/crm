@@ -1,6 +1,4 @@
-use crate::{
-    CustomerEnrichmentProviderAdapterConfig, CustomerEnrichmentProviderAdapterState,
-};
+use crate::{CustomerEnrichmentProviderAdapterConfig, CustomerEnrichmentProviderAdapterState};
 use crm_customer_enrichment::ProviderAdapterCoordinate;
 use crm_customer_enrichment_provider_registry::{
     ConsecutiveFailureProviderCircuitBreaker, ExactProviderAdapterRegistry,
@@ -53,12 +51,7 @@ impl fmt::Debug for ProviderTransportRegistration {
 /// Immutable exact transport catalog. It never falls back by transport key or adapter kind alone.
 #[derive(Clone, Default)]
 pub struct StaticProviderTransportCatalog {
-    entries: Arc<
-        BTreeMap<
-            (String, ProviderAdapterCoordinate),
-            Arc<dyn ProviderTransportPort>,
-        >,
-    >,
+    entries: Arc<BTreeMap<(String, ProviderAdapterCoordinate), Arc<dyn ProviderTransportPort>>>,
 }
 
 impl StaticProviderTransportCatalog {
@@ -69,7 +62,10 @@ impl StaticProviderTransportCatalog {
         for registration in registrations {
             validate_transport_key(&registration.transport_key)?;
             let key = (registration.transport_key, registration.coordinate);
-            if entries.insert(key.clone(), registration.transport).is_some() {
+            if entries
+                .insert(key.clone(), registration.transport)
+                .is_some()
+            {
                 return Err(provider_configuration_invalid(format!(
                     "duplicate provider transport registration {}:{}@{}",
                     key.0,
@@ -152,10 +148,9 @@ pub fn build_customer_enrichment_provider_registry(
                 registrations.push(ProviderAdapterRegistration::disabled(coordinate));
             }
             CustomerEnrichmentProviderAdapterState::Enabled => {
-                let transport_key = configuration
-                    .transport_key
-                    .as_deref()
-                    .ok_or_else(|| provider_configuration_invalid("enabled transport key missing"))?;
+                let transport_key = configuration.transport_key.as_deref().ok_or_else(|| {
+                    provider_configuration_invalid("enabled transport key missing")
+                })?;
                 let transport = transport_catalog.resolve_exact(transport_key, &coordinate)?;
                 let secret_registrations = configuration
                     .credential_bindings
@@ -175,22 +170,18 @@ pub fn build_customer_enrichment_provider_registry(
                     configuration.maximum_attempts.ok_or_else(|| {
                         provider_configuration_invalid("enabled quota maximum missing")
                     })?,
-                    seconds_to_nanos(
-                        configuration.quota_window_seconds.ok_or_else(|| {
-                            provider_configuration_invalid("enabled quota window missing")
-                        })?,
-                    )?,
+                    seconds_to_nanos(configuration.quota_window_seconds.ok_or_else(|| {
+                        provider_configuration_invalid("enabled quota window missing")
+                    })?)?,
                     Arc::clone(&clock),
                 )?);
                 let circuit = Arc::new(ConsecutiveFailureProviderCircuitBreaker::try_new(
                     configuration.circuit_failure_threshold.ok_or_else(|| {
                         provider_configuration_invalid("enabled circuit threshold missing")
                     })?,
-                    seconds_to_nanos(
-                        configuration.circuit_open_seconds.ok_or_else(|| {
-                            provider_configuration_invalid("enabled circuit window missing")
-                        })?,
-                    )?,
+                    seconds_to_nanos(configuration.circuit_open_seconds.ok_or_else(|| {
+                        provider_configuration_invalid("enabled circuit window missing")
+                    })?)?,
                     Arc::clone(&clock),
                 )?);
                 registrations.push(ProviderAdapterRegistration::enabled(
@@ -308,7 +299,13 @@ mod tests {
         fn dispatch<'a>(
             &'a self,
             _request: crm_customer_enrichment_provider_registry::ProviderTransportRequest,
-        ) -> PortFuture<'a, Result<SanitizedProviderResponse, crm_customer_enrichment_provider_registry::ProviderTransportFailure>> {
+        ) -> PortFuture<
+            'a,
+            Result<
+                SanitizedProviderResponse,
+                crm_customer_enrichment_provider_registry::ProviderTransportFailure,
+            >,
+        > {
             Box::pin(async {
                 Ok(SanitizedProviderResponse {
                     replay_key: "unused".to_owned(),
@@ -392,13 +389,11 @@ mod tests {
             ProviderResponseClass::Success,
             1,
         ));
-        let catalog = StaticProviderTransportCatalog::try_new([
-            ProviderTransportRegistration {
-                transport_key: "registry_http".to_owned(),
-                coordinate: coordinate(),
-                transport,
-            },
-        ])
+        let catalog = StaticProviderTransportCatalog::try_new([ProviderTransportRegistration {
+            transport_key: "registry_http".to_owned(),
+            coordinate: coordinate(),
+            transport,
+        }])
         .unwrap();
         let registry = build_customer_enrichment_provider_registry(
             &[enabled_config()],
@@ -432,13 +427,11 @@ mod tests {
             "CUSTOMER_ENRICHMENT_PROVIDER_TRANSPORT_UNAVAILABLE"
         );
 
-        let catalog = StaticProviderTransportCatalog::try_new([
-            ProviderTransportRegistration {
-                transport_key: "registry_http".to_owned(),
-                coordinate: coordinate(),
-                transport: Arc::new(NoopTransport),
-            },
-        ])
+        let catalog = StaticProviderTransportCatalog::try_new([ProviderTransportRegistration {
+            transport_key: "registry_http".to_owned(),
+            coordinate: coordinate(),
+            transport: Arc::new(NoopTransport),
+        }])
         .unwrap();
         let error = build_customer_enrichment_provider_registry(
             &[config],
@@ -458,13 +451,11 @@ mod tests {
 
     #[test]
     fn transport_catalog_does_not_fallback_across_versions() {
-        let catalog = StaticProviderTransportCatalog::try_new([
-            ProviderTransportRegistration {
-                transport_key: "registry_http".to_owned(),
-                coordinate: coordinate(),
-                transport: Arc::new(NoopTransport),
-            },
-        ])
+        let catalog = StaticProviderTransportCatalog::try_new([ProviderTransportRegistration {
+            transport_key: "registry_http".to_owned(),
+            coordinate: coordinate(),
+            transport: Arc::new(NoopTransport),
+        }])
         .unwrap();
         let other = ProviderAdapterCoordinate::try_new("registry_http_v1", "1.1.0").unwrap();
         let error = catalog.resolve_exact("registry_http", &other).unwrap_err();
