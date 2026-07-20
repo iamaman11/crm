@@ -390,7 +390,10 @@ struct SeedRecord {
     event_payload: TypedPayload,
 }
 
-async fn seed_record(store: &PostgresDataStore, seed: SeedRecord) -> Result<(), SdkError> {
+async fn seed_record(
+    store: &PostgresDataStore,
+    seed: SeedRecord,
+) -> Result<(), Box<dyn std::error::Error>> {
     let request_hash = semantic_input_hash(&seed.event_payload);
     let at_unix_nanos = i64::try_from(seed.at_unix_ms * 1_000_000).unwrap();
     store
