@@ -39,11 +39,10 @@ jobs:
           end_marker = "          PY"
           start = lines.index(start_marker) + 1
           end = lines.index(end_marker, start)
-          extracted = []
-          for line in lines[start:end]:
-              if line and not line.startswith("          "):
-                  raise SystemExit(f"unexpected embedded patch indentation: {line!r}")
-              extracted.append(line[10:] if line else "")
+          extracted = [
+              line[10:] if line.startswith("          ") else line
+              for line in lines[start:end]
+          ]
           Path("/tmp/phase8a10-provider-background-registration.py").write_text(
               "\n".join(extracted) + "\n"
           )
