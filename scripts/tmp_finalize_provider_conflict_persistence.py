@@ -20,55 +20,6 @@ pub struct ProviderResponseConflictPersistencePlan {
 )
 
 replace_once(
-    Path("crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs"),
-    """            &format!(
-                "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = '{TENANT_ID}' AND record_type = '{PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE}'"
-            ),
-""",
-    """            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_conflict'",
-""",
-    "static conflict record count query",
-)
-
-replace_once(
-    Path("crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs"),
-    """            &format!(
-                "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = '{TENANT_ID}' AND event_type = '{PROVIDER_RESPONSE_CONFLICT_RECORDED_EVENT_TYPE}'"
-            ),
-""",
-    """            "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = 'tenant-a' AND event_type = 'customer_enrichment.provider_response_conflict.recorded'",
-""",
-    "static conflict event count query",
-)
-
-replace_once(
-    Path("crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs"),
-    """            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id = 'customer_enrichment.response.record' AND aggregate_type = 'customer_enrichment.provider_response_conflict'",
-""",
-    """            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id = 'customer_enrichment.response.record'",
-""",
-    "audit evidence query",
-)
-
-replace_once(
-    Path("crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs"),
-    "SELECT current_version::bigint FROM crm.records",
-    "SELECT version::bigint FROM crm.records",
-    "record version query",
-)
-
-replace_once(
-    Path("crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs"),
-    """async fn scalar(pool: &PgPool, query: &str) -> i64 {
-    sqlx::query_scalar(query)
-""",
-    """async fn scalar(pool: &PgPool, query: &'static str) -> i64 {
-    sqlx::query_scalar::<_, i64>(query)
-""",
-    "static typed scalar helper",
-)
-
-replace_once(
     Path("modules/crm-customer-enrichment/module.yaml"),
     """    - id: customer_enrichment.response.recorded
       version: 1.0.0
