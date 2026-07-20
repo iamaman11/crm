@@ -240,13 +240,13 @@ INSERT 0 1
 INSERT 0 10
 ALTER ROLE
 [1m[92m   Compiling[0m crm-customer-enrichment-application-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-application-composition)
-[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.83s
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 1.04s
 [1m[92m     Running[0m tests/postgres_application_worker_process.rs (target/debug/deps/postgres_application_worker_process-298bf6fd98ca0c0f)
 
 running 1 test
 
-thread 'process::accepted_review_worker_checkpoints_and_applies_exactly_once' (6093) panicked at crates/crm-customer-enrichment-application-composition/tests/postgres_application_worker_process.rs:164:10:
-called `Result::unwrap()` on an `Err` value: Database(PgDatabaseError { severity: Error, code: "28000", message: "complete transaction-local execution context is required", detail: None, hint: None, position: None, where: Some("PL/pgSQL function crm.require_write_context() line 22 at RAISE"), schema: None, table: None, column: None, data_type: None, constraint: None, file: Some("pl_exec.c"), line: Some(3897), routine: Some("exec_stmt_raise") })
+thread 'process::accepted_review_worker_checkpoints_and_applies_exactly_once' (6418) panicked at crates/crm-customer-enrichment-application-composition/tests/postgres_application_worker_process.rs:187:10:
+called `Result::unwrap()` on an `Err` value: Database(PgDatabaseError { severity: Error, code: "23503", message: "insert or update on table \"module_installations\" violates foreign key constraint \"module_installations_tenant_id_last_business_transaction_i_fkey\"", detail: Some("Key (tenant_id, last_business_transaction_id)=(tenant-application-orchestration-a, application-worker-status-suspended-transaction) is not present in table \"business_transactions\"."), hint: None, position: None, where: None, schema: Some("crm"), table: Some("module_installations"), column: None, data_type: None, constraint: Some("module_installations_tenant_id_last_business_transaction_i_fkey"), file: Some("ri_triggers.c"), line: Some(2599), routine: Some("ri_ReportViolation") })
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 test process::accepted_review_worker_checkpoints_and_applies_exactly_once ... FAILED
 
@@ -255,6 +255,6 @@ failures:
 failures:
     process::accepted_review_worker_checkpoints_and_applies_exactly_once
 
-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.56s
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.60s
 
 [1m[91merror[0m: test failed, to rerun pass `-p crm-customer-enrichment-application-composition --test postgres_application_worker_process`
