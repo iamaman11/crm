@@ -18,6 +18,10 @@ message ProviderResponseReceiptRef {
   string provider_response_receipt_id = 1;
 }
 
+message ProviderResponseConflictRef {
+  string provider_response_conflict_id = 1;
+}
+
 message SuggestionRef {
   string suggestion_id = 1;
 }
