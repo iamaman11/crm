@@ -12,6 +12,7 @@ mod bootstrap_visibility;
 mod bootstrap_visibility_overlay;
 mod config;
 mod customer_enrichment_application_worker;
+mod customer_enrichment_materialization_process;
 mod customer_enrichment_provider_process;
 mod customer_enrichment_provider_source;
 mod customer_enrichment_provider_worker;
@@ -40,6 +41,10 @@ pub use config::*;
 pub use customer_enrichment_application_worker::{
     CustomerEnrichmentApplicationWorkerDependencies, OWNER_APPLICATION_POLICY_VERSION,
     build_customer_enrichment_application_worker,
+};
+pub use customer_enrichment_materialization_process::{
+    CustomerEnrichmentMaterializationProcessDependencies,
+    build_customer_enrichment_materialization_process,
 };
 pub use customer_enrichment_provider_process::{
     CustomerEnrichmentProviderProcessDependencies, build_customer_enrichment_provider_process,
