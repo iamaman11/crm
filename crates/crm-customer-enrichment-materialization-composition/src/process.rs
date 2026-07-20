@@ -16,9 +16,9 @@ use crm_customer_enrichment_materialization_adapter::{
     MATERIALIZE_SUGGESTIONS_REQUEST_SCHEMA, suggestion_materialization_capability_definition,
 };
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CausationId, CorrelationId, DataClass, EventDelivery, EventType,
-    ExecutionContext, FileId, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
-    PortFuture, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
+    ActorId, BusinessTransactionId, CausationId, CorrelationId, DataClass, EventDelivery,
+    EventType, ExecutionContext, FileId, IdempotencyKey, ModuleExecutionContext, ModuleId,
+    PayloadEncoding, PortFuture, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use prost::Message;
@@ -82,7 +82,10 @@ impl fmt::Debug for CustomerEnrichmentMaterializationProcessWorker {
         formatter
             .debug_struct("CustomerEnrichmentMaterializationProcessWorker")
             .field("store", &self.store)
-            .field("evidence", &"dyn ProviderSuggestionCandidateEvidenceSourcePort")
+            .field(
+                "evidence",
+                &"dyn ProviderSuggestionCandidateEvidenceSourcePort",
+            )
             .field("executor", &"dyn SuggestionMaterializationExecutorPort")
             .field("actor_id", &self.actor_id)
             .field("page_size", &self.page_size)
@@ -230,7 +233,8 @@ impl CustomerEnrichmentMaterializationProcessWorker {
         }
 
         let definition = suggestion_materialization_capability_definition()?;
-        let context = materialization_context(delivery, &definition.owner_module_id, &self.actor_id)?;
+        let context =
+            materialization_context(delivery, &definition.owner_module_id, &self.actor_id)?;
         let command = match wire::ProviderResponseClass::try_from(receipt.response_class) {
             Ok(wire::ProviderResponseClass::Success) => {
                 let file_id = receipt
@@ -320,9 +324,12 @@ fn decode_response_recorded_event(
     {
         return Err(response_event_invalid());
     }
-    wire::ProviderResponseRecordedEvent::decode(delivery.payload.bytes.as_slice()).map_err(|error| {
-        response_event_invalid().with_internal_reference(format!("response event decode: {error}"))
-    })
+    wire::ProviderResponseRecordedEvent::decode(delivery.payload.bytes.as_slice()).map_err(
+        |error| {
+            response_event_invalid()
+                .with_internal_reference(format!("response event decode: {error}"))
+        },
+    )
 }
 
 fn materialization_context(
