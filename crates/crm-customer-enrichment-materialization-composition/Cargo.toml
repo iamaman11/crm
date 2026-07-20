@@ -28,6 +28,9 @@ sqlx = { version = "0.9", default-features = false, features = ["postgres", "run
 sha2 = "0.10"
 
 [dev-dependencies]
+crm-customer-enrichment-application-adapter = { path = "../crm-customer-enrichment-application-adapter" }
+crm-customer-enrichment-application-composition = { path = "../crm-customer-enrichment-application-composition" }
+crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-review-adapter" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[test]]
