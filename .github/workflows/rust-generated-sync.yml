@@ -55,6 +55,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Apply exact provider-registry test correction
+        run: python scripts/phase8a10-fix-provider-registry-tests.py
       - name: Synchronize lockfile and canonical formatting
         run: |
           cargo generate-lockfile
@@ -73,7 +75,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json
-            git commit -m "Synchronize Rust and generated contract artifacts"
+            git commit -m "Fix exact provider registry test errors"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
