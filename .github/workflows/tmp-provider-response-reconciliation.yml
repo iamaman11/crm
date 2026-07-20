@@ -94,7 +94,20 @@ jobs:
         if: steps.wrapper_compile.outcome == 'failure'
         run: exit 1
       - name: Strict focused Clippy
-        run: cargo clippy -p crm-customer-enrichment -p crm-customer-enrichment-worker-composition -p crm-application-runtime --all-targets -- -D warnings
+        id: focused_clippy
+        continue-on-error: true
+        run: cargo clippy -p crm-customer-enrichment -p crm-customer-enrichment-worker-composition -p crm-application-runtime --all-targets -- -D warnings 2>&1 | tee provider-response-reconciliation-clippy.log
+      - name: Upload Clippy diagnostics
+        if: steps.focused_clippy.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-response-reconciliation-clippy-diagnostics
+          path: provider-response-reconciliation-clippy.log
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop after Clippy failure
+        if: steps.focused_clippy.outcome == 'failure'
+        run: exit 1
       - name: Commit verified code slice
         run: |
           git config user.name "github-actions[bot]"
