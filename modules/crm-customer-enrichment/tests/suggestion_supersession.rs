@@ -16,6 +16,7 @@ fn newer_exact_logical_proposition_supersedes_older_evidence_deterministically()
     let reordered = derive_suggestion_supersession([&older, &alternative, &newer]);
 
     assert_eq!(first, reordered);
+    assert_eq!(first.len(), 1);
     assert_eq!(
         first.get(older.suggestion_id()),
         Some(newer.suggestion_id())
