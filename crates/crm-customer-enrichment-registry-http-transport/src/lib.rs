@@ -541,7 +541,7 @@ mod tests {
             return (AxumStatusCode::UNAUTHORIZED, "unauthorized").into_response();
         }
         if state.malformed {
-            return (AxumStatusCode::OK, "{").into_response();
+            return (AxumStatusCode::OK, "{raw-provider-body-marker").into_response();
         }
         let request: Value = match serde_json::from_slice(&body) {
             Ok(value) => value,
@@ -765,7 +765,7 @@ mod tests {
         .await
         .unwrap_err();
         assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PROVIDER_MAPPING_CONFLICT");
-        assert!(!format!("{error:?} {error}").contains("{"));
+        assert!(!format!("{error:?} {error}").contains("raw-provider-body-marker"));
     }
 
     #[tokio::test]
