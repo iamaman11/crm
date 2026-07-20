@@ -1,0 +1,16 @@
+[package]
+name = "crm-customer-enrichment-provider-process-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-ingress = { path = "../crm-capability-ingress" }
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
+crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
+crm-customer-enrichment-worker-composition = { path = "../crm-customer-enrichment-worker-composition" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+sha2 = "0.10"
