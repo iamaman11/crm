@@ -37,3 +37,14 @@ payload = payload.replace(
 
 compile(payload, str(SOURCE), 'exec')
 exec(payload, {'__name__': '__main__'})
+
+module_root = Path('modules/crm-customer-enrichment/src/lib.rs')
+module_text = module_root.read_text()
+old_export = "    derive_suggestion_status, derive_suggestion_supersession,\n"
+new_export = (
+    "    derive_suggestion_status, derive_suggestion_supersession, "
+    "suggestion_mutation_lock_key,\n"
+)
+if module_text.count(old_export) != 1:
+    raise SystemExit('customer-enrichment lifecycle export anchor is not exact')
+module_root.write_text(module_text.replace(old_export, new_export, 1))
