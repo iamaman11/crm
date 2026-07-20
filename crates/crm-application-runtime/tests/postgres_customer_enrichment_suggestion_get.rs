@@ -293,7 +293,7 @@ async fn production_suggestion_queries_are_activation_gated_permission_aware_and
     )
     .await;
     assert_eq!(list_cross_tenant.status, StatusCode::FORBIDDEN);
-    assert_error_code(list_cross_tenant.body, "AUTHENTICATION_TENANT_FORBIDDEN");
+    assert_error_code(list_cross_tenant.body, "TENANT_FORBIDDEN");
 
     for status in ["suspended", "uninstalling"] {
         set_installation_status(&admin, status).await;
