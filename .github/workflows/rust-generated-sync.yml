@@ -55,7 +55,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Correct materialization event-process fixture lineage
+      - name: Bind materialization event-process to fixture actor
         shell: bash
         run: |
           python3 - <<'PY'
@@ -63,21 +63,11 @@ jobs:
 
           path = Path("crates/crm-customer-enrichment-materialization-composition/tests/postgres_materialization_event_process.rs")
           text = path.read_text()
-          replacements = [
-              (
-                  "        ActorId::try_new(MATERIALIZATION_PROCESS_WORKER_ACTOR_ID).unwrap(),",
-                  "        ActorId::try_new(ACTOR_ID).unwrap(),",
-              ),
-              (
-                  '            suffix: "event-receipt",\n            at_unix_ms: 4,',
-                  '            suffix: "event-receipt",\n            at_unix_ms: 40,',
-              ),
-          ]
-          for old, new in replacements:
-              if text.count(old) != 1:
-                  raise SystemExit(f"materialization event-process fixture anchor mismatch: {old!r}")
-              text = text.replace(old, new, 1)
-          path.write_text(text)
+          old = 'const ACTOR_ID: &str = "materialization-process-seed-actor";'
+          new = 'const ACTOR_ID: &str = "actor-a";'
+          if text.count(old) != 1:
+              raise SystemExit("materialization event-process actor constant mismatch")
+          path.write_text(text.replace(old, new, 1))
           PY
       - name: Synchronize lockfile and canonical formatting
         run: |
@@ -97,7 +87,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json
-            git commit -m "Correct materialization event-process fixture lineage"
+            git commit -m "Bind materialization event-process to fixture actor"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
