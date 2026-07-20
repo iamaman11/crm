@@ -38,6 +38,8 @@ crm-customer-enrichment-application-adapter = { path = "../crm-customer-enrichme
 crm-customer-enrichment-application-composition = { path = "../crm-customer-enrichment-application-composition" }
 crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
 crm-customer-enrichment-capability-composition = { path = "../crm-customer-enrichment-capability-composition" }
+crm-customer-enrichment-materialization-adapter = { path = "../crm-customer-enrichment-materialization-adapter" }
+crm-customer-enrichment-materialization-composition = { path = "../crm-customer-enrichment-materialization-composition" }
 crm-customer-enrichment-provider-process-composition = { path = "../crm-customer-enrichment-provider-process-composition" }
 crm-customer-enrichment-provider-registry = { path = "../crm-customer-enrichment-provider-registry" }
 crm-customer-enrichment-query-adapter = { path = "../crm-customer-enrichment-query-adapter" }
