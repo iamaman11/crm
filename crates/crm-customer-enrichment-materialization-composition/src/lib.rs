@@ -3,8 +3,10 @@
 //! PostgreSQL composition for worker-only Customer Enrichment suggestion materialization.
 
 mod candidate_evidence;
+mod process;
 
 pub use candidate_evidence::*;
+pub use process::*;
 
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_capability_runtime::{
