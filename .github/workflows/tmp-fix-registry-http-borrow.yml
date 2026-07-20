@@ -1,0 +1,54 @@
+name: Temporary Registry HTTP Borrow Fix
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/tmp-fix-registry-http-borrow.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-registry-http-borrow-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply exact borrow fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-customer-enrichment-registry-http-transport/src/lib.rs')
+          text = path.read_text()
+          old = """        let config = RegistryHttpTransportConfig::try_new(\n            &endpoint,\n            [endpoint],\n"""
+          new = """        let config = RegistryHttpTransportConfig::try_new(\n            &endpoint,\n            [endpoint.clone()],\n"""
+          if text.count(old) != 1:
+              raise SystemExit('expected exactly one endpoint borrow pattern')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Verify canonical formatting
+        run: cargo fmt --all --check
+      - name: Verify exact transport tests
+        run: cargo test -p crm-customer-enrichment-registry-http-transport
+      - name: Verify strict transport Clippy
+        run: cargo clippy -p crm-customer-enrichment-registry-http-transport --all-targets -- -D warnings
+      - name: Commit verified source fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-customer-enrichment-registry-http-transport/src/lib.rs
+          git diff --cached --check
+          git commit -m "Fix registry HTTP test endpoint ownership"
+          git push origin HEAD:agent/phase8a10-customer-enrichment
