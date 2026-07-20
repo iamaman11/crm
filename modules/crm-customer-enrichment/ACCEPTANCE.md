@@ -46,12 +46,12 @@ Current accepted production inventory: **6 public mutations + 6 permission-aware
 - [x] Derive suggestion supersession deterministically from exact visible logical propositions only, so a hidden successor neither changes the disclosed lifecycle nor leaks its identity.
 - [x] Derive expiry at the exact `expires_at` boundary while retaining immutable suggestion and review evidence.
 - [x] Wire `CRM_CUSTOMER_ENRICHMENT_PROVIDER_ADAPTERS` into actual `crm-api` provider registry assembly; empty configuration remains empty, disabled coordinates remain disabled, and enabled configuration without the exact host transport fails assembly instead of being silently replaced by `ExactProviderAdapterRegistry::default()`.
-- [ ] Add fail-closed final mutation guards so expired or superseded evidence cannot be newly reviewed or applied, including restart/crash-window recovery without TOCTOU escape.
+- [x] Add fail-closed transaction-scoped stale-evidence guards: review, application and materialization share a deterministic PostgreSQL advisory lock for the exact provider/mapping/Party/field coordinate; review and application reload all same-coordinate immutable suggestions under that lock and reject a superseded target before persistence, while materialization defers when an exact application attempt is pending. Fresh-PostgreSQL process evidence proves superseded review/application commands create no new application/review evidence.
 - [ ] Complete remaining Consent semantic scenarios plus final live authorization and declarative field visibility.
 - [ ] Add concrete provider transport adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
 - [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof for remaining records.
 - [ ] Prove remaining provider replay, conflicting response, response reconciliation, quota, circuit/failure and provider-disabled behavior across configured concrete adapters.
-- [ ] Complete remaining response-materialization and stale-evidence recovery scenarios; target-success/outcome-missing application recovery is complete.
+- [ ] Complete remaining response-materialization and pending-application/materialization recovery scenarios; superseded review/application guards and target-success/outcome-missing application recovery are complete.
 - [ ] Replace `tests/acceptance.rs` with real production-path evidence.
 - [ ] Complete `production/CONTRIBUTION.md` through separately owned adapter/composition crates with exact route parity.
 - [ ] Add remaining fresh-PostgreSQL real `crm-api` success, denial, stale, failure, disable/uninstall and cross-tenant process scenarios.
