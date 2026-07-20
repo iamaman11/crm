@@ -54,7 +54,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
       - name: Apply reconciliation patch
-        run: python3 scripts/tmp_apply_provider_response_reconciliation.py
+        id: apply_patch
+        continue-on-error: true
+        run: python3 scripts/tmp_apply_provider_response_reconciliation.py 2>&1 | tee provider-response-reconciliation-patch.log
+      - name: Upload patch diagnostics
+        if: steps.apply_patch.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-response-reconciliation-patch-diagnostics
+          path: provider-response-reconciliation-patch.log
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop after patch failure
+        if: steps.apply_patch.outcome == 'failure'
+        run: exit 1
       - name: Format workspace
         run: cargo fmt --all
       - name: Verify pure reconciliation semantics
