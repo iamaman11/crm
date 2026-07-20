@@ -37,7 +37,15 @@ jobs:
           lines = source.read_text().splitlines()
           start = lines.index("          python3 - <<'PY'") + 1
           end = lines.index("          PY", start)
-          extracted = [line[10:] if line.startswith("          ") else line for line in lines[start:end]]
+          extracted = []
+          in_triple = False
+          for line in lines[start:end]:
+              converted = line if in_triple else (line[10:] if line.startswith("          ") else line)
+              extracted.append(converted)
+              if converted.count("'''") % 2 == 1:
+                  in_triple = not in_triple
+          if in_triple:
+              raise SystemExit("embedded provider patch ended inside a triple-quoted string")
           code = "\n".join(extracted) + "\n"
           signature = "def replace_once(path: str, old: str, new: str) -> None:\n"
           code = code.replace(signature, "anchor_index = 0\n\n" + signature, 1)
