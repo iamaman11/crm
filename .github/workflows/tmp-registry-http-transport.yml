@@ -57,7 +57,22 @@ jobs:
       - name: Verify application registry composition
         run: cargo test -p crm-application-runtime customer_enrichment_provider_registry
       - name: Strict focused Clippy
-        run: cargo clippy -p crm-customer-enrichment-registry-http-transport -p crm-application-runtime --all-targets -- -D warnings
+        id: focused_clippy
+        continue-on-error: true
+        run: cargo clippy -p crm-customer-enrichment-registry-http-transport -p crm-application-runtime --all-targets -- -D warnings 2>&1 | tee registry-http-transport-clippy.log
+      - name: Upload Clippy diagnostics
+        if: steps.focused_clippy.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: registry-http-transport-clippy-diagnostics
+          path: |
+            registry-http-transport-clippy.log
+            crates/crm-customer-enrichment-registry-http-transport/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop after Clippy failure
+        if: steps.focused_clippy.outcome == 'failure'
+        run: exit 1
       - name: Remove temporary patch machinery
         run: rm scripts/tmp_apply_registry_http_transport.py .github/workflows/tmp-registry-http-transport.yml
       - name: Commit verified slice
