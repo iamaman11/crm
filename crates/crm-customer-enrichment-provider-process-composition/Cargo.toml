@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = []
+postgres-integration = []
+
 [dependencies]
 crm-application-composition = { path = "../crm-application-composition" }
 crm-capability-ingress = { path = "../crm-capability-ingress" }
@@ -18,3 +22,13 @@ crm-module-sdk = { path = "../crm-module-sdk" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 prost = "0.14"
 sha2 = "0.10"
+
+[dev-dependencies]
+serde_json = "1"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[test]]
+name = "postgres_conflict_persistence"
+path = "tests/postgres_conflict_persistence.rs"
+required-features = ["postgres-integration"]
