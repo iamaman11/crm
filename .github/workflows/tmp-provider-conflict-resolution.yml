@@ -1,0 +1,171 @@
+name: Temporary Provider Conflict Resolution
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-provider-conflict-resolution-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-commit:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_enrichment_worker_process_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5442:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_enrichment_worker_process_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5442
+      PGDATABASE: crm_customer_enrichment_worker_process_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply provider conflict resolution patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/tmp_apply_provider_conflict_resolution.py
+          cargo fmt --all
+      - name: Reject unexpected patch scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+
+          allowed = {
+              "modules/crm-customer-enrichment/src/response_conflict.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/Cargo.toml",
+              "crates/crm-customer-enrichment-provider-process-composition/src/lib.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/src/conflict_resolution.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_resolution.rs",
+          }
+          changed = set(subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines())
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected={sorted(unexpected)}")
+          missing = allowed - changed
+          if missing:
+              raise SystemExit(f"missing={sorted(missing)}")
+          print("provider conflict resolution diff:", sorted(changed))
+          PY
+      - name: Verify pure conflict resolution contracts
+        id: pure
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-enrichment response_conflict --lib -- --nocapture 2>&1 | tee /tmp/provider-conflict-resolution-pure.log
+          cargo test -p crm-customer-enrichment-provider-process-composition --lib -- --nocapture 2>&1 | tee -a /tmp/provider-conflict-resolution-pure.log
+      - name: Upload pure diagnostics
+        if: steps.pure.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-conflict-resolution-pure-diagnostics
+          path: /tmp/provider-conflict-resolution-pure.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after pure failure
+        if: steps.pure.outcome == 'failure'
+        run: exit 1
+      - name: Prepare fresh conflict resolution database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify PostgreSQL live authorized conflict resolution
+        id: conflict_resolution
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-customer-enrichment-provider-process-composition \
+            --features postgres-integration \
+            --test postgres_conflict_resolution \
+            -- --nocapture 2>&1 | tee /tmp/provider-conflict-resolution-postgres.log
+      - name: Upload conflict resolution diagnostics
+        if: steps.conflict_resolution.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-conflict-resolution-postgres-diagnostics
+          path: /tmp/provider-conflict-resolution-postgres.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after conflict resolution failure
+        if: steps.conflict_resolution.outcome == 'failure'
+        run: exit 1
+      - name: Verify production wrappers compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check -p crm-application-runtime
+          cargo test -p crm-application-runtime --test customer_enrichment_provider_source_contract --no-run
+      - name: Strict focused Clippy
+        id: focused_clippy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy \
+            -p crm-customer-enrichment \
+            -p crm-customer-enrichment-provider-process-composition \
+            -p crm-application-runtime \
+            --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/provider-conflict-resolution-clippy.log
+      - name: Upload focused Clippy diagnostics
+        if: steps.focused_clippy.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-conflict-resolution-focused-clippy-diagnostics
+          path: /tmp/provider-conflict-resolution-clippy.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after focused Clippy failure
+        if: steps.focused_clippy.outcome == 'failure'
+        run: exit 1
+      - name: Commit verified provider conflict resolution
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            modules/crm-customer-enrichment/src/response_conflict.rs \
+            crates/crm-customer-enrichment-provider-process-composition/Cargo.toml \
+            crates/crm-customer-enrichment-provider-process-composition/src/lib.rs \
+            crates/crm-customer-enrichment-provider-process-composition/src/conflict_resolution.rs \
+            crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_resolution.rs
+          git diff --cached --quiet && exit 0
+          git commit -m "Persist live-authorized provider conflict resolutions"
+          git push origin "HEAD:${HEAD_BRANCH}"
