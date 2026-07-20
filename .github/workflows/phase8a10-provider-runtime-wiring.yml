@@ -1,0 +1,109 @@
+name: Phase 8A.10 Provider Runtime Wiring
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/phase8a10-provider-runtime-wiring.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire-and-verify:
+    if: github.head_ref == 'agent/phase8a10-customer-enrichment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Wire exact configured registry into crm-api assembly
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/crm-application-runtime/src/runtime.rs')
+          text = path.read_text()
+
+          old_import = '''    build_customer_enrichment_materialization_process, build_customer_enrichment_provider_process,
+              build_customer_enrichment_provider_worker, build_production_background_workers,
+              build_production_composition,
+          '''
+          new_import = '''    build_customer_enrichment_materialization_process, build_customer_enrichment_provider_process,
+              build_customer_enrichment_provider_registry, build_customer_enrichment_provider_worker,
+              build_production_background_workers, build_production_composition,
+              ProcessProviderSecretValueSource, StaticProviderTransportCatalog,
+          '''
+          if text.count(old_import) != 1:
+              raise SystemExit('runtime crate import anchor is not exact')
+          text = text.replace(old_import, new_import, 1)
+
+          exact_registry_import = 'use crm_customer_enrichment_provider_registry::ExactProviderAdapterRegistry;\n'
+          if text.count(exact_registry_import) != 1:
+              raise SystemExit('obsolete exact-registry import anchor is not exact')
+          text = text.replace(exact_registry_import, '', 1)
+
+          old_block = '''        // No adapter coordinate is enabled implicitly. Concrete provider adapters are added only
+                  // through exact production configuration; the empty immutable registry fails closed.
+                  let customer_enrichment_provider_executor = Arc::new(
+                      build_customer_enrichment_provider_worker(
+                          CustomerEnrichmentProviderWorkerDependencies {
+                              store: store.clone(),
+                              registry: Arc::new(ExactProviderAdapterRegistry::default()),
+                              authorizer: authorizer.clone(),
+                          },
+                      )
+                      .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                  );
+          '''
+          new_block = '''        // Concrete transports are host registrations and are never inferred. Empty configuration
+                  // remains an empty fail-closed registry; an enabled coordinate without its exact host
+                  // transport fails application assembly instead of being silently ignored.
+                  let customer_enrichment_provider_registry = Arc::new(
+                      build_customer_enrichment_provider_registry(
+                          &config.customer_enrichment_provider_adapters,
+                          Arc::clone(&clock),
+                          Arc::new(StaticProviderTransportCatalog::default()),
+                          Arc::new(ProcessProviderSecretValueSource),
+                      )
+                      .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                  );
+                  let customer_enrichment_provider_executor = Arc::new(
+                      build_customer_enrichment_provider_worker(
+                          CustomerEnrichmentProviderWorkerDependencies {
+                              store: store.clone(),
+                              registry: customer_enrichment_provider_registry,
+                              authorizer: authorizer.clone(),
+                          },
+                      )
+                      .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+                  );
+          '''
+          if text.count(old_block) != 1:
+              raise SystemExit('provider runtime assembly anchor is not exact')
+          path.write_text(text.replace(old_block, new_block, 1))
+          PY
+      - name: Verify provider runtime wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo test -p crm-application-runtime
+          cargo clippy -p crm-application-runtime --all-targets -- -D warnings
+      - name: Commit verified runtime wiring and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/phase8a10-provider-runtime-wiring.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/crm-application-runtime/src/runtime.rs \
+            .github/workflows/phase8a10-provider-runtime-wiring.yml
+          git diff --cached --check
+          git commit -m 'Wire provider configuration into runtime assembly'
+          git push origin HEAD:agent/phase8a10-customer-enrichment
