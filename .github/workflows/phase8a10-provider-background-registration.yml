@@ -43,9 +43,33 @@ jobs:
               line[10:] if line.startswith("          ") else line
               for line in lines[start:end]
           ]
-          Path("/tmp/phase8a10-provider-background-registration.py").write_text(
-              "\n".join(extracted) + "\n"
-          )
+          code = "\n".join(extracted) + "\n"
+          original = '''def replace_once(path: str, old: str, new: str) -> None:
+    file = Path(path)
+    text = file.read_text()
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{path}: expected one replacement anchor, found {count}")
+    file.write_text(text.replace(old, new, 1))
+'''
+          enhanced = '''anchor_index = 0
+
+def replace_once(path: str, old: str, new: str) -> None:
+    global anchor_index
+    anchor_index += 1
+    file = Path(path)
+    text = file.read_text()
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(
+            f"{path}: anchor {anchor_index} expected once, found {count}; old={old[:240]!r}"
+        )
+    file.write_text(text.replace(old, new, 1))
+'''
+          if code.count(original) != 1:
+              raise SystemExit("embedded replace_once definition was not found exactly once")
+          code = code.replace(original, enhanced, 1)
+          Path("/tmp/phase8a10-provider-background-registration.py").write_text(code)
           PY
           if ! python3 /tmp/phase8a10-provider-background-registration.py > /tmp/provider-patch.log 2>&1; then
             cat /tmp/provider-patch.log
