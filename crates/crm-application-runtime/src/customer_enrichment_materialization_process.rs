@@ -1,13 +1,11 @@
-use crm_capability_runtime::{
-    CapabilityAuthorizer, CapabilityExecutionResult, CapabilityRequest,
-};
+use crm_capability_runtime::{CapabilityAuthorizer, CapabilityExecutionResult, CapabilityRequest};
 use crm_core_data::{PostgresDataStore, PostgresImmutableFileArtifactStore};
 use crm_customer_enrichment_materialization_adapter::suggestion_materialization_capability_definition;
 use crm_customer_enrichment_materialization_composition::{
     CustomerEnrichmentMaterializationProcessWorker,
-    GovernedFileProviderSuggestionCandidateEvidenceSource,
+    GovernedFileProviderSuggestionCandidateEvidenceSource, MATERIALIZATION_PROCESS_WORKER_ACTOR_ID,
     PostgresCustomerEnrichmentSuggestionMaterializationWorker,
-    SuggestionMaterializationExecutorPort, MATERIALIZATION_PROCESS_WORKER_ACTOR_ID,
+    SuggestionMaterializationExecutorPort,
 };
 use crm_module_sdk::{ActorId, ErrorCategory, PortFuture, SdkError};
 use std::fmt;
@@ -36,14 +34,15 @@ pub fn build_customer_enrichment_materialization_process(
             dependencies.store.clone(),
         )),
     ));
-    let executor: Arc<dyn SuggestionMaterializationExecutorPort> = Arc::new(
-        AuthorizedSuggestionMaterializationExecutor::new(
-            Arc::new(PostgresCustomerEnrichmentSuggestionMaterializationWorker::new(
-                dependencies.store.clone(),
-            )),
+    let executor: Arc<dyn SuggestionMaterializationExecutorPort> =
+        Arc::new(AuthorizedSuggestionMaterializationExecutor::new(
+            Arc::new(
+                PostgresCustomerEnrichmentSuggestionMaterializationWorker::new(
+                    dependencies.store.clone(),
+                ),
+            ),
             dependencies.authorizer,
-        ),
-    );
+        ));
     let actor_id = ActorId::try_new(MATERIALIZATION_PROCESS_WORKER_ACTOR_ID)
         .map_err(materialization_configuration_invalid)?;
     CustomerEnrichmentMaterializationProcessWorker::new(
