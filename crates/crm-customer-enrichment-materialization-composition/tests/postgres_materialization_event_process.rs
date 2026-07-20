@@ -54,7 +54,9 @@ const SEED_CAPABILITY: &str = "customer_enrichment.materialization.process.seed"
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn response_event_waits_for_finalized_evidence_then_materializes_once() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping PostgreSQL materialization event process because DATABASE_URL is absent");
+        eprintln!(
+            "skipping PostgreSQL materialization event process because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -76,9 +78,7 @@ async fn response_event_waits_for_finalized_evidence_then_materializes_once() {
         Arc::new(GovernedFileProviderSuggestionCandidateEvidenceSource::new(
             artifacts.clone(),
         )),
-        Arc::new(PostgresCustomerEnrichmentSuggestionMaterializationWorker::new(
-            store.clone(),
-        )),
+        Arc::new(PostgresCustomerEnrichmentSuggestionMaterializationWorker::new(store.clone())),
         ActorId::try_new(MATERIALIZATION_PROCESS_WORKER_ACTOR_ID).unwrap(),
     )
     .expect("compose materialization event process");
