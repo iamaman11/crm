@@ -54,6 +54,7 @@ pub use customer_enrichment_provider_registry::{
     ProcessProviderSecretValueSource, ProviderSecretValueSourcePort, ProviderTransportCatalogPort,
     ProviderTransportRegistration, StaticProviderTransportCatalog,
     build_customer_enrichment_provider_registry,
+    build_process_customer_enrichment_provider_transport_catalog,
 };
 pub use customer_enrichment_provider_source::GovernedCustomerEnrichmentProviderSource;
 pub use customer_enrichment_provider_worker::{

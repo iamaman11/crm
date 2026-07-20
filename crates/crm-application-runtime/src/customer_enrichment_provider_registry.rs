@@ -6,13 +6,30 @@ use crm_customer_enrichment_provider_registry::{
     ProviderSecretMaterial, ProviderSecretRegistration, ProviderTransportPort,
     StaticProviderSecretHandleResolver,
 };
+use crm_customer_enrichment_registry_http_transport::{
+    REGISTRY_HTTP_ADAPTER_CONTRACT_VERSION, REGISTRY_HTTP_ADAPTER_KIND,
+    REGISTRY_HTTP_TRANSPORT_KEY, RegistryHttpTransport, RegistryHttpTransportConfig,
+};
 use crm_module_sdk::{Clock, ErrorCategory, SdkError};
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 const NANOS_PER_SECOND: u64 = 1_000_000_000;
+const REGISTRY_HTTP_ENDPOINT_ENVIRONMENT: &str = "CRM_CUSTOMER_ENRICHMENT_REGISTRY_HTTP_ENDPOINT";
+const REGISTRY_HTTP_ALLOWED_ENDPOINTS_ENVIRONMENT: &str =
+    "CRM_CUSTOMER_ENRICHMENT_REGISTRY_HTTP_ALLOWED_ENDPOINTS";
+const REGISTRY_HTTP_TIMEOUT_MILLIS_ENVIRONMENT: &str =
+    "CRM_CUSTOMER_ENRICHMENT_REGISTRY_HTTP_TIMEOUT_MILLIS";
+const REGISTRY_HTTP_MAXIMUM_REQUEST_BYTES_ENVIRONMENT: &str =
+    "CRM_CUSTOMER_ENRICHMENT_REGISTRY_HTTP_MAXIMUM_REQUEST_BYTES";
+const REGISTRY_HTTP_MAXIMUM_RESPONSE_BYTES_ENVIRONMENT: &str =
+    "CRM_CUSTOMER_ENRICHMENT_REGISTRY_HTTP_MAXIMUM_RESPONSE_BYTES";
+const DEFAULT_REGISTRY_HTTP_TIMEOUT_MILLIS: u64 = 5_000;
+const DEFAULT_REGISTRY_HTTP_MAXIMUM_REQUEST_BYTES: usize = 64 * 1024;
+const DEFAULT_REGISTRY_HTTP_MAXIMUM_RESPONSE_BYTES: usize = 256 * 1024;
 
 /// Resolves one exact transport implementation selected by explicit production configuration.
 pub trait ProviderTransportCatalogPort: Send + Sync {
@@ -114,6 +131,85 @@ impl ProviderTransportCatalogPort for StaticProviderTransportCatalog {
             .get(&(transport_key.to_owned(), coordinate.clone()))
             .cloned()
             .ok_or_else(|| provider_transport_unavailable(transport_key, coordinate))
+    }
+}
+
+/// Builds the process-host transport catalog. Host configuration is resolved only when the exact
+/// enabled `registry_http:registry_http_v1@1.0.0` coordinate is selected. Disabled or unrelated
+/// coordinates do not resolve endpoint configuration and remain fail closed.
+pub fn build_process_customer_enrichment_provider_transport_catalog(
+    configurations: &[CustomerEnrichmentProviderAdapterConfig],
+    clock: Arc<dyn Clock>,
+) -> Result<StaticProviderTransportCatalog, SdkError> {
+    let coordinate = registry_http_coordinate()?;
+    let selected = configurations.iter().any(|configuration| {
+        configuration.state == CustomerEnrichmentProviderAdapterState::Enabled
+            && configuration.transport_key.as_deref() == Some(REGISTRY_HTTP_TRANSPORT_KEY)
+            && configuration.coordinate == coordinate
+    });
+    if !selected {
+        return Ok(StaticProviderTransportCatalog::default());
+    }
+    let endpoint = required_process_value(REGISTRY_HTTP_ENDPOINT_ENVIRONMENT)?;
+    let allowed_endpoints = required_process_value(REGISTRY_HTTP_ALLOWED_ENDPOINTS_ENVIRONMENT)?
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let timeout_millis = optional_process_value(
+        REGISTRY_HTTP_TIMEOUT_MILLIS_ENVIRONMENT,
+        DEFAULT_REGISTRY_HTTP_TIMEOUT_MILLIS,
+    )?;
+    let maximum_request_bytes = optional_process_value(
+        REGISTRY_HTTP_MAXIMUM_REQUEST_BYTES_ENVIRONMENT,
+        DEFAULT_REGISTRY_HTTP_MAXIMUM_REQUEST_BYTES,
+    )?;
+    let maximum_response_bytes = optional_process_value(
+        REGISTRY_HTTP_MAXIMUM_RESPONSE_BYTES_ENVIRONMENT,
+        DEFAULT_REGISTRY_HTTP_MAXIMUM_RESPONSE_BYTES,
+    )?;
+    let transport = RegistryHttpTransport::try_new(
+        RegistryHttpTransportConfig::try_new(
+            endpoint,
+            allowed_endpoints,
+            Duration::from_millis(timeout_millis),
+            maximum_request_bytes,
+            maximum_response_bytes,
+        )?,
+        clock,
+    )?;
+    StaticProviderTransportCatalog::try_new([ProviderTransportRegistration {
+        transport_key: REGISTRY_HTTP_TRANSPORT_KEY.to_owned(),
+        coordinate,
+        transport: Arc::new(transport),
+    }])
+}
+
+fn registry_http_coordinate() -> Result<ProviderAdapterCoordinate, SdkError> {
+    ProviderAdapterCoordinate::try_new(
+        REGISTRY_HTTP_ADAPTER_KIND,
+        REGISTRY_HTTP_ADAPTER_CONTRACT_VERSION,
+    )
+    .map_err(|_| provider_configuration_invalid("registry HTTP coordinate is invalid"))
+}
+
+fn required_process_value(name: &'static str) -> Result<String, SdkError> {
+    env::var(name)
+        .ok()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| provider_process_configuration_missing(name))
+}
+
+fn optional_process_value<T>(name: &'static str, default: T) -> Result<T, SdkError>
+where
+    T: std::str::FromStr,
+{
+    match env::var(name) {
+        Ok(value) => value
+            .parse::<T>()
+            .map_err(|_| provider_process_configuration_invalid(name)),
+        Err(_) => Ok(default),
     }
 }
 
@@ -235,6 +331,26 @@ fn provider_transport_unavailable(
         coordinate.adapter_kind(),
         coordinate.adapter_contract_version()
     ))
+}
+
+fn provider_process_configuration_missing(environment_name: &str) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_HOST_CONFIGURATION_MISSING",
+        ErrorCategory::Internal,
+        false,
+        "Required provider host configuration is missing.",
+    )
+    .with_internal_reference(format!("environment:{environment_name}"))
+}
+
+fn provider_process_configuration_invalid(environment_name: &str) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_HOST_CONFIGURATION_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "Provider host configuration is invalid.",
+    )
+    .with_internal_reference(format!("environment:{environment_name}"))
 }
 
 fn provider_secret_configuration_missing(environment_name: &str) -> SdkError {

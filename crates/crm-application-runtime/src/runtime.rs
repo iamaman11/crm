@@ -5,11 +5,12 @@ use crate::{
     CustomerEnrichmentProviderProcessDependencies, CustomerEnrichmentProviderWorkerDependencies,
     GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
     PostgresModuleActivation, ProcessIdentitySource, ProcessProviderSecretValueSource,
-    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies,
-    StaticProviderTransportCatalog, SystemClock, bootstrap_export_selection_worker_access,
-    build_bootstrap_visibility_registry, build_customer_enrichment_application_worker,
+    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies, SystemClock,
+    bootstrap_export_selection_worker_access, build_bootstrap_visibility_registry,
+    build_customer_enrichment_application_worker,
     build_customer_enrichment_materialization_process, build_customer_enrichment_provider_process,
     build_customer_enrichment_provider_registry, build_customer_enrichment_provider_worker,
+    build_process_customer_enrichment_provider_transport_catalog,
     build_production_background_workers, build_production_composition,
 };
 use axum::extract::{Path, State};
@@ -330,14 +331,21 @@ impl ApplicationRuntime {
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
 
-        // Concrete transports are host registrations and are never inferred. Empty configuration
-        // remains an empty fail-closed registry; an enabled coordinate without its exact host
-        // transport fails application assembly instead of being silently ignored.
+        // Concrete transports are explicit exact-coordinate host registrations. Endpoint
+        // configuration is resolved only for the selected exact coordinate; disabled and unrelated
+        // coordinates perform no transport or secret resolution.
+        let customer_enrichment_provider_transport_catalog = Arc::new(
+            build_process_customer_enrichment_provider_transport_catalog(
+                &config.customer_enrichment_provider_adapters,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
         let customer_enrichment_provider_registry = Arc::new(
             build_customer_enrichment_provider_registry(
                 &config.customer_enrichment_provider_adapters,
                 Arc::clone(&clock),
-                Arc::new(StaticProviderTransportCatalog::default()),
+                customer_enrichment_provider_transport_catalog,
                 Arc::new(ProcessProviderSecretValueSource),
             )
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,

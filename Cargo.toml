@@ -30,6 +30,7 @@ members = [
   "crates/crm-customer-enrichment-query-adapter",
   "crates/crm-customer-enrichment-request-list-query-adapter",
   "crates/crm-customer-enrichment-provider-registry",
+  "crates/crm-customer-enrichment-registry-http-transport",
   "crates/crm-customer-enrichment-provider-process-composition",
   "crates/crm-customer-enrichment-worker-composition",
   "crates/crm-customer-enrichment-materialization-adapter",
