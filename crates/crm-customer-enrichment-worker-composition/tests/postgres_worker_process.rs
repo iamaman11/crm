@@ -173,12 +173,8 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
                 .expect("build provider quota"),
         ),
         Arc::new(
-            ConsecutiveFailureProviderCircuitBreaker::try_new(
-                3,
-                60_000_000_000,
-                clock,
-            )
-            .expect("build provider circuit"),
+            ConsecutiveFailureProviderCircuitBreaker::try_new(3, 60_000_000_000, clock)
+                .expect("build provider circuit"),
         ),
         Arc::new(transport),
     );

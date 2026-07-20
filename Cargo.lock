@@ -1024,6 +1024,7 @@ dependencies = [
 name = "crm-customer-enrichment-worker-composition"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "crm-capability-ingress",
  "crm-capability-plan-support",
  "crm-capability-runtime",
@@ -1031,9 +1032,11 @@ dependencies = [
  "crm-customer-enrichment",
  "crm-customer-enrichment-capability-adapter",
  "crm-customer-enrichment-provider-registry",
+ "crm-customer-enrichment-registry-http-transport",
  "crm-module-sdk",
  "crm-proto-contracts",
  "prost",
+ "serde_json",
  "sha2 0.10.9",
  "sqlx",
  "tokio",
