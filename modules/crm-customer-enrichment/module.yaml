@@ -2,7 +2,7 @@ schema_version: crm.module/v1
 module_id: crm.customer-enrichment
 version: 0.1.0
 display_name: CRM Customer Enrichment
-description: Governed provider-neutral customer enrichment requests, immutable suggestions and provenance, review decisions and exact owner-capability application evidence without owning customer-master values.
+description: Governed provider-neutral customer enrichment requests, immutable suggestions and provenance, provider-response conflict resolution, review decisions and exact owner-capability application evidence without owning customer-master values.
 owner:
   team: customer-platform
   contact: crm-owner@example.com
@@ -191,6 +191,7 @@ provides:
     - customer_enrichment.mapping_version
     - customer_enrichment.request
     - customer_enrichment.provider_response_receipt
+    - customer_enrichment.provider_response_conflict
     - customer_enrichment.suggestion
     - customer_enrichment.review_decision
     - customer_enrichment.application_attempt
@@ -207,6 +208,7 @@ storage:
     - customer_enrichment.mapping_version
     - customer_enrichment.request
     - customer_enrichment.provider_response_receipt
+    - customer_enrichment.provider_response_conflict
     - customer_enrichment.suggestion
     - customer_enrichment.review_decision
     - customer_enrichment.application_attempt
@@ -216,6 +218,7 @@ storage:
     - crm.customer-enrichment.mapping_version
     - crm.customer-enrichment.request
     - crm.customer-enrichment.provider_response_receipt
+    - crm.customer-enrichment.provider_response_conflict
     - crm.customer-enrichment.suggestion
     - crm.customer-enrichment.review_decision
     - crm.customer-enrichment.application_attempt
@@ -237,6 +240,7 @@ lifecycle:
     - customer_enrichment.mapping_version
     - customer_enrichment.request
     - customer_enrichment.provider_response_receipt
+    - customer_enrichment.provider_response_conflict
     - customer_enrichment.suggestion
     - customer_enrichment.review_decision
     - customer_enrichment.application_attempt
