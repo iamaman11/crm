@@ -20,6 +20,15 @@ pub struct ProviderResponseConflictPersistencePlan {
 )
 
 replace_once(
+    Path("crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs"),
+    """            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id = 'customer_enrichment.response.record' AND aggregate_type = 'customer_enrichment.provider_response_conflict'",
+""",
+    """            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id = 'customer_enrichment.response.record'",
+""",
+    "audit evidence query",
+)
+
+replace_once(
     Path("modules/crm-customer-enrichment/module.yaml"),
     """    - id: customer_enrichment.response.recorded
       version: 1.0.0
