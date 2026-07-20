@@ -255,6 +255,9 @@ impl CustomerEnrichmentProviderProcessWorker {
         if source.request.request_id().as_str() != request_id.as_str()
             || source.request.tenant_id() != tenant_id
             || source.provider_profile.version_id() != source.request.provider_profile_version_id()
+            || source.party_snapshot.party_id.as_str() != source.request.target().resource_id
+            || source.party_snapshot.resource_version != source.request.target().resource_version
+            || source.party_snapshot.observed_at_unix_ms > now_unix_ms
         {
             return Err(source_snapshot_invalid());
         }
@@ -389,6 +392,16 @@ mod tests {
             PROVIDER_PROCESS_PROJECTION_ID,
             "customer-enrichment-provider-process-v1"
         );
+    }
+
+    #[test]
+    fn worker_clock_requires_a_positive_representable_millisecond() {
+        let error = current_time_ms(999_999).unwrap_err();
+        assert_eq!(
+            error.code,
+            "CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_CONFIGURATION_INVALID"
+        );
+        assert_eq!(current_time_ms(1_999_999).unwrap(), 1);
     }
 
     #[test]
