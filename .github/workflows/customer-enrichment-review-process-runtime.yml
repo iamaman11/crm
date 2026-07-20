@@ -77,6 +77,8 @@ jobs:
       PGPASSWORD: postgres
       DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5443/crm_customer_enrichment_review_process_test
       ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5443/crm_customer_enrichment_review_process_test
+      CRM_CURSOR_SIGNING_KEY: customer-enrichment-review-cursor-key-0123456789abcdef
+      CRM_APPROVAL_SIGNING_KEY: customer-enrichment-review-approval-key-0123456789abcdef
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
