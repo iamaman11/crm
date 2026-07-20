@@ -1,0 +1,73 @@
+name: Phase 8A.10 Provider Background Registration
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/phase8a10-provider-background-registration.yml
+      - scripts/phase8a10-provider-background-registration.source.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase8a10-provider-background-registration
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    if: github.head_ref == 'agent/phase8a10-customer-enrichment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Extract and apply reviewed patch source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path("scripts/phase8a10-provider-background-registration.source.yml")
+          lines = source.read_text().splitlines()
+          start_marker = "          python3 - <<'PY'"
+          end_marker = "          PY"
+          start = lines.index(start_marker) + 1
+          end = lines.index(end_marker, start)
+          extracted = []
+          for line in lines[start:end]:
+              if line and not line.startswith("          "):
+                  raise SystemExit(f"unexpected embedded patch indentation: {line!r}")
+              extracted.append(line[10:] if line else "")
+          Path("/tmp/phase8a10-provider-background-registration.py").write_text(
+              "\n".join(extracted) + "\n"
+          )
+          PY
+          python3 /tmp/phase8a10-provider-background-registration.py
+      - name: Format and verify focused slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo test -p crm-application-runtime --lib provider_precedes_application_and_stops_after_disable_or_uninstall
+          cargo check -p crm-application-runtime --all-targets
+          cargo clippy -p crm-application-runtime --all-targets -- -D warnings
+      - name: Commit verified slice and remove temporary automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/phase8a10-provider-background-registration.yml
+          rm scripts/phase8a10-provider-background-registration.source.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock crates/crm-application-runtime \
+            .github/workflows/phase8a10-provider-background-registration.yml \
+            scripts/phase8a10-provider-background-registration.source.yml
+          git diff --cached --check
+          git commit -m "Register governed provider background process"
+          git push origin HEAD:agent/phase8a10-customer-enrichment
