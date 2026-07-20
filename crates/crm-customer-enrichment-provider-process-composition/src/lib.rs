@@ -62,7 +62,7 @@ pub fn build_provider_dispatch_work_item(
     let (expected_status, expected_retry_generation, dispatch_started_at_unix_ms, provider_request) =
         match request.status() {
             EnrichmentRequestStatus::Created => {
-                let mut next = request.clone();
+                let mut next = request.to_owned();
                 let provider_request = prepare_provider_dispatch_attempt(
                     &mut next,
                     ProviderDispatchExpectation {
@@ -82,7 +82,7 @@ pub fn build_provider_dispatch_work_item(
                 )
             }
             EnrichmentRequestStatus::FailedRetryable => {
-                let mut next = request.clone();
+                let mut next = request.to_owned();
                 let provider_request = prepare_provider_dispatch_attempt(
                     &mut next,
                     ProviderDispatchExpectation {
