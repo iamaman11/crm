@@ -1,1 +1,1 @@
-crates/crm-application-runtime/src/runtime.rs: expected one replacement anchor, found 0
+crates/crm-application-runtime/src/runtime.rs: anchor 12 expected once, found 0; old='        let customer_enrichment_application_outcome_definition =\n  record_application_outcome_capability_definition()\n      .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;\n'
