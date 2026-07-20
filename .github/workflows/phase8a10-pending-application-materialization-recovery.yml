@@ -53,21 +53,41 @@ jobs:
       - name: Prepare fresh PostgreSQL
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify pending application materialization recovery
+        id: verify
+        continue-on-error: true
         run: |
           set -euo pipefail
-          cargo test \
-            -p crm-customer-enrichment-materialization-composition \
-            --features postgres-integration \
-            --test postgres_materialization_event_process \
-            -- --nocapture
-          cargo clippy \
-            -p crm-customer-enrichment-materialization-composition \
-            --all-targets -- -D warnings
+          {
+            cargo test \
+              -p crm-customer-enrichment-materialization-composition \
+              --features postgres-integration \
+              --test postgres_materialization_event_process \
+              -- --nocapture
+            cargo clippy \
+              -p crm-customer-enrichment-materialization-composition \
+              --all-targets -- -D warnings
+          } 2>&1 | tee /tmp/pending-application-materialization-recovery.log
+      - name: Persist focused diagnostic
+        if: steps.verify.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          tail -n 260 /tmp/pending-application-materialization-recovery.log > /tmp/pending-application-materialization-recovery-diagnostic.txt
+          git reset --hard HEAD
+          git clean -fd
+          cp /tmp/pending-application-materialization-recovery-diagnostic.txt pending-application-materialization-recovery-diagnostic.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pending-application-materialization-recovery-diagnostic.txt
+          git commit -m 'Capture pending application materialization diagnostic'
+          git push origin HEAD:agent/phase8a10-customer-enrichment
+          exit 1
       - name: Commit verified recovery proof and remove temporary tooling
+        if: steps.verify.outcome == 'success'
         run: |
           set -euo pipefail
           rm .github/workflows/phase8a10-pending-application-materialization-recovery.yml
           rm scripts/patch_phase8a10_pending_application_materialization_recovery.py
+          rm -f pending-application-materialization-recovery-diagnostic.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
