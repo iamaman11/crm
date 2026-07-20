@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: temporary-provider-conflict-persistence-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   verify-and-commit:
