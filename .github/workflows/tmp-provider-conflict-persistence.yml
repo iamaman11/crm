@@ -114,14 +114,28 @@ jobs:
       - name: Prepare fresh conflict database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify atomic PostgreSQL conflict replay
+        id: postgres_conflict
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
           cargo test \
             -p crm-customer-enrichment-provider-process-composition \
             --features postgres-integration \
             --test postgres_conflict_persistence \
-            -- --nocapture
+            -- --nocapture 2>&1 | tee /tmp/provider-conflict-postgres.log
+      - name: Upload PostgreSQL conflict diagnostics
+        if: steps.postgres_conflict.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-conflict-postgres-diagnostics
+          path: /tmp/provider-conflict-postgres.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after PostgreSQL conflict failure
+        if: steps.postgres_conflict.outcome == 'failure'
+        shell: bash
+        run: exit 1
       - name: Verify production wrappers compile
         shell: bash
         run: |
