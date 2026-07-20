@@ -1,12 +1,6 @@
 name: Temporary Registry HTTP Transport Patch
 
 on:
-  push:
-    branches:
-      - agent/phase8a10-customer-enrichment
-    paths:
-      - scripts/tmp_apply_registry_http_transport.py
-      - .github/workflows/tmp-registry-http-transport.yml
   pull_request:
     branches:
       - main
@@ -76,10 +70,27 @@ jobs:
       - name: Remove temporary patch machinery
         run: rm scripts/tmp_apply_registry_http_transport.py .github/workflows/tmp-registry-http-transport.yml
       - name: Commit verified slice
+        id: verified_commit
+        continue-on-error: true
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "Add concrete registry HTTP provider transport"
-          git push origin HEAD:agent/phase8a10-customer-enrichment
+          set -o pipefail
+          {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git diff --cached --check
+            git commit -m "Add concrete registry HTTP provider transport"
+            git push origin HEAD:agent/phase8a10-customer-enrichment
+          } 2>&1 | tee registry-http-transport-commit.log
+      - name: Upload commit diagnostics
+        if: steps.verified_commit.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: registry-http-transport-commit-diagnostics
+          path: registry-http-transport-commit.log
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop after commit failure
+        if: steps.verified_commit.outcome == 'failure'
+        run: exit 1
