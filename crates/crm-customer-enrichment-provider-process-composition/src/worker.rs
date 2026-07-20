@@ -37,7 +37,7 @@ pub struct ProviderDispatchSourceSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderDispatchSourceDisposition {
-    Ready(ProviderDispatchSourceSnapshot),
+    Ready(Box<ProviderDispatchSourceSnapshot>),
     Skip,
 }
 
@@ -273,7 +273,7 @@ impl CustomerEnrichmentProviderProcessWorker {
             now_unix_ms,
         })?;
         let result = self.executor.execute(work_item).await?;
-        Ok(DeliveryDisposition::Executed(result))
+        Ok(DeliveryDisposition::Executed(Box::new(result)))
     }
 }
 
@@ -292,7 +292,7 @@ impl TenantBackgroundWorker for CustomerEnrichmentProviderProcessWorker {
 
 #[derive(Debug, Clone, PartialEq)]
 enum DeliveryDisposition {
-    Executed(ProviderDispatchWorkerResult),
+    Executed(Box<ProviderDispatchWorkerResult>),
     Skipped,
 }
 
