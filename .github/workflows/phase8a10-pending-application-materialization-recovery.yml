@@ -49,6 +49,7 @@ jobs:
       - name: Apply recovery process patch
         run: |
           python scripts/patch_phase8a10_pending_application_materialization_recovery.py
+          python scripts/patch_phase8a10_pending_application_materialization_recovery_fix.py
           cargo fmt --all
       - name: Prepare fresh PostgreSQL
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
@@ -87,6 +88,7 @@ jobs:
           set -euo pipefail
           rm .github/workflows/phase8a10-pending-application-materialization-recovery.yml
           rm scripts/patch_phase8a10_pending_application_materialization_recovery.py
+          rm scripts/patch_phase8a10_pending_application_materialization_recovery_fix.py
           rm -f pending-application-materialization-recovery-diagnostic.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
