@@ -5,12 +5,16 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-application-composition = { path = "../crm-application-composition" }
 crm-capability-ingress = { path = "../crm-capability-ingress" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-core-data = { path = "../crm-core-data" }
+crm-core-events = { path = "../crm-core-events" }
 crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
 crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
 crm-customer-enrichment-worker-composition = { path = "../crm-customer-enrichment-worker-composition" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
+prost = "0.14"
 sha2 = "0.10"
