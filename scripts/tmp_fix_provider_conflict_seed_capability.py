@@ -15,7 +15,7 @@ process_test = Path(
 replace_once(
     process_test,
     'const SEED_CAPABILITY: &str = "customer_enrichment.provider_process.seed";',
-    'const SEED_CAPABILITY: &str = "customer_enrichment.request.create";',
+    'const SEED_CAPABILITY: &str = "customer_enrichment.response.record";',
     "provider conflict process seed capability",
 )
 
@@ -25,14 +25,14 @@ persistence_test = Path(
 replace_once(
     persistence_test,
     'scope: "customer_enrichment.provider_conflict.seed@1.0.0".to_owned(),',
-    'scope: "customer_enrichment.request.create@1.0.0".to_owned(),',
+    'scope: "customer_enrichment.response.record@1.0.0".to_owned(),',
     "provider conflict persistence seed scope",
 )
 replace_once(
     persistence_test,
     'CapabilityId::try_new("customer_enrichment.provider_conflict.seed")',
-    'CapabilityId::try_new("customer_enrichment.request.create")',
+    'CapabilityId::try_new("customer_enrichment.response.record")',
     "provider conflict persistence seed capability",
 )
 
-print("aligned provider conflict fixtures to registered request capability")
+print("aligned provider conflict fixtures to registered response capability")
