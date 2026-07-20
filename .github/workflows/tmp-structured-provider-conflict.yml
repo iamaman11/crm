@@ -55,6 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/tmp_apply_structured_provider_conflict.py
+          python scripts/tmp_finalize_structured_provider_conflict.py
       - name: Verify exact patch scope
         shell: bash
         run: |
