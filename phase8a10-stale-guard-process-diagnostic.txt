@@ -1,179 +1,3 @@
-ALTER TABLE
-COMMENT
-COMMENT
-COMMIT
-BEGIN
-CREATE TABLE
-ALTER TABLE
-ALTER TABLE
-CREATE POLICY
-CREATE INDEX
-CREATE INDEX
-COMMENT
-COMMENT
-COMMIT
-BEGIN
-CREATE TABLE
-CREATE TABLE
-CREATE TABLE
-ALTER TABLE
-ALTER TABLE
-ALTER TABLE
-ALTER TABLE
-ALTER TABLE
-ALTER TABLE
-CREATE POLICY
-CREATE POLICY
-CREATE POLICY
-CREATE INDEX
-CREATE INDEX
-COMMENT
-COMMENT
-COMMENT
-COMMIT
-BEGIN
-CREATE TABLE
-CREATE INDEX
-CREATE INDEX
-CREATE INDEX
-ALTER TABLE
-ALTER TABLE
-CREATE POLICY
-COMMENT
-COMMENT
-COMMIT
-BEGIN
-CREATE TABLE
-CREATE TABLE
-CREATE TABLE
-CREATE TABLE
-CREATE TABLE
-CREATE TABLE
-CREATE INDEX
-CREATE TRIGGER
-CREATE TRIGGER
-CREATE TRIGGER
-CREATE TRIGGER
-DO
-COMMENT
-COMMENT
-COMMENT
-COMMENT
-COMMENT
-COMMENT
-COMMIT
-BEGIN
-CREATE INDEX
-CREATE FUNCTION
-CREATE TRIGGER
-COMMIT
-BEGIN
-CREATE INDEX
-COMMENT
-COMMIT
-BEGIN
-CREATE TABLE
-CREATE TABLE
-CREATE INDEX
-ALTER TABLE
-ALTER TABLE
-ALTER TABLE
-ALTER TABLE
-CREATE POLICY
-CREATE POLICY
-COMMENT
-COMMENT
-COMMIT
-ALTER TABLE
-ALTER TABLE
-INSERT 0 2
-INSERT 0 5
-INSERT 0 4
-DO
-GRANT
-GRANT
-GRANT
-REVOKE
-SET
-BEGIN
-SET
-SET
-SET
-SET
-SET
-SET
-INSERT 0 1
-INSERT 0 1
-INSERT 0 1
-INSERT 0 1
-INSERT 0 1
-COMMIT
-BEGIN
-SET
-SET
-SET
-SET
-SET
-SET
-INSERT 0 1
-INSERT 0 1
-INSERT 0 1
-INSERT 0 1
-INSERT 0 1
-COMMIT
-DO
-BEGIN
-SET
-SET
-SET
-SET
-SET
-SET
-DO
-COMMIT
-BEGIN
-SET
-SET
-SET
-SET
-SET
-SET
-DO
-ROLLBACK
-BEGIN
-SET
-SET
-SET
-SET
-SET
-SET
-INSERT 0 1
-INSERT 0 1
-INSERT 0 1
-INSERT 0 1
-COMMIT
-BEGIN
-SET
-SET
-SET
-SET
-SET
-SET
-DO
-ROLLBACK
-BEGIN
-SET
-SET
-SET
-SET
-SET
-SET
-DO
-ROLLBACK
-BEGIN
-SET
-SET
-SET
 SET
 SET
 SET
@@ -239,22 +63,198 @@ COMMIT
 INSERT 0 1
 INSERT 0 10
 ALTER ROLE
+[1m[92m Downloading[0m crates ...
+[1m[92m  Downloaded[0m atomic-waker v1.1.2
+[1m[92m  Downloaded[0m fnv v1.0.7
+[1m[92m  Downloaded[0m httpdate v1.0.3
+[1m[92m  Downloaded[0m axum v0.8.9
+[1m[92m  Downloaded[0m serde_urlencoded v0.7.1
+[1m[92m  Downloaded[0m csv-core v0.1.13
+[1m[92m  Downloaded[0m async-trait v0.1.91
+[1m[92m  Downloaded[0m axum-core v0.5.6
+[1m[92m  Downloaded[0m hyper-timeout v0.5.2
+[1m[92m  Downloaded[0m mime v0.3.17
+[1m[92m  Downloaded[0m serde_path_to_error v0.1.20
+[1m[92m  Downloaded[0m signal-hook-registry v1.4.8
+[1m[92m  Downloaded[0m httparse v1.10.1
+[1m[92m  Downloaded[0m pulldown-cmark-to-cmark v22.0.0
+[1m[92m  Downloaded[0m ryu v1.0.23
+[1m[92m  Downloaded[0m matchit v0.8.4
+[1m[92m  Downloaded[0m hyper-util v0.1.20
+[1m[92m  Downloaded[0m h2 v0.4.15
+[1m[92m  Downloaded[0m pulldown-cmark v0.13.4
+[1m[92m  Downloaded[0m hyper v1.11.0
+[1m[92m  Downloaded[0m csv v1.4.0
+[1m[92m  Downloaded[0m tokio-util v0.7.18
+[1m[92m  Downloaded[0m tonic-prost v0.14.6
+[1m[92m  Downloaded[0m try-lock v0.2.5
+[1m[92m  Downloaded[0m unicase v2.9.0
+[1m[92m  Downloaded[0m want v0.3.1
+[1m[92m  Downloaded[0m tonic-build v0.14.6
+[1m[92m  Downloaded[0m tonic-health v0.14.6
+[1m[92m  Downloaded[0m tonic-prost-build v0.14.6
+[1m[92m  Downloaded[0m tower v0.5.3
+[1m[92m  Downloaded[0m tonic-web v0.14.6
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m syn v3.0.2
+[1m[92m   Compiling[0m smallvec v1.15.2
+[1m[92m   Compiling[0m errno v0.3.14
+[1m[92m   Compiling[0m futures-sink v0.3.33
+[1m[92m   Compiling[0m signal-hook-registry v1.4.8
+[1m[92m   Compiling[0m slab v0.4.12
+[1m[92m   Compiling[0m tokio v1.53.0
+[1m[92m   Compiling[0m libc v0.2.186
+[1m[92m   Compiling[0m pulldown-cmark v0.13.4
+[1m[92m   Compiling[0m getrandom v0.4.3
+[1m[92m   Compiling[0m futures-util v0.3.33
+[1m[92m   Compiling[0m serde_json v1.0.151
+[1m[92m   Compiling[0m form_urlencoded v1.2.2
+[1m[92m   Compiling[0m unicase v2.9.0
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m   Compiling[0m prost v0.14.4
+[1m[92m   Compiling[0m tokio-util v0.7.18
+[1m[92m   Compiling[0m futures-channel v0.3.33
+[1m[92m   Compiling[0m tempfile v3.27.0
+[1m[92m   Compiling[0m pulldown-cmark-to-cmark v22.0.0
+[1m[92m   Compiling[0m prost-types v0.14.4
+[1m[92m   Compiling[0m tokio-stream v0.1.18
+[1m[92m   Compiling[0m icu_normalizer v2.2.0
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m prost-build v0.14.4
+[1m[92m   Compiling[0m idna_adapter v1.2.2
+[1m[92m   Compiling[0m idna v1.1.0
+[1m[92m   Compiling[0m parking_lot_core v0.9.12
+[1m[92m   Compiling[0m crm-module-sdk v0.1.0 (/home/runner/work/crm/crm/crates/crm-module-sdk)
+[1m[92m   Compiling[0m parking_lot v0.12.5
+[1m[92m   Compiling[0m url v2.5.8
+[1m[92m   Compiling[0m thiserror-impl v2.0.19
+[1m[92m   Compiling[0m crm-proto-contracts v0.1.0 (/home/runner/work/crm/crm/crates/crm-proto-contracts)
+[1m[92m   Compiling[0m crm-capability-runtime v0.1.0 (/home/runner/work/crm/crm/crates/crm-capability-runtime)
+[1m[92m   Compiling[0m crm-metadata-runtime v0.1.0 (/home/runner/work/crm/crm/crates/crm-metadata-runtime)
+[1m[92m   Compiling[0m crm-query-runtime v0.1.0 (/home/runner/work/crm/crm/crates/crm-query-runtime)
+[1m[92m   Compiling[0m thiserror v2.0.19
+[1m[92m   Compiling[0m futures-intrusive v0.5.0
+[1m[92m   Compiling[0m crm-metadata-schema v0.1.0 (/home/runner/work/crm/crm/crates/crm-metadata-schema)
+[1m[92m   Compiling[0m crm-core-events v0.1.0 (/home/runner/work/crm/crm/crates/crm-core-events)
+[1m[92m   Compiling[0m sqlx-core v0.9.0
+[1m[92m   Compiling[0m crm-projection-runtime v0.1.0 (/home/runner/work/crm/crm/crates/crm-projection-runtime)
+[1m[92m   Compiling[0m crm-search-runtime v0.1.0 (/home/runner/work/crm/crm/crates/crm-search-runtime)
+[1m[92m   Compiling[0m crm-core-files v0.1.0 (/home/runner/work/crm/crm/crates/crm-core-files)
+[1m[92m   Compiling[0m ryu v1.0.23
+[1m[92m   Compiling[0m crm-parties v0.1.0 (/home/runner/work/crm/crm/modules/crm-parties)
+[1m[92m   Compiling[0m httparse v1.10.1
+[1m[92m   Compiling[0m crm-customer-enrichment v0.1.0 (/home/runner/work/crm/crm/modules/crm-customer-enrichment)
+[1m[92m   Compiling[0m atomic-waker v1.1.2
+[1m[92m   Compiling[0m fnv v1.0.7
+[1m[92m   Compiling[0m try-lock v0.2.5
+[1m[92m   Compiling[0m want v0.3.1
+[1m[92m   Compiling[0m h2 v0.4.15
+[1m[92m   Compiling[0m sqlx-postgres v0.9.0
+[1m[92m   Compiling[0m httpdate v1.0.3
+[1m[92m   Compiling[0m hyper v1.11.0
+[1m[92m   Compiling[0m crm-metadata-api-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-metadata-api-adapter)
+[1m[92m   Compiling[0m crm-metadata-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-metadata-query-adapter)
+[1m[92m   Compiling[0m sqlx v0.9.0
+[1m[92m   Compiling[0m crm-core-data v0.1.0 (/home/runner/work/crm/crm/crates/crm-core-data)
+[1m[92m   Compiling[0m hyper-util v0.1.20
+[1m[92m   Compiling[0m mime v0.3.17
+[1m[92m   Compiling[0m axum-core v0.5.6
+[1m[92m   Compiling[0m tower v0.5.3
+[1m[92m   Compiling[0m serde_urlencoded v0.7.1
+[1m[92m   Compiling[0m serde_path_to_error v0.1.20
+[1m[92m   Compiling[0m crm-capability-plan-support v0.1.0 (/home/runner/work/crm/crm/crates/crm-capability-plan-support)
+[1m[92m   Compiling[0m matchit v0.8.4
+[1m[92m   Compiling[0m crm-parties-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-parties-capability-adapter)
+[1m[92m   Compiling[0m crm-customer-enrichment-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-capability-adapter)
+[1m[92m   Compiling[0m axum v0.8.9
+[1m[92m   Compiling[0m hyper-timeout v0.5.2
+[1m[92m   Compiling[0m async-trait v0.1.91
+[1m[92m   Compiling[0m csv-core v0.1.13
+[1m[92m   Compiling[0m csv v1.4.0
+[1m[92m   Compiling[0m crm-identity-resolution v0.1.0 (/home/runner/work/crm/crm/modules/crm-identity-resolution)
+[1m[92m   Compiling[0m crm-customer-data-operations v0.1.0 (/home/runner/work/crm/crm/modules/crm-customer-data-operations)
+[1m[92m   Compiling[0m crm-customer-enrichment-review-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-review-adapter)
+[1m[92m   Compiling[0m crm-identity-resolution-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-identity-resolution-capability-adapter)
+[1m[92m   Compiling[0m tonic v0.14.6
+[1m[92m   Compiling[0m crm-contact-points v0.1.0 (/home/runner/work/crm/crm/modules/crm-contact-points)
+[1m[92m   Compiling[0m crm-consents v0.1.0 (/home/runner/work/crm/crm/modules/crm-consents)
+[1m[92m   Compiling[0m crm-contact-points-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-contact-points-capability-adapter)
+[1m[92m   Compiling[0m crm-consents-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-consents-capability-adapter)
+[1m[92m   Compiling[0m crm-customer-data-operations-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-data-operations-capability-adapter)
+[1m[92m   Compiling[0m crm-parties-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-parties-query-adapter)
+[1m[92m   Compiling[0m crm-party-reference-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-party-reference-composition)
+[1m[92m   Compiling[0m crm-capability-ingress v0.1.0 (/home/runner/work/crm/crm/crates/crm-capability-ingress)
+[1m[92m   Compiling[0m crm-capability-adapters v0.1.0 (/home/runner/work/crm/crm/crates/crm-capability-adapters)
+[1m[92m   Compiling[0m crm-application-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-application-composition)
+[1m[92m   Compiling[0m crm-party-relationships v0.1.0 (/home/runner/work/crm/crm/modules/crm-party-relationships)
+[1m[92m   Compiling[0m crm-activities v0.1.0 (/home/runner/work/crm/crm/modules/crm-activities)
+[1m[92m   Compiling[0m crm-data-quality v0.1.0 (/home/runner/work/crm/crm/modules/crm-data-quality)
+[1m[92m   Compiling[0m crm-customer-accounts v0.1.0 (/home/runner/work/crm/crm/modules/crm-customer-accounts)
+[1m[92m   Compiling[0m crm-sales v0.1.0 (/home/runner/work/crm/crm/modules/crm-sales)
+[1m[92m   Compiling[0m tonic-build v0.14.6
+[1m[92m   Compiling[0m crm-customer-accounts-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-accounts-capability-adapter)
+[1m[92m   Compiling[0m tonic-prost-build v0.14.6
+[1m[92m   Compiling[0m crm-data-quality-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-data-quality-capability-adapter)
+[1m[92m   Compiling[0m crm-party-relationships-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-party-relationships-capability-adapter)
+[1m[92m   Compiling[0m crm-sales-activities-link v0.1.0 (/home/runner/work/crm/crm/modules/crm-sales-activities-link)
+[1m[92m   Compiling[0m crm-sales-activities-link-contract-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-sales-activities-link-contract-adapter)
+[1m[92m   Compiling[0m crm-application-runtime v0.1.0 (/home/runner/work/crm/crm/crates/crm-application-runtime)
+[1m[92m   Compiling[0m crm-sales-activities-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-sales-activities-query-adapter)
+[1m[92m   Compiling[0m crm-sales-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-sales-capability-adapter)
+[1m[92m   Compiling[0m crm-activities-capability-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-activities-capability-adapter)
+[1m[92m   Compiling[0m crm-customer-enrichment-worker-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-worker-composition)
+[1m[92m   Compiling[0m tonic-prost v0.14.6
+[1m[92m   Compiling[0m crm-consents-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-consents-query-adapter)
+[1m[92m   Compiling[0m crm-customer-enrichment-application-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-application-adapter)
+[1m[92m   Compiling[0m crm-customer-enrichment-materialization-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-materialization-adapter)
+[1m[92m   Compiling[0m crm-search-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-search-query-adapter)
+[1m[92m   Compiling[0m crm-global-search-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-global-search-composition)
+[1m[92m   Compiling[0m crm-customer-360-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-360-composition)
+[1m[92m   Compiling[0m crm-sales-activities-capability-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-sales-activities-capability-composition)
+[1m[92m   Compiling[0m crm-customer-enrichment-materialization-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-materialization-composition)
+[1m[92m   Compiling[0m crm-customer-enrichment-capability-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-capability-composition)
+[1m[92m   Compiling[0m crm-customer-360-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-360-query-adapter)
 [1m[92m   Compiling[0m crm-customer-enrichment-application-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-application-composition)
-[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 1.04s
-[1m[92m     Running[0m tests/postgres_application_worker_process.rs (target/debug/deps/postgres_application_worker_process-298bf6fd98ca0c0f)
+[1m[92m   Compiling[0m crm-customer-enrichment-provider-process-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-provider-process-composition)
+[1m[92m   Compiling[0m tonic-health v0.14.6
+[1m[92m   Compiling[0m crm-data-quality-source-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-data-quality-source-composition)
+[1m[92m   Compiling[0m crm-data-quality-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-data-quality-query-adapter)
+[1m[92m   Compiling[0m crm-party-relationships-capability-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-party-relationships-capability-composition)
+[1m[92m   Compiling[0m crm-party-relationships-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-party-relationships-query-adapter)
+[1m[92m   Compiling[0m crm-customer-accounts-capability-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-accounts-capability-composition)
+[1m[92m   Compiling[0m crm-customer-accounts-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-accounts-query-adapter)
+[1m[92m   Compiling[0m crm-customer-data-operations-execution-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-data-operations-execution-composition)
+[1m[92m   Compiling[0m tonic-web v0.14.6
+[1m[92m   Compiling[0m crm-contact-points-capability-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-contact-points-capability-composition)
+[1m[92m   Compiling[0m crm-customer-data-operations-source-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-data-operations-source-composition)
+[1m[92m   Compiling[0m crm-customer-data-operations-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-data-operations-query-adapter)
+[1m[92m   Compiling[0m crm-consents-capability-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-consents-capability-composition)
+[1m[92m   Compiling[0m crm-contact-points-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-contact-points-query-adapter)
+[1m[92m   Compiling[0m crm-identity-resolution-merge-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-identity-resolution-merge-query-adapter)
+[1m[92m   Compiling[0m crm-identity-resolution-capability-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-identity-resolution-capability-composition)
+[1m[92m   Compiling[0m crm-identity-resolution-merge-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-identity-resolution-merge-composition)
+[1m[92m   Compiling[0m crm-identity-resolution-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-identity-resolution-query-adapter)
+[1m[92m   Compiling[0m crm-customer-enrichment-review-composition v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-review-composition)
+[1m[92m   Compiling[0m crm-customer-enrichment-suggestion-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-suggestion-query-adapter)
+[1m[92m   Compiling[0m crm-customer-enrichment-request-list-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-request-list-query-adapter)
+[1m[92m   Compiling[0m crm-customer-enrichment-query-adapter v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-query-adapter)
+[1m[92m   Compiling[0m crm-party-relationships-projection v0.1.0 (/home/runner/work/crm/crm/crates/crm-party-relationships-projection)
+[1m[92m   Compiling[0m crm-customer-enrichment-provider-registry v0.1.0 (/home/runner/work/crm/crm/crates/crm-customer-enrichment-provider-registry)
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 32.98s
+[1m[92m     Running[0m tests/postgres_customer_enrichment_application_worker.rs (target/debug/deps/postgres_customer_enrichment_application_worker-f7263e0b31eeac5a)
 
 running 1 test
 
-thread 'process::accepted_review_worker_checkpoints_and_applies_exactly_once' (6418) panicked at crates/crm-customer-enrichment-application-composition/tests/postgres_application_worker_process.rs:187:10:
-called `Result::unwrap()` on an `Err` value: Database(PgDatabaseError { severity: Error, code: "23503", message: "insert or update on table \"module_installations\" violates foreign key constraint \"module_installations_tenant_id_last_business_transaction_i_fkey\"", detail: Some("Key (tenant_id, last_business_transaction_id)=(tenant-application-orchestration-a, application-worker-status-suspended-transaction) is not present in table \"business_transactions\"."), hint: None, position: None, where: None, schema: Some("crm"), table: Some("module_installations"), column: None, data_type: None, constraint: Some("module_installations_tenant_id_last_business_transaction_i_fkey"), file: Some("ri_triggers.c"), line: Some(2599), routine: Some("ri_ReportViolation") })
+thread 'production_application_worker_uses_governed_party_gateway_and_recovers_after_grant' (8158) panicked at crates/crm-data-quality-query-adapter/src/query_definition_gets.rs:157:10:
+CRM_CURSOR_SIGNING_KEY is required for Data Quality pagination: NotPresent
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-test process::accepted_review_worker_checkpoints_and_applies_exactly_once ... FAILED
+test production_application_worker_uses_governed_party_gateway_and_recovers_after_grant ... FAILED
 
 failures:
 
 failures:
-    process::accepted_review_worker_checkpoints_and_applies_exactly_once
+    production_application_worker_uses_governed_party_gateway_and_recovers_after_grant
 
-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.60s
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
 
-[1m[91merror[0m: test failed, to rerun pass `-p crm-customer-enrichment-application-composition --test postgres_application_worker_process`
+[1m[91merror[0m: test failed, to rerun pass `-p crm-application-runtime --test postgres_customer_enrichment_application_worker`
