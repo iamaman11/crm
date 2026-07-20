@@ -11,7 +11,6 @@ mod process {
     use crm_customer_enrichment_capability_adapter::{
         enrichment_request_from_snapshot, provider_response_capability_definition,
     };
-    use crm_module_sdk::testing::FixedClock;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn provider_worker_requires_dispatch_and_response_grants_and_recovers() {
@@ -27,6 +26,50 @@ mod process {
             .unwrap();
 
         let calls = Arc::new(AtomicUsize::new(0));
+        let endpoint = spawn_registry_provider(
+            fixture.provider_request.provider_idempotency_key.clone(),
+            calls.clone(),
+        )
+        .await;
+        let transport_clock = Arc::new(FixedClock::new(31_000_000));
+        let transport = RegistryHttpTransport::try_new(
+            RegistryHttpTransportConfig::try_new(
+                &endpoint,
+                [endpoint.clone()],
+                Duration::from_secs(1),
+                64 * 1024,
+                64 * 1024,
+            )
+            .unwrap(),
+            transport_clock.clone(),
+        )
+        .unwrap();
+        let secrets = StaticProviderSecretHandleResolver::try_new([ProviderSecretRegistration {
+            tenant_id: TenantId::try_new(TENANT_ID).unwrap(),
+            handle_alias: "registry_primary".to_owned(),
+            material: ProviderSecretMaterial::try_new(PROVIDER_SECRET.as_bytes().to_vec()).unwrap(),
+        }])
+        .unwrap();
+        let adapter = GovernedProviderAdapter::new(
+            Arc::new(secrets),
+            Arc::new(
+                FixedWindowProviderQuota::try_new(
+                    10,
+                    60_000_000_000,
+                    transport_clock.clone(),
+                )
+                .unwrap(),
+            ),
+            Arc::new(
+                ConsecutiveFailureProviderCircuitBreaker::try_new(
+                    3,
+                    60_000_000_000,
+                    transport_clock,
+                )
+                .unwrap(),
+            ),
+            Arc::new(transport),
+        );
         let registry =
             ExactProviderAdapterRegistry::try_new([ProviderAdapterRegistration::enabled(
                 fixture
@@ -34,10 +77,7 @@ mod process {
                     .provider_request
                     .adapter_coordinate
                     .clone(),
-                ReplaySafeProvider {
-                    expected_key: fixture.provider_request.provider_idempotency_key.clone(),
-                    calls: calls.clone(),
-                },
+                adapter,
             )])
             .unwrap();
         let authorization_store = LiveAuthorizationStore::default();
