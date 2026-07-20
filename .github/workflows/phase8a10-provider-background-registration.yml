@@ -35,40 +35,21 @@ jobs:
 
           source = Path("scripts/phase8a10-provider-background-registration.source.yml")
           lines = source.read_text().splitlines()
-          start_marker = "          python3 - <<'PY'"
-          end_marker = "          PY"
-          start = lines.index(start_marker) + 1
-          end = lines.index(end_marker, start)
-          extracted = [
-              line[10:] if line.startswith("          ") else line
-              for line in lines[start:end]
-          ]
+          start = lines.index("          python3 - <<'PY'") + 1
+          end = lines.index("          PY", start)
+          extracted = [line[10:] if line.startswith("          ") else line for line in lines[start:end]]
           code = "\n".join(extracted) + "\n"
-          original = '''def replace_once(path: str, old: str, new: str) -> None:
-    file = Path(path)
-    text = file.read_text()
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{path}: expected one replacement anchor, found {count}")
-    file.write_text(text.replace(old, new, 1))
-'''
-          enhanced = '''anchor_index = 0
-
-def replace_once(path: str, old: str, new: str) -> None:
-    global anchor_index
-    anchor_index += 1
-    file = Path(path)
-    text = file.read_text()
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(
-            f"{path}: anchor {anchor_index} expected once, found {count}; old={old[:240]!r}"
-        )
-    file.write_text(text.replace(old, new, 1))
-'''
-          if code.count(original) != 1:
-              raise SystemExit("embedded replace_once definition was not found exactly once")
-          code = code.replace(original, enhanced, 1)
+          signature = "def replace_once(path: str, old: str, new: str) -> None:\n"
+          code = code.replace(signature, "anchor_index = 0\n\n" + signature, 1)
+          file_line = "    file = Path(path)\n"
+          code = code.replace(
+              file_line,
+              "    global anchor_index\n    anchor_index += 1\n" + file_line,
+              1,
+          )
+          old_error = '        raise SystemExit(f"{path}: expected one replacement anchor, found {count}")'
+          new_error = '        raise SystemExit(f"{path}: anchor {anchor_index} expected once, found {count}; old={old[:240]!r}")'
+          code = code.replace(old_error, new_error, 1)
           Path("/tmp/phase8a10-provider-background-registration.py").write_text(code)
           PY
           if ! python3 /tmp/phase8a10-provider-background-registration.py > /tmp/provider-patch.log 2>&1; then
