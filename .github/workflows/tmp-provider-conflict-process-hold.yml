@@ -153,14 +153,27 @@ jobs:
           cargo check -p crm-application-runtime
           cargo test -p crm-application-runtime --test customer_enrichment_provider_source_contract --no-run
       - name: Strict focused Clippy
+        id: focused_clippy
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
           cargo clippy \
             -p crm-customer-enrichment-provider-process-composition \
             -p crm-customer-enrichment-worker-composition \
             -p crm-application-runtime \
-            --all-targets --all-features -- -D warnings
+            --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/provider-conflict-process-clippy.log
+      - name: Upload focused Clippy diagnostics
+        if: steps.focused_clippy.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-conflict-process-focused-clippy-diagnostics
+          path: /tmp/provider-conflict-process-clippy.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after focused Clippy failure
+        if: steps.focused_clippy.outcome == 'failure'
+        run: exit 1
       - name: Commit verified provider conflict process hold
         shell: bash
         env:
