@@ -10,6 +10,16 @@ def replace_once(path: Path, old: str, new: str, label: str) -> None:
 
 
 replace_once(
+    Path("crates/crm-customer-enrichment-provider-process-composition/src/conflict_persistence.rs"),
+    """#[derive(Debug, Clone)]
+pub struct ProviderResponseConflictPersistencePlan {
+""",
+    """pub struct ProviderResponseConflictPersistencePlan {
+""",
+    "conflict plan traits",
+)
+
+replace_once(
     Path("modules/crm-customer-enrichment/module.yaml"),
     """    - id: customer_enrichment.response.recorded
       version: 1.0.0
