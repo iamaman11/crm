@@ -146,10 +146,8 @@ impl ProviderResponseConflict {
         &mut self,
         draft: ProviderResponseConflictResolutionDraft,
     ) -> Result<ReplayDisposition, SdkError> {
-        let resolution = ProviderResponseConflictResolution::try_from_draft(
-            draft,
-            self.detected_at_unix_ms,
-        )?;
+        let resolution =
+            ProviderResponseConflictResolution::try_from_draft(draft, self.detected_at_unix_ms)?;
         match &self.resolution {
             Some(existing) if existing == &resolution => Ok(ReplayDisposition::Duplicate),
             Some(_) => Err(conflict(
@@ -412,9 +410,9 @@ fn validate_derived_id(
     prefix: &'static str,
     field: &'static str,
 ) -> Result<(), SdkError> {
-    let suffix = value.strip_prefix(prefix).ok_or_else(|| {
-        invalid_identifier(field, format!("identifier must start with {prefix}"))
-    })?;
+    let suffix = value
+        .strip_prefix(prefix)
+        .ok_or_else(|| invalid_identifier(field, format!("identifier must start with {prefix}")))?;
     if suffix.len() != 64
         || !suffix
             .bytes()
@@ -714,7 +712,10 @@ mod tests {
             ))
             .unwrap();
         let bytes = encode_provider_response_conflict_state(&conflict).unwrap();
-        assert_eq!(decode_provider_response_conflict_state(&bytes).unwrap(), conflict);
+        assert_eq!(
+            decode_provider_response_conflict_state(&bytes).unwrap(),
+            conflict
+        );
 
         let mut value: Value = serde_json::from_slice(&bytes).unwrap();
         value
