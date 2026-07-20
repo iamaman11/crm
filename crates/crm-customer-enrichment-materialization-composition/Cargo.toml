@@ -12,6 +12,7 @@ postgres-integration = []
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
+crm-core-files = { path = "../crm-core-files" }
 crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
 crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
 crm-customer-enrichment-materialization-adapter = { path = "../crm-customer-enrichment-materialization-adapter" }
