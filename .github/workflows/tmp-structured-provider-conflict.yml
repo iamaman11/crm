@@ -1,0 +1,123 @@
+name: Temporary Structured Provider Conflict
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-structured-provider-conflict-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_enrichment_worker_process_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5442:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_enrichment_worker_process_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5442
+      PGDATABASE: crm_customer_enrichment_worker_process_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply structured conflict patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/tmp_apply_structured_provider_conflict.py
+      - name: Verify exact patch scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(printf '%s\n' \
+            crates/crm-customer-enrichment-worker-composition/src/lib.rs \
+            crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs)"
+          actual="$(git diff --name-only | sort)"
+          test "${actual}" = "${expected}"
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Verify canonical patch scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(printf '%s\n' \
+            crates/crm-customer-enrichment-worker-composition/src/lib.rs \
+            crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs)"
+          actual="$(git diff --name-only | sort)"
+          test "${actual}" = "${expected}"
+      - name: Verify pure conflict domain and worker unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p crm-customer-enrichment response_conflict -- --nocapture
+          cargo test -p crm-customer-enrichment-worker-composition --lib -- --nocapture
+      - name: Prepare fresh worker database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify typed conflict through concrete HTTP and PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-customer-enrichment-worker-composition \
+            --features postgres-integration \
+            --test postgres_worker_process \
+            -- --nocapture
+      - name: Verify provider process and application wrapper compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check -p crm-customer-enrichment-provider-process-composition
+          cargo check -p crm-application-runtime
+      - name: Strict focused Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy \
+            -p crm-customer-enrichment-worker-composition \
+            -p crm-customer-enrichment-provider-process-composition \
+            -p crm-application-runtime \
+            --all-targets --all-features -- -D warnings
+      - name: Commit verified structured conflict slice
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            crates/crm-customer-enrichment-worker-composition/src/lib.rs \
+            crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs
+          git diff --cached --quiet && exit 0
+          git commit -m "Return structured provider response conflicts"
+          git push origin "HEAD:${HEAD_BRANCH}"
