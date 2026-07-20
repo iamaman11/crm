@@ -15,8 +15,9 @@ use crm_customer_enrichment_suggestion_query_adapter::{
     list_suggestions_by_party_capability_definition,
 };
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ModuleId, PortFuture,
-    RecordRef, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
+    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CorrelationId, DataClass,
+    IdempotencyKey, ModuleId, PortFuture, RecordRef, RequestId, SchemaVersion, SdkError, TenantId,
+    TraceId,
 };
 use crm_proto_contracts::crm::{customer::v1::PartyRef, customer_enrichment::v1 as wire};
 use crm_query_runtime::{
@@ -236,6 +237,31 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
     seed_suggestion_with_suffix(&query_store, &refreshed, "refreshed")
         .await
         .expect("seed refreshed immutable suggestion");
+
+    let mut stale_review_request = accept_request(&suggestion);
+    stale_review_request.context.execution.request_id =
+        RequestId::try_new("review-request-superseded").unwrap();
+    stale_review_request.context.execution.correlation_id =
+        CorrelationId::try_new("correlation-review-request-superseded").unwrap();
+    stale_review_request.context.execution.causation_id =
+        crm_module_sdk::CausationId::try_new("causation-review-request-superseded").unwrap();
+    stale_review_request.context.execution.trace_id =
+        TraceId::try_new("trace-review-request-superseded").unwrap();
+    stale_review_request.context.execution.idempotency_key =
+        IdempotencyKey::try_new("review-idempotency-superseded").unwrap();
+    stale_review_request
+        .context
+        .execution
+        .business_transaction_id = BusinessTransactionId::try_new("review-tx-superseded").unwrap();
+    stale_review_request.input_hash = [43; 32];
+    let stale_review = executor
+        .execute(stale_review_request)
+        .await
+        .expect_err("superseded suggestion must fail before review persistence");
+    assert_eq!(
+        stale_review.code,
+        "CUSTOMER_ENRICHMENT_SUGGESTION_SUPERSEDED"
+    );
 
     let superseded_result = visible_queries
         .execute(&get_definition, get_request.clone())

@@ -315,12 +315,43 @@ fn seed_context() -> ModuleExecutionContext {
 }
 
 pub async fn set_installation_status(admin: &PgPool, status: &str) {
+    let actor_id = actor();
+    let request_id = format!("suggestion-production-status-{status}");
     sqlx::query(
-        "UPDATE crm.module_installations SET status = $1, generation = generation + 1, updated_at = clock_timestamp() WHERE tenant_id = $2 AND module_id = $3",
+        r#"
+        WITH current_installation AS (
+          SELECT last_business_transaction_id
+          FROM crm.module_installations
+          WHERE tenant_id = $2 AND module_id = $3
+        ),
+        context AS (
+          SELECT
+            set_config('app.tenant_id', $2, true),
+            set_config('app.actor_id', $4, true),
+            set_config('app.request_id', $5, true),
+            set_config('app.capability_id', $6, true),
+            set_config('app.capability_version', '1.0.0', true),
+            set_config(
+              'app.business_transaction_id',
+              current_installation.last_business_transaction_id,
+              true
+            )
+          FROM current_installation
+        )
+        UPDATE crm.module_installations
+        SET status = $1,
+            generation = generation + 1,
+            updated_at = clock_timestamp()
+        FROM context
+        WHERE tenant_id = $2 AND module_id = $3
+        "#,
     )
     .bind(status)
     .bind(TENANT)
     .bind(MODULE_ID)
+    .bind(actor_id.as_str())
+    .bind(request_id)
+    .bind(SEED_CAPABILITY)
     .execute(admin)
     .await
     .expect("update durable module installation status");

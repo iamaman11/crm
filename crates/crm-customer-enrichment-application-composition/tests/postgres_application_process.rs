@@ -65,6 +65,7 @@ async fn postgres_application_attempt_outcome_replay_and_conflict_are_determinis
         .await
         .expect("seed immutable accepted review");
 
+    let application_store = store.clone();
     let attempt_executor = PostgresCustomerEnrichmentApplicationAttemptExecutor::new(store.clone());
     let apply = apply_request(
         &suggestion,
@@ -181,13 +182,32 @@ async fn postgres_application_attempt_outcome_replay_and_conflict_are_determinis
         "CUSTOMER_ENRICHMENT_APPLICATION_OUTCOME_CONFLICT"
     );
 
+    let refreshed = refreshed_suggestion();
+    seed_suggestion_with_suffix(&application_store, &refreshed, "refreshed")
+        .await
+        .expect("seed refreshed immutable application suggestion");
+    let stale_application = attempt_executor
+        .execute(apply_request(
+            &suggestion,
+            &review,
+            "application-request-superseded",
+            "application-idempotency-superseded",
+            "application-tx-superseded",
+        ))
+        .await
+        .expect_err("superseded suggestion must fail before application persistence");
+    assert_eq!(
+        stale_application.code,
+        "CUSTOMER_ENRICHMENT_SUGGESTION_SUPERSEDED"
+    );
+
     assert_eq!(
         scalar(
             &admin,
             "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-application-a' AND owner_module_id = 'crm.customer-enrichment'",
         )
         .await,
-        3
+        4
     );
     assert_eq!(
         scalar(
@@ -203,7 +223,7 @@ async fn postgres_application_attempt_outcome_replay_and_conflict_are_determinis
             "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = 'tenant-application-a' AND event_type LIKE 'customer_enrichment.%'",
         )
         .await,
-        4
+        5
     );
     assert_eq!(
         scalar(
@@ -219,7 +239,7 @@ async fn postgres_application_attempt_outcome_replay_and_conflict_are_determinis
             "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-application-a' AND capability_id LIKE 'customer_enrichment.%'",
         )
         .await,
-        5
+        6
     );
     assert_eq!(
         scalar(
@@ -227,7 +247,7 @@ async fn postgres_application_attempt_outcome_replay_and_conflict_are_determinis
             "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = 'tenant-application-a'",
         )
         .await,
-        5
+        6
     );
     assert_eq!(
         scalar(
@@ -235,7 +255,7 @@ async fn postgres_application_attempt_outcome_replay_and_conflict_are_determinis
             "SELECT count(*)::bigint FROM crm.business_transactions WHERE tenant_id = 'tenant-application-a'",
         )
         .await,
-        5
+        6
     );
 }
 
@@ -258,6 +278,14 @@ async fn seed_suggestion(
     store: &PostgresDataStore,
     suggestion: &Suggestion,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    seed_suggestion_with_suffix(store, suggestion, "suggestion").await
+}
+
+async fn seed_suggestion_with_suffix(
+    store: &PostgresDataStore,
+    suggestion: &Suggestion,
+    suffix: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let reference = suggestion_record_ref(suggestion.suggestion_id().as_str())?;
     let event_payload = support::protobuf_payload(
         MODULE_ID,
@@ -273,11 +301,11 @@ async fn seed_suggestion(
         suggestion_persisted_payload(suggestion)?,
         SUGGESTION_MATERIALIZED_EVENT_TYPE,
         event_payload,
-        "application-seed-suggestion",
-        "application-seed-suggestion-event",
-        "application-seed-suggestion-audit",
-        "application-seed-suggestion-idempotency",
-        "application-seed-suggestion-tx",
+        &format!("application-seed-suggestion-{suffix}"),
+        &format!("application-seed-suggestion-event-{suffix}"),
+        &format!("application-seed-suggestion-audit-{suffix}"),
+        &format!("application-seed-suggestion-idempotency-{suffix}"),
+        &format!("application-seed-suggestion-tx-{suffix}"),
         30_000_000,
     )
     .await
@@ -475,6 +503,29 @@ fn context(
 }
 
 fn suggestion() -> Suggestion {
+    suggestion_at(
+        "application-domain-request",
+        "application-provider-replay-1",
+        30,
+        7,
+    )
+}
+
+fn refreshed_suggestion() -> Suggestion {
+    suggestion_at(
+        "application-domain-request-refreshed",
+        "application-provider-replay-2",
+        45,
+        8,
+    )
+}
+
+fn suggestion_at(
+    request_key: &str,
+    replay_key: &str,
+    retrieved_at_unix_ms: u64,
+    party_resource_version: u64,
+) -> Suggestion {
     let profile = ProviderProfileVersion::publish(ProviderProfileDraft {
         provider_key: "application-registry".to_owned(),
         adapter_kind: "application-http-v1".to_owned(),
@@ -504,9 +555,13 @@ fn suggestion() -> Suggestion {
     let mut request = EnrichmentRequest::create(EnrichmentRequestDraft {
         tenant_id: TenantId::try_new(TENANT_ID).unwrap(),
         requested_by: ActorId::try_new("application-worker-a").unwrap(),
-        idempotency_key: IdempotencyKey::try_new("application-domain-request").unwrap(),
-        target: TargetSnapshot::try_new("party-application-1", 7, TargetField::PartyDisplayName)
-            .unwrap(),
+        idempotency_key: IdempotencyKey::try_new(request_key).unwrap(),
+        target: TargetSnapshot::try_new(
+            "party-application-1",
+            party_resource_version,
+            TargetField::PartyDisplayName,
+        )
+        .unwrap(),
         provider_profile_version_id: profile.version_id().clone(),
         mapping_version_id: mapping.version_id().clone(),
         requested_fields: vec![TargetField::PartyDisplayName],
@@ -528,14 +583,14 @@ fn suggestion() -> Suggestion {
         request_id: request.request_id().clone(),
         provider_profile_version_id: profile.version_id().clone(),
         mapping_version_id: mapping.version_id().clone(),
-        replay_key: "application-provider-replay-1".to_owned(),
-        provider_correlation_id: Some("application-provider-correlation-1".to_owned()),
+        replay_key: replay_key.to_owned(),
+        provider_correlation_id: Some(format!("application-provider-correlation-{replay_key}")),
         response_class: ProviderResponseClass::Success,
-        canonical_response_digest: [82; 32],
-        provider_observed_at_unix_ms: Some(20),
-        retrieved_at_unix_ms: 30,
+        canonical_response_digest: [u8::try_from(retrieved_at_unix_ms).unwrap(); 32],
+        provider_observed_at_unix_ms: Some(retrieved_at_unix_ms - 1),
+        retrieved_at_unix_ms,
         metered_units: 1,
-        protected_evidence_reference: Some("application-evidence-1".to_owned()),
+        protected_evidence_reference: Some(format!("application-evidence-{replay_key}")),
     })
     .unwrap();
     Suggestion::materialize(SuggestionDraft {
@@ -545,9 +600,9 @@ fn suggestion() -> Suggestion {
         mapping_version_id: mapping.version_id().clone(),
         target: request.target().clone(),
         proposed_value: "Applied Company".to_owned(),
-        observed_at_unix_ms: Some(20),
-        retrieved_at_unix_ms: 30,
-        effective_at_unix_ms: 20,
+        observed_at_unix_ms: Some(retrieved_at_unix_ms - 1),
+        retrieved_at_unix_ms,
+        effective_at_unix_ms: retrieved_at_unix_ms - 1,
         fresh_until_unix_ms: 1_000,
         expires_at_unix_ms: 1_500,
         confidence_basis_points: Some(9_100),
@@ -558,7 +613,7 @@ fn suggestion() -> Suggestion {
         residency_region: "eu".to_owned(),
         retention_days: 30,
         consent_evidence_reference: Some("consent-application-1".to_owned()),
-        evidence_references: vec!["application-evidence-1".to_owned()],
+        evidence_references: vec![format!("application-evidence-{replay_key}")],
     })
     .unwrap()
 }

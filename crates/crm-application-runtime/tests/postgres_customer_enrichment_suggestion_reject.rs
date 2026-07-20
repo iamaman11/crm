@@ -160,7 +160,9 @@ async fn production_suggestion_rejection_is_policy_bound_atomic_and_replay_safe(
         )),
         ExecutionContextResolver::new(
             Arc::clone(&clock),
-            Arc::new(DeterministicRandom::from_bytes(0_u8..=127)),
+            Arc::new(DeterministicRandom::from_bytes(
+                (0_u8..=255).cycle().take(4_096),
+            )),
             TimeoutPolicy {
                 default_millis: 5_000,
                 maximum_millis: 30_000,
@@ -176,7 +178,9 @@ async fn production_suggestion_rejection_is_policy_bound_atomic_and_replay_safe(
         )),
         QueryContextResolver::new(
             Arc::clone(&clock),
-            Arc::new(DeterministicRandom::from_bytes(128_u8..=255)),
+            Arc::new(DeterministicRandom::from_bytes(
+                (0_u8..=255).cycle().take(4_096),
+            )),
             TimeoutPolicy {
                 default_millis: 5_000,
                 maximum_millis: 30_000,
@@ -251,7 +255,7 @@ async fn production_suggestion_rejection_is_policy_bound_atomic_and_replay_safe(
     )
     .await;
     assert_eq!(cross_tenant.status, StatusCode::FORBIDDEN);
-    assert_mutation_error_code(cross_tenant.body, "AUTHENTICATION_TENANT_FORBIDDEN");
+    assert_mutation_error_code(cross_tenant.body, "TENANT_FORBIDDEN");
 
     for (status, key) in [
         ("suspended", "suggestion-production-reject-suspended"),
