@@ -10,7 +10,7 @@ old = '''for old, new in [("        2\\n", "        3\\n"), ("        2\\n", "  
         raise SystemExit("review process count anchor missing")
     Path(process).write_text(text[:index] + new + text[index + len(old):])
 '''
-new = '''for query in [
+new = """for query in [
     "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND owner_module_id = 'crm.customer-enrichment'",
     "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = 'tenant-a' AND event_type LIKE 'customer_enrichment.%'",
     "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id LIKE 'customer_enrichment.%'",
@@ -30,7 +30,7 @@ new = '''for query in [
         3
 ''',
     )
-'''
+"""
 if text.count(old) != 1:
     raise SystemExit("expected one broad lifecycle count replacement block")
 path.write_text(text.replace(old, new, 1))
