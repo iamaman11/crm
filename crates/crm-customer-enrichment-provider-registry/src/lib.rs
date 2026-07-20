@@ -980,21 +980,13 @@ mod tests {
     use std::collections::VecDeque;
     use std::future::Future;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::task::{Context, Poll, Wake, Waker};
-
-    #[derive(Debug)]
-    struct NoopWake;
-
-    impl Wake for NoopWake {
-        fn wake(self: Arc<Self>) {}
-    }
+    use std::task::{Context, Poll, Waker};
 
     fn block_on<F>(future: F) -> F::Output
     where
         F: Future,
     {
-        let waker = Waker::from(Arc::new(NoopWake));
-        let mut context = Context::from_waker(&waker);
+        let mut context = Context::from_waker(Waker::noop());
         let mut future = Box::pin(future);
         loop {
             match future.as_mut().poll(&mut context) {
