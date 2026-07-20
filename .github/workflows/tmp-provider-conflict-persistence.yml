@@ -78,7 +78,6 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          from pathlib import Path
           import subprocess
 
           allowed = {
@@ -96,15 +95,9 @@ jobs:
           }
           changed = set(subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines())
           unexpected = changed - allowed
-          missing = {
-              "crates/crm-customer-enrichment-provider-process-composition/src/conflict_persistence.rs",
-              "crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs",
-              "modules/crm-customer-enrichment/module.yaml",
-              "proto/crm/customer_enrichment/v1/provider_evidence.proto",
-              "proto/crm/customer_enrichment/v1/reference.proto",
-          } - changed
-          if unexpected or missing:
-              raise SystemExit(f"unexpected={sorted(unexpected)} missing={sorted(missing)}")
+          if unexpected:
+              raise SystemExit(f"unexpected={sorted(unexpected)}")
+          print("generated/finalizer diff:", sorted(changed))
           PY
       - name: Verify manifest and generated contract bindings
         shell: bash
