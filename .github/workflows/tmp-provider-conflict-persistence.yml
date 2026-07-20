@@ -1,0 +1,175 @@
+name: Temporary Provider Conflict Persistence
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-provider-conflict-persistence-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  verify-and-commit:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_enrichment_worker_process_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5442:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_enrichment_worker_process_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5442
+      PGDATABASE: crm_customer_enrichment_worker_process_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install generation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - name: Install Buf
+        uses: bufbuild/buf-action@v1.4.0
+        with:
+          version: 1.50.1
+          setup_only: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Finalize conflict contract and generated artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/tmp_finalize_provider_conflict_persistence.py
+          cargo generate-lockfile
+          cargo fmt --all
+          cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
+          python scripts/generate_contract_bindings.py --write
+      - name: Reject unexpected patch scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          allowed = {
+              "Cargo.lock",
+              "contracts/module-contract-bindings.json",
+              "crates/crm-customer-enrichment-provider-process-composition/Cargo.toml",
+              "crates/crm-customer-enrichment-provider-process-composition/src/conflict_persistence.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/src/lib.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs",
+              "crates/crm-proto-contracts/tests/customer_enrichment_contract.rs",
+              "modules/crm-customer-enrichment/module.yaml",
+              "packages/client/src/contract_hashes.ts",
+              "proto/crm/customer_enrichment/v1/provider_evidence.proto",
+              "proto/crm/customer_enrichment/v1/reference.proto",
+          }
+          changed = set(subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines())
+          unexpected = changed - allowed
+          missing = {
+              "crates/crm-customer-enrichment-provider-process-composition/src/conflict_persistence.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs",
+              "modules/crm-customer-enrichment/module.yaml",
+              "proto/crm/customer_enrichment/v1/provider_evidence.proto",
+              "proto/crm/customer_enrichment/v1/reference.proto",
+          } - changed
+          if unexpected or missing:
+              raise SystemExit(f"unexpected={sorted(unexpected)} missing={sorted(missing)}")
+          PY
+      - name: Verify manifest and generated contract bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/validate_module_manifests.py
+          python scripts/generate_contract_bindings.py --check
+          cargo test -p crm-proto-contracts --test customer_enrichment_contract -- --nocapture
+      - name: Verify pure persistence planner
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p crm-customer-enrichment-provider-process-composition --lib conflict_persistence -- --nocapture
+      - name: Prepare fresh conflict database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify atomic PostgreSQL conflict replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-customer-enrichment-provider-process-composition \
+            --features postgres-integration \
+            --test postgres_conflict_persistence \
+            -- --nocapture
+      - name: Verify production wrappers compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check -p crm-customer-enrichment-worker-composition
+          cargo check -p crm-application-runtime
+      - name: Verify public route inventory remains unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_production_route_classifications.py
+          python -m pytest -q tests/test_customer_enrichment_production_promotion.py tests/test_production_route_classifications.py
+      - name: Strict focused Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy \
+            -p crm-customer-enrichment-provider-process-composition \
+            -p crm-customer-enrichment-worker-composition \
+            -p crm-application-runtime \
+            --all-targets --all-features -- -D warnings
+      - name: Commit verified conflict persistence slice
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            Cargo.lock \
+            contracts/module-contract-bindings.json \
+            crates/crm-customer-enrichment-provider-process-composition/Cargo.toml \
+            crates/crm-customer-enrichment-provider-process-composition/src/conflict_persistence.rs \
+            crates/crm-customer-enrichment-provider-process-composition/src/lib.rs \
+            crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs \
+            crates/crm-proto-contracts/tests/customer_enrichment_contract.rs \
+            modules/crm-customer-enrichment/module.yaml \
+            packages/client/src/contract_hashes.ts \
+            proto/crm/customer_enrichment/v1/provider_evidence.proto \
+            proto/crm/customer_enrichment/v1/reference.proto
+          git diff --cached --quiet && exit 0
+          git commit -m "Persist provider response conflicts atomically"
+          git push origin "HEAD:${HEAD_BRANCH}"
