@@ -226,12 +226,9 @@ mod tests {
     fn raw_or_wrongly_classified_artifact_is_rejected() {
         let mut artifact = artifact(&command());
         artifact.metadata.media_type = "application/json".to_owned();
-        let error = decode_provider_suggestion_candidate_evidence(
-            &artifact,
-            "request-1",
-            "receipt-1",
-        )
-        .unwrap_err();
+        let error =
+            decode_provider_suggestion_candidate_evidence(&artifact, "request-1", "receipt-1")
+                .unwrap_err();
         assert_eq!(
             error.code,
             "CUSTOMER_ENRICHMENT_SUGGESTION_EVIDENCE_INVALID"
