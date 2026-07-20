@@ -6,11 +6,13 @@ use crm_core_events::{ProjectionStore, ProjectionStore as _};
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
     PartySnapshot, ProviderProfileDraft, ProviderProfileVersion, ProviderResponseConflictDraft,
-    ProviderResponseReceiptId, RawPayloadPolicy, RequestPolicyEvidence, TargetField, TargetSnapshot,
+    ProviderResponseReceiptId, RawPayloadPolicy, RequestPolicyEvidence, TargetField,
+    TargetSnapshot,
 };
 use crm_customer_enrichment_capability_adapter::{
     ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA, ENRICHMENT_REQUEST_CREATED_EVENT_TYPE, MODULE_ID,
-    enrichment_request_persisted_payload, enrichment_request_record_ref, enrichment_request_to_wire,
+    enrichment_request_persisted_payload, enrichment_request_record_ref,
+    enrichment_request_to_wire,
 };
 use crm_customer_enrichment_provider_process_composition::{
     CustomerEnrichmentProviderProcessWorker, PROVIDER_PROCESS_PROJECTION_ID,
@@ -101,13 +103,9 @@ async fn unresolved_conflict_is_persisted_once_and_holds_checkpoint_across_resta
     let baseline = evidence_counts(&admin).await;
 
     drop(process);
-    let restarted = CustomerEnrichmentProviderProcessWorker::new(
-        store.clone(),
-        source,
-        executor,
-        actor_id,
-    )
-    .expect("recompose provider conflict process");
+    let restarted =
+        CustomerEnrichmentProviderProcessWorker::new(store.clone(), source, executor, actor_id)
+            .expect("recompose provider conflict process");
     let replay = restarted
         .run_cycle(tenant_id.clone(), 60_000_000)
         .await
