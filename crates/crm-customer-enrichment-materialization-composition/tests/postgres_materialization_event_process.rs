@@ -46,7 +46,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;
 
-const TENANT_ID: &str = "tenant-materialization-process";
+const TENANT_ID: &str = "tenant-a";
 const ACTOR_ID: &str = "materialization-process-seed-actor";
 const FILE_ID: &str = "materialization-candidate-evidence-process-1";
 const SEED_CAPABILITY: &str = "customer_enrichment.materialization.process.seed";
