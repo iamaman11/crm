@@ -56,7 +56,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Apply Phase 8A.10 materialization registration
-        run: python scripts/phase8a10-materialization-registration.py
+        run: |
+          python scripts/phase8a10-fix-materialization-registration-anchor.py
+          python scripts/phase8a10-materialization-registration.py
       - name: Synchronize lockfile and canonical formatting
         run: |
           cargo generate-lockfile
