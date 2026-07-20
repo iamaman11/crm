@@ -7,8 +7,10 @@
 //! the durable worker work item consumed by `crm-customer-enrichment-worker-composition`. It owns no
 //! provider network I/O and registers no public capability route.
 
+mod conflict_persistence;
 mod worker;
 
+pub use conflict_persistence::*;
 pub use worker::*;
 
 use crm_capability_ingress::semantic_input_hash;
@@ -365,26 +367,80 @@ mod tests {
             now_unix_ms: 31,
         })
         .unwrap();
-
         assert_eq!(initial, recovered);
     }
 
     #[test]
-    fn queued_state_is_rejected_without_recoverable_origin_evidence() {
-        let mut fixture = fixture();
-        fixture.request.queue(20).unwrap();
+    fn exact_profile_party_and_deadline_are_revalidated_before_recovery() {
+        let fixture = fixture();
+        let mut dispatched = fixture.request.clone();
+        prepare_provider_dispatch_attempt(
+            &mut dispatched,
+            ProviderDispatchExpectation {
+                status: EnrichmentRequestStatus::Created,
+                retry_generation: 0,
+            },
+            &fixture.profile,
+            &fixture.party,
+            fixture.actor.clone(),
+            20,
+        )
+        .unwrap();
+
+        let mut stale_party = fixture.party.clone();
+        stale_party.resource_version += 1;
         let error = build_provider_dispatch_work_item(ProviderDispatchWorkItemInput {
-            request: &fixture.request,
+            request: &dispatched,
             provider_profile: &fixture.profile,
-            party_snapshot: &fixture.party,
+            party_snapshot: &stale_party,
             worker_actor_id: &fixture.actor,
             now_unix_ms: 21,
         })
         .unwrap_err();
+        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PARTY_VERSION_MISMATCH");
 
+        let error = build_provider_dispatch_work_item(ProviderDispatchWorkItemInput {
+            request: &dispatched,
+            provider_profile: &fixture.profile,
+            party_snapshot: &fixture.party,
+            worker_actor_id: &fixture.actor,
+            now_unix_ms: 1_000,
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_REQUEST_DEADLINE_CLOSED");
+    }
+
+    #[test]
+    fn queued_and_terminal_states_are_not_recoverable() {
+        let fixture = fixture();
+        let mut queued = fixture.request.clone();
+        queued.queue(20).unwrap();
         assert_eq!(
-            error.code,
+            build_provider_dispatch_work_item(ProviderDispatchWorkItemInput {
+                request: &queued,
+                provider_profile: &fixture.profile,
+                party_snapshot: &fixture.party,
+                worker_actor_id: &fixture.actor,
+                now_unix_ms: 21,
+            })
+            .unwrap_err()
+            .code,
             "CUSTOMER_ENRICHMENT_PROVIDER_QUEUE_STATE_UNRECOVERABLE"
+        );
+
+        let mut cancelled = fixture.request.clone();
+        cancelled.cancel(20).unwrap();
+        assert_eq!(
+            build_provider_dispatch_work_item(ProviderDispatchWorkItemInput {
+                request: &cancelled,
+                provider_profile: &fixture.profile,
+                party_snapshot: &fixture.party,
+                worker_actor_id: &fixture.actor,
+                now_unix_ms: 21,
+            })
+            .unwrap_err()
+            .code,
+            "CUSTOMER_ENRICHMENT_PROVIDER_REQUEST_NOT_ACTIONABLE"
         );
     }
 
@@ -402,14 +458,14 @@ mod tests {
             adapter_contract_version: "1.0.0".to_owned(),
             supported_target_fields: vec![TargetField::PartyDisplayName],
             purpose_codes: vec!["customer_profile_enrichment".to_owned()],
-            license_id: "Registry licence".to_owned(),
+            license_id: "Registry process licence".to_owned(),
             permitted_use_class: "customer_master_review".to_owned(),
             residency_region: "eu".to_owned(),
             retention_days: 30,
             raw_payload_policy: RawPayloadPolicy::DigestOnly,
             credential_handle_aliases: vec!["registry_primary".to_owned()],
             effective_at_unix_ms: 1,
-            expires_at_unix_ms: Some(1_000),
+            expires_at_unix_ms: Some(5_000),
         })
         .unwrap();
         let mapping = MappingVersion::publish(MappingDraft {
@@ -422,11 +478,11 @@ mod tests {
             confidence_required: true,
         })
         .unwrap();
-        let actor = ActorId::try_new("customer-enrichment-provider-worker").unwrap();
+        let actor = ActorId::try_new("provider-process-worker").unwrap();
         let request = EnrichmentRequest::create(EnrichmentRequestDraft {
-            tenant_id: TenantId::try_new("tenant-1").unwrap(),
-            requested_by: ActorId::try_new("requester-1").unwrap(),
-            idempotency_key: IdempotencyKey::try_new("request-key-1").unwrap(),
+            tenant_id: TenantId::try_new("tenant-a").unwrap(),
+            requested_by: actor.clone(),
+            idempotency_key: IdempotencyKey::try_new("provider-process-request").unwrap(),
             target: TargetSnapshot::try_new("party-1", 7, TargetField::PartyDisplayName).unwrap(),
             provider_profile_version_id: profile.version_id().clone(),
             mapping_version_id: mapping.version_id().clone(),
@@ -435,12 +491,12 @@ mod tests {
                 "customer_profile_enrichment",
                 "legitimate_interest",
                 None,
-                "1.0.0",
+                "provider-process-policy-v1",
             )
             .unwrap(),
             created_at_unix_ms: 10,
-            deadline_at_unix_ms: 100,
-            expires_at_unix_ms: 200,
+            deadline_at_unix_ms: 1_000,
+            expires_at_unix_ms: 2_000,
         })
         .unwrap();
         let party = PartySnapshot {
