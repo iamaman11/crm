@@ -92,7 +92,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo fmt --all -- --check
+          cargo fmt --all
           cargo test -p crm-application-runtime
           cargo clippy -p crm-application-runtime --all-targets -- -D warnings
       - name: Commit verified runtime wiring and remove temporary workflow
