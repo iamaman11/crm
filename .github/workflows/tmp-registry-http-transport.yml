@@ -7,6 +7,12 @@ on:
     paths:
       - scripts/tmp_apply_registry_http_transport.py
       - .github/workflows/tmp-registry-http-transport.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/tmp_apply_registry_http_transport.py
+      - .github/workflows/tmp-registry-http-transport.yml
 
 permissions:
   contents: write
