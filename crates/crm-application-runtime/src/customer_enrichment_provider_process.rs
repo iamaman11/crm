@@ -53,7 +53,7 @@ pub fn build_customer_enrichment_provider_process(
     )?))
 }
 
-fn configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
+fn configuration_error(error: impl fmt::Display) -> SdkError {
     SdkError::new(
         "CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_CONFIGURATION_INVALID",
         ErrorCategory::Internal,
