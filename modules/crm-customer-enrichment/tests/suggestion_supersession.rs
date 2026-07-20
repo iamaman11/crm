@@ -1,8 +1,10 @@
 use crm_customer_enrichment::{
-    EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
-    ProviderProfileDraft, ProviderProfileVersion, ProviderResponseClass, ProviderResponseReceipt,
-    ProviderResponseReceiptDraft, RawPayloadPolicy, RequestPolicyEvidence, Suggestion,
-    SuggestionDraft, TargetField, TargetSnapshot, derive_suggestion_supersession,
+    ApplicationAttempt, ApprovalRequirement, EnrichmentRequest, EnrichmentRequestDraft,
+    MappingDraft, MappingNormalization, MappingVersion, ProviderProfileDraft, ProviderProfileVersion,
+    ProviderResponseClass, ProviderResponseReceipt, ProviderResponseReceiptDraft, RawPayloadPolicy,
+    RequestPolicyEvidence, ReviewDecision, ReviewDecisionKind, Suggestion, SuggestionDraft,
+    SuggestionLifecycleStatus, TargetField, TargetSnapshot, derive_suggestion_status,
+    derive_suggestion_supersession,
 };
 use crm_module_sdk::{ActorId, IdempotencyKey, TenantId};
 
@@ -23,6 +25,77 @@ fn newer_exact_logical_proposition_supersedes_older_evidence_deterministically()
     );
     assert!(!first.contains_key(newer.suggestion_id()));
     assert!(!first.contains_key(alternative.suggestion_id()));
+}
+
+#[test]
+fn supersession_precedes_expiry_without_mutating_immutable_provenance() {
+    let older = suggestion("request-old-expired", "replay-old-expired", 200, "Acme Company");
+    let newer = suggestion("request-new-current", "replay-new-current", 300, "Acme Company");
+    let original = older.clone();
+
+    let status = derive_suggestion_status(
+        &older,
+        None,
+        None,
+        Some(newer.suggestion_id()),
+        older.expires_at_unix_ms(),
+    );
+
+    assert_eq!(status, SuggestionLifecycleStatus::Superseded);
+    assert_eq!(older, original);
+    assert_ne!(older.suggestion_id(), newer.suggestion_id());
+}
+
+#[test]
+fn expiry_overrides_an_accepted_review_but_retains_both_evidence_records() {
+    let suggestion = suggestion("request-expiry", "replay-expiry", 200, "Acme Company");
+    let decision = accepted_decision(&suggestion, 300);
+    let original_suggestion = suggestion.clone();
+    let original_decision = decision.clone();
+
+    let status = derive_suggestion_status(
+        &suggestion,
+        Some(&decision),
+        None,
+        None,
+        suggestion.expires_at_unix_ms(),
+    );
+
+    assert_eq!(status, SuggestionLifecycleStatus::Expired);
+    assert_eq!(suggestion, original_suggestion);
+    assert_eq!(decision, original_decision);
+}
+
+#[test]
+fn stale_enrichment_evidence_fails_before_owner_application() {
+    let suggestion = suggestion("request-stale", "replay-stale", 200, "Acme Company");
+    let decision = accepted_decision(&suggestion, 300);
+
+    let error = ApplicationAttempt::plan(
+        TenantId::try_new("tenant-a").unwrap(),
+        &suggestion,
+        &decision,
+        0,
+        800,
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code, "CUSTOMER_ENRICHMENT_SUGGESTION_STALE");
+}
+
+fn accepted_decision(suggestion: &Suggestion, decided_at_unix_ms: u64) -> ReviewDecision {
+    ReviewDecision::decide(
+        suggestion,
+        ActorId::try_new("reviewer-a").unwrap(),
+        ReviewDecisionKind::Accepted,
+        "review-policy-v1",
+        "accepted_for_application",
+        ApprovalRequirement::NotRequired,
+        None,
+        decided_at_unix_ms,
+        None,
+    )
+    .unwrap()
 }
 
 fn suggestion(
