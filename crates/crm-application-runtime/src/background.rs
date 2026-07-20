@@ -14,6 +14,9 @@ use crm_customer_enrichment_application_composition::{
     CustomerEnrichmentPartyApplicationWorker, PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID,
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
+use crm_customer_enrichment_materialization_composition::{
+    CustomerEnrichmentMaterializationProcessWorker, MATERIALIZATION_PROCESS_WORKER_ID,
+};
 use crm_customer_enrichment_provider_process_composition::{
     CustomerEnrichmentProviderProcessWorker, PROVIDER_PROCESS_WORKER_ID,
 };
@@ -44,6 +47,8 @@ const CUSTOMER_360_PROJECTION_WORKER_ID: &str = "customer-360-projection";
 const GLOBAL_SEARCH_WORKER_ID: &str = "global-search-index";
 const CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_PHASE: BackgroundWorkerPhase =
     BackgroundWorkerPhase::new(240);
+const CUSTOMER_ENRICHMENT_MATERIALIZATION_PHASE: BackgroundWorkerPhase =
+    BackgroundWorkerPhase::new(245);
 const CUSTOMER_ENRICHMENT_APPLICATION_PHASE: BackgroundWorkerPhase =
     BackgroundWorkerPhase::new(250);
 
@@ -54,6 +59,8 @@ pub(crate) struct ProductionBackgroundWorkerDependencies {
     pub import_execution_worker: Arc<PartyImportExecutionWorker>,
     pub export_selection_worker: Arc<PartyExportSelectionWorker>,
     pub customer_enrichment_provider_process: Arc<CustomerEnrichmentProviderProcessWorker>,
+    pub customer_enrichment_materialization_process:
+        Arc<CustomerEnrichmentMaterializationProcessWorker>,
     pub customer_enrichment_application_worker: Arc<CustomerEnrichmentPartyApplicationWorker>,
     pub link_processor: Arc<SalesActivitiesLinkEventProcessor>,
     pub projection_worker: Arc<Phase6ProjectionWorker>,
@@ -71,6 +78,7 @@ pub(crate) fn build_production_background_workers(
         import_execution_worker,
         export_selection_worker,
         customer_enrichment_provider_process,
+        customer_enrichment_materialization_process,
         customer_enrichment_application_worker,
         link_processor,
         projection_worker,
@@ -114,6 +122,7 @@ pub(crate) fn build_production_background_workers(
         &mut builder,
         activation.clone(),
         customer_enrichment_provider_process,
+        customer_enrichment_materialization_process,
         customer_enrichment_application_worker,
     )?;
     add_worker(
@@ -162,6 +171,7 @@ fn add_customer_enrichment_workers(
     builder: &mut BackgroundWorkerRegistryBuilder,
     activation: Arc<dyn ModuleActivationPort>,
     provider_process: Arc<dyn TenantBackgroundWorker>,
+    materialization_process: Arc<dyn TenantBackgroundWorker>,
     application_worker: Arc<dyn TenantBackgroundWorker>,
 ) -> Result<(), SdkError> {
     add_worker(
@@ -171,6 +181,14 @@ fn add_customer_enrichment_workers(
         CUSTOMER_ENRICHMENT_MODULE_ID,
         PROVIDER_PROCESS_WORKER_ID,
         provider_process,
+    )?;
+    add_worker(
+        builder,
+        activation.clone(),
+        CUSTOMER_ENRICHMENT_MATERIALIZATION_PHASE,
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        MATERIALIZATION_PROCESS_WORKER_ID,
+        materialization_process,
     )?;
     add_worker(
         builder,
@@ -552,7 +570,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_precedes_application_and_stops_after_disable_or_uninstall() {
+    async fn enrichment_workers_run_in_phase_order_and_stop_after_disable_or_uninstall() {
         let activation = Arc::new(MutableActivation::active());
         let calls = Arc::new(Mutex::new(Vec::new()));
         let mut builder = BackgroundWorkerRegistryBuilder::new(BTreeSet::from([
@@ -565,6 +583,10 @@ mod tests {
             Arc::new(RecordingWorker {
                 calls: calls.clone(),
                 label: "provider",
+            }),
+            Arc::new(RecordingWorker {
+                calls: calls.clone(),
+                label: "materialization",
             }),
             Arc::new(RecordingWorker {
                 calls: calls.clone(),
@@ -588,6 +610,11 @@ mod tests {
                     PROVIDER_PROCESS_WORKER_ID.to_owned(),
                 ),
                 (
+                    245,
+                    CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
+                    MATERIALIZATION_PROCESS_WORKER_ID.to_owned(),
+                ),
+                (
                     250,
                     CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
                     PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID.to_owned(),
@@ -600,14 +627,20 @@ mod tests {
             .run_tenant_cycle(tenant_id.clone(), 1)
             .await
             .unwrap();
-        assert_eq!(*calls.lock().unwrap(), vec!["provider", "application"]);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec!["provider", "materialization", "application"]
+        );
 
         activation.set(DISABLED);
         registry
             .run_tenant_cycle(tenant_id.clone(), 2)
             .await
             .unwrap();
-        assert_eq!(*calls.lock().unwrap(), vec!["provider", "application"]);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec!["provider", "materialization", "application"]
+        );
 
         activation.set(ACTIVE);
         registry
@@ -616,14 +649,28 @@ mod tests {
             .unwrap();
         assert_eq!(
             *calls.lock().unwrap(),
-            vec!["provider", "application", "provider", "application"]
+            vec![
+                "provider",
+                "materialization",
+                "application",
+                "provider",
+                "materialization",
+                "application",
+            ]
         );
 
         activation.set(UNINSTALLED);
         registry.run_tenant_cycle(tenant_id, 4).await.unwrap();
         assert_eq!(
             *calls.lock().unwrap(),
-            vec!["provider", "application", "provider", "application"]
+            vec![
+                "provider",
+                "materialization",
+                "application",
+                "provider",
+                "materialization",
+                "application",
+            ]
         );
     }
 }

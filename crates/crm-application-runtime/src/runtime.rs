@@ -1,11 +1,13 @@
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
-    CustomerEnrichmentApplicationWorkerDependencies, CustomerEnrichmentProviderProcessDependencies,
-    CustomerEnrichmentProviderWorkerDependencies, GovernedPartyExportSelectionSource,
-    PartyExportArtifactDownloadService, PostgresModuleActivation, ProcessIdentitySource,
-    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies, SystemClock,
-    bootstrap_export_selection_worker_access, build_bootstrap_visibility_registry,
-    build_customer_enrichment_application_worker, build_customer_enrichment_provider_process,
+    CustomerEnrichmentApplicationWorkerDependencies,
+    CustomerEnrichmentMaterializationProcessDependencies,
+    CustomerEnrichmentProviderProcessDependencies, CustomerEnrichmentProviderWorkerDependencies,
+    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
+    PostgresModuleActivation, ProcessIdentitySource, ProductionBackgroundWorkerDependencies,
+    ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
+    build_bootstrap_visibility_registry, build_customer_enrichment_application_worker,
+    build_customer_enrichment_materialization_process, build_customer_enrichment_provider_process,
     build_customer_enrichment_provider_worker, build_production_background_workers,
     build_production_composition,
 };
@@ -47,6 +49,8 @@ use crm_customer_enrichment_application_composition::PARTY_DISPLAY_NAME_APPLICAT
 use crm_customer_enrichment_capability_adapter::{
     provider_response_capability_definition, request_dispatch_capability_definition,
 };
+use crm_customer_enrichment_materialization_adapter::suggestion_materialization_capability_definition;
+use crm_customer_enrichment_materialization_composition::MATERIALIZATION_PROCESS_WORKER_ACTOR_ID;
 use crm_customer_enrichment_provider_process_composition::PROVIDER_PROCESS_WORKER_ACTOR_ID;
 use crm_customer_enrichment_provider_registry::ExactProviderAdapterRegistry;
 use crm_global_search_composition::GlobalSearchWorker;
@@ -222,6 +226,9 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let customer_enrichment_response_definition = provider_response_capability_definition()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_materialization_definition =
+            suggestion_materialization_capability_definition()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let import_execution_worker_actor_id =
             ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
@@ -233,6 +240,9 @@ impl ApplicationRuntime {
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let customer_enrichment_provider_worker_actor_id =
             ActorId::try_new(PROVIDER_PROCESS_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_materialization_worker_actor_id =
+            ActorId::try_new(MATERIALIZATION_PROCESS_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         if config.bootstrap_allow_phase6 {
             bootstrap_application_access(
@@ -280,6 +290,13 @@ impl ApplicationRuntime {
                 &customer_enrichment_dispatch_definition,
                 &customer_enrichment_response_definition,
                 &customer_enrichment_provider_worker_actor_id,
+            )?;
+            bootstrap_customer_enrichment_materialization_process_access(
+                &config,
+                now,
+                &authorization_store,
+                &customer_enrichment_materialization_definition,
+                &customer_enrichment_materialization_worker_actor_id,
             )?;
         }
 
@@ -335,6 +352,15 @@ impl ApplicationRuntime {
             },
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_materialization_process = Arc::new(
+            build_customer_enrichment_materialization_process(
+                CustomerEnrichmentMaterializationProcessDependencies {
+                    store: store.clone(),
+                    authorizer: authorizer.clone(),
+                },
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
 
         let import_execution_reader =
             Arc::new(PostgresImportExecutionSnapshotReader::new(store.clone()));
@@ -451,6 +477,7 @@ impl ApplicationRuntime {
                 import_execution_worker,
                 export_selection_worker,
                 customer_enrichment_provider_process,
+                customer_enrichment_materialization_process,
                 customer_enrichment_application_worker,
                 link_processor,
                 projection_worker,
@@ -960,6 +987,31 @@ fn bootstrap_customer_enrichment_provider_process_access(
             },
             expires_at,
         )?;
+    }
+    Ok(())
+}
+
+fn bootstrap_customer_enrichment_materialization_process_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    materialization_definition: &CapabilityDefinition,
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    for tenant_id in &config.tenant_ids {
+        authorization_store
+            .upsert(AuthorizationGrant {
+                tenant_id: tenant_id.clone(),
+                actor_id: worker_actor_id.clone(),
+                policy_id: materialization_definition.authorization_policy_id.clone(),
+                capability_id: materialization_definition.capability_id.clone(),
+                capability_version: materialization_definition.capability_version.clone(),
+                owner_module_id: materialization_definition.owner_module_id.clone(),
+                policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                expires_at_unix_nanos: Some(expires_at),
+            })
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
     }
     Ok(())
 }
