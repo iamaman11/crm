@@ -34,7 +34,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,34 +55,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Apply deterministic suggestion supersession
-        run: python scripts/phase8a10-suggestion-supersession.py
       - name: Synchronize lockfile and canonical formatting
         run: |
           cargo generate-lockfile
           cargo fmt --all
-      - name: Verify suggestion supersession slice
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test -p crm-customer-enrichment --test suggestion_supersession
-          cargo test -p crm-customer-enrichment-suggestion-query-adapter
-          cargo clippy -p crm-customer-enrichment -p crm-customer-enrichment-review-adapter -p crm-customer-enrichment-suggestion-query-adapter --all-targets -- -D warnings
       - name: Synchronize generated contract artifacts
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
           python scripts/generate_contract_bindings.py --write
-      - name: Commit verified supersession and generated artifacts
+      - name: Commit generated Rust and contract artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
           if git diff --quiet -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json; then
-            echo "Suggestion supersession artifacts are already synchronized."
+            echo "Rust and generated contract artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json
-            git commit -m "Derive visibility-aware suggestion supersession"
+            git commit -m "Synchronize Rust and generated contract artifacts"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
