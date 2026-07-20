@@ -34,7 +34,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,6 +55,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Apply Phase 8A.10 materialization registration
+        run: python scripts/phase8a10-materialization-registration.py
       - name: Synchronize lockfile and canonical formatting
         run: |
           cargo generate-lockfile
@@ -73,7 +75,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json
-            git commit -m "Synchronize Rust and generated contract artifacts"
+            git commit -m "Register governed materialization background process"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
