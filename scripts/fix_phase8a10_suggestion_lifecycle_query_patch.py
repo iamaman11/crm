@@ -33,4 +33,12 @@ new = """for query in [
 """
 if text.count(old) != 1:
     raise SystemExit("expected one broad lifecycle count replacement block")
-path.write_text(text.replace(old, new, 1))
+text = text.replace(old, new, 1)
+
+escaped_old = r'canonical_envelope: format!("{{\"seed\":\"{suffix}\"}}").into_bytes(),'
+escaped_new = r'canonical_envelope: format!("{{\\\"seed\\\":\\\"{suffix}\\\"}}").into_bytes(),'
+if text.count(escaped_old) != 1:
+    raise SystemExit("expected one canonical envelope escape anchor")
+text = text.replace(escaped_old, escaped_new, 1)
+
+path.write_text(text)
