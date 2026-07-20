@@ -377,7 +377,10 @@ mod tests {
             }),
         )
         .unwrap();
-        let error = registry.resolve_exact(&coordinate()).unwrap_err();
+        let error = registry
+            .resolve_exact(&coordinate())
+            .err()
+            .expect("disabled coordinate must fail closed");
         assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PROVIDER_ADAPTER_DISABLED");
     }
 
@@ -458,7 +461,10 @@ mod tests {
         }])
         .unwrap();
         let other = ProviderAdapterCoordinate::try_new("registry_http_v1", "1.1.0").unwrap();
-        let error = catalog.resolve_exact("registry_http", &other).unwrap_err();
+        let error = catalog
+            .resolve_exact("registry_http", &other)
+            .err()
+            .expect("unknown exact transport coordinate must fail closed");
         assert_eq!(
             error.code,
             "CUSTOMER_ENRICHMENT_PROVIDER_TRANSPORT_UNAVAILABLE"
