@@ -13,6 +13,7 @@ use crm_module_sdk::{ActorId, CausationId, CorrelationId, TenantId, TraceId};
 use sqlx::PgPool;
 
 const TENANT_ID: &str = "tenant-a";
+const ACTOR_ID: &str = "actor-a";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_conflict_persistence_is_atomic_and_exactly_replayable() {
@@ -113,7 +114,7 @@ fn draft() -> ProviderResponseConflictDraft {
 
 fn lineage() -> ProviderResponseConflictPersistenceLineage {
     ProviderResponseConflictPersistenceLineage {
-        actor_id: ActorId::try_new("provider-process-worker").unwrap(),
+        actor_id: ActorId::try_new(ACTOR_ID).unwrap(),
         correlation_id: CorrelationId::try_new("provider-conflict-correlation").unwrap(),
         causation_id: CausationId::try_new("provider-created-event").unwrap(),
         trace_id: TraceId::try_new("provider-conflict-trace").unwrap(),
