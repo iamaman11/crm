@@ -4,12 +4,13 @@ use crate::{
     CustomerEnrichmentMaterializationProcessDependencies,
     CustomerEnrichmentProviderProcessDependencies, CustomerEnrichmentProviderWorkerDependencies,
     GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
-    PostgresModuleActivation, ProcessIdentitySource, ProductionBackgroundWorkerDependencies,
-    ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
+    PostgresModuleActivation, ProcessIdentitySource, ProcessProviderSecretValueSource,
+    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies,
+    StaticProviderTransportCatalog, SystemClock, bootstrap_export_selection_worker_access,
     build_bootstrap_visibility_registry, build_customer_enrichment_application_worker,
     build_customer_enrichment_materialization_process, build_customer_enrichment_provider_process,
-    build_customer_enrichment_provider_worker, build_production_background_workers,
-    build_production_composition,
+    build_customer_enrichment_provider_registry, build_customer_enrichment_provider_worker,
+    build_production_background_workers, build_production_composition,
 };
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -52,7 +53,6 @@ use crm_customer_enrichment_capability_adapter::{
 use crm_customer_enrichment_materialization_adapter::suggestion_materialization_capability_definition;
 use crm_customer_enrichment_materialization_composition::MATERIALIZATION_PROCESS_WORKER_ACTOR_ID;
 use crm_customer_enrichment_provider_process_composition::PROVIDER_PROCESS_WORKER_ACTOR_ID;
-use crm_customer_enrichment_provider_registry::ExactProviderAdapterRegistry;
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, Clock, ModuleId, RandomSource, RecordType,
@@ -330,13 +330,23 @@ impl ApplicationRuntime {
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
 
-        // No adapter coordinate is enabled implicitly. Concrete provider adapters are added only
-        // through exact production configuration; the empty immutable registry fails closed.
+        // Concrete transports are host registrations and are never inferred. Empty configuration
+        // remains an empty fail-closed registry; an enabled coordinate without its exact host
+        // transport fails application assembly instead of being silently ignored.
+        let customer_enrichment_provider_registry = Arc::new(
+            build_customer_enrichment_provider_registry(
+                &config.customer_enrichment_provider_adapters,
+                Arc::clone(&clock),
+                Arc::new(StaticProviderTransportCatalog::default()),
+                Arc::new(ProcessProviderSecretValueSource),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
         let customer_enrichment_provider_executor = Arc::new(
             build_customer_enrichment_provider_worker(
                 CustomerEnrichmentProviderWorkerDependencies {
                     store: store.clone(),
-                    registry: Arc::new(ExactProviderAdapterRegistry::default()),
+                    registry: customer_enrichment_provider_registry,
                     authorizer: authorizer.clone(),
                 },
             )
