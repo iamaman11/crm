@@ -37,7 +37,7 @@ pub use lifecycle::{
     ProviderResponseReceiptId, RecordedApplicationOutcome, ReplayDisposition,
     RequestPolicyEvidence, ReviewDecision, ReviewDecisionId, ReviewDecisionKind, Suggestion,
     SuggestionDraft, SuggestionId, SuggestionLifecycleStatus, TargetSnapshot,
-    derive_suggestion_status, derive_suggestion_supersession,
+    derive_suggestion_status, derive_suggestion_supersession, suggestion_mutation_lock_key,
 };
 pub use materialization::*;
 pub use persistence::*;

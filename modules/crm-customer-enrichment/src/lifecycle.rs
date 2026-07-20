@@ -10,6 +10,8 @@ use std::collections::BTreeMap;
 const REQUEST_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.request/v1";
 const RESPONSE_RECEIPT_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.response-receipt/v1";
 const SUGGESTION_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.suggestion/v1";
+const SUGGESTION_MUTATION_LOCK_DOMAIN: &[u8] =
+    b"crm.customer-enrichment.suggestion-mutation-lock/v1";
 const REVIEW_DECISION_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.review-decision/v1";
 const APPLICATION_ATTEMPT_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.application-attempt/v1";
 const TARGET_IDEMPOTENCY_DOMAIN: &[u8] = b"crm.customer-enrichment.target-idempotency/v1";
@@ -734,6 +736,38 @@ struct SuggestionIdentity<'a> {
     proposed_value_digest: &'a [u8; 32],
 }
 
+#[derive(Serialize)]
+struct SuggestionMutationLockIdentity<'a> {
+    semantic_version: &'static str,
+    provider_profile_version_id: &'a ProviderProfileVersionId,
+    mapping_version_id: &'a MappingVersionId,
+    resource_id: &'a str,
+    target_field: TargetField,
+}
+
+/// Deterministic PostgreSQL advisory-lock key for all mutations affecting one broad logical
+/// proposition. Digest is intentionally excluded: a pending application of one value serializes
+/// refreshed values for the same exact provider/mapping/Party/field coordinate.
+pub fn suggestion_mutation_lock_key(
+    provider_profile_version_id: &ProviderProfileVersionId,
+    mapping_version_id: &MappingVersionId,
+    target: &TargetSnapshot,
+) -> i64 {
+    let identity = SuggestionMutationLockIdentity {
+        semantic_version: "1.0.0",
+        provider_profile_version_id,
+        mapping_version_id,
+        resource_id: &target.resource_id,
+        target_field: target.target_field,
+    };
+    let digest = canonical_digest(SUGGESTION_MUTATION_LOCK_DOMAIN, &identity);
+    i64::from_be_bytes(
+        digest[..8]
+            .try_into()
+            .expect("SHA-256 digest always contains eight lock-key bytes"),
+    )
+}
+
 impl Suggestion {
     pub fn materialize(draft: SuggestionDraft) -> Result<Self, SdkError> {
         if draft.proposed_value.chars().any(char::is_control) {
@@ -875,6 +909,30 @@ impl Suggestion {
 
     pub fn proposed_value_digest(&self) -> &[u8; 32] {
         &self.proposed_value_digest
+    }
+
+    pub fn provider_profile_version_id(&self) -> &ProviderProfileVersionId {
+        &self.provider_profile_version_id
+    }
+
+    pub fn mapping_version_id(&self) -> &MappingVersionId {
+        &self.mapping_version_id
+    }
+
+    pub fn response_receipt_id(&self) -> &ProviderResponseReceiptId {
+        &self.response_receipt_id
+    }
+
+    pub const fn retrieved_at_unix_ms(&self) -> u64 {
+        self.retrieved_at_unix_ms
+    }
+
+    pub fn mutation_lock_key(&self) -> i64 {
+        suggestion_mutation_lock_key(
+            &self.provider_profile_version_id,
+            &self.mapping_version_id,
+            &self.target,
+        )
     }
 
     pub const fn expires_at_unix_ms(&self) -> u64 {

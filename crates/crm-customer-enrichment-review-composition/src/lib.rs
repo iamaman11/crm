@@ -2,6 +2,10 @@
 
 //! PostgreSQL composition for non-runtime governed suggestion review.
 
+mod stale_guard;
+
+use stale_guard::PostgresSuggestionMutationGuard;
+
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityExecutionResult, CapabilityRequest, TransactionalCapabilityExecutor,
@@ -86,10 +90,14 @@ impl PostgresCustomerEnrichmentSuggestionReviewExecutor {
         let approval_requirement =
             resolve_policy(&command.policy_version, command.kind, policy_decision)?;
 
+        let guard = PostgresSuggestionMutationGuard::new(suggestion.clone());
         let planner =
             CustomerEnrichmentSuggestionReviewPlanner::new(suggestion, approval_requirement);
-        let executor =
-            PostgresTransactionalAggregateExecutor::new(self.store.clone(), Arc::new(planner));
+        let executor = PostgresTransactionalAggregateExecutor::guarded(
+            self.store.clone(),
+            Arc::new(planner),
+            Arc::new(guard),
+        );
         executor.execute(&definition, request).await
     }
 }

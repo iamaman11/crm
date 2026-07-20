@@ -4,9 +4,12 @@
 
 mod candidate_evidence;
 mod process;
+mod stale_guard;
 
 pub use candidate_evidence::*;
 pub use process::*;
+
+use stale_guard::PostgresSuggestionMaterializationGuard;
 
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_capability_runtime::{
@@ -127,10 +130,14 @@ impl PostgresCustomerEnrichmentSuggestionMaterializationWorker {
 
         let profile = provider_profile_from_snapshot(&profile_snapshot)?;
         let mapping = mapping_from_snapshot(&mapping_snapshot)?;
+        let guard = PostgresSuggestionMaterializationGuard::new(&profile, &mapping, &command)?;
         let planner =
             CustomerEnrichmentSuggestionMaterializationPlanner::new(receipt, profile, mapping);
-        let executor =
-            PostgresTransactionalAggregateExecutor::new(self.store.clone(), Arc::new(planner));
+        let executor = PostgresTransactionalAggregateExecutor::guarded(
+            self.store.clone(),
+            Arc::new(planner),
+            Arc::new(guard),
+        );
         executor.execute(&definition, request).await
     }
 }

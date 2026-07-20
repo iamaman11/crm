@@ -9,11 +9,14 @@
 
 mod orchestration;
 mod owner_application;
+mod stale_guard;
 mod worker;
 
 pub use orchestration::*;
 pub use owner_application::*;
 pub use worker::*;
+
+use stale_guard::PostgresSuggestionMutationGuard;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
@@ -74,10 +77,15 @@ impl PostgresCustomerEnrichmentApplicationAttemptExecutor {
             .await?;
         let suggestion = suggestion_from_application_snapshot(&suggestion_snapshot)?;
         let review = review_from_application_snapshot(&review_snapshot)?;
+        let guard = PostgresSuggestionMutationGuard::new(suggestion.clone());
         let planner = CustomerEnrichmentApplicationAttemptPlanner::new(suggestion, review);
-        PostgresTransactionalAggregateExecutor::new(self.store.clone(), Arc::new(planner))
-            .execute(&definition, request)
-            .await
+        PostgresTransactionalAggregateExecutor::guarded(
+            self.store.clone(),
+            Arc::new(planner),
+            Arc::new(guard),
+        )
+        .execute(&definition, request)
+        .await
     }
 
     async fn load_required(
