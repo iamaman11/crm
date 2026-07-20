@@ -53,12 +53,8 @@ mod process {
         let adapter = GovernedProviderAdapter::new(
             Arc::new(secrets),
             Arc::new(
-                FixedWindowProviderQuota::try_new(
-                    10,
-                    60_000_000_000,
-                    transport_clock.clone(),
-                )
-                .unwrap(),
+                FixedWindowProviderQuota::try_new(10, 60_000_000_000, transport_clock.clone())
+                    .unwrap(),
             ),
             Arc::new(
                 ConsecutiveFailureProviderCircuitBreaker::try_new(
