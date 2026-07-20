@@ -1,0 +1,82 @@
+name: Temporary Provider Response Reconciliation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/tmp_apply_provider_response_reconciliation.py
+      - .github/workflows/tmp-provider-response-reconciliation.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-provider-response-reconciliation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_enrichment_worker_process_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5442:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_enrichment_worker_process_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5442
+      PGDATABASE: crm_customer_enrichment_worker_process_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply reconciliation patch
+        run: python3 scripts/tmp_apply_provider_response_reconciliation.py
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Verify pure reconciliation semantics
+        run: cargo test -p crm-customer-enrichment response_replay
+      - name: Verify worker unit semantics
+        run: cargo test -p crm-customer-enrichment-worker-composition
+      - name: Prepare fresh worker database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify PostgreSQL response reconciliation process
+        run: cargo test -p crm-customer-enrichment-worker-composition --features postgres-integration --test postgres_worker_process -- --nocapture
+      - name: Verify application authorization wrapper compiles
+        run: cargo test -p crm-application-runtime --test postgres_customer_enrichment_provider_worker --no-run
+      - name: Strict focused Clippy
+        run: cargo clippy -p crm-customer-enrichment -p crm-customer-enrichment-worker-composition -p crm-application-runtime --all-targets -- -D warnings
+      - name: Commit verified code slice
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/crm-customer-enrichment/src/lifecycle.rs \
+                  crates/crm-customer-enrichment-worker-composition/src/lib.rs \
+                  crates/crm-customer-enrichment-worker-composition/src/tests.rs \
+                  crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs
+          git diff --cached --check
+          git commit -m "Reconcile provider response replays semantically"
+          git push origin HEAD:agent/phase8a10-customer-enrichment
