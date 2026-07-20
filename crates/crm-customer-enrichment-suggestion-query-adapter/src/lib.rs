@@ -13,12 +13,13 @@ use crm_core_data::{
     PostgresDataStore, RecordGetQuery, RecordListQuery, RecordQueryContinuation, RecordQuerySort,
 };
 use crm_customer_enrichment::{
-    REVIEW_DECISION_RECORD_TYPE, ReviewDecision, SUGGESTION_RECORD_TYPE, Suggestion,
+    REVIEW_DECISION_RECORD_TYPE, ReviewDecision, SUGGESTION_RECORD_TYPE, Suggestion, SuggestionId,
+    derive_suggestion_supersession,
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_customer_enrichment_review_adapter::{
     review_decision_from_snapshot, review_decision_to_wire, suggestion_from_snapshot,
-    suggestion_to_wire,
+    suggestion_to_wire_with_supersession,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
@@ -105,24 +106,29 @@ impl CustomerEnrichmentSuggestionQueryAdapter {
             .ok_or_else(suggestion_not_found)?;
         let suggestion = suggestion_from_snapshot(&snapshot)?;
         self.ensure_party_visible(request, &suggestion).await?;
-        let suggestion_visibility = self
-            .visibility
-            .authorize_visibility(request, &snapshot.reference)
+        let visible_suggestions = self
+            .load_visible_suggestions_for_party(request, suggestion.target().resource_id.as_str())
             .await?;
-        if !suggestion_visibility.resource_visible {
-            return Err(suggestion_not_found());
+        let visible = visible_suggestions
+            .get(suggestion.suggestion_id().as_str())
+            .ok_or_else(suggestion_not_found)?;
+        if visible.suggestion != suggestion {
+            return Err(query_state_invalid(
+                "direct suggestion lookup differs from bounded lifecycle scan",
+            ));
         }
 
         let reviews = self.load_visible_latest_reviews(request).await?;
         let latest_review = reviews.get(suggestion.suggestion_id().as_str());
         let at_unix_ms = request_started_at_unix_ms(request)?;
-        let mut public_suggestion = suggestion_to_wire(
+        let mut public_suggestion = suggestion_to_wire_with_supersession(
             &suggestion,
             latest_review.map(|review| &review.decision),
+            visible.superseded_by.as_ref(),
             at_unix_ms,
         )?;
         redact_suggestion(&mut public_suggestion, |field| {
-            suggestion_visibility.allows_field(field)
+            visible.visibility.allows_field(field)
         });
         let latest_review_decision = latest_review
             .map(|review| {
@@ -231,6 +237,63 @@ impl CustomerEnrichmentSuggestionQueryAdapter {
             }
         }
     }
+    pub(crate) async fn load_visible_suggestions_for_party(
+        &self,
+        request: &QueryRequest,
+        party_id: &str,
+    ) -> Result<BTreeMap<String, VisibleSuggestion>, SdkError> {
+        let mut values = Vec::<(Suggestion, QueryVisibilityDecision)>::new();
+        let mut after: Option<RecordQueryContinuation> = None;
+        let mut scanned = 0_usize;
+        loop {
+            let page = self
+                .store
+                .list_records_for_query(&RecordListQuery {
+                    tenant_id: request.context.tenant_id.clone(),
+                    owner_module_id: module_id()?,
+                    record_type: suggestion_record_type()?,
+                    page_size: INTERNAL_SCAN_PAGE_SIZE,
+                    sort: RecordQuerySort::UpdatedAtDescending,
+                    after: after.clone(),
+                })
+                .await?;
+            scanned = scanned.saturating_add(page.records.len());
+            enforce_scan_limit(scanned)?;
+            for snapshot in page.records {
+                let suggestion = suggestion_from_snapshot(&snapshot)?;
+                if suggestion.target().resource_id.as_str() != party_id {
+                    continue;
+                }
+                let visibility = self
+                    .visibility
+                    .authorize_visibility(request, &snapshot.reference)
+                    .await?;
+                if visibility.resource_visible {
+                    values.push((suggestion, visibility));
+                }
+            }
+            after = page.next;
+            if after.is_none() {
+                break;
+            }
+        }
+
+        let supersession =
+            derive_suggestion_supersession(values.iter().map(|(suggestion, _)| suggestion));
+        let mut output = BTreeMap::new();
+        for (suggestion, visibility) in values {
+            let superseded_by = supersession.get(suggestion.suggestion_id()).cloned();
+            output.insert(
+                suggestion.suggestion_id().as_str().to_owned(),
+                VisibleSuggestion {
+                    suggestion,
+                    visibility,
+                    superseded_by,
+                },
+            );
+        }
+        Ok(output)
+    }
 }
 
 impl std::fmt::Debug for CustomerEnrichmentSuggestionQueryAdapter {
@@ -281,6 +344,13 @@ impl QueryExecutor for CustomerEnrichmentSuggestionQueryAdapter {
             Ok(QueryExecutionResult { output })
         })
     }
+}
+
+#[derive(Clone)]
+pub(crate) struct VisibleSuggestion {
+    pub(crate) suggestion: Suggestion,
+    pub(crate) visibility: QueryVisibilityDecision,
+    pub(crate) superseded_by: Option<SuggestionId>,
 }
 
 #[derive(Clone)]

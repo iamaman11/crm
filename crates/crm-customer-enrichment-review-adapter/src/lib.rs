@@ -18,7 +18,7 @@ use crm_customer_enrichment::{
     ApprovalRequirement, LIFECYCLE_STATE_RETENTION_POLICY_ID, LIFECYCLE_STATE_SCHEMA_VERSION,
     REVIEW_DECISION_RECORD_TYPE, REVIEW_DECISION_STATE_MAXIMUM_BYTES,
     REVIEW_DECISION_STATE_SCHEMA_ID, ReviewDecision, ReviewDecisionKind, SUGGESTION_RECORD_TYPE,
-    SUGGESTION_STATE_MAXIMUM_BYTES, SUGGESTION_STATE_SCHEMA_ID, Suggestion,
+    SUGGESTION_STATE_MAXIMUM_BYTES, SUGGESTION_STATE_SCHEMA_ID, Suggestion, SuggestionId,
     SuggestionLifecycleStatus, TargetField, decode_review_decision_state, decode_suggestion_state,
     derive_suggestion_status, encode_review_decision_state, encode_suggestion_state,
     review_decision_state_descriptor_hash, suggestion_state_descriptor_hash,
@@ -375,6 +375,15 @@ pub fn suggestion_to_wire(
     latest_decision: Option<&ReviewDecision>,
     at_unix_ms: u64,
 ) -> Result<wire::Suggestion, SdkError> {
+    suggestion_to_wire_with_supersession(suggestion, latest_decision, None, at_unix_ms)
+}
+
+pub fn suggestion_to_wire_with_supersession(
+    suggestion: &Suggestion,
+    latest_decision: Option<&ReviewDecision>,
+    superseded_by: Option<&SuggestionId>,
+    at_unix_ms: u64,
+) -> Result<wire::Suggestion, SdkError> {
     let state: SuggestionStateView = serde_json::from_slice(&encode_suggestion_state(suggestion)?)
         .map_err(|error| review_state_invalid(error.to_string()))?;
     Ok(wire::Suggestion {
@@ -435,10 +444,12 @@ pub fn suggestion_to_wire(
             suggestion,
             latest_decision,
             None,
-            None,
+            superseded_by,
             at_unix_ms,
         )),
-        superseded_by_suggestion_ref: None,
+        superseded_by_suggestion_ref: superseded_by.map(|suggestion_id| wire::SuggestionRef {
+            suggestion_id: suggestion_id.as_str().to_owned(),
+        }),
     })
 }
 

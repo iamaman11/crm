@@ -50,6 +50,9 @@ pub(crate) async fn execute(
         return response(Vec::new(), String::new());
     }
 
+    let visible_suggestions = adapter
+        .load_visible_suggestions_for_party(request, party_id.as_str())
+        .await?;
     let reviews = adapter.load_visible_latest_reviews(request).await?;
     let (items, next) = scan::collect(
         adapter,
@@ -60,6 +63,7 @@ pub(crate) async fn execute(
         page_size,
         after,
         &reviews,
+        &visible_suggestions,
     )
     .await?;
     response(

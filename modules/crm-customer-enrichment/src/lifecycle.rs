@@ -5,6 +5,7 @@ use crm_module_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 
 const REQUEST_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.request/v1";
 const RESPONSE_RECEIPT_ID_DOMAIN: &[u8] = b"crm.customer-enrichment.response-receipt/v1";
@@ -879,6 +880,73 @@ impl Suggestion {
     pub const fn expires_at_unix_ms(&self) -> u64 {
         self.expires_at_unix_ms
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct SuggestionSupersessionCoordinate {
+    provider_profile_version_id: ProviderProfileVersionId,
+    mapping_version_id: MappingVersionId,
+    resource_id: String,
+    target_field: TargetField,
+    proposed_value_digest: [u8; 32],
+}
+
+/// Derives deterministic one-to-one supersession among the supplied visible suggestions.
+///
+/// A suggestion can supersede another only when both represent the same logical proposition:
+/// exact provider-profile and mapping versions, the same Party and target field, and the same
+/// normalized proposed-value digest. Target resource version is intentionally excluded so a
+/// refreshed proposition against a newer Party version can supersede its older evidence. The
+/// newest provider retrieval wins; exact receipt and suggestion identities break timestamp ties.
+pub fn derive_suggestion_supersession<'a>(
+    suggestions: impl IntoIterator<Item = &'a Suggestion>,
+) -> BTreeMap<SuggestionId, SuggestionId> {
+    let suggestions = suggestions.into_iter().collect::<Vec<_>>();
+    let mut latest = BTreeMap::<SuggestionSupersessionCoordinate, &Suggestion>::new();
+    for suggestion in &suggestions {
+        let coordinate = suggestion_supersession_coordinate(suggestion);
+        let replace = latest.get(&coordinate).is_none_or(|current| {
+            suggestion_supersession_order(suggestion) > suggestion_supersession_order(current)
+        });
+        if replace {
+            latest.insert(coordinate, suggestion);
+        }
+    }
+
+    let mut output = BTreeMap::new();
+    for suggestion in suggestions {
+        let coordinate = suggestion_supersession_coordinate(suggestion);
+        let successor = latest
+            .get(&coordinate)
+            .expect("every supplied suggestion must have a latest logical proposition");
+        if successor.suggestion_id() != suggestion.suggestion_id() {
+            output.insert(
+                suggestion.suggestion_id().clone(),
+                successor.suggestion_id().clone(),
+            );
+        }
+    }
+    output
+}
+
+fn suggestion_supersession_coordinate(suggestion: &Suggestion) -> SuggestionSupersessionCoordinate {
+    SuggestionSupersessionCoordinate {
+        provider_profile_version_id: suggestion.provider_profile_version_id.clone(),
+        mapping_version_id: suggestion.mapping_version_id.clone(),
+        resource_id: suggestion.target.resource_id.as_str().to_owned(),
+        target_field: suggestion.target.target_field,
+        proposed_value_digest: suggestion.proposed_value_digest,
+    }
+}
+
+fn suggestion_supersession_order(
+    suggestion: &Suggestion,
+) -> (u64, &ProviderResponseReceiptId, &SuggestionId) {
+    (
+        suggestion.retrieved_at_unix_ms,
+        &suggestion.response_receipt_id,
+        &suggestion.suggestion_id,
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

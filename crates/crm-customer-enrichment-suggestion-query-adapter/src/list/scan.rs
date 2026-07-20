@@ -1,10 +1,10 @@
 use super::matches;
 use crate::{
-    CustomerEnrichmentSuggestionQueryAdapter, VisibleReview, enforce_scan_limit, module_id,
-    query_configuration_invalid, request_started_at_unix_ms, suggestion_record_type,
+    CustomerEnrichmentSuggestionQueryAdapter, VisibleReview, VisibleSuggestion, enforce_scan_limit,
+    module_id, query_configuration_invalid, request_started_at_unix_ms, suggestion_record_type,
 };
 use crm_core_data::{RecordListQuery, RecordQueryContinuation, RecordQuerySort};
-use crm_customer_enrichment_review_adapter::{suggestion_from_snapshot, suggestion_to_wire};
+use crm_customer_enrichment_review_adapter::suggestion_to_wire_with_supersession;
 use crm_module_sdk::{RecordId, SdkError};
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use crm_query_runtime::QueryRequest;
@@ -20,6 +20,7 @@ pub(super) async fn collect(
     page_size: u32,
     mut after: Option<RecordQueryContinuation>,
     reviews: &BTreeMap<String, VisibleReview>,
+    visible_suggestions: &BTreeMap<String, VisibleSuggestion>,
 ) -> Result<(Vec<wire::Suggestion>, Option<RecordQueryContinuation>), SdkError> {
     let mut output = Vec::with_capacity(page_size as usize);
     let mut scanned = 0_usize;
@@ -35,6 +36,7 @@ pub(super) async fn collect(
                 status,
                 anchor.clone(),
                 reviews,
+                visible_suggestions,
                 &mut scanned,
             )
             .await?;
@@ -56,24 +58,22 @@ pub(super) async fn collect(
         enforce_scan_limit(scanned)?;
 
         for snapshot in &page.records {
-            let suggestion = suggestion_from_snapshot(snapshot)?;
+            let Some(visible) = visible_suggestions.get(snapshot.reference.record_id.as_str())
+            else {
+                continue;
+            };
+            let suggestion = &visible.suggestion;
             let review = reviews.get(suggestion.suggestion_id().as_str());
-            let mut public = suggestion_to_wire(
-                &suggestion,
+            let mut public = suggestion_to_wire_with_supersession(
+                suggestion,
                 review.map(|value| &value.decision),
+                visible.superseded_by.as_ref(),
                 request_started_at_unix_ms(request)?,
             )?;
             if !matches(&public, party_id, profile_id, status) {
                 continue;
             }
-            let visibility = adapter
-                .visibility
-                .authorize_visibility(request, &snapshot.reference)
-                .await?;
-            if !visibility.resource_visible {
-                continue;
-            }
-            crate::redact_suggestion(&mut public, |field| visibility.allows_field(field));
+            crate::redact_suggestion(&mut public, |field| visible.visibility.allows_field(field));
             output.push(public);
         }
 
@@ -93,6 +93,7 @@ async fn has_more(
     status: Option<i32>,
     mut after: Option<RecordQueryContinuation>,
     reviews: &BTreeMap<String, VisibleReview>,
+    visible_suggestions: &BTreeMap<String, VisibleSuggestion>,
     scanned: &mut usize,
 ) -> Result<bool, SdkError> {
     while after.is_some() {
@@ -111,20 +112,19 @@ async fn has_more(
         enforce_scan_limit(*scanned)?;
 
         for snapshot in &page.records {
-            let suggestion = suggestion_from_snapshot(snapshot)?;
+            let Some(visible) = visible_suggestions.get(snapshot.reference.record_id.as_str())
+            else {
+                continue;
+            };
+            let suggestion = &visible.suggestion;
             let review = reviews.get(suggestion.suggestion_id().as_str());
-            let public = suggestion_to_wire(
-                &suggestion,
+            let public = suggestion_to_wire_with_supersession(
+                suggestion,
                 review.map(|value| &value.decision),
+                visible.superseded_by.as_ref(),
                 request_started_at_unix_ms(request)?,
             )?;
-            if matches(&public, party_id, profile_id, status)
-                && adapter
-                    .visibility
-                    .authorize_visibility(request, &snapshot.reference)
-                    .await?
-                    .resource_visible
-            {
+            if matches(&public, party_id, profile_id, status) {
                 return Ok(true);
             }
         }
