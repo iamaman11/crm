@@ -27,8 +27,7 @@ use crm_module_sdk::{
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use sha2::{Digest, Sha256};
 
-const DISPATCH_WORK_ITEM_IDENTITY_DOMAIN: &[u8] =
-    b"crm.customer-enrichment.provider-work-item/v1";
+const DISPATCH_WORK_ITEM_IDENTITY_DOMAIN: &[u8] = b"crm.customer-enrichment.provider-work-item/v1";
 
 /// Stable crate identity for architecture tooling.
 pub const CRATE_NAME: &str = "crm-customer-enrichment-provider-process-composition";

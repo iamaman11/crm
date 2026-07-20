@@ -868,6 +868,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-enrichment-provider-process-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-ingress",
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-customer-enrichment",
+ "crm-customer-enrichment-capability-adapter",
+ "crm-customer-enrichment-worker-composition",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "crm-customer-enrichment-provider-registry"
 version = "0.1.0"
 dependencies = [
