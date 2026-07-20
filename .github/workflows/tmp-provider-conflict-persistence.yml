@@ -150,7 +150,9 @@ jobs:
           set -o pipefail
           {
             python scripts/check_production_route_classifications.py
-            python -m pytest -q tests/test_customer_enrichment_production_promotion.py tests/test_production_route_classifications.py
+            python -m unittest -q \
+              tests.test_customer_enrichment_production_promotion \
+              tests.test_production_route_classifications
           } 2>&1 | tee /tmp/provider-conflict-route-inventory.log
       - name: Upload route inventory diagnostics
         if: steps.route_inventory.outcome == 'failure'
