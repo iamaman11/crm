@@ -39,6 +39,7 @@ crm-customer-enrichment-application-composition = { path = "../crm-customer-enri
 crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
 crm-customer-enrichment-capability-composition = { path = "../crm-customer-enrichment-capability-composition" }
 crm-customer-enrichment-provider-process-composition = { path = "../crm-customer-enrichment-provider-process-composition" }
+crm-customer-enrichment-provider-registry = { path = "../crm-customer-enrichment-provider-registry" }
 crm-customer-enrichment-query-adapter = { path = "../crm-customer-enrichment-query-adapter" }
 crm-customer-enrichment-request-list-query-adapter = { path = "../crm-customer-enrichment-request-list-query-adapter" }
 crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-review-adapter" }
@@ -84,7 +85,6 @@ tonic-health = "0.14"
 tonic-prost = "0.14"
 
 [dev-dependencies]
-crm-customer-enrichment-provider-registry = { path = "../crm-customer-enrichment-provider-registry" }
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 
 [build-dependencies]

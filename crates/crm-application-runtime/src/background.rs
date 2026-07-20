@@ -14,6 +14,9 @@ use crm_customer_enrichment_application_composition::{
     CustomerEnrichmentPartyApplicationWorker, PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID,
 };
 use crm_customer_enrichment_capability_adapter::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
+use crm_customer_enrichment_provider_process_composition::{
+    CustomerEnrichmentProviderProcessWorker, PROVIDER_PROCESS_WORKER_ID,
+};
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{ErrorCategory, EventType, ModuleId, PortFuture, SdkError, TenantId};
 use crm_sales_activities_capability_composition::{
@@ -39,6 +42,10 @@ const DEAL_TIMELINE_PROJECTION_WORKER_ID: &str = "deal-timeline-projection";
 const TASK_STATUS_PROJECTION_WORKER_ID: &str = "task-status-projection";
 const CUSTOMER_360_PROJECTION_WORKER_ID: &str = "customer-360-projection";
 const GLOBAL_SEARCH_WORKER_ID: &str = "global-search-index";
+const CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_PHASE: BackgroundWorkerPhase =
+    BackgroundWorkerPhase::new(240);
+const CUSTOMER_ENRICHMENT_APPLICATION_PHASE: BackgroundWorkerPhase =
+    BackgroundWorkerPhase::new(250);
 
 pub(crate) struct ProductionBackgroundWorkerDependencies {
     pub module_ids: BTreeSet<String>,
@@ -46,6 +53,7 @@ pub(crate) struct ProductionBackgroundWorkerDependencies {
     pub store: PostgresDataStore,
     pub import_execution_worker: Arc<PartyImportExecutionWorker>,
     pub export_selection_worker: Arc<PartyExportSelectionWorker>,
+    pub customer_enrichment_provider_process: Arc<CustomerEnrichmentProviderProcessWorker>,
     pub customer_enrichment_application_worker: Arc<CustomerEnrichmentPartyApplicationWorker>,
     pub link_processor: Arc<SalesActivitiesLinkEventProcessor>,
     pub projection_worker: Arc<Phase6ProjectionWorker>,
@@ -62,6 +70,7 @@ pub(crate) fn build_production_background_workers(
         store,
         import_execution_worker,
         export_selection_worker,
+        customer_enrichment_provider_process,
         customer_enrichment_application_worker,
         link_processor,
         projection_worker,
@@ -101,12 +110,10 @@ pub(crate) fn build_production_background_workers(
             link_processor,
         )),
     )?;
-    add_worker(
+    add_customer_enrichment_workers(
         &mut builder,
         activation.clone(),
-        BackgroundWorkerPhase::new(250),
-        CUSTOMER_ENRICHMENT_MODULE_ID,
-        PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID,
+        customer_enrichment_provider_process,
         customer_enrichment_application_worker,
     )?;
     add_worker(
@@ -149,6 +156,30 @@ pub(crate) fn build_production_background_workers(
     )?;
 
     Ok(builder.build())
+}
+
+fn add_customer_enrichment_workers(
+    builder: &mut BackgroundWorkerRegistryBuilder,
+    activation: Arc<dyn ModuleActivationPort>,
+    provider_process: Arc<dyn TenantBackgroundWorker>,
+    application_worker: Arc<dyn TenantBackgroundWorker>,
+) -> Result<(), SdkError> {
+    add_worker(
+        builder,
+        activation.clone(),
+        CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_PHASE,
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        PROVIDER_PROCESS_WORKER_ID,
+        provider_process,
+    )?;
+    add_worker(
+        builder,
+        activation,
+        CUSTOMER_ENRICHMENT_APPLICATION_PHASE,
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID,
+        application_worker,
+    )
 }
 
 fn add_worker(
@@ -459,4 +490,140 @@ fn configuration_error(error: impl fmt::Display) -> SdkError {
         "The production background-worker configuration is invalid.",
     )
     .with_internal_reference(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    const ACTIVE: u8 = 1;
+    const DISABLED: u8 = 2;
+    const UNINSTALLED: u8 = 3;
+
+    #[derive(Debug)]
+    struct MutableActivation {
+        state: AtomicU8,
+    }
+
+    impl MutableActivation {
+        fn active() -> Self {
+            Self {
+                state: AtomicU8::new(ACTIVE),
+            }
+        }
+
+        fn set(&self, state: u8) {
+            self.state.store(state, Ordering::Release);
+        }
+    }
+
+    impl ModuleActivationPort for MutableActivation {
+        fn is_active<'a>(
+            &'a self,
+            _tenant_id: &'a TenantId,
+            module_id: &'a ModuleId,
+        ) -> PortFuture<'a, Result<bool, SdkError>> {
+            Box::pin(async move {
+                Ok(module_id.as_str() == CUSTOMER_ENRICHMENT_MODULE_ID
+                    && self.state.load(Ordering::Acquire) == ACTIVE)
+            })
+        }
+    }
+
+    #[derive(Debug)]
+    struct RecordingWorker {
+        calls: Arc<Mutex<Vec<&'static str>>>,
+        label: &'static str,
+    }
+
+    impl TenantBackgroundWorker for RecordingWorker {
+        fn run_tenant_cycle<'a>(
+            &'a self,
+            _tenant_id: TenantId,
+            _now_unix_nanos: i64,
+        ) -> PortFuture<'a, Result<(), SdkError>> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(self.label);
+                Ok(())
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_precedes_application_and_stops_after_disable_or_uninstall() {
+        let activation = Arc::new(MutableActivation::active());
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let mut builder = BackgroundWorkerRegistryBuilder::new(BTreeSet::from([
+            CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
+        ]));
+        let activation_port: Arc<dyn ModuleActivationPort> = activation.clone();
+        add_customer_enrichment_workers(
+            &mut builder,
+            activation_port,
+            Arc::new(RecordingWorker {
+                calls: calls.clone(),
+                label: "provider",
+            }),
+            Arc::new(RecordingWorker {
+                calls: calls.clone(),
+                label: "application",
+            }),
+        )
+        .unwrap();
+        let registry = builder.build();
+        let scheduled = registry
+            .scheduled_coordinates()
+            .map(|(phase, module_id, worker_id)| {
+                (phase.order(), module_id.to_owned(), worker_id.to_owned())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            scheduled,
+            vec![
+                (
+                    240,
+                    CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
+                    PROVIDER_PROCESS_WORKER_ID.to_owned(),
+                ),
+                (
+                    250,
+                    CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
+                    PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID.to_owned(),
+                ),
+            ]
+        );
+
+        let tenant_id = TenantId::try_new("tenant-a").unwrap();
+        registry
+            .run_tenant_cycle(tenant_id.clone(), 1)
+            .await
+            .unwrap();
+        assert_eq!(*calls.lock().unwrap(), vec!["provider", "application"]);
+
+        activation.set(DISABLED);
+        registry
+            .run_tenant_cycle(tenant_id.clone(), 2)
+            .await
+            .unwrap();
+        assert_eq!(*calls.lock().unwrap(), vec!["provider", "application"]);
+
+        activation.set(ACTIVE);
+        registry
+            .run_tenant_cycle(tenant_id.clone(), 3)
+            .await
+            .unwrap();
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec!["provider", "application", "provider", "application"]
+        );
+
+        activation.set(UNINSTALLED);
+        registry.run_tenant_cycle(tenant_id, 4).await.unwrap();
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec!["provider", "application", "provider", "application"]
+        );
+    }
 }
