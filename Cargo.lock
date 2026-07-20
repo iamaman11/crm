@@ -320,6 +320,7 @@ dependencies = [
  "crm-customer-enrichment-application-composition",
  "crm-customer-enrichment-capability-adapter",
  "crm-customer-enrichment-capability-composition",
+ "crm-customer-enrichment-provider-process-composition",
  "crm-customer-enrichment-provider-registry",
  "crm-customer-enrichment-query-adapter",
  "crm-customer-enrichment-request-list-query-adapter",

@@ -95,10 +95,9 @@ impl ProviderDispatchSourcePort for GovernedCustomerEnrichmentProviderSource {
                 ));
             }
 
-            let profile_record_id = RecordId::try_new(
-                request.provider_profile_version_id().as_str().to_owned(),
-            )
-            .map_err(source_identifier_invalid)?;
+            let profile_record_id =
+                RecordId::try_new(request.provider_profile_version_id().as_str().to_owned())
+                    .map_err(source_identifier_invalid)?;
             let profile_snapshot = self
                 .store
                 .get_record_for_query(&RecordGetQuery {
@@ -122,7 +121,9 @@ impl ProviderDispatchSourcePort for GovernedCustomerEnrichmentProviderSource {
                 .checked_mul(1_000_000)
                 .and_then(|value| i64::try_from(value).ok())
                 .ok_or_else(|| {
-                    source_configuration_invalid("provider source clock exceeds the supported range")
+                    source_configuration_invalid(
+                        "provider source clock exceeds the supported range",
+                    )
                 })?;
             let query_identity = format!("provider-source-{}", request.request_id().as_str());
             let query = export_execution_query_request(
@@ -189,7 +190,9 @@ impl ProviderDispatchSourcePort for GovernedCustomerEnrichmentProviderSource {
                 ));
             }
             let observed_at_unix_ms = i64::try_from(now_unix_ms).map_err(|_| {
-                source_configuration_invalid("provider source clock exceeds the Party snapshot range")
+                source_configuration_invalid(
+                    "provider source clock exceeds the Party snapshot range",
+                )
             })?;
             Ok(ProviderDispatchSourceDisposition::Ready(Box::new(
                 ProviderDispatchSourceSnapshot {
