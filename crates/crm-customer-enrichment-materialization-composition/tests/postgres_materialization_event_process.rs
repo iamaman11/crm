@@ -29,8 +29,7 @@ use crm_customer_enrichment_capability_adapter::{
 };
 use crm_customer_enrichment_materialization_composition::{
     CustomerEnrichmentMaterializationProcessWorker,
-    GovernedFileProviderSuggestionCandidateEvidenceSource, MATERIALIZATION_PROCESS_PROJECTION_ID,
-    MATERIALIZATION_PROCESS_WORKER_ACTOR_ID, PROVIDER_RESPONSE_RECORDED_EVENT_SCHEMA,
+    GovernedFileProviderSuggestionCandidateEvidenceSource, MATERIALIZATION_PROCESS_PROJECTION_ID, PROVIDER_RESPONSE_RECORDED_EVENT_SCHEMA,
     PROVIDER_RESPONSE_RECORDED_EVENT_TYPE, PROVIDER_SUGGESTION_CANDIDATE_EVIDENCE_MEDIA_TYPE,
     PostgresCustomerEnrichmentSuggestionMaterializationWorker,
 };
