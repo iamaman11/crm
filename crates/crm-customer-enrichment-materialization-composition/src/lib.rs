@@ -2,6 +2,10 @@
 
 //! PostgreSQL composition for worker-only Customer Enrichment suggestion materialization.
 
+mod candidate_evidence;
+
+pub use candidate_evidence::*;
+
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_capability_runtime::{
     CapabilityExecutionResult, CapabilityRequest, TransactionalCapabilityExecutor,
