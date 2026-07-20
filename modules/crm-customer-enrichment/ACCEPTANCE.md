@@ -45,7 +45,7 @@ Current accepted production inventory: **6 public mutations + 6 permission-aware
 - [x] Add an explicit bounded provider-adapter configuration and exact registry-assembly foundation for enabled/disabled state, exact transport coordinate, per-tenant secret environment bindings, fixed-window quota and circuit settings.
 - [x] Derive suggestion supersession deterministically from exact visible logical propositions only, so a hidden successor neither changes the disclosed lifecycle nor leaks its identity.
 - [x] Derive expiry at the exact `expires_at` boundary while retaining immutable suggestion and review evidence.
-- [ ] Wire `CRM_CUSTOMER_ENRICHMENT_PROVIDER_ADAPTERS` into actual `crm-api` provider registry assembly; enabled configuration must never be silently replaced by `ExactProviderAdapterRegistry::default()`.
+- [x] Wire `CRM_CUSTOMER_ENRICHMENT_PROVIDER_ADAPTERS` into actual `crm-api` provider registry assembly; empty configuration remains empty, disabled coordinates remain disabled, and enabled configuration without the exact host transport fails assembly instead of being silently replaced by `ExactProviderAdapterRegistry::default()`.
 - [ ] Add fail-closed final mutation guards so expired or superseded evidence cannot be newly reviewed or applied, including restart/crash-window recovery without TOCTOU escape.
 - [ ] Complete remaining Consent semantic scenarios plus final live authorization and declarative field visibility.
 - [ ] Add concrete provider transport adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
