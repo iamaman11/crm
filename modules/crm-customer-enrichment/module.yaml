@@ -166,6 +166,11 @@ provides:
       binding:
         kind: protobuf_message
         message: crm.customer_enrichment.v1.ProviderResponseRecordedEvent
+    - id: customer_enrichment.provider_response_conflict.recorded
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.ProviderResponseConflictRecordedEvent
     - id: customer_enrichment.provider_usage.recorded
       version: 1.0.0
       binding:

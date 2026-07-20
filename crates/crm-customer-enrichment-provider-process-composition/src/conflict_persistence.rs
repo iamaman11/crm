@@ -37,7 +37,6 @@ pub struct ProviderResponseConflictPersistenceLineage {
     pub trace_id: TraceId,
 }
 
-#[derive(Debug, Clone)]
 pub struct ProviderResponseConflictPersistencePlan {
     pub conflict: ProviderResponseConflict,
     pub record: RecordRef,
