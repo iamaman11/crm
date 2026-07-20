@@ -1,4 +1,5 @@
 use super::*;
+use crm_capability_ingress::semantic_input_hash;
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
     PartySnapshot, ProviderDispatchExpectation, ProviderProfileDraft, ProviderProfileVersion,
@@ -93,6 +94,10 @@ async fn worker_orders_dispatch_commit_provider_and_response_commit() {
     assert!(!result.dispatch_replayed);
     assert!(!result.response_replayed);
     assert_eq!(
+        result.response_reconciliation,
+        ProviderResponseReconciliation::New
+    );
+    assert_eq!(
         result.response.enrichment_request.unwrap().status,
         wire::EnrichmentRequestStatus::ResponseRecorded as i32
     );
@@ -141,6 +146,42 @@ async fn mismatched_provider_replay_key_stops_before_response_commit() {
         fixture.calls.lock().expect("call log lock").as_slice(),
         ["dispatch_commit", "provider"]
     );
+}
+
+#[test]
+fn response_semantic_hash_ignores_only_volatile_transport_metadata() {
+    let fixture = fixture();
+    let definition = provider_response_capability_definition().unwrap();
+    let first = build_response_request(
+        &definition,
+        &fixture.item.dispatch_request,
+        &fixture.item.provider_request,
+        &fixture.response,
+    )
+    .unwrap();
+    let mut semantic_duplicate = fixture.response.clone();
+    semantic_duplicate.provider_correlation_id = Some("provider-correlation-2".to_owned());
+    semantic_duplicate.retrieved_at_unix_ms += 1;
+    let semantic = build_response_request(
+        &definition,
+        &fixture.item.dispatch_request,
+        &fixture.item.provider_request,
+        &semantic_duplicate,
+    )
+    .unwrap();
+    assert_ne!(first.input, semantic.input);
+    assert_eq!(first.input_hash, semantic.input_hash);
+
+    let mut conflict = semantic_duplicate;
+    conflict.canonical_response_digest = [10; 32];
+    let conflicting = build_response_request(
+        &definition,
+        &fixture.item.dispatch_request,
+        &fixture.item.provider_request,
+        &conflict,
+    )
+    .unwrap();
+    assert_ne!(first.input_hash, conflicting.input_hash);
 }
 
 #[tokio::test]
@@ -393,7 +434,28 @@ fn response_output(
                 Some("provider-receipt-1"),
             )),
             provider_response_receipt: Some(receipt),
-            provider_usage_entries: Vec::new(),
+            provider_usage_entries: vec![wire::ProviderUsageEntry {
+                provider_usage_entry_ref: Some(wire::ProviderUsageEntryRef {
+                    provider_usage_entry_id: "provider-usage-response-1".to_owned(),
+                }),
+                enrichment_request_ref: command.enrichment_request_ref.clone(),
+                provider_response_receipt_ref: Some(wire::ProviderResponseReceiptRef {
+                    provider_response_receipt_id: "provider-receipt-1".to_owned(),
+                }),
+                provider_profile_version_ref: Some(wire::ProviderProfileVersionRef {
+                    provider_profile_version_id: provider
+                        .provider_profile_version_id
+                        .as_str()
+                        .to_owned(),
+                }),
+                kind: wire::ProviderUsageKind::ResponseReceived as i32,
+                metered_units: command.metered_units,
+                quota_bucket: None,
+                quota_remaining: None,
+                provider_observed_at_unix_ms: command.provider_observed_at_unix_ms,
+                recorded_at_unix_ms: command.retrieved_at_unix_ms,
+                safe_provider_code: command.safe_provider_code.clone(),
+            }],
         },
     )
 }

@@ -6,7 +6,6 @@
 //! and commits the sanitized response batch. It is intentionally not registered in the public
 //! capability inventory; production activation still requires real provider process acceptance.
 
-use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support::{self as support, message_descriptor_hash};
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
@@ -36,6 +35,8 @@ use std::fmt;
 use std::sync::Arc;
 
 const RESPONSE_IDENTITY_DOMAIN: &[u8] = b"crm.customer-enrichment.response-worker/v1";
+const RESPONSE_SEMANTIC_HASH_DOMAIN: &[u8] =
+    b"crm.customer-enrichment.response-worker.semantic-request/v1";
 const MAX_INTERNAL_KEY_BYTES: usize = 180;
 
 /// Stable crate identity for architecture tooling.
@@ -49,11 +50,20 @@ pub struct ProviderDispatchWorkItem {
     pub provider_request: ProviderDispatchRequest,
 }
 
+/// Deterministic reconciliation result for one provider replay identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderResponseReconciliation {
+    New,
+    ExactDuplicate,
+    SemanticDuplicate,
+}
+
 /// Durable worker outcome after the provider response has been atomically recorded.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProviderDispatchWorkerResult {
     pub dispatch_replayed: bool,
     pub response_replayed: bool,
+    pub response_reconciliation: ProviderResponseReconciliation,
     pub response: wire::RecordProviderResponseResponse,
 }
 
@@ -154,17 +164,26 @@ impl CustomerEnrichmentProviderWorker {
         let response_result = self
             .response_executor
             .execute(&self.response_definition, response_request)
-            .await?;
+            .await
+            .map_err(response_reconciliation_error)?;
         let response: wire::RecordProviderResponseResponse = decode_execution_output(
             &response_result,
             RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA,
             DataClass::Personal,
         )?;
-        validate_response_output(&response, &item.provider_request, &sanitized)?;
+        validate_response_output(
+            &response,
+            &item.provider_request,
+            &sanitized,
+            response_result.replayed,
+        )?;
+        let response_reconciliation =
+            classify_response_reconciliation(&response, &sanitized, response_result.replayed)?;
 
         Ok(ProviderDispatchWorkerResult {
             dispatch_replayed: dispatch_result.replayed,
             response_replayed: response_result.replayed,
+            response_reconciliation,
             response,
         })
     }
@@ -386,7 +405,7 @@ fn build_response_request(
             request_started_at_unix_nanos: started_at,
         },
     };
-    let input_hash = semantic_input_hash(&input);
+    let input_hash = response_semantic_input_hash(provider_request, response);
     Ok(CapabilityRequest {
         context,
         input,
@@ -399,6 +418,7 @@ fn validate_response_output(
     response: &wire::RecordProviderResponseResponse,
     provider_request: &ProviderDispatchRequest,
     sanitized: &SanitizedProviderResponse,
+    replayed: bool,
 ) -> Result<(), SdkError> {
     let request = response
         .enrichment_request
@@ -414,6 +434,7 @@ fn validate_response_output(
     let receipt_request_ref = receipt.enrichment_request_ref.as_ref().ok_or_else(|| {
         response_output_invalid("response receipt is missing enrichment-request identity")
     })?;
+    let response_usage = response_received_usage(response)?;
     if request_ref.enrichment_request_id != provider_request.enrichment_request_id.as_str()
         || request.status != wire::EnrichmentRequestStatus::ResponseRecorded as i32
         || request.retry_generation != provider_request.retry_generation
@@ -422,6 +443,13 @@ fn validate_response_output(
         || receipt.replay_key != provider_request.provider_idempotency_key
         || receipt.response_class != provider_response_class_to_wire(sanitized.response_class)
         || receipt.canonical_response_digest != sanitized.canonical_response_digest
+        || receipt.provider_observed_at_unix_ms != sanitized.provider_observed_at_unix_ms
+        || receipt.metered_units != sanitized.metered_units
+        || receipt.protected_evidence_reference != sanitized.protected_evidence_reference
+        || response_usage.safe_provider_code != sanitized.safe_provider_code
+        || (!replayed
+            && (receipt.provider_correlation_id != sanitized.provider_correlation_id
+                || receipt.retrieved_at_unix_ms != sanitized.retrieved_at_unix_ms))
     {
         return Err(response_output_invalid(
             "recorded response does not match the exact provider attempt",
@@ -474,6 +502,126 @@ fn response_identity(request: &ProviderDispatchRequest) -> [u8; 32] {
     hash_frame(&mut hasher, &request.retry_generation.to_be_bytes());
     hash_frame(&mut hasher, request.provider_idempotency_key.as_bytes());
     hasher.finalize().into()
+}
+
+fn response_semantic_input_hash(
+    request: &ProviderDispatchRequest,
+    response: &SanitizedProviderResponse,
+) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hash_frame(&mut hasher, RESPONSE_SEMANTIC_HASH_DOMAIN);
+    hash_frame(&mut hasher, request.tenant_id.as_str().as_bytes());
+    hash_frame(&mut hasher, request.actor_id.as_str().as_bytes());
+    hash_frame(
+        &mut hasher,
+        request.enrichment_request_id.as_str().as_bytes(),
+    );
+    hash_frame(
+        &mut hasher,
+        request.provider_profile_version_id.as_str().as_bytes(),
+    );
+    hash_frame(&mut hasher, request.mapping_version_id.as_str().as_bytes());
+    hash_frame(
+        &mut hasher,
+        request.adapter_coordinate.adapter_kind().as_bytes(),
+    );
+    hash_frame(
+        &mut hasher,
+        request
+            .adapter_coordinate
+            .adapter_contract_version()
+            .as_bytes(),
+    );
+    hash_frame(&mut hasher, &request.retry_generation.to_be_bytes());
+    hash_frame(&mut hasher, request.party_id.as_str().as_bytes());
+    hash_frame(&mut hasher, &request.party_resource_version.to_be_bytes());
+    hash_frame(&mut hasher, response.replay_key.as_bytes());
+    hash_frame(
+        &mut hasher,
+        &[provider_response_class_tag(response.response_class)],
+    );
+    hash_frame(&mut hasher, &response.canonical_response_digest);
+    hash_optional_i64(&mut hasher, response.provider_observed_at_unix_ms);
+    hash_frame(&mut hasher, &response.metered_units.to_be_bytes());
+    hash_optional_text(
+        &mut hasher,
+        response.protected_evidence_reference.as_deref(),
+    );
+    hash_optional_text(&mut hasher, response.safe_provider_code.as_deref());
+    hasher.finalize().into()
+}
+
+fn provider_response_class_tag(value: ProviderResponseClass) -> u8 {
+    match value {
+        ProviderResponseClass::Success => 1,
+        ProviderResponseClass::NoMatch => 2,
+        ProviderResponseClass::RetryableFailure => 3,
+        ProviderResponseClass::TerminalFailure => 4,
+    }
+}
+
+fn hash_optional_i64(hasher: &mut Sha256, value: Option<i64>) {
+    match value {
+        Some(value) => {
+            hash_frame(hasher, &[1]);
+            hash_frame(hasher, &value.to_be_bytes());
+        }
+        None => hash_frame(hasher, &[0]),
+    }
+}
+
+fn hash_optional_text(hasher: &mut Sha256, value: Option<&str>) {
+    match value {
+        Some(value) => {
+            hash_frame(hasher, &[1]);
+            hash_frame(hasher, value.as_bytes());
+        }
+        None => hash_frame(hasher, &[0]),
+    }
+}
+
+fn response_received_usage(
+    response: &wire::RecordProviderResponseResponse,
+) -> Result<&wire::ProviderUsageEntry, SdkError> {
+    let mut matching = response
+        .provider_usage_entries
+        .iter()
+        .filter(|entry| entry.kind == wire::ProviderUsageKind::ResponseReceived as i32);
+    let usage = matching.next().ok_or_else(|| {
+        response_output_invalid("response output is missing ResponseReceived usage evidence")
+    })?;
+    if matching.next().is_some() {
+        return Err(response_output_invalid(
+            "response output contains duplicate ResponseReceived usage evidence",
+        ));
+    }
+    Ok(usage)
+}
+
+fn classify_response_reconciliation(
+    response: &wire::RecordProviderResponseResponse,
+    sanitized: &SanitizedProviderResponse,
+    replayed: bool,
+) -> Result<ProviderResponseReconciliation, SdkError> {
+    if !replayed {
+        return Ok(ProviderResponseReconciliation::New);
+    }
+    let receipt = response
+        .provider_response_receipt
+        .as_ref()
+        .ok_or_else(|| response_output_invalid("response output is missing receipt evidence"))?;
+    let response_usage = response_received_usage(response)?;
+    if receipt.provider_correlation_id == sanitized.provider_correlation_id
+        && receipt.provider_observed_at_unix_ms == sanitized.provider_observed_at_unix_ms
+        && receipt.retrieved_at_unix_ms == sanitized.retrieved_at_unix_ms
+        && receipt.metered_units == sanitized.metered_units
+        && receipt.protected_evidence_reference == sanitized.protected_evidence_reference
+        && response_usage.safe_provider_code == sanitized.safe_provider_code
+    {
+        Ok(ProviderResponseReconciliation::ExactDuplicate)
+    } else {
+        Ok(ProviderResponseReconciliation::SemanticDuplicate)
+    }
 }
 
 fn provider_response_class_to_wire(value: ProviderResponseClass) -> i32 {
@@ -539,6 +687,22 @@ fn dispatch_output_invalid(reference: impl Into<String>) -> SdkError {
         "The committed dispatch state could not be verified.",
     )
     .with_internal_reference(reference.into())
+}
+
+fn response_reconciliation_error(error: SdkError) -> SdkError {
+    if matches!(
+        error.code.as_str(),
+        "DATA_CONFLICT" | "CAPABILITY_IDEMPOTENCY_KEY_REUSED"
+    ) {
+        return SdkError::new(
+            "CUSTOMER_ENRICHMENT_CONFLICTING_PROVIDER_REPLAY",
+            ErrorCategory::Conflict,
+            false,
+            "The provider replay conflicts with immutable response evidence.",
+        )
+        .with_internal_reference("response idempotency semantic fingerprint conflict");
+    }
+    error
 }
 
 fn response_output_invalid(reference: impl Into<String>) -> SdkError {

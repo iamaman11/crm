@@ -29,7 +29,7 @@ use crm_customer_enrichment_registry_http_transport::{
     REGISTRY_HTTP_PATH, RegistryHttpTransport, RegistryHttpTransportConfig,
 };
 use crm_customer_enrichment_worker_composition::{
-    CustomerEnrichmentProviderWorker, ProviderDispatchWorkItem,
+    CustomerEnrichmentProviderWorker, ProviderDispatchWorkItem, ProviderResponseReconciliation,
 };
 use crm_module_sdk::testing::FixedClock;
 use crm_module_sdk::{
@@ -62,7 +62,7 @@ async fn registry_provider(
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
-    state.calls.fetch_add(1, Ordering::SeqCst);
+    let call = state.calls.fetch_add(1, Ordering::SeqCst) + 1;
     if headers
         .get("authorization")
         .and_then(|value| value.to_str().ok())
@@ -88,11 +88,12 @@ async fn registry_provider(
     {
         return (StatusCode::CONFLICT, "lineage conflict").into_response();
     }
+    let response_class = if call >= 4 { "no_match" } else { "success" };
     Json(json!({
         "schema_version": PROVIDER_RESPONSE_SCHEMA,
         "replay_key": state.expected_key,
         "provider_correlation_id": "provider-correlation-process-1",
-        "response_class": "success",
+        "response_class": response_class,
         "provider_observed_at_unix_ms": 30,
         "metered_units": 3,
         "protected_evidence_reference": null,
@@ -173,7 +174,7 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
                 .expect("build provider quota"),
         ),
         Arc::new(
-            ConsecutiveFailureProviderCircuitBreaker::try_new(3, 60_000_000_000, clock)
+            ConsecutiveFailureProviderCircuitBreaker::try_new(3, 60_000_000_000, clock.clone())
                 .expect("build provider circuit"),
         ),
         Arc::new(transport),
@@ -192,6 +193,10 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
         .expect("commit first provider attempt");
     assert!(!first.dispatch_replayed);
     assert!(!first.response_replayed);
+    assert_eq!(
+        first.response_reconciliation,
+        ProviderResponseReconciliation::New
+    );
 
     let second = worker
         .execute(fixture.work_item.clone())
@@ -199,7 +204,32 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
         .expect("replay provider attempt safely");
     assert!(second.dispatch_replayed);
     assert!(second.response_replayed);
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        second.response_reconciliation,
+        ProviderResponseReconciliation::ExactDuplicate
+    );
+
+    clock.advance(1_000_000);
+    let semantic = worker
+        .execute(fixture.work_item.clone())
+        .await
+        .expect("reconcile changed retrieval metadata to the first receipt");
+    assert!(semantic.dispatch_replayed);
+    assert!(semantic.response_replayed);
+    assert_eq!(
+        semantic.response_reconciliation,
+        ProviderResponseReconciliation::SemanticDuplicate
+    );
+
+    let conflict = worker
+        .execute(fixture.work_item.clone())
+        .await
+        .expect_err("reject conflicting canonical provider response");
+    assert_eq!(
+        conflict.code,
+        "CUSTOMER_ENRICHMENT_CONFLICTING_PROVIDER_REPLAY"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
 
     let request_snapshot = store
         .get_record(

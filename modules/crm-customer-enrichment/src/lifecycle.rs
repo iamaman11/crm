@@ -567,6 +567,12 @@ struct ResponseReceiptIdentity<'a> {
 pub enum ReplayDisposition {
     New,
     Duplicate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderResponseReplayDisposition {
+    New,
+    ExactDuplicate,
     SemanticDuplicate,
 }
 
@@ -646,17 +652,35 @@ impl ProviderResponseReceipt {
         })
     }
 
-    pub fn reconcile(&self, candidate: &Self) -> Result<ReplayDisposition, SdkError> {
+    pub fn reconcile(
+        &self,
+        candidate: &Self,
+    ) -> Result<ProviderResponseReplayDisposition, SdkError> {
         if self.receipt_id != candidate.receipt_id {
-            return Ok(ReplayDisposition::New);
+            return Ok(ProviderResponseReplayDisposition::New);
         }
         if self == candidate {
-            return Ok(ReplayDisposition::Duplicate);
+            return Ok(ProviderResponseReplayDisposition::ExactDuplicate);
+        }
+        if self.semantic_identity_matches(candidate) {
+            return Ok(ProviderResponseReplayDisposition::SemanticDuplicate);
         }
         Err(conflict(
             "CUSTOMER_ENRICHMENT_CONFLICTING_PROVIDER_REPLAY",
-            "the same provider replay identity produced different canonical evidence",
+            "the same provider replay identity produced conflicting canonical response evidence",
         ))
+    }
+
+    fn semantic_identity_matches(&self, candidate: &Self) -> bool {
+        self.request_id == candidate.request_id
+            && self.provider_profile_version_id == candidate.provider_profile_version_id
+            && self.mapping_version_id == candidate.mapping_version_id
+            && self.replay_key == candidate.replay_key
+            && self.response_class == candidate.response_class
+            && self.canonical_response_digest == candidate.canonical_response_digest
+            && self.provider_observed_at_unix_ms == candidate.provider_observed_at_unix_ms
+            && self.metered_units == candidate.metered_units
+            && self.protected_evidence_reference == candidate.protected_evidence_reference
     }
 
     pub fn receipt_id(&self) -> &ProviderResponseReceiptId {
@@ -1748,17 +1772,28 @@ mod tests {
     }
 
     #[test]
-    fn response_replay_is_idempotent_and_conflicting_content_is_rejected() {
+    fn response_replay_distinguishes_exact_semantic_and_conflicting_evidence() {
         let request = request();
         let first = receipt(&request, 7);
         let duplicate = receipt(&request, 7);
+        let mut semantic_duplicate = receipt(&request, 7);
+        semantic_duplicate.provider_correlation_id = Some("provider-correlation-retry".to_owned());
+        semantic_duplicate.retrieved_at_unix_ms = 201;
         let conflict = receipt(&request, 8);
         assert_eq!(
             first.reconcile(&duplicate).unwrap(),
-            ReplayDisposition::Duplicate
+            ProviderResponseReplayDisposition::ExactDuplicate
+        );
+        assert_eq!(
+            first.reconcile(&semantic_duplicate).unwrap(),
+            ProviderResponseReplayDisposition::SemanticDuplicate
         );
         assert_eq!(first.receipt_id(), conflict.receipt_id());
-        assert!(first.reconcile(&conflict).is_err());
+        let error = first.reconcile(&conflict).unwrap_err();
+        assert_eq!(
+            error.code,
+            "CUSTOMER_ENRICHMENT_CONFLICTING_PROVIDER_REPLAY"
+        );
     }
 
     #[test]
