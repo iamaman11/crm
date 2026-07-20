@@ -100,25 +100,51 @@ jobs:
       - name: Prepare fresh conflict persistence database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify PostgreSQL conflict relationship replay
+        id: conflict_persistence
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
           cargo test \
             -p crm-customer-enrichment-provider-process-composition \
             --features postgres-integration \
             --test postgres_conflict_persistence \
-            -- --nocapture
+            -- --nocapture 2>&1 | tee /tmp/provider-conflict-persistence-postgres.log
+      - name: Upload conflict persistence diagnostics
+        if: steps.conflict_persistence.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-conflict-persistence-postgres-diagnostics
+          path: /tmp/provider-conflict-persistence-postgres.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after conflict persistence failure
+        if: steps.conflict_persistence.outcome == 'failure'
+        run: exit 1
       - name: Prepare fresh conflict process database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify PostgreSQL unresolved conflict checkpoint hold
+        id: conflict_process
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
           cargo test \
             -p crm-customer-enrichment-provider-process-composition \
             --features postgres-integration \
             --test postgres_conflict_process_hold \
-            -- --nocapture
+            -- --nocapture 2>&1 | tee /tmp/provider-conflict-process-postgres.log
+      - name: Upload conflict process diagnostics
+        if: steps.conflict_process.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-conflict-process-postgres-diagnostics
+          path: /tmp/provider-conflict-process-postgres.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after conflict process failure
+        if: steps.conflict_process.outcome == 'failure'
+        run: exit 1
       - name: Verify production wrappers compile
         shell: bash
         run: |
