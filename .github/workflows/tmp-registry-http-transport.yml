@@ -29,6 +29,8 @@ jobs:
           components: rustfmt, clippy
       - name: Apply exact host transport patch
         run: python3 scripts/tmp_apply_registry_http_transport.py
+      - name: Keep permanent workflow outside bot commit
+        run: git checkout -- .github/workflows/customer-enrichment-worker-process-runtime.yml
       - name: Format workspace
         run: cargo fmt --all
       - name: Verify concrete transport
@@ -67,9 +69,7 @@ jobs:
       - name: Stop after Clippy failure
         if: steps.focused_clippy.outcome == 'failure'
         run: exit 1
-      - name: Remove temporary patch machinery
-        run: rm scripts/tmp_apply_registry_http_transport.py .github/workflows/tmp-registry-http-transport.yml
-      - name: Commit verified slice
+      - name: Commit verified code slice
         id: verified_commit
         continue-on-error: true
         shell: bash
@@ -79,6 +79,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
+            git reset -- scripts/tmp_apply_registry_http_transport.py .github/workflows/tmp-registry-http-transport.yml
             git diff --cached --check
             git commit -m "Add concrete registry HTTP provider transport"
             git push origin HEAD:agent/phase8a10-customer-enrichment
