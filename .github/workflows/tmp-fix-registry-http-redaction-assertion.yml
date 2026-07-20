@@ -1,0 +1,60 @@
+name: Temporary Registry HTTP Redaction Assertion Fix
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/tmp-fix-registry-http-redaction-assertion.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-registry-http-redaction-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply exact redaction assertion fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/crm-customer-enrichment-registry-http-transport/src/lib.rs')
+          text = path.read_text()
+          replacements = {
+              'return (AxumStatusCode::OK, "{").into_response();':
+                  'return (AxumStatusCode::OK, "{raw-provider-body-marker").into_response();',
+              'assert!(!format!("{error:?} {error}").contains("{"));':
+                  'assert!(!format!("{error:?} {error}").contains("raw-provider-body-marker"));',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected exactly one pattern: {old}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+      - name: Verify canonical formatting
+        run: cargo fmt --all --check
+      - name: Verify exact transport tests
+        run: cargo test -p crm-customer-enrichment-registry-http-transport
+      - name: Verify strict transport Clippy
+        run: cargo clippy -p crm-customer-enrichment-registry-http-transport --all-targets -- -D warnings
+      - name: Commit verified source fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-customer-enrichment-registry-http-transport/src/lib.rs
+          git diff --cached --check
+          git commit -m "Assert registry HTTP raw-body redaction precisely"
+          git push origin HEAD:agent/phase8a10-customer-enrichment
