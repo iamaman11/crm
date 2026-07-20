@@ -567,6 +567,7 @@ struct ResponseReceiptIdentity<'a> {
 pub enum ReplayDisposition {
     New,
     Duplicate,
+    SemanticDuplicate,
 }
 
 impl ProviderResponseReceipt {
