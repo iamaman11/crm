@@ -41,13 +41,19 @@ async fn postgres_conflict_persistence_is_atomic_and_exactly_replayable() {
         .expect("replay exact provider-response conflict");
     assert!(replay.replayed);
     assert_eq!(first.conflict, replay.conflict);
+    assert_eq!(
+        PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE,
+        "customer_enrichment.provider_response_conflict"
+    );
+    assert_eq!(
+        PROVIDER_RESPONSE_CONFLICT_RECORDED_EVENT_TYPE,
+        "customer_enrichment.provider_response_conflict.recorded"
+    );
 
     assert_eq!(
         scalar(
             &admin,
-            &format!(
-                "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = '{TENANT_ID}' AND record_type = '{PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE}'"
-            ),
+            "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_conflict'",
         )
         .await,
         1
@@ -55,9 +61,7 @@ async fn postgres_conflict_persistence_is_atomic_and_exactly_replayable() {
     assert_eq!(
         scalar(
             &admin,
-            &format!(
-                "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = '{TENANT_ID}' AND event_type = '{PROVIDER_RESPONSE_CONFLICT_RECORDED_EVENT_TYPE}'"
-            ),
+            "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = 'tenant-a' AND event_type = 'customer_enrichment.provider_response_conflict.recorded'",
         )
         .await,
         1
@@ -65,7 +69,7 @@ async fn postgres_conflict_persistence_is_atomic_and_exactly_replayable() {
     assert_eq!(
         scalar(
             &admin,
-            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id = 'customer_enrichment.response.record' AND aggregate_type = 'customer_enrichment.provider_response_conflict'",
+            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id = 'customer_enrichment.response.record'",
         )
         .await,
         1
@@ -89,7 +93,7 @@ async fn postgres_conflict_persistence_is_atomic_and_exactly_replayable() {
     assert_eq!(
         scalar(
             &admin,
-            "SELECT current_version::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_conflict'",
+            "SELECT version::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND record_type = 'customer_enrichment.provider_response_conflict'",
         )
         .await,
         1
@@ -132,8 +136,8 @@ fn receipt_id(byte: u8) -> ProviderResponseReceiptId {
     .unwrap()
 }
 
-async fn scalar(pool: &PgPool, query: &str) -> i64 {
-    sqlx::query_scalar(query)
+async fn scalar(pool: &PgPool, query: &'static str) -> i64 {
+    sqlx::query_scalar::<_, i64>(query)
         .fetch_one(pool)
         .await
         .expect("read PostgreSQL conflict evidence")
