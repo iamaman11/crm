@@ -48,7 +48,16 @@ jobs:
               "\n".join(extracted) + "\n"
           )
           PY
-          python3 /tmp/phase8a10-provider-background-registration.py
+          if ! python3 /tmp/phase8a10-provider-background-registration.py > /tmp/provider-patch.log 2>&1; then
+            cat /tmp/provider-patch.log
+            cp /tmp/provider-patch.log phase8a10-provider-background-registration.error.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add phase8a10-provider-background-registration.error.txt
+            git commit -m "Capture provider registration patch failure"
+            git push origin HEAD:agent/phase8a10-customer-enrichment
+            exit 1
+          fi
       - name: Format and verify focused slice
         shell: bash
         run: |
@@ -63,11 +72,13 @@ jobs:
           set -euo pipefail
           rm .github/workflows/phase8a10-provider-background-registration.yml
           rm scripts/phase8a10-provider-background-registration.source.yml
+          rm -f phase8a10-provider-background-registration.error.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock crates/crm-application-runtime \
             .github/workflows/phase8a10-provider-background-registration.yml \
-            scripts/phase8a10-provider-background-registration.source.yml
+            scripts/phase8a10-provider-background-registration.source.yml \
+            phase8a10-provider-background-registration.error.txt
           git diff --cached --check
           git commit -m "Register governed provider background process"
           git push origin HEAD:agent/phase8a10-customer-enrichment
