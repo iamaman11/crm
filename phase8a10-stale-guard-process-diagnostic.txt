@@ -238,15 +238,15 @@ INSERT 0 1
 INSERT 0 10
 ALTER ROLE
 [1m[92m   Compiling[0m crm-application-runtime v0.1.0 (/home/runner/work/crm/crm/crates/crm-application-runtime)
-[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 1.40s
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 1.26s
 [1m[92m     Running[0m tests/postgres_customer_enrichment_suggestion_get.rs (target/debug/deps/postgres_customer_enrichment_suggestion_get-13543e0c00cc6d44)
 
 running 1 test
 
-thread 'production_suggestion_queries_are_activation_gated_permission_aware_and_side_effect_free' (8760) panicked at crates/crm-application-runtime/tests/postgres_customer_enrichment_suggestion_get.rs:260:5:
+thread 'production_suggestion_queries_are_activation_gated_permission_aware_and_side_effect_free' (8608) panicked at crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get/transport.rs:175:40:
 assertion `left == right` failed
-  left: 503
- right: 400
+  left: "TENANT_FORBIDDEN"
+ right: "AUTHENTICATION_TENANT_FORBIDDEN"
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 test production_suggestion_queries_are_activation_gated_permission_aware_and_side_effect_free ... FAILED
 
@@ -255,6 +255,6 @@ failures:
 failures:
     production_suggestion_queries_are_activation_gated_permission_aware_and_side_effect_free
 
-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.89s
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.88s
 
 [1m[91merror[0m: test failed, to rerun pass `-p crm-application-runtime --test postgres_customer_enrichment_suggestion_get`
