@@ -55,6 +55,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Bind materialization event-process to fixture capability
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-customer-enrichment-materialization-composition/tests/postgres_materialization_event_process.rs")
+          text = path.read_text()
+          old = 'const SEED_CAPABILITY: &str = "customer_enrichment.materialization.process.seed";'
+          new = 'const SEED_CAPABILITY: &str = "customer_enrichment.materialization.seed";'
+          if text.count(old) != 1:
+              raise SystemExit("materialization event-process seed capability mismatch")
+          path.write_text(text.replace(old, new, 1))
+          PY
       - name: Synchronize lockfile and canonical formatting
         run: |
           cargo generate-lockfile
@@ -73,7 +87,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json
-            git commit -m "Synchronize Rust and generated contract artifacts"
+            git commit -m "Bind materialization event-process to fixture capability"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
