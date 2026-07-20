@@ -1,0 +1,33 @@
+name: Provider Adapter Format Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - crates/crm-customer-enrichment-provider-registry/src/lib.rs
+      - .github/workflows/provider-adapter-format-check.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.head_ref == 'agent/phase8a10-customer-enrichment'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --all
+      - run: cargo test -p crm-customer-enrichment-provider-registry
+      - run: cargo clippy -p crm-customer-enrichment-provider-registry --all-targets -- -D warnings
+      - name: Commit formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-customer-enrichment-provider-registry/src/lib.rs
+          git diff --cached --check
+          git commit -m "Format governed provider adapter boundary"
+          git push origin HEAD:agent/phase8a10-customer-enrichment
