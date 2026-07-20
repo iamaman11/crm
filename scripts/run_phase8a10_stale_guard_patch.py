@@ -8,9 +8,20 @@ start = next(
 end = next(
     index for index in range(start, len(lines)) if lines[index].strip() == 'PY'
 )
+
 payload_lines = []
+inside_triple = False
 for line in lines[start:end]:
-    payload_lines.append(line[10:] if line.startswith('          ') else line)
+    if inside_triple:
+        converted = line
+    else:
+        converted = line[10:] if line.startswith('          ') else line
+    payload_lines.append(converted)
+    if converted.count("'''") % 2 == 1:
+        inside_triple = not inside_triple
+
+if inside_triple:
+    raise SystemExit('prepared patch contains an unterminated triple-quoted string')
 payload = '\n'.join(payload_lines) + '\n'
 
 placeholder = "AND attempt.record_type = $8"
