@@ -340,7 +340,10 @@ impl ProviderQuotaPort for FixedWindowProviderQuota {
     fn acquire(&self, request: &ProviderDispatchRequest) -> Result<(), SdkError> {
         let now = valid_now(self.clock.as_ref())?;
         let coordinate = ProviderAttemptCoordinate::from_request(request);
-        let mut windows = self.windows.lock().map_err(|_| provider_state_unavailable())?;
+        let mut windows = self
+            .windows
+            .lock()
+            .map_err(|_| provider_state_unavailable())?;
         let window = windows.entry(coordinate).or_insert(QuotaWindow {
             started_at_unix_nanos: now,
             attempts: 0,
@@ -421,7 +424,10 @@ impl ProviderCircuitBreakerPort for ConsecutiveFailureProviderCircuitBreaker {
     fn before_attempt(&self, request: &ProviderDispatchRequest) -> Result<(), SdkError> {
         let now = valid_now(self.clock.as_ref())?;
         let coordinate = ProviderAttemptCoordinate::from_request(request);
-        let mut states = self.states.lock().map_err(|_| provider_state_unavailable())?;
+        let mut states = self
+            .states
+            .lock()
+            .map_err(|_| provider_state_unavailable())?;
         let state = states.entry(coordinate).or_default();
         let Some(opened_at) = state.opened_at_unix_nanos else {
             return Ok(());
@@ -448,7 +454,10 @@ impl ProviderCircuitBreakerPort for ConsecutiveFailureProviderCircuitBreaker {
     fn record_failure(&self, request: &ProviderDispatchRequest) -> Result<(), SdkError> {
         let now = valid_now(self.clock.as_ref())?;
         let coordinate = ProviderAttemptCoordinate::from_request(request);
-        let mut states = self.states.lock().map_err(|_| provider_state_unavailable())?;
+        let mut states = self
+            .states
+            .lock()
+            .map_err(|_| provider_state_unavailable())?;
         let state = states.entry(coordinate).or_default();
         state.consecutive_failures = state
             .consecutive_failures
@@ -490,7 +499,10 @@ impl fmt::Debug for ProviderTransportRequest {
                 "enrichment_request_id",
                 &self.provider_request.enrichment_request_id,
             )
-            .field("adapter_coordinate", &self.provider_request.adapter_coordinate)
+            .field(
+                "adapter_coordinate",
+                &self.provider_request.adapter_coordinate,
+            )
             .field(
                 "credential_aliases",
                 &self.credentials.keys().collect::<Vec<_>>(),
@@ -712,13 +724,15 @@ impl ProviderTransportPort for DeterministicSanitizedProviderTransport {
                 retrieved_at_unix_ms,
                 metered_units: self.metered_units,
                 protected_evidence_reference: None,
-                safe_provider_code: Some(match self.response_class {
-                    ProviderResponseClass::Success => "success",
-                    ProviderResponseClass::NoMatch => "no_match",
-                    ProviderResponseClass::RetryableFailure => "retryable_failure",
-                    ProviderResponseClass::TerminalFailure => "terminal_failure",
-                }
-                .to_owned()),
+                safe_provider_code: Some(
+                    match self.response_class {
+                        ProviderResponseClass::Success => "success",
+                        ProviderResponseClass::NoMatch => "no_match",
+                        ProviderResponseClass::RetryableFailure => "retryable_failure",
+                        ProviderResponseClass::TerminalFailure => "terminal_failure",
+                    }
+                    .to_owned(),
+                ),
             })
         })
     }
@@ -744,8 +758,7 @@ fn deterministic_response_digest(parts: &[&[u8]]) -> [u8; 32] {
                 hash = hash.wrapping_mul(FNV_PRIME);
             }
         }
-        output[(lane as usize) * 8..(lane as usize + 1) * 8]
-            .copy_from_slice(&hash.to_be_bytes());
+        output[(lane as usize) * 8..(lane as usize + 1) * 8].copy_from_slice(&hash.to_be_bytes());
     }
     output
 }
@@ -775,7 +788,10 @@ fn validate_transport_response(
     response: &SanitizedProviderResponse,
 ) -> Result<(), SdkError> {
     if response.replay_key != request.provider_idempotency_key
-        || response.canonical_response_digest.iter().all(|byte| *byte == 0)
+        || response
+            .canonical_response_digest
+            .iter()
+            .all(|byte| *byte == 0)
         || response.retrieved_at_unix_ms < 0
         || response
             .provider_observed_at_unix_ms
@@ -807,9 +823,7 @@ fn validate_safe_provider_code(code: &str) -> Result<(), SdkError> {
         || code.len() > MAX_SAFE_PROVIDER_CODE_BYTES
         || code.trim() != code
         || code.chars().any(|character| {
-            !(character.is_ascii_lowercase()
-                || character.is_ascii_digit()
-                || character == '_')
+            !(character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_')
         })
     {
         return Err(provider_response_invalid());
@@ -1206,8 +1220,8 @@ mod tests {
 
     #[test]
     fn secret_debug_surfaces_are_redacted() {
-        let material = ProviderSecretMaterial::try_new(b"super-secret-provider-token".to_vec())
-            .unwrap();
+        let material =
+            ProviderSecretMaterial::try_new(b"super-secret-provider-token".to_vec()).unwrap();
         let registration = ProviderSecretRegistration {
             tenant_id: TenantId::try_new("tenant-a").unwrap(),
             handle_alias: "registry_primary".to_owned(),
@@ -1250,16 +1264,10 @@ mod tests {
         let clock = Arc::new(FixedClock::new(5_000_000_000));
         let adapter = GovernedProviderAdapter::new(
             Arc::new(StaticProviderSecretHandleResolver::default()),
+            Arc::new(FixedWindowProviderQuota::try_new(10, 60_000_000_000, clock.clone()).unwrap()),
             Arc::new(
-                FixedWindowProviderQuota::try_new(10, 60_000_000_000, clock.clone()).unwrap(),
-            ),
-            Arc::new(
-                ConsecutiveFailureProviderCircuitBreaker::try_new(
-                    3,
-                    60_000_000_000,
-                    clock.clone(),
-                )
-                .unwrap(),
+                ConsecutiveFailureProviderCircuitBreaker::try_new(3, 60_000_000_000, clock.clone())
+                    .unwrap(),
             ),
             Arc::new(DeterministicSanitizedProviderTransport::new(
                 clock,
@@ -1289,10 +1297,7 @@ mod tests {
         let adapter = adapter_with_transport(clock, 1, 3, transport);
         block_on(adapter.dispatch(provider_request())).unwrap();
         let error = block_on(adapter.dispatch(provider_request())).unwrap_err();
-        assert_eq!(
-            error.code,
-            "CUSTOMER_ENRICHMENT_PROVIDER_QUOTA_EXCEEDED"
-        );
+        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PROVIDER_QUOTA_EXCEEDED");
         assert!(error.retryable);
     }
 
@@ -1308,10 +1313,7 @@ mod tests {
         let adapter = adapter_with_transport(clock, 10, 1, transport.clone());
 
         let first = block_on(adapter.dispatch(provider_request())).unwrap_err();
-        assert_eq!(
-            first.code,
-            "CUSTOMER_ENRICHMENT_PROVIDER_RETRYABLE_FAILURE"
-        );
+        assert_eq!(first.code, "CUSTOMER_ENRICHMENT_PROVIDER_RETRYABLE_FAILURE");
         assert!(first.retryable);
         assert_eq!(transport.calls(), 1);
 
@@ -1344,10 +1346,7 @@ mod tests {
         let adapter = adapter_with_transport(clock, 10, 1, transport.clone());
 
         let first = block_on(adapter.dispatch(request.clone())).unwrap_err();
-        assert_eq!(
-            first.code,
-            "CUSTOMER_ENRICHMENT_PROVIDER_MAPPING_CONFLICT"
-        );
+        assert_eq!(first.code, "CUSTOMER_ENRICHMENT_PROVIDER_MAPPING_CONFLICT");
         assert!(!first.retryable);
         assert_eq!(
             first.internal_reference.as_deref(),
