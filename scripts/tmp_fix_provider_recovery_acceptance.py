@@ -9,11 +9,20 @@ def replace_once(path: Path, old: str, new: str, label: str) -> None:
     path.write_text(text.replace(old, new, 1))
 
 
+provider_process = Path(
+    "crates/crm-customer-enrichment-provider-process-composition/src/lib.rs"
+)
 replace_once(
-    Path("crates/crm-customer-enrichment-provider-process-composition/src/lib.rs"),
+    provider_process,
     'assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PARTY_VERSION_MISMATCH");',
     'assert_eq!(error.code, "CUSTOMER_ENRICHMENT_DISPATCH_TARGET_CONFLICT");',
-    "provider recovery error assertion",
+    "provider recovery target error assertion",
+)
+replace_once(
+    provider_process,
+    'assert_eq!(error.code, "CUSTOMER_ENRICHMENT_REQUEST_DEADLINE_CLOSED");',
+    'assert_eq!(error.code, "CUSTOMER_ENRICHMENT_DISPATCH_WINDOW_CLOSED");',
+    "provider recovery window error assertion",
 )
 
 pure_conflict = "- [x] Add pure durable provider-response conflict evidence: deterministic identity binds tenant, request, retry generation, immutable first receipt and conflicting semantic fingerprint; strict canonical persistence rejects corruption; operator resolution permits only retain-first or reject-request with exact actor, policy version, reason, approval and causation lineage; exact replay is a no-op and a different second decision fails closed."
@@ -32,4 +41,4 @@ replace_once(
     "remaining conflict process gate",
 )
 
-print("fixed provider recovery assertion and synchronized conflict acceptance")
+print("fixed provider recovery assertions and synchronized conflict acceptance")
