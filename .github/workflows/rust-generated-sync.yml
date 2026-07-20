@@ -64,11 +64,33 @@ jobs:
           cargo generate-lockfile
           cargo fmt --all
       - name: Verify suggestion lifecycle query proof compiles strictly
+        id: proof
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
-          cargo test -p crm-customer-enrichment-review-composition --features postgres-integration --test postgres_review_process --no-run
-          cargo clippy -p crm-customer-enrichment-review-composition --features postgres-integration --test postgres_review_process -- -D warnings
+          set +e
+          set -o pipefail
+          cargo test -p crm-customer-enrichment-review-composition --features postgres-integration --test postgres_review_process --no-run 2>&1 | tee suggestion-lifecycle-proof-diagnostics.txt
+          test_status=${PIPESTATUS[0]}
+          cargo clippy -p crm-customer-enrichment-review-composition --features postgres-integration --test postgres_review_process -- -D warnings 2>&1 | tee -a suggestion-lifecycle-proof-diagnostics.txt
+          clippy_status=${PIPESTATUS[0]}
+          if [ "$test_status" -ne 0 ] || [ "$clippy_status" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Upload suggestion lifecycle proof diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suggestion-lifecycle-proof-diagnostics
+          path: |
+            suggestion-lifecycle-proof-diagnostics.txt
+            crates/crm-customer-enrichment-review-composition/tests/postgres_review_process.rs
+            crates/crm-customer-enrichment-review-composition/tests/support/mod.rs
+          if-no-files-found: error
+          retention-days: 7
+      - name: Enforce suggestion lifecycle proof compile result
+        if: steps.proof.outcome != 'success'
+        run: exit 1
       - name: Synchronize generated contract artifacts
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
