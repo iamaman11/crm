@@ -910,7 +910,10 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "prost",
+ "serde_json",
  "sha2 0.10.9",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]

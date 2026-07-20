@@ -8,8 +8,9 @@ use crm_customer_enrichment::{
     PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE, PROVIDER_RESPONSE_CONFLICT_STATE_MAXIMUM_BYTES,
     PROVIDER_RESPONSE_CONFLICT_STATE_RETENTION_POLICY_ID,
     PROVIDER_RESPONSE_CONFLICT_STATE_SCHEMA_ID, PROVIDER_RESPONSE_CONFLICT_STATE_SCHEMA_VERSION,
-    ProviderResponseConflict, ProviderResponseConflictDraft, decode_provider_response_conflict_state,
-    encode_provider_response_conflict_state, provider_response_conflict_state_descriptor_hash,
+    ProviderResponseConflict, ProviderResponseConflictDraft,
+    decode_provider_response_conflict_state, encode_provider_response_conflict_state,
+    provider_response_conflict_state_descriptor_hash,
 };
 use crm_customer_enrichment_capability_adapter::{
     MODULE_ID, RECORD_PROVIDER_RESPONSE_CAPABILITY, provider_response_capability_definition,
@@ -207,9 +208,7 @@ pub fn provider_response_conflict_to_wire(
         first_provider_response_receipt_ref: Some(wire::ProviderResponseReceiptRef {
             provider_response_receipt_id: conflict.first_receipt_id().as_str().to_owned(),
         }),
-        conflicting_semantic_fingerprint: conflict
-            .conflicting_semantic_fingerprint()
-            .to_vec(),
+        conflicting_semantic_fingerprint: conflict.conflicting_semantic_fingerprint().to_vec(),
         detected_at_unix_ms: i64::try_from(conflict.detected_at_unix_ms())
             .map_err(|_| conflict_plan_invalid("conflict detection time exceeds wire range"))?,
     })
@@ -431,7 +430,10 @@ mod tests {
         };
         assert_eq!(payload.data_class, DataClass::Confidential);
         assert_eq!(payload.encoding, PayloadEncoding::Json);
-        assert_eq!(payload.schema_id.as_str(), PROVIDER_RESPONSE_CONFLICT_STATE_SCHEMA_ID);
+        assert_eq!(
+            payload.schema_id.as_str(),
+            PROVIDER_RESPONSE_CONFLICT_STATE_SCHEMA_ID
+        );
         assert_eq!(
             decode_provider_response_conflict_state(&payload.bytes).unwrap(),
             plan.conflict
