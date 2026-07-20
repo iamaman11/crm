@@ -145,7 +145,9 @@ async fn production_suggestion_queries_are_activation_gated_permission_aware_and
         )),
         QueryContextResolver::new(
             Arc::clone(&clock),
-            Arc::new(DeterministicRandom::from_bytes(0_u8..=127)),
+            Arc::new(DeterministicRandom::from_bytes(
+                (0_u8..=255).cycle().take(4_096),
+            )),
             TimeoutPolicy {
                 default_millis: 5_000,
                 maximum_millis: 30_000,
