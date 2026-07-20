@@ -1,0 +1,502 @@
+name: Phase 8A.10 Provider Background Registration
+
+on:
+  push:
+    branches:
+      - agent/phase8a10-customer-enrichment
+    paths:
+      - .github/workflows/phase8a10-provider-background-registration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Apply production registration slice
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement anchor, found {count}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "crates/crm-application-runtime/Cargo.toml",
+              'crm-customer-enrichment-provider-process-composition = { path = "../crm-customer-enrichment-provider-process-composition" }\ncrm-customer-enrichment-query-adapter',
+              'crm-customer-enrichment-provider-process-composition = { path = "../crm-customer-enrichment-provider-process-composition" }\ncrm-customer-enrichment-provider-registry = { path = "../crm-customer-enrichment-provider-registry" }\ncrm-customer-enrichment-query-adapter',
+          )
+          replace_once(
+              "crates/crm-application-runtime/Cargo.toml",
+              '[dev-dependencies]\ncrm-customer-enrichment-provider-registry = { path = "../crm-customer-enrichment-provider-registry" }\n',
+              '[dev-dependencies]\n',
+          )
+
+          background = "crates/crm-application-runtime/src/background.rs"
+          replace_once(
+              background,
+              'use crm_customer_enrichment_capability_adapter::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;\nuse crm_global_search_composition::GlobalSearchWorker;',
+              'use crm_customer_enrichment_capability_adapter::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;\nuse crm_customer_enrichment_provider_process_composition::{\n    CustomerEnrichmentProviderProcessWorker, PROVIDER_PROCESS_WORKER_ID,\n};\nuse crm_global_search_composition::GlobalSearchWorker;',
+          )
+          replace_once(
+              background,
+              'const GLOBAL_SEARCH_WORKER_ID: &str = "global-search-index";\n',
+              'const GLOBAL_SEARCH_WORKER_ID: &str = "global-search-index";\nconst CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_PHASE: BackgroundWorkerPhase =\n    BackgroundWorkerPhase::new(240);\nconst CUSTOMER_ENRICHMENT_APPLICATION_PHASE: BackgroundWorkerPhase = BackgroundWorkerPhase::new(250);\n',
+          )
+          replace_once(
+              background,
+              '    pub export_selection_worker: Arc<PartyExportSelectionWorker>,\n    pub customer_enrichment_application_worker: Arc<CustomerEnrichmentPartyApplicationWorker>,',
+              '    pub export_selection_worker: Arc<PartyExportSelectionWorker>,\n    pub customer_enrichment_provider_process: Arc<CustomerEnrichmentProviderProcessWorker>,\n    pub customer_enrichment_application_worker: Arc<CustomerEnrichmentPartyApplicationWorker>,',
+          )
+          replace_once(
+              background,
+              '        export_selection_worker,\n        customer_enrichment_application_worker,',
+              '        export_selection_worker,\n        customer_enrichment_provider_process,\n        customer_enrichment_application_worker,',
+          )
+          replace_once(
+              background,
+              '''    add_worker(
+        &mut builder,
+        activation.clone(),
+        BackgroundWorkerPhase::new(250),
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID,
+        customer_enrichment_application_worker,
+    )?;
+''',
+              '''    add_customer_enrichment_workers(
+        &mut builder,
+        activation.clone(),
+        customer_enrichment_provider_process,
+        customer_enrichment_application_worker,
+    )?;
+''',
+          )
+          replace_once(
+              background,
+              'fn add_worker(\n',
+              '''fn add_customer_enrichment_workers(
+    builder: &mut BackgroundWorkerRegistryBuilder,
+    activation: Arc<dyn ModuleActivationPort>,
+    provider_process: Arc<dyn TenantBackgroundWorker>,
+    application_worker: Arc<dyn TenantBackgroundWorker>,
+) -> Result<(), SdkError> {
+    add_worker(
+        builder,
+        activation.clone(),
+        CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_PHASE,
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        PROVIDER_PROCESS_WORKER_ID,
+        provider_process,
+    )?;
+    add_worker(
+        builder,
+        activation,
+        CUSTOMER_ENRICHMENT_APPLICATION_PHASE,
+        CUSTOMER_ENRICHMENT_MODULE_ID,
+        PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID,
+        application_worker,
+    )
+}
+
+fn add_worker(
+''',
+          )
+          background_path = Path(background)
+          background_text = background_path.read_text()
+          if '#[cfg(test)]\nmod tests {' in background_text:
+              raise SystemExit(f"{background}: test module already exists")
+          background_path.write_text(background_text + r'''
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    const ACTIVE: u8 = 1;
+    const DISABLED: u8 = 2;
+    const UNINSTALLED: u8 = 3;
+
+    #[derive(Debug)]
+    struct MutableActivation {
+        state: AtomicU8,
+    }
+
+    impl MutableActivation {
+        fn active() -> Self {
+            Self {
+                state: AtomicU8::new(ACTIVE),
+            }
+        }
+
+        fn set(&self, state: u8) {
+            self.state.store(state, Ordering::Release);
+        }
+    }
+
+    impl ModuleActivationPort for MutableActivation {
+        fn is_active<'a>(
+            &'a self,
+            _tenant_id: &'a TenantId,
+            module_id: &'a ModuleId,
+        ) -> PortFuture<'a, Result<bool, SdkError>> {
+            Box::pin(async move {
+                Ok(module_id.as_str() == CUSTOMER_ENRICHMENT_MODULE_ID
+                    && self.state.load(Ordering::Acquire) == ACTIVE)
+            })
+        }
+    }
+
+    #[derive(Debug)]
+    struct RecordingWorker {
+        calls: Arc<Mutex<Vec<&'static str>>>,
+        label: &'static str,
+    }
+
+    impl TenantBackgroundWorker for RecordingWorker {
+        fn run_tenant_cycle<'a>(
+            &'a self,
+            _tenant_id: TenantId,
+            _now_unix_nanos: i64,
+        ) -> PortFuture<'a, Result<(), SdkError>> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(self.label);
+                Ok(())
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_precedes_application_and_stops_after_disable_or_uninstall() {
+        let activation = Arc::new(MutableActivation::active());
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let mut builder = BackgroundWorkerRegistryBuilder::new(BTreeSet::from([
+            CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
+        ]));
+        let activation_port: Arc<dyn ModuleActivationPort> = activation.clone();
+        add_customer_enrichment_workers(
+            &mut builder,
+            activation_port,
+            Arc::new(RecordingWorker {
+                calls: calls.clone(),
+                label: "provider",
+            }),
+            Arc::new(RecordingWorker {
+                calls: calls.clone(),
+                label: "application",
+            }),
+        )
+        .unwrap();
+        let registry = builder.build();
+        let scheduled = registry
+            .scheduled_coordinates()
+            .map(|(phase, module_id, worker_id)| {
+                (phase.order(), module_id.to_owned(), worker_id.to_owned())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            scheduled,
+            vec![
+                (
+                    240,
+                    CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
+                    PROVIDER_PROCESS_WORKER_ID.to_owned(),
+                ),
+                (
+                    250,
+                    CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
+                    PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID.to_owned(),
+                ),
+            ]
+        );
+
+        let tenant_id = TenantId::try_new("tenant-a").unwrap();
+        registry
+            .run_tenant_cycle(tenant_id.clone(), 1)
+            .await
+            .unwrap();
+        assert_eq!(*calls.lock().unwrap(), vec!["provider", "application"]);
+
+        activation.set(DISABLED);
+        registry
+            .run_tenant_cycle(tenant_id.clone(), 2)
+            .await
+            .unwrap();
+        assert_eq!(*calls.lock().unwrap(), vec!["provider", "application"]);
+
+        activation.set(ACTIVE);
+        registry
+            .run_tenant_cycle(tenant_id.clone(), 3)
+            .await
+            .unwrap();
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec!["provider", "application", "provider", "application"]
+        );
+
+        activation.set(UNINSTALLED);
+        registry.run_tenant_cycle(tenant_id, 4).await.unwrap();
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec!["provider", "application", "provider", "application"]
+        );
+    }
+}
+''')
+
+          runtime = "crates/crm-application-runtime/src/runtime.rs"
+          replace_once(
+              runtime,
+              '''    CustomerEnrichmentApplicationWorkerDependencies, GovernedPartyExportSelectionSource,
+    PartyExportArtifactDownloadService, PostgresModuleActivation, ProcessIdentitySource,
+    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies, SystemClock,
+    bootstrap_export_selection_worker_access, build_bootstrap_visibility_registry,
+    build_customer_enrichment_application_worker, build_production_background_workers,
+    build_production_composition,
+''',
+              '''    CustomerEnrichmentApplicationWorkerDependencies,
+    CustomerEnrichmentProviderProcessDependencies, CustomerEnrichmentProviderWorkerDependencies,
+    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
+    PostgresModuleActivation, ProcessIdentitySource, ProductionBackgroundWorkerDependencies,
+    ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
+    build_bootstrap_visibility_registry, build_customer_enrichment_application_worker,
+    build_customer_enrichment_provider_process, build_customer_enrichment_provider_worker,
+    build_production_background_workers, build_production_composition,
+''',
+          )
+          replace_once(
+              runtime,
+              'use crm_customer_enrichment_application_composition::PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID;\nuse crm_global_search_composition::GlobalSearchWorker;',
+              '''use crm_customer_enrichment_application_composition::PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID;
+use crm_customer_enrichment_capability_adapter::{
+    provider_response_capability_definition, request_dispatch_capability_definition,
+};
+use crm_customer_enrichment_provider_process_composition::PROVIDER_PROCESS_WORKER_ACTOR_ID;
+use crm_customer_enrichment_provider_registry::ExactProviderAdapterRegistry;
+use crm_global_search_composition::GlobalSearchWorker;''',
+          )
+          replace_once(
+              runtime,
+              '''use crm_parties_capability_adapter::{
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
+    UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
+};''',
+              '''use crm_parties_capability_adapter::{
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
+    RECORD_TYPE as PARTY_RECORD_TYPE, UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
+};''',
+          )
+          replace_once(
+              runtime,
+              '''        let customer_enrichment_application_outcome_definition =
+            record_application_outcome_capability_definition()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+''',
+              '''        let customer_enrichment_application_outcome_definition =
+            record_application_outcome_capability_definition()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_dispatch_definition = request_dispatch_capability_definition()
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_response_definition = provider_response_capability_definition()
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+''',
+          )
+          replace_once(
+              runtime,
+              '''        let customer_enrichment_application_worker_actor_id =
+            ActorId::try_new(PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+''',
+              '''        let customer_enrichment_application_worker_actor_id =
+            ActorId::try_new(PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_provider_worker_actor_id =
+            ActorId::try_new(PROVIDER_PROCESS_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+''',
+          )
+          replace_once(
+              runtime,
+              '''            bootstrap_customer_enrichment_application_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &mutation_definitions,
+                &query_definitions,
+                &customer_enrichment_application_outcome_definition,
+                &customer_enrichment_application_worker_actor_id,
+            )?;
+''',
+              '''            bootstrap_customer_enrichment_application_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &mutation_definitions,
+                &query_definitions,
+                &customer_enrichment_application_outcome_definition,
+                &customer_enrichment_application_worker_actor_id,
+            )?;
+            bootstrap_customer_enrichment_provider_process_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &query_definitions,
+                &customer_enrichment_dispatch_definition,
+                &customer_enrichment_response_definition,
+                &customer_enrichment_provider_worker_actor_id,
+            )?;
+''',
+          )
+          replace_once(
+              runtime,
+              '''                capability_authorizer: authorizer.clone(),
+                query_authorizer,
+                visibility_authorizer: query_visibility,
+''',
+              '''                capability_authorizer: authorizer.clone(),
+                query_authorizer: query_authorizer.clone(),
+                visibility_authorizer: query_visibility.clone(),
+''',
+          )
+          replace_once(
+              runtime,
+              '''        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+
+        let import_execution_reader =
+''',
+              '''        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+
+        // No adapter coordinate is enabled implicitly. Concrete provider adapters are added only
+        // through exact production configuration; the empty immutable registry fails closed.
+        let customer_enrichment_provider_executor = Arc::new(
+            build_customer_enrichment_provider_worker(CustomerEnrichmentProviderWorkerDependencies {
+                store: store.clone(),
+                registry: Arc::new(ExactProviderAdapterRegistry::default()),
+                authorizer: authorizer.clone(),
+            })
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
+        let customer_enrichment_provider_process = build_customer_enrichment_provider_process(
+            CustomerEnrichmentProviderProcessDependencies {
+                store: store.clone(),
+                executor: customer_enrichment_provider_executor,
+                query_authorizer,
+                visibility_authorizer: query_visibility,
+                cursor_key,
+            },
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+
+        let import_execution_reader =
+''',
+          )
+          replace_once(
+              runtime,
+              '''                export_selection_worker,
+                customer_enrichment_application_worker,
+                link_processor,
+''',
+              '''                export_selection_worker,
+                customer_enrichment_provider_process,
+                customer_enrichment_application_worker,
+                link_processor,
+''',
+          )
+          replace_once(
+              runtime,
+              'fn bootstrap_customer_enrichment_application_worker_access(\n',
+              '''fn bootstrap_customer_enrichment_provider_process_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    visibility_store: &LiveQueryVisibilityStore,
+    query_definitions: &[CapabilityDefinition],
+    dispatch_definition: &CapabilityDefinition,
+    response_definition: &CapabilityDefinition,
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    let party_get = query_definitions
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+                && definition.capability_id.as_str() == PARTY_GET_CAPABILITY
+        })
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party get capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    for tenant_id in &config.tenant_ids {
+        for definition in [dispatch_definition, response_definition, party_get] {
+            authorization_store
+                .upsert(AuthorizationGrant {
+                    tenant_id: tenant_id.clone(),
+                    actor_id: worker_actor_id.clone(),
+                    policy_id: definition.authorization_policy_id.clone(),
+                    capability_id: definition.capability_id.clone(),
+                    capability_version: definition.capability_version.clone(),
+                    owner_module_id: definition.owner_module_id.clone(),
+                    policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                    expires_at_unix_nanos: Some(expires_at),
+                })
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        }
+        upsert_bootstrap_visibility(
+            visibility_store,
+            worker_actor_id,
+            tenant_id,
+            party_get,
+            BootstrapVisibilityResource {
+                owner_module_id: PARTIES_MODULE_ID,
+                resource_type: PARTY_RECORD_TYPE,
+                allowed_fields: BTreeSet::from(["display_name".to_owned()]),
+            },
+            expires_at,
+        )?;
+    }
+    Ok(())
+}
+
+fn bootstrap_customer_enrichment_application_worker_access(
+''',
+          )
+          PY
+      - name: Format and verify focused slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo test -p crm-application-runtime --lib provider_precedes_application_and_stops_after_disable_or_uninstall
+          cargo check -p crm-application-runtime --all-targets
+          cargo clippy -p crm-application-runtime --all-targets -- -D warnings
+      - name: Commit verified slice and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/phase8a10-provider-background-registration.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock crates/crm-application-runtime .github/workflows/phase8a10-provider-background-registration.yml
+          git diff --cached --check
+          git commit -m "Register governed provider background process"
+          git push origin HEAD:agent/phase8a10-customer-enrichment
