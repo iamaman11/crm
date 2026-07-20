@@ -1,8 +1,8 @@
 # Acceptance gates for `crm.customer-enrichment`
 
-Foundation state: **In progress — not a production vertical slice**. These gates block any completion or readiness claim.
+Foundation state: **In progress — accepted production surface, incomplete Phase 8A.10 stage**. These gates block any completion or readiness claim.
 
-Current accepted production inventory: **6 public mutations + 6 permission-aware queries + 2 activation-gated worker coordinates**; the remaining 3 published coordinates stay individually non-runtime. The complete public suggestion review surface, `customer_enrichment.party.display_name.apply@1.0.0` and `customer_enrichment.application.outcome.record@1.0.0` are production-registered without public outcome ingress. The next promotion coordinate is `customer_enrichment.request.dispatch@1.0.0`. This inventory is authoritative only on a canonical Generated Sync state and a green exact-head workflow matrix.
+Current accepted production inventory: **6 public mutations + 6 permission-aware queries + 2 activation-gated worker coordinates**; the remaining 3 published coordinates stay individually non-runtime and have no public HTTP/gRPC ingress. The complete public suggestion review surface, `customer_enrichment.party.display_name.apply@1.0.0` and `customer_enrichment.application.outcome.record@1.0.0` are production-registered. Internal provider, materialization and application processes are activation-gated and ordered at phases 240, 245 and 250. This inventory is authoritative only on a canonical Generated Sync state and a green exact-head workflow matrix.
 
 - [x] Freeze immutable module identity, owned evidence records and retain-on-uninstall semantics.
 - [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
@@ -39,15 +39,21 @@ Current accepted production inventory: **6 public mutations + 6 permission-aware
 - [x] Promote activation-gated `customer_enrichment.suggestion.accept@1.0.0` with governed live Party authorization, mandatory approval evidence, exact version/digest binding, atomic review evidence, replay safety and real-process missing-approval/denial/stale/disable/uninstall/cross-tenant proof.
 - [x] Promote activation-gated worker-only `customer_enrichment.party.display_name.apply@1.0.0` with durable reviewed-event checkpointing, exact accepted-review and approval binding, live Party policy/visibility authorization, governed `parties.party.update@1.0.0`, pending-attempt recovery, append-once outcome, replay suppression, disable/uninstall and cross-tenant proof.
 - [x] Promote worker-only `customer_enrichment.application.outcome.record@1.0.0` with an exact live authorization grant before append-once persistence, policy/owner causation lineage, target-success/outcome-missing recovery, projection repair, completed-attempt replay suppression, cross-tenant isolation and no public HTTP/gRPC route.
-- [ ] Add governed public and worker-only capability/query adapters and production composition for every remaining published coordinate.
+- [x] Register activation-gated event-driven provider, suggestion-materialization and owner-application processes in deterministic phases 240 → 245 → 250; disable/uninstall stops all three while provenance and the accepted public inventory remain unchanged.
+- [x] Govern materialization through exact `customer_enrichment.suggestions.materialize@1.0.0` live authorization and a finalized canonical evidence source; raw provider payload is never interpreted by the module process.
+- [x] Prove materialization recovery when response evidence arrives before the finalized candidate artifact: execution fails closed, the projection checkpoint does not advance, later artifact upload creates exactly one logical suggestion and replay creates no duplicate.
+- [x] Add an explicit bounded provider-adapter configuration and exact registry-assembly foundation for enabled/disabled state, exact transport coordinate, per-tenant secret environment bindings, fixed-window quota and circuit settings.
+- [x] Derive suggestion supersession deterministically from exact visible logical propositions only, so a hidden successor neither changes the disclosed lifecycle nor leaks its identity.
+- [x] Derive expiry at the exact `expires_at` boundary while retaining immutable suggestion and review evidence.
+- [ ] Wire `CRM_CUSTOMER_ENRICHMENT_PROVIDER_ADAPTERS` into actual `crm-api` provider registry assembly; enabled configuration must never be silently replaced by `ExactProviderAdapterRegistry::default()`.
+- [ ] Add fail-closed final mutation guards so expired or superseded evidence cannot be newly reviewed or applied, including restart/crash-window recovery without TOCTOU escape.
 - [ ] Complete remaining Consent semantic scenarios plus final live authorization and declarative field visibility.
-- [ ] Add concrete provider infrastructure adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
+- [ ] Add concrete provider transport adapters outside the pure module core with sanitized errors and no credential/raw-payload leakage.
 - [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof for remaining records.
-- [ ] Add deterministic activation-gated provider dispatch, response reconciliation and suggestion materialization/expiry workers.
-- [ ] Prove provider replay, conflicting response, quota, circuit/failure and provider-disabled behavior across concrete adapters; exact registry and worker replay process proof is complete.
-- [ ] Prove remaining response-materialization recovery scenarios; target-success/outcome-missing application recovery is complete in the production application worker.
+- [ ] Prove remaining provider replay, conflicting response, response reconciliation, quota, circuit/failure and provider-disabled behavior across configured concrete adapters.
+- [ ] Complete remaining response-materialization and stale-evidence recovery scenarios; target-success/outcome-missing application recovery is complete.
 - [ ] Replace `tests/acceptance.rs` with real production-path evidence.
 - [ ] Complete `production/CONTRIBUTION.md` through separately owned adapter/composition crates with exact route parity.
 - [ ] Add remaining fresh-PostgreSQL real `crm-api` success, denial, stale, failure, disable/uninstall and cross-tenant process scenarios.
-- [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status, issue #125 and PR evidence.
-- [ ] Pass all applicable exact-head Contract, Governance, Rust, Database, Application Runtime, Product Plane and enrichment process workflows.
+- [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status and issue #125 after the final code state stabilizes.
+- [ ] Pass all applicable exact-head Contract, Governance, Rust, Database, Application Runtime, Product Plane and enrichment process workflows on one unchanged final SHA.
