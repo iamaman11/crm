@@ -49,7 +49,7 @@ use std::sync::Arc;
 const TENANT_ID: &str = "tenant-a";
 const ACTOR_ID: &str = "actor-a";
 const FILE_ID: &str = "materialization-candidate-evidence-process-1";
-const SEED_CAPABILITY: &str = "customer_enrichment.materialization.process.seed";
+const SEED_CAPABILITY: &str = "customer_enrichment.materialization.seed";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn response_event_waits_for_finalized_evidence_then_materializes_once() {
