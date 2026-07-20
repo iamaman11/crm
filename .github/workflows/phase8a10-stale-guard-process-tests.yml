@@ -50,6 +50,7 @@ jobs:
         run: |
           python scripts/patch_phase8a10_stale_guard_process_tests.py
           python scripts/patch_phase8a10_stale_guard_process_counts.py
+          python scripts/patch_phase8a10_context_bound_status_helpers.py
           cargo fmt --all
       - name: Verify stale review and application guards
         id: verify
@@ -83,6 +84,7 @@ jobs:
           rm .github/workflows/phase8a10-stale-guard-process-tests.yml
           rm scripts/patch_phase8a10_stale_guard_process_tests.py
           rm scripts/patch_phase8a10_stale_guard_process_counts.py
+          rm scripts/patch_phase8a10_context_bound_status_helpers.py
           rm -f phase8a10-stale-guard-process-diagnostic.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
