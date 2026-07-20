@@ -29,8 +29,9 @@ use crm_customer_enrichment_capability_adapter::{
 };
 use crm_customer_enrichment_materialization_composition::{
     CustomerEnrichmentMaterializationProcessWorker,
-    GovernedFileProviderSuggestionCandidateEvidenceSource, MATERIALIZATION_PROCESS_PROJECTION_ID, PROVIDER_RESPONSE_RECORDED_EVENT_SCHEMA,
-    PROVIDER_RESPONSE_RECORDED_EVENT_TYPE, PROVIDER_SUGGESTION_CANDIDATE_EVIDENCE_MEDIA_TYPE,
+    GovernedFileProviderSuggestionCandidateEvidenceSource, MATERIALIZATION_PROCESS_PROJECTION_ID,
+    PROVIDER_RESPONSE_RECORDED_EVENT_SCHEMA, PROVIDER_RESPONSE_RECORDED_EVENT_TYPE,
+    PROVIDER_SUGGESTION_CANDIDATE_EVIDENCE_MEDIA_TYPE,
     PostgresCustomerEnrichmentSuggestionMaterializationWorker,
 };
 use crm_module_sdk::{
@@ -46,7 +47,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 const TENANT_ID: &str = "tenant-a";
-const ACTOR_ID: &str = "materialization-process-seed-actor";
+const ACTOR_ID: &str = "actor-a";
 const FILE_ID: &str = "materialization-candidate-evidence-process-1";
 const SEED_CAPABILITY: &str = "customer_enrichment.materialization.process.seed";
 
