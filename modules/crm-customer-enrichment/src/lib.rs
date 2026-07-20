@@ -13,8 +13,10 @@ pub mod materialization;
 pub mod persistence;
 /// Pure-core governed reads, policy, provider dispatch and owner-application boundaries.
 pub mod ports;
-/// Exact identities for the eight manifest-owned enrichment record types.
+/// Exact identities for the nine manifest-owned enrichment record types.
 pub mod records;
+/// Durable provider-response conflict identity and operator-resolution evidence.
+pub mod response_conflict;
 /// Exact resource-specific final policy boundary for suggestion review.
 pub mod review_policy;
 /// Immutable provider metering and quota evidence plus strict persistence.
@@ -44,6 +46,7 @@ pub use persistence::*;
 pub use ports::*;
 pub use provider_usage::*;
 pub use records::*;
+pub use response_conflict::*;
 pub use review_policy::*;
 
 /// Stable crate identity for repository tooling.
