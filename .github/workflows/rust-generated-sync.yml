@@ -34,7 +34,7 @@ jobs:
   sync:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,25 +55,35 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Apply PostgreSQL suggestion lifecycle query proof
+        run: |
+          python scripts/fix_phase8a10_suggestion_lifecycle_query_patch.py
+          python scripts/phase8a10-suggestion-lifecycle-query-proof.py
       - name: Synchronize lockfile and canonical formatting
         run: |
           cargo generate-lockfile
           cargo fmt --all
+      - name: Verify suggestion lifecycle query proof compiles strictly
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p crm-customer-enrichment-review-composition --features postgres-integration --test postgres_review_process --no-run
+          cargo clippy -p crm-customer-enrichment-review-composition --features postgres-integration --test postgres_review_process -- -D warnings
       - name: Synchronize generated contract artifacts
         run: |
           cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
           python scripts/generate_contract_bindings.py --write
-      - name: Commit generated Rust and contract artifacts when needed
+      - name: Commit verified lifecycle proof and generated artifacts
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
           if git diff --quiet -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json; then
-            echo "Rust and generated contract artifacts are already synchronized."
+            echo "Suggestion lifecycle query proof is already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json
-            git commit -m "Synchronize Rust and generated contract artifacts"
+            git commit -m "Prove suggestion supersession and expiry queries"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
