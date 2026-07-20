@@ -397,7 +397,7 @@ mod tests {
             now_unix_ms: 21,
         })
         .unwrap_err();
-        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PARTY_VERSION_MISMATCH");
+        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_DISPATCH_TARGET_CONFLICT");
 
         let error = build_provider_dispatch_work_item(ProviderDispatchWorkItemInput {
             request: &dispatched,
@@ -407,7 +407,7 @@ mod tests {
             now_unix_ms: 1_000,
         })
         .unwrap_err();
-        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_REQUEST_DEADLINE_CLOSED");
+        assert_eq!(error.code, "CUSTOMER_ENRICHMENT_DISPATCH_WINDOW_CLOSED");
     }
 
     #[test]
