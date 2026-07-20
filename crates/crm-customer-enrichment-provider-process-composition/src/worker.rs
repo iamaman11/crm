@@ -1,4 +1,7 @@
-use crate::{ProviderDispatchWorkItemInput, build_provider_dispatch_work_item};
+use crate::{
+    PostgresProviderResponseConflictStore, ProviderDispatchWorkItemInput,
+    ProviderResponseConflictPersistenceLineage, build_provider_dispatch_work_item,
+};
 use crm_application_composition::TenantBackgroundWorker;
 use crm_capability_plan_support as support;
 use crm_core_data::PostgresDataStore;
@@ -12,11 +15,12 @@ use crm_customer_enrichment_capability_adapter::{
     ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA, ENRICHMENT_REQUEST_CREATED_EVENT_TYPE, MODULE_ID,
 };
 use crm_customer_enrichment_worker_composition::{
-    CustomerEnrichmentProviderWorker, ProviderDispatchWorkItem, ProviderDispatchWorkerResult,
+    CustomerEnrichmentProviderWorker, ProviderDispatchExecution, ProviderDispatchWorkItem,
+    ProviderDispatchWorkerResult,
 };
 use crm_module_sdk::{
-    ActorId, DataClass, EventDelivery, EventType, ModuleId, PayloadEncoding, PortFuture, RecordId,
-    SdkError, TenantId,
+    ActorId, CausationId, DataClass, EventDelivery, EventType, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, SdkError, TenantId,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use prost::Message;
@@ -55,15 +59,17 @@ pub trait ProviderDispatchExecutorPort: Send + Sync {
     fn execute<'a>(
         &'a self,
         work_item: ProviderDispatchWorkItem,
-    ) -> PortFuture<'a, Result<ProviderDispatchWorkerResult, SdkError>>;
+    ) -> PortFuture<'a, Result<ProviderDispatchExecution, SdkError>>;
 }
 
 impl ProviderDispatchExecutorPort for CustomerEnrichmentProviderWorker {
     fn execute<'a>(
         &'a self,
         work_item: ProviderDispatchWorkItem,
-    ) -> PortFuture<'a, Result<ProviderDispatchWorkerResult, SdkError>> {
-        Box::pin(async move { CustomerEnrichmentProviderWorker::execute(self, work_item).await })
+    ) -> PortFuture<'a, Result<ProviderDispatchExecution, SdkError>> {
+        Box::pin(async move {
+            CustomerEnrichmentProviderWorker::execute_reconciled(self, work_item).await
+        })
     }
 }
 
@@ -81,6 +87,7 @@ pub struct CustomerEnrichmentProviderProcessWorker {
     store: PostgresDataStore,
     source: Arc<dyn ProviderDispatchSourcePort>,
     executor: Arc<dyn ProviderDispatchExecutorPort>,
+    conflict_store: PostgresProviderResponseConflictStore,
     actor_id: ActorId,
     page_size: u32,
 }
@@ -92,6 +99,7 @@ impl fmt::Debug for CustomerEnrichmentProviderProcessWorker {
             .field("store", &self.store)
             .field("source", &"dyn ProviderDispatchSourcePort")
             .field("executor", &"dyn ProviderDispatchExecutorPort")
+            .field("conflict_store", &self.conflict_store)
             .field("actor_id", &self.actor_id)
             .field("page_size", &self.page_size)
             .finish()
@@ -121,6 +129,7 @@ impl CustomerEnrichmentProviderProcessWorker {
             ));
         }
         Ok(Self {
+            conflict_store: PostgresProviderResponseConflictStore::new(store.clone()),
             store,
             source,
             executor,
@@ -240,6 +249,15 @@ impl CustomerEnrichmentProviderProcessWorker {
         }
         let request_id = RecordId::try_new(request_ref.enrichment_request_id.clone())
             .map_err(worker_identifier_invalid)?;
+        if let Some(conflict) = self
+            .conflict_store
+            .unresolved_for_request(tenant_id.clone(), request_id.clone())
+            .await?
+        {
+            return Err(unresolved_provider_conflict(
+                conflict.conflict_id().as_str(),
+            ));
+        }
         let source = self
             .source
             .load(
@@ -272,8 +290,31 @@ impl CustomerEnrichmentProviderProcessWorker {
             worker_actor_id: &self.actor_id,
             now_unix_ms,
         })?;
-        let result = self.executor.execute(work_item).await?;
-        Ok(DeliveryDisposition::Executed(Box::new(result)))
+        match self.executor.execute(work_item).await? {
+            ProviderDispatchExecution::Recorded(result) => {
+                Ok(DeliveryDisposition::Executed(result))
+            }
+            ProviderDispatchExecution::Conflicting(draft) => {
+                let persisted = self
+                    .conflict_store
+                    .record(
+                        draft,
+                        ProviderResponseConflictPersistenceLineage {
+                            actor_id: self.actor_id.clone(),
+                            correlation_id: delivery.correlation_id.clone(),
+                            causation_id: CausationId::try_new(
+                                delivery.event_id.as_str().to_owned(),
+                            )
+                            .map_err(worker_identifier_invalid)?,
+                            trace_id: delivery.trace_id.clone(),
+                        },
+                    )
+                    .await?;
+                Err(unresolved_provider_conflict(
+                    persisted.conflict.conflict_id().as_str(),
+                ))
+            }
+        }
     }
 }
 
@@ -371,6 +412,16 @@ fn created_event_invalid() -> SdkError {
     )
 }
 
+fn unresolved_provider_conflict(conflict_id: &str) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_UNRESOLVED",
+        crm_module_sdk::ErrorCategory::Conflict,
+        true,
+        "Provider-response conflict resolution is required before processing can continue.",
+    )
+    .with_internal_reference(format!("conflict_id={conflict_id}"))
+}
+
 fn source_snapshot_invalid() -> SdkError {
     SdkError::new(
         "CUSTOMER_ENRICHMENT_PROVIDER_SOURCE_SNAPSHOT_INVALID",
@@ -396,6 +447,16 @@ mod tests {
             PROVIDER_PROCESS_PROJECTION_ID,
             "customer-enrichment-provider-process-v1"
         );
+    }
+
+    #[test]
+    fn unresolved_provider_conflict_is_a_retryable_checkpoint_hold() {
+        let error = unresolved_provider_conflict("enrichment-response-conflict-example");
+        assert_eq!(
+            error.code,
+            "CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_UNRESOLVED"
+        );
+        assert!(error.retryable);
     }
 
     #[test]

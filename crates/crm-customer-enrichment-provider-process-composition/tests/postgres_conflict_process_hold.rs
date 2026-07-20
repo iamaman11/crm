@@ -2,7 +2,7 @@
 
 use crm_capability_plan_support as support;
 use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan};
-use crm_core_events::{ProjectionStore, ProjectionStore as _};
+use crm_core_events::ProjectionStore;
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
     PartySnapshot, ProviderProfileDraft, ProviderProfileVersion, ProviderResponseConflictDraft,
@@ -35,7 +35,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 const TENANT_ID: &str = "tenant-a";
 const ACTOR_ID: &str = "actor-a";
-const SEED_CAPABILITY: &str = "customer_enrichment.provider_process.seed";
+const SEED_CAPABILITY: &str = "customer_enrichment.response.record";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unresolved_conflict_is_persisted_once_and_holds_checkpoint_across_restart() {

@@ -32,3 +32,8 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 name = "postgres_conflict_persistence"
 path = "tests/postgres_conflict_persistence.rs"
 required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_conflict_process_hold"
+path = "tests/postgres_conflict_process_hold.rs"
+required-features = ["postgres-integration"]

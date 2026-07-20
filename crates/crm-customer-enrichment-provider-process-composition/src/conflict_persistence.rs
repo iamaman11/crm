@@ -3,9 +3,11 @@ use crm_capability_plan_support::{self as support, EventSpec, PersistedPayloadCo
 use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::{
     BatchError, BatchMutationPlan, BatchMutationResult, PostgresDataStore, RecordMutation,
+    RelatedRecordListQuery, RelationshipMutation,
 };
 use crm_customer_enrichment::{
-    PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE, PROVIDER_RESPONSE_CONFLICT_STATE_MAXIMUM_BYTES,
+    ENRICHMENT_REQUEST_RECORD_TYPE, PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE,
+    PROVIDER_RESPONSE_CONFLICT_STATE_MAXIMUM_BYTES,
     PROVIDER_RESPONSE_CONFLICT_STATE_RETENTION_POLICY_ID,
     PROVIDER_RESPONSE_CONFLICT_STATE_SCHEMA_ID, PROVIDER_RESPONSE_CONFLICT_STATE_SCHEMA_VERSION,
     ProviderResponseConflict, ProviderResponseConflictDraft,
@@ -17,8 +19,9 @@ use crm_customer_enrichment_capability_adapter::{
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CausationId, CorrelationId, DataClass, ErrorCategory,
-    ExecutionContext, IdempotencyKey, ModuleExecutionContext, RecordRef, RequestId, SchemaVersion,
-    SdkError, TraceId, TypedPayload,
+    ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, RecordId, RecordRef,
+    RecordType, RelationshipRef, RelationshipType, RequestId, SchemaVersion, SdkError, TenantId,
+    TraceId, TypedPayload,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 
@@ -26,8 +29,19 @@ pub const PROVIDER_RESPONSE_CONFLICT_RECORDED_EVENT_TYPE: &str =
     "customer_enrichment.provider_response_conflict.recorded";
 pub const PROVIDER_RESPONSE_CONFLICT_RECORDED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.ProviderResponseConflictRecordedEvent";
+pub const PROVIDER_RESPONSE_CONFLICT_RELATIONSHIP_TYPE: &str =
+    "customer_enrichment.request.provider_response_conflict";
 
 const CONFLICT_ID_PREFIX: &str = "enrichment-response-conflict-";
+const CONFLICT_RELATIONSHIP_SCHEMA_ID: &str =
+    "crm.customer-enrichment.request.provider_response_conflict-link";
+const CONFLICT_RELATIONSHIP_SCHEMA_VERSION: &str = "1.0.0";
+const CONFLICT_RELATIONSHIP_MAXIMUM_BYTES: u64 = 1_024;
+const CONFLICT_RELATIONSHIP_DESCRIPTOR_HASH: [u8; 32] = [
+    89, 89, 224, 34, 91, 2, 35, 23, 37, 77, 136, 62, 69, 3, 50, 251, 156, 49, 254, 55, 85, 173,
+    200, 194, 57, 250, 124, 1, 62, 34, 185, 183,
+];
+const MAX_CONFLICTS_PER_REQUEST: u32 = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderResponseConflictPersistenceLineage {
@@ -40,6 +54,7 @@ pub struct ProviderResponseConflictPersistenceLineage {
 pub struct ProviderResponseConflictPersistencePlan {
     pub conflict: ProviderResponseConflict,
     pub record: RecordRef,
+    pub relationship: RelationshipRef,
     pub batch: BatchMutationPlan,
 }
 
@@ -76,6 +91,61 @@ impl PostgresProviderResponseConflictStore {
             replayed: result.replayed,
         })
     }
+
+    pub async fn unresolved_for_request(
+        &self,
+        tenant_id: TenantId,
+        request_id: RecordId,
+    ) -> Result<Option<ProviderResponseConflict>, SdkError> {
+        let page = self
+            .store
+            .list_related_records_for_query(&RelatedRecordListQuery {
+                tenant_id: tenant_id.clone(),
+                relationship_owner_module_id: configured(ModuleId::try_new(MODULE_ID))?,
+                relationship_type: configured(RelationshipType::try_new(
+                    PROVIDER_RESPONSE_CONFLICT_RELATIONSHIP_TYPE,
+                ))?,
+                source: RecordRef {
+                    record_type: configured(RecordType::try_new(ENRICHMENT_REQUEST_RECORD_TYPE))?,
+                    record_id: request_id.clone(),
+                },
+                target_owner_module_id: configured(ModuleId::try_new(MODULE_ID))?,
+                target_record_type: configured(RecordType::try_new(
+                    PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE,
+                ))?,
+                page_size: MAX_CONFLICTS_PER_REQUEST,
+                after_record_id: None,
+            })
+            .await?;
+        if page.next_record_id.is_some() {
+            return Err(conflict_state_invalid(
+                "provider-response conflicts exceed the governed per-request bound",
+            ));
+        }
+
+        let mut unresolved = None;
+        for snapshot in page.records {
+            let bytes = support::persisted_json_bytes_with_data_class(
+                &snapshot,
+                provider_response_conflict_persisted_contract(),
+                DataClass::Confidential,
+            )?;
+            let conflict = decode_provider_response_conflict_state(bytes)?;
+            if conflict.tenant_id() != &tenant_id
+                || conflict.request_id().as_str() != request_id.as_str()
+            {
+                return Err(conflict_state_invalid(
+                    "related provider-response conflict does not match its request identity",
+                ));
+            }
+            if conflict.resolution().is_none() && unresolved.replace(conflict).is_some() {
+                return Err(conflict_state_invalid(
+                    "request has more than one unresolved provider-response conflict",
+                ));
+            }
+        }
+        Ok(unresolved)
+    }
 }
 
 pub fn provider_response_conflict_persistence_plan(
@@ -84,6 +154,7 @@ pub fn provider_response_conflict_persistence_plan(
 ) -> Result<ProviderResponseConflictPersistencePlan, SdkError> {
     let conflict = ProviderResponseConflict::record(draft)?;
     let record = provider_response_conflict_record_ref(&conflict)?;
+    let relationship = provider_response_conflict_relationship(&conflict, &record)?;
     let state_bytes = encode_provider_response_conflict_state(&conflict)?;
     let input = provider_response_conflict_persisted_payload(&conflict)?;
     let definition = provider_response_capability_definition()?;
@@ -149,7 +220,10 @@ pub fn provider_response_conflict_persistence_plan(
             reference: record.clone(),
             payload: provider_response_conflict_persisted_payload(&conflict)?,
         }],
-        relationships: Vec::new(),
+        relationships: vec![RelationshipMutation::Link {
+            relationship: relationship.clone(),
+            payload: provider_response_conflict_relationship_payload()?,
+        }],
         events: vec![event],
         idempotency: support::capability_idempotency(&definition, &request)?,
         audits: vec![audit],
@@ -158,6 +232,7 @@ pub fn provider_response_conflict_persistence_plan(
     Ok(ProviderResponseConflictPersistencePlan {
         conflict,
         record,
+        relationship,
         batch,
     })
 }
@@ -193,6 +268,37 @@ pub fn provider_response_conflict_record_ref(
     )
 }
 
+pub fn provider_response_conflict_relationship(
+    conflict: &ProviderResponseConflict,
+    conflict_record: &RecordRef,
+) -> Result<RelationshipRef, SdkError> {
+    Ok(RelationshipRef {
+        relationship_type: configured(RelationshipType::try_new(
+            PROVIDER_RESPONSE_CONFLICT_RELATIONSHIP_TYPE,
+        ))?,
+        source: RecordRef {
+            record_type: configured(RecordType::try_new(ENRICHMENT_REQUEST_RECORD_TYPE))?,
+            record_id: configured(RecordId::try_new(conflict.request_id().as_str().to_owned()))?,
+        },
+        target: conflict_record.clone(),
+    })
+}
+
+fn provider_response_conflict_relationship_payload() -> Result<TypedPayload, SdkError> {
+    support::persisted_json_payload_with_data_class(
+        PersistedPayloadContract {
+            owner: MODULE_ID,
+            schema_id: CONFLICT_RELATIONSHIP_SCHEMA_ID,
+            schema_version: CONFLICT_RELATIONSHIP_SCHEMA_VERSION,
+            descriptor_hash: CONFLICT_RELATIONSHIP_DESCRIPTOR_HASH,
+            maximum_size_bytes: CONFLICT_RELATIONSHIP_MAXIMUM_BYTES,
+            retention_policy_id: PROVIDER_RESPONSE_CONFLICT_STATE_RETENTION_POLICY_ID,
+        },
+        DataClass::Confidential,
+        b"{}".to_vec(),
+    )
+}
+
 pub fn provider_response_conflict_to_wire(
     conflict: &ProviderResponseConflict,
 ) -> Result<wire::ProviderResponseConflict, SdkError> {
@@ -225,6 +331,11 @@ fn validate_batch_result(
     if snapshot.reference != plan.record || snapshot.version != 1 {
         return Err(conflict_plan_invalid(
             "conflict persistence returned the wrong record identity or version",
+        ));
+    }
+    if result.linked_relationships.as_slice() != [plan.relationship.clone()] {
+        return Err(conflict_plan_invalid(
+            "conflict persistence returned the wrong request relationship",
         ));
     }
     let bytes = support::persisted_json_bytes_with_data_class(
@@ -288,6 +399,16 @@ fn conflict_batch_error(error: BatchError) -> SdkError {
     }
 }
 
+fn conflict_state_invalid(reference: impl Into<String>) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_STATE_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "Stored provider-response conflict evidence is invalid.",
+    )
+    .with_internal_reference(reference.into())
+}
+
 fn conflict_plan_invalid(reference: impl Into<String>) -> SdkError {
     SdkError::new(
         "CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_PLAN_INVALID",
@@ -346,9 +467,9 @@ mod tests {
         let plan = provider_response_conflict_persistence_plan(draft(), lineage()).unwrap();
         plan.batch.validate().unwrap();
         assert_eq!(plan.batch.records.len(), 1);
+        assert_eq!(plan.batch.relationships.len(), 1);
         assert_eq!(plan.batch.events.len(), 1);
         assert_eq!(plan.batch.audits.len(), 1);
-        assert_eq!(plan.batch.relationships.len(), 0);
         assert_eq!(
             plan.batch.context.module_id,
             ModuleId::try_new(MODULE_ID).unwrap()
