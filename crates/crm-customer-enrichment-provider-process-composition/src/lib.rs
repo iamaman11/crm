@@ -1,10 +1,15 @@
 #![forbid(unsafe_code)]
 
-//! Deterministic preparation for the internal Customer Enrichment provider process.
+//! Deterministic preparation and event-driven orchestration for the internal Customer Enrichment
+//! provider process.
 //!
 //! This crate converts one governed request plus exact provider-profile and Party snapshots into
 //! the durable worker work item consumed by `crm-customer-enrichment-worker-composition`. It owns no
 //! provider network I/O and registers no public capability route.
+
+mod worker;
+
+pub use worker::*;
 
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
