@@ -20,6 +20,15 @@ message ProviderResponseReceipt {
   optional string protected_evidence_reference = 12;
 }
 
+message ProviderResponseConflict {
+  ProviderResponseConflictRef provider_response_conflict_ref = 1;
+  EnrichmentRequestRef enrichment_request_ref = 2;
+  uint32 retry_generation = 3;
+  ProviderResponseReceiptRef first_provider_response_receipt_ref = 4;
+  bytes conflicting_semantic_fingerprint = 5;
+  int64 detected_at_unix_ms = 6;
+}
+
 message ProviderUsageEntry {
   ProviderUsageEntryRef provider_usage_entry_ref = 1;
   EnrichmentRequestRef enrichment_request_ref = 2;
@@ -36,6 +45,10 @@ message ProviderUsageEntry {
 
 message ProviderResponseRecordedEvent {
   ProviderResponseReceipt provider_response_receipt = 1;
+}
+
+message ProviderResponseConflictRecordedEvent {
+  ProviderResponseConflict provider_response_conflict = 1;
 }
 
 message ProviderUsageRecordedEvent {
