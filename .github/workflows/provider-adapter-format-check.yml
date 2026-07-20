@@ -30,30 +30,32 @@ jobs:
 
           path = Path("crates/crm-customer-enrichment-provider-registry/src/lib.rs")
           text = path.read_text()
-          old = '''    use std::task::{Context, Poll, Wake, Waker};
-
-    #[derive(Debug)]
-    struct NoopWake;
-
-    impl Wake for NoopWake {
-        fn wake(self: Arc<Self>) {}
-    }
-
-    fn block_on<F>(future: F) -> F::Output
-    where
-        F: Future,
-    {
-        let waker = Waker::from(Arc::new(NoopWake));
-        let mut context = Context::from_waker(&waker);
-'''
-          new = '''    use std::task::{Context, Poll, Waker};
-
-    fn block_on<F>(future: F) -> F::Output
-    where
-        F: Future,
-    {
-        let mut context = Context::from_waker(Waker::noop());
-'''
+          old = "\n".join([
+              "    use std::task::{Context, Poll, Wake, Waker};",
+              "",
+              "    #[derive(Debug)]",
+              "    struct NoopWake;",
+              "",
+              "    impl Wake for NoopWake {",
+              "        fn wake(self: Arc<Self>) {}",
+              "    }",
+              "",
+              "    fn block_on<F>(future: F) -> F::Output",
+              "    where",
+              "        F: Future,",
+              "    {",
+              "        let waker = Waker::from(Arc::new(NoopWake));",
+              "        let mut context = Context::from_waker(&waker);",
+          ])
+          new = "\n".join([
+              "    use std::task::{Context, Poll, Waker};",
+              "",
+              "    fn block_on<F>(future: F) -> F::Output",
+              "    where",
+              "        F: Future,",
+              "    {",
+              "        let mut context = Context::from_waker(Waker::noop());",
+          ])
           if text.count(old) != 1:
               raise SystemExit("expected exactly one manual no-op waker block")
           path.write_text(text.replace(old, new, 1))
