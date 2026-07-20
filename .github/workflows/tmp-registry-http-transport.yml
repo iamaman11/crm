@@ -1,0 +1,49 @@
+name: Temporary Registry HTTP Transport Patch
+
+on:
+  push:
+    branches:
+      - agent/phase8a10-customer-enrichment
+    paths:
+      - scripts/tmp_apply_registry_http_transport.py
+      - .github/workflows/tmp-registry-http-transport.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-registry-http-transport-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/phase8a10-customer-enrichment
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply exact host transport patch
+        run: python3 scripts/tmp_apply_registry_http_transport.py
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Verify concrete transport
+        run: cargo test -p crm-customer-enrichment-registry-http-transport
+      - name: Verify application registry composition
+        run: cargo test -p crm-application-runtime customer_enrichment_provider_registry
+      - name: Strict focused Clippy
+        run: cargo clippy -p crm-customer-enrichment-registry-http-transport -p crm-application-runtime --all-targets -- -D warnings
+      - name: Remove temporary patch machinery
+        run: rm scripts/tmp_apply_registry_http_transport.py .github/workflows/tmp-registry-http-transport.yml
+      - name: Commit verified slice
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Add concrete registry HTTP provider transport"
+          git push origin HEAD:agent/phase8a10-customer-enrichment
