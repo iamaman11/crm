@@ -252,12 +252,16 @@ impl CustomerEnrichmentProviderProcessWorker {
         let ProviderDispatchSourceDisposition::Ready(source) = source else {
             return Ok(DeliveryDisposition::Skipped);
         };
+        let party_resource_version = u64::try_from(source.party_snapshot.resource_version)
+            .map_err(|_| source_snapshot_invalid())?;
+        let party_observed_at_unix_ms = u64::try_from(source.party_snapshot.observed_at_unix_ms)
+            .map_err(|_| source_snapshot_invalid())?;
         if source.request.request_id().as_str() != request_id.as_str()
             || source.request.tenant_id() != tenant_id
             || source.provider_profile.version_id() != source.request.provider_profile_version_id()
             || source.party_snapshot.party_id.as_str() != source.request.target().resource_id
-            || source.party_snapshot.resource_version != source.request.target().resource_version
-            || source.party_snapshot.observed_at_unix_ms > now_unix_ms
+            || party_resource_version != source.request.target().resource_version
+            || party_observed_at_unix_ms > now_unix_ms
         {
             return Err(source_snapshot_invalid());
         }
