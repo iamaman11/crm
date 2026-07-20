@@ -29,7 +29,8 @@ use crm_customer_enrichment_registry_http_transport::{
     REGISTRY_HTTP_PATH, RegistryHttpTransport, RegistryHttpTransportConfig,
 };
 use crm_customer_enrichment_worker_composition::{
-    CustomerEnrichmentProviderWorker, ProviderDispatchWorkItem, ProviderResponseReconciliation,
+    CustomerEnrichmentProviderWorker, ProviderDispatchExecution, ProviderDispatchWorkItem,
+    ProviderResponseReconciliation,
 };
 use crm_module_sdk::testing::FixedClock;
 use crm_module_sdk::{
@@ -222,14 +223,44 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
     );
 
     let conflict = worker
+        .execute_reconciled(fixture.work_item.clone())
+        .await
+        .expect("return typed conflicting canonical provider response");
+    let ProviderDispatchExecution::Conflicting(conflict) = conflict else {
+        panic!("expected a typed provider-response conflict");
+    };
+    let first_receipt_id = first
+        .response
+        .provider_response_receipt
+        .as_ref()
+        .and_then(|receipt| receipt.provider_response_receipt_ref.as_ref())
+        .expect("first response receipt identity")
+        .provider_response_receipt_id
+        .clone();
+    assert_eq!(conflict.tenant_id.as_str(), TENANT_ID);
+    assert_eq!(
+        conflict.request_id.as_str(),
+        fixture.provider_request.enrichment_request_id.as_str()
+    );
+    assert_eq!(conflict.retry_generation, 0);
+    assert_eq!(conflict.first_receipt_id.as_str(), first_receipt_id);
+    assert!(
+        conflict
+            .conflicting_semantic_fingerprint
+            .iter()
+            .any(|byte| *byte != 0)
+    );
+    assert_eq!(conflict.detected_at_unix_ms, 32);
+
+    let fail_closed = worker
         .execute(fixture.work_item.clone())
         .await
-        .expect_err("reject conflicting canonical provider response");
+        .expect_err("ordinary worker API remains fail closed");
     assert_eq!(
-        conflict.code,
+        fail_closed.code,
         "CUSTOMER_ENRICHMENT_CONFLICTING_PROVIDER_REPLAY"
     );
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 5);
 
     let request_snapshot = store
         .get_record(

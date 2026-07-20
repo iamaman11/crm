@@ -14,6 +14,7 @@ use crm_capability_runtime::{
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
 use crm_customer_enrichment::{
     ProviderAdapterRegistryPort, ProviderDispatchRequest, ProviderResponseClass,
+    ProviderResponseConflictDraft, ProviderResponseReceipt, ProviderResponseReceiptDraft,
     SanitizedProviderResponse,
 };
 use crm_customer_enrichment_capability_adapter::{
@@ -65,6 +66,13 @@ pub struct ProviderDispatchWorkerResult {
     pub response_replayed: bool,
     pub response_reconciliation: ProviderResponseReconciliation,
     pub response: wire::RecordProviderResponseResponse,
+}
+
+/// Structured result used by provider-process orchestration before durable conflict persistence.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProviderDispatchExecution {
+    Recorded(Box<ProviderDispatchWorkerResult>),
+    Conflicting(ProviderResponseConflictDraft),
 }
 
 /// Infrastructure coordinator for commit-before-I/O and atomic response recording.
@@ -141,6 +149,20 @@ impl CustomerEnrichmentProviderWorker {
         &self,
         item: ProviderDispatchWorkItem,
     ) -> Result<ProviderDispatchWorkerResult, SdkError> {
+        match self.execute_reconciled(item).await? {
+            ProviderDispatchExecution::Recorded(result) => Ok(*result),
+            ProviderDispatchExecution::Conflicting(_) => Err(conflicting_provider_replay()),
+        }
+    }
+
+    /// Executes one provider attempt while preserving a typed conflict candidate for orchestration.
+    ///
+    /// The ordinary `execute` API remains fail-closed for existing callers. Provider-process
+    /// composition uses this method to persist exact conflict evidence without parsing error text.
+    pub async fn execute_reconciled(
+        &self,
+        item: ProviderDispatchWorkItem,
+    ) -> Result<ProviderDispatchExecution, SdkError> {
         let expectation = validate_work_item(&self.dispatch_definition, &item)?;
 
         let dispatch_result = self
@@ -161,11 +183,24 @@ impl CustomerEnrichmentProviderWorker {
             &item.provider_request,
             &sanitized,
         )?;
-        let response_result = self
+        let conflicting_semantic_fingerprint = response_request.input_hash;
+        let response_result = match self
             .response_executor
             .execute(&self.response_definition, response_request)
             .await
-            .map_err(response_reconciliation_error)?;
+        {
+            Ok(result) => result,
+            Err(error) if is_response_reconciliation_conflict(&error) => {
+                return Ok(ProviderDispatchExecution::Conflicting(
+                    provider_response_conflict_draft(
+                        &item.provider_request,
+                        &sanitized,
+                        conflicting_semantic_fingerprint,
+                    )?,
+                ));
+            }
+            Err(error) => return Err(error),
+        };
         let response: wire::RecordProviderResponseResponse = decode_execution_output(
             &response_result,
             RECORD_PROVIDER_RESPONSE_RESPONSE_SCHEMA,
@@ -180,12 +215,14 @@ impl CustomerEnrichmentProviderWorker {
         let response_reconciliation =
             classify_response_reconciliation(&response, &sanitized, response_result.replayed)?;
 
-        Ok(ProviderDispatchWorkerResult {
-            dispatch_replayed: dispatch_result.replayed,
-            response_replayed: response_result.replayed,
-            response_reconciliation,
-            response,
-        })
+        Ok(ProviderDispatchExecution::Recorded(Box::new(
+            ProviderDispatchWorkerResult {
+                dispatch_replayed: dispatch_result.replayed,
+                response_replayed: response_result.replayed,
+                response_reconciliation,
+                response,
+            },
+        )))
     }
 }
 
@@ -689,20 +726,56 @@ fn dispatch_output_invalid(reference: impl Into<String>) -> SdkError {
     .with_internal_reference(reference.into())
 }
 
-fn response_reconciliation_error(error: SdkError) -> SdkError {
-    if matches!(
+fn provider_response_conflict_draft(
+    request: &ProviderDispatchRequest,
+    response: &SanitizedProviderResponse,
+    conflicting_semantic_fingerprint: [u8; 32],
+) -> Result<ProviderResponseConflictDraft, SdkError> {
+    let provider_observed_at_unix_ms = response
+        .provider_observed_at_unix_ms
+        .map(u64::try_from)
+        .transpose()
+        .map_err(|_| worker_input_invalid("provider observation timestamp is negative"))?;
+    let retrieved_at_unix_ms = u64::try_from(response.retrieved_at_unix_ms)
+        .map_err(|_| worker_input_invalid("provider retrieval timestamp is negative"))?;
+    let first_receipt = ProviderResponseReceipt::record(ProviderResponseReceiptDraft {
+        request_id: request.enrichment_request_id.clone(),
+        provider_profile_version_id: request.provider_profile_version_id.clone(),
+        mapping_version_id: request.mapping_version_id.clone(),
+        replay_key: response.replay_key.clone(),
+        provider_correlation_id: response.provider_correlation_id.clone(),
+        response_class: response.response_class,
+        canonical_response_digest: response.canonical_response_digest,
+        provider_observed_at_unix_ms,
+        retrieved_at_unix_ms,
+        metered_units: response.metered_units,
+        protected_evidence_reference: response.protected_evidence_reference.clone(),
+    })?;
+    Ok(ProviderResponseConflictDraft {
+        tenant_id: request.tenant_id.clone(),
+        request_id: request.enrichment_request_id.clone(),
+        retry_generation: request.retry_generation,
+        first_receipt_id: first_receipt.receipt_id().clone(),
+        conflicting_semantic_fingerprint,
+        detected_at_unix_ms: retrieved_at_unix_ms,
+    })
+}
+
+fn is_response_reconciliation_conflict(error: &SdkError) -> bool {
+    matches!(
         error.code.as_str(),
         "DATA_CONFLICT" | "CAPABILITY_IDEMPOTENCY_KEY_REUSED"
-    ) {
-        return SdkError::new(
-            "CUSTOMER_ENRICHMENT_CONFLICTING_PROVIDER_REPLAY",
-            ErrorCategory::Conflict,
-            false,
-            "The provider replay conflicts with immutable response evidence.",
-        )
-        .with_internal_reference("response idempotency semantic fingerprint conflict");
-    }
-    error
+    )
+}
+
+fn conflicting_provider_replay() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_CONFLICTING_PROVIDER_REPLAY",
+        ErrorCategory::Conflict,
+        false,
+        "The provider replay conflicts with immutable response evidence.",
+    )
+    .with_internal_reference("response idempotency semantic fingerprint conflict")
 }
 
 fn response_output_invalid(reference: impl Into<String>) -> SdkError {
