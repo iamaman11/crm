@@ -27,7 +27,9 @@ use prost::Message;
 use sqlx::PgPool;
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use support::{accept_request, seed_suggestion, suggestion};
+use support::{
+    accept_request, refreshed_suggestion, seed_suggestion, seed_suggestion_with_suffix, suggestion,
+};
 
 #[derive(Debug)]
 struct ExactAllowPolicy;
@@ -62,6 +64,7 @@ impl SuggestionReviewPolicyPort for ExactAllowPolicy {
 #[derive(Debug)]
 struct ProcessVisibility {
     hide_party: bool,
+    hidden_suggestion_id: Option<String>,
 }
 
 impl QueryVisibilityAuthorizer for ProcessVisibility {
@@ -74,6 +77,14 @@ impl QueryVisibilityAuthorizer for ProcessVisibility {
             if self.hide_party && resource.record_type.as_str() == "parties.party" {
                 return Ok(QueryVisibilityDecision::denied(
                     "visibility-party-hidden",
+                    "visibility-v1",
+                ));
+            }
+            if resource.record_type.as_str() == "customer_enrichment.suggestion"
+                && self.hidden_suggestion_id.as_deref() == Some(resource.record_id.as_str())
+            {
+                return Ok(QueryVisibilityDecision::denied(
+                    "visibility-suggestion-hidden",
                     "visibility-v1",
                 ));
             }
@@ -156,7 +167,10 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
     let visible_queries = CustomerEnrichmentSuggestionQueryAdapter::new(
         query_store.clone(),
         CursorCodec::new([91; 32]).expect("construct visible review-query cursor codec"),
-        Arc::new(ProcessVisibility { hide_party: false }),
+        Arc::new(ProcessVisibility {
+            hide_party: false,
+            hidden_suggestion_id: None,
+        }),
     );
     let get_definition = get_suggestion_capability_definition().unwrap();
     let get_request = query_request(
@@ -218,10 +232,115 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
     assert_eq!(list_output.suggestions.len(), 1);
     assert!(list_output.next_cursor.is_empty());
 
+    let refreshed = refreshed_suggestion();
+    seed_suggestion_with_suffix(&query_store, &refreshed, "refreshed")
+        .await
+        .expect("seed refreshed immutable suggestion");
+
+    let superseded_result = visible_queries
+        .execute(&get_definition, get_request.clone())
+        .await
+        .expect("derive visible supersession");
+    let superseded_output =
+        wire::GetSuggestionResponse::decode(superseded_result.output.bytes.as_slice()).unwrap();
+    let superseded = superseded_output.suggestion.unwrap();
+    assert_eq!(
+        superseded.lifecycle_status,
+        wire::SuggestionLifecycleStatus::Superseded as i32
+    );
+    assert_eq!(
+        superseded
+            .superseded_by_suggestion_ref
+            .unwrap()
+            .suggestion_id,
+        refreshed.suggestion_id().as_str()
+    );
+
+    let superseded_list_request = query_request(
+        &list_definition.capability_id,
+        LIST_SUGGESTIONS_BY_PARTY_REQUEST_SCHEMA,
+        &wire::ListSuggestionsByPartyRequest {
+            party_ref: Some(PartyRef {
+                party_id: "party-review-1".to_owned(),
+            }),
+            provider_profile_version_ref: accepted_suggestion.provider_profile_version_ref.clone(),
+            status: Some(wire::SuggestionLifecycleStatus::Superseded as i32),
+            page_size: 10,
+            cursor: String::new(),
+        },
+        "review-list-superseded",
+    );
+    let superseded_list_result = visible_queries
+        .execute(&list_definition, superseded_list_request)
+        .await
+        .expect("list visible superseded suggestion");
+    let superseded_list = wire::ListSuggestionsByPartyResponse::decode(
+        superseded_list_result.output.bytes.as_slice(),
+    )
+    .unwrap();
+    assert_eq!(superseded_list.suggestions.len(), 1);
+    assert_eq!(
+        superseded_list.suggestions[0]
+            .suggestion_ref
+            .as_ref()
+            .unwrap()
+            .suggestion_id,
+        suggestion.suggestion_id().as_str()
+    );
+
+    let hidden_successor_queries = CustomerEnrichmentSuggestionQueryAdapter::new(
+        query_store.clone(),
+        CursorCodec::new([93; 32]).expect("construct hidden-successor cursor codec"),
+        Arc::new(ProcessVisibility {
+            hide_party: false,
+            hidden_suggestion_id: Some(refreshed.suggestion_id().as_str().to_owned()),
+        }),
+    );
+    let hidden_successor_result = hidden_successor_queries
+        .execute(&get_definition, get_request.clone())
+        .await
+        .expect("hidden successor must not affect visible lifecycle");
+    let hidden_successor_output =
+        wire::GetSuggestionResponse::decode(hidden_successor_result.output.bytes.as_slice())
+            .unwrap();
+    let hidden_successor_suggestion = hidden_successor_output.suggestion.unwrap();
+    assert_eq!(
+        hidden_successor_suggestion.lifecycle_status,
+        wire::SuggestionLifecycleStatus::Accepted as i32
+    );
+    assert!(
+        hidden_successor_suggestion
+            .superseded_by_suggestion_ref
+            .is_none()
+    );
+
+    let expired_get_request = query_request_at(
+        &get_definition.capability_id,
+        GET_SUGGESTION_REQUEST_SCHEMA,
+        &wire::GetSuggestionRequest {
+            suggestion_ref: accepted_suggestion.suggestion_ref.clone(),
+        },
+        "review-get-expired",
+        1_600_000_000,
+    );
+    let expired_result = hidden_successor_queries
+        .execute(&get_definition, expired_get_request)
+        .await
+        .expect("derive expiry at query time");
+    let expired_output =
+        wire::GetSuggestionResponse::decode(expired_result.output.bytes.as_slice()).unwrap();
+    assert_eq!(
+        expired_output.suggestion.unwrap().lifecycle_status,
+        wire::SuggestionLifecycleStatus::Expired as i32
+    );
+
     let hidden_queries = CustomerEnrichmentSuggestionQueryAdapter::new(
         query_store,
         CursorCodec::new([92; 32]).expect("construct hidden review-query cursor codec"),
-        Arc::new(ProcessVisibility { hide_party: true }),
+        Arc::new(ProcessVisibility {
+            hide_party: true,
+            hidden_suggestion_id: None,
+        }),
     );
     let hidden_get = hidden_queries
         .execute(&get_definition, get_request)
@@ -243,7 +362,7 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
             "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND owner_module_id = 'crm.customer-enrichment'",
         )
         .await,
-        2
+        3
     );
     assert_eq!(
         scalar(
@@ -259,7 +378,7 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
             "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = 'tenant-a' AND event_type LIKE 'customer_enrichment.%'",
         )
         .await,
-        2
+        3
     );
     assert_eq!(
         scalar(
@@ -267,7 +386,7 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
             "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id LIKE 'customer_enrichment.%'",
         )
         .await,
-        2
+        3
     );
     assert_eq!(
         scalar(
@@ -275,7 +394,7 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
             "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = 'tenant-a' AND (idempotency_scope = 'customer_enrichment.review.seed@1.0.0' OR idempotency_scope = 'capability:customer_enrichment.suggestion.accept:1.0.0')",
         )
         .await,
-        2
+        3
     );
     assert_eq!(
         scalar(
@@ -283,7 +402,7 @@ async fn postgres_review_and_permission_aware_queries_are_replay_safe() {
             "SELECT count(*)::bigint FROM crm.business_transactions WHERE tenant_id = 'tenant-a' AND capability_id IN ('customer_enrichment.review.seed', 'customer_enrichment.suggestion.accept')",
         )
         .await,
-        2
+        3
     );
 }
 
@@ -292,6 +411,16 @@ fn query_request<M: Message>(
     schema: &'static str,
     message: &M,
     request_id: &str,
+) -> QueryRequest {
+    query_request_at(capability_id, schema, message, request_id, 50_000_000)
+}
+
+fn query_request_at<M: Message>(
+    capability_id: &CapabilityId,
+    schema: &'static str,
+    message: &M,
+    request_id: &str,
+    request_started_at_unix_nanos: i64,
 ) -> QueryRequest {
     let input =
         plan_support::protobuf_payload(MODULE_ID, schema, DataClass::Personal, message).unwrap();
@@ -306,7 +435,7 @@ fn query_request<M: Message>(
             capability_id: capability_id.clone(),
             capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
             schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
-            request_started_at_unix_nanos: 50_000_000,
+            request_started_at_unix_nanos,
         },
         input_hash: semantic_input_hash(&input),
         input,

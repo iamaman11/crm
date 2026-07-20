@@ -28,6 +28,32 @@ const SUGGESTION_MATERIALIZED_EVENT_SCHEMA: &str =
     "crm.customer_enrichment.v1.SuggestionMaterializedEvent";
 
 pub fn suggestion() -> Suggestion {
+    suggestion_at(
+        "review-domain-request",
+        "review-provider-replay-1",
+        30,
+        1_500,
+        7,
+    )
+}
+
+pub fn refreshed_suggestion() -> Suggestion {
+    suggestion_at(
+        "review-domain-request-refreshed",
+        "review-provider-replay-2",
+        45,
+        2_000,
+        8,
+    )
+}
+
+fn suggestion_at(
+    request_key: &str,
+    replay_key: &str,
+    retrieved_at_unix_ms: u64,
+    expires_at_unix_ms: u64,
+    party_resource_version: u64,
+) -> Suggestion {
     let profile = ProviderProfileVersion::publish(ProviderProfileDraft {
         provider_key: "review-registry".to_owned(),
         adapter_kind: "review-http-v1".to_owned(),
@@ -57,9 +83,13 @@ pub fn suggestion() -> Suggestion {
     let mut request = EnrichmentRequest::create(EnrichmentRequestDraft {
         tenant_id: TenantId::try_new(TENANT_ID).unwrap(),
         requested_by: ActorId::try_new("worker-a").unwrap(),
-        idempotency_key: IdempotencyKey::try_new("review-domain-request").unwrap(),
-        target: TargetSnapshot::try_new("party-review-1", 7, TargetField::PartyDisplayName)
-            .unwrap(),
+        idempotency_key: IdempotencyKey::try_new(request_key).unwrap(),
+        target: TargetSnapshot::try_new(
+            "party-review-1",
+            party_resource_version,
+            TargetField::PartyDisplayName,
+        )
+        .unwrap(),
         provider_profile_version_id: profile.version_id().clone(),
         mapping_version_id: mapping.version_id().clone(),
         requested_fields: vec![TargetField::PartyDisplayName],
@@ -72,7 +102,7 @@ pub fn suggestion() -> Suggestion {
         .unwrap(),
         created_at_unix_ms: 1,
         deadline_at_unix_ms: 1_000,
-        expires_at_unix_ms: 2_000,
+        expires_at_unix_ms: 2_500,
     })
     .unwrap();
     request.queue(10).unwrap();
@@ -81,14 +111,14 @@ pub fn suggestion() -> Suggestion {
         request_id: request.request_id().clone(),
         provider_profile_version_id: profile.version_id().clone(),
         mapping_version_id: mapping.version_id().clone(),
-        replay_key: "review-provider-replay-1".to_owned(),
-        provider_correlation_id: Some("review-provider-correlation-1".to_owned()),
+        replay_key: replay_key.to_owned(),
+        provider_correlation_id: Some(format!("correlation-{replay_key}")),
         response_class: ProviderResponseClass::Success,
-        canonical_response_digest: [81; 32],
-        provider_observed_at_unix_ms: Some(20),
-        retrieved_at_unix_ms: 30,
+        canonical_response_digest: [u8::try_from(retrieved_at_unix_ms).unwrap(); 32],
+        provider_observed_at_unix_ms: Some(retrieved_at_unix_ms - 1),
+        retrieved_at_unix_ms,
         metered_units: 1,
-        protected_evidence_reference: Some("review-evidence-1".to_owned()),
+        protected_evidence_reference: Some(format!("evidence-{replay_key}")),
     })
     .unwrap();
     Suggestion::materialize(SuggestionDraft {
@@ -98,11 +128,11 @@ pub fn suggestion() -> Suggestion {
         mapping_version_id: mapping.version_id().clone(),
         target: request.target().clone(),
         proposed_value: "Reviewed Company".to_owned(),
-        observed_at_unix_ms: Some(20),
-        retrieved_at_unix_ms: 30,
-        effective_at_unix_ms: 20,
+        observed_at_unix_ms: Some(retrieved_at_unix_ms - 1),
+        retrieved_at_unix_ms,
+        effective_at_unix_ms: retrieved_at_unix_ms,
         fresh_until_unix_ms: 1_000,
-        expires_at_unix_ms: 1_500,
+        expires_at_unix_ms,
         confidence_basis_points: Some(9_000),
         purpose_code: "customer_profile_enrichment".to_owned(),
         legal_basis_code: "legitimate_interest".to_owned(),
@@ -111,7 +141,7 @@ pub fn suggestion() -> Suggestion {
         residency_region: "eu".to_owned(),
         retention_days: 30,
         consent_evidence_reference: Some("consent-review-1".to_owned()),
-        evidence_references: vec!["review-evidence-1".to_owned()],
+        evidence_references: vec![format!("evidence-{replay_key}")],
     })
     .unwrap()
 }
@@ -120,46 +150,54 @@ pub async fn seed_suggestion(
     store: &PostgresDataStore,
     suggestion: &Suggestion,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    seed_suggestion_with_suffix(store, suggestion, "suggestion").await
+}
+
+pub async fn seed_suggestion_with_suffix(
+    store: &PostgresDataStore,
+    suggestion: &Suggestion,
+    suffix: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let reference = suggestion_record_ref(suggestion.suggestion_id().as_str())?;
     let event_payload = support::protobuf_payload(
         MODULE_ID,
         SUGGESTION_MATERIALIZED_EVENT_SCHEMA,
         DataClass::Personal,
         &wire::SuggestionMaterializedEvent {
-            suggestion: Some(suggestion_to_wire(suggestion, None, 30)?),
+            suggestion: Some(suggestion_to_wire(suggestion, None, 50)?),
         },
     )?;
     let request_hash = semantic_input_hash(&event_payload);
     store
         .create_record(&RecordCreatePlan {
             context: context(
-                "review-seed-request",
+                &format!("review-seed-request-{suffix}"),
                 SEED_CAPABILITY,
-                "review-seed-idempotency",
-                "review-seed-tx",
-                30_000_000,
+                &format!("review-seed-idempotency-{suffix}"),
+                &format!("review-seed-tx-{suffix}"),
+                50_000_000,
             ),
             record: reference.clone(),
             record_payload: suggestion_persisted_payload(suggestion)?,
-            event_id: "review-seed-event".to_owned(),
+            event_id: format!("review-seed-event-{suffix}"),
             event: DomainEvent {
                 event_type: EventType::try_new(SUGGESTION_MATERIALIZED_EVENT_TYPE)?,
-                aggregate: reference.clone(),
+                aggregate: reference,
                 expected_aggregate_version: None,
-                deduplication_key: "review-seed-event".to_owned(),
+                deduplication_key: format!("review-seed-event-{suffix}"),
                 payload: event_payload,
             },
             idempotency: IdempotencyEvidence {
                 scope: format!("{SEED_CAPABILITY}@1.0.0"),
-                key: "review-seed-idempotency".to_owned(),
+                key: format!("review-seed-idempotency-{suffix}"),
                 request_hash,
-                expires_at_unix_nanos: 86_400_030_000_000,
+                expires_at_unix_nanos: 86_400_050_000_000,
             },
             audit: AuditIntent {
-                audit_record_id: "review-seed-audit".to_owned(),
+                audit_record_id: format!("review-seed-audit-{suffix}"),
                 canonicalization_profile: "crm.cjson/v1".to_owned(),
-                canonical_envelope: b"{\"seed\":\"suggestion\"}".to_vec(),
-                occurred_at_unix_nanos: 30_000_000,
+                canonical_envelope: format!("{{\"seed\":\"{suffix}\"}}").into_bytes(),
+                occurred_at_unix_nanos: 50_000_000,
             },
         })
         .await?;
