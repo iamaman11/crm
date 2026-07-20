@@ -29,6 +29,13 @@ replace_once(
 )
 
 replace_once(
+    Path("crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_persistence.rs"),
+    "SELECT current_version::bigint FROM crm.records",
+    "SELECT version::bigint FROM crm.records",
+    "record version query",
+)
+
+replace_once(
     Path("modules/crm-customer-enrichment/module.yaml"),
     """    - id: customer_enrichment.response.recorded
       version: 1.0.0
