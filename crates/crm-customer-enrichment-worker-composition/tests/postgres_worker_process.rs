@@ -1,3 +1,9 @@
+use axum::body::Bytes;
+use axum::extract::State;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::IntoResponse;
+use axum::routing::post;
+use axum::{Json, Router};
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::CapabilityRequest;
@@ -5,9 +11,8 @@ use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordC
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, EnrichmentRequestStatus, MappingDraft,
     MappingNormalization, MappingVersion, PartySnapshot, ProviderDispatchExpectation,
-    ProviderDispatchPort, ProviderDispatchRequest, ProviderProfileDraft, ProviderProfileVersion,
-    ProviderResponseClass, RawPayloadPolicy, RequestPolicyEvidence, SanitizedProviderResponse,
-    TargetField, TargetSnapshot, prepare_provider_dispatch_attempt,
+    ProviderDispatchRequest, ProviderProfileDraft, ProviderProfileVersion, RawPayloadPolicy,
+    RequestPolicyEvidence, TargetField, TargetSnapshot, prepare_provider_dispatch_attempt,
 };
 use crm_customer_enrichment_capability_adapter::{
     DISPATCH_ENRICHMENT_REQUEST_REQUEST_SCHEMA, ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA,
@@ -16,60 +21,103 @@ use crm_customer_enrichment_capability_adapter::{
     request_dispatch_capability_definition,
 };
 use crm_customer_enrichment_provider_registry::{
-    ExactProviderAdapterRegistry, ProviderAdapterRegistration,
+    ConsecutiveFailureProviderCircuitBreaker, ExactProviderAdapterRegistry,
+    FixedWindowProviderQuota, GovernedProviderAdapter, ProviderAdapterRegistration,
+    ProviderSecretMaterial, ProviderSecretRegistration, StaticProviderSecretHandleResolver,
+};
+use crm_customer_enrichment_registry_http_transport::{
+    REGISTRY_HTTP_PATH, RegistryHttpTransport, RegistryHttpTransportConfig,
 };
 use crm_customer_enrichment_worker_composition::{
     CustomerEnrichmentProviderWorker, ProviderDispatchWorkItem,
 };
+use crm_module_sdk::testing::FixedClock;
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
     DataClass, DomainEvent, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext,
-    ModuleId, PortFuture, RecordId, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
+    ModuleId, RecordId, RequestId, SchemaVersion, TenantId, TraceId,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
+use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
+use tokio::net::TcpListener;
 
 const TENANT_ID: &str = "tenant-a";
 const ACTOR_ID: &str = "actor-a";
 const SEED_CAPABILITY: &str = "customer_enrichment.request.seed";
+const PROVIDER_SECRET: &str = "super-secret-provider-token";
+const PROVIDER_RESPONSE_SCHEMA: &str = "crm.customer-enrichment.registry-http.response/v1";
 
 #[derive(Clone)]
-struct ReplaySafeProvider {
+struct RegistryProviderState {
     expected_key: String,
     calls: Arc<AtomicUsize>,
 }
 
-impl ProviderDispatchPort for ReplaySafeProvider {
-    fn dispatch<'a>(
-        &'a self,
-        request: ProviderDispatchRequest,
-    ) -> PortFuture<'a, Result<SanitizedProviderResponse, SdkError>> {
-        self.calls.fetch_add(1, Ordering::SeqCst);
-        let expected_key = self.expected_key.clone();
-        Box::pin(async move {
-            if request.provider_idempotency_key != expected_key {
-                return Err(SdkError::new(
-                    "TEST_PROVIDER_REPLAY_KEY_CHANGED",
-                    crm_module_sdk::ErrorCategory::Dependency,
-                    false,
-                    "The provider replay key changed.",
-                ));
-            }
-            Ok(SanitizedProviderResponse {
-                replay_key: request.provider_idempotency_key,
-                provider_correlation_id: Some("provider-correlation-process-1".to_owned()),
-                response_class: ProviderResponseClass::Success,
-                canonical_response_digest: [91; 32],
-                provider_observed_at_unix_ms: Some(30),
-                retrieved_at_unix_ms: 31,
-                metered_units: 3,
-                protected_evidence_reference: None,
-                safe_provider_code: Some("success".to_owned()),
-            })
-        })
+async fn registry_provider(
+    State(state): State<RegistryProviderState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> impl IntoResponse {
+    state.calls.fetch_add(1, Ordering::SeqCst);
+    if headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        != Some("Bearer super-secret-provider-token")
+    {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
+    if headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        != Some(state.expected_key.as_str())
+    {
+        return (StatusCode::CONFLICT, "idempotency conflict").into_response();
+    }
+    let request: Value = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid request").into_response(),
+    };
+    if request
+        .get("provider_idempotency_key")
+        .and_then(Value::as_str)
+        != Some(state.expected_key.as_str())
+    {
+        return (StatusCode::CONFLICT, "lineage conflict").into_response();
+    }
+    Json(json!({
+        "schema_version": PROVIDER_RESPONSE_SCHEMA,
+        "replay_key": state.expected_key,
+        "provider_correlation_id": "provider-correlation-process-1",
+        "response_class": "success",
+        "provider_observed_at_unix_ms": 30,
+        "metered_units": 3,
+        "protected_evidence_reference": null,
+        "safe_provider_code": "success"
+    }))
+    .into_response()
+}
+
+async fn spawn_registry_provider(expected_key: String, calls: Arc<AtomicUsize>) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind registry HTTP provider");
+    let address = listener.local_addr().expect("read provider address");
+    let router = Router::new()
+        .route(REGISTRY_HTTP_PATH, post(registry_provider))
+        .with_state(RegistryProviderState {
+            expected_key,
+            calls,
+        });
+    tokio::spawn(async move {
+        axum::serve(listener, router)
+            .await
+            .expect("serve registry HTTP provider");
+    });
+    format!("http://{address}{REGISTRY_HTTP_PATH}")
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -93,12 +141,50 @@ async fn postgres_worker_commits_and_replays_without_duplicates() {
         .expect("seed canonical Created request");
 
     let calls = Arc::new(AtomicUsize::new(0));
+    let endpoint = spawn_registry_provider(
+        fixture.provider_request.provider_idempotency_key.clone(),
+        calls.clone(),
+    )
+    .await;
+    let clock = Arc::new(FixedClock::new(31_000_000));
+    let transport = RegistryHttpTransport::try_new(
+        RegistryHttpTransportConfig::try_new(
+            &endpoint,
+            [endpoint.clone()],
+            Duration::from_secs(1),
+            64 * 1024,
+            64 * 1024,
+        )
+        .expect("configure exact registry HTTP endpoint"),
+        clock.clone(),
+    )
+    .expect("build registry HTTP transport");
+    let secrets = StaticProviderSecretHandleResolver::try_new([ProviderSecretRegistration {
+        tenant_id: TenantId::try_new(TENANT_ID).unwrap(),
+        handle_alias: "registry_primary".to_owned(),
+        material: ProviderSecretMaterial::try_new(PROVIDER_SECRET.as_bytes().to_vec())
+            .expect("create redacted provider secret"),
+    }])
+    .expect("build tenant-bound provider secret resolver");
+    let adapter = GovernedProviderAdapter::new(
+        Arc::new(secrets),
+        Arc::new(
+            FixedWindowProviderQuota::try_new(10, 60_000_000_000, clock.clone())
+                .expect("build provider quota"),
+        ),
+        Arc::new(
+            ConsecutiveFailureProviderCircuitBreaker::try_new(
+                3,
+                60_000_000_000,
+                clock,
+            )
+            .expect("build provider circuit"),
+        ),
+        Arc::new(transport),
+    );
     let registry = ExactProviderAdapterRegistry::try_new([ProviderAdapterRegistration::enabled(
         fixture.provider_request.adapter_coordinate.clone(),
-        ReplaySafeProvider {
-            expected_key: fixture.provider_request.provider_idempotency_key.clone(),
-            calls: calls.clone(),
-        },
+        adapter,
     )])
     .expect("build exact provider registry");
     let worker = CustomerEnrichmentProviderWorker::postgres(store.clone(), Arc::new(registry))
