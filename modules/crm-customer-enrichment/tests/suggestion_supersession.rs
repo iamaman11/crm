@@ -63,7 +63,14 @@ fn expiry_overrides_an_accepted_review_but_retains_both_evidence_records() {
     let original_suggestion = suggestion.clone();
     let original_decision = decision.clone();
 
-    let status = derive_suggestion_status(
+    let before_expiry = derive_suggestion_status(
+        &suggestion,
+        Some(&decision),
+        None,
+        None,
+        suggestion.expires_at_unix_ms() - 1,
+    );
+    let at_expiry = derive_suggestion_status(
         &suggestion,
         Some(&decision),
         None,
@@ -71,7 +78,8 @@ fn expiry_overrides_an_accepted_review_but_retains_both_evidence_records() {
         suggestion.expires_at_unix_ms(),
     );
 
-    assert_eq!(status, SuggestionLifecycleStatus::Expired);
+    assert_eq!(before_expiry, SuggestionLifecycleStatus::Accepted);
+    assert_eq!(at_expiry, SuggestionLifecycleStatus::Expired);
     assert_eq!(suggestion, original_suggestion);
     assert_eq!(decision, original_decision);
 }
