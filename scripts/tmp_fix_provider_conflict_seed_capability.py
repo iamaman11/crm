@@ -34,5 +34,27 @@ replace_once(
     'CapabilityId::try_new("customer_enrichment.response.record")',
     "provider conflict persistence seed capability",
 )
+replace_once(
+    persistence_test,
+    """    assert_eq!(
+        scalar(
+            &admin,
+            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id = 'customer_enrichment.response.record'",
+        )
+        .await,
+        1
+    );
+""",
+    """    assert_eq!(
+        scalar(
+            &admin,
+            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id = 'customer_enrichment.response.record'",
+        )
+        .await,
+        2
+    );
+""",
+    "provider conflict persistence seed and conflict audit count",
+)
 
 print("aligned provider conflict fixtures to registered response capability")
