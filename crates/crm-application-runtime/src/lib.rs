@@ -14,6 +14,7 @@ mod config;
 mod customer_enrichment_application_worker;
 mod customer_enrichment_materialization_process;
 mod customer_enrichment_provider_process;
+mod customer_enrichment_provider_registry;
 mod customer_enrichment_provider_source;
 mod customer_enrichment_provider_worker;
 mod customer_enrichment_reject_promotion;
@@ -48,6 +49,11 @@ pub use customer_enrichment_materialization_process::{
 };
 pub use customer_enrichment_provider_process::{
     CustomerEnrichmentProviderProcessDependencies, build_customer_enrichment_provider_process,
+};
+pub use customer_enrichment_provider_registry::{
+    ProcessProviderSecretValueSource, ProviderSecretValueSourcePort, ProviderTransportCatalogPort,
+    ProviderTransportRegistration, StaticProviderTransportCatalog,
+    build_customer_enrichment_provider_registry,
 };
 pub use customer_enrichment_provider_source::GovernedCustomerEnrichmentProviderSource;
 pub use customer_enrichment_provider_worker::{
