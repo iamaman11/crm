@@ -16,9 +16,9 @@ use crm_customer_enrichment_materialization_adapter::{
     MATERIALIZE_SUGGESTIONS_REQUEST_SCHEMA, suggestion_materialization_capability_definition,
 };
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CausationId, CorrelationId, DataClass, EventDelivery,
+    ActorId, BusinessTransactionId, CausationId, DataClass, EventDelivery,
     EventType, ExecutionContext, FileId, IdempotencyKey, ModuleExecutionContext, ModuleId,
-    PayloadEncoding, PortFuture, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
+    PayloadEncoding, PortFuture, RequestId, SchemaVersion, SdkError, TenantId,
 };
 use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
 use prost::Message;
