@@ -79,7 +79,7 @@ async fn response_event_waits_for_finalized_evidence_then_materializes_once() {
             artifacts.clone(),
         )),
         Arc::new(PostgresCustomerEnrichmentSuggestionMaterializationWorker::new(store.clone())),
-        ActorId::try_new(MATERIALIZATION_PROCESS_WORKER_ACTOR_ID).unwrap(),
+        ActorId::try_new(ACTOR_ID).unwrap(),
     )
     .expect("compose materialization event process");
     let tenant_id = TenantId::try_new(TENANT_ID).unwrap();
@@ -288,7 +288,7 @@ async fn seed_dependencies(
         store,
         SeedRecord {
             suffix: "event-receipt",
-            at_unix_ms: 4,
+            at_unix_ms: 40,
             reference: receipt_record_ref(&fixture.receipt)?,
             record_payload: receipt_persisted_payload(&fixture.receipt)?,
             event_type: PROVIDER_RESPONSE_RECORDED_EVENT_TYPE,
