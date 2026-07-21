@@ -468,8 +468,7 @@ old_loop = '''                for delivery in page.deliveries {
                         Ok(DeliveryDisposition::RejectedRequest { replayed }) => {
                             cycle.rejected_requests = cycle.rejected_requests.saturating_add(1);
                             if replayed {
-                                cycle.rejection_replays =
-                                    cycle.rejection_replays.saturating_add(1);
+                                cycle.rejection_replays = cycle.rejection_replays.saturating_add(1);
                             }
                         }
                         Err(error) => {
@@ -544,8 +543,7 @@ new_loop = '''                for delivery in page.deliveries {
                         DeliveryDisposition::RejectedRequest { replayed } => {
                             cycle.rejected_requests = cycle.rejected_requests.saturating_add(1);
                             if replayed {
-                                cycle.rejection_replays =
-                                    cycle.rejection_replays.saturating_add(1);
+                                cycle.rejection_replays = cycle.rejection_replays.saturating_add(1);
                             }
                         }
                     }
@@ -641,7 +639,7 @@ replace_once(
 )
 replace_once(
     provider_worker,
-    '''#[derive(Debug)]
+    '''#[derive(Debug, Clone, PartialEq)]
 enum DeliveryDisposition {
 ''',
     '''#[derive(Debug)]
