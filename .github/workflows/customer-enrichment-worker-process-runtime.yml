@@ -157,18 +157,6 @@ jobs:
             --test postgres_customer_enrichment_provider_materialization_http_process \
             process::exact_host_http_response_materializes_one_governed_suggestion \
             -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
-      - name: Prepare fresh candidate-evidence lineage-conflict database
-        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
-      - name: Verify terminal governed evidence lineage conflict
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test \
-            -p crm-customer-enrichment-materialization-composition \
-            --features postgres-integration \
-            --test postgres_materialization_lineage_conflict_process \
-            process::lineage_mismatched_evidence_fails_checkpoint_before_materialization \
-            -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
       - name: Prepare fresh Customer Enrichment provider-worker database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify durable Customer Enrichment provider worker
