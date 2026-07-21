@@ -1,7 +1,9 @@
+#![cfg(unix)]
+
 #[path = "support/customer_enrichment_process/mod.rs"]
 mod support;
 
-use crm_application_runtime::gateway_v1::ApplicationGatewayServiceClient;
+use crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient;
 use reqwest::Client as HttpClient;
 use serde_json::json;
 use sqlx::PgPool;
@@ -13,7 +15,7 @@ const HIDDEN_PROFILE_DEFINITION: &str = "customer_enrichment.provider_profile.ge
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn customer_enrichment_real_process_denials_are_bounded_and_side_effect_free() {
-    let Some(database_url) = std::env::var("DATABASE_URL").ok() else {
+    let Ok(database_url) = std::env::var("DATABASE_URL") else {
         eprintln!(
             "skipping Customer Enrichment crm-api process test because DATABASE_URL is absent"
         );
