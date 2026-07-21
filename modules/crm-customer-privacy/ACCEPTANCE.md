@@ -1,12 +1,13 @@
 # Acceptance gates for `crm.customer-privacy`
 
-Scaffold state: **Foundation only**. These gates block any claim of a production vertical slice.
+Current state: **Foundation plus pure domain**. These gates block any claim of a production vertical slice.
 
 - [x] Freeze immutable module identity and first ownership boundary.
 - [x] Keep the pure module core infrastructure-neutral and deny direct cross-owner storage access.
 - [x] Accept the Phase 8A.11 architecture and guardrail freeze on unchanged source SHA `62aaaeeb6dec68d520b3b50bb8a6c83fa44e62f8`, merged through PR #140 as `b54ecf42eab4cb465db79ea0103e40edd3ba9d79`.
+- [x] Implement deterministic in-memory privacy case, restriction and legal-hold aggregates with optimistic versions, monotonic transition time, bounded errors, exact retry/resume and canonical-lineage rescope semantics.
 - [ ] Publish compatible versioned privacy case, restriction and legal-hold Protobuf contracts and generated bindings.
-- [ ] Define deterministic domain state machines, identities, canonical persistence and safe typed failures.
+- [ ] Define immutable identities, canonical private persistence representation and strict rehydration for every privacy aggregate.
 - [ ] Implement FORCE RLS persistence, rollback/reapply and `NOBYPASSRLS` tenant isolation.
 - [ ] Add permission-aware public case, restriction and legal-hold mutations/queries through module-owned production contributions.
 - [ ] Add the shared `tenant_id + canonical_party_id` final subject-lock enforcement port to protected owner paths.
