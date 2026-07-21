@@ -183,7 +183,28 @@ async fn customer_enrichment_real_process_denials_are_bounded_and_side_effect_fr
     );
     assert_eq!(evidence_counts(&admin).await, baseline);
 
+    mutate(
+        &mut grpc,
+        &request_definition,
+        legitimate_interest_request_payload(
+            &request_definition,
+            profile_id.as_str(),
+            mapping_id.as_str(),
+        ),
+        TENANT_A,
+        "crm-api-enrichment-legitimate-interest",
+        true,
+    )
+    .await
+    .expect("create enrichment request through guarded crm-api persistence");
     set_customer_enrichment_status(&admin, "suspended").await;
+    let committed = evidence_counts(&admin).await;
+    assert_eq!(committed.request_records, baseline.request_records + 1);
+    assert!(committed.events >= baseline.events + 1);
+    assert!(committed.audits >= baseline.audits + 1);
+    assert!(committed.idempotency >= baseline.idempotency + 1);
+    assert!(committed.transactions >= baseline.transactions + 1);
+
     let inactive = mutate(
         &mut grpc,
         &profile_definition,
@@ -195,9 +216,9 @@ async fn customer_enrichment_real_process_denials_are_bounded_and_side_effect_fr
     .await
     .expect_err("suspended Customer Enrichment module must reject mutations");
     assert_safe_status(&inactive, Code::Aborted, "MODULE_NOT_ACTIVE");
-    assert_eq!(evidence_counts(&admin).await, baseline);
-    set_customer_enrichment_status(&admin, "active").await;
+    assert_eq!(evidence_counts(&admin).await, committed);
     stop_process(&mut process).await;
+    set_customer_enrichment_status(&admin, "active").await;
 
     let denied_http_port = free_port();
     let denied_grpc_port = free_port();
@@ -228,7 +249,7 @@ async fn customer_enrichment_real_process_denials_are_bounded_and_side_effect_fr
         Code::PermissionDenied,
         "CAPABILITY_PERMISSION_DENIED",
     );
-    assert_eq!(evidence_counts(&admin).await, baseline);
+    assert_eq!(evidence_counts(&admin).await, committed);
     stop_process(&mut denied_process).await;
 }
 
