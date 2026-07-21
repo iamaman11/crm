@@ -1044,9 +1044,7 @@ async fn lineage_mismatched_evidence_fails_checkpoint_before_materialization() {
         .as_deref()
         .expect("failed materialization checkpoint lineage exists");
     assert!(
-        failed_reference.contains(
-            "failure_code=CUSTOMER_ENRICHMENT_SUGGESTION_EVIDENCE_CONFLICT"
-        )
+        failed_reference.contains("failure_code=CUSTOMER_ENRICHMENT_SUGGESTION_EVIDENCE_CONFLICT")
     );
 
     let baseline = evidence_counts(&admin).await;
@@ -1071,14 +1069,8 @@ async fn lineage_mismatched_evidence_fails_checkpoint_before_materialization() {
         .expect_err("failed materialization checkpoint must block restart");
     assert_eq!(replay.code, "PROJECTION_CHECKPOINT_FAILED");
     assert!(!replay.retryable);
-    assert_eq!(
-        evidence_calls.load(std::sync::atomic::Ordering::SeqCst),
-        0
-    );
-    assert_eq!(
-        executor_calls.load(std::sync::atomic::Ordering::SeqCst),
-        0
-    );
+    assert_eq!(evidence_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(executor_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
     assert_eq!(suggestion_count(&admin).await, 0);
     assert_eq!(request_version(&admin, &fixture).await, 1);
     assert_eq!(evidence_counts(&admin).await, baseline);
@@ -1124,8 +1116,7 @@ impl crm_customer_enrichment_materialization_composition::SuggestionMaterializat
         'a,
         Result<crm_capability_runtime::CapabilityExecutionResult, SdkError>,
     > {
-        self.calls
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Box::pin(async {
             Err(SdkError::new(
                 "TEST_MATERIALIZATION_EXECUTOR_MUST_NOT_RUN",
