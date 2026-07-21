@@ -9,8 +9,8 @@ use crm_consents::{
     PartyReference, PurposeCode, SourceCode,
 };
 use crm_consents_capability_adapter::{
-    MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
-    WITHDRAW_CAPABILITY, WITHDRAW_REQUEST_SCHEMA, ConsentCapabilityPlanner,
+    ConsentCapabilityPlanner, MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
+    WITHDRAW_CAPABILITY, WITHDRAW_REQUEST_SCHEMA,
     capability_definition as consent_capability_definition,
     persisted_payload as consent_persisted_payload,
 };
