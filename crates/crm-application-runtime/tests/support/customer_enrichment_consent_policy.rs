@@ -5,8 +5,8 @@ use crm_capability_runtime::{
 };
 use crm_consents::{
     CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId, ConsentEffect,
-    CreateConsentAuthorization, EvidenceReference, JurisdictionCode, LegalBasisCode, PartyReference,
-    PurposeCode, SourceCode, WithdrawConsentAuthorization,
+    CreateConsentAuthorization, EvidenceReference, JurisdictionCode, LegalBasisCode,
+    PartyReference, PurposeCode, SourceCode, WithdrawConsentAuthorization,
 };
 use crm_consents_capability_adapter::{
     RECORD_TYPE as CONSENT_RECORD_TYPE, persisted_payload as consent_persisted_payload,
@@ -272,11 +272,9 @@ fn seed_context(identity: &str) -> Result<ModuleExecutionContext, SdkError> {
                 .map_err(configuration_error)?,
             causation_id: CausationId::try_new(format!("{identity}-causation"))
                 .map_err(configuration_error)?,
-            trace_id: TraceId::try_new(format!("{identity}-trace"))
-                .map_err(configuration_error)?,
+            trace_id: TraceId::try_new(format!("{identity}-trace")).map_err(configuration_error)?,
             capability_id: CapabilityId::try_new(SEED_CAPABILITY).map_err(configuration_error)?,
-            capability_version: CapabilityVersion::try_new("1.0.0")
-                .map_err(configuration_error)?,
+            capability_version: CapabilityVersion::try_new("1.0.0").map_err(configuration_error)?,
             idempotency_key: IdempotencyKey::try_new(identity).map_err(configuration_error)?,
             business_transaction_id: BusinessTransactionId::try_new(format!(
                 "{identity}-transaction"
