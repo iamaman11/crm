@@ -6,10 +6,13 @@ use crm_capability_runtime::{
 use crm_consents::{
     CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId, ConsentEffect,
     CreateConsentAuthorization, EvidenceReference, JurisdictionCode, LegalBasisCode,
-    PartyReference, PurposeCode, SourceCode, WithdrawConsentAuthorization,
+    PartyReference, PurposeCode, SourceCode,
 };
 use crm_consents_capability_adapter::{
-    RECORD_TYPE as CONSENT_RECORD_TYPE, persisted_payload as consent_persisted_payload,
+    MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
+    WITHDRAW_CAPABILITY, WITHDRAW_REQUEST_SCHEMA, ConsentCapabilityPlanner,
+    capability_definition as consent_capability_definition,
+    persisted_payload as consent_persisted_payload,
 };
 use crm_core_data::{
     AuditIntent, IdempotencyEvidence, PostgresDataStore, PostgresTransactionalAggregateExecutor,
@@ -20,8 +23,8 @@ use crm_customer_enrichment::{
     ProviderProfileVersion, RawPayloadPolicy, TargetField,
 };
 use crm_customer_enrichment_capability_adapter::{
-    mapping_persisted_payload, mapping_record_ref,
-    provider_profile_persisted_payload, provider_profile_record_ref,
+    mapping_persisted_payload, mapping_record_ref, provider_profile_persisted_payload,
+    provider_profile_record_ref,
 };
 use crm_module_sdk::{
     BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, DataClass,
@@ -33,7 +36,9 @@ use crm_parties_capability_adapter::{
     CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA, MODULE_ID as PARTIES_MODULE_ID,
     PartyCapabilityPlanner, capability_definition as party_capability_definition,
 };
-use crm_proto_contracts::crm::{customer::v1 as customer_wire, parties::v1 as party_wire};
+use crm_proto_contracts::crm::{
+    consents::v1 as consent_wire, customer::v1 as customer_wire, parties::v1 as party_wire,
+};
 use std::sync::Arc;
 
 use super::customer_enrichment_suggestion_get::{NOW, TENANT, actor, tenant};
@@ -173,7 +178,7 @@ pub async fn seed_consent(
         ConsentFixtureKind::Expired => Some(NOW - 500_000_000),
         _ => Some(NOW + 10_000_000_000),
     };
-    let mut authorization = ConsentAuthorization::create(CreateConsentAuthorization {
+    let authorization = ConsentAuthorization::create(CreateConsentAuthorization {
         authorization_id: ConsentAuthorizationId::try_new(authorization_id.clone())?,
         party_ref: PartyReference::try_new(match kind {
             ConsentFixtureKind::WrongParty => WRONG_PARTY_ID,
@@ -200,12 +205,6 @@ pub async fn seed_consent(
         expires_at_unix_nanos: expires_at,
         occurred_at_unix_nanos: occurred_at,
     })?;
-    if matches!(kind, ConsentFixtureKind::Withdrawn) {
-        authorization.withdraw(WithdrawConsentAuthorization {
-            expected_version: 1,
-            occurred_at_unix_nanos: NOW - 500_000_000,
-        })?;
-    }
 
     seed_record(
         store,
@@ -217,7 +216,41 @@ pub async fn seed_consent(
         &format!("consent-{}", kind.suffix()),
     )
     .await?;
+    if matches!(kind, ConsentFixtureKind::Withdrawn) {
+        withdraw_consent(store, &authorization_id).await?;
+    }
     Ok(authorization_id)
+}
+
+async fn withdraw_consent(
+    store: &PostgresDataStore,
+    authorization_id: &str,
+) -> Result<(), SdkError> {
+    let definition = consent_capability_definition(WITHDRAW_CAPABILITY)?;
+    let executor = PostgresTransactionalAggregateExecutor::new(
+        store.clone(),
+        Arc::new(ConsentCapabilityPlanner),
+    );
+    let command = consent_wire::WithdrawConsentAuthorizationRequest {
+        authorization_ref: Some(consent_wire::ConsentAuthorizationRef {
+            authorization_id: authorization_id.to_owned(),
+        }),
+        expected_version: 1,
+    };
+    executor
+        .execute(
+            &definition,
+            capability_request(
+                &definition,
+                CONSENTS_MODULE_ID,
+                WITHDRAW_REQUEST_SCHEMA,
+                DataClass::Personal,
+                &command,
+                "consent-policy-withdrawn-withdraw",
+            )?,
+        )
+        .await?;
+    Ok(())
 }
 
 async fn seed_record(
