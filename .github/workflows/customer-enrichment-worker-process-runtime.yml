@@ -113,6 +113,7 @@ jobs:
             --test postgres_customer_enrichment_provider_http_process \
             process::exact_host_http_transport_records_one_canonical_process_outcome \
             -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+      # Terminal credential isolation is proved on a fresh database before any provider I/O.
       - name: Prepare fresh credential-isolation database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify tenant-bound credential isolation before provider I/O
