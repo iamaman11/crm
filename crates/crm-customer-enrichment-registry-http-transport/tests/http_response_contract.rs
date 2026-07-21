@@ -42,11 +42,7 @@ struct ProviderState {
     observed_keys: Arc<Mutex<Vec<String>>>,
 }
 
-async fn provider(
-    State(state): State<ProviderState>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Response {
+async fn provider(State(state): State<ProviderState>, headers: HeaderMap, body: Bytes) -> Response {
     state.calls.fetch_add(1, Ordering::SeqCst);
     if headers
         .get(AUTHORIZATION)
@@ -178,7 +174,10 @@ async fn verify_rejected_response(
 fn assert_mapping_conflict(error: &SdkError, expected_reference: &str) {
     assert_eq!(error.code, "CUSTOMER_ENRICHMENT_PROVIDER_MAPPING_CONFLICT");
     assert!(!error.retryable);
-    assert_eq!(error.internal_reference.as_deref(), Some(expected_reference));
+    assert_eq!(
+        error.internal_reference.as_deref(),
+        Some(expected_reference)
+    );
     assert!(!format!("{error:?} {error}").contains(SECRET_MARKER));
 }
 
@@ -210,12 +209,8 @@ fn adapter(endpoint: String, maximum_response_bytes: usize) -> GovernedProviderA
                 .expect("build provider quota"),
         ),
         Arc::new(
-            ConsecutiveFailureProviderCircuitBreaker::try_new(
-                3,
-                60_000_000_000,
-                clock,
-            )
-            .expect("build provider circuit"),
+            ConsecutiveFailureProviderCircuitBreaker::try_new(3, 60_000_000_000, clock)
+                .expect("build provider circuit"),
         ),
         transport,
     )
