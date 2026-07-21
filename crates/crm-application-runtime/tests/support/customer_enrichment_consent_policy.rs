@@ -227,10 +227,11 @@ async fn seed_record(
     suffix: &str,
 ) -> Result<(), SdkError> {
     let identity = format!("consent-policy-seed-{suffix}");
+    let owner_module_id = payload.owner.clone();
     let event_payload = payload.clone();
     store
         .create_record(&RecordCreatePlan {
-            context: seed_context(&identity)?,
+            context: seed_context(&identity, owner_module_id)?,
             record: reference.clone(),
             record_payload: payload,
             event_id: format!("{identity}-event"),
@@ -260,9 +261,9 @@ async fn seed_record(
     Ok(())
 }
 
-fn seed_context(identity: &str) -> Result<ModuleExecutionContext, SdkError> {
+fn seed_context(identity: &str, module_id: ModuleId) -> Result<ModuleExecutionContext, SdkError> {
     Ok(ModuleExecutionContext {
-        module_id: ModuleId::try_new(CUSTOMER_ENRICHMENT_MODULE_ID).map_err(configuration_error)?,
+        module_id,
         execution: ExecutionContext {
             tenant_id: tenant(TENANT),
             actor_id: actor(),
