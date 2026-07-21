@@ -20,7 +20,7 @@ use crm_customer_enrichment::{
     ProviderProfileVersion, RawPayloadPolicy, TargetField,
 };
 use crm_customer_enrichment_capability_adapter::{
-    MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID, mapping_persisted_payload, mapping_record_ref,
+    mapping_persisted_payload, mapping_record_ref,
     provider_profile_persisted_payload, provider_profile_record_ref,
 };
 use crm_module_sdk::{
