@@ -187,17 +187,22 @@ jobs:
             --features postgres-integration \
             --test postgres_materialization_process \
             -- --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
-      - name: Prepare fresh Customer Enrichment materialization event-process database
-        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
-      - name: Verify event-driven Customer Enrichment materialization recovery
+      - name: Verify event-driven materialization and terminal evidence recovery
         shell: bash
         run: |
           set -euo pipefail
-          cargo test \
-            -p crm-customer-enrichment-materialization-composition \
-            --features postgres-integration \
-            --test postgres_materialization_event_process \
-            -- --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+          for test_name in \
+            response_event_waits_for_finalized_evidence_then_materializes_once \
+            lineage_mismatched_evidence_fails_checkpoint_before_materialization
+          do
+            bash scripts/prepare_customer_enrichment_worker_process_database.sh
+            cargo test \
+              -p crm-customer-enrichment-materialization-composition \
+              --features postgres-integration \
+              --test postgres_materialization_event_process \
+              "${test_name}" \
+              -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+          done
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
