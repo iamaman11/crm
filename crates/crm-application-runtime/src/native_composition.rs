@@ -1,3 +1,9 @@
+mod customer_enrichment_reference_guards;
+
+use customer_enrichment_reference_guards::{
+    PostgresCustomerEnrichmentMappingReferenceGuard,
+    PostgresCustomerEnrichmentRequestPartyGuard,
+};
 use crate::{DataQualityAggregatePlanner, DataQualityCapabilityExecutor};
 use crm_application_composition::{
     ActivationGatedMutationValidator, ActivationGatedQueryValidator, ApplicationComposition,
@@ -55,7 +61,8 @@ use crm_customer_data_operations_source_composition::{
     source_capability_definitions as customer_data_operations_source_capability_definitions,
 };
 use crm_customer_enrichment_capability_adapter::{
-    CustomerEnrichmentProviderProfileCapabilityPlanner, CustomerEnrichmentRequestReferencePlanner,
+    CustomerEnrichmentProviderProfileCapabilityPlanner,
+    CustomerEnrichmentRequestCreateCapabilityPlanner,
     capability_definitions as customer_enrichment_capability_definitions,
 };
 use crm_customer_enrichment_capability_composition::CustomerEnrichmentCapabilityExecutor;
@@ -375,12 +382,20 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let customer_enrichment_fallback = aggregate_executor(
-        store.clone(),
-        CustomerEnrichmentProviderProfileCapabilityPlanner,
+    let customer_enrichment_fallback: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
+        PostgresTransactionalAggregateExecutor::guarded(
+            store.clone(),
+            Arc::new(CustomerEnrichmentProviderProfileCapabilityPlanner),
+            Arc::new(PostgresCustomerEnrichmentMappingReferenceGuard),
+        ),
     );
-    let customer_enrichment_request =
-        aggregate_executor(store.clone(), CustomerEnrichmentRequestReferencePlanner);
+    let customer_enrichment_request: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
+        PostgresTransactionalAggregateExecutor::guarded(
+            store.clone(),
+            Arc::new(CustomerEnrichmentRequestCreateCapabilityPlanner),
+            Arc::new(PostgresCustomerEnrichmentRequestPartyGuard),
+        ),
+    );
     let customer_enrichment_party_queries = Arc::new(PartyQueryAdapter::new(
         store.clone(),
         cursor(cursor_key)?,
