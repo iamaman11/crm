@@ -113,5 +113,6 @@ This avoids creating a forbidden public ingress path merely for testing worker-o
 - [x] Final synchronized user-authored SHA `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged.
 - [x] PR #137 and issue #125 record the exact accepted SHA and squash merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 - [x] No unresolved review thread or submitted change request remained at merge.
+- [x] Post-merge Generated Sync reached a stable formatted/generated state before the integrity candidate gate.
 
 Phase 8A.10 is a completed production integration slice. This does not make Customer Enrichment or the universal CRM product complete; additional providers, target fields and product UX require separately governed packets.
