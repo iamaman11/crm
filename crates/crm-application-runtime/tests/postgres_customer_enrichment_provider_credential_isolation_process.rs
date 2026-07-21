@@ -273,16 +273,23 @@ mod process {
         assert!(!format!("{first_error:?} {first_error}").contains(WRONG_TENANT_SECRET));
         assert_eq!(transport_calls.load(Ordering::SeqCst), 0);
         assert_eq!(source_calls.load(Ordering::SeqCst), 1);
-        assert!(
-            ProjectionStore::projection_checkpoint(
-                &store,
-                tenant_id.clone(),
-                PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
-            )
-            .await
-            .unwrap()
-            .is_none()
-        );
+        let failed_checkpoint = ProjectionStore::projection_checkpoint(
+            &store,
+            tenant_id.clone(),
+            PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
+        )
+        .await
+        .expect_err("terminal credential failure must fail the provider checkpoint");
+        assert_eq!(failed_checkpoint.code, "PROJECTION_CHECKPOINT_FAILED");
+        assert!(!failed_checkpoint.retryable);
+        let failed_checkpoint_reference = failed_checkpoint
+            .internal_reference
+            .as_deref()
+            .expect("failed checkpoint lineage exists");
+        assert!(failed_checkpoint_reference.contains("customer-enrichment-worker-seed-event"));
+        assert!(failed_checkpoint_reference.contains(
+            "failure_code=CUSTOMER_ENRICHMENT_PROVIDER_SECRET_UNAVAILABLE"
+        ));
         assert!(
             store
                 .projection_document(
@@ -314,14 +321,11 @@ mod process {
         let replay_error = process
             .run_cycle(tenant_id, 31_000_000)
             .await
-            .expect_err("credential-isolation restart must remain fail closed");
-        assert_eq!(
-            replay_error.code,
-            "CUSTOMER_ENRICHMENT_PROVIDER_SECRET_UNAVAILABLE"
-        );
+            .expect_err("failed credential checkpoint must block restart before source I/O");
+        assert_eq!(replay_error.code, "PROJECTION_CHECKPOINT_FAILED");
         assert!(!replay_error.retryable);
         assert_eq!(transport_calls.load(Ordering::SeqCst), 0);
-        assert_eq!(source_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(source_calls.load(Ordering::SeqCst), 1);
         assert_eq!(credential_isolation_evidence_counts(&admin).await, baseline);
     }
 
