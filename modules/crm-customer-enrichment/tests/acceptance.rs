@@ -20,7 +20,10 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
         promotion["schema_version"],
         "crm.customer-enrichment.production-promotion/v1"
     );
-    assert_eq!(promotion["accepted_source_checkpoint"], ACCEPTED_SOURCE_CHECKPOINT);
+    assert_eq!(
+        promotion["accepted_source_checkpoint"],
+        ACCEPTED_SOURCE_CHECKPOINT
+    );
     assert_eq!(promotion["merge_commit"], MERGE_COMMIT);
 
     let inventory = &promotion["current_runtime_inventory"];
@@ -66,17 +69,19 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
     );
     assert_eq!(promotion["promotion_stages"][0]["state"], "complete");
 
-    let classifications =
-        read_json(&root.join("contracts/production-route-classifications.json"));
-    let worker_coordinates = classified_coordinates(
-        &classifications["worker_runtime_routes"],
-        MODULE_ID,
-    );
+    let classifications = read_json(&root.join("contracts/production-route-classifications.json"));
+    let worker_coordinates =
+        classified_coordinates(&classifications["worker_runtime_routes"], MODULE_ID);
     let expected_workers = inventory["workers"]
         .as_array()
         .expect("worker inventory must be an array")
         .iter()
-        .map(|value| value.as_str().expect("worker coordinate must be a string").to_owned())
+        .map(|value| {
+            value
+                .as_str()
+                .expect("worker coordinate must be a string")
+                .to_owned()
+        })
         .collect::<BTreeSet<_>>();
     assert_eq!(worker_coordinates, expected_workers);
     assert!(
@@ -143,7 +148,9 @@ fn classified_coordinates(value: &Value, owner_module_id: &str) -> BTreeSet<Stri
         .map(|entry| {
             format!(
                 "{}@{}",
-                entry["id"].as_str().expect("classified id must be a string"),
+                entry["id"]
+                    .as_str()
+                    .expect("classified id must be a string"),
                 entry["version"]
                     .as_str()
                     .expect("classified version must be a string")
