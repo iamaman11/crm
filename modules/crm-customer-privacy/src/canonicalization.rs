@@ -8,14 +8,6 @@ use std::fmt;
 pub const PROFILE_ID: &str = canonical_json::PROFILE_ID;
 const PROFILE_FIELD: &str = "canonicalization_profile";
 
-pub mod semantic_json {
-    use super::*;
-
-    pub fn to_vec<T: Serialize>(value: &T) -> Result<Vec<u8>, CanonicalJsonError> {
-        canonical_json::to_vec(value)
-    }
-}
-
 pub mod persisted_state_json {
     use super::*;
 
