@@ -1,38 +1,13 @@
-name: Temporary Canonical Outcome Cleanup
+name: Disabled Temporary Canonical Outcome Cleanup
 
 on:
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: temporary-canonical-outcome-cleanup-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  cleanup:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  noop:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Remove temporary scripts
-        run: python scripts/tmp_cleanup_provider_canonical_outcome.py
-      - name: Commit cleanup
-        env:
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A scripts
-          git diff --cached --quiet && exit 0
-          git commit -m "Remove canonical outcome staging scripts"
-          git push origin "HEAD:${HEAD_BRANCH}"
+      - run: echo "Temporary workflow disabled"
