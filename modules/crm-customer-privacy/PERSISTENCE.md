@@ -15,6 +15,8 @@ Every state payload uses `crm.cjson/v1` with:
 
 Unknown fields, unsupported profiles, noncanonical decimal forms, contradictory lifecycle evidence and oversized payloads fail closed as `CUSTOMER_PRIVACY_PERSISTED_STATE_INVALID`.
 
+The byte ceiling is enforced before decoding untrusted persisted bytes and again after encoding domain state. Descriptor hashes identify the immutable schema layout; they do not replace a record-envelope or payload digest supplied by the persistence adapter.
+
 ## Versioned state identities
 
 The first immutable private schemas are:
