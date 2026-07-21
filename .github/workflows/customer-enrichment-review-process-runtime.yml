@@ -16,6 +16,7 @@ on:
       - "crates/crm-customer-enrichment-application-adapter/**"
       - "crates/crm-customer-enrichment-application-composition/**"
       - "crates/crm-customer-enrichment-suggestion-query-adapter/**"
+      - "crates/crm-customer-enrichment-visibility/**"
       - "modules/crm-customer-enrichment/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
@@ -39,6 +40,7 @@ on:
       - "crates/crm-customer-enrichment-application-adapter/**"
       - "crates/crm-customer-enrichment-application-composition/**"
       - "crates/crm-customer-enrichment-suggestion-query-adapter/**"
+      - "crates/crm-customer-enrichment-visibility/**"
       - "modules/crm-customer-enrichment/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
@@ -106,6 +108,7 @@ jobs:
             crates/crm-customer-enrichment-application-adapter/
             crates/crm-customer-enrichment-application-composition/
             crates/crm-customer-enrichment-suggestion-query-adapter/
+            crates/crm-customer-enrichment-visibility/
             database/tests/0017_customer_enrichment_review.sql
           if-no-files-found: error
           retention-days: 7
