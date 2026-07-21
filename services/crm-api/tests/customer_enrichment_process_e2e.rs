@@ -200,10 +200,10 @@ async fn customer_enrichment_real_process_denials_are_bounded_and_side_effect_fr
     set_customer_enrichment_status(&admin, "suspended").await;
     let committed = evidence_counts(&admin).await;
     assert_eq!(committed.request_records, baseline.request_records + 1);
-    assert!(committed.events >= baseline.events + 1);
-    assert!(committed.audits >= baseline.audits + 1);
-    assert!(committed.idempotency >= baseline.idempotency + 1);
-    assert!(committed.transactions >= baseline.transactions + 1);
+    assert!(committed.events > baseline.events);
+    assert!(committed.audits > baseline.audits);
+    assert!(committed.idempotency > baseline.idempotency);
+    assert!(committed.transactions > baseline.transactions);
 
     let inactive = mutate(
         &mut grpc,
