@@ -1,6 +1,6 @@
 use crate::{EnrichmentRequestId, ProviderResponseReceiptId, ReplayDisposition};
 use crm_module_sdk::{
-    ActorId, CausationId, ErrorCategory, FieldName, FieldViolation, SdkError, TenantId,
+    ActorId, CausationId, ErrorCategory, FieldName, FieldViolation, PortFuture, SdkError, TenantId,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -554,6 +554,45 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
         "The persisted customer-enrichment state is invalid.",
     )
     .with_internal_reference(message.into())
+}
+
+/// Exact immutable conflict binding evaluated immediately before an operator resolution write.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderResponseConflictResolutionPolicyRequest {
+    pub tenant_id: TenantId,
+    pub actor_id: ActorId,
+    pub conflict_id: ProviderResponseConflictId,
+    pub request_id: EnrichmentRequestId,
+    pub retry_generation: u32,
+    pub first_receipt_id: ProviderResponseReceiptId,
+    pub decision: ProviderResponseConflictDecision,
+    pub safe_reason_code: String,
+    pub approval_evidence_reference: String,
+    pub evaluated_at_unix_ms: u64,
+}
+
+/// Closed, versioned live authorization outcome for one exact conflict resolution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderResponseConflictResolutionPolicyDecision {
+    Allowed {
+        policy_version: String,
+    },
+    Denied {
+        policy_version: String,
+        safe_reason_code: String,
+    },
+}
+
+/// Infrastructure-owned final authorization boundary for provider-response conflict resolution.
+///
+/// Implementations must evaluate the exact immutable conflict, operator, decision and approval
+/// evidence. The caller must invoke this port after loading current state and immediately before
+/// the atomic resolution write.
+pub trait ProviderResponseConflictResolutionPolicyPort: Send + Sync {
+    fn evaluate<'a>(
+        &'a self,
+        request: ProviderResponseConflictResolutionPolicyRequest,
+    ) -> PortFuture<'a, Result<ProviderResponseConflictResolutionPolicyDecision, SdkError>>;
 }
 
 #[cfg(test)]

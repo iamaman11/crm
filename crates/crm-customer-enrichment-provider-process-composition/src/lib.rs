@@ -8,9 +8,11 @@
 //! provider network I/O and registers no public capability route.
 
 mod conflict_persistence;
+mod conflict_resolution;
 mod worker;
 
 pub use conflict_persistence::*;
+pub use conflict_resolution::*;
 pub use worker::*;
 
 use crm_capability_ingress::semantic_input_hash;
