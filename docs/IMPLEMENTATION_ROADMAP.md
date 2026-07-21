@@ -33,8 +33,6 @@ A phase or packet is complete only when its acceptance boundary is implemented, 
 
 ## 3. Work states
 
-The normative vocabulary is:
-
 - Planned
 - Ready
 - In progress
@@ -80,7 +78,7 @@ Delivered golden module tooling, generalized projection runtime, permission-awar
 
 ### Native application-composition integrity — Complete
 
-Issue #134 / PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8` established module-owned exact-coordinate routing, durable tenant activation, pre-authorization cross-owner semantics, deterministic worker contributions, exact production-route parity, immutable compatibility gates and production contribution scaffolding. It remains the required baseline for later Phase 8 modules.
+Issue #134 / PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8` established module-owned exact-coordinate routing, durable tenant activation, pre-authorization cross-owner semantics, deterministic worker contributions, exact production-route parity, immutable compatibility gates and production contribution scaffolding.
 
 ## 6. Phase 8A — canonical customer master and governed customer-data lifecycle
 
@@ -93,34 +91,48 @@ Completed packets:
 - **8A.7** — governed immutable import sources, server-side parsing/validation, resumable Party import and crash/retry recovery (#120 / PR #121).
 - **8A.8** — governed Party export jobs, immutable selection/manifests, deterministic artifacts, reconciliation and both crash-window recoveries (#123 / PR #130).
 - **8A.9** — Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132; merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`).
+- **8A.10** — Governed Customer Enrichment and Provenance (#125 / PR #137; accepted source `f92d101206886e3ceaf94d0e56e52580cec21093`; merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`).
 
-Active and planned sequence:
+Active sequence:
 
-1. **8A.10 / #125 — Gate review:** Governed Customer Enrichment and Provenance in draft PR #137.
-2. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
-3. **Phase 8A closure:** only after both packets are merged and the full customer-master baseline is reconciled.
+1. **8A.11 / #126 — Ready:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
+2. **Phase 8A closure:** only after 8A.11 is merged and the full customer-master baseline is reconciled.
+3. **8B / #29:** starts only from the completed Phase 8A baseline.
 
-### Phase 8A.10 gate-review boundary
+### Phase 8A.10 accepted boundary
 
-The accepted production inventory is frozen at exactly **6 public mutations + 6 permission-aware queries + 2 activation-gated worker coordinates**. Three provider/materialization coordinates remain worker-only and have no public HTTP/gRPC ingress.
+The frozen inventory is exactly **6 public mutations + 6 permission-aware queries + 5 activation-gated worker-only coordinates**. All 17 manifest-bound coordinates are public runtime or worker runtime; no completed Customer Enrichment coordinate remains non-runtime.
 
-The packet includes:
+The merged packet includes:
 
 - immutable provider-profile, mapping, request, response receipt/conflict, suggestion, review, usage and application evidence;
-- concrete exact-coordinate registry HTTP transport outside the pure module core;
-- tenant-bound secret resolution, bounded network behavior, quota and circuit controls;
+- exact registry HTTP transport outside the pure module core;
+- tenant-bound secret resolution, endpoint allowlisting, bounded network behavior, quota and circuit controls;
 - independent live authorization for dispatch, response, materialization and owner application;
-- deterministic replay, exact/semantic duplicate reconciliation and fail-closed conflicting provider responses;
-- retain-first and terminal-reject operator resolution evidence;
-- governed suggestion review and exact Party owner-capability application;
-- permission-aware reads, declarative field redaction, activation shutdown and cross-tenant concealment;
-- FORCE RLS, migration and fresh-PostgreSQL process evidence;
-- permanent real-`crm-api` HTTP/gRPC acceptance proving successful governed persistence plus bounded authentication, tenant, visibility, Consent, activation and authorization denials;
-- transaction-scoped immutable provider-profile and exact Party-version reference guards before atomic mapping/request persistence.
+- deterministic replay, exact/semantic duplicate reconciliation and fail-closed response conflicts;
+- governed review and exact Party owner-capability application;
+- permission-aware reads, declarative redaction, activation shutdown and cross-tenant concealment;
+- transaction-scoped immutable provider-profile and exact Party-version guards;
+- FORCE RLS, migration rollback/reapply and fresh-PostgreSQL process evidence;
+- permanent real-`crm-api` public-ingress acceptance and dedicated provider/materialization/review/application worker-process acceptance;
+- exact background phase order 240 → 245 → 250 and disable/uninstall shutdown.
 
-PR #137 may leave draft only when the final synchronized user-authored SHA passes all 17 permanent workflows unchanged and that exact SHA is recorded in both the PR and issue #125. Until merge, the packet is **Gate review**, not Complete.
+### Phase 8A.11 Ready boundary
 
-Phase 8A is complete only when the customer-master baseline also covers privacy access/export/restriction/deletion/legal-hold interaction proof, tenant isolation, migrations, compatibility, process acceptance and maturity-appropriate performance.
+Issue #126 must deliver:
+
+- governed privacy request/case identity and lifecycle;
+- subject and owner-resource discovery without unauthorized bulk disclosure;
+- access and export evidence integrated with existing governed export foundations;
+- immediate processing and communication restrictions enforced at live mutation/query/worker boundaries;
+- deletion/anonymization planning by authoritative owner and data class;
+- retention, legal-hold and immutable-evidence conflict resolution;
+- resumable per-owner orchestration with deterministic attempts/outcomes;
+- search, projection and cache convergence without treating derived state as authority;
+- immutable audit/lineage preservation and tenant-aware crypto-shredding where key architecture permits;
+- fresh-PostgreSQL, real-process, cross-tenant, migration and exact-head acceptance.
+
+Phase 8A is complete only when privacy access/export/restriction/deletion/legal-hold interactions are merged and reconciled with Consent, Identity Resolution, Import/Export, Data Quality and Customer Enrichment.
 
 ## 7. Phase 8B — product catalog, pricing, CPQ and quote-to-revenue
 
@@ -131,17 +143,7 @@ Required owner domains include Product Catalog, Price Books/Pricing, CPQ, Quotes
 
 ## 8. Additional expert-product waves
 
-After stable prerequisite domains, Phase 8 continues with:
-
-- Sales and Activities expert expansion;
-- communications and omnichannel interaction history;
-- Service/Support, Knowledge and optional Field Service;
-- Marketing automation, segmentation, journeys and attribution;
-- Customer Success and optional Partner Relationship Management;
-- projects/configurable work, documents and e-signature;
-- analytics, reporting and performance management;
-- workflow, approvals, human tasks and collaboration;
-- responsive/mobile UX, accessibility, localization, onboarding, saved views, bulk actions, offline/retry states and critical browser E2E.
+After stable prerequisite domains, Phase 8 continues with Sales/Activities expert expansion, communications and omnichannel, Service/Support/Knowledge/Field Service, Marketing, Customer Success/PRM, projects/configurable work, documents/e-signature, analytics/performance management, workflow/approvals/collaboration and complete responsive accessible product UX.
 
 Each authoritative domain receives an explicit owner and cannot be hidden inside generic metadata or a giant Sales module.
 
@@ -161,9 +163,8 @@ Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarc
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Obtain one synchronized user-authored PR #137 SHA with all 17 permanent workflows successful.
-2. Record the exact SHA in PR #137 and issue #125; complete review and merge Phase 8A.10.
-3. Rebase and deliver #126 on the merged enrichment baseline.
+1. Merge the post-8A.10 integrity synchronization after exact-head checks pass.
+2. Create the Phase 8A.11 implementation branch and draft PR from that synchronized baseline.
+3. Deliver #126 with owner-aware privacy orchestration and full enforcement/process evidence.
 4. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
 5. Begin Phase 8B / #29 from the completed customer-master baseline.
-6. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
