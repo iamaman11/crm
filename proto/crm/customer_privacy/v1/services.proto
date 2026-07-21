@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package crm.customer_privacy.v1;
+
+import "crm/customer_privacy/v1/cases.proto";
+import "crm/customer_privacy/v1/controls.proto";
+
+service CustomerPrivacyCaseService {
+  rpc CreatePrivacyCase(CreatePrivacyCaseRequest) returns (CreatePrivacyCaseResponse);
+  rpc SubmitPrivacyCase(SubmitPrivacyCaseRequest) returns (SubmitPrivacyCaseResponse);
+  rpc VerifyPrivacyCaseSubject(VerifyPrivacyCaseSubjectRequest) returns (VerifyPrivacyCaseSubjectResponse);
+  rpc ApprovePrivacyCase(ApprovePrivacyCaseRequest) returns (ApprovePrivacyCaseResponse);
+  rpc CancelPrivacyCase(CancelPrivacyCaseRequest) returns (CancelPrivacyCaseResponse);
+  rpc GetPrivacyCase(GetPrivacyCaseRequest) returns (GetPrivacyCaseResponse);
+  rpc ListPrivacyCases(ListPrivacyCasesRequest) returns (ListPrivacyCasesResponse);
+  rpc GetPrivacyActionPlan(GetPrivacyActionPlanRequest) returns (GetPrivacyActionPlanResponse);
+  rpc ListPrivacyOwnerOutcomes(ListPrivacyOwnerOutcomesRequest) returns (ListPrivacyOwnerOutcomesResponse);
+}
+
+service CustomerPrivacyControlService {
+  rpc PlaceProcessingRestriction(PlaceProcessingRestrictionRequest) returns (PlaceProcessingRestrictionResponse);
+  rpc ReleaseProcessingRestriction(ReleaseProcessingRestrictionRequest) returns (ReleaseProcessingRestrictionResponse);
+  rpc GetProcessingRestriction(GetProcessingRestrictionRequest) returns (GetProcessingRestrictionResponse);
+  rpc PlaceCustomerDataLegalHold(PlaceCustomerDataLegalHoldRequest) returns (PlaceCustomerDataLegalHoldResponse);
+  rpc ReleaseCustomerDataLegalHold(ReleaseCustomerDataLegalHoldRequest) returns (ReleaseCustomerDataLegalHoldResponse);
+  rpc GetCustomerDataLegalHold(GetCustomerDataLegalHoldRequest) returns (GetCustomerDataLegalHoldResponse);
+  rpc ListCustomerDataLegalHoldsBySubject(ListCustomerDataLegalHoldsBySubjectRequest) returns (ListCustomerDataLegalHoldsBySubjectResponse);
+}

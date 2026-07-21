@@ -37,6 +37,32 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                 ),
             },
         )
+        privacy_contract_only = {
+            ("crm.customer-privacy", "customer_privacy.case.approve", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.case.cancel", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.case.create", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.case.get", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.case.list", "1.0.0"),
+            (
+                "crm.customer-privacy",
+                "customer_privacy.case.owner_outcomes.list",
+                "1.0.0",
+            ),
+            ("crm.customer-privacy", "customer_privacy.case.plan.get", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.case.subject.verify", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.case.submit", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.legal_hold.get", "1.0.0"),
+            (
+                "crm.customer-privacy",
+                "customer_privacy.legal_hold.list_by_subject",
+                "1.0.0",
+            ),
+            ("crm.customer-privacy", "customer_privacy.legal_hold.place", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.legal_hold.release", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.restriction.get", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.restriction.place", "1.0.0"),
+            ("crm.customer-privacy", "customer_privacy.restriction.release", "1.0.0"),
+        }
         self.assertEqual(
             non_runtime,
             {
@@ -50,12 +76,10 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                     "customer_data.import.party.rows.validate",
                     "1.0.0",
                 ),
-            },
+            }
+            | privacy_contract_only,
         )
-        self.assertEqual(
-            empty_modules,
-            {"crm.customer-privacy", "crm.sales-activities-link"},
-        )
+        self.assertEqual(empty_modules, {"crm.sales-activities-link"})
         self.assertIn(("crm.search", "search.global.query", "1.0.0"), platform)
         for capability_id in {
             "customer_enrichment.provider_profile.publish",
@@ -82,6 +106,10 @@ class ProductionRouteClassificationTests(unittest.TestCase):
         self.assertFalse(
             any(owner == "crm.customer-enrichment" for owner, _, _ in non_runtime),
             "a completed Customer Enrichment coordinate may not remain non-runtime",
+        )
+        self.assertFalse(
+            any(owner == "crm.customer-privacy" for owner, _, _ in workers),
+            "Customer Privacy workers are not published by the public-contract slice",
         )
 
 

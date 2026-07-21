@@ -640,8 +640,157 @@
     },
     {
       "module_id": "crm.customer-privacy",
-      "capabilities": [],
-      "events": []
+      "capabilities": [
+        {
+          "id": "customer_privacy.case.approve",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.ApprovePrivacyCase",
+          "request": "crm.customer_privacy.v1.ApprovePrivacyCaseRequest",
+          "response": "crm.customer_privacy.v1.ApprovePrivacyCaseResponse"
+        },
+        {
+          "id": "customer_privacy.case.cancel",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.CancelPrivacyCase",
+          "request": "crm.customer_privacy.v1.CancelPrivacyCaseRequest",
+          "response": "crm.customer_privacy.v1.CancelPrivacyCaseResponse"
+        },
+        {
+          "id": "customer_privacy.case.create",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.CreatePrivacyCase",
+          "request": "crm.customer_privacy.v1.CreatePrivacyCaseRequest",
+          "response": "crm.customer_privacy.v1.CreatePrivacyCaseResponse"
+        },
+        {
+          "id": "customer_privacy.case.get",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.GetPrivacyCase",
+          "request": "crm.customer_privacy.v1.GetPrivacyCaseRequest",
+          "response": "crm.customer_privacy.v1.GetPrivacyCaseResponse"
+        },
+        {
+          "id": "customer_privacy.case.list",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.ListPrivacyCases",
+          "request": "crm.customer_privacy.v1.ListPrivacyCasesRequest",
+          "response": "crm.customer_privacy.v1.ListPrivacyCasesResponse"
+        },
+        {
+          "id": "customer_privacy.case.owner_outcomes.list",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.ListPrivacyOwnerOutcomes",
+          "request": "crm.customer_privacy.v1.ListPrivacyOwnerOutcomesRequest",
+          "response": "crm.customer_privacy.v1.ListPrivacyOwnerOutcomesResponse"
+        },
+        {
+          "id": "customer_privacy.case.plan.get",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.GetPrivacyActionPlan",
+          "request": "crm.customer_privacy.v1.GetPrivacyActionPlanRequest",
+          "response": "crm.customer_privacy.v1.GetPrivacyActionPlanResponse"
+        },
+        {
+          "id": "customer_privacy.case.subject.verify",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.VerifyPrivacyCaseSubject",
+          "request": "crm.customer_privacy.v1.VerifyPrivacyCaseSubjectRequest",
+          "response": "crm.customer_privacy.v1.VerifyPrivacyCaseSubjectResponse"
+        },
+        {
+          "id": "customer_privacy.case.submit",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.SubmitPrivacyCase",
+          "request": "crm.customer_privacy.v1.SubmitPrivacyCaseRequest",
+          "response": "crm.customer_privacy.v1.SubmitPrivacyCaseResponse"
+        },
+        {
+          "id": "customer_privacy.legal_hold.get",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyControlService.GetCustomerDataLegalHold",
+          "request": "crm.customer_privacy.v1.GetCustomerDataLegalHoldRequest",
+          "response": "crm.customer_privacy.v1.GetCustomerDataLegalHoldResponse"
+        },
+        {
+          "id": "customer_privacy.legal_hold.list_by_subject",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyControlService.ListCustomerDataLegalHoldsBySubject",
+          "request": "crm.customer_privacy.v1.ListCustomerDataLegalHoldsBySubjectRequest",
+          "response": "crm.customer_privacy.v1.ListCustomerDataLegalHoldsBySubjectResponse"
+        },
+        {
+          "id": "customer_privacy.legal_hold.place",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyControlService.PlaceCustomerDataLegalHold",
+          "request": "crm.customer_privacy.v1.PlaceCustomerDataLegalHoldRequest",
+          "response": "crm.customer_privacy.v1.PlaceCustomerDataLegalHoldResponse"
+        },
+        {
+          "id": "customer_privacy.legal_hold.release",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyControlService.ReleaseCustomerDataLegalHold",
+          "request": "crm.customer_privacy.v1.ReleaseCustomerDataLegalHoldRequest",
+          "response": "crm.customer_privacy.v1.ReleaseCustomerDataLegalHoldResponse"
+        },
+        {
+          "id": "customer_privacy.restriction.get",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyControlService.GetProcessingRestriction",
+          "request": "crm.customer_privacy.v1.GetProcessingRestrictionRequest",
+          "response": "crm.customer_privacy.v1.GetProcessingRestrictionResponse"
+        },
+        {
+          "id": "customer_privacy.restriction.place",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyControlService.PlaceProcessingRestriction",
+          "request": "crm.customer_privacy.v1.PlaceProcessingRestrictionRequest",
+          "response": "crm.customer_privacy.v1.PlaceProcessingRestrictionResponse"
+        },
+        {
+          "id": "customer_privacy.restriction.release",
+          "version": "1.0.0",
+          "rpc": "crm.customer_privacy.v1.CustomerPrivacyControlService.ReleaseProcessingRestriction",
+          "request": "crm.customer_privacy.v1.ReleaseProcessingRestrictionRequest",
+          "response": "crm.customer_privacy.v1.ReleaseProcessingRestrictionResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "customer_privacy.case.created",
+          "version": "1.0.0",
+          "message": "crm.customer_privacy.v1.PrivacyCaseCreatedEvent"
+        },
+        {
+          "id": "customer_privacy.case.status_changed",
+          "version": "1.0.0",
+          "message": "crm.customer_privacy.v1.PrivacyCaseStatusChangedEvent"
+        },
+        {
+          "id": "customer_privacy.case.subject_verified",
+          "version": "1.0.0",
+          "message": "crm.customer_privacy.v1.PrivacyCaseSubjectVerifiedEvent"
+        },
+        {
+          "id": "customer_privacy.legal_hold.placed",
+          "version": "1.0.0",
+          "message": "crm.customer_privacy.v1.CustomerDataLegalHoldPlacedEvent"
+        },
+        {
+          "id": "customer_privacy.legal_hold.released",
+          "version": "1.0.0",
+          "message": "crm.customer_privacy.v1.CustomerDataLegalHoldReleasedEvent"
+        },
+        {
+          "id": "customer_privacy.restriction.placed",
+          "version": "1.0.0",
+          "message": "crm.customer_privacy.v1.ProcessingRestrictionPlacedEvent"
+        },
+        {
+          "id": "customer_privacy.restriction.released",
+          "version": "1.0.0",
+          "message": "crm.customer_privacy.v1.ProcessingRestrictionReleasedEvent"
+        }
+      ]
     },
     {
       "module_id": "crm.customer360",

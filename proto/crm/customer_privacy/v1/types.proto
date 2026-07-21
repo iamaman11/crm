@@ -1,0 +1,198 @@
+syntax = "proto3";
+
+package crm.customer_privacy.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/customer_privacy/v1/reference.proto";
+
+enum PrivacyCaseKind {
+  PRIVACY_CASE_KIND_UNSPECIFIED = 0;
+  PRIVACY_CASE_KIND_ACCESS = 1;
+  PRIVACY_CASE_KIND_PORTABILITY_EXPORT = 2;
+  PRIVACY_CASE_KIND_RESTRICT_PROCESSING = 3;
+  PRIVACY_CASE_KIND_ERASURE = 4;
+}
+
+enum PrivacyCaseStatus {
+  PRIVACY_CASE_STATUS_UNSPECIFIED = 0;
+  PRIVACY_CASE_STATUS_DRAFT = 1;
+  PRIVACY_CASE_STATUS_SUBMITTED = 2;
+  PRIVACY_CASE_STATUS_SUBJECT_VERIFIED = 3;
+  PRIVACY_CASE_STATUS_SCOPING = 4;
+  PRIVACY_CASE_STATUS_SCOPED = 5;
+  PRIVACY_CASE_STATUS_PLANNED = 6;
+  PRIVACY_CASE_STATUS_AWAITING_APPROVAL = 7;
+  PRIVACY_CASE_STATUS_EXECUTING = 8;
+  PRIVACY_CASE_STATUS_CONVERGING = 9;
+  PRIVACY_CASE_STATUS_RESCOPE_REQUIRED = 10;
+  PRIVACY_CASE_STATUS_FAILED_RETRYABLE = 11;
+  PRIVACY_CASE_STATUS_COMPLETED = 12;
+  PRIVACY_CASE_STATUS_PARTIALLY_COMPLETED = 13;
+  PRIVACY_CASE_STATUS_DENIED = 14;
+  PRIVACY_CASE_STATUS_CANCELLED = 15;
+  PRIVACY_CASE_STATUS_FAILED_TERMINAL = 16;
+}
+
+enum SubjectVerificationMethod {
+  SUBJECT_VERIFICATION_METHOD_UNSPECIFIED = 0;
+  SUBJECT_VERIFICATION_METHOD_AUTHENTICATED_PORTAL = 1;
+  SUBJECT_VERIFICATION_METHOD_STAFF_ASSISTED = 2;
+  SUBJECT_VERIFICATION_METHOD_VERIFIED_DOCUMENT = 3;
+  SUBJECT_VERIFICATION_METHOD_EXISTING_HIGH_ASSURANCE_IDENTITY = 4;
+}
+
+enum RetryResumeStage {
+  RETRY_RESUME_STAGE_UNSPECIFIED = 0;
+  RETRY_RESUME_STAGE_SCOPING = 1;
+  RETRY_RESUME_STAGE_PLANNING = 2;
+  RETRY_RESUME_STAGE_EXECUTING = 3;
+  RETRY_RESUME_STAGE_CONVERGING = 4;
+}
+
+enum ProcessingRestrictionScope {
+  PROCESSING_RESTRICTION_SCOPE_UNSPECIFIED = 0;
+  PROCESSING_RESTRICTION_SCOPE_PROCESSING = 1;
+  PROCESSING_RESTRICTION_SCOPE_COMMUNICATION = 2;
+  PROCESSING_RESTRICTION_SCOPE_PROCESSING_AND_COMMUNICATION = 3;
+}
+
+enum ProcessingRestrictionStatus {
+  PROCESSING_RESTRICTION_STATUS_UNSPECIFIED = 0;
+  PROCESSING_RESTRICTION_STATUS_ACTIVE = 1;
+  PROCESSING_RESTRICTION_STATUS_RELEASED = 2;
+  PROCESSING_RESTRICTION_STATUS_EXPIRED = 3;
+}
+
+enum CustomerDataClass {
+  CUSTOMER_DATA_CLASS_UNSPECIFIED = 0;
+  CUSTOMER_DATA_CLASS_PUBLIC = 1;
+  CUSTOMER_DATA_CLASS_INTERNAL = 2;
+  CUSTOMER_DATA_CLASS_CONFIDENTIAL = 3;
+  CUSTOMER_DATA_CLASS_PERSONAL = 4;
+  CUSTOMER_DATA_CLASS_SENSITIVE_PERSONAL = 5;
+  CUSTOMER_DATA_CLASS_BIOMETRIC = 6;
+  CUSTOMER_DATA_CLASS_FINANCIAL = 7;
+  CUSTOMER_DATA_CLASS_CREDENTIAL = 8;
+}
+
+enum CustomerDataLegalHoldStatus {
+  CUSTOMER_DATA_LEGAL_HOLD_STATUS_UNSPECIFIED = 0;
+  CUSTOMER_DATA_LEGAL_HOLD_STATUS_ACTIVE = 1;
+  CUSTOMER_DATA_LEGAL_HOLD_STATUS_RELEASED = 2;
+}
+
+enum PrivacyActionPlanStatus {
+  PRIVACY_ACTION_PLAN_STATUS_UNSPECIFIED = 0;
+  PRIVACY_ACTION_PLAN_STATUS_DRAFT = 1;
+  PRIVACY_ACTION_PLAN_STATUS_FINALIZED = 2;
+  PRIVACY_ACTION_PLAN_STATUS_EXECUTING = 3;
+  PRIVACY_ACTION_PLAN_STATUS_COMPLETED = 4;
+  PRIVACY_ACTION_PLAN_STATUS_PARTIALLY_COMPLETED = 5;
+}
+
+enum PrivacyOwnerOutcomeStatus {
+  PRIVACY_OWNER_OUTCOME_STATUS_UNSPECIFIED = 0;
+  PRIVACY_OWNER_OUTCOME_STATUS_SUCCEEDED = 1;
+  PRIVACY_OWNER_OUTCOME_STATUS_RETAINED = 2;
+  PRIVACY_OWNER_OUTCOME_STATUS_BLOCKED_BY_HOLD = 3;
+  PRIVACY_OWNER_OUTCOME_STATUS_BLOCKED_BY_RETENTION = 4;
+  PRIVACY_OWNER_OUTCOME_STATUS_FAILED_RETRYABLE = 5;
+  PRIVACY_OWNER_OUTCOME_STATUS_FAILED_TERMINAL = 6;
+}
+
+message SubjectBindingEvidence {
+  crm.customer.v1.PartyRef submitted_party_ref = 1;
+  crm.customer.v1.PartyRef canonical_party_ref = 2;
+  uint64 identity_resolution_generation = 3;
+  SubjectVerificationMethod verification_method = 4;
+  string verified_by_actor_id = 5;
+  int64 verified_at_unix_ms = 6;
+}
+
+message PrivacyRescopeRequirement {
+  crm.customer.v1.PartyRef previous_canonical_party_ref = 1;
+  crm.customer.v1.PartyRef proposed_canonical_party_ref = 2;
+  uint64 previous_identity_resolution_generation = 3;
+  uint64 proposed_identity_resolution_generation = 4;
+  int64 detected_at_unix_ms = 5;
+}
+
+message PrivacyApprovalEvidence {
+  string approved_by_actor_id = 1;
+  int64 approved_at_unix_ms = 2;
+}
+
+message PrivacyCase {
+  PrivacyCaseRef privacy_case_ref = 1;
+  PrivacyCaseKind kind = 2;
+  PrivacyCaseStatus status = 3;
+  int64 version = 4;
+  string policy_version = 5;
+  int64 created_at_unix_ms = 6;
+  int64 updated_at_unix_ms = 7;
+  PrivacyCaseRef previous_privacy_case_ref = 8;
+  SubjectBindingEvidence subject_binding = 9;
+  PrivacyRescopeRequirement pending_rescope = 10;
+  string scope_snapshot_id = 11;
+  PrivacyActionPlanRef privacy_action_plan_ref = 12;
+  PrivacyApprovalEvidence approval = 13;
+  optional RetryResumeStage retry_resume_stage = 14;
+}
+
+message ProcessingRestriction {
+  ProcessingRestrictionRef processing_restriction_ref = 1;
+  crm.customer.v1.PartyRef canonical_party_ref = 2;
+  ProcessingRestrictionScope scope = 3;
+  ProcessingRestrictionStatus status = 4;
+  int64 version = 5;
+  string policy_version = 6;
+  string placed_by_actor_id = 7;
+  int64 placed_at_unix_ms = 8;
+  int64 effective_from_unix_ms = 9;
+  optional int64 expires_at_unix_ms = 10;
+  optional string released_by_actor_id = 11;
+  optional int64 released_at_unix_ms = 12;
+}
+
+message CustomerDataLegalHoldScope {
+  oneof scope {
+    bool all_customer_data = 1;
+    CustomerDataClass data_class = 2;
+    string owner_module_id = 3;
+  }
+}
+
+message CustomerDataLegalHold {
+  CustomerDataLegalHoldRef customer_data_legal_hold_ref = 1;
+  crm.customer.v1.PartyRef canonical_party_ref = 2;
+  CustomerDataLegalHoldScope scope = 3;
+  string authority_reference_id = 4;
+  string reason_code = 5;
+  string policy_version = 6;
+  CustomerDataLegalHoldStatus status = 7;
+  int64 version = 8;
+  string placed_by_actor_id = 9;
+  int64 effective_from_unix_ms = 10;
+  optional int64 effective_until_unix_ms = 11;
+  optional string released_by_actor_id = 12;
+  optional int64 released_at_unix_ms = 13;
+}
+
+message PrivacyActionPlan {
+  PrivacyActionPlanRef privacy_action_plan_ref = 1;
+  PrivacyCaseRef privacy_case_ref = 2;
+  PrivacyActionPlanStatus status = 3;
+  string policy_version = 4;
+  int64 version = 5;
+  int64 finalized_at_unix_ms = 6;
+}
+
+message PrivacyOwnerOutcome {
+  PrivacyOwnerOutcomeRef privacy_owner_outcome_ref = 1;
+  PrivacyActionPlanRef privacy_action_plan_ref = 2;
+  string owner_module_id = 3;
+  string action_code = 4;
+  PrivacyOwnerOutcomeStatus status = 5;
+  optional string safe_failure_code = 6;
+  int64 recorded_at_unix_ms = 7;
+}
