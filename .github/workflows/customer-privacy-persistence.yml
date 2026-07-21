@@ -75,7 +75,10 @@ jobs:
       - name: Verify strict privacy snapshot adapter
         run: cargo test -p crm-customer-privacy-persistence-adapter --all-features
       - name: Verify clean-migration Customer Privacy FORCE RLS
-        run: psql --set ON_ERROR_STOP=1 --file database/tests/0021_customer_privacy_force_rls.sql
+        shell: bash
+        run: |
+          set -o pipefail
+          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-clean.log
       - name: Roll back every migration
         shell: bash
         run: |
@@ -102,7 +105,10 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify reapplied Customer Privacy FORCE RLS
-        run: psql --set ON_ERROR_STOP=1 --file database/tests/0021_customer_privacy_force_rls.sql
+        shell: bash
+        run: |
+          set -o pipefail
+          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-reapplied.log
       - name: Upload Customer Privacy persistence diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -111,5 +117,6 @@ jobs:
           path: |
             crates/crm-customer-privacy-persistence-adapter/
             database/tests/0021_customer_privacy_force_rls.sql
+            database/customer-privacy-force-rls-*.log
           if-no-files-found: error
           retention-days: 7
