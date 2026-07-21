@@ -8,6 +8,10 @@
 //! Identity Resolution, Customer Data Operations and all other customer-master
 //! values remain authoritative in their existing owner modules.
 
+pub mod domain;
+
+pub use domain::*;
+
 /// Stable crate identity for repository tooling.
 pub const CRATE_NAME: &str = "crm-customer-privacy";
 /// Immutable governed module identity.
