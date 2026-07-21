@@ -314,6 +314,7 @@ dependencies = [
  "crm-capability-ingress",
  "crm-capability-plan-support",
  "crm-capability-runtime",
+ "crm-consents",
  "crm-consents-capability-adapter",
  "crm-consents-capability-composition",
  "crm-consents-query-adapter",

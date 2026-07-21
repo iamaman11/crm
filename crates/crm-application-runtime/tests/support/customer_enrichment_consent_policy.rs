@@ -1,20 +1,25 @@
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as capability_support;
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor};
-use crm_consents::{
-    CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId, ConsentAuthorizationStatus,
-    ConsentAuthorizationSnapshot, ConsentEffect, CreateConsentAuthorization, EvidenceReference,
-    JurisdictionCode, LegalBasisCode, PartyReference, PurposeCode, SourceCode,
-    WithdrawConsentAuthorization,
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
 };
-use crm_consents_capability_adapter::{MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE, persisted_payload as consent_persisted_payload};
+use crm_consents::{
+    CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId,
+    ConsentAuthorizationSnapshot, ConsentAuthorizationStatus, ConsentEffect,
+    CreateConsentAuthorization, EvidenceReference, JurisdictionCode, LegalBasisCode,
+    PartyReference, PurposeCode, SourceCode, WithdrawConsentAuthorization,
+};
+use crm_consents_capability_adapter::{
+    MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
+    persisted_payload as consent_persisted_payload,
+};
 use crm_core_data::{
     AuditIntent, IdempotencyEvidence, PostgresDataStore, PostgresTransactionalAggregateExecutor,
     RecordCreatePlan,
 };
 use crm_customer_enrichment::{
-    MappingDraft, MappingNormalization, MappingVersion, ProviderProfileDraft, ProviderProfileVersion,
-    RawPayloadPolicy, TargetField,
+    MappingDraft, MappingNormalization, MappingVersion, ProviderProfileDraft,
+    ProviderProfileVersion, RawPayloadPolicy, TargetField,
 };
 use crm_customer_enrichment_capability_adapter::{
     MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID, mapping_persisted_payload, mapping_record_ref,
@@ -26,9 +31,9 @@ use crm_module_sdk::{
     RecordId, RecordRef, RecordType, RequestId, SchemaVersion, SdkError, TraceId,
 };
 use crm_parties_capability_adapter::{
-    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA,
-    MODULE_ID as PARTIES_MODULE_ID, PartyCapabilityPlanner,
-    capability_definition as party_capability_definition,
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY,
+    CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA, MODULE_ID as PARTIES_MODULE_ID,
+    PartyCapabilityPlanner, capability_definition as party_capability_definition,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer_wire, parties::v1 as party_wire};
 use std::sync::Arc;
@@ -217,9 +222,7 @@ pub async fn seed_consent(
     Ok(authorization_id)
 }
 
-pub fn withdrawn_snapshot(
-    authorization_id: &str,
-) -> Result<ConsentAuthorization, SdkError> {
+pub fn withdrawn_snapshot(authorization_id: &str) -> Result<ConsentAuthorization, SdkError> {
     ConsentAuthorization::rehydrate(ConsentAuthorizationSnapshot {
         authorization_id: ConsentAuthorizationId::try_new(authorization_id)?,
         party_ref: PartyReference::try_new(PARTY_ID)?,
@@ -286,14 +289,20 @@ fn seed_context(identity: &str) -> Result<ModuleExecutionContext, SdkError> {
         execution: ExecutionContext {
             tenant_id: tenant(TENANT),
             actor_id: actor(),
-            request_id: RequestId::try_new(format!("{identity}-request")).map_err(configuration_error)?,
-            correlation_id: CorrelationId::try_new(format!("{identity}-correlation")).map_err(configuration_error)?,
-            causation_id: CausationId::try_new(format!("{identity}-causation")).map_err(configuration_error)?,
+            request_id: RequestId::try_new(format!("{identity}-request"))
+                .map_err(configuration_error)?,
+            correlation_id: CorrelationId::try_new(format!("{identity}-correlation"))
+                .map_err(configuration_error)?,
+            causation_id: CausationId::try_new(format!("{identity}-causation"))
+                .map_err(configuration_error)?,
             trace_id: TraceId::try_new(format!("{identity}-trace")).map_err(configuration_error)?,
             capability_id: CapabilityId::try_new(SEED_CAPABILITY).map_err(configuration_error)?,
             capability_version: CapabilityVersion::try_new("1.0.0").map_err(configuration_error)?,
             idempotency_key: IdempotencyKey::try_new(identity).map_err(configuration_error)?,
-            business_transaction_id: BusinessTransactionId::try_new(format!("{identity}-transaction")).map_err(configuration_error)?,
+            business_transaction_id: BusinessTransactionId::try_new(format!(
+                "{identity}-transaction"
+            ))
+            .map_err(configuration_error)?,
             schema_version: SchemaVersion::try_new("1.0.0").map_err(configuration_error)?,
             request_started_at_unix_nanos: NOW - 100_000_000,
         },
@@ -315,14 +324,21 @@ fn capability_request<M: prost::Message>(
             execution: ExecutionContext {
                 tenant_id: tenant(TENANT),
                 actor_id: actor(),
-                request_id: RequestId::try_new(format!("{identity}-request")).map_err(configuration_error)?,
-                correlation_id: CorrelationId::try_new(format!("{identity}-correlation")).map_err(configuration_error)?,
-                causation_id: CausationId::try_new(format!("{identity}-causation")).map_err(configuration_error)?,
-                trace_id: TraceId::try_new(format!("{identity}-trace")).map_err(configuration_error)?,
+                request_id: RequestId::try_new(format!("{identity}-request"))
+                    .map_err(configuration_error)?,
+                correlation_id: CorrelationId::try_new(format!("{identity}-correlation"))
+                    .map_err(configuration_error)?,
+                causation_id: CausationId::try_new(format!("{identity}-causation"))
+                    .map_err(configuration_error)?,
+                trace_id: TraceId::try_new(format!("{identity}-trace"))
+                    .map_err(configuration_error)?,
                 capability_id: definition.capability_id.clone(),
                 capability_version: definition.capability_version.clone(),
                 idempotency_key: IdempotencyKey::try_new(identity).map_err(configuration_error)?,
-                business_transaction_id: BusinessTransactionId::try_new(format!("{identity}-transaction")).map_err(configuration_error)?,
+                business_transaction_id: BusinessTransactionId::try_new(format!(
+                    "{identity}-transaction"
+                ))
+                .map_err(configuration_error)?,
                 schema_version: SchemaVersion::try_new("1.0.0").map_err(configuration_error)?,
                 request_started_at_unix_nanos: NOW - 100_000_000,
             },

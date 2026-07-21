@@ -1,7 +1,7 @@
-#[path = "support/customer_enrichment_suggestion_get.rs"]
-mod customer_enrichment_suggestion_get;
 #[path = "support/customer_enrichment_consent_policy.rs"]
 mod consent_fixture;
+#[path = "support/customer_enrichment_suggestion_get.rs"]
+mod customer_enrichment_suggestion_get;
 
 use consent_fixture::{
     ConsentFixtureKind, DefinitionFixture, LEGAL_BASIS, PARTY_ID, PURPOSE, seed_consent,
@@ -28,9 +28,7 @@ use crm_consents_query_adapter::{
     query_capability_definition as consent_query_definition,
 };
 use crm_core_data::PostgresDataStore;
-use crm_customer_enrichment_capability_adapter::{
-    MODULE_ID, request_create_capability_definition,
-};
+use crm_customer_enrichment_capability_adapter::{MODULE_ID, request_create_capability_definition};
 use crm_customer_enrichment_capability_composition::REQUEST_POLICY_VERSION;
 use crm_module_sdk::testing::{DeterministicRandom, FixedClock};
 use crm_module_sdk::{Clock, PortFuture, SdkError};
@@ -111,11 +109,7 @@ async fn production_request_creation_denies_invalid_consent_before_persistence()
             PARTY_RECORD_TYPE,
             BTreeSet::from(["display_name".to_owned()]),
         ),
-        visibility_grant(
-            &consent_definition,
-            CONSENT_RECORD_TYPE,
-            consent_fields(),
-        ),
+        visibility_grant(&consent_definition, CONSENT_RECORD_TYPE, consent_fields()),
     ] {
         visibility_store
             .upsert(grant)
