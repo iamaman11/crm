@@ -1,6 +1,6 @@
 # Acceptance gates for `crm.customer-enrichment`
 
-Phase 8A.10 state: **Gate review**. The packet is implemented in draft PR #137 but is not Complete until merge.
+Phase 8A.10 state: **Complete**. Accepted source checkpoint `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged and was squash-merged through PR #137 as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
 ## Frozen production inventory
 
@@ -96,9 +96,10 @@ The permanent Application Runtime workflow starts the real `crm-api` binary on a
 
 - [x] `tests/acceptance.rs` is a non-ignored production contract that verifies the exact 6+6+2 inventory, 17-workflow invariant and permanent real-process evidence.
 - [x] `production/CONTRIBUTION.md` matches production composition, visibility, worker and lifecycle boundaries.
-- [x] Module README, catalog entry, roadmap, phase plan and project status are synchronized to Gate review.
+- [x] Module README, catalog entry, roadmap, phase plan, project status, issue #125 and PR #137 are synchronized.
 - [x] Additional provider transports are explicitly future separately owned infrastructure work and are not hidden in this packet.
-- [ ] Record the final synchronized user-authored SHA after Generated Sync is stable and all 17 permanent workflows pass unchanged.
-- [ ] Update PR #137 and issue #125 with that exact SHA, complete review and merge.
+- [x] Generated Sync was stable on the final source state.
+- [x] Final user-authored SHA `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged.
+- [x] PR #137 merged with exact-head protection as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
-The last two items are process-state gates and cannot be checked into source without creating a new SHA. Their authoritative completion evidence belongs in the PR and issue immediately before merge.
+Phase 8A.11 / #126 is the next customer-master packet.
