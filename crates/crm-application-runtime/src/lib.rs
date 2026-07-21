@@ -9,7 +9,6 @@
 
 mod background;
 mod bootstrap_visibility;
-mod bootstrap_visibility_overlay;
 mod config;
 mod customer_enrichment_application_worker;
 mod customer_enrichment_materialization_process;
@@ -35,7 +34,7 @@ mod runtime;
 pub(crate) use background::{
     ProductionBackgroundWorkerDependencies, build_production_background_workers,
 };
-pub(crate) use bootstrap_visibility_overlay::{
+pub(crate) use bootstrap_visibility::{
     BootstrapVisibilityResource, build_bootstrap_visibility_registry,
 };
 pub use config::*;
