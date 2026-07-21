@@ -4,9 +4,7 @@ use crm_application_runtime::{
     ProviderTransportRegistration, StaticProviderTransportCatalog,
     build_customer_enrichment_provider_registry,
 };
-use crm_customer_enrichment::{
-    ProviderAdapterCoordinate, SanitizedProviderResponse,
-};
+use crm_customer_enrichment::{ProviderAdapterCoordinate, SanitizedProviderResponse};
 use crm_customer_enrichment_provider_registry::{
     ProviderSecretMaterial, ProviderTransportFailure, ProviderTransportFailureClass,
     ProviderTransportPort, ProviderTransportRequest,
