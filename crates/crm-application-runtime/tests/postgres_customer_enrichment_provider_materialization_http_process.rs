@@ -41,7 +41,7 @@ mod process {
         build_provider_dispatch_work_item,
     };
     use crm_customer_enrichment_registry_http_transport::{
-        REGISTRY_HTTP_ADAPTER_CONTRACT_VERSION, REGISTRY_HTTP_ADAPTER_KIND, REGISTRY_HTTP_PATH,
+        REGISTRY_HTTP_ADAPTER_CONTRACT_VERSION, REGISTRY_HTTP_ADAPTER_KIND,
         REGISTRY_HTTP_TRANSPORT_KEY,
     };
     use crm_module_sdk::{
@@ -200,19 +200,19 @@ mod process {
         let admin = PgPool::connect(&admin_database_url)
             .await
             .expect("connect provider HTTP materialization evidence reader");
-        let snapshot = provider_process_snapshot();
-        seed_provider_dependencies(&store, &snapshot)
+        let fixture = process_fixture();
+        seed_provider_dependencies(&store, &fixture)
             .await
             .expect("seed exact provider profile and mapping snapshots");
-        seed_request(&store, &snapshot.request)
+        seed_request(&store, &fixture.snapshot.request)
             .await
             .expect("seed provider HTTP request-created evidence");
 
         let process_actor = ActorId::try_new(PROVIDER_PROCESS_WORKER_ACTOR_ID).unwrap();
         let expected_work_item = build_provider_dispatch_work_item(ProviderDispatchWorkItemInput {
-            request: &snapshot.request,
-            provider_profile: &snapshot.provider_profile,
-            party_snapshot: &snapshot.party_snapshot,
+            request: &fixture.snapshot.request,
+            provider_profile: &fixture.snapshot.provider_profile,
+            party_snapshot: &fixture.snapshot.party_snapshot,
             worker_actor_id: &process_actor,
             now_unix_ms: 30,
         })
@@ -311,7 +311,7 @@ mod process {
         let provider_process = CustomerEnrichmentProviderProcessWorker::new(
             store.clone(),
             Arc::new(StaticProcessSource {
-                snapshot: snapshot.clone(),
+                snapshot: fixture.snapshot.clone(),
                 calls: source_calls.clone(),
             }),
             Arc::new(provider_worker),
@@ -334,7 +334,7 @@ mod process {
         let provider_request_snapshot = store
             .get_record(
                 &read_context(),
-                &enrichment_request_record_ref(&snapshot.request).unwrap(),
+                &enrichment_request_record_ref(&fixture.snapshot.request).unwrap(),
             )
             .await
             .unwrap()
@@ -365,13 +365,16 @@ mod process {
                 &tenant_id,
                 PROVIDER_PROCESS_PROJECTION_ID,
                 PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
-                snapshot.request.request_id().as_str(),
+                fixture.snapshot.request.request_id().as_str(),
             )
             .await
             .unwrap()
             .expect("canonical provider process outcome exists");
         let outcome = ProviderProcessCanonicalOutcome::from_projection_document(document).unwrap();
-        assert_eq!(outcome.request_id(), snapshot.request.request_id().as_str());
+        assert_eq!(
+            outcome.request_id(),
+            fixture.snapshot.request.request_id().as_str()
+        );
         assert_eq!(outcome.retry_generation(), 0);
         assert_eq!(outcome.kind(), ProviderProcessOutcomeKind::ResponseRecorded);
         assert_eq!(
@@ -408,7 +411,7 @@ mod process {
         );
         assert_eq!(suggestion_count(&admin).await, 0);
 
-        upload_candidate_evidence(&store, &snapshot, &receipt_id)
+        upload_candidate_evidence(&store, &fixture.snapshot, &receipt_id)
             .await
             .expect("finalize canonical provider candidate evidence");
         let materialized = materialization_process
@@ -425,7 +428,7 @@ mod process {
         let materialized_request_snapshot = store
             .get_record(
                 &read_context(),
-                &enrichment_request_record_ref(&snapshot.request).unwrap(),
+                &enrichment_request_record_ref(&fixture.snapshot.request).unwrap(),
             )
             .await
             .unwrap()
@@ -457,7 +460,7 @@ mod process {
         let restarted_provider = CustomerEnrichmentProviderProcessWorker::new(
             store.clone(),
             Arc::new(StaticProcessSource {
-                snapshot: snapshot.clone(),
+                snapshot: fixture.snapshot.clone(),
                 calls: source_calls.clone(),
             }),
             Arc::new(ForbiddenProcessExecutor),
@@ -524,7 +527,12 @@ mod process {
         }
     }
 
-    fn provider_process_snapshot() -> ProviderDispatchSourceSnapshot {
+    struct ProcessFixture {
+        snapshot: ProviderDispatchSourceSnapshot,
+        mapping: MappingVersion,
+    }
+
+    fn process_fixture() -> ProcessFixture {
         let provider_profile = ProviderProfileVersion::publish(ProviderProfileDraft {
             provider_key: "company_registry_http_materialization_process".to_owned(),
             adapter_kind: REGISTRY_HTTP_ADAPTER_KIND.to_owned(),
@@ -579,30 +587,41 @@ mod process {
             expires_at_unix_ms: 20_000,
         })
         .unwrap();
-        ProviderDispatchSourceSnapshot {
-            request,
-            provider_profile,
-            party_snapshot: PartySnapshot {
-                party_id: RecordId::try_new("party-provider-http-materialization-process-1")
+        ProcessFixture {
+            snapshot: ProviderDispatchSourceSnapshot {
+                request,
+                provider_profile,
+                party_snapshot: PartySnapshot {
+                    party_id: RecordId::try_new(
+                        "party-provider-http-materialization-process-1",
+                    )
                     .unwrap(),
-                display_name: "HTTP Materialization Process Company".to_owned(),
-                resource_version: 7,
-                observed_at_unix_ms: 15,
+                    display_name: "HTTP Materialization Process Company".to_owned(),
+                    resource_version: 7,
+                    observed_at_unix_ms: 15,
+                },
             },
+            mapping,
         }
     }
 
     async fn seed_provider_dependencies(
         store: &PostgresDataStore,
-        snapshot: &ProviderDispatchSourceSnapshot,
+        fixture: &ProcessFixture,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            fixture.mapping.version_id(),
+            fixture.snapshot.request.mapping_version_id()
+        );
         seed_definition_record(
             store,
             DefinitionSeed {
                 suffix: "provider-profile",
                 occurred_at_unix_nanos: 1_000_000,
-                record: provider_profile_record_ref(&snapshot.provider_profile)?,
-                record_payload: provider_profile_persisted_payload(&snapshot.provider_profile)?,
+                record: provider_profile_record_ref(&fixture.snapshot.provider_profile)?,
+                record_payload: provider_profile_persisted_payload(
+                    &fixture.snapshot.provider_profile,
+                )?,
                 event_type: PROVIDER_PROFILE_PUBLISHED_EVENT_TYPE,
                 event_payload: support::protobuf_payload(
                     MODULE_ID,
@@ -610,7 +629,7 @@ mod process {
                     DataClass::Confidential,
                     &wire::ProviderProfileVersionPublishedEvent {
                         provider_profile_version: Some(provider_profile_to_wire(
-                            &snapshot.provider_profile,
+                            &fixture.snapshot.provider_profile,
                         )),
                     },
                 )?,
@@ -622,15 +641,15 @@ mod process {
             DefinitionSeed {
                 suffix: "mapping",
                 occurred_at_unix_nanos: 2_000_000,
-                record: mapping_record_ref(&snapshot.mapping)?,
-                record_payload: mapping_persisted_payload(&snapshot.mapping)?,
+                record: mapping_record_ref(&fixture.mapping)?,
+                record_payload: mapping_persisted_payload(&fixture.mapping)?,
                 event_type: MAPPING_PUBLISHED_EVENT_TYPE,
                 event_payload: support::protobuf_payload(
                     MODULE_ID,
                     MAPPING_PUBLISHED_EVENT_SCHEMA,
                     DataClass::Confidential,
                     &wire::MappingVersionPublishedEvent {
-                        mapping_version: Some(mapping_to_wire(&snapshot.mapping)),
+                        mapping_version: Some(mapping_to_wire(&fixture.mapping)),
                     },
                 )?,
             },
@@ -683,7 +702,8 @@ mod process {
                     scope: format!("{SEED_CAPABILITY}@1.0.0"),
                     key: format!("provider-http-materialization-seed-{}", seed.suffix),
                     request_hash,
-                    expires_at_unix_nanos: 86_400_000_000_000 + seed.occurred_at_unix_nanos,
+                    expires_at_unix_nanos: 86_400_000_000_000
+                        + seed.occurred_at_unix_nanos,
                 },
                 audit: AuditIntent {
                     audit_record_id: format!(
@@ -691,7 +711,8 @@ mod process {
                         seed.suffix
                     ),
                     canonicalization_profile: "crm.cjson/v1".to_owned(),
-                    canonical_envelope: format!("{{\"seed\":\"{}\"}}", seed.suffix).into_bytes(),
+                    canonical_envelope: format!("{{\"seed\":\"{}\"}}", seed.suffix)
+                        .into_bytes(),
                     occurred_at_unix_nanos: seed.occurred_at_unix_nanos,
                 },
             })
