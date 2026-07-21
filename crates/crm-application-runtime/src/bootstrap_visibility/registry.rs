@@ -44,11 +44,9 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) const SALES_MODULE_ID: &str = "crm.sales";
 pub(super) const ACTIVITIES_MODULE_ID: &str = "crm.activities";
 pub(super) const DATA_QUALITY_MODULE_ID: &str = "crm.data-quality";
-pub(super) const DATA_QUALITY_RULE_SET_RECORD_TYPE: &str =
-    "data_quality.party_rule_set_version";
+pub(super) const DATA_QUALITY_RULE_SET_RECORD_TYPE: &str = "data_quality.party_rule_set_version";
 
-pub(super) type VisibilityProvider =
-    fn(&CapabilityDefinition) -> Vec<BootstrapVisibilityResource>;
+pub(super) type VisibilityProvider = fn(&CapabilityDefinition) -> Vec<BootstrapVisibilityResource>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BootstrapVisibilityResource {

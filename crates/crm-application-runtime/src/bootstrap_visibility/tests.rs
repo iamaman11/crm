@@ -3,11 +3,11 @@ use super::registry::{
     SALES_MODULE_ID, build_bootstrap_visibility_registry,
 };
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk, PayloadContract};
+use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_customer_enrichment::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_customer_enrichment_visibility::{
     QUERY_VISIBILITY_CAPABILITY_IDS, query_visibility_resources,
 };
-use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, SchemaId, SchemaVersion,
 };

@@ -346,6 +346,7 @@ dependencies = [
  "crm-customer-enrichment-review-adapter",
  "crm-customer-enrichment-review-composition",
  "crm-customer-enrichment-suggestion-query-adapter",
+ "crm-customer-enrichment-visibility",
  "crm-customer-enrichment-worker-composition",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
@@ -1021,6 +1022,16 @@ dependencies = [
  "crm-proto-contracts",
  "crm-query-runtime",
  "prost",
+]
+
+[[package]]
+name = "crm-customer-enrichment-visibility"
+version = "0.1.0"
+dependencies = [
+ "crm-customer-enrichment",
+ "crm-customer-enrichment-query-adapter",
+ "crm-customer-enrichment-request-list-query-adapter",
+ "crm-customer-enrichment-suggestion-query-adapter",
 ]
 
 [[package]]
