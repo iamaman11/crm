@@ -5,16 +5,10 @@ use crm_customer_enrichment_capability_adapter::{
     CANCEL_ENRICHMENT_REQUEST_CAPABILITY, CREATE_ENRICHMENT_REQUEST_CAPABILITY, MODULE_ID,
     PUBLISH_MAPPING_CAPABILITY, PUBLISH_PROVIDER_PROFILE_CAPABILITY,
 };
-use crm_customer_enrichment_query_adapter::{
-    GET_ENRICHMENT_REQUEST_CAPABILITY, GET_MAPPING_CAPABILITY, GET_PROVIDER_PROFILE_CAPABILITY,
-};
-use crm_customer_enrichment_request_list_query_adapter::LIST_ENRICHMENT_REQUESTS_CAPABILITY;
 use crm_customer_enrichment_review_adapter::{
     ACCEPT_SUGGESTION_CAPABILITY, REJECT_SUGGESTION_CAPABILITY,
 };
-use crm_customer_enrichment_suggestion_query_adapter::{
-    GET_SUGGESTION_CAPABILITY, LIST_SUGGESTIONS_BY_PARTY_CAPABILITY,
-};
+use crm_customer_enrichment_visibility::QUERY_VISIBILITY_CAPABILITY_IDS;
 use std::collections::BTreeSet;
 
 #[test]
@@ -51,30 +45,24 @@ fn definition_publications_request_lifecycle_and_reviews_are_the_composed_enrich
 }
 
 #[test]
-fn definition_and_request_lookups_are_the_composed_enrichment_queries() {
+fn production_queries_have_exact_module_owned_visibility_parity() {
     let enrichment_definitions = application_query_definitions()
         .unwrap()
         .into_iter()
         .filter(|definition| definition.owner_module_id.as_str() == MODULE_ID)
         .collect::<Vec<_>>();
+    let production_ids = enrichment_definitions
+        .iter()
+        .map(|definition| definition.capability_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let visibility_ids = QUERY_VISIBILITY_CAPABILITY_IDS
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
 
     assert_eq!(enrichment_definitions.len(), 6);
-    assert_eq!(
-        enrichment_definitions
-            .iter()
-            .map(|definition| definition.capability_id.as_str())
-            .collect::<BTreeSet<_>>(),
-        [
-            GET_PROVIDER_PROFILE_CAPABILITY,
-            GET_MAPPING_CAPABILITY,
-            GET_ENRICHMENT_REQUEST_CAPABILITY,
-            LIST_ENRICHMENT_REQUESTS_CAPABILITY,
-            GET_SUGGESTION_CAPABILITY,
-            LIST_SUGGESTIONS_BY_PARTY_CAPABILITY,
-        ]
-        .into_iter()
-        .collect()
-    );
+    assert_eq!(QUERY_VISIBILITY_CAPABILITY_IDS.len(), 6);
+    assert_eq!(production_ids, visibility_ids);
     for definition in enrichment_definitions {
         assert_eq!(definition.capability_version.as_str(), "1.0.0");
         assert!(!definition.mutation);
