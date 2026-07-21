@@ -128,7 +128,10 @@ mod process {
         _body: Bytes,
     ) -> impl IntoResponse {
         state.calls.fetch_add(1, Ordering::SeqCst);
-        (StatusCode::INTERNAL_SERVER_ERROR, "provider I/O was forbidden")
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "provider I/O was forbidden",
+        )
     }
 
     async fn spawn_forbidden_provider(calls: Arc<AtomicUsize>) -> String {
@@ -394,10 +397,8 @@ mod process {
             request,
             provider_profile,
             party_snapshot: PartySnapshot {
-                party_id: RecordId::try_new(
-                    "party-provider-credential-isolation-process-1",
-                )
-                .unwrap(),
+                party_id: RecordId::try_new("party-provider-credential-isolation-process-1")
+                    .unwrap(),
                 display_name: "Credential Isolation Process Company".to_owned(),
                 resource_version: 7,
                 observed_at_unix_ms: 15,
