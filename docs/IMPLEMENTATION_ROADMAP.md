@@ -93,18 +93,19 @@ Completed packets:
 - **8A.7** — governed immutable import sources, server-side parsing/validation, resumable Party import and crash/retry recovery (#120 / PR #121).
 - **8A.8** — governed Party export jobs, immutable selection/manifests, deterministic artifacts, reconciliation and both crash-window recoveries (#123 / PR #130).
 - **8A.9** — Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132; merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`).
+- **8A.10** — Governed Customer Enrichment and Provenance (#125 / PR #137; accepted checkpoint `f92d101206886e3ceaf94d0e56e52580cec21093`; merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`).
 
 Active and planned sequence:
 
-1. **8A.10 / #125 — Gate review:** Governed Customer Enrichment and Provenance in draft PR #137.
-2. **8A.11 / #126 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
-3. **Phase 8A closure:** only after both packets are merged and the full customer-master baseline is reconciled.
+1. **8A.11 / #126 — Ready:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
+2. **Phase 8A closure:** after 8A.11 merges and the full customer-master baseline is reconciled.
+3. **8B / #29 — Planned:** begin only from the completed Phase 8A baseline.
 
-### Phase 8A.10 gate-review boundary
+### Phase 8A.10 completed boundary
 
-The accepted production inventory is frozen at exactly **6 public mutations + 6 permission-aware queries + 2 activation-gated worker coordinates**. Three provider/materialization coordinates remain worker-only and have no public HTTP/gRPC ingress.
+The merged production inventory is frozen at exactly **6 public mutations + 6 permission-aware queries + 2 activation-gated worker coordinates**. Three provider/materialization coordinates remain worker-only and have no public HTTP/gRPC ingress.
 
-The packet includes:
+The completed packet includes:
 
 - immutable provider-profile, mapping, request, response receipt/conflict, suggestion, review, usage and application evidence;
 - concrete exact-coordinate registry HTTP transport outside the pure module core;
@@ -118,7 +119,7 @@ The packet includes:
 - permanent real-`crm-api` HTTP/gRPC acceptance proving successful governed persistence plus bounded authentication, tenant, visibility, Consent, activation and authorization denials;
 - transaction-scoped immutable provider-profile and exact Party-version reference guards before atomic mapping/request persistence.
 
-PR #137 may leave draft only when the final synchronized user-authored SHA passes all 17 permanent workflows unchanged and that exact SHA is recorded in both the PR and issue #125. Until merge, the packet is **Gate review**, not Complete.
+Exact source checkpoint `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged. PR #137 was squash-merged as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
 Phase 8A is complete only when the customer-master baseline also covers privacy access/export/restriction/deletion/legal-hold interaction proof, tenant isolation, migrations, compatibility, process acceptance and maturity-appropriate performance.
 
@@ -161,9 +162,8 @@ Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarc
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Obtain one synchronized user-authored PR #137 SHA with all 17 permanent workflows successful.
-2. Record the exact SHA in PR #137 and issue #125; complete review and merge Phase 8A.10.
-3. Rebase and deliver #126 on the merged enrichment baseline.
-4. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
-5. Begin Phase 8B / #29 from the completed customer-master baseline.
-6. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
+1. Start and deliver Phase 8A.11 / #126 from merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
+2. Prove privacy access/export, live restriction, owner-aware deletion/anonymization and legal-hold conflict behavior through governed owner boundaries.
+3. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
+4. Begin Phase 8B / #29 from the completed customer-master baseline.
+5. Continue other Phase 8 waves through explicit owner-domain packets while Phase 11 hardening remains continuous.
