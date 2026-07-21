@@ -56,6 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/tmp_apply_provider_http_process_acceptance.py
+          python scripts/tmp_adjust_http_process_source.py
           cargo fmt --all
       - name: Reject unexpected patch scope
         run: |
