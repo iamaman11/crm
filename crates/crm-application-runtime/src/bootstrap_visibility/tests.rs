@@ -1,8 +1,9 @@
 use super::registry::{
-    ACTIVITIES_MODULE_ID, BootstrapVisibilityResource, CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-    SALES_MODULE_ID, build_bootstrap_visibility_registry,
+    ACTIVITIES_MODULE_ID, BootstrapVisibilityResource, SALES_MODULE_ID,
+    build_bootstrap_visibility_registry,
 };
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk, PayloadContract};
+use crm_customer_data_operations_capability_adapter::MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID;
 use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_customer_enrichment::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_customer_enrichment_visibility::{
