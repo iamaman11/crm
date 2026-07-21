@@ -5,7 +5,9 @@ use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordC
 use crm_core_events::ProjectionStore;
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
-    PartySnapshot, ProviderProfileDraft, ProviderProfileVersion, ProviderResponseConflictDraft,
+    PartySnapshot, ProviderProfileDraft, ProviderProfileVersion, ProviderResponseConflictDecision,
+    ProviderResponseConflictDraft, ProviderResponseConflictResolutionPolicyDecision,
+    ProviderResponseConflictResolutionPolicyPort, ProviderResponseConflictResolutionPolicyRequest,
     ProviderResponseReceiptId, RawPayloadPolicy, RequestPolicyEvidence, TargetField,
     TargetSnapshot,
 };
@@ -16,8 +18,9 @@ use crm_customer_enrichment_capability_adapter::{
 };
 use crm_customer_enrichment_provider_process_composition::{
     CustomerEnrichmentProviderProcessWorker, PROVIDER_PROCESS_PROJECTION_ID,
+    PostgresProviderResponseConflictResolutionExecutor, PostgresProviderResponseConflictStore,
     ProviderDispatchExecutorPort, ProviderDispatchSourceDisposition, ProviderDispatchSourcePort,
-    ProviderDispatchSourceSnapshot,
+    ProviderDispatchSourceSnapshot, ProviderResponseConflictResolutionCommand,
 };
 use crm_customer_enrichment_worker_composition::{
     ProviderDispatchExecution, ProviderDispatchWorkItem,
@@ -130,6 +133,119 @@ async fn unresolved_conflict_is_persisted_once_and_holds_checkpoint_across_resta
     assert_eq!(conflict_count(&admin).await, 1);
     assert_eq!(conflict_relationship_count(&admin).await, 1);
     assert_eq!(evidence_counts(&admin).await, baseline);
+
+    let conflict_store = PostgresProviderResponseConflictStore::new(store.clone());
+    let conflict = conflict_store
+        .recovery_conflict_for_request(
+            TenantId::try_new(TENANT_ID).unwrap(),
+            RecordId::try_new(fixture.request.request_id().as_str().to_owned()).unwrap(),
+        )
+        .await
+        .expect("load held conflict for governed resolution")
+        .expect("held conflict exists");
+    let first_receipt_id = conflict.first_receipt_id().as_str().to_owned();
+    let resolver = PostgresProviderResponseConflictResolutionExecutor::new(
+        store.clone(),
+        Arc::new(AllowRetainFirstPolicy),
+    );
+    let resolution = resolver
+        .execute(ProviderResponseConflictResolutionCommand {
+            tenant_id: TenantId::try_new(TENANT_ID).unwrap(),
+            conflict_id: RecordId::try_new(conflict.conflict_id().as_str().to_owned()).unwrap(),
+            actor_id: ActorId::try_new(ACTOR_ID).unwrap(),
+            decision: ProviderResponseConflictDecision::RetainFirstReceipt,
+            safe_reason_code: "retain-first-receipt".to_owned(),
+            approval_evidence_reference: "approval/provider-conflict/retain-first".to_owned(),
+            causation_id: CausationId::try_new("provider-conflict-retain-first-command").unwrap(),
+            correlation_id: CorrelationId::try_new("provider-conflict-retain-first-correlation")
+                .unwrap(),
+            trace_id: TraceId::try_new("provider-conflict-retain-first-trace").unwrap(),
+            resolved_at_unix_ms: 70,
+        })
+        .await
+        .expect("persist governed retain-first resolution");
+    assert!(!resolution.replayed);
+    assert_eq!(
+        resolution
+            .conflict
+            .resolution()
+            .expect("resolution exists")
+            .decision(),
+        ProviderResponseConflictDecision::RetainFirstReceipt
+    );
+    assert_eq!(
+        resolution.conflict.first_receipt_id().as_str(),
+        first_receipt_id
+    );
+    let resolved_baseline = evidence_counts(&admin).await;
+
+    let resumed = restarted
+        .run_cycle(TenantId::try_new(TENANT_ID).unwrap(), 80_000_000)
+        .await
+        .expect("retain-first resolution must resume the held checkpoint");
+    assert_eq!(resumed.created_events, 1);
+    assert_eq!(resumed.retained_first_receipts, 1);
+    assert_eq!(resumed.dispatched, 0);
+    assert_eq!(source_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(executor_calls.load(Ordering::SeqCst), 1);
+    assert!(
+        ProjectionStore::projection_checkpoint(
+            &store,
+            TenantId::try_new(TENANT_ID).unwrap(),
+            PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
+        )
+        .await
+        .expect("read resumed provider checkpoint")
+        .is_some()
+    );
+    assert_eq!(evidence_counts(&admin).await, resolved_baseline);
+
+    let resolved = conflict_store
+        .recovery_conflict_for_request(
+            TenantId::try_new(TENANT_ID).unwrap(),
+            RecordId::try_new(fixture.request.request_id().as_str().to_owned()).unwrap(),
+        )
+        .await
+        .expect("reload resolved conflict")
+        .expect("resolved conflict remains linked");
+    assert_eq!(resolved.first_receipt_id().as_str(), first_receipt_id);
+    assert_eq!(
+        resolved
+            .resolution()
+            .expect("resolved conflict has resolution")
+            .decision(),
+        ProviderResponseConflictDecision::RetainFirstReceipt
+    );
+
+    let no_op = restarted
+        .run_cycle(TenantId::try_new(TENANT_ID).unwrap(), 90_000_000)
+        .await
+        .expect("checkpoint replay must be a no-op");
+    assert_eq!(no_op.created_events, 0);
+    assert_eq!(no_op.retained_first_receipts, 0);
+    assert_eq!(source_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(executor_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(evidence_counts(&admin).await, resolved_baseline);
+}
+
+#[derive(Clone)]
+struct AllowRetainFirstPolicy;
+
+impl ProviderResponseConflictResolutionPolicyPort for AllowRetainFirstPolicy {
+    fn evaluate<'a>(
+        &'a self,
+        request: ProviderResponseConflictResolutionPolicyRequest,
+    ) -> PortFuture<'a, Result<ProviderResponseConflictResolutionPolicyDecision, SdkError>> {
+        Box::pin(async move {
+            assert_eq!(
+                request.decision,
+                ProviderResponseConflictDecision::RetainFirstReceipt
+            );
+            Ok(ProviderResponseConflictResolutionPolicyDecision::Allowed {
+                policy_version: "provider-conflict-policy-v1".to_owned(),
+            })
+        })
+    }
 }
 
 #[derive(Clone)]

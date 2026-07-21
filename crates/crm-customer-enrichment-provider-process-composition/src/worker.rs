@@ -10,6 +10,7 @@ use crm_core_events::{
 };
 use crm_customer_enrichment::{
     ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequest, PartySnapshot, ProviderProfileVersion,
+    ProviderResponseConflictDecision,
 };
 use crm_customer_enrichment_capability_adapter::{
     ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA, ENRICHMENT_REQUEST_CREATED_EVENT_TYPE, MODULE_ID,
@@ -80,6 +81,7 @@ pub struct ProviderProcessCycle {
     pub skipped: u32,
     pub dispatch_replays: u32,
     pub response_replays: u32,
+    pub retained_first_receipts: u32,
 }
 
 #[derive(Clone)]
@@ -191,6 +193,10 @@ impl CustomerEnrichmentProviderProcessWorker {
                         Ok(DeliveryDisposition::Skipped) => {
                             cycle.skipped = cycle.skipped.saturating_add(1);
                         }
+                        Ok(DeliveryDisposition::RetainedFirstReceipt) => {
+                            cycle.retained_first_receipts =
+                                cycle.retained_first_receipts.saturating_add(1);
+                        }
                         Err(error) => {
                             if !error.retryable {
                                 let _ = ProjectionStore::mark_projection_failed(
@@ -251,12 +257,22 @@ impl CustomerEnrichmentProviderProcessWorker {
             .map_err(worker_identifier_invalid)?;
         if let Some(conflict) = self
             .conflict_store
-            .unresolved_for_request(tenant_id.clone(), request_id.clone())
+            .recovery_conflict_for_request(tenant_id.clone(), request_id.clone())
             .await?
         {
-            return Err(unresolved_provider_conflict(
-                conflict.conflict_id().as_str(),
-            ));
+            let Some(resolution) = conflict.resolution() else {
+                return Err(unresolved_provider_conflict(
+                    conflict.conflict_id().as_str(),
+                ));
+            };
+            return match resolution.decision() {
+                ProviderResponseConflictDecision::RetainFirstReceipt => {
+                    Ok(DeliveryDisposition::RetainedFirstReceipt)
+                }
+                ProviderResponseConflictDecision::RejectRequest => Err(
+                    reject_request_resolution_pending(conflict.conflict_id().as_str()),
+                ),
+            };
         }
         let source = self
             .source
@@ -335,6 +351,7 @@ impl TenantBackgroundWorker for CustomerEnrichmentProviderProcessWorker {
 enum DeliveryDisposition {
     Executed(Box<ProviderDispatchWorkerResult>),
     Skipped,
+    RetainedFirstReceipt,
 }
 
 fn decode_created_event(
@@ -410,6 +427,16 @@ fn created_event_invalid() -> SdkError {
         false,
         "Customer Enrichment request-created evidence is invalid.",
     )
+}
+
+fn reject_request_resolution_pending(conflict_id: &str) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_REJECT_TRANSITION_PENDING",
+        crm_module_sdk::ErrorCategory::Conflict,
+        true,
+        "The approved provider-response conflict rejection has not reached terminal request state.",
+    )
+    .with_internal_reference(format!("provider_response_conflict_id={conflict_id}"))
 }
 
 fn unresolved_provider_conflict(conflict_id: &str) -> SdkError {

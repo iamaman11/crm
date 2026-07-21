@@ -92,7 +92,7 @@ impl PostgresProviderResponseConflictStore {
         })
     }
 
-    pub async fn unresolved_for_request(
+    pub async fn recovery_conflict_for_request(
         &self,
         tenant_id: TenantId,
         request_id: RecordId,
@@ -123,7 +123,7 @@ impl PostgresProviderResponseConflictStore {
             ));
         }
 
-        let mut unresolved = None;
+        let mut found = None;
         for snapshot in page.records {
             let bytes = support::persisted_json_bytes_with_data_class(
                 &snapshot,
@@ -138,13 +138,24 @@ impl PostgresProviderResponseConflictStore {
                     "related provider-response conflict does not match its request identity",
                 ));
             }
-            if conflict.resolution().is_none() && unresolved.replace(conflict).is_some() {
+            if found.replace(conflict).is_some() {
                 return Err(conflict_state_invalid(
-                    "request has more than one unresolved provider-response conflict",
+                    "request has more than one provider-response conflict for process recovery",
                 ));
             }
         }
-        Ok(unresolved)
+        Ok(found)
+    }
+
+    pub async fn unresolved_for_request(
+        &self,
+        tenant_id: TenantId,
+        request_id: RecordId,
+    ) -> Result<Option<ProviderResponseConflict>, SdkError> {
+        Ok(self
+            .recovery_conflict_for_request(tenant_id, request_id)
+            .await?
+            .filter(|conflict| conflict.resolution().is_none()))
     }
 }
 
