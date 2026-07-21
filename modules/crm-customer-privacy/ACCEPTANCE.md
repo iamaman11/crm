@@ -4,7 +4,7 @@ Scaffold state: **Foundation only**. These gates block any claim of a production
 
 - [x] Freeze immutable module identity and first ownership boundary.
 - [x] Keep the pure module core infrastructure-neutral and deny direct cross-owner storage access.
-- [ ] Accept the Phase 8A.11 architecture and guardrail freeze on one unchanged exact SHA.
+- [x] Accept the Phase 8A.11 architecture and guardrail freeze on unchanged source SHA `62aaaeeb6dec68d520b3b50bb8a6c83fa44e62f8`, merged through PR #140 as `b54ecf42eab4cb465db79ea0103e40edd3ba9d79`.
 - [ ] Publish compatible versioned privacy case, restriction and legal-hold Protobuf contracts and generated bindings.
 - [ ] Define deterministic domain state machines, identities, canonical persistence and safe typed failures.
 - [ ] Implement FORCE RLS persistence, rollback/reapply and `NOBYPASSRLS` tenant isolation.
