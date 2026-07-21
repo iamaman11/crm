@@ -103,12 +103,7 @@ pub fn legitimate_interest_request_payload(
     profile_id: &str,
     mapping_id: &str,
 ) -> TypedPayload {
-    request_payload(
-        definition,
-        profile_id,
-        mapping_id,
-        "legitimate_interest",
-    )
+    request_payload(definition, profile_id, mapping_id, "legitimate_interest")
 }
 
 fn request_payload(
