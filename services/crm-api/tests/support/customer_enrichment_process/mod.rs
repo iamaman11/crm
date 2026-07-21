@@ -7,7 +7,7 @@ pub use fixtures::*;
 pub use transport::*;
 
 pub const TOKEN: &str = "customer-enrichment-process-token";
-pub const ACTOR: &str = "customer-enrichment-process-actor";
+pub const ACTOR: &str = "actor-a";
 pub const TENANT_A: &str = "tenant-a";
 pub const TENANT_B: &str = "tenant-b";
 pub const TENANT_OUTSIDE_TOKEN: &str = "tenant-c";
