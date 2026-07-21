@@ -789,15 +789,14 @@ fn validate_privacy_case(case: &PrivacyCase) -> Result<(), SdkError> {
         ));
     }
 
-    if let Some(binding) = &case.subject_binding {
-        if binding.verified_at_unix_nanos < case.created_at_unix_nanos
-            || binding.verified_at_unix_nanos > case.last_transition_at_unix_nanos
+    if let Some(binding) = &case.subject_binding
+        && (binding.verified_at_unix_nanos < case.created_at_unix_nanos
+            || binding.verified_at_unix_nanos > case.last_transition_at_unix_nanos)
         {
             return Err(persisted_error(
                 "privacy-case subject-verification time is inconsistent",
             ));
         }
-    }
 
     if let Some(requirement) = &case.pending_rescope {
         let binding = case.subject_binding.as_ref().ok_or_else(|| {
@@ -820,13 +819,12 @@ fn validate_privacy_case(case: &PrivacyCase) -> Result<(), SdkError> {
         }
     }
 
-    if let Some(approval) = &case.approval {
-        if approval.approved_at_unix_nanos < case.created_at_unix_nanos
-            || approval.approved_at_unix_nanos > case.last_transition_at_unix_nanos
+    if let Some(approval) = &case.approval
+        && (approval.approved_at_unix_nanos < case.created_at_unix_nanos
+            || approval.approved_at_unix_nanos > case.last_transition_at_unix_nanos)
         {
             return Err(persisted_error("privacy-case approval time is inconsistent"));
         }
-    }
 
     let subject_required = matches!(
         case.status,
