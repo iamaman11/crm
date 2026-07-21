@@ -56,7 +56,10 @@ pub async fn set_customer_enrichment_status(pool: &PgPool, status: &str) {
         ("app.tenant_id", TENANT_A),
         ("app.actor_id", "customer-enrichment-process-admin"),
         ("app.request_id", "customer-enrichment-process-activation"),
-        ("app.capability_id", "customer_enrichment.process.activation"),
+        (
+            "app.capability_id",
+            "customer_enrichment.process.activation",
+        ),
         ("app.capability_version", "1.0.0"),
         ("app.business_transaction_id", transaction_id.as_str()),
     ] {
@@ -76,7 +79,10 @@ pub async fn set_customer_enrichment_status(pool: &PgPool, status: &str) {
     .execute(&mut *transaction)
     .await
     .expect("update Customer Enrichment activation state");
-    transaction.commit().await.expect("commit activation update");
+    transaction
+        .commit()
+        .await
+        .expect("commit activation update");
 }
 
 async fn scalar_for_tenant(pool: &PgPool, sql: &str) -> i64 {

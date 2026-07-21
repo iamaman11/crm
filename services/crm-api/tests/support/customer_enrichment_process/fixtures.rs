@@ -58,10 +58,7 @@ pub fn profile_payload(definition: &CapabilityDefinition, provider_key: &str) ->
     )
 }
 
-pub fn mapping_payload(
-    definition: &CapabilityDefinition,
-    profile_id: &str,
-) -> TypedPayload {
+pub fn mapping_payload(definition: &CapabilityDefinition, profile_id: &str) -> TypedPayload {
     payload(
         definition,
         enrichment::PublishMappingVersionRequest {
@@ -72,8 +69,7 @@ pub fn mapping_payload(
                 }),
                 provider_response_field_path: "organization.legal_name".to_owned(),
                 target_field: enrichment::EnrichmentTargetField::PartyDisplayName as i32,
-                normalization: enrichment::MappingNormalization::CanonicalPartyDisplayNameV1
-                    as i32,
+                normalization: enrichment::MappingNormalization::CanonicalPartyDisplayNameV1 as i32,
                 maximum_suggestions_per_response: 1,
                 confidence_required: true,
             }),

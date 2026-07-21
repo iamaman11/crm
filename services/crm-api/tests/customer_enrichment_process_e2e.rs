@@ -14,11 +14,13 @@ const HIDDEN_PROFILE_DEFINITION: &str = "customer_enrichment.provider_profile.ge
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn customer_enrichment_real_process_denials_are_bounded_and_side_effect_free() {
     let Some(database_url) = std::env::var("DATABASE_URL").ok() else {
-        eprintln!("skipping Customer Enrichment crm-api process test because DATABASE_URL is absent");
+        eprintln!(
+            "skipping Customer Enrichment crm-api process test because DATABASE_URL is absent"
+        );
         return;
     };
-    let admin_database_url =
-        std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
+    let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
+        .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
     let admin = PgPool::connect(&admin_database_url)
         .await
         .expect("connect Customer Enrichment process evidence reader");
@@ -151,7 +153,11 @@ async fn customer_enrichment_real_process_denials_are_bounded_and_side_effect_fr
     )
     .await
     .expect_err("token must not cross its tenant set");
-    assert_safe_status(&forbidden_tenant, Code::PermissionDenied, "TENANT_FORBIDDEN");
+    assert_safe_status(
+        &forbidden_tenant,
+        Code::PermissionDenied,
+        "TENANT_FORBIDDEN",
+    );
     assert_eq!(evidence_counts(&admin).await, baseline);
 
     let missing_consent = mutate(
