@@ -8,12 +8,12 @@ use crm_customer_privacy::{
     LEGAL_HOLD_STATE_RETENTION_POLICY_ID, LEGAL_HOLD_STATE_SCHEMA_ID,
     LEGAL_HOLD_STATE_SCHEMA_VERSION, MODULE_ID, PRIVACY_CASE_RECORD_TYPE,
     PRIVACY_CASE_STATE_MAXIMUM_BYTES, PRIVACY_CASE_STATE_RETENTION_POLICY_ID,
-    PRIVACY_CASE_STATE_SCHEMA_ID, PRIVACY_CASE_STATE_SCHEMA_VERSION, PrivacyCase,
-    PROCESSING_RESTRICTION_STATE_MAXIMUM_BYTES,
-    PROCESSING_RESTRICTION_STATE_RETENTION_POLICY_ID, PROCESSING_RESTRICTION_STATE_SCHEMA_ID,
-    PROCESSING_RESTRICTION_STATE_SCHEMA_VERSION, ProcessingRestriction, RESTRICTION_RECORD_TYPE,
-    decode_legal_hold_state, decode_privacy_case_state, decode_processing_restriction_state,
-    encode_legal_hold_state, encode_privacy_case_state, encode_processing_restriction_state,
+    PRIVACY_CASE_STATE_SCHEMA_ID, PRIVACY_CASE_STATE_SCHEMA_VERSION,
+    PROCESSING_RESTRICTION_STATE_MAXIMUM_BYTES, PROCESSING_RESTRICTION_STATE_RETENTION_POLICY_ID,
+    PROCESSING_RESTRICTION_STATE_SCHEMA_ID, PROCESSING_RESTRICTION_STATE_SCHEMA_VERSION,
+    PrivacyCase, ProcessingRestriction, RESTRICTION_RECORD_TYPE, decode_legal_hold_state,
+    decode_privacy_case_state, decode_processing_restriction_state, encode_legal_hold_state,
+    encode_privacy_case_state, encode_processing_restriction_state,
     legal_hold_state_descriptor_hash, privacy_case_state_descriptor_hash,
     processing_restriction_state_descriptor_hash,
 };
@@ -126,11 +126,7 @@ pub fn privacy_case_from_snapshot(snapshot: &RecordSnapshot) -> Result<PrivacyCa
 pub fn processing_restriction_from_snapshot(
     snapshot: &RecordSnapshot,
 ) -> Result<ProcessingRestriction, SdkError> {
-    ensure_record_type(
-        snapshot,
-        RESTRICTION_RECORD_TYPE,
-        "processing restriction",
-    )?;
+    ensure_record_type(snapshot, RESTRICTION_RECORD_TYPE, "processing restriction")?;
     let bytes = support::persisted_json_bytes_with_data_class(
         snapshot,
         processing_restriction_persisted_contract(),
@@ -215,9 +211,7 @@ fn adapter_error(reference: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crm_customer_privacy::{
-        LegalHoldScope, PrivacyCaseKind, RestrictionScope,
-    };
+    use crm_customer_privacy::{LegalHoldScope, PrivacyCaseKind, RestrictionScope};
     use crm_module_sdk::{ActorId, RecordId, RecordType, SchemaId, SchemaVersion, TenantId};
 
     fn record_id(value: &str) -> RecordId {

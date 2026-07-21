@@ -1069,6 +1069,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-privacy-persistence-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-customer-privacy",
+ "crm-module-sdk",
+]
+
+[[package]]
 name = "crm-data-quality"
 version = "0.1.0"
 dependencies = [
