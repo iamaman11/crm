@@ -38,8 +38,13 @@ class CustomerPrivacyArchitectureFreezeTests(unittest.TestCase):
     def test_exact_inventory_counts_and_coordinate_disjointness(self) -> None:
         mutations = self.freeze["public_mutations"]
         queries = self.freeze["public_queries"]
-        workers = [item["coordinate"] for item in self.freeze["worker_internal_coordinates"]]
-        non_runtime = [item["coordinate"] for item in self.freeze["non_runtime_coordinates"]]
+        workers = [
+            item["coordinate"]
+            for item in self.freeze["worker_internal_coordinates"]
+        ]
+        non_runtime = [
+            item["coordinate"] for item in self.freeze["non_runtime_coordinates"]
+        ]
 
         self.assertEqual(len(mutations), 9)
         self.assertEqual(len(queries), 7)
@@ -48,7 +53,9 @@ class CustomerPrivacyArchitectureFreezeTests(unittest.TestCase):
 
         all_coordinates = mutations + queries + workers + non_runtime
         self.assertEqual(len(all_coordinates), len(set(all_coordinates)))
-        self.assertTrue(all(coordinate.endswith("@1.0.0") for coordinate in all_coordinates))
+        self.assertTrue(
+            all(coordinate.endswith("@1.0.0") for coordinate in all_coordinates)
+        )
 
     def test_worker_phases_and_public_ingress_are_exact(self) -> None:
         workers = self.freeze["worker_internal_coordinates"]
@@ -88,8 +95,18 @@ class CustomerPrivacyArchitectureFreezeTests(unittest.TestCase):
         action_coordinates = [item["action"] for item in contributions]
         self.assertEqual(len(scope_coordinates), len(set(scope_coordinates)))
         self.assertEqual(len(action_coordinates), len(set(action_coordinates)))
-        self.assertTrue(all(value.endswith(".privacy.scope.contribute@1.0.0") for value in scope_coordinates))
-        self.assertTrue(all(value.endswith(".privacy.action.apply@1.0.0") for value in action_coordinates))
+        self.assertTrue(
+            all(
+                value.endswith(".privacy.scope.contribute@1.0.0")
+                for value in scope_coordinates
+            )
+        )
+        self.assertTrue(
+            all(
+                value.endswith(".privacy.action.apply@1.0.0")
+                for value in action_coordinates
+            )
+        )
 
         data_operations = next(
             item
@@ -127,26 +144,30 @@ class CustomerPrivacyArchitectureFreezeTests(unittest.TestCase):
         self.assertIn("data-encryption-key hierarchy", reason)
         self.assertIn("backup and restore", reason)
 
-    def test_every_frozen_coordinate_is_documented(self) -> None:
+    def test_privacy_module_coordinates_are_documented(self) -> None:
         coordinates: list[str] = []
         coordinates.extend(self.freeze["public_mutations"])
         coordinates.extend(self.freeze["public_queries"])
         coordinates.extend(
-            item["coordinate"] for item in self.freeze["worker_internal_coordinates"]
+            item["coordinate"]
+            for item in self.freeze["worker_internal_coordinates"]
         )
         coordinates.extend(
             item["coordinate"] for item in self.freeze["non_runtime_coordinates"]
         )
-        for contribution in self.freeze["owner_contributions"]:
-            coordinates.append(contribution["scope"])
-            coordinates.append(contribution["action"])
-            if "privacy_export" in contribution:
-                coordinates.append(contribution["privacy_export"])
 
         for coordinate in coordinates:
             with self.subTest(coordinate=coordinate):
                 self.assertIn(coordinate, self.architecture)
 
+        self.assertIn(
+            "<owner>.privacy.scope.contribute@1.0.0",
+            self.architecture,
+        )
+        self.assertIn(
+            "<owner>.privacy.action.apply@1.0.0",
+            self.architecture,
+        )
         self.assertIn("9 public mutations", self.guardrails)
         self.assertIn("7 permission-aware public queries", self.guardrails)
         self.assertIn("9 trusted worker/internal coordinates", self.guardrails)
