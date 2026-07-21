@@ -113,6 +113,15 @@ jobs:
             --test postgres_customer_enrichment_provider_http_process \
             process::exact_host_http_transport_records_one_canonical_process_outcome \
             -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+      - name: Verify exact host transport isolation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-application-runtime \
+            --test customer_enrichment_provider_transport_isolation_contract \
+            exact_host_transport_mismatches_fail_before_secret_or_provider_io \
+            -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
       # Terminal credential isolation is proved on a fresh database before any provider I/O.
       - name: Prepare fresh credential-isolation database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
@@ -252,6 +261,7 @@ jobs:
             database/customer-enrichment-worker-process-runtime.log
             database/customer-enrichment-worker-process-runtime-state.log
             database/customer-enrichment-worker-process-runtime-postgres.log
+            crates/crm-application-runtime/tests/customer_enrichment_provider_transport_isolation_contract.rs
             crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_http_process.rs
             crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_credential_isolation_process.rs
             crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_http_timeout_process.rs
