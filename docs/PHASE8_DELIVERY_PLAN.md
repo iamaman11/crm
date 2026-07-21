@@ -51,11 +51,12 @@ Issue #124 / PR #132 / merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`.
 
 Delivered immutable Party rule/completeness definitions, exact-version evaluation, findings/observations/completeness lineage, stewardship lifecycle, governed Party remediation, signed pagination, FORCE RLS and restart/crash recovery.
 
-### 8A.10 — Governed Customer Enrichment and Provenance — Gate review
+### 8A.10 — Governed Customer Enrichment and Provenance — Complete
 
 Issue: #125  
-Draft PR: #137  
-Depends on: merged 8A.9 and native-composition integrity merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`
+PR: #137  
+Accepted source checkpoint: `f92d101206886e3ceaf94d0e56e52580cec21093` — 17/17 permanent workflows successful unchanged  
+Merge: `150e44b95d9dbdc08c1792563de03ec73f34aed1`
 
 #### Frozen production inventory
 
@@ -72,7 +73,7 @@ The machine-readable source of truth is `contracts/customer-enrichment-productio
 
 Provider I/O, credentials and PostgreSQL transaction guards remain host-owned infrastructure outside the pure module core. Accepted changes re-enter the exact authoritative Party capability `parties.party.update@1.0.0`.
 
-#### Implemented production behavior
+#### Delivered production behavior
 
 - immutable content-derived provider-profile and mapping versions;
 - deterministic request, response, conflict, suggestion, review and application identities;
@@ -86,11 +87,12 @@ Provider I/O, credentials and PostgreSQL transaction guards remain host-owned in
 - deterministic materialization and owner-application recovery;
 - permission-aware provider/mapping/request/suggestion reads with declarative redaction;
 - live activation shutdown, disable/uninstall behavior and cross-tenant concealment;
-- FORCE RLS and migration rollback/reapply proof.
+- FORCE RLS and migration rollback/reapply proof;
+- transaction-scoped immutable provider-profile and exact Party-version guards.
 
-#### Real `crm-api` gate evidence
+#### Real `crm-api` acceptance
 
-A permanent fresh-database Application Runtime step starts the real `crm-api` binary and uses actual HTTP and gRPC endpoints. It proves:
+The permanent fresh-database Application Runtime step starts the real `crm-api` binary and proves:
 
 - unauthenticated HTTP returns bounded `401 {"error":"request_failed"}`;
 - Party creation, provider-profile publication, mapping publication and legitimate-interest enrichment-request persistence succeed through real gRPC ingress;
@@ -104,26 +106,23 @@ A permanent fresh-database Application Runtime step starts the real `crm-api` bi
 - credential/provider/internal markers never reach the public surface;
 - request/event/audit/idempotency/business-transaction counters do not change after pre-persistence denials.
 
-Mapping publication now uses the mapping as its primary aggregate and atomically revalidates/locks the immutable provider profile through a transaction-scoped host guard. Request creation uses its own aggregate and atomically locks the exact Party row/version through a second host guard.
-
-#### Gate-review exit
-
-PR #137 may leave draft only when:
-
-1. acceptance, catalog, roadmap/status, issue and PR descriptions are synchronized;
-2. Generated Sync produces no remaining source changes;
-3. one unchanged **user-authored** SHA passes all 17 permanent workflows;
-4. that exact SHA is recorded in PR #137 and issue #125;
-5. review confirms no public-inventory expansion and no direct cross-owner or infrastructure bypass.
-
-Until merge, 8A.10 remains **Gate review**, not Complete.
-
-### 8A.11 — Customer Privacy Lifecycle — Planned
+### 8A.11 — Customer Privacy Lifecycle — Ready
 
 Issue: #126  
-Depends on: merged 8A.10
+Depends on: merged 8A.10 at `150e44b95d9dbdc08c1792563de03ec73f34aed1`
 
 Deliver governed privacy request lifecycle, access/export, live restriction enforcement, owner-aware deletion/anonymization planning, retention/legal-hold conflict handling and downstream search/projection convergence with immutable evidence preservation where required.
+
+Before contract expansion, freeze:
+
+- privacy request and case ownership;
+- live restriction decision and enforcement boundaries;
+- access/export relation to existing governed export artifacts;
+- deletion/anonymization plans across authoritative owners;
+- legal hold and retention conflict semantics;
+- evidence that must survive deletion or anonymization;
+- exact owner-capability and worker contributions;
+- process, migration, rollback and cross-tenant acceptance matrix.
 
 ### Phase 8A completion gate
 
