@@ -54,4 +54,4 @@ use std::sync::Arc;
 const TENANT_ID: &str = "tenant-a";
 const ACTOR_ID: &str = "actor-a";
 const FILE_ID: &str = "materialization-malformed-candidate-evidence-1";
-const SEED_CAPABILITY: &str = "customer_enrichment.materialization.process.seed";
+const SEED_CAPABILITY: &str = "customer_enrichment.materialization.seed";
