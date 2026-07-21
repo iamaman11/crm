@@ -113,6 +113,17 @@ jobs:
             --test postgres_customer_enrichment_provider_http_process \
             process::exact_host_http_transport_records_one_canonical_process_outcome \
             -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+      - name: Prepare fresh concrete HTTP timeout-recovery database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify concrete HTTP timeout recovery lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-application-runtime \
+            --test postgres_customer_enrichment_provider_http_timeout_process \
+            process::timeout_recovery_reuses_exact_provider_key_and_checkpoint_lineage \
+            -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
       # Keep the full HTTP-to-materialization proof isolated on a freshly rebuilt database.
       - name: Prepare fresh concrete HTTP provider-materialization database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
@@ -230,6 +241,7 @@ jobs:
             database/customer-enrichment-worker-process-runtime-state.log
             database/customer-enrichment-worker-process-runtime-postgres.log
             crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_http_process.rs
+            crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_http_timeout_process.rs
             crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_materialization_http_process.rs
             crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs
             crates/crm-customer-enrichment-provider-process-composition/
