@@ -67,6 +67,7 @@ fn exact_host_transport_mismatches_fail_before_secret_or_provider_io() {
     }])
     .expect("build exact host transport catalog");
 
+    // Both mismatches must be rejected before host composition can resolve any secret.
     let cases = [
         (
             "registry_http_shadow",
