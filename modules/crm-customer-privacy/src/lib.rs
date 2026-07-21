@@ -8,14 +8,27 @@
 //! Identity Resolution, Customer Data Operations and all other customer-master
 //! values remain authoritative in their existing owner modules.
 
-pub mod domain;
+mod canonical_json;
+mod canonicalization;
 
+pub mod domain {
+    include!("domain.rs");
+
+    pub mod persistence {
+        use crate::canonicalization::persisted_state_json as serde_json;
+        include!("persistence.rs");
+    }
+}
+
+pub use domain::persistence::*;
 pub use domain::*;
 
 /// Stable crate identity for repository tooling.
 pub const CRATE_NAME: &str = "crm-customer-privacy";
 /// Immutable governed module identity.
 pub const MODULE_ID: &str = "crm.customer-privacy";
+/// Canonical private-state encoding profile.
+pub const CANONICALIZATION_PROFILE_ID: &str = canonicalization::PROFILE_ID;
 
 /// Authoritative privacy-case record type.
 pub const PRIVACY_CASE_RECORD_TYPE: &str = "customer-privacy.case";
@@ -38,6 +51,7 @@ mod tests {
     fn foundation_identity_and_owned_record_types_are_explicit() {
         assert_eq!(CRATE_NAME, "crm-customer-privacy");
         assert_eq!(MODULE_ID, "crm.customer-privacy");
+        assert_eq!(CANONICALIZATION_PROFILE_ID, "crm.cjson/v1");
 
         let record_types = [
             PRIVACY_CASE_RECORD_TYPE,
