@@ -203,6 +203,18 @@ jobs:
               "${test_name}" \
               -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
           done
+      - name: Prepare fresh malformed-evidence materialization database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify terminal malformed governed evidence recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-customer-enrichment-materialization-composition \
+            --features postgres-integration \
+            --test postgres_materialization_malformed_process \
+            malformed_finalized_evidence_fails_checkpoint_before_materialization \
+            -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -242,7 +254,8 @@ jobs:
                WHERE idempotency_scope IN (
                        'customer_enrichment.request.seed@1.0.0',
                        'customer_enrichment.materialization.seed@1.0.0',
-                       'customer_enrichment.materialization.process.seed@1.0.0'
+                       'customer_enrichment.materialization.process.seed@1.0.0',
+                       'customer_enrichment.materialization.malformed.seed@1.0.0'
                      )
                   OR idempotency_scope LIKE 'capability:customer_enrichment.%:1.0.0'
                ORDER BY tenant_id, idempotency_scope, idempotency_key;
