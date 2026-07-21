@@ -85,7 +85,7 @@ pub async fn set_customer_enrichment_status(pool: &PgPool, status: &str) {
         .expect("commit activation update");
 }
 
-async fn scalar_for_tenant(pool: &PgPool, sql: &str) -> i64 {
+async fn scalar_for_tenant(pool: &PgPool, sql: &'static str) -> i64 {
     sqlx::query_scalar(sql)
         .bind(TENANT_A)
         .fetch_one(pool)
@@ -93,7 +93,7 @@ async fn scalar_for_tenant(pool: &PgPool, sql: &str) -> i64 {
         .expect("read tenant-scoped Customer Enrichment evidence count")
 }
 
-async fn scalar_with_owner(pool: &PgPool, sql: &str) -> i64 {
+async fn scalar_with_owner(pool: &PgPool, sql: &'static str) -> i64 {
     sqlx::query_scalar(sql)
         .bind(TENANT_A)
         .bind(MODULE_ID)
