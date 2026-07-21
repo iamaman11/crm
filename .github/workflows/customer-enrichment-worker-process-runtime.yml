@@ -6,6 +6,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "proto/crm/customer_enrichment/**"
+      - "crates/crm-application-runtime/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-plan-support/**"
       - "crates/crm-capability-runtime/**"
@@ -28,6 +29,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "proto/crm/customer_enrichment/**"
+      - "crates/crm-application-runtime/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-plan-support/**"
       - "crates/crm-capability-runtime/**"
@@ -52,7 +54,7 @@ permissions:
 jobs:
   customer-enrichment-worker-process-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:17-alpine
@@ -100,6 +102,17 @@ jobs:
               --test "${test_name}" \
               -- --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
           done
+      - name: Prepare fresh exact HTTP provider-process database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify concrete exact-coordinate HTTP provider process
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-application-runtime \
+            --test postgres_customer_enrichment_provider_http_process \
+            process::exact_host_http_transport_records_one_canonical_process_outcome \
+            -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
       - name: Prepare fresh Customer Enrichment provider-worker database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify durable Customer Enrichment provider worker
@@ -204,6 +217,7 @@ jobs:
             database/customer-enrichment-worker-process-runtime.log
             database/customer-enrichment-worker-process-runtime-state.log
             database/customer-enrichment-worker-process-runtime-postgres.log
+            crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_http_process.rs
             crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs
             crates/crm-customer-enrichment-provider-process-composition/
             crates/crm-customer-enrichment-materialization-adapter/
