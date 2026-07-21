@@ -1,0 +1,214 @@
+{
+  "schema_version": "crm.customer-privacy-architecture-freeze/v1",
+  "packet": {
+    "phase": "8A.11",
+    "issue": 126,
+    "state": "in_progress_architecture_freeze",
+    "module_id": "crm.customer-privacy",
+    "baseline": "merged_main_after_phase_8a10_integrity_sync"
+  },
+  "ownership": {
+    "owns": [
+      "privacy_case",
+      "subject_binding_evidence",
+      "scope_snapshot",
+      "restriction_directive",
+      "legal_hold",
+      "retention_decision",
+      "privacy_action_plan",
+      "owner_action_attempt",
+      "owner_action_outcome",
+      "orchestration_checkpoint",
+      "export_reference",
+      "convergence_evidence"
+    ],
+    "does_not_own": [
+      "party_values",
+      "account_values",
+      "contact_point_values",
+      "party_relationship_values",
+      "consent_assertions",
+      "identity_resolution_lineage",
+      "import_export_jobs_or_artifacts",
+      "data_quality_values",
+      "customer_enrichment_values",
+      "projection_search_or_cache_state"
+    ]
+  },
+  "public_mutations": [
+    "customer_privacy.case.create@1.0.0",
+    "customer_privacy.case.submit@1.0.0",
+    "customer_privacy.case.subject.verify@1.0.0",
+    "customer_privacy.case.approve@1.0.0",
+    "customer_privacy.case.cancel@1.0.0",
+    "customer_privacy.restriction.place@1.0.0",
+    "customer_privacy.restriction.release@1.0.0",
+    "customer_privacy.legal_hold.place@1.0.0",
+    "customer_privacy.legal_hold.release@1.0.0"
+  ],
+  "public_queries": [
+    "customer_privacy.case.get@1.0.0",
+    "customer_privacy.case.list@1.0.0",
+    "customer_privacy.case.plan.get@1.0.0",
+    "customer_privacy.case.owner_outcomes.list@1.0.0",
+    "customer_privacy.restriction.get@1.0.0",
+    "customer_privacy.legal_hold.get@1.0.0",
+    "customer_privacy.legal_hold.list_by_subject@1.0.0"
+  ],
+  "worker_internal_coordinates": [
+    {
+      "coordinate": "customer_privacy.enforcement.decide@1.0.0",
+      "phase": 260,
+      "public_ingress": false,
+      "activation_semantics": "trusted_final_guard_fail_closed"
+    },
+    {
+      "coordinate": "customer_privacy.scope.discover@1.0.0",
+      "phase": 260,
+      "public_ingress": false
+    },
+    {
+      "coordinate": "customer_privacy.retention.evaluate@1.0.0",
+      "phase": 260,
+      "public_ingress": false
+    },
+    {
+      "coordinate": "customer_privacy.plan.build@1.0.0",
+      "phase": 270,
+      "public_ingress": false
+    },
+    {
+      "coordinate": "customer_privacy.access_export.request@1.0.0",
+      "phase": 270,
+      "public_ingress": false
+    },
+    {
+      "coordinate": "customer_privacy.owner_action.dispatch@1.0.0",
+      "phase": 280,
+      "public_ingress": false
+    },
+    {
+      "coordinate": "customer_privacy.owner_outcome.record@1.0.0",
+      "phase": 280,
+      "public_ingress": false
+    },
+    {
+      "coordinate": "customer_privacy.convergence.verify@1.0.0",
+      "phase": 290,
+      "public_ingress": false
+    },
+    {
+      "coordinate": "customer_privacy.case.finalize@1.0.0",
+      "phase": 290,
+      "public_ingress": false
+    }
+  ],
+  "non_runtime_coordinates": [
+    {
+      "coordinate": "customer_privacy.crypto_shred.execute@1.0.0",
+      "reason": "subject-scoped data-encryption-key hierarchy, hold-aware key destruction, backup and restore semantics are not yet implemented"
+    }
+  ],
+  "owner_contributions": [
+    {
+      "module_id": "crm.parties",
+      "scope": "parties.privacy.scope.contribute@1.0.0",
+      "action": "parties.privacy.action.apply@1.0.0"
+    },
+    {
+      "module_id": "crm.customer-accounts",
+      "scope": "customer_accounts.privacy.scope.contribute@1.0.0",
+      "action": "customer_accounts.privacy.action.apply@1.0.0"
+    },
+    {
+      "module_id": "crm.contact-points",
+      "scope": "contact_points.privacy.scope.contribute@1.0.0",
+      "action": "contact_points.privacy.action.apply@1.0.0"
+    },
+    {
+      "module_id": "crm.party-relationships",
+      "scope": "party_relationships.privacy.scope.contribute@1.0.0",
+      "action": "party_relationships.privacy.action.apply@1.0.0"
+    },
+    {
+      "module_id": "crm.consents",
+      "scope": "consents.privacy.scope.contribute@1.0.0",
+      "action": "consents.privacy.action.apply@1.0.0"
+    },
+    {
+      "module_id": "crm.identity-resolution",
+      "scope": "identity_resolution.privacy.scope.contribute@1.0.0",
+      "action": "identity_resolution.privacy.action.apply@1.0.0"
+    },
+    {
+      "module_id": "crm.customer-data-operations",
+      "scope": "customer_data.privacy.scope.contribute@1.0.0",
+      "action": "customer_data.privacy.action.apply@1.0.0",
+      "privacy_export": "customer_data.export.privacy.request@1.0.0"
+    },
+    {
+      "module_id": "crm.data-quality",
+      "scope": "data_quality.privacy.scope.contribute@1.0.0",
+      "action": "data_quality.privacy.action.apply@1.0.0"
+    },
+    {
+      "module_id": "crm.customer-enrichment",
+      "scope": "customer_enrichment.privacy.scope.contribute@1.0.0",
+      "action": "customer_enrichment.privacy.action.apply@1.0.0"
+    }
+  ],
+  "case_types": [
+    "Access",
+    "PortabilityExport",
+    "RestrictProcessing",
+    "Erasure"
+  ],
+  "plan_actions": [
+    "Retain",
+    "RestrictOnly",
+    "Anonymize",
+    "Delete",
+    "CryptoShred",
+    "NoOpAlreadyCompliant"
+  ],
+  "evidence_classes": [
+    "DestroyableSubjectData",
+    "RetainMinimizedEvidence",
+    "ImmutableRequiredEvidence",
+    "DerivedRebuildableState",
+    "CryptoShreddableData"
+  ],
+  "precedence": [
+    "active_legal_hold",
+    "mandatory_retention",
+    "approved_privacy_action",
+    "ordinary_product_retention"
+  ],
+  "subject_lock": {
+    "coordinate": "tenant_id + canonical_party_id",
+    "required_for": [
+      "restriction_place",
+      "restriction_release",
+      "protected_owner_mutation",
+      "protected_disclosure",
+      "protected_worker_io",
+      "destructive_owner_action"
+    ]
+  },
+  "acceptance_required": [
+    "real_crm_api_public_process",
+    "concurrent_restriction_race",
+    "owner_scope_and_action_process",
+    "governed_privacy_export",
+    "legal_hold_and_retention_blocking",
+    "party_erased_tombstone_no_orphans",
+    "owner_success_outcome_missing_recovery",
+    "artifact_success_case_link_missing_recovery",
+    "projection_search_cache_rebuild_convergence",
+    "cross_tenant_visibility_authorization",
+    "force_rls_rollback_reapply",
+    "disable_uninstall_fail_closed",
+    "exact_route_and_contract_parity",
+    "unchanged_exact_head_ci"
+  ]
+}

@@ -98,41 +98,52 @@ Dedicated fresh-PostgreSQL provider/materialization/review/application workflows
 
 All 17 permanent workflows passed on the unchanged accepted source SHA before merge.
 
-### 8A.11 — Customer Privacy Lifecycle — Ready
+### 8A.11 — Customer Privacy Lifecycle — In progress
 
 Issue: #126  
+Architecture-freeze PR: #140  
 Depends on: merged and synchronized 8A.10
 
 #### Objective
 
 Deliver governed privacy request/case lifecycle, subject/resource discovery, access/export, live restrictions, owner-aware deletion/anonymization planning, retention/legal-hold conflict resolution and downstream convergence without losing immutable evidence required by law, audit or system integrity.
 
-#### Required ownership boundary
+#### Frozen authoritative owner boundary
 
-The privacy coordinator owns privacy cases, scope snapshots, plans, per-owner attempts/outcomes, restriction evidence, retention/legal-hold decisions and orchestration checkpoints. It does not directly mutate Party, Account, Contact Point, Consent, Identity Resolution, Import/Export, Data Quality or Enrichment storage.
+`crm.customer-privacy` owns privacy cases, verified subject binding, immutable scope snapshots, current restrictions, customer-data legal holds, retention decisions, deterministic plans, per-owner attempts/outcomes, orchestration checkpoints, governed export references and convergence evidence.
 
-Every authoritative owner exposes or consumes exact governed capabilities for discovery, access/export contribution, restriction enforcement, deletion/anonymization and evidence preservation. Derived projections/search/caches remain non-authoritative.
+It does not directly mutate Party, Account, Contact Point, Relationship, Consent, Identity Resolution, Import/Export, Data Quality or Enrichment storage. Those modules remain authoritative and participate only through exact module-owned privacy capabilities. Derived projections/search/caches remain non-authoritative.
+
+#### Frozen initial inventory
+
+The machine-readable authority is `contracts/customer-privacy-architecture-freeze.json`.
+
+- 9 public mutations;
+- 7 permission-aware public queries;
+- 9 trusted worker/internal coordinates in phases 260 → 270 → 280 → 290;
+- 1 non-runtime crypto-shredding coordinate pending subject-scoped key architecture.
 
 #### Required behavior
 
 - immutable privacy case/request identity and lifecycle;
 - exact subject identity/canonical redirect handling;
 - bounded owner-resource discovery with live visibility;
-- access/export assembly using governed disclosure and artifact controls;
-- immediate processing/communication restriction enforcement at public and worker boundaries;
+- access/export assembly using governed Customer Data Operations disclosure and artifact controls;
+- immediate processing/communication restriction through a shared tenant + canonical Party lock;
 - deterministic owner/data-class deletion or anonymization plans;
 - explicit retention and legal-hold precedence/conflict evidence;
 - resumable per-owner execution with deterministic idempotency and no duplicate effects;
 - search/projection/cache tombstone or rebuild convergence;
-- preservation of audit, merge lineage, consent, provenance and legal evidence where deletion is prohibited;
-- tenant-aware crypto-shredding only where key ownership and legal-hold policy permit;
-- bounded safe errors, tenant isolation and no orphan references.
+- preservation of audit, merge lineage, Consent, provenance and legal evidence where deletion is prohibited;
+- non-reusable erased Party tombstones and no orphan references;
+- bounded safe errors, tenant isolation and fail-closed enforcement;
+- tenant-aware crypto-shredding only after key ownership, legal-hold, backup and restore semantics exist.
 
 #### Acceptance gate
 
-The packet must prove access/export, immediate restriction, legal-hold blocking, deletion/anonymization convergence, immutable-evidence preservation, restart recovery, cross-tenant denial, migration rollback/reapply and real-process behavior on one unchanged exact SHA.
+The implementation packet must prove access/export, immediate restriction including races, legal-hold blocking, deletion/anonymization convergence, immutable-evidence preservation, restart recovery, cross-tenant denial, migration rollback/reapply and real-process behavior on one unchanged exact SHA.
 
-It moves to **In progress** only after a branch or draft PR is created from the synchronized baseline.
+The architecture-freeze PR itself claims no Protobuf, manifest, migration, production-route or runtime implementation. Contract expansion begins only after the freeze is accepted.
 
 ### Phase 8A completion gate
 

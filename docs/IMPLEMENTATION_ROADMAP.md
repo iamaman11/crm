@@ -95,7 +95,7 @@ Completed packets:
 
 Active sequence:
 
-1. **8A.11 / #126 — Ready:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
+1. **8A.11 / #126 — In progress:** ownership/enforcement architecture freeze in draft PR #140, followed by Customer Privacy runtime implementation.
 2. **Phase 8A closure:** only after 8A.11 is merged and the full customer-master baseline is reconciled.
 3. **8B / #29:** starts only from the completed Phase 8A baseline.
 
@@ -117,20 +117,33 @@ The merged packet includes:
 - permanent real-`crm-api` public-ingress acceptance and dedicated provider/materialization/review/application worker-process acceptance;
 - exact background phase order 240 → 245 → 250 and disable/uninstall shutdown.
 
-### Phase 8A.11 Ready boundary
+### Phase 8A.11 active architecture freeze
 
-Issue #126 must deliver:
+Issue #126 / draft PR #140 freezes `crm.customer-privacy` as the privacy case and orchestration owner before contract expansion.
 
-- governed privacy request/case identity and lifecycle;
+The coordinator owns privacy cases, verified subject binding, scope snapshots, current restrictions, customer-data legal holds, retention decisions, deterministic action plans, per-owner attempts/outcomes, orchestration checkpoints, governed export references and convergence evidence. Existing modules retain all authoritative Party, Account, Contact Point, Relationship, Consent, Identity Resolution, import/export, Data Quality and Enrichment values.
+
+The initial inventory is exactly:
+
+- **9 public mutations**;
+- **7 permission-aware public queries**;
+- **9 trusted worker/internal coordinates** in deterministic phases 260 → 270 → 280 → 290;
+- **1 reasoned non-runtime crypto-shredding coordinate**.
+
+The freeze requires:
+
 - subject and owner-resource discovery without unauthorized bulk disclosure;
-- access and export evidence integrated with existing governed export foundations;
-- immediate processing and communication restrictions enforced at live mutation/query/worker boundaries;
+- access/export integrated with existing governed Customer Data Operations artifacts;
+- immediate processing and communication restrictions enforced by a shared tenant + canonical Party lock;
 - deletion/anonymization planning by authoritative owner and data class;
-- retention, legal-hold and immutable-evidence conflict resolution;
+- legal-hold and retention precedence with immutable blocking reasons;
 - resumable per-owner orchestration with deterministic attempts/outcomes;
 - search, projection and cache convergence without treating derived state as authority;
-- immutable audit/lineage preservation and tenant-aware crypto-shredding where key architecture permits;
+- non-reusable erased Party tombstones and no orphaned authoritative references;
+- immutable audit/Consent/identity/provenance evidence preservation where deletion is prohibited;
 - fresh-PostgreSQL, real-process, cross-tenant, migration and exact-head acceptance.
+
+The architecture freeze does not claim Protobuf, manifest, migration, route or runtime implementation.
 
 Phase 8A is complete only when privacy access/export/restriction/deletion/legal-hold interactions are merged and reconciled with Consent, Identity Resolution, Import/Export, Data Quality and Customer Enrichment.
 
@@ -163,8 +176,8 @@ Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarc
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Merge the post-8A.10 integrity synchronization after exact-head checks pass.
-2. Create the Phase 8A.11 implementation branch and draft PR from that synchronized baseline.
-3. Deliver #126 with owner-aware privacy orchestration and full enforcement/process evidence.
+1. Validate and merge the Phase 8A.11 ownership/enforcement architecture freeze in draft PR #140 on one unchanged exact SHA.
+2. Scaffold `crm.customer-privacy` and publish immutable contracts only from the accepted freeze.
+3. Implement FORCE RLS persistence, shared-lock live enforcement, owner contributions, governed privacy export, retention/legal-hold planning, replay-safe execution and convergence evidence.
 4. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
 5. Begin Phase 8B / #29 from the completed customer-master baseline.
