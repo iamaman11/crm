@@ -22,7 +22,9 @@ on:
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0016_customer_enrichment_worker.sql"
       - "database/tests/0017_customer_enrichment_review.sql"
+      - "database/tests/0019_customer_enrichment_consent_policy.sql"
       - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
       - "scripts/run_customer_enrichment_review_process.sh"
       - ".github/workflows/customer-enrichment-review-process-runtime.yml"
   pull_request:
@@ -46,7 +48,9 @@ on:
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0016_customer_enrichment_worker.sql"
       - "database/tests/0017_customer_enrichment_review.sql"
+      - "database/tests/0019_customer_enrichment_consent_policy.sql"
       - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
       - "scripts/run_customer_enrichment_review_process.sh"
       - ".github/workflows/customer-enrichment-review-process-runtime.yml"
 
@@ -91,7 +95,7 @@ jobs:
       - name: Verify review, application evidence, suggestion lookup and replay
         run: bash scripts/run_customer_enrichment_review_process.sh 2>&1 | tee database/customer-enrichment-review-process-runtime.log
       - name: Prepare fresh Consent policy database
-        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+        run: bash scripts/prepare_customer_enrichment_consent_policy_database.sh
       - name: Verify production Consent denials before request persistence
         shell: bash
         run: |
@@ -121,5 +125,7 @@ jobs:
             crates/crm-customer-enrichment-suggestion-query-adapter/
             crates/crm-customer-enrichment-visibility/
             database/tests/0017_customer_enrichment_review.sql
+            database/tests/0019_customer_enrichment_consent_policy.sql
+            scripts/prepare_customer_enrichment_consent_policy_database.sh
           if-no-files-found: error
           retention-days: 7
