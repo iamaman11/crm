@@ -56,7 +56,7 @@ permissions:
 jobs:
   review-process-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17-alpine
@@ -90,10 +90,21 @@ jobs:
           sudo apt-get install --yes postgresql-client
       - name: Verify review, application evidence, suggestion lookup and replay
         run: bash scripts/run_customer_enrichment_review_process.sh 2>&1 | tee database/customer-enrichment-review-process-runtime.log
+      - name: Prepare fresh Consent policy database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify production Consent denials before request persistence
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-application-runtime \
+            --test postgres_customer_enrichment_consent_policy \
+            production_request_creation_denies_invalid_consent_before_persistence \
+            -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-review-process-runtime.log
       - name: Capture diagnostics
         if: failure()
         run: |
-          psql --no-psqlrc --pset pager=off --command "SELECT tenant_id, record_type, record_id, version FROM crm.records WHERE owner_module_id = 'crm.customer-enrichment' ORDER BY tenant_id, record_type, record_id" > database/customer-enrichment-review-process-runtime-state.log 2>&1 || true
+          psql --no-psqlrc --pset pager=off --command "SELECT tenant_id, record_type, record_id, version FROM crm.records WHERE owner_module_id IN ('crm.customer-enrichment', 'crm.consents') ORDER BY tenant_id, owner_module_id, record_type, record_id" > database/customer-enrichment-review-process-runtime-state.log 2>&1 || true
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
