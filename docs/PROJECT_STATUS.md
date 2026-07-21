@@ -31,7 +31,7 @@ The active dependency lane is:
 
 `8A.11 -> Phase 8A closure -> 8B`
 
-Only merged `main` changes module counts. The merged Customer Enrichment owner/coordinator module is now part of the authoritative customer-master baseline.
+Only merged `main` changes module counts. The merged Customer Enrichment owner/coordinator module is now part of the authoritative customer-master baseline. This post-merge synchronization changes governance accounting only; it does not reopen or expand the frozen Phase 8A.10 runtime inventory.
 
 ## Phase 8A.10 completed state
 
