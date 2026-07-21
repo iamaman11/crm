@@ -20,8 +20,8 @@ pub mod domain {
     }
 }
 
-pub use domain::*;
 pub use domain::persistence::*;
+pub use domain::*;
 
 /// Stable crate identity for repository tooling.
 pub const CRATE_NAME: &str = "crm-customer-privacy";
