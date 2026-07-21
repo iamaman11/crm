@@ -96,9 +96,9 @@ Completed:
 - 8A.9 — Customer Data Quality.
 - 8A.10 — Governed Customer Enrichment and Provenance.
 
-Ready:
+In progress:
 
-- 8A.11 / #126 — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
+- 8A.11 / #126 / draft PR #140 — Customer Privacy ownership and enforcement architecture freeze; no merged runtime module is counted yet.
 
 ## 8. Customer-master ownership baseline
 
@@ -113,7 +113,9 @@ Ready:
 - `crm.customer-enrichment` owns enrichment coordination/evidence, not customer values.
 - `crm.customer360` owns only rebuildable read composition.
 
-Phase 8A.11 must introduce an explicit privacy coordinator/owner boundary rather than placing deletion orchestration inside Party, Consent or a generic platform service.
+The active Phase 8A.11 freeze introduces `crm.customer-privacy` as the future explicit coordinator for privacy cases, subject binding, restrictions, customer-data legal holds, retention decisions, owner plans/outcomes, export references and convergence evidence. It does not count as a merged module until its manifest, implementation and production acceptance are merged.
+
+The privacy coordinator must not absorb mutable customer values, Consent, Identity Resolution, import/export artifact ownership, Data Quality or Enrichment provenance. Initial owner integrations use exact bounded scope-contribution and action-application capabilities.
 
 ## 9. Mandatory commercial lifecycle domains
 
@@ -132,7 +134,7 @@ These domains must not be absorbed into Sales.
 
 ## 10. Other expert CRM domains still required
 
-Privacy lifecycle, Sales/Activities expansion, omnichannel, Service/Knowledge/Field Service, Marketing, Customer Success, optional PRM, projects/configurable work, documents/e-signature, analytics/performance management, workflow/approvals/collaboration, AI governance, marketplace and enterprise operational proof remain incomplete or planned.
+The implemented Phase 8A.11 privacy runtime, Sales/Activities expansion, omnichannel, Service/Knowledge/Field Service, Marketing, Customer Success, optional PRM, projects/configurable work, documents/e-signature, analytics/performance management, workflow/approvals/collaboration, AI governance, marketplace and enterprise operational proof remain incomplete or planned.
 
 ## 11. Module creation checklist
 
