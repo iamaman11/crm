@@ -101,9 +101,9 @@ VALUES (
   'request-customer-privacy-force-rls',
   'customer_privacy.persistence.probe',
   '1.0.0',
-  0,
-  0,
-  0
+  1,
+  1,
+  1
 );
 
 INSERT INTO crm.records (
@@ -175,6 +175,95 @@ VALUES
     '{"canonical_party_id":"party-force-rls","reason_code":"LITIGATION_HOLD","status":"active"}'::jsonb,
     'tx-customer-privacy-force-rls'
   );
+
+INSERT INTO crm.idempotency_records (
+  tenant_id,
+  idempotency_scope,
+  idempotency_key,
+  request_hash,
+  status,
+  business_transaction_id,
+  expires_at
+)
+VALUES (
+  'tenant-privacy-a',
+  'customer_privacy.persistence.probe@1.0.0',
+  'customer-privacy-force-rls',
+  decode(repeat('65', 32), 'hex'),
+  'completed',
+  'tx-customer-privacy-force-rls',
+  clock_timestamp() + interval '1 day'
+);
+
+INSERT INTO crm.outbox_events (
+  tenant_id,
+  event_id,
+  business_transaction_id,
+  aggregate_type,
+  aggregate_id,
+  aggregate_version,
+  event_sequence,
+  event_type,
+  deduplication_key,
+  schema_id,
+  schema_version,
+  descriptor_hash,
+  data_class,
+  payload_encoding,
+  maximum_payload_size,
+  retention_policy_id,
+  payload_bytes,
+  occurred_at
+)
+VALUES (
+  'tenant-privacy-a',
+  'event-customer-privacy-force-rls',
+  'tx-customer-privacy-force-rls',
+  'customer-privacy.case',
+  'privacy-case-force-rls',
+  1,
+  1,
+  'customer_privacy.persistence.probe.recorded',
+  'customer-privacy-force-rls',
+  'crm.customer_privacy.persistence_probe.recorded',
+  '1.0.0',
+  decode(repeat('66', 32), 'hex'),
+  'personal',
+  'protobuf',
+  64,
+  'crm.customer_privacy.case',
+  decode('01', 'hex'),
+  clock_timestamp()
+);
+
+INSERT INTO crm.audit_records (
+  tenant_id,
+  audit_sequence,
+  audit_record_id,
+  business_transaction_id,
+  actor_id,
+  capability_id,
+  capability_version,
+  canonicalization_profile,
+  previous_hash,
+  record_hash,
+  canonical_envelope,
+  occurred_at
+)
+VALUES (
+  'tenant-privacy-a',
+  1,
+  'audit-customer-privacy-force-rls',
+  'tx-customer-privacy-force-rls',
+  'privacy-actor-a',
+  'customer_privacy.persistence.probe',
+  '1.0.0',
+  'crm.cjson/v1',
+  decode(repeat('00', 32), 'hex'),
+  decode(repeat('67', 32), 'hex'),
+  convert_to('{"customer_privacy":"force_rls"}', 'UTF8'),
+  clock_timestamp()
+);
 
 SET CONSTRAINTS ALL IMMEDIATE;
 
