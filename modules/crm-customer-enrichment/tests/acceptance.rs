@@ -9,9 +9,8 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
     assert_eq!(MODULE_ID, "crm.customer-enrichment");
 
     let root = repository_root();
-    let promotion = read_json(
-        &root.join("contracts/customer-enrichment-production-promotion.json"),
-    );
+    let promotion =
+        read_json(&root.join("contracts/customer-enrichment-production-promotion.json"));
     assert_eq!(promotion["module_id"], MODULE_ID);
     assert_eq!(
         promotion["schema_version"],
@@ -61,14 +60,18 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
     assert!(workflow.contains("customer_enrichment_process_e2e"));
     assert!(workflow.contains("prepare_customer_enrichment_consent_policy_database.sh"));
 
-    let process = read_text(&root.join("services/crm-api/tests/customer_enrichment_process_e2e.rs"));
+    let process =
+        read_text(&root.join("services/crm-api/tests/customer_enrichment_process_e2e.rs"));
     for evidence in [
         "CUSTOMER_ENRICHMENT_REQUEST_CONSENT_DENIED",
         "MODULE_NOT_ACTIVE",
         "CAPABILITY_PERMISSION_DENIED",
         "legitimate_interest_request_payload",
     ] {
-        assert!(process.contains(evidence), "missing process evidence {evidence}");
+        assert!(
+            process.contains(evidence),
+            "missing process evidence {evidence}"
+        );
     }
 
     let transport = read_text(
@@ -89,8 +92,7 @@ fn read_json(path: &Path) -> Value {
 }
 
 fn read_text(path: &Path) -> String {
-    fs::read_to_string(path)
-        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+    fs::read_to_string(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
 }
 
 fn assert_exact_coordinates(value: &Value, expected: &[&str]) {
