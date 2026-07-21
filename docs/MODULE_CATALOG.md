@@ -37,11 +37,12 @@ Only merged `main` state is counted. Active PR work must not inflate implemented
 | `crm.contact-points` | Canonical communication endpoints | **Vertical slice** | Create/update/verify/get/list | Broader channel UX and downstream omnichannel use |
 | `crm.party-relationships` | Typed temporal Party relationships | **Vertical slice** | Create/update/get/list and hierarchy foundation | Additional governed relationship semantics |
 | `crm.consents` | Purpose/channel Consent and Communication Authorization | **Vertical slice** | Immutable assertions, withdrawal and exact authorization decisions | Broader privacy orchestration and downstream enforcement |
-| `crm.identity-resolution` | Duplicate cases, merge lineage and canonical resolution | **Expert expansion** | Candidate/review plus reversible merge/unmerge | Further enrichment/privacy integration |
+| `crm.identity-resolution` | Duplicate cases, merge lineage and canonical resolution | **Expert expansion** | Candidate/review plus reversible merge/unmerge | Further privacy integration |
 | `crm.customer-data-operations` | Governed import/export jobs and evidence | **Expert expansion** | Resumable import, deterministic export/artifacts/reconciliation and crash recovery | More resource profiles and privacy interactions |
-| `crm.data-quality` | Customer-data quality governance coordinator | **Vertical slice** | Exact-version Party evaluation, findings/completeness, stewardship and governed remediation | Additional owner-resource profiles and enrichment/privacy coordination |
+| `crm.data-quality` | Customer-data quality governance coordinator | **Vertical slice** | Exact-version Party evaluation, findings/completeness, stewardship and governed remediation | Additional owner-resource profiles and privacy coordination |
+| `crm.customer-enrichment` | Provider-neutral enrichment governance coordinator | **Vertical slice — Complete** | Exact 6 mutations + 6 permission-aware queries + 2 workers; concrete provider transport, deterministic replay/reconciliation/materialization/review/application, guarded Party update path and real-process acceptance | Additional exact provider transports/profiles and privacy-lifecycle coordination through separately governed packets |
 
-Current merged authoritative/coordination module count: **10**.
+Current merged authoritative/coordination module count: **11**.
 
 ## 4. Implemented link module
 
@@ -49,15 +50,17 @@ Current merged authoritative/coordination module count: **10**.
 |---|---|---|---|
 | `crm.sales-activities-link` | Optional link module | **Production integration slice — Complete** | Restart-safe stage-event delivery, lifecycle gating and governed Activities invocation with retry/dead-letter/idempotency evidence |
 
-Current merged business-module total: **11** — ten authoritative/coordination modules plus one optional link module.
+Current merged business-module total: **12** — eleven authoritative/coordination modules plus one optional link module.
 
 ## 5. Independently governed read composition
 
 `crm.customer360` is a lifecycle-managed read-composition module. It owns the versioned Customer 360 contract, rebuildable contributions and permission-aware assembly/freshness metadata. It owns no mutable customer-master values and is tracked separately from the owner/link count.
 
-## 6. Active gate review — `crm.customer-enrichment`
+## 6. Completed Customer Enrichment packet
 
-Phase 8A.10 / issue #125 / draft PR #137 is **Gate review** and is not counted as merged.
+Phase 8A.10 / issue #125 / PR #137 is **Complete**.
+
+Accepted source checkpoint `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged and was squash-merged as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
 Ownership:
 
@@ -82,8 +85,6 @@ Frozen production inventory:
 
 Permanent acceptance includes concrete provider transport/replay/reconciliation/materialization/review/application process proof plus a real fresh-database `crm-api` HTTP/gRPC E2E covering successful guarded request persistence and bounded authentication, tenant, visibility, Consent, activation and authorization denials.
 
-The packet becomes countable only after one synchronized user-authored SHA passes all 17 workflows and PR #137 merges. Until then the merged total remains 11.
-
 ## 7. Phase 8A packet accounting
 
 Completed:
@@ -97,12 +98,9 @@ Completed:
 - 8A.7 — Customer Import.
 - 8A.8 — Customer Export.
 - 8A.9 — Customer Data Quality.
+- 8A.10 — Governed Customer Enrichment and Provenance.
 
-Gate review:
-
-- 8A.10 / #125 — Governed Customer Enrichment and Provenance.
-
-Planned:
+Ready:
 
 - 8A.11 / #126 — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold.
 
@@ -116,7 +114,7 @@ Planned:
 - `crm.identity-resolution` owns candidate/reviewer/merge lineage, canonical redirect and survivorship provenance.
 - `crm.customer-data-operations` owns import/export job/evidence lifecycles, not customer values.
 - `crm.data-quality` owns quality definitions/evidence/stewardship, not customer values.
-- `crm.customer-enrichment` will own enrichment coordination/evidence after merge, not customer values.
+- `crm.customer-enrichment` owns enrichment coordination/evidence, not customer values.
 - `crm.customer360` owns only rebuildable read composition.
 
 ## 9. Mandatory commercial lifecycle domains
