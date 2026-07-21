@@ -16,7 +16,7 @@ Authoritative references:
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is the active expert owner-domain program. Phase 8A.10 is merged and Complete. Phase 8A.11 is Ready and is the next customer-master packet.**
+**Phases 0.1–7 are complete. Phase 8A is the active expert owner-domain program. Phase 8A.10 is merged and Complete. Phase 8A.11 is In progress through the ownership/enforcement architecture freeze in draft PR #140.**
 
 Current Phase 8A baseline:
 
@@ -25,11 +25,11 @@ Current Phase 8A baseline:
 - **8A.8 — Complete:** governed customer export, artifacts and reconciliation (#123 / PR #130).
 - **8A.9 — Complete:** Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132).
 - **8A.10 — Complete:** Governed Customer Enrichment and Provenance (#125 / PR #137).
-- **8A.11 — Ready:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold (#126).
+- **8A.11 — In progress:** Customer Privacy Lifecycle architecture freeze (#126 / draft PR #140); runtime behavior is not implemented yet.
 
 The active dependency lane is:
 
-`8A.11 -> Phase 8A closure -> 8B`
+`8A.11 architecture freeze -> 8A.11 implementation -> Phase 8A closure -> 8B`
 
 ## Phase 8A.10 accepted result
 
@@ -68,21 +68,33 @@ Merged `main` contains:
 - durable activation-gated workers, event delivery, projections and permission-aware search;
 - Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality and Customer Enrichment production slices.
 
-## Next packet: Phase 8A.11
+## Active packet: Phase 8A.11
 
-Issue #126 is Ready because its prerequisite Customer Enrichment packet is merged. The privacy packet must deliver governed privacy request/case lifecycle, subject/resource discovery, access/export, immediate processing/communication restrictions, owner-aware deletion/anonymization planning, retention/legal-hold conflict resolution, downstream projection/search/cache convergence, resumable orchestration and immutable audit/lineage preservation.
+Issue #126 is In progress because draft PR #140 now contains the mandatory pre-contract ownership and guardrail freeze.
 
-It does not become In progress until an implementation branch or draft PR exists from the synchronized merged baseline.
+The frozen coordinator is `crm.customer-privacy`. It owns privacy cases, verified subject binding, scope snapshots, restrictions, customer-data legal holds, retention decisions, deterministic owner plans, attempts/outcomes, checkpoints, export references and convergence evidence. Existing modules retain all authoritative customer values.
+
+The initial architecture inventory is exactly:
+
+- **9 public mutations**;
+- **7 permission-aware public queries**;
+- **9 trusted worker/internal coordinates** in phases 260 → 270 → 280 → 290;
+- **1 reasoned non-runtime crypto-shredding coordinate**.
+
+Critical frozen invariants include a shared tenant + canonical Party subject lock, fail-closed live restriction, Consent as an independent authoritative deny source, Customer Data Operations artifact reuse, owner-specific deterministic actions, legal-hold/retention precedence, non-reusable erased Party tombstones and preservation of required immutable evidence.
+
+No Protobuf, manifest, migration, production route or runtime behavior is claimed by the architecture-freeze PR.
 
 ## Product completeness reality
 
-The project is **not yet a complete universal CRM**. Major required families still include privacy lifecycle, Product Catalog/Pricing/CPQ/Quotes/Orders/Contracts/Subscriptions, broader Sales and Activities, omnichannel, Service, Marketing, Customer Success, projects, documents/e-signature, analytics, workflow/collaboration, AI governance, marketplace and enterprise operational proof.
+The project is **not yet a complete universal CRM**. Major required families still include the implemented Phase 8A.11 runtime, Product Catalog/Pricing/CPQ/Quotes/Orders/Contracts/Subscriptions, broader Sales and Activities, omnichannel, Service, Marketing, Customer Success, projects, documents/e-signature, analytics, workflow/collaboration, AI governance, marketplace and enterprise operational proof.
 
 No broad “ultimate CRM complete” claim is valid while those domains remain planned or partial.
 
 ## Immediate next actions
 
-1. Merge this post-8A.10 integrity synchronization after its exact-head checks pass.
-2. Start Phase 8A.11 / #126 from the synchronized merged baseline with explicit owner, lifecycle, retention/legal-hold and enforcement architecture.
-3. Close Phase 8A only after the full customer-master privacy interaction baseline is merged and reconciled.
-4. Begin Phase 8B / #29 only after Phase 8A closure.
+1. Validate and accept the Phase 8A.11 architecture freeze in draft PR #140 on one unchanged exact SHA.
+2. Scaffold `crm.customer-privacy` and publish immutable case/restriction/legal-hold contracts only after that freeze is accepted.
+3. Implement FORCE RLS persistence, shared-lock live enforcement, owner contributions, governed privacy export, retention/legal-hold planning and crash recovery.
+4. Close Phase 8A only after the full customer-master privacy interaction baseline is merged and reconciled.
+5. Begin Phase 8B / #29 only after Phase 8A closure.
