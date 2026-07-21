@@ -13,27 +13,27 @@ pub struct EvidenceCounts {
 
 pub async fn evidence_counts(pool: &PgPool) -> EvidenceCounts {
     EvidenceCounts {
-        request_records: scalar(
+        request_records: scalar_with_owner(
             pool,
             "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = $1 AND owner_module_id = $2 AND record_type = 'customer_enrichment.request'",
         )
         .await,
-        events: scalar(
+        events: scalar_for_tenant(
             pool,
             "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = $1 AND event_type LIKE 'customer_enrichment.%'",
         )
         .await,
-        audits: scalar(
+        audits: scalar_for_tenant(
             pool,
             "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = $1 AND capability_id LIKE 'customer_enrichment.%'",
         )
         .await,
-        idempotency: scalar(
+        idempotency: scalar_for_tenant(
             pool,
             "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope LIKE 'capability:customer_enrichment.%'",
         )
         .await,
-        transactions: scalar(
+        transactions: scalar_for_tenant(
             pool,
             "SELECT count(*)::bigint FROM crm.business_transactions WHERE tenant_id = $1 AND capability_id LIKE 'customer_enrichment.%'",
         )
@@ -79,11 +79,19 @@ pub async fn set_customer_enrichment_status(pool: &PgPool, status: &str) {
     transaction.commit().await.expect("commit activation update");
 }
 
-async fn scalar(pool: &PgPool, sql: &str) -> i64 {
+async fn scalar_for_tenant(pool: &PgPool, sql: &str) -> i64 {
+    sqlx::query_scalar(sql)
+        .bind(TENANT_A)
+        .fetch_one(pool)
+        .await
+        .expect("read tenant-scoped Customer Enrichment evidence count")
+}
+
+async fn scalar_with_owner(pool: &PgPool, sql: &str) -> i64 {
     sqlx::query_scalar(sql)
         .bind(TENANT_A)
         .bind(MODULE_ID)
         .fetch_one(pool)
         .await
-        .expect("read Customer Enrichment evidence count")
+        .expect("read owner-scoped Customer Enrichment evidence count")
 }
