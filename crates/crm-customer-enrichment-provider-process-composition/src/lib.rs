@@ -8,10 +8,12 @@
 //! provider network I/O and registers no public capability route.
 
 mod conflict_persistence;
+mod conflict_rejection;
 mod conflict_resolution;
 mod worker;
 
 pub use conflict_persistence::*;
+pub use conflict_rejection::*;
 pub use conflict_resolution::*;
 pub use worker::*;
 

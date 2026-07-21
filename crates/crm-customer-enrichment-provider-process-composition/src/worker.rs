@@ -1,6 +1,7 @@
 use crate::{
-    PostgresProviderResponseConflictStore, ProviderDispatchWorkItemInput,
-    ProviderResponseConflictPersistenceLineage, build_provider_dispatch_work_item,
+    PostgresProviderResponseConflictRejectExecutor, PostgresProviderResponseConflictStore,
+    ProviderDispatchWorkItemInput, ProviderResponseConflictPersistenceLineage,
+    ProviderResponseConflictRejectionLineage, build_provider_dispatch_work_item,
 };
 use crm_application_composition::TenantBackgroundWorker;
 use crm_capability_plan_support as support;
@@ -82,6 +83,8 @@ pub struct ProviderProcessCycle {
     pub dispatch_replays: u32,
     pub response_replays: u32,
     pub retained_first_receipts: u32,
+    pub rejected_requests: u32,
+    pub rejection_replays: u32,
 }
 
 #[derive(Clone)]
@@ -90,6 +93,7 @@ pub struct CustomerEnrichmentProviderProcessWorker {
     source: Arc<dyn ProviderDispatchSourcePort>,
     executor: Arc<dyn ProviderDispatchExecutorPort>,
     conflict_store: PostgresProviderResponseConflictStore,
+    reject_executor: PostgresProviderResponseConflictRejectExecutor,
     actor_id: ActorId,
     page_size: u32,
 }
@@ -102,6 +106,7 @@ impl fmt::Debug for CustomerEnrichmentProviderProcessWorker {
             .field("source", &"dyn ProviderDispatchSourcePort")
             .field("executor", &"dyn ProviderDispatchExecutorPort")
             .field("conflict_store", &self.conflict_store)
+            .field("reject_executor", &self.reject_executor)
             .field("actor_id", &self.actor_id)
             .field("page_size", &self.page_size)
             .finish()
@@ -132,6 +137,7 @@ impl CustomerEnrichmentProviderProcessWorker {
         }
         Ok(Self {
             conflict_store: PostgresProviderResponseConflictStore::new(store.clone()),
+            reject_executor: PostgresProviderResponseConflictRejectExecutor::new(store.clone()),
             store,
             source,
             executor,
@@ -196,6 +202,12 @@ impl CustomerEnrichmentProviderProcessWorker {
                         Ok(DeliveryDisposition::RetainedFirstReceipt) => {
                             cycle.retained_first_receipts =
                                 cycle.retained_first_receipts.saturating_add(1);
+                        }
+                        Ok(DeliveryDisposition::RejectedRequest { replayed }) => {
+                            cycle.rejected_requests = cycle.rejected_requests.saturating_add(1);
+                            if replayed {
+                                cycle.rejection_replays = cycle.rejection_replays.saturating_add(1);
+                            }
                         }
                         Err(error) => {
                             if !error.retryable {
@@ -269,9 +281,22 @@ impl CustomerEnrichmentProviderProcessWorker {
                 ProviderResponseConflictDecision::RetainFirstReceipt => {
                     Ok(DeliveryDisposition::RetainedFirstReceipt)
                 }
-                ProviderResponseConflictDecision::RejectRequest => Err(
-                    reject_request_resolution_pending(conflict.conflict_id().as_str()),
-                ),
+                ProviderResponseConflictDecision::RejectRequest => {
+                    let result = self
+                        .reject_executor
+                        .execute(
+                            &conflict,
+                            ProviderResponseConflictRejectionLineage {
+                                actor_id: self.actor_id.clone(),
+                                correlation_id: delivery.correlation_id.clone(),
+                                trace_id: delivery.trace_id.clone(),
+                            },
+                        )
+                        .await?;
+                    Ok(DeliveryDisposition::RejectedRequest {
+                        replayed: result.replayed,
+                    })
+                }
             };
         }
         let source = self
@@ -352,6 +377,7 @@ enum DeliveryDisposition {
     Executed(Box<ProviderDispatchWorkerResult>),
     Skipped,
     RetainedFirstReceipt,
+    RejectedRequest { replayed: bool },
 }
 
 fn decode_created_event(
@@ -427,16 +453,6 @@ fn created_event_invalid() -> SdkError {
         false,
         "Customer Enrichment request-created evidence is invalid.",
     )
-}
-
-fn reject_request_resolution_pending(conflict_id: &str) -> SdkError {
-    SdkError::new(
-        "CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_REJECT_TRANSITION_PENDING",
-        crm_module_sdk::ErrorCategory::Conflict,
-        true,
-        "The approved provider-response conflict rejection has not reached terminal request state.",
-    )
-    .with_internal_reference(format!("provider_response_conflict_id={conflict_id}"))
 }
 
 fn unresolved_provider_conflict(conflict_id: &str) -> SdkError {

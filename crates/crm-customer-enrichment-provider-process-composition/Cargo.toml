@@ -42,3 +42,8 @@ required-features = ["postgres-integration"]
 name = "postgres_conflict_resolution"
 path = "tests/postgres_conflict_resolution.rs"
 required-features = ["postgres-integration"]
+
+[[test]]
+name = "postgres_conflict_reject_process"
+path = "tests/postgres_conflict_reject_process.rs"
+required-features = ["postgres-integration"]
