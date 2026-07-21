@@ -1,6 +1,7 @@
 use crm_application_runtime::gateway_v1::{
-    ApplicationGatewayServiceClient, MutateRequest as GatewayMutateRequest,
-    QueryRequest as GatewayQueryRequest, TypedPayload as GatewayTypedPayload,
+    MutateRequest as GatewayMutateRequest, QueryRequest as GatewayQueryRequest,
+    TypedPayload as GatewayTypedPayload,
+    application_gateway_service_client::ApplicationGatewayServiceClient,
 };
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::TypedPayload;
