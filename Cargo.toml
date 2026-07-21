@@ -92,6 +92,7 @@ members = [
   "modules/crm-customer-data-operations",
   "modules/crm-data-quality",
   "modules/crm-customer-enrichment",
+  "modules/crm-customer-privacy",
   "services/crm-api",
 ]
 
