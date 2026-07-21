@@ -12,6 +12,21 @@ class ProductionRouteClassificationTests(unittest.TestCase):
             {
                 (
                     "crm.customer-enrichment",
+                    "customer_enrichment.request.dispatch",
+                    "1.0.0",
+                ),
+                (
+                    "crm.customer-enrichment",
+                    "customer_enrichment.response.record",
+                    "1.0.0",
+                ),
+                (
+                    "crm.customer-enrichment",
+                    "customer_enrichment.suggestions.materialize",
+                    "1.0.0",
+                ),
+                (
+                    "crm.customer-enrichment",
                     "customer_enrichment.party.display_name.apply",
                     "1.0.0",
                 ),
@@ -33,21 +48,6 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                 (
                     "crm.customer-data-operations",
                     "customer_data.import.party.rows.validate",
-                    "1.0.0",
-                ),
-                (
-                    "crm.customer-enrichment",
-                    "customer_enrichment.request.dispatch",
-                    "1.0.0",
-                ),
-                (
-                    "crm.customer-enrichment",
-                    "customer_enrichment.response.record",
-                    "1.0.0",
-                ),
-                (
-                    "crm.customer-enrichment",
-                    "customer_enrichment.suggestions.materialize",
                     "1.0.0",
                 ),
             },
@@ -75,6 +75,11 @@ class ProductionRouteClassificationTests(unittest.TestCase):
             )
             self.assertNotIn(coordinate, workers)
             self.assertNotIn(coordinate, non_runtime)
+
+        self.assertFalse(
+            any(owner == "crm.customer-enrichment" for owner, _, _ in non_runtime),
+            "a completed Customer Enrichment coordinate may not remain non-runtime",
+        )
 
 
 if __name__ == "__main__":

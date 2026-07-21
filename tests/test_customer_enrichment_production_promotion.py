@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PROMOTION_PATH = ROOT / "contracts" / "customer-enrichment-production-promotion.json"
 CLASSIFICATIONS_PATH = ROOT / "contracts" / "production-route-classifications.json"
 MODULE_ID = "crm.customer-enrichment"
+ACCEPTED_SOURCE_CHECKPOINT = "f92d101206886e3ceaf94d0e56e52580cec21093"
+MERGE_COMMIT = "150e44b95d9dbdc08c1792563de03ec73f34aed1"
 
 EXPECTED_RUNTIME_MUTATIONS = {
     "customer_enrichment.provider_profile.publish@1.0.0",
@@ -25,6 +27,9 @@ EXPECTED_RUNTIME_QUERIES = {
     "customer_enrichment.suggestion.list_by_party@1.0.0",
 }
 EXPECTED_RUNTIME_WORKERS = {
+    "customer_enrichment.request.dispatch@1.0.0",
+    "customer_enrichment.response.record@1.0.0",
+    "customer_enrichment.suggestions.materialize@1.0.0",
     "customer_enrichment.party.display_name.apply@1.0.0",
     "customer_enrichment.application.outcome.record@1.0.0",
 }
@@ -66,6 +71,10 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
             "crm.customer-enrichment.production-promotion/v1",
         )
         self.assertEqual(self.plan["module_id"], MODULE_ID)
+        self.assertEqual(
+            self.plan["accepted_source_checkpoint"], ACCEPTED_SOURCE_CHECKPOINT
+        )
+        self.assertEqual(self.plan["merge_commit"], MERGE_COMMIT)
         inventory = self.plan["current_runtime_inventory"]
         mutations = set(inventory["mutations"])
         queries = set(inventory["queries"])
@@ -76,37 +85,38 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
         self.assertTrue(mutations.isdisjoint(queries))
         self.assertTrue(mutations.isdisjoint(workers))
         self.assertTrue(queries.isdisjoint(workers))
-        self.assertEqual(len(mutations | queries | workers), 14)
+        self.assertEqual(len(mutations | queries | workers), 17)
 
-    def test_promotion_coordinates_match_authoritative_non_runtime_set(self) -> None:
+    def test_completed_promotions_match_authoritative_worker_runtime_set(self) -> None:
         entries = [
             entry
             for stage in self.plan["promotion_stages"]
             for entry in stage["coordinates"]
         ]
-        planned = {coordinate(entry) for entry in entries}
-        self.assertEqual(planned, set(EXPECTED_PROMOTION))
-        self.assertEqual(len(entries), len(planned), "promotion coordinates must be unique")
+        promoted = {coordinate(entry) for entry in entries}
+        self.assertEqual(promoted, set(EXPECTED_PROMOTION))
+        self.assertEqual(len(entries), len(promoted), "promotion coordinates must be unique")
 
-        classified = {
+        classified_workers = {
+            f"{entry['id']}@{entry['version']}"
+            for entry in self.classifications["worker_runtime_routes"]
+            if entry["owner_module_id"] == MODULE_ID
+        }
+        self.assertEqual(classified_workers, EXPECTED_RUNTIME_WORKERS)
+        self.assertTrue(promoted.issubset(classified_workers))
+
+        classified_non_runtime = {
             f"{entry['id']}@{entry['version']}"
             for entry in self.classifications["non_runtime_contract_routes"]
             if entry["owner_module_id"] == MODULE_ID
         }
-        self.assertEqual(planned, classified)
-        runtime = (
-            EXPECTED_RUNTIME_MUTATIONS
-            | EXPECTED_RUNTIME_QUERIES
-            | EXPECTED_RUNTIME_WORKERS
-        )
-        self.assertTrue(planned.isdisjoint(runtime))
-        self.assertEqual(len(planned | runtime), 17)
+        self.assertEqual(classified_non_runtime, set())
 
     def test_stages_route_kinds_and_dependencies_are_deterministic(self) -> None:
         stages = self.plan["promotion_stages"]
         self.assertEqual(
-            [(stage["stage"], stage["name"]) for stage in stages],
-            [(1, "provider_worker_pipeline")],
+            [(stage["stage"], stage["name"], stage["state"]) for stage in stages],
+            [(1, "provider_worker_pipeline", "complete")],
         )
         stage_by_coordinate: dict[str, int] = {}
         entries_by_coordinate: dict[str, dict[str, object]] = {}
@@ -127,6 +137,7 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
             | EXPECTED_RUNTIME_WORKERS
         )
         for key, entry in entries_by_coordinate.items():
+            self.assertIn(key, available_runtime)
             for dependency in entry["depends_on"]:
                 if dependency in EXTERNAL_DEPENDENCIES or dependency in available_runtime:
                     continue
@@ -143,6 +154,7 @@ class CustomerEnrichmentProductionPromotionTests(unittest.TestCase):
         self.assertTrue(invariants["retain_provenance_on_uninstall"])
 
         for stage in self.plan["promotion_stages"]:
+            self.assertEqual(stage["state"], "complete")
             for entry in stage["coordinates"]:
                 evidence = set(entry["required_evidence"])
                 self.assertIn("disable_uninstall", evidence)

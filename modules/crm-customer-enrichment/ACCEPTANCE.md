@@ -1,6 +1,6 @@
 # Acceptance gates for `crm.customer-enrichment`
 
-Phase 8A.10 state: **Gate review**. The packet is implemented in draft PR #137 but is not Complete until merge.
+Phase 8A.10 state: **Complete**. Accepted source checkpoint `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged and was squash-merged through PR #137 as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
 ## Frozen production inventory
 
@@ -8,8 +8,12 @@ The authoritative inventory in `contracts/customer-enrichment-production-promoti
 
 - **6 public mutations**;
 - **6 permission-aware queries**;
-- **2 activation-gated worker coordinates**;
-- **3 provider/materialization coordinates** classified worker-only with no public HTTP/gRPC ingress.
+- **5 activation-gated worker-only coordinates** with no public HTTP/gRPC ingress:
+  - provider process: `request.dispatch`, `response.record`;
+  - materialization process: `suggestions.materialize`;
+  - application process: `party.display_name.apply`, `application.outcome.record`.
+
+All 17 manifest-bound coordinates are now accounted for as public runtime or worker runtime. No completed Customer Enrichment coordinate remains classified non-runtime.
 
 Any inventory change requires a separately reviewed promotion contract and complete parity/process evidence.
 
@@ -38,7 +42,7 @@ Any inventory change requires a separately reviewed promotion contract and compl
 - [x] `customer_enrichment.mapping.publish/get@1.0.0`.
 - [x] `customer_enrichment.request.create/cancel/get/list@1.0.0`.
 - [x] `customer_enrichment.suggestion.get/list_by_party/accept/reject@1.0.0`.
-- [x] `customer_enrichment.party.display_name.apply@1.0.0` and `customer_enrichment.application.outcome.record@1.0.0` remain activation-gated workers with no public route.
+- [x] All five internal coordinates remain activation-gated workers with no public route.
 - [x] Query visibility is module-owned, permission-aware and field-redaction capable.
 - [x] Hidden Party/provider resources are concealed rather than disclosed through authorization differences.
 
@@ -75,9 +79,17 @@ Any inventory change requires a separately reviewed promotion contract and compl
 - [x] Request creation uses the request as its primary aggregate and locks the exact Party row/version inside the same PostgreSQL transaction.
 - [x] Reference guards cannot commit, perform external I/O or mutate referenced owner records.
 
-## Real `crm-api` process acceptance
+## Production acceptance topology
 
-The permanent Application Runtime workflow starts the real `crm-api` binary on a fresh PostgreSQL database and uses actual HTTP/gRPC endpoints.
+The permanent acceptance matrix deliberately follows the production boundary:
+
+- the Application Runtime workflow starts the real `crm-api` binary on fresh PostgreSQL and exercises actual HTTP/gRPC ingress for public mutations, queries, visibility, Consent, activation and authorization behavior;
+- dedicated fresh-PostgreSQL provider, materialization, review and application process workflows exercise worker-only coordinates directly through the production compositions that the binary registers;
+- the production background registry test proves exact phase order 240 → 245 → 250 and durable disable/uninstall shutdown.
+
+This avoids creating a forbidden public ingress path merely for testing worker-only coordinates while still proving their real production composition and persistence behavior.
+
+### Real `crm-api` evidence
 
 - [x] Unauthenticated HTTP returns bounded `401 {"error":"request_failed"}`.
 - [x] Party creation, profile publication and mapping publication succeed through real gRPC ingress.
@@ -94,11 +106,13 @@ The permanent Application Runtime workflow starts the real `crm-api` binary on a
 
 ## Governance and merge gate
 
-- [x] `tests/acceptance.rs` is a non-ignored production contract that verifies the exact 6+6+2 inventory, 17-workflow invariant and permanent real-process evidence.
+- [x] `tests/acceptance.rs` is a non-ignored production contract that verifies the exact 6+6+5 inventory, merge evidence and permanent real-process evidence.
 - [x] `production/CONTRIBUTION.md` matches production composition, visibility, worker and lifecycle boundaries.
-- [x] Module README, catalog entry, roadmap, phase plan and project status are synchronized to Gate review.
+- [x] Module README, catalog entry, roadmap, phase plan and project status are synchronized to the merged state.
 - [x] Additional provider transports are explicitly future separately owned infrastructure work and are not hidden in this packet.
-- [ ] Record the final synchronized user-authored SHA after Generated Sync is stable and all 17 permanent workflows pass unchanged.
-- [ ] Update PR #137 and issue #125 with that exact SHA, complete review and merge.
+- [x] Final synchronized user-authored SHA `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged.
+- [x] PR #137 and issue #125 record the exact accepted SHA and squash merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
+- [x] No unresolved review thread or submitted change request remained at merge.
+- [x] Post-merge Generated Sync reached a stable formatted/generated state before the integrity candidate gate.
 
-The last two items are process-state gates and cannot be checked into source without creating a new SHA. Their authoritative completion evidence belongs in the PR and issue immediately before merge.
+Phase 8A.10 is a completed production integration slice. This does not make Customer Enrichment or the universal CRM product complete; additional providers, target fields and product UX require separately governed packets.

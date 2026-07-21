@@ -10,23 +10,23 @@ Functional scope guardrail: `CRM_CAPABILITY_COVERAGE.md`
 
 ## 1. Goal
 
-Build the expert CRM domain layer on top of the completed governed platform without collapsing ownership into Sales, creating a giant long-lived Phase 8 branch or weakening compatibility, tenant isolation, authorization, audit, rollback and exact-SHA evidence.
+Build the expert CRM domain layer on top of the completed governed platform without collapsing ownership into Sales, creating giant long-lived branches or weakening compatibility, tenant isolation, authorization, audit, rollback and exact-SHA evidence.
 
-Phase 8 is delivered as reviewable owner-domain and product packets. Every packet ends at a natural architecture boundary with explicit acceptance gates.
+Every packet ends at a natural architecture boundary with explicit contracts, persistence, activation, authorization, recovery and real-process acceptance.
 
 ## 2. Packet contract
 
-Every Phase 8 packet must define:
+Every Phase 8 packet defines:
 
 - authoritative owner domain and stable references;
 - public capability/query/event contracts;
 - persistence, tenant and authorization model;
 - audit, idempotency and approval requirements;
-- projection/search implications;
+- projection/search/cache implications;
 - frontend/product workflow where applicable;
 - import/export and compatibility consequences;
-- module-owned mutation/query/worker contributions and durable activation semantics;
-- exact route classification with no central business switches;
+- module-owned routes, validators, visibility and workers;
+- exact public/worker/non-runtime classifications;
 - real process/browser/operational acceptance gates.
 
 A packet may be marked **Complete** only after merge to `main`. Every later source or documentation change invalidates earlier exact candidate evidence until applicable checks rerun.
@@ -35,7 +35,7 @@ A packet may be marked **Complete** only after merge to `main`. Every later sour
 
 ### 8A.1–8A.6 — Complete
 
-Delivered customer reference foundations, Party lifecycle/search, Account, Contact Point, Party Relationship, Customer 360, Consent/Communication Authorization, explainable duplicate candidates and approval-required reversible merge/unmerge with immutable provenance.
+Delivered customer references, Party lifecycle/search, Account, Contact Point, Party Relationship, Customer 360, Consent/Communication Authorization, explainable duplicate candidates and approval-required reversible merge/unmerge with immutable provenance.
 
 ### 8A.7 — Customer Import — Complete
 
@@ -51,79 +51,88 @@ Issue #124 / PR #132 / merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`.
 
 Delivered immutable Party rule/completeness definitions, exact-version evaluation, findings/observations/completeness lineage, stewardship lifecycle, governed Party remediation, signed pagination, FORCE RLS and restart/crash recovery.
 
-### 8A.10 — Governed Customer Enrichment and Provenance — Gate review
+### 8A.10 — Governed Customer Enrichment and Provenance — Complete
 
 Issue: #125  
-Draft PR: #137  
-Depends on: merged 8A.9 and native-composition integrity merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`
+PR: #137  
+Accepted source: `f92d101206886e3ceaf94d0e56e52580cec21093`  
+Merge: `150e44b95d9dbdc08c1792563de03ec73f34aed1`
 
 #### Frozen production inventory
 
 - 6 public mutations;
 - 6 permission-aware queries;
-- 2 activation-gated worker coordinates;
-- 3 provider/materialization coordinates classified worker-only with no public HTTP/gRPC ingress.
+- 5 activation-gated worker-only coordinates;
+- no completed Customer Enrichment non-runtime coordinates.
 
 The machine-readable source of truth is `contracts/customer-enrichment-production-promotion.json`.
 
-#### Ownership and architecture boundary
+#### Ownership and architecture
 
 `crm.customer-enrichment` owns enrichment requests and immutable provider/mapping, response, conflict, suggestion, review, usage and application evidence. It does not own mutable Party, Account, Contact Point, Consent, Identity Resolution or Data Quality values.
 
-Provider I/O, credentials and PostgreSQL transaction guards remain host-owned infrastructure outside the pure module core. Accepted changes re-enter the exact authoritative Party capability `parties.party.update@1.0.0`.
+Provider HTTP, credentials, quotas/circuits and PostgreSQL transaction guards remain host-owned infrastructure outside the pure module core. Accepted values enter authoritative Party state only through `parties.party.update@1.0.0`.
 
-#### Implemented production behavior
+#### Accepted production behavior
 
 - immutable content-derived provider-profile and mapping versions;
 - deterministic request, response, conflict, suggestion, review and application identities;
-- exact-coordinate registry HTTP transport with endpoint allowlisting, bounded bodies/deadlines, redirect rejection and sanitized failures;
+- exact registry HTTP transport with endpoint allowlisting, bounded bodies/deadlines, redirect rejection and sanitized failures;
 - tenant-bound secret resolution without credential leakage;
 - quota and circuit behavior;
 - commit-before-provider-I/O and crash-safe recovery using the same provider idempotency lineage;
-- independent live dispatch and response authorization;
+- independent live dispatch, response, materialization and application authorization;
 - exact/semantic duplicate reconciliation and fail-closed canonical response conflicts;
-- immutable operator resolution evidence for retain-first and terminal request rejection;
+- immutable retain-first and terminal-reject operator resolution evidence;
 - deterministic materialization and owner-application recovery;
 - permission-aware provider/mapping/request/suggestion reads with declarative redaction;
-- live activation shutdown, disable/uninstall behavior and cross-tenant concealment;
+- live activation shutdown, disable/uninstall and cross-tenant concealment;
+- transaction-scoped provider-profile and exact Party-version guards;
 - FORCE RLS and migration rollback/reapply proof.
 
-#### Real `crm-api` gate evidence
+#### Production acceptance
 
-A permanent fresh-database Application Runtime step starts the real `crm-api` binary and uses actual HTTP and gRPC endpoints. It proves:
+A permanent fresh-database Application Runtime step starts the real `crm-api` binary and proves successful public persistence plus bounded authentication, tenant, visibility, Consent, activation and authorization denials through actual HTTP/gRPC ingress.
 
-- unauthenticated HTTP returns bounded `401 {"error":"request_failed"}`;
-- Party creation, provider-profile publication, mapping publication and legitimate-interest enrichment-request persistence succeed through real gRPC ingress;
-- confidential profile definition is redacted by deployment field ceiling;
-- cross-tenant lookup is concealed as `CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND`;
-- a tenant outside the token grant receives `TENANT_FORBIDDEN`;
-- missing Consent evidence receives `CUSTOMER_ENRICHMENT_REQUEST_CONSENT_DENIED`;
-- live suspension receives `MODULE_NOT_ACTIVE`;
-- bootstrap-disabled live permission receives `CAPABILITY_PERMISSION_DENIED`;
-- typed gRPC codes are non-retryable and safe, while HTTP hides governed details;
-- credential/provider/internal markers never reach the public surface;
-- request/event/audit/idempotency/business-transaction counters do not change after pre-persistence denials.
+Dedicated fresh-PostgreSQL provider/materialization/review/application workflows exercise worker-only coordinates, exact transport and secret boundaries, replay/reconciliation, crash windows and owner-application recovery. Background registration tests prove exact phase order 240 → 245 → 250 and disable/uninstall shutdown.
 
-Mapping publication now uses the mapping as its primary aggregate and atomically revalidates/locks the immutable provider profile through a transaction-scoped host guard. Request creation uses its own aggregate and atomically locks the exact Party row/version through a second host guard.
+All 17 permanent workflows passed on the unchanged accepted source SHA before merge.
 
-#### Gate-review exit
-
-PR #137 may leave draft only when:
-
-1. acceptance, catalog, roadmap/status, issue and PR descriptions are synchronized;
-2. Generated Sync produces no remaining source changes;
-3. one unchanged **user-authored** SHA passes all 17 permanent workflows;
-4. that exact SHA is recorded in PR #137 and issue #125;
-5. review confirms no public-inventory expansion and no direct cross-owner or infrastructure bypass.
-
-Until merge, 8A.10 remains **Gate review**, not Complete.
-
-### 8A.11 — Customer Privacy Lifecycle — Planned
+### 8A.11 — Customer Privacy Lifecycle — Ready
 
 Issue: #126  
-Depends on: merged 8A.10
+Depends on: merged and synchronized 8A.10
 
-Deliver governed privacy request lifecycle, access/export, live restriction enforcement, owner-aware deletion/anonymization planning, retention/legal-hold conflict handling and downstream search/projection convergence with immutable evidence preservation where required.
+#### Objective
+
+Deliver governed privacy request/case lifecycle, subject/resource discovery, access/export, live restrictions, owner-aware deletion/anonymization planning, retention/legal-hold conflict resolution and downstream convergence without losing immutable evidence required by law, audit or system integrity.
+
+#### Required ownership boundary
+
+The privacy coordinator owns privacy cases, scope snapshots, plans, per-owner attempts/outcomes, restriction evidence, retention/legal-hold decisions and orchestration checkpoints. It does not directly mutate Party, Account, Contact Point, Consent, Identity Resolution, Import/Export, Data Quality or Enrichment storage.
+
+Every authoritative owner exposes or consumes exact governed capabilities for discovery, access/export contribution, restriction enforcement, deletion/anonymization and evidence preservation. Derived projections/search/caches remain non-authoritative.
+
+#### Required behavior
+
+- immutable privacy case/request identity and lifecycle;
+- exact subject identity/canonical redirect handling;
+- bounded owner-resource discovery with live visibility;
+- access/export assembly using governed disclosure and artifact controls;
+- immediate processing/communication restriction enforcement at public and worker boundaries;
+- deterministic owner/data-class deletion or anonymization plans;
+- explicit retention and legal-hold precedence/conflict evidence;
+- resumable per-owner execution with deterministic idempotency and no duplicate effects;
+- search/projection/cache tombstone or rebuild convergence;
+- preservation of audit, merge lineage, consent, provenance and legal evidence where deletion is prohibited;
+- tenant-aware crypto-shredding only where key ownership and legal-hold policy permit;
+- bounded safe errors, tenant isolation and no orphan references.
+
+#### Acceptance gate
+
+The packet must prove access/export, immediate restriction, legal-hold blocking, deletion/anonymization convergence, immutable-evidence preservation, restart recovery, cross-tenant denial, migration rollback/reapply and real-process behavior on one unchanged exact SHA.
+
+It moves to **In progress** only after a branch or draft PR is created from the synchronized baseline.
 
 ### Phase 8A completion gate
 
@@ -157,13 +166,13 @@ Begin only after the Phase 8A baseline is complete. Planned owners include Produ
 - analytics, reporting and performance management;
 - workflow, collaboration and product completeness.
 
-Every wave must include replay-safe contracts, authorization, tenant isolation, data/provenance expectations, credential boundaries, quotas, observability, recovery and synchronized governance state.
+Every wave includes replay-safe contracts, authorization, tenant isolation, data/provenance expectations, credential boundaries, quotas, observability, recovery and synchronized governance state.
 
 ## 6. Later platform programs
 
 ### Phase 9 — AI-native CRM
 
-AI remains an authenticated audited Actor using permission-scoped governed tools. It has no alternate mutation, Consent, identity-resolution or data-export path.
+AI remains an authenticated audited Actor using permission-scoped governed tools. It has no alternate mutation, Consent, identity-resolution, privacy or data-export path.
 
 ### Phase 10 — signed marketplace and sandbox
 
@@ -171,4 +180,4 @@ Untrusted extensions remain signed, permissioned and sandboxed with explicit cap
 
 ### Phase 11 — enterprise security, resilience and production proof
 
-Enterprise hardening remains continuous and culminates in identity federation/provisioning, authorization, encryption, audit export, privacy/legal hold, backup/restore, residency, supply-chain/security testing, load/chaos proof, SLOs, alerting, incident response and runbooks.
+Enterprise hardening remains continuous and culminates in identity federation/provisioning, authorization, encryption, WORM audit export, privacy/legal hold, backup/restore, residency, supply-chain/security testing, load/chaos proof, SLOs, alerting, incident response and runbooks.

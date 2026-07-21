@@ -1,248 +1,160 @@
 # Phase 8A.10 — Governed Customer Enrichment and Provenance Architecture
 
-Status: **Accepted implementation boundary for active packet #125**
+Status: **Accepted completed implementation boundary for packet #125**
 
 Parent program: Phase 8A / #28  
 Delivery packet: #125  
-Required baseline: issue #134 / PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`
+Implementation PR: #137  
+Accepted source checkpoint: `f92d101206886e3ceaf94d0e56e52580cec21093`  
+Squash merge: `150e44b95d9dbdc08c1792563de03ec73f34aed1`
 
 ## 1. Objective
 
 Deliver optional external customer-data enrichment without creating an alternate customer master, an unreviewed mutation path, or provider-specific business logic inside the application core.
 
-The packet introduces one provider-neutral owner/coordinator module, `crm.customer-enrichment`. It owns enrichment requests, immutable provider and mapping definitions, suggestion provenance, review decisions, provider-exchange evidence and owner-capability application attempts. Existing customer-master modules remain the only owners of authoritative customer values.
+`crm.customer-enrichment` is a provider-neutral owner/coordinator. It owns enrichment requests and immutable provider, mapping, response, conflict, suggestion, review, usage and owner-application evidence. Existing customer-master modules remain the only owners of authoritative customer values.
 
-The first production slice is Party-focused. Accepted Party display-name changes enter authoritative state only through the exact governed capability `parties.party.update@1.0.0`.
+The accepted first production slice is Party display-name enrichment. Accepted values enter authoritative Party state only through exact governed capability `parties.party.update@1.0.0`.
 
-## 2. Ownership decision
+## 2. Ownership boundary
 
-### 2.1 `crm.customer-enrichment` owns
+### `crm.customer-enrichment` owns
 
 - immutable provider-profile versions;
 - immutable request/response mapping versions;
 - enrichment-request lifecycle and exact target snapshot;
-- replay-safe provider exchange receipts and bounded reconciliation evidence;
-- immutable suggestions and their source provenance;
+- replay-safe provider exchange receipts and reconciliation conflicts;
+- immutable suggestions and source provenance;
 - review and approval decisions;
 - suggestion expiry and supersession evidence;
-- immutable application-attempt evidence;
-- deterministic retry, quota-accounting and crash-recovery evidence owned by the enrichment process.
+- immutable application attempts and outcomes;
+- bounded provider-usage, retry, quota and recovery evidence.
 
-The module may retain references to authoritative owner resources, exact resource versions, exact owner-capability coordinates, secret-handle aliases and governed file/evidence references. It does not own the referenced customer values, secret material or provider payload transport.
-
-### 2.2 Existing owner modules retain authority
+### Existing owners retain authority
 
 - `crm.parties` owns Party identity and mutable Party fields;
 - `crm.customer-accounts` owns Account values and Party associations;
-- `crm.contact-points` owns contact endpoint values and verification/preference state;
+- `crm.contact-points` owns endpoint values, verification and preferences;
 - `crm.consents` owns consent assertions and communication authorization;
 - `crm.identity-resolution` owns duplicate/merge lineage and canonical resolution;
 - `crm.data-quality` owns quality-governance evidence, not enriched customer values.
 
-No enrichment handler may write another module's storage, invoke its adapter directly or reinterpret a projection as authoritative state.
+Customer Enrichment never writes another module's storage, invokes another module's internal adapter or treats a projection/search index as authoritative state.
 
-### 2.3 First production slice
-
-The first accepted application path is:
+## 3. Accepted production flow
 
 ```text
 authorized enrichment request
-  -> exact Party snapshot read through a governed pre-authorization port
-  -> provider adapter dispatch outside the business core
-  -> immutable response receipt and suggestion provenance
+  -> governed exact Party snapshot and policy/Consent validation
+  -> transaction-scoped exact Party/profile reference guards
+  -> provider-process pending dispatch commit
+  -> exact host-owned provider transport and tenant secret resolution
+  -> sanitized immutable response/usage/conflict evidence
+  -> deterministic suggestion materialization
   -> governed review/approval
-  -> exact Party version revalidation
+  -> exact Party version revalidation and final live authorization
   -> parties.party.update@1.0.0
-  -> immutable enrichment application outcome
+  -> append-once enrichment application outcome
 ```
 
-The initial authoritative mutation surface is limited to Party display name. Additional Party, Account or Contact Point fields require later explicit contract and owner-capability expansion; they are not implied by this architecture document.
+A stale Party version never silently rebases an accepted suggestion. Re-enrichment and a new explicit review are required.
 
-## 3. Layer and dependency boundary
+## 4. Layer and dependency boundary
 
-### 3.1 Pure module core
+### Pure module core
 
-`modules/crm-customer-enrichment` must contain provider-neutral domain/application semantics only. It may depend on stable CRM contracts and Module SDK boundaries. It must not depend on:
+`modules/crm-customer-enrichment` contains provider-neutral domain/application semantics only. It has no dependency on SQLx, PostgreSQL, arbitrary HTTP, provider SDKs, secret managers, filesystem/object-storage clients, another business module's internals or executable user mapping code.
 
-- SQLx, PostgreSQL clients or migration tooling;
-- arbitrary HTTP clients or provider SDKs;
-- cloud secret managers or raw credentials;
-- filesystem or object-storage clients;
-- another business module's internal crate;
-- transport-generated request/response types as persisted state;
-- generic scripting, SQL expressions or user-provided executable mapping code.
+### Application ports
 
-### 3.2 Application ports
+The core uses narrow typed ports for:
 
-The pure core operates through narrow typed ports for:
-
-- authoritative Party snapshot and exact-version validation;
-- current consent/purpose evidence when a provider policy requires it;
-- provider dispatch and sanitized response retrieval;
-- secret-handle resolution owned by infrastructure;
-- governed file/evidence storage for permitted protected payload retention;
+- governed Party snapshot and exact-version validation;
+- current Consent/purpose evidence;
+- sanitized provider dispatch results;
 - exact owner-capability invocation;
-- time, deterministic identity and policy/approval verification.
+- time, deterministic identity, authorization, policy and approval verification.
 
-Cross-owner reads occur during pre-authorization semantic validation. Final live authorization is repeated immediately before protected disclosure and immediately before an authoritative owner mutation.
+Cross-owner semantic reads happen before final authorization. Live authorization is repeated immediately before provider disclosure/response persistence, materialization and authoritative owner mutation as applicable.
 
-### 3.3 Infrastructure adapters
+### Host-owned infrastructure
 
-Provider SDKs, arbitrary HTTP, authentication protocols, credential retrieval, rate-limit clients, circuit breakers, vendor payload parsing and vendor-specific error mapping are infrastructure adapters outside the business core.
+The process host owns:
 
-A provider adapter is selected through an infrastructure-owned exact adapter registry keyed by immutable provider-profile adapter kind/version. Generic application routers and worker schedulers must not branch on provider ID, module ID, capability ID or concrete adapter type.
+- exact adapter kind/version and transport-key resolution;
+- concrete HTTP transport construction;
+- tenant-bound secret material resolution;
+- endpoint allowlists, bounded request/response bodies, deadlines and redirect rejection;
+- quotas and circuit isolation;
+- PostgreSQL transaction-scoped reference guards;
+- activation-gated phase-ordered worker registration.
 
-## 4. Provider profile and secret boundary
+No generic router or scheduler contains a provider-ID or Customer Enrichment capability switch.
 
-Each immutable provider-profile version records:
+## 5. Provider and secret boundary
 
-- stable provider identity and display metadata;
-- exact adapter kind and adapter contract version;
-- supported target owner/resource/field coordinates;
-- allowed purpose and permitted-use classifications;
-- licensing identifier/version and usage restrictions;
-- residency and region constraints;
-- retention and raw-payload handling policy;
-- request timeout, retry class, rate/quota policy identifiers;
-- credential **handle aliases only**;
-- activation state and effective window;
-- immutable publication identity and content digest.
+Each immutable provider-profile version records stable identity, exact adapter kind/version, supported target fields, purpose/permitted-use/licensing/residency/retention policy, bounded timeout/retry/quota identifiers, credential handle aliases, effective window and content digest.
 
-Secret values never enter module state, public contracts, logs, audit envelopes, outbox events or provider-exchange evidence. The infrastructure adapter resolves an approved secret handle at execution time and receives only the minimum credential material needed for that attempt.
+Secret values never enter module state, public contracts, logs, audit envelopes, events or provider evidence. The host resolves configured secret environment values only for an enabled exact adapter/transport coordinate and supplies minimum material to the transport.
 
-Disabling a provider profile prevents new dispatch and retries that require the provider. It does not delete existing provenance or break Party, Account, Contact Point, Consent or other customer-master paths.
+The first concrete transport is exact coordinate:
 
-## 5. Mapping boundary
+- transport key: `registry_http`;
+- adapter kind: `registry_http_v1`;
+- adapter contract version: `1.0.0`.
 
-A mapping version is immutable and provider-neutral. It defines:
+It accepts only exact allowlisted HTTPS endpoints, except loopback HTTP for tests, disables redirects and proxies, bounds request/response sizes and exposes only sanitized typed failures.
 
-- exact provider-profile version;
-- request field selection and canonical request representation;
-- response field extraction into a bounded canonical suggestion vocabulary;
-- target owner/resource/field coordinate;
-- normalization identifier/version;
-- confidence and evidence extraction rules;
-- null/absence/error handling;
-- maximum response and suggestion counts;
-- content digest and publication evidence.
+## 6. Mapping boundary
 
-Mappings are declarative and bounded. Arbitrary SQL, JavaScript, WASM, templates with side effects, filesystem access and arbitrary network calls are forbidden in Phase 8A.10.
+Mapping versions are immutable bounded data, not executable programs. They bind an exact provider-profile version, canonical response field path, target owner/resource/field, normalization version, confidence/evidence requirements, maximum suggestion count and content digest.
 
-## 6. Enrichment request model
+Arbitrary SQL, JavaScript, shell, untrusted WASM, filesystem access, arbitrary network access, recursive expressions and direct owner-mutation instructions are forbidden.
 
-An enrichment request fixes:
+Mapping publication uses the mapping as its primary aggregate and locks/revalidates the exact persisted provider-profile row inside the same PostgreSQL transaction. The guard verifies canonical persisted identity and target-field support without external I/O or referenced-record mutation.
 
-- tenant and actor context;
-- target owner/resource ID;
-- exact authoritative target resource version;
-- provider-profile and mapping versions;
-- purpose, legal basis and optional consent evidence reference;
-- requested fields;
-- execution policy and approval policy version;
-- deterministic request identity and idempotency key;
-- creation, effective, deadline and expiry timestamps;
-- lifecycle state and bounded diagnostics.
+## 7. Request, response and suggestion semantics
 
-Request lifecycle:
+An enrichment request fixes tenant/actor context, exact Party ID/version, provider-profile and mapping versions, requested fields, purpose/legal basis/optional Consent evidence, policy version, deterministic identity/idempotency, deadlines/expiry and bounded lifecycle diagnostics.
 
-```text
-Draft/Created -> Queued -> Dispatched -> ResponseRecorded -> SuggestionsMaterialized
-             -> Completed | FailedRetryable | FailedTerminal | Cancelled | Expired
-```
+Request creation uses the request as primary aggregate and locks the exact Party row/version in the same transaction before persistence.
 
-Lifecycle transitions are monotonic except explicit retry transitions from `FailedRetryable`. Cancellation never erases provider or suggestion evidence already produced.
+Provider dispatch commits a deterministic pending attempt before external I/O. Recovery reuses the same provider idempotency lineage.
 
-## 7. Provider response and raw payload handling
+Every accepted provider response yields immutable sanitized evidence containing request/profile/mapping lineage, replay identity, canonical digest, response class, bounded correlation, timing and metering. Raw provider payload is never interpreted by the materialization process.
 
-Every accepted provider response produces one immutable response receipt containing:
+Reconciliation is deterministic:
 
-- request ID and provider-profile/mapping versions;
-- provider request/response correlation identities after sanitization;
-- retrieval timestamp and provider-observed timestamp when present;
-- canonical response digest;
-- safe status/error classification;
-- metering/quota evidence;
-- replay identity and reconciliation status;
-- optional governed file/evidence reference when retention policy permits protected raw payload storage.
+- same replay identity and same canonical evidence: exact duplicate/no-op;
+- distinct replay identity with semantically identical canonical evidence: semantic duplicate/no-op with evidence;
+- same lineage with changed canonical class, digest, metering or protected-evidence reference: fail-closed conflict.
 
-Raw provider payloads are never copied into audit details, logs, typed public errors or outbox event bodies. When protected raw payload retention is not permitted, only the canonical digest and bounded extracted provenance are retained.
+Only finalized response evidence may advance materialization. Missing, malformed, future or unresolved-conflict evidence stops execution without advancing the checkpoint.
 
-Duplicate provider callbacks or retried responses with the same deterministic replay identity are no-ops when content matches and conflicts when content differs.
+Suggestions bind exact request/receipt/profile/mapping/Party version, proposed value digest, timestamps, confidence and policy/licensing/Consent/residency/retention evidence. Historical accepted, rejected, expired, superseded and applied provenance is immutable.
 
-## 8. Suggestion and provenance model
+## 8. Review and owner application
 
-Each immutable suggestion binds:
+The first Party display-name slice requires explicit reviewer acceptance. Approval evidence is additionally required when the versioned policy marks the change high risk. Decisions bind exact suggestion, proposed value digest, actor, Party version, owner capability, policy version and expiry.
 
-- enrichment request and response receipt;
-- provider-profile and mapping versions;
-- target owner/resource/field coordinate;
-- exact source owner resource version observed for the request;
-- proposed canonical value and value digest;
-- observed, retrieved, effective, freshness and expiry timestamps with explicit semantics;
-- confidence and bounded evidence references;
-- purpose, legal-basis, consent, licensing, residency, retention and permitted-use evidence;
-- deterministic logical suggestion identity;
-- current review/application status derived from immutable decisions and attempts.
+Application commits a deterministic pending attempt before owner I/O, revalidates exact Party version and live authorization, invokes only `parties.party.update@1.0.0`, then appends one outcome.
 
-Suggestion lifecycle evidence supports:
+When the Party mutation succeeds but outcome persistence is interrupted, restart uses the same target idempotency lineage and records one logical outcome without a second Party update.
 
-- proposed;
-- accepted;
-- rejected;
-- expired;
-- superseded;
-- applied;
-- application failed/retryable.
+## 9. Frozen production inventory
 
-Historical suggestions and provenance are never rewritten or deleted merely because a newer suggestion supersedes them.
+The machine-readable authority is `contracts/customer-enrichment-production-promotion.json`.
 
-## 9. Review and approval policy
-
-A suggestion cannot mutate authoritative customer state merely because a provider returned it.
-
-Review policy is deterministic and versioned. It evaluates at least:
-
-- target field risk class;
-- provider/mapping trust classification;
-- confidence threshold;
-- evidence completeness;
-- purpose, license, consent and permitted-use constraints;
-- authoritative owner version freshness;
-- actor permission and resource visibility;
-- approval requirement.
-
-The first Party display-name slice requires an explicit reviewer acceptance. Approval evidence is additionally required when the configured policy classifies the change as high risk. Review and approval evidence is bound to the exact suggestion, proposed value digest, actor, target resource version, capability coordinate, policy version and expiry.
-
-## 10. Exact owner-capability application
-
-Accepted changes are applied only through an exact versioned owner capability.
-
-For the first slice:
-
-- target owner: `crm.parties`;
-- capability: `parties.party.update@1.0.0`;
-- precondition: exact current Party version equals the suggestion's accepted target version;
-- target idempotency: deterministic key derived from tenant, suggestion ID, application generation and target capability version;
-- mutation input: only the reviewed Party display-name change and exact optimistic version;
-- outcome: immutable application-attempt evidence with target business transaction ID, resulting Party version and safe error classification.
-
-A stale Party version fails safely and never silently rebases the suggestion. Re-enrichment or a new explicit review is required.
-
-## 11. Planned public contract surface
-
-The first published contract packet will use package `crm.customer_enrichment.v1` and exact version `1.0.0` coordinates.
-
-### Public mutations
+### Public mutations — exactly 6
 
 - `customer_enrichment.provider_profile.publish@1.0.0`;
 - `customer_enrichment.mapping.publish@1.0.0`;
 - `customer_enrichment.request.create@1.0.0`;
 - `customer_enrichment.request.cancel@1.0.0`;
 - `customer_enrichment.suggestion.accept@1.0.0`;
-- `customer_enrichment.suggestion.reject@1.0.0`;
-- `customer_enrichment.party.display_name.apply@1.0.0`.
+- `customer_enrichment.suggestion.reject@1.0.0`.
 
-### Public queries
+### Permission-aware public queries — exactly 6
 
 - `customer_enrichment.provider_profile.get@1.0.0`;
 - `customer_enrichment.mapping.get@1.0.0`;
@@ -251,122 +163,62 @@ The first published contract packet will use package `crm.customer_enrichment.v1
 - `customer_enrichment.suggestion.get@1.0.0`;
 - `customer_enrichment.suggestion.list_by_party@1.0.0`.
 
-### Internal worker-only mutations
+### Activation-gated worker-only coordinates — exactly 5
+
+Provider process, phase 240:
 
 - `customer_enrichment.request.dispatch@1.0.0`;
-- `customer_enrichment.response.record@1.0.0`;
-- `customer_enrichment.suggestions.materialize@1.0.0`;
+- `customer_enrichment.response.record@1.0.0`.
+
+Materialization process, phase 245:
+
+- `customer_enrichment.suggestions.materialize@1.0.0`.
+
+Application process, phase 250:
+
+- `customer_enrichment.party.display_name.apply@1.0.0`;
 - `customer_enrichment.application.outcome.record@1.0.0`.
 
-Internal worker-only coordinates are compiled and parity-checked but excluded from public HTTP/gRPC mutation catalogs.
+All 17 manifest-bound coordinates are public runtime or worker runtime. Worker-only coordinates have no public HTTP/gRPC ingress. No completed Customer Enrichment coordinate remains classified non-runtime.
 
-### Events
+## 10. Visibility, persistence and lifecycle
 
-Planned immutable events include provider-profile/mapping publication, request lifecycle, response receipt, suggestion materialization/review/expiry and application completion/failure. Every event payload is bounded and excludes credentials and protected raw provider payloads.
+All six queries use module-owned resource/field visibility. Hidden resources are concealed with not-found semantics; confidential definition fields may be redacted by deployment ceilings. Possession of an enrichment identifier is not authority.
 
-Publishing these contracts requires the module manifest bindings and generated contract registry to be updated from the canonical Protobuf descriptor set; the registry is never hand-edited.
+Protected Customer Enrichment records use tenant-scoped ENABLE + FORCE RLS. Application roles are `NOBYPASSRLS`; cross-tenant/no-context reads are concealed and cross-tenant writes are rejected. Rollback/reapply restores the same policies.
 
-## 12. Native production contributions
+Mutations preserve atomic record, optimistic version, idempotency, outbox, audit and business-transaction evidence. Persisted state is strictly canonical and rejects corrupt identities or future/unknown state.
 
-A separately owned adapter/composition boundary will contribute:
+Disable/uninstall stops public routes and all three worker processes through durable `crm.module_installations`, retains provenance and leaves core customer-master owners operational. Reinstall revalidates policy/provider state before retryable work resumes.
 
-- every exact public and internal mutation route;
-- every exact public query route;
-- pre-authorization Party/Consent semantic validators;
-- declarative visibility fields for request, response receipt, suggestion, decision and application-attempt reads;
-- activation-gated deterministic workers;
-- exact route parity or an individually reasoned non-runtime classification.
+## 11. Failure and recovery semantics
 
-Required worker phases are ordered as:
+The implementation distinguishes safe typed outcomes for module/provider inactive, unavailable transport/secret, quota, circuit open, retryable/terminal upstream failure, mapping conflict, policy/Consent/license/residency/retention denial, expired/superseded suggestion, missing/invalid approval, stale Party, authorization denial, conflicting replay and corrupted persistence.
 
-1. provider dispatch;
-2. provider response reconciliation;
-3. suggestion materialization/expiry;
-4. accepted-suggestion application;
-5. application outcome recovery.
+Provider bodies, credentials, headers, protected documents, URLs containing secrets and internal diagnostics never cross public transport boundaries.
 
-Each worker is tenant-bounded, batch-bounded, deterministic, replay-safe and gated by durable `crm.module_installations` state plus the provider profile's effective activation state.
+Proven crash windows include:
 
-No generic capability router, query router or worker scheduler may gain a customer-enrichment or provider-specific switch.
+1. dispatch committed before provider I/O and replay with the same provider idempotency key;
+2. response evidence recorded before materialization and restart without duplicate receipts/suggestions;
+3. Party update succeeded before application outcome and restart without duplicate Party mutation.
 
-## 13. Persistence and lifecycle
+## 12. Acceptance topology
 
-PostgreSQL adapter state must use tenant-scoped FORCE RLS for all protected enrichment records. Persistence must preserve:
+Permanent production evidence is split according to the production boundary:
 
-- exact optimistic versions where state is mutable;
-- immutable definitions, receipts, suggestions, decisions and attempts;
-- deterministic uniqueness for requests, responses, suggestions and target attempts;
-- atomic state/idempotency/outbox/audit evidence;
-- safe persisted-state conversion independent from public wire schemas.
+- Application Runtime starts the real `crm-api` binary on a fresh PostgreSQL database and exercises actual HTTP/gRPC public ingress, successful Party/profile/mapping/request persistence, transaction guards, visibility, Consent, activation, authorization and bounded safe errors;
+- Customer Enrichment Worker Process Runtime exercises exact provider transport, dispatch/response reconciliation, quota/circuit/failure isolation and recovery on fresh PostgreSQL;
+- Customer Enrichment Review Process Runtime exercises deterministic materialization, review, approval and owner-application recovery on fresh PostgreSQL;
+- background registry tests prove exact phase order 240 → 245 → 250 and durable disable/uninstall shutdown;
+- Contract, Governance, Rust, Generated Sync, Database, Product Plane and remaining runtime workflows prove full repository compatibility on one unchanged SHA.
 
-Module uninstall policy is `retain_business_records`. Disable/uninstall behavior:
+Worker-only coordinates are intentionally not exposed publicly for testing.
 
-- no new enrichment routes or workers execute while inactive;
-- existing customer-master owner modules continue normally;
-- retained enrichment provenance remains unchanged;
-- no automatic owner rollback or mutation occurs;
-- reinstall may resume retryable work only after exact policy and provider activation revalidation;
-- secret handles may be revoked by infrastructure without deleting business provenance.
+The accepted source SHA `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged, had no unresolved review threads or change requests, and was merged through PR #137 as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
-## 14. Failure and recovery semantics
+## 13. Explicit non-goals
 
-The implementation must prove at least these crash windows:
+Phase 8A.10 does not introduce autonomous unreviewed mutation, arbitrary-field patching, Account/Contact Point mutation, direct provider infrastructure in the pure core, executable mapping code, provider-owned authoritative customer records, projection/search authority, automatic identity merge or privacy deletion orchestration.
 
-1. provider accepted/dispatched the request but dispatch outcome was not durably recorded;
-2. provider response was durably received but response receipt or suggestion materialization was incomplete;
-3. owner capability succeeded but enrichment application outcome was not durably recorded.
-
-Recovery uses deterministic replay identities and target idempotency. It must not duplicate provider charges where a provider supports an idempotency key, duplicate response receipts, duplicate suggestions, duplicate Party mutations or duplicate application evidence.
-
-Provider unavailable, quota exceeded, circuit open, mapping invalid, secret unavailable, purpose/consent denied, license restricted, stale target version and authorization denied are distinct typed safe outcomes. Raw provider errors are sanitized at the adapter boundary.
-
-## 15. Acceptance matrix
-
-Completion requires one unchanged exact review SHA with all applicable gates green and evidence for:
-
-- `python scripts/repo.py conformance`;
-- manifest/binding/compiled route parity and immutable publication compatibility;
-- pure-domain invariants and strict persisted-state rehydration;
-- deterministic provider replay and duplicate-response handling;
-- mapping immutability and bounded canonicalization;
-- provenance retention across accepted, rejected, expired, superseded and applied suggestions;
-- purpose, consent, licensing, residency, retention and permitted-use enforcement;
-- stale target version rejection;
-- reviewer and approval binding;
-- exact Party owner-capability invocation with no direct storage write;
-- target-success/outcome-missing recovery with no duplicate Party update;
-- provider dispatch/response crash recovery and quota reconciliation;
-- disabled provider and disabled/uninstalled module behavior;
-- no secret or protected raw payload leakage in logs, errors, audit or events;
-- live authorization, resource/field visibility and signed pagination;
-- FORCE RLS and cross-tenant negative proof;
-- migration clean apply, rollback/reapply or explicit compensation evidence;
-- fresh-PostgreSQL real `crm-api` process acceptance including provider-failure scenarios;
-- applicable Contract, Governance, Rust, Database, Application Runtime, Product Plane and specialized enrichment process workflows.
-
-## 16. Explicit non-goals
-
-This packet does not introduce:
-
-- autonomous unreviewed customer-master mutation;
-- generic arbitrary-field patching;
-- direct Account or Contact Point mutation in the first slice;
-- direct provider SDK/HTTP/secret access from the pure module core;
-- arbitrary user code, scripts, SQL or generic expression execution;
-- provider-owned authoritative customer records;
-- search/projection state as an authorization or mutation oracle;
-- automatic identity merge or duplicate resolution;
-- deletion/privacy lifecycle orchestration, which remains Phase 8A.11 / #126;
-- a central provider switch in generic routers or workers.
-
-## 17. Delivery sequence
-
-1. Add the governed module foundation and immutable ownership objects.
-2. Publish compatible Protobuf contracts and manifest bindings.
-3. Implement pure domain/application semantics and persisted-state conversion.
-4. Add PostgreSQL capability/query adapters and pre-authorization owner/consent ports.
-5. Add provider infrastructure adapter contracts, sanitized fake provider and deterministic workers.
-6. Register exact module-owned routes, visibility and workers through native composition.
-7. Add fresh-process PostgreSQL acceptance for success, denial, stale evidence, replay and crash recovery.
-8. Synchronize roadmap, project status, Phase 8 plan, module catalog, issue and PR evidence.
-9. Move to Gate review only after all applicable checks pass on one exact SHA.
+Privacy access/export/restriction/deletion/legal-hold orchestration remains Phase 8A.11 / #126.

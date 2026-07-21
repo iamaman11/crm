@@ -1,7 +1,11 @@
 use crm_customer_enrichment::{CRATE_NAME, MODULE_ID};
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+const ACCEPTED_SOURCE_CHECKPOINT: &str = "f92d101206886e3ceaf94d0e56e52580cec21093";
+const MERGE_COMMIT: &str = "150e44b95d9dbdc08c1792563de03ec73f34aed1";
 
 #[test]
 fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence() {
@@ -16,6 +20,11 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
         promotion["schema_version"],
         "crm.customer-enrichment.production-promotion/v1"
     );
+    assert_eq!(
+        promotion["accepted_source_checkpoint"],
+        ACCEPTED_SOURCE_CHECKPOINT
+    );
+    assert_eq!(promotion["merge_commit"], MERGE_COMMIT);
 
     let inventory = &promotion["current_runtime_inventory"];
     assert_exact_coordinates(
@@ -43,6 +52,9 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
     assert_exact_coordinates(
         &inventory["workers"],
         &[
+            "customer_enrichment.request.dispatch@1.0.0",
+            "customer_enrichment.response.record@1.0.0",
+            "customer_enrichment.suggestions.materialize@1.0.0",
             "customer_enrichment.party.display_name.apply@1.0.0",
             "customer_enrichment.application.outcome.record@1.0.0",
         ],
@@ -54,6 +66,28 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
     assert_eq!(
         promotion["global_invariants"]["central_business_route_switches_allowed"],
         false
+    );
+    assert_eq!(promotion["promotion_stages"][0]["state"], "complete");
+
+    let classifications = read_json(&root.join("contracts/production-route-classifications.json"));
+    let worker_coordinates =
+        classified_coordinates(&classifications["worker_runtime_routes"], MODULE_ID);
+    let expected_workers = inventory["workers"]
+        .as_array()
+        .expect("worker inventory must be an array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("worker coordinate must be a string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(worker_coordinates, expected_workers);
+    assert!(
+        classified_coordinates(&classifications["non_runtime_contract_routes"], MODULE_ID)
+            .is_empty(),
+        "a completed Customer Enrichment coordinate may not remain non-runtime"
     );
 
     let workflow = read_text(&root.join(".github/workflows/application-runtime.yml"));
@@ -88,7 +122,7 @@ fn repository_root() -> PathBuf {
 }
 
 fn read_json(path: &Path) -> Value {
-    serde_json::from_str(&read_text(path)).expect("parse governed production-promotion contract")
+    serde_json::from_str(&read_text(path)).expect("parse governed JSON contract")
 }
 
 fn read_text(path: &Path) -> String {
@@ -103,4 +137,24 @@ fn assert_exact_coordinates(value: &Value, expected: &[&str]) {
         .map(|value| value.as_str().expect("coordinate must be a string"))
         .collect::<Vec<_>>();
     assert_eq!(actual, expected);
+}
+
+fn classified_coordinates(value: &Value, owner_module_id: &str) -> BTreeSet<String> {
+    value
+        .as_array()
+        .expect("route classification must be an array")
+        .iter()
+        .filter(|entry| entry["owner_module_id"] == owner_module_id)
+        .map(|entry| {
+            format!(
+                "{}@{}",
+                entry["id"]
+                    .as_str()
+                    .expect("classified id must be a string"),
+                entry["version"]
+                    .as_str()
+                    .expect("classified version must be a string")
+            )
+        })
+        .collect()
 }
