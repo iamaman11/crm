@@ -44,8 +44,10 @@ mod tests {
             OWNER_ACTION_OUTCOME_RECORD_TYPE,
         ];
         assert_eq!(record_types.len(), 6);
-        assert!(record_types
-            .iter()
-            .all(|value| value.starts_with("customer-privacy.")));
+        assert!(
+            record_types
+                .iter()
+                .all(|value| value.starts_with("customer-privacy."))
+        );
     }
 }
