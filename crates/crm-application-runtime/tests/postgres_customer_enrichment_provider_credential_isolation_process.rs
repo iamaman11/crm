@@ -287,9 +287,10 @@ mod process {
             .as_deref()
             .expect("failed checkpoint lineage exists");
         assert!(failed_checkpoint_reference.contains("customer-enrichment-worker-seed-event"));
-        assert!(failed_checkpoint_reference.contains(
-            "failure_code=CUSTOMER_ENRICHMENT_PROVIDER_SECRET_UNAVAILABLE"
-        ));
+        assert!(
+            failed_checkpoint_reference
+                .contains("failure_code=CUSTOMER_ENRICHMENT_PROVIDER_SECRET_UNAVAILABLE")
+        );
         assert!(
             store
                 .projection_document(
