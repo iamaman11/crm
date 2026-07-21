@@ -20,22 +20,22 @@ pub async fn evidence_counts(pool: &PgPool) -> EvidenceCounts {
         .await,
         events: scalar_for_tenant(
             pool,
-            "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = $1 AND event_type LIKE 'customer_enrichment.%'",
+            "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = $1 AND starts_with(event_type, 'customer_enrichment.')",
         )
         .await,
         audits: scalar_for_tenant(
             pool,
-            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = $1 AND capability_id LIKE 'customer_enrichment.%'",
+            "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = $1 AND starts_with(capability_id, 'customer_enrichment.')",
         )
         .await,
         idempotency: scalar_for_tenant(
             pool,
-            "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope LIKE 'capability:customer_enrichment.%'",
+            "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = $1 AND starts_with(idempotency_scope, 'capability:customer_enrichment.')",
         )
         .await,
         transactions: scalar_for_tenant(
             pool,
-            "SELECT count(*)::bigint FROM crm.business_transactions WHERE tenant_id = $1 AND capability_id LIKE 'customer_enrichment.%'",
+            "SELECT count(*)::bigint FROM crm.business_transactions WHERE tenant_id = $1 AND starts_with(capability_id, 'customer_enrichment.')",
         )
         .await,
     }
