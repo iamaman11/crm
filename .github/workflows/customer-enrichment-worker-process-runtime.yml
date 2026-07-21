@@ -14,6 +14,7 @@ on:
       - "crates/crm-customer-enrichment-provider-registry/**"
       - "crates/crm-customer-enrichment-registry-http-transport/**"
       - "crates/crm-customer-enrichment-worker-composition/**"
+      - "crates/crm-customer-enrichment-provider-process-composition/**"
       - "crates/crm-customer-enrichment-materialization-adapter/**"
       - "crates/crm-customer-enrichment-materialization-composition/**"
       - "modules/crm-customer-enrichment/**"
@@ -35,6 +36,7 @@ on:
       - "crates/crm-customer-enrichment-provider-registry/**"
       - "crates/crm-customer-enrichment-registry-http-transport/**"
       - "crates/crm-customer-enrichment-worker-composition/**"
+      - "crates/crm-customer-enrichment-provider-process-composition/**"
       - "crates/crm-customer-enrichment-materialization-adapter/**"
       - "crates/crm-customer-enrichment-materialization-composition/**"
       - "modules/crm-customer-enrichment/**"
@@ -80,13 +82,30 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
+      - name: Verify durable provider-conflict process scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > database/customer-enrichment-worker-process-runtime.log
+          for test_name in \
+            postgres_conflict_persistence \
+            postgres_conflict_resolution \
+            postgres_conflict_process_hold \
+            postgres_conflict_reject_process
+          do
+            bash scripts/prepare_customer_enrichment_worker_process_database.sh
+            cargo test \
+              -p crm-customer-enrichment-provider-process-composition \
+              --features postgres-integration \
+              --test "${test_name}" \
+              -- --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+          done
       - name: Prepare fresh Customer Enrichment provider-worker database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify durable Customer Enrichment provider worker
         shell: bash
         run: |
           set -euo pipefail
-          : > database/customer-enrichment-worker-process-runtime.log
           cargo test \
             -p crm-customer-enrichment-worker-composition \
             --features postgres-integration \
@@ -186,6 +205,7 @@ jobs:
             database/customer-enrichment-worker-process-runtime-state.log
             database/customer-enrichment-worker-process-runtime-postgres.log
             crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs
+            crates/crm-customer-enrichment-provider-process-composition/
             crates/crm-customer-enrichment-materialization-adapter/
             crates/crm-customer-enrichment-materialization-composition/
             database/tests/0016_customer_enrichment_worker.sql
