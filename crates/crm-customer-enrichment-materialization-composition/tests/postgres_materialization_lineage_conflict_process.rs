@@ -64,7 +64,10 @@ mod process {
             .internal_reference
             .as_deref()
             .expect("failed materialization checkpoint lineage exists");
-        assert!(failed_reference.contains("failure_code=CUSTOMER_ENRICHMENT_SUGGESTION_EVIDENCE_CONFLICT"));
+        assert!(
+            failed_reference
+                .contains("failure_code=CUSTOMER_ENRICHMENT_SUGGESTION_EVIDENCE_CONFLICT")
+        );
 
         let baseline = evidence_counts(&admin).await;
         drop(process);
@@ -126,7 +129,8 @@ mod process {
         fn execute<'a>(
             &'a self,
             _request: CapabilityRequest,
-        ) -> PortFuture<'a, Result<crm_capability_runtime::CapabilityExecutionResult, SdkError>> {
+        ) -> PortFuture<'a, Result<crm_capability_runtime::CapabilityExecutionResult, SdkError>>
+        {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Box::pin(async {
                 Err(SdkError::new(
