@@ -71,7 +71,7 @@ mod process {
         ) -> PortFuture<'a, Result<ProviderDispatchSourceDisposition, SdkError>> {
             Box::pin(async move {
                 self.calls.fetch_add(1, Ordering::SeqCst);
-                if tenant_id != *self.initial_request.tenant_id()
+                if &tenant_id != self.initial_request.tenant_id()
                     || request_id.as_str() != self.initial_request.request_id().as_str()
                     || worker_actor_id.as_str() != PROVIDER_PROCESS_WORKER_ACTOR_ID
                     || !matches!(now_unix_ms, 30 | 31)
@@ -360,16 +360,10 @@ mod process {
         assert_eq!(recovered.response_replays, 0);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
         assert_eq!(source_calls.load(Ordering::SeqCst), 2);
-        assert_eq!(
-            observed_keys
-                .lock()
-                .expect("read observed provider keys")
-                .as_slice(),
-            [
-                expected_provider_key.as_str(),
-                expected_provider_key.as_str()
-            ]
-        );
+        let observed = observed_keys.lock().expect("read observed provider keys");
+        assert_eq!(observed.len(), 2);
+        assert!(observed.iter().all(|key| key == &expected_provider_key));
+        drop(observed);
 
         let recorded_snapshot = store
             .get_record(
