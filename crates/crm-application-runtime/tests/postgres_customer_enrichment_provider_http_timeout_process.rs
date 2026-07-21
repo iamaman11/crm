@@ -344,7 +344,10 @@ mod process {
             .unwrap()
             .expect("durable dispatched request exists after timeout");
         let dispatched_request = enrichment_request_from_snapshot(&dispatched_snapshot).unwrap();
-        assert_eq!(dispatched_request.status(), EnrichmentRequestStatus::Dispatched);
+        assert_eq!(
+            dispatched_request.status(),
+            EnrichmentRequestStatus::Dispatched
+        );
         assert!(dispatched_request.response_receipt_id().is_none());
 
         let recovered = process
@@ -362,7 +365,10 @@ mod process {
                 .lock()
                 .expect("read observed provider keys")
                 .as_slice(),
-            [expected_provider_key.as_str(), expected_provider_key.as_str()]
+            [
+                expected_provider_key.as_str(),
+                expected_provider_key.as_str()
+            ]
         );
 
         let recorded_snapshot = store
