@@ -639,6 +639,11 @@
       ]
     },
     {
+      "module_id": "crm.customer-privacy",
+      "capabilities": [],
+      "events": []
+    },
+    {
       "module_id": "crm.customer360",
       "capabilities": [
         {

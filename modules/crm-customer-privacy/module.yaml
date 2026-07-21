@@ -1,0 +1,79 @@
+schema_version: crm.module/v1
+module_id: crm.customer-privacy
+version: "0.1.0"
+display_name: "CRM Customer Privacy"
+description: "Authoritative privacy case, restriction, legal-hold and owner-action orchestration foundation without ownership of customer-master values."
+
+owner:
+  team: customer-platform
+  contact: "crm-owner@example.com"
+  codeowners:
+    - "@iamaman11"
+
+runtime:
+  kind: in_process
+  entrypoint: modules/crm-customer-privacy
+
+platform:
+  minimum_version: "0.1.0"
+
+dependencies:
+  required:
+    - module_id: crm.parties
+      version_range: ">=0.3.0, <1.0.0"
+    - module_id: crm.consents
+      version_range: ">=0.1.0, <1.0.0"
+    - module_id: crm.identity-resolution
+      version_range: ">=0.2.0, <1.0.0"
+    - module_id: crm.customer-data-operations
+      version_range: ">=0.2.0, <1.0.0"
+  optional: []
+  conflicts: []
+
+provides:
+  capabilities: []
+  events: []
+  objects:
+    - customer-privacy.case
+    - customer-privacy.restriction
+    - customer-privacy.legal-hold
+    - customer-privacy.action-plan
+    - customer-privacy.owner-action-attempt
+    - customer-privacy.owner-action-outcome
+  ui_extensions: []
+
+consumes:
+  capabilities: []
+  events: []
+
+storage:
+  record_types:
+    - customer-privacy.case
+    - customer-privacy.restriction
+    - customer-privacy.legal-hold
+    - customer-privacy.action-plan
+    - customer-privacy.owner-action-attempt
+    - customer-privacy.owner-action-outcome
+  private_state_namespaces:
+    - crm.customer-privacy
+
+security:
+  data_classes:
+    - internal
+    - confidential
+    - personal
+  network_egress: []
+  secret_handles: []
+
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-customer-privacy/migrations
+  retained_record_types:
+    - customer-privacy.case
+    - customer-privacy.restriction
+    - customer-privacy.legal-hold
+    - customer-privacy.action-plan
+    - customer-privacy.owner-action-attempt
+    - customer-privacy.owner-action-outcome

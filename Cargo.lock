@@ -1058,6 +1058,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-privacy"
+version = "0.1.0"
+dependencies = [
+ "crm-core-contracts",
+ "crm-module-sdk",
+]
+
+[[package]]
 name = "crm-data-quality"
 version = "0.1.0"
 dependencies = [

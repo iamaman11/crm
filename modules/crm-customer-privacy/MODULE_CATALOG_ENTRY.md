@@ -1,0 +1,1 @@
+| `crm.customer-privacy` | Owner/coordinator module | Privacy cases, restrictions, customer-data legal holds, retention decisions, owner action plans/outcomes and convergence evidence | **Foundation — unmerged** | Architecture frozen in #140; no production route, worker or completed privacy lifecycle yet |
