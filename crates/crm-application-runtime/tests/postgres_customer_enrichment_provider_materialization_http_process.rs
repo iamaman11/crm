@@ -339,7 +339,8 @@ mod process {
             .await
             .unwrap()
             .expect("response-recorded request exists");
-        let provider_request = enrichment_request_from_snapshot(&provider_request_snapshot).unwrap();
+        let provider_request =
+            enrichment_request_from_snapshot(&provider_request_snapshot).unwrap();
         assert_eq!(
             provider_request.status(),
             EnrichmentRequestStatus::ResponseRecorded
@@ -582,10 +583,8 @@ mod process {
             request,
             provider_profile,
             party_snapshot: PartySnapshot {
-                party_id: RecordId::try_new(
-                    "party-provider-http-materialization-process-1",
-                )
-                .unwrap(),
+                party_id: RecordId::try_new("party-provider-http-materialization-process-1")
+                    .unwrap(),
                 display_name: "HTTP Materialization Process Company".to_owned(),
                 resource_version: 7,
                 observed_at_unix_ms: 15,
@@ -684,8 +683,7 @@ mod process {
                     scope: format!("{SEED_CAPABILITY}@1.0.0"),
                     key: format!("provider-http-materialization-seed-{}", seed.suffix),
                     request_hash,
-                    expires_at_unix_nanos: 86_400_000_000_000
-                        + seed.occurred_at_unix_nanos,
+                    expires_at_unix_nanos: 86_400_000_000_000 + seed.occurred_at_unix_nanos,
                 },
                 audit: AuditIntent {
                     audit_record_id: format!(
@@ -693,8 +691,7 @@ mod process {
                         seed.suffix
                     ),
                     canonicalization_profile: "crm.cjson/v1".to_owned(),
-                    canonical_envelope: format!("{{\"seed\":\"{}\"}}", seed.suffix)
-                        .into_bytes(),
+                    canonical_envelope: format!("{{\"seed\":\"{}\"}}", seed.suffix).into_bytes(),
                     occurred_at_unix_nanos: seed.occurred_at_unix_nanos,
                 },
             })
