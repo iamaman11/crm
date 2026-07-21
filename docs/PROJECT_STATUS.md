@@ -16,7 +16,7 @@ Authoritative references:
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is the active expert owner-domain program. Phase 8A.9 is merged and complete. Phase 8A.10 is in Gate review in draft PR #137.**
+**Phases 0.1–7 are complete. Phase 8A is the active expert owner-domain program. Phase 8A.10 is merged and complete. Phase 8A.11 is the next ready customer-master packet.**
 
 Current Phase 8A baseline:
 
@@ -24,16 +24,16 @@ Current Phase 8A baseline:
 - **8A.7 — Complete:** governed customer import and resumable execution (#120 / PR #121).
 - **8A.8 — Complete:** governed customer export, artifacts and reconciliation (#123 / PR #130).
 - **8A.9 — Complete:** Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132).
-- **8A.10 — Gate review:** Governed Customer Enrichment and Provenance (#125 / draft PR #137).
-- **8A.11 — Planned:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold (#126).
+- **8A.10 — Complete:** Governed Customer Enrichment and Provenance (#125 / PR #137 / merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`).
+- **8A.11 — Ready:** Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold (#126).
 
 The active dependency lane is:
 
-`8A.10 merge -> 8A.11 -> Phase 8A closure -> 8B`
+`8A.11 -> Phase 8A closure -> 8B`
 
-Only merged `main` changes module counts. Gate-review work must not be described as merged or complete before the PR lands.
+Only merged `main` changes module counts. The merged Customer Enrichment owner/coordinator module is now part of the authoritative customer-master baseline.
 
-## Phase 8A.10 gate-review state
+## Phase 8A.10 completed state
 
 The production inventory is frozen at exactly:
 
@@ -42,7 +42,7 @@ The production inventory is frozen at exactly:
 - **2 activation-gated worker coordinates**;
 - **3 provider/materialization coordinates** classified worker-only with no public HTTP/gRPC ingress.
 
-Implemented and accepted on prior exact-head checkpoints:
+Delivered behavior includes:
 
 - immutable provider-profile, mapping, request, response, conflict, suggestion, review, usage and application evidence;
 - concrete exact-coordinate registry HTTP transport with tenant-bound secret resolution, bounded network behavior, quota and circuit control;
@@ -51,19 +51,19 @@ Implemented and accepted on prior exact-head checkpoints:
 - retain-first and terminal-reject operator resolution evidence;
 - deterministic materialization, review, owner-capability application and recovery;
 - permission-aware reads, declarative field redaction, tenant concealment and activation shutdown;
-- FORCE RLS and migration rollback/reapply proof across Customer Enrichment tenant tables.
+- FORCE RLS and migration rollback/reapply proof across Customer Enrichment tenant tables;
+- transaction-scoped immutable provider-profile and exact Party-version reference guards.
 
-The final production-path addition is permanent `crm-api` process acceptance on a fresh PostgreSQL database. It starts the real binary and proves:
+Permanent `crm-api` process acceptance on a fresh PostgreSQL database proves:
 
 - generic bounded HTTP `401 {"error":"request_failed"}` without authorization;
 - successful Party creation, provider-profile publication, mapping publication and governed enrichment-request persistence through real gRPC ingress;
-- transaction-scoped immutable provider-profile and exact Party-version reference guards;
 - deployment field ceilings and cross-tenant concealment;
 - `TENANT_FORBIDDEN`, `CUSTOMER_ENRICHMENT_REQUEST_CONSENT_DENIED`, `MODULE_NOT_ACTIVE` and `CAPABILITY_PERMISSION_DENIED` as typed safe non-retryable gRPC errors;
 - no credential, provider payload or internal diagnostic leakage;
 - unchanged request/event/audit/idempotency/business-transaction counters after every pre-persistence denial.
 
-The last accepted unchanged checkpoint remains `8432b8d59756bbd36a6b2a5033aabcf05f3ce3d1` with 17/17 permanent workflows successful. PR #137 may leave draft only after the synchronized final user-authored SHA also passes all 17 workflows unchanged.
+Accepted source checkpoint `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows on one unchanged user-authored SHA. PR #137 was squash-merged as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
 ## Merged platform and customer-master baseline
 
@@ -75,7 +75,7 @@ Merged `main` already contains:
 - authenticated mutation and permission-bound query gateways;
 - native module-owned exact-coordinate composition and deployable `crm-api` process acceptance;
 - durable activation-gated workers, event delivery, projections and permission-aware search;
-- Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export and Data Quality production slices.
+- Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality and Customer Enrichment production slices.
 
 ## Product completeness reality
 
@@ -85,8 +85,7 @@ No broad “ultimate CRM complete” claim is valid while those domains remain p
 
 ## Immediate next actions
 
-1. Obtain one synchronized user-authored Phase 8A.10 SHA with all 17 permanent workflows successful.
-2. Record that exact SHA in PR #137 and issue #125, then complete gate review and merge.
-3. Rebase Phase 8A.11 on the merged Customer Enrichment baseline.
-4. Close Phase 8A only after the full customer-master acceptance baseline is merged.
-5. Begin Phase 8B / #29 only after Phase 8A closure.
+1. Start Phase 8A.11 / #126 from merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
+2. Freeze privacy ownership, restriction, access/export, deletion/anonymization and legal-hold boundaries before contract expansion.
+3. Close Phase 8A only after the full privacy/customer-master acceptance baseline is merged.
+4. Begin Phase 8B / #29 only after Phase 8A closure.
