@@ -40,3 +40,11 @@ read_error = '''fn resolution_read_error(error: DataError) -> SdkError {
 '''
 text = text.replace(marker, read_error + marker, 1)
 path.write_text(text)
+
+test_path = Path(
+    "crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_resolution.rs"
+)
+test_text = test_path.read_text()
+test_text = test_text.replace('ActorId::try_new("provider-worker-a")', 'ActorId::try_new("actor-a")')
+test_text = test_text.replace('ActorId::try_new("operator-a")', 'ActorId::try_new("actor-a")')
+test_path.write_text(test_text)
