@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.customer-privacy
-version: "0.1.0"
+version: "0.2.0"
 display_name: "CRM Customer Privacy"
 description: "Authoritative privacy case, restriction, legal-hold and owner-action orchestration contracts without ownership of customer-master values."
 
