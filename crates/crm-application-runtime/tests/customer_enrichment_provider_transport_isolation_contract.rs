@@ -98,7 +98,10 @@ fn exact_host_transport_mismatches_fail_before_secret_or_provider_io() {
             "CUSTOMER_ENRICHMENT_PROVIDER_TRANSPORT_UNAVAILABLE"
         );
         assert!(!error.retryable);
-        assert_eq!(error.internal_reference.as_deref(), Some(expected_reference));
+        assert_eq!(
+            error.internal_reference.as_deref(),
+            Some(expected_reference)
+        );
         assert!(!format!("{error:?} {error}").contains("transport-isolation-secret"));
     }
 
