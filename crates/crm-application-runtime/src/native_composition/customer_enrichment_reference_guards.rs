@@ -55,12 +55,14 @@ impl TransactionalAggregateGuard for PostgresCustomerEnrichmentMappingReferenceG
             .map_err(mapping_store_unavailable)?
             .ok_or_else(mapping_reference_unavailable)?;
 
-            let record_id: String = row.try_get("record_id").map_err(mapping_store_unavailable)?;
+            let record_id: String = row
+                .try_get("record_id")
+                .map_err(mapping_store_unavailable)?;
             let payload: Vec<u8> = row
                 .try_get("payload_bytes")
                 .map_err(mapping_store_unavailable)?;
-            let profile = decode_provider_profile_version_state(&payload)
-                .map_err(mapping_state_invalid)?;
+            let profile =
+                decode_provider_profile_version_state(&payload).map_err(mapping_state_invalid)?;
             if record_id != profile.version_id().as_str()
                 || profile.version_id() != mapping.provider_profile_version_id()
             {
@@ -122,7 +124,9 @@ impl TransactionalAggregateGuard for PostgresCustomerEnrichmentRequestPartyGuard
             .map_err(request_store_unavailable)?
             .ok_or_else(request_target_unavailable)?;
 
-            let record_id: String = row.try_get("record_id").map_err(request_store_unavailable)?;
+            let record_id: String = row
+                .try_get("record_id")
+                .map_err(request_store_unavailable)?;
             let version: i64 = row.try_get("version").map_err(request_store_unavailable)?;
             if record_id != enrichment_request.target().resource_id.as_str()
                 || version != expected_version

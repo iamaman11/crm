@@ -1,9 +1,5 @@
 mod customer_enrichment_reference_guards;
 
-use customer_enrichment_reference_guards::{
-    PostgresCustomerEnrichmentMappingReferenceGuard,
-    PostgresCustomerEnrichmentRequestPartyGuard,
-};
 use crate::{DataQualityAggregatePlanner, DataQualityCapabilityExecutor};
 use crm_application_composition::{
     ActivationGatedMutationValidator, ActivationGatedQueryValidator, ApplicationComposition,
@@ -139,6 +135,9 @@ use crm_sales_activities_query_adapter::{
 };
 use crm_search_query_adapter::{SearchQueryAdapter, search_query_capability_definition};
 use crm_search_runtime::SearchIndexId;
+use customer_enrichment_reference_guards::{
+    PostgresCustomerEnrichmentMappingReferenceGuard, PostgresCustomerEnrichmentRequestPartyGuard,
+};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -382,20 +381,18 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let customer_enrichment_fallback: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        PostgresTransactionalAggregateExecutor::guarded(
+    let customer_enrichment_fallback: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(PostgresTransactionalAggregateExecutor::guarded(
             store.clone(),
             Arc::new(CustomerEnrichmentProviderProfileCapabilityPlanner),
             Arc::new(PostgresCustomerEnrichmentMappingReferenceGuard),
-        ),
-    );
-    let customer_enrichment_request: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        PostgresTransactionalAggregateExecutor::guarded(
+        ));
+    let customer_enrichment_request: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(PostgresTransactionalAggregateExecutor::guarded(
             store.clone(),
             Arc::new(CustomerEnrichmentRequestCreateCapabilityPlanner),
             Arc::new(PostgresCustomerEnrichmentRequestPartyGuard),
-        ),
-    );
+        ));
     let customer_enrichment_party_queries = Arc::new(PartyQueryAdapter::new(
         store.clone(),
         cursor(cursor_key)?,
