@@ -15,6 +15,7 @@ on:
       - "proto/crm/party_relationships/**"
       - "proto/crm/consents/**"
       - "proto/crm/identity_resolution/**"
+      - "proto/crm/customer_enrichment/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -28,6 +29,7 @@ on:
       - "crates/crm-core-events/**"
       - "crates/crm-customer-accounts-capability-adapter/**"
       - "crates/crm-customer-accounts-query-adapter/**"
+      - "crates/crm-customer-enrichment-*/**"
       - "crates/crm-identity-resolution-capability-adapter/**"
       - "crates/crm-identity-resolution-capability-composition/**"
       - "crates/crm-identity-resolution-merge-composition/**"
@@ -48,11 +50,14 @@ on:
       - "modules/crm-consents/**"
       - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
+      - "modules/crm-customer-enrichment/**"
       - "modules/crm-identity-resolution/**"
       - "modules/crm-parties/**"
       - "modules/crm-party-relationships/**"
       - "modules/crm-sales-activities-link/**"
       - "services/crm-api/**"
+      - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
       - "database/migrations/**"
       - "database/tests/**"
       - ".github/workflows/application-runtime.yml"
@@ -70,6 +75,7 @@ on:
       - "proto/crm/party_relationships/**"
       - "proto/crm/consents/**"
       - "proto/crm/identity_resolution/**"
+      - "proto/crm/customer_enrichment/**"
       - "crates/crm-application-runtime/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
@@ -83,6 +89,7 @@ on:
       - "crates/crm-core-events/**"
       - "crates/crm-customer-accounts-capability-adapter/**"
       - "crates/crm-customer-accounts-query-adapter/**"
+      - "crates/crm-customer-enrichment-*/**"
       - "crates/crm-identity-resolution-capability-adapter/**"
       - "crates/crm-identity-resolution-capability-composition/**"
       - "crates/crm-identity-resolution-merge-composition/**"
@@ -103,11 +110,14 @@ on:
       - "modules/crm-consents/**"
       - "modules/crm-contact-points/**"
       - "modules/crm-customer-accounts/**"
+      - "modules/crm-customer-enrichment/**"
       - "modules/crm-identity-resolution/**"
       - "modules/crm-parties/**"
       - "modules/crm-party-relationships/**"
       - "modules/crm-sales-activities-link/**"
       - "services/crm-api/**"
+      - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
       - "database/migrations/**"
       - "database/tests/**"
       - ".github/workflows/application-runtime.yml"
@@ -220,6 +230,13 @@ jobs:
           /tmp/reset-application-database.sh
           cargo test -p crm-api --test merge_unmerge_process_e2e -- --nocapture \
             2>&1 | tee database/application-runtime-merge-unmerge-process.log
+      - name: Verify Customer Enrichment bounded crm-api denials on a fresh database
+        shell: bash
+        run: |
+          set -o pipefail
+          bash scripts/prepare_customer_enrichment_consent_policy_database.sh
+          cargo test -p crm-api --test customer_enrichment_process_e2e -- --nocapture \
+            2>&1 | tee database/application-runtime-customer-enrichment-process.log
       - name: Capture PostgreSQL diagnostics on failure
         if: failure()
         shell: bash
@@ -246,6 +263,7 @@ jobs:
             database/application-runtime-consent-process.log
             database/application-runtime-identity-resolution-process.log
             database/application-runtime-merge-unmerge-process.log
+            database/application-runtime-customer-enrichment-process.log
             database/application-runtime-postgres.log
             crates/crm-application-runtime/
             crates/crm-consents-capability-adapter/
@@ -255,6 +273,12 @@ jobs:
             crates/crm-contact-points-query-adapter/
             crates/crm-customer-accounts-capability-adapter/
             crates/crm-customer-accounts-query-adapter/
+            crates/crm-customer-enrichment-application-adapter/
+            crates/crm-customer-enrichment-application-composition/
+            crates/crm-customer-enrichment-capability-adapter/
+            crates/crm-customer-enrichment-capability-composition/
+            crates/crm-customer-enrichment-query-adapter/
+            crates/crm-customer-enrichment-visibility/
             crates/crm-identity-resolution-capability-adapter/
             crates/crm-identity-resolution-capability-composition/
             crates/crm-identity-resolution-merge-composition/
@@ -271,6 +295,7 @@ jobs:
             modules/crm-consents/
             modules/crm-contact-points/
             modules/crm-customer-accounts/
+            modules/crm-customer-enrichment/
             modules/crm-identity-resolution/
             modules/crm-party-relationships/
             services/crm-api/
