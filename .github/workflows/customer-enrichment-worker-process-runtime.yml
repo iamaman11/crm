@@ -22,7 +22,9 @@ on:
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0016_customer_enrichment_worker.sql"
+      - "database/tests/0018_customer_enrichment_force_rls.sql"
       - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/verify_customer_enrichment_database_hardening.sh"
       - ".github/workflows/customer-enrichment-worker-process-runtime.yml"
   pull_request:
     paths:
@@ -45,7 +47,9 @@ on:
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0016_customer_enrichment_worker.sql"
+      - "database/tests/0018_customer_enrichment_force_rls.sql"
       - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/verify_customer_enrichment_database_hardening.sh"
       - ".github/workflows/customer-enrichment-worker-process-runtime.yml"
 
 permissions:
@@ -84,6 +88,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
+      - name: Verify Customer Enrichment FORCE RLS and rollback/reapply
+        shell: bash
+        run: bash scripts/verify_customer_enrichment_database_hardening.sh
       - name: Verify durable provider-conflict process scenarios
         shell: bash
         run: |
@@ -298,6 +305,8 @@ jobs:
             crates/crm-customer-enrichment-materialization-adapter/
             crates/crm-customer-enrichment-materialization-composition/
             database/tests/0016_customer_enrichment_worker.sql
+            database/tests/0018_customer_enrichment_force_rls.sql
             scripts/prepare_customer_enrichment_worker_process_database.sh
+            scripts/verify_customer_enrichment_database_hardening.sh
           if-no-files-found: error
           retention-days: 7
