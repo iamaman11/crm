@@ -1,67 +1,104 @@
 # Acceptance gates for `crm.customer-enrichment`
 
-Foundation state: **In progress — accepted production surface, incomplete Phase 8A.10 stage**. These gates block any completion or readiness claim.
+Phase 8A.10 state: **Gate review**. The packet is implemented in draft PR #137 but is not Complete until merge.
 
-Current accepted production inventory: **6 public mutations + 6 permission-aware queries + 2 activation-gated worker coordinates**; the remaining 3 published coordinates stay individually non-runtime and have no public HTTP/gRPC ingress. The complete public suggestion review surface, `customer_enrichment.party.display_name.apply@1.0.0` and `customer_enrichment.application.outcome.record@1.0.0` are production-registered. Internal provider, materialization and application processes are activation-gated and ordered at phases 240, 245 and 250. This inventory is authoritative only on a canonical Generated Sync state and a green exact-head workflow matrix.
+## Frozen production inventory
 
-- [x] Freeze immutable module identity, owned evidence records and retain-on-uninstall semantics.
-- [x] Freeze provider infrastructure, secret-handle, mapping, provenance, review and exact owner-capability boundaries.
-- [x] Publish compatible `crm.customer_enrichment.v1` Protobuf contracts, typed descriptor tests, generated manifest bindings and client descriptor hashes.
-- [x] Implement immutable provider-profile and mapping-version invariants with deterministic content-derived identities, bounded metadata and focused unit coverage.
-- [x] Implement deterministic request, response-receipt, provider-response-conflict, suggestion, review and application-attempt domain behavior with strict state transitions, replay conflict detection, freshness/expiry semantics, approval binding and target idempotency planning.
-- [x] Implement immutable provider-usage, billable-unit and quota-snapshot evidence with deterministic identities and bounded semantic validation.
-- [x] Add strict bounded canonical persisted-state conversion, schema descriptors, exact re-encoding and corruption rejection for all nine manifest-owned enrichment record types.
-- [x] Add pure-core Party snapshot, versioned policy/Consent, sanitized provider-dispatch and exact owner-application port contracts.
-- [x] Add activation-gated native `customer_enrichment.provider_profile.publish@1.0.0` production composition with exact wire/domain conversion and atomic immutable record/idempotency/outbox/audit evidence.
-- [x] Add activation-gated permission-aware `customer_enrichment.provider_profile.get@1.0.0` with tenant-scoped lookup, strict persisted-state validation, fail-closed resource visibility and `definition` field redaction.
-- [x] Add activation-gated native `customer_enrichment.mapping.publish@1.0.0` with atomic governed provider-profile `MustExist` locking, persisted identity and target-field support validation, immutable mapping persistence, idempotency, outbox and audit evidence.
-- [x] Add activation-gated permission-aware `customer_enrichment.mapping.get@1.0.0` with tenant-scoped lookup, strict mapping-state rehydration, live referenced-provider-profile visibility, not-found hiding and declarative `definition` field redaction.
-- [x] Add activation-gated native `customer_enrichment.request.create@1.0.0` with deterministic identity, canonical Personal persisted state, immutable mapping/profile validation, versioned purpose/legal-basis policy, governed Party and optional Consent reads, exact Party row/version locking, Party access-path relationship and atomic idempotency/outbox/audit evidence.
-- [x] Add activation-gated permission-aware `customer_enrichment.request.get@1.0.0` with strict Personal request-state rehydration, live target-Party and request-record visibility, not-found hiding and declarative field redaction.
-- [x] Add activation-gated native `customer_enrichment.request.cancel@1.0.0` with live Party pre-authorization, exact request-row locking, terminal-state rejection, optimistic version update and atomic Personal status-change/idempotency/audit evidence.
-- [x] Add activation-gated permission-aware `customer_enrichment.request.list@1.0.0` with exact Party/provider/status filters, tenant/actor/capability-version/filter/page-size-bound signed cursor, stable updated-at ordering, bounded visibility scanning, strict Personal rehydration, live Party/request visibility, hidden-Party empty-page semantics and declarative field redaction.
-- [x] Add non-runtime deterministic worker foundation for `customer_enrichment.request.dispatch@1.0.0` and `customer_enrichment.response.record@1.0.0`: exact status and retry-generation expectations, deterministic dispatch transitions, immutable sanitized receipt creation and exact request binding.
-- [x] Add a non-runtime atomic response batch planner: exact request lock, `expected_retry_generation`, request update, immutable receipt, ResponseReceived and optional BillableUnits evidence, idempotency, outbox and per-record audits. Integration tests prove metered and zero-meter batches, exact record/event/audit counts, stale generation rejection and invalid-digest rejection.
-- [x] Add non-runtime dispatch recovery foundation with exact adapter kind/version, exact registry boundary, generation-bound deterministic provider key, profile and Party version validation, durable Dispatched state before provider invocation, and recovery that rebuilds the same request. Focused tests cover recovery identity, retries, stale inputs and closed deadlines.
-- [x] Add immutable exact-coordinate provider registry and durable non-runtime worker composition with commit-before-I/O ordering, sanitized response validation, deterministic response identity and crash-safe replay.
-- [x] Add fresh-PostgreSQL Customer Enrichment worker process acceptance proving seed → dispatch → concrete registry HTTP transport → sanitized response and repeated replay with the same provider idempotency header/body lineage, one request, one receipt, three usage rows, seven events, seven audits, three exact idempotency rows and three transactions without duplicates.
-- [x] Prove live provider-process authorization through the same concrete HTTP transport: missing dispatch grant performs zero provider I/O and leaves the request Created; a dispatch-only grant commits Dispatched and performs exactly one HTTP call but persists no response receipt; adding the response grant recovers with the same provider idempotency lineage, creates exactly one receipt and keeps later replay duplicate-free.
-- [x] Add pure deterministic suggestion materialization over exact request/receipt/profile/mapping lineage with response-class rules, mapping count/confidence constraints, exact provider-policy evidence, protected-evidence linkage, deterministic suggestion ordering/deduplication and no partial request mutation.
-- [x] Add the atomic non-runtime `customer_enrichment.suggestions.materialize@1.0.0` planner and immutable-dependency PostgreSQL worker composition. Integration and fresh-PostgreSQL process evidence prove exact dependency reads, one atomic request update plus two immutable suggestions, and repeat replay without duplicate records, events, audits, idempotency rows or transactions.
-- [x] Add resource-specific suggestion-review policy evaluation and atomic non-runtime accept/reject composition with exact Party-version/value-digest binding, required approval evidence, immutable review decision, idempotency, outbox, audit and replay safety.
-- [x] Add reusable permission-aware suggestion-query foundations with strict suggestion/review rehydration, Party/profile/status filters, signed cursor, Party-first hiding, declarative record redaction and fresh-PostgreSQL proof that reads are side-effect free.
-- [x] Add deterministic non-runtime application evidence: persist a pending application attempt before external I/O, append one exact outcome afterwards, preserve strict record versions `1 → 2`, replay exact requests without duplicates, audit semantic duplicates as no-ops and reject conflicting outcomes fail-closed. Fresh-PostgreSQL process evidence covers the complete attempt/outcome lifecycle.
-- [x] Add the governed owner boundary for Party display-name application: invoke only `parties.party.update@1.0.0` through `CapabilityClient`, preserve deterministic target idempotency and business-transaction lineage, reuse ordinary Party authorization/validation/optimistic locking, validate the typed response and affected-resource evidence, and resolve version conflicts through governed `PartySnapshotPort` rather than error-text parsing.
-- [x] Add final non-runtime owner-application orchestration: commit the deterministic attempt before policy or owner I/O, reload current append-once evidence, evaluate exact `OwnerApplication` policy, invoke the governed Party owner only when allowed, and append the exact outcome with policy-decision causation lineage. Fresh-PostgreSQL recovery proves that a target-success/outcome-missing retry uses the same deterministic target idempotency key, while a completed attempt skips both policy and owner I/O.
-- [x] Freeze a machine-readable production-promotion contract for the exact runtime inventory and all remaining non-runtime coordinates. CI validates unique coordinates, deterministic stages and dependencies, route kind/exposure, module-owned activation gating, disable/uninstall, cross-tenant and one-exact-head 17-workflow requirements before any coordinate can be promoted.
-- [x] Promote activation-gated `customer_enrichment.suggestion.get@1.0.0` through the exact production composition with get-only adapter construction, Party-first hiding, suggestion/review visibility, field redaction and a fresh-PostgreSQL HTTP process proving success, live authorization denial, cross-tenant rejection, suspended/uninstalling shutdown and side-effect-free reads.
-- [x] Promote activation-gated `customer_enrichment.suggestion.list_by_party@1.0.0` through the production composition with exact Party/profile/status filtering, process-key-bound signed cursor validation, bounded visibility scanning, Party-first empty-page hiding, declarative field redaction and fresh-PostgreSQL HTTP evidence for success, tampered cursor, denial, cross-tenant, suspended/uninstalling and side-effect-free reads.
-- [x] Promote activation-gated `customer_enrichment.suggestion.reject@1.0.0` with governed live Party authorization, exact version/digest binding, atomic review evidence, replay safety and real-process denial/stale/disable/uninstall/cross-tenant proof.
-- [x] Promote activation-gated `customer_enrichment.suggestion.accept@1.0.0` with governed live Party authorization, mandatory approval evidence, exact version/digest binding, atomic review evidence, replay safety and real-process missing-approval/denial/stale/disable/uninstall/cross-tenant proof.
-- [x] Promote activation-gated worker-only `customer_enrichment.party.display_name.apply@1.0.0` with durable reviewed-event checkpointing, exact accepted-review and approval binding, live Party policy/visibility authorization, governed `parties.party.update@1.0.0`, pending-attempt recovery, append-once outcome, replay suppression, disable/uninstall and cross-tenant proof.
-- [x] Promote worker-only `customer_enrichment.application.outcome.record@1.0.0` with an exact live authorization grant before append-once persistence, policy/owner causation lineage, target-success/outcome-missing recovery, projection repair, completed-attempt replay suppression, cross-tenant isolation and no public HTTP/gRPC route.
-- [x] Register activation-gated event-driven provider, suggestion-materialization and owner-application processes in deterministic phases 240 → 245 → 250; disable/uninstall stops all three while provenance and the accepted public inventory remain unchanged.
-- [x] Govern materialization through exact `customer_enrichment.suggestions.materialize@1.0.0` live authorization and a finalized canonical evidence source; raw provider payload is never interpreted by the module process.
-- [x] Prove materialization recovery when response evidence arrives before the finalized candidate artifact: execution fails closed, the projection checkpoint does not advance, later artifact upload creates exactly one logical suggestion and replay creates no duplicate.
-- [x] Add an explicit bounded provider-adapter configuration and exact registry-assembly foundation for enabled/disabled state, exact transport coordinate, per-tenant secret environment bindings, fixed-window quota and circuit settings.
-- [x] Derive suggestion supersession deterministically from exact visible logical propositions only, so a hidden successor neither changes the disclosed lifecycle nor leaks its identity.
-- [x] Derive expiry at the exact `expires_at` boundary while retaining immutable suggestion and review evidence.
-- [x] Wire `CRM_CUSTOMER_ENRICHMENT_PROVIDER_ADAPTERS` into actual `crm-api` provider registry assembly; empty configuration remains empty, disabled coordinates remain disabled, and enabled configuration without the exact host transport fails assembly instead of being silently replaced by `ExactProviderAdapterRegistry::default()`.
-- [x] Add fail-closed transaction-scoped stale-evidence guards: review, application and materialization share a deterministic PostgreSQL advisory lock for the exact provider/mapping/Party/field coordinate; review and application reload all same-coordinate immutable suggestions under that lock and reject a superseded target before persistence, while materialization defers when an exact application attempt is pending. Fresh-PostgreSQL process evidence proves superseded review/application commands create no new application/review evidence.
-- [x] Prove pending-application/materialization recovery on the shared advisory-lock boundary: finalized candidate evidence plus a same-coordinate pending application returns exact retryable `CUSTOMER_ENRICHMENT_APPLICATION_IN_PROGRESS`, leaves the request at version 1, advances no projection checkpoint and commits no materialization evidence; an append-once terminal outcome permits a restarted materialization worker to create exactly one successor and advance the checkpoint once; another restart creates no duplicate suggestion, attempt, event, audit, idempotency row or business transaction.
-- [ ] Complete remaining Consent semantic scenarios plus final live authorization and declarative field visibility.
-- [x] Add the first concrete exact-coordinate registry HTTP transport outside the pure module core with endpoint allowlisting, bounded request/response bodies, deadlines, redirect rejection, sanitized status/error mapping and no credential/raw-payload leakage.
-- [x] Prove the first transport matrix across focused and fresh-PostgreSQL layers: disabled coordinates resolve neither transport nor secret, unknown exact coordinates fail closed without version fallback, missing secrets fail startup without value leakage, timeout/network failures are retryable and sanitized, malformed responses are mapping conflicts, quota blocks excess attempts, the circuit opens at its threshold, and successful replay preserves one provider idempotency lineage without duplicate receipt/event/audit/idempotency/transaction evidence.
-- [x] Add deterministic provider-response reconciliation before the response planner: the idempotency fingerprint binds exact tenant/actor/request/profile/mapping/adapter/generation/Party/replay/class/digest/provider-observed/billing/evidence/safe-code semantics while excluding only volatile provider correlation and retrieval time. Exact duplicates and semantic duplicates return the immutable first receipt; changed canonical class, digest, metering or evidence fails closed as `CUSTOMER_ENRICHMENT_CONFLICTING_PROVIDER_REPLAY` before persistence.
-- [x] Prove reconciliation through the concrete HTTP transport on fresh PostgreSQL: first response is `New`, unchanged replay is `ExactDuplicate`, changed retrieval metadata is `SemanticDuplicate`, and a later conflicting canonical response creates no second receipt, usage, event, audit, idempotency row or business transaction.
-- [x] Add pure durable provider-response conflict evidence: deterministic identity binds tenant, request, retry generation, immutable first receipt and conflicting semantic fingerprint; strict canonical persistence rejects corruption; operator resolution permits only retain-first or reject-request with exact actor, policy version, reason, approval and causation lineage; exact replay is a no-op and a different second decision fails closed.
-- [x] Add atomic provider-response conflict persistence under the existing non-runtime `customer_enrichment.response.record@1.0.0` scope: one confidential immutable conflict record, one typed internal outbox event, one audit, one exact idempotency claim and one business transaction; fresh-PostgreSQL replay preserves version 1 and creates no duplicate evidence while public route inventory remains unchanged.
-- [x] Integrate persisted provider-response conflicts into the event-driven provider process: atomically link each conflict to its exact request, hold the original created-event checkpoint with retryable `CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_UNRESOLVED`, and detect the persisted unresolved conflict before source or provider I/O on restart; fresh-PostgreSQL evidence proves no duplicate conflict, relationship, event, audit, idempotency row, transaction or checkpoint advancement.
-- [ ] Add additional concrete provider transports as separately owned infrastructure crates when new exact provider coordinates are approved.
-- [ ] Add tenant-scoped PostgreSQL persistence with FORCE RLS, deterministic uniqueness, atomic idempotency/outbox/audit evidence and migration rollback/reapply proof for remaining records.
-- [ ] Complete remaining reconciliation/materialization conflict scenarios, including live operator authorization, deterministic checkpoint resumption and materialization gating after an approved canonical choice.
-- [ ] Replace `tests/acceptance.rs` with real production-path evidence.
-- [ ] Complete `production/CONTRIBUTION.md` through separately owned adapter/composition crates with exact route parity.
-- [ ] Add remaining fresh-PostgreSQL real `crm-api` success, denial, stale, failure, disable/uninstall and cross-tenant process scenarios.
-- [ ] Synchronize `MODULE_CATALOG.md`, roadmap/status and issue #125 after the final code state stabilizes.
-- [ ] Pass all applicable exact-head Contract, Governance, Rust, Database, Application Runtime, Product Plane and enrichment process workflows on one unchanged final SHA.
+The authoritative inventory in `contracts/customer-enrichment-production-promotion.json` is exactly:
+
+- **6 public mutations**;
+- **6 permission-aware queries**;
+- **2 activation-gated worker coordinates**;
+- **3 provider/materialization coordinates** classified worker-only with no public HTTP/gRPC ingress.
+
+Any inventory change requires a separately reviewed promotion contract and complete parity/process evidence.
+
+## Ownership and architecture
+
+- [x] Immutable module identity and retain-on-uninstall provenance are frozen.
+- [x] The module owns enrichment requests and immutable provider/mapping, response, conflict, suggestion, review, usage and application evidence.
+- [x] Authoritative Party, Account, Contact Point, Consent, Identity Resolution and Data Quality values remain with their owner modules.
+- [x] Accepted Party display-name changes invoke only `parties.party.update@1.0.0` through the governed capability boundary.
+- [x] The pure module core contains no PostgreSQL, arbitrary HTTP, provider SDK or secret-store dependency.
+- [x] Concrete provider transport, tenant secret resolution and transaction-scoped reference guards are host-owned infrastructure.
+- [x] Production composition is module-owned and contains no central business-route switch.
+
+## Domain, persistence and contracts
+
+- [x] Provider-profile and mapping versions are immutable, bounded and content-addressed.
+- [x] Requests, response receipts/conflicts, suggestions, reviews, usage and application attempts have deterministic identities and strict canonical persistence.
+- [x] All nine manifest-owned record types reject corrupt or non-canonical state.
+- [x] Public Protobuf contracts, manifest bindings and descriptor hashes are synchronized.
+- [x] Mutations persist atomic state, idempotency, outbox, audit and business-transaction evidence.
+- [x] Customer Enrichment tenant tables use ENABLE + FORCE RLS with cross-tenant/no-context denial and rollback/reapply proof.
+
+## Public mutation/query surface
+
+- [x] `customer_enrichment.provider_profile.publish/get@1.0.0`.
+- [x] `customer_enrichment.mapping.publish/get@1.0.0`.
+- [x] `customer_enrichment.request.create/cancel/get/list@1.0.0`.
+- [x] `customer_enrichment.suggestion.get/list_by_party/accept/reject@1.0.0`.
+- [x] `customer_enrichment.party.display_name.apply@1.0.0` and `customer_enrichment.application.outcome.record@1.0.0` remain activation-gated workers with no public route.
+- [x] Query visibility is module-owned, permission-aware and field-redaction capable.
+- [x] Hidden Party/provider resources are concealed rather than disclosed through authorization differences.
+
+## Provider, reconciliation and recovery
+
+- [x] Exact adapter kind/version registry and explicit enabled/disabled configuration.
+- [x] First concrete registry HTTP transport lives outside the pure module core.
+- [x] Endpoint allowlisting, deadlines, bounded bodies, redirect rejection and sanitized network/status/response failures.
+- [x] Tenant-bound secret handles without credential value leakage.
+- [x] Quota and circuit behavior with fail-closed unknown coordinates and no version fallback.
+- [x] Commit-before-provider-I/O and crash-safe replay with the same provider idempotency lineage.
+- [x] Independent live dispatch and response authorization.
+- [x] Deterministic `New`, `ExactDuplicate` and `SemanticDuplicate` reconciliation.
+- [x] Changed canonical response class, digest, metering or evidence fails closed.
+- [x] Immutable provider-response conflict evidence and exact replay without duplicates.
+- [x] Retain-first and terminal-reject operator resolution evidence.
+- [x] Unresolved conflicts stop checkpoint advancement and repeat provider I/O.
+
+## Materialization, review and owner application
+
+- [x] Deterministic materialization over exact request/receipt/profile/mapping and finalized evidence lineage.
+- [x] Raw provider payload is never interpreted by the module process.
+- [x] Missing/malformed/future evidence stops execution without checkpoint advancement.
+- [x] Suggestion supersession and expiry do not leak hidden successors.
+- [x] Review uses exact Party version/value digest, approval evidence and immutable decision records.
+- [x] Owner application commits a pending attempt before owner I/O and appends one exact outcome.
+- [x] Target-success/outcome-missing recovery reuses the same target idempotency lineage.
+- [x] Provider, materialization and application workers are activation-gated in deterministic phases 240 → 245 → 250.
+
+## Atomic reference guards
+
+- [x] Mapping publication uses the mapping as its primary aggregate and locks/revalidates the exact immutable provider-profile row inside the same PostgreSQL transaction.
+- [x] The provider-profile guard verifies persisted canonical identity and target-field support before mapping persistence.
+- [x] Request creation uses the request as its primary aggregate and locks the exact Party row/version inside the same PostgreSQL transaction.
+- [x] Reference guards cannot commit, perform external I/O or mutate referenced owner records.
+
+## Real `crm-api` process acceptance
+
+The permanent Application Runtime workflow starts the real `crm-api` binary on a fresh PostgreSQL database and uses actual HTTP/gRPC endpoints.
+
+- [x] Unauthenticated HTTP returns bounded `401 {"error":"request_failed"}`.
+- [x] Party creation, profile publication and mapping publication succeed through real gRPC ingress.
+- [x] A legitimate-interest request commits one governed enrichment-request record through the exact Party guard.
+- [x] Deployment field ceiling redacts confidential profile definition.
+- [x] Cross-tenant profile lookup returns `CUSTOMER_ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND`.
+- [x] Tenant outside token grant returns `TENANT_FORBIDDEN`.
+- [x] Missing Consent evidence returns `CUSTOMER_ENRICHMENT_REQUEST_CONSENT_DENIED`.
+- [x] Live suspension returns `MODULE_NOT_ACTIVE` before semantic/persistence work.
+- [x] Bootstrap-disabled live permission returns `CAPABILITY_PERMISSION_DENIED`.
+- [x] gRPC returns typed safe code/message and `x-error-retryable=false`; HTTP hides governed details.
+- [x] Credential, provider payload and internal diagnostic markers never reach the public surface.
+- [x] Request/event/audit/idempotency/business-transaction counters remain unchanged after every pre-persistence denial.
+
+## Governance and merge gate
+
+- [x] `tests/acceptance.rs` is a non-ignored production contract that verifies the exact 6+6+2 inventory, 17-workflow invariant and permanent real-process evidence.
+- [x] `production/CONTRIBUTION.md` matches production composition, visibility, worker and lifecycle boundaries.
+- [x] Module README, catalog entry, roadmap, phase plan and project status are synchronized to Gate review.
+- [x] Additional provider transports are explicitly future separately owned infrastructure work and are not hidden in this packet.
+- [ ] Record the final synchronized user-authored SHA after Generated Sync is stable and all 17 permanent workflows pass unchanged.
+- [ ] Update PR #137 and issue #125 with that exact SHA, complete review and merge.
+
+The last two items are process-state gates and cannot be checked into source without creating a new SHA. Their authoritative completion evidence belongs in the PR and issue immediately before merge.
