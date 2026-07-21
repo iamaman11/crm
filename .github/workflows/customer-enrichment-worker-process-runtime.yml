@@ -113,6 +113,17 @@ jobs:
             --test postgres_customer_enrichment_provider_http_process \
             process::exact_host_http_transport_records_one_canonical_process_outcome \
             -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+      - name: Prepare fresh concrete HTTP provider-materialization database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify concrete HTTP provider through governed materialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p crm-application-runtime \
+            --test postgres_customer_enrichment_provider_materialization_http_process \
+            process::exact_host_http_response_materializes_one_governed_suggestion \
+            -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
       - name: Prepare fresh Customer Enrichment provider-worker database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify durable Customer Enrichment provider worker
@@ -218,6 +229,7 @@ jobs:
             database/customer-enrichment-worker-process-runtime-state.log
             database/customer-enrichment-worker-process-runtime-postgres.log
             crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_http_process.rs
+            crates/crm-application-runtime/tests/postgres_customer_enrichment_provider_materialization_http_process.rs
             crates/crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs
             crates/crm-customer-enrichment-provider-process-composition/
             crates/crm-customer-enrichment-materialization-adapter/
