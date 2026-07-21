@@ -52,7 +52,10 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                 ),
             },
         )
-        self.assertEqual(empty_modules, {"crm.sales-activities-link"})
+        self.assertEqual(
+            empty_modules,
+            {"crm.customer-privacy", "crm.sales-activities-link"},
+        )
         self.assertIn(("crm.search", "search.global.query", "1.0.0"), platform)
         for capability_id in {
             "customer_enrichment.provider_profile.publish",
