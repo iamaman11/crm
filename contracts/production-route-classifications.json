@@ -44,6 +44,20 @@
       "reason": "Platform permission-aware global search route outside business module manifests."
     }
   ],
+  "worker_runtime_routes": [
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.party.display_name.apply",
+      "version": "1.0.0",
+      "reason": "Activation-gated Customer Enrichment worker consumes accepted review evidence and invokes the exact governed Party owner capability without exposing a public ingress route."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.application.outcome.record",
+      "version": "1.0.0",
+      "reason": "The activation-gated application worker requires an exact live authorization grant before append-once outcome persistence and proves target-success/outcome-missing recovery without exposing a public ingress route."
+    }
+  ],
   "non_runtime_contract_routes": [
     {
       "owner_module_id": "crm.customer-data-operations",
@@ -56,6 +70,24 @@
       "id": "customer_data.import.party.rows.validate",
       "version": "1.0.0",
       "reason": "Legacy client-preparsed row-validation contract retained for compatibility; production validates rows only through the governed source-artifact route."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.request.dispatch",
+      "version": "1.0.0",
+      "reason": "Deterministic dispatch planning, exact adapter registry, durable worker composition and fresh-PostgreSQL replay proof exist non-runtime; activation-gated production worker registration and the remaining provider failure matrix are not complete."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.response.record",
+      "version": "1.0.0",
+      "reason": "Atomic response reconciliation, immutable receipt/usage evidence and fresh-PostgreSQL replay proof exist non-runtime; activation-gated production worker registration and remaining conflicting/failure scenarios are not complete."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.suggestions.materialize",
+      "version": "1.0.0",
+      "reason": "Deterministic materialization planning, immutable dependency validation and fresh-PostgreSQL replay proof exist non-runtime; activation-gated production worker registration and remaining recovery scenarios are not complete."
     }
   ],
   "empty_runtime_modules": [

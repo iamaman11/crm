@@ -1,0 +1,18 @@
+[package]
+name = "crm-customer-enrichment-registry-http-transport"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
+crm-customer-enrichment-provider-registry = { path = "../crm-customer-enrichment-provider-registry" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }

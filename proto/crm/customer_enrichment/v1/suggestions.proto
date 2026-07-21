@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/customer_enrichment/v1/enrichment_types.proto";
+import "crm/customer_enrichment/v1/reference.proto";
+
+message Suggestion {
+  SuggestionRef suggestion_ref = 1;
+  EnrichmentRequestRef enrichment_request_ref = 2;
+  ProviderResponseReceiptRef provider_response_receipt_ref = 3;
+  ProviderProfileVersionRef provider_profile_version_ref = 4;
+  MappingVersionRef mapping_version_ref = 5;
+  EnrichmentTargetSnapshot target = 6;
+  string proposed_value = 7;
+  bytes proposed_value_digest = 8;
+  optional int64 observed_at_unix_ms = 9;
+  int64 retrieved_at_unix_ms = 10;
+  int64 effective_at_unix_ms = 11;
+  int64 fresh_until_unix_ms = 12;
+  int64 expires_at_unix_ms = 13;
+  optional uint32 confidence_basis_points = 14;
+  ProviderPolicyEvidence policy_evidence = 15;
+  repeated string evidence_references = 16;
+  SuggestionLifecycleStatus lifecycle_status = 17;
+  SuggestionRef superseded_by_suggestion_ref = 18;
+}
+
+message ReviewDecision {
+  ReviewDecisionRef review_decision_ref = 1;
+  SuggestionRef suggestion_ref = 2;
+  int64 target_party_resource_version = 3;
+  bytes proposed_value_digest = 4;
+  string reviewed_by_actor_id = 5;
+  SuggestionReviewDecisionKind kind = 6;
+  string policy_version = 7;
+  string safe_reason_code = 8;
+  optional string approval_evidence_reference = 9;
+  int64 decided_at_unix_ms = 10;
+  optional int64 expires_at_unix_ms = 11;
+}
+
+message ApplicationSucceeded {
+  string business_transaction_id = 1;
+  int64 resulting_party_resource_version = 2;
+}
+
+message ApplicationRetryableFailure {
+  string safe_code = 1;
+}
+
+message ApplicationTerminalFailure {
+  string safe_code = 1;
+}
+
+message ApplicationStaleTarget {
+  int64 actual_party_resource_version = 1;
+}
+
+message ApplicationAuthorizationDenied {}
+
+message ApplicationPolicyDenied {}
+
+message ApplicationOutcome {
+  oneof result {
+    ApplicationSucceeded succeeded = 1;
+    ApplicationRetryableFailure retryable_failure = 2;
+    ApplicationTerminalFailure terminal_failure = 3;
+    ApplicationStaleTarget stale_target = 4;
+    ApplicationAuthorizationDenied authorization_denied = 5;
+    ApplicationPolicyDenied policy_denied = 6;
+  }
+}
+
+message RecordedApplicationOutcome {
+  ApplicationOutcome outcome = 1;
+  int64 recorded_at_unix_ms = 2;
+}
+
+message ApplicationAttempt {
+  ApplicationAttemptRef application_attempt_ref = 1;
+  SuggestionRef suggestion_ref = 2;
+  ReviewDecisionRef review_decision_ref = 3;
+  EnrichmentTargetSnapshot target = 4;
+  bytes proposed_value_digest = 5;
+  uint32 application_generation = 6;
+  string owner_capability_id = 7;
+  string owner_capability_version = 8;
+  string target_idempotency_key = 9;
+  int64 planned_at_unix_ms = 10;
+  RecordedApplicationOutcome recorded_outcome = 11;
+}
+
+message GetSuggestionRequest {
+  SuggestionRef suggestion_ref = 1;
+}
+
+message GetSuggestionResponse {
+  Suggestion suggestion = 1;
+  ReviewDecision latest_review_decision = 2;
+  ApplicationAttempt latest_application_attempt = 3;
+}
+
+message ListSuggestionsByPartyRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  optional SuggestionLifecycleStatus status = 2;
+  ProviderProfileVersionRef provider_profile_version_ref = 3;
+  int32 page_size = 4;
+  string cursor = 5;
+}
+
+message ListSuggestionsByPartyResponse {
+  repeated Suggestion suggestions = 1;
+  string next_cursor = 2;
+}
+
+message AcceptSuggestionRequest {
+  SuggestionRef suggestion_ref = 1;
+  int64 expected_party_resource_version = 2;
+  bytes expected_proposed_value_digest = 3;
+  string policy_version = 4;
+  string safe_reason_code = 5;
+  optional string approval_evidence_reference = 6;
+  optional int64 review_expires_at_unix_ms = 7;
+}
+
+message AcceptSuggestionResponse {
+  ReviewDecision review_decision = 1;
+  Suggestion suggestion = 2;
+}
+
+message RejectSuggestionRequest {
+  SuggestionRef suggestion_ref = 1;
+  int64 expected_party_resource_version = 2;
+  bytes expected_proposed_value_digest = 3;
+  string policy_version = 4;
+  string safe_reason_code = 5;
+}
+
+message RejectSuggestionResponse {
+  ReviewDecision review_decision = 1;
+  Suggestion suggestion = 2;
+}
+
+message ApplyPartyDisplayNameSuggestionRequest {
+  SuggestionRef suggestion_ref = 1;
+  ReviewDecisionRef review_decision_ref = 2;
+  int64 expected_party_resource_version = 3;
+  uint32 application_generation = 4;
+}
+
+message ApplyPartyDisplayNameSuggestionResponse {
+  ApplicationAttempt application_attempt = 1;
+}
+
+message SuggestionMaterializedEvent {
+  Suggestion suggestion = 1;
+}
+
+message SuggestionReviewedEvent {
+  Suggestion suggestion = 1;
+  ReviewDecision review_decision = 2;
+}
+
+message SuggestionApplicationRecordedEvent {
+  Suggestion suggestion = 1;
+  ApplicationAttempt application_attempt = 2;
+}

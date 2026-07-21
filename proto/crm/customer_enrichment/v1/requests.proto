@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/customer_enrichment/v1/enrichment_types.proto";
+import "crm/customer_enrichment/v1/reference.proto";
+
+message EnrichmentRequest {
+  EnrichmentRequestRef enrichment_request_ref = 1;
+  string requested_by_actor_id = 2;
+  EnrichmentTargetSnapshot target = 3;
+  ProviderProfileVersionRef provider_profile_version_ref = 4;
+  MappingVersionRef mapping_version_ref = 5;
+  repeated EnrichmentTargetField requested_fields = 6;
+  EnrichmentRequestPolicyEvidence policy_evidence = 7;
+  int64 created_at_unix_ms = 8;
+  int64 deadline_at_unix_ms = 9;
+  int64 expires_at_unix_ms = 10;
+  EnrichmentRequestStatus status = 11;
+  uint32 retry_generation = 12;
+  ProviderResponseReceiptRef provider_response_receipt_ref = 13;
+  optional string last_safe_failure_code = 14;
+  int64 updated_at_unix_ms = 15;
+}
+
+message CreateEnrichmentRequestRequest {
+  EnrichmentTargetSnapshot target = 1;
+  ProviderProfileVersionRef provider_profile_version_ref = 2;
+  MappingVersionRef mapping_version_ref = 3;
+  repeated EnrichmentTargetField requested_fields = 4;
+  EnrichmentRequestPolicyEvidence policy_evidence = 5;
+  int64 deadline_at_unix_ms = 6;
+  int64 expires_at_unix_ms = 7;
+}
+
+message CreateEnrichmentRequestResponse {
+  EnrichmentRequest enrichment_request = 1;
+}
+
+message CancelEnrichmentRequestRequest {
+  EnrichmentRequestRef enrichment_request_ref = 1;
+}
+
+message CancelEnrichmentRequestResponse {
+  EnrichmentRequest enrichment_request = 1;
+}
+
+message GetEnrichmentRequestRequest {
+  EnrichmentRequestRef enrichment_request_ref = 1;
+}
+
+message GetEnrichmentRequestResponse {
+  EnrichmentRequest enrichment_request = 1;
+}
+
+message ListEnrichmentRequestsRequest {
+  crm.customer.v1.PartyRef party_ref = 1;
+  ProviderProfileVersionRef provider_profile_version_ref = 2;
+  optional EnrichmentRequestStatus status = 3;
+  int32 page_size = 4;
+  string cursor = 5;
+}
+
+message ListEnrichmentRequestsResponse {
+  repeated EnrichmentRequest enrichment_requests = 1;
+  string next_cursor = 2;
+}
+
+message EnrichmentRequestCreatedEvent {
+  EnrichmentRequest enrichment_request = 1;
+}
+
+message EnrichmentRequestStatusChangedEvent {
+  EnrichmentRequest enrichment_request = 1;
+}

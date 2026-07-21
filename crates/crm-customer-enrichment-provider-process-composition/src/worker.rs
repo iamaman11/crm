@@ -1,0 +1,646 @@
+use crate::{
+    PostgresProviderResponseConflictRejectExecutor, PostgresProviderResponseConflictStore,
+    ProviderDispatchWorkItemInput, ProviderResponseConflictPersistenceLineage,
+    ProviderResponseConflictRejectionLineage, build_provider_dispatch_work_item,
+};
+use crm_application_composition::TenantBackgroundWorker;
+use crm_capability_plan_support as support;
+use crm_core_data::PostgresDataStore;
+use crm_core_events::{
+    EventHistoryRequest, ProjectionDocumentWrite, ProjectionEventApplication, ProjectionFailure,
+    ProjectionStore,
+};
+use crm_customer_enrichment::{
+    ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequest, PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
+    PartySnapshot, ProviderProcessCanonicalOutcome, ProviderProfileVersion,
+    ProviderResponseConflictDecision,
+};
+use crm_customer_enrichment_capability_adapter::{
+    ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA, ENRICHMENT_REQUEST_CREATED_EVENT_TYPE, MODULE_ID,
+};
+use crm_customer_enrichment_worker_composition::{
+    CustomerEnrichmentProviderWorker, ProviderDispatchExecution, ProviderDispatchWorkItem,
+    ProviderDispatchWorkerResult,
+};
+use crm_module_sdk::{
+    ActorId, CausationId, DataClass, EventDelivery, EventType, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, SdkError, TenantId,
+};
+use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
+use prost::Message;
+use std::fmt;
+use std::sync::Arc;
+
+pub const PROVIDER_PROCESS_WORKER_ID: &str = "customer-enrichment-provider-process";
+pub use crm_customer_enrichment::PROVIDER_PROCESS_PROJECTION_ID;
+pub const PROVIDER_PROCESS_WORKER_ACTOR_ID: &str = "customer-enrichment-provider-worker";
+const DEFAULT_PAGE_SIZE: u32 = 100;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderDispatchSourceSnapshot {
+    pub request: EnrichmentRequest,
+    pub provider_profile: ProviderProfileVersion,
+    pub party_snapshot: PartySnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderDispatchSourceDisposition {
+    Ready(Box<ProviderDispatchSourceSnapshot>),
+    Skip,
+}
+
+pub trait ProviderDispatchSourcePort: Send + Sync {
+    fn load<'a>(
+        &'a self,
+        tenant_id: TenantId,
+        request_id: RecordId,
+        worker_actor_id: ActorId,
+        now_unix_ms: u64,
+    ) -> PortFuture<'a, Result<ProviderDispatchSourceDisposition, SdkError>>;
+}
+
+pub trait ProviderDispatchExecutorPort: Send + Sync {
+    fn execute<'a>(
+        &'a self,
+        work_item: ProviderDispatchWorkItem,
+    ) -> PortFuture<'a, Result<ProviderDispatchExecution, SdkError>>;
+}
+
+impl ProviderDispatchExecutorPort for CustomerEnrichmentProviderWorker {
+    fn execute<'a>(
+        &'a self,
+        work_item: ProviderDispatchWorkItem,
+    ) -> PortFuture<'a, Result<ProviderDispatchExecution, SdkError>> {
+        Box::pin(async move {
+            CustomerEnrichmentProviderWorker::execute_reconciled(self, work_item).await
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ProviderProcessCycle {
+    pub created_events: u32,
+    pub dispatched: u32,
+    pub skipped: u32,
+    pub dispatch_replays: u32,
+    pub response_replays: u32,
+    pub retained_first_receipts: u32,
+    pub rejected_requests: u32,
+    pub rejection_replays: u32,
+}
+
+#[derive(Clone)]
+pub struct CustomerEnrichmentProviderProcessWorker {
+    store: PostgresDataStore,
+    source: Arc<dyn ProviderDispatchSourcePort>,
+    executor: Arc<dyn ProviderDispatchExecutorPort>,
+    conflict_store: PostgresProviderResponseConflictStore,
+    reject_executor: PostgresProviderResponseConflictRejectExecutor,
+    actor_id: ActorId,
+    page_size: u32,
+}
+
+impl fmt::Debug for CustomerEnrichmentProviderProcessWorker {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CustomerEnrichmentProviderProcessWorker")
+            .field("store", &self.store)
+            .field("source", &"dyn ProviderDispatchSourcePort")
+            .field("executor", &"dyn ProviderDispatchExecutorPort")
+            .field("conflict_store", &self.conflict_store)
+            .field("reject_executor", &self.reject_executor)
+            .field("actor_id", &self.actor_id)
+            .field("page_size", &self.page_size)
+            .finish()
+    }
+}
+
+impl CustomerEnrichmentProviderProcessWorker {
+    pub fn new(
+        store: PostgresDataStore,
+        source: Arc<dyn ProviderDispatchSourcePort>,
+        executor: Arc<dyn ProviderDispatchExecutorPort>,
+        actor_id: ActorId,
+    ) -> Result<Self, SdkError> {
+        Self::with_page_size(store, source, executor, actor_id, DEFAULT_PAGE_SIZE)
+    }
+
+    pub fn with_page_size(
+        store: PostgresDataStore,
+        source: Arc<dyn ProviderDispatchSourcePort>,
+        executor: Arc<dyn ProviderDispatchExecutorPort>,
+        actor_id: ActorId,
+        page_size: u32,
+    ) -> Result<Self, SdkError> {
+        if page_size == 0 || page_size > crm_core_events::MAX_EVENT_HISTORY_PAGE_SIZE {
+            return Err(worker_configuration_invalid(
+                "provider-process page size is outside the governed limit",
+            ));
+        }
+        Ok(Self {
+            conflict_store: PostgresProviderResponseConflictStore::new(store.clone()),
+            reject_executor: PostgresProviderResponseConflictRejectExecutor::new(store.clone()),
+            store,
+            source,
+            executor,
+            actor_id,
+            page_size,
+        })
+    }
+
+    pub fn run_cycle<'a>(
+        &'a self,
+        tenant_id: TenantId,
+        now_unix_nanos: i64,
+    ) -> PortFuture<'a, Result<ProviderProcessCycle, SdkError>> {
+        Box::pin(async move {
+            let now_unix_ms = current_time_ms(now_unix_nanos)?;
+            let module_id = module_id()?;
+            let event_type = event_type()?;
+            let checkpoint = ProjectionStore::projection_checkpoint(
+                &self.store,
+                tenant_id.clone(),
+                PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
+            )
+            .await?;
+            let mut after = checkpoint.map(|value| value.cursor);
+            let mut cycle = ProviderProcessCycle::default();
+
+            loop {
+                let page = ProjectionStore::list_event_history(
+                    &self.store,
+                    EventHistoryRequest {
+                        tenant_id: tenant_id.clone(),
+                        consumer_module_id: module_id.clone(),
+                        event_types: vec![event_type.clone()],
+                        after: after.clone(),
+                        page_size: self.page_size,
+                    },
+                )
+                .await?;
+
+                if page.deliveries.is_empty() {
+                    return Ok(cycle);
+                }
+                let next_cursor = page.next_cursor.clone();
+                for delivery in page.deliveries {
+                    cycle.created_events = cycle.created_events.saturating_add(1);
+                    let processed = match self
+                        .process_delivery(&tenant_id, now_unix_ms, &delivery)
+                        .await
+                    {
+                        Ok(processed) => processed,
+                        Err(error) => {
+                            if !error.retryable {
+                                let _ = ProjectionStore::mark_projection_failed(
+                                    &self.store,
+                                    ProjectionFailure {
+                                        tenant_id: tenant_id.clone(),
+                                        projection_id: PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
+                                        event_id: delivery.event_id.clone(),
+                                        occurred_at_unix_nanos: delivery.occurred_at_unix_nanos,
+                                        failure_code: error.code.clone(),
+                                    },
+                                )
+                                .await;
+                            }
+                            return Err(error);
+                        }
+                    };
+                    match processed.disposition {
+                        DeliveryDisposition::Executed(result) => {
+                            cycle.dispatched = cycle.dispatched.saturating_add(1);
+                            if result.dispatch_replayed {
+                                cycle.dispatch_replays = cycle.dispatch_replays.saturating_add(1);
+                            }
+                            if result.response_replayed {
+                                cycle.response_replays = cycle.response_replays.saturating_add(1);
+                            }
+                        }
+                        DeliveryDisposition::Skipped => {
+                            cycle.skipped = cycle.skipped.saturating_add(1);
+                        }
+                        DeliveryDisposition::RetainedFirstReceipt => {
+                            cycle.retained_first_receipts =
+                                cycle.retained_first_receipts.saturating_add(1);
+                        }
+                        DeliveryDisposition::RejectedRequest { replayed } => {
+                            cycle.rejected_requests = cycle.rejected_requests.saturating_add(1);
+                            if replayed {
+                                cycle.rejection_replays = cycle.rejection_replays.saturating_add(1);
+                            }
+                        }
+                    }
+                    ProjectionStore::apply_projection_event(
+                        &self.store,
+                        ProjectionEventApplication {
+                            projection_id: PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
+                            delivery,
+                            writes: vec![processed.outcome_write],
+                        },
+                    )
+                    .await?;
+                }
+
+                let Some(next) = next_cursor else {
+                    return Ok(cycle);
+                };
+                after = Some(next);
+            }
+        })
+    }
+
+    async fn process_delivery(
+        &self,
+        tenant_id: &TenantId,
+        now_unix_ms: u64,
+        delivery: &EventDelivery,
+    ) -> Result<ProcessedDelivery, SdkError> {
+        let event = decode_created_event(delivery)?;
+        let created = event.enrichment_request.ok_or_else(created_event_invalid)?;
+        let request_ref = created
+            .enrichment_request_ref
+            .as_ref()
+            .ok_or_else(created_event_invalid)?;
+        if tenant_id != &delivery.tenant_id
+            || delivery.aggregate.record_type.as_str() != ENRICHMENT_REQUEST_RECORD_TYPE
+            || delivery.aggregate.record_id.as_str() != request_ref.enrichment_request_id
+            || wire::EnrichmentRequestStatus::try_from(created.status).ok()
+                != Some(wire::EnrichmentRequestStatus::Created)
+        {
+            return Err(created_event_invalid());
+        }
+        let request_id = RecordId::try_new(request_ref.enrichment_request_id.clone())
+            .map_err(worker_identifier_invalid)?;
+        if let Some(conflict) = self
+            .conflict_store
+            .recovery_conflict_for_request(tenant_id.clone(), request_id.clone())
+            .await?
+        {
+            let Some(resolution) = conflict.resolution() else {
+                return Err(unresolved_provider_conflict(
+                    conflict.conflict_id().as_str(),
+                ));
+            };
+            return match resolution.decision() {
+                ProviderResponseConflictDecision::RetainFirstReceipt => processed_delivery(
+                    DeliveryDisposition::RetainedFirstReceipt,
+                    ProviderProcessCanonicalOutcome::retain_first_receipt(
+                        conflict.request_id().as_str().to_owned(),
+                        conflict.retry_generation(),
+                        conflict.first_receipt_id().as_str().to_owned(),
+                        conflict.conflict_id().as_str().to_owned(),
+                        delivery.event_id.as_str().to_owned(),
+                    )?,
+                    delivery,
+                ),
+                ProviderResponseConflictDecision::RejectRequest => {
+                    let result = self
+                        .reject_executor
+                        .execute(
+                            &conflict,
+                            ProviderResponseConflictRejectionLineage {
+                                actor_id: self.actor_id.clone(),
+                                correlation_id: delivery.correlation_id.clone(),
+                                trace_id: delivery.trace_id.clone(),
+                            },
+                        )
+                        .await?;
+                    processed_delivery(
+                        DeliveryDisposition::RejectedRequest {
+                            replayed: result.replayed,
+                        },
+                        ProviderProcessCanonicalOutcome::reject_request(
+                            conflict.request_id().as_str().to_owned(),
+                            conflict.retry_generation(),
+                            conflict.first_receipt_id().as_str().to_owned(),
+                            conflict.conflict_id().as_str().to_owned(),
+                            delivery.event_id.as_str().to_owned(),
+                        )?,
+                        delivery,
+                    )
+                }
+            };
+        }
+        let source = self
+            .source
+            .load(
+                tenant_id.clone(),
+                request_id.clone(),
+                self.actor_id.clone(),
+                now_unix_ms,
+            )
+            .await?;
+        let ProviderDispatchSourceDisposition::Ready(source) = source else {
+            return processed_delivery(
+                DeliveryDisposition::Skipped,
+                ProviderProcessCanonicalOutcome::skipped(
+                    request_ref.enrichment_request_id.clone(),
+                    created.retry_generation,
+                    delivery.event_id.as_str().to_owned(),
+                )?,
+                delivery,
+            );
+        };
+        let party_resource_version = u64::try_from(source.party_snapshot.resource_version)
+            .map_err(|_| source_snapshot_invalid())?;
+        let party_observed_at_unix_ms = u64::try_from(source.party_snapshot.observed_at_unix_ms)
+            .map_err(|_| source_snapshot_invalid())?;
+        if source.request.request_id().as_str() != request_id.as_str()
+            || source.request.tenant_id() != tenant_id
+            || source.provider_profile.version_id() != source.request.provider_profile_version_id()
+            || source.party_snapshot.party_id.as_str() != source.request.target().resource_id
+            || party_resource_version != source.request.target().resource_version
+            || party_observed_at_unix_ms > now_unix_ms
+        {
+            return Err(source_snapshot_invalid());
+        }
+        let work_item = build_provider_dispatch_work_item(ProviderDispatchWorkItemInput {
+            request: &source.request,
+            provider_profile: &source.provider_profile,
+            party_snapshot: &source.party_snapshot,
+            worker_actor_id: &self.actor_id,
+            now_unix_ms,
+        })?;
+        match self.executor.execute(work_item).await? {
+            ProviderDispatchExecution::Recorded(result) => {
+                let outcome = recorded_outcome(result.as_ref(), delivery)?;
+                processed_delivery(DeliveryDisposition::Executed(result), outcome, delivery)
+            }
+            ProviderDispatchExecution::Conflicting(draft) => {
+                let persisted = self
+                    .conflict_store
+                    .record(
+                        draft,
+                        ProviderResponseConflictPersistenceLineage {
+                            actor_id: self.actor_id.clone(),
+                            correlation_id: delivery.correlation_id.clone(),
+                            causation_id: CausationId::try_new(
+                                delivery.event_id.as_str().to_owned(),
+                            )
+                            .map_err(worker_identifier_invalid)?,
+                            trace_id: delivery.trace_id.clone(),
+                        },
+                    )
+                    .await?;
+                Err(unresolved_provider_conflict(
+                    persisted.conflict.conflict_id().as_str(),
+                ))
+            }
+        }
+    }
+}
+
+impl TenantBackgroundWorker for CustomerEnrichmentProviderProcessWorker {
+    fn run_tenant_cycle<'a>(
+        &'a self,
+        tenant_id: TenantId,
+        now_unix_nanos: i64,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            self.run_cycle(tenant_id, now_unix_nanos).await?;
+            Ok(())
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ProcessedDelivery {
+    disposition: DeliveryDisposition,
+    outcome_write: ProjectionDocumentWrite,
+}
+
+#[derive(Debug)]
+enum DeliveryDisposition {
+    Executed(Box<ProviderDispatchWorkerResult>),
+    Skipped,
+    RetainedFirstReceipt,
+    RejectedRequest { replayed: bool },
+}
+
+fn processed_delivery(
+    disposition: DeliveryDisposition,
+    outcome: ProviderProcessCanonicalOutcome,
+    delivery: &EventDelivery,
+) -> Result<ProcessedDelivery, SdkError> {
+    Ok(ProcessedDelivery {
+        disposition,
+        outcome_write: ProjectionDocumentWrite {
+            resource_type: PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE.to_owned(),
+            resource_id: outcome.request_id().to_owned(),
+            source_version: delivery.aggregate_version,
+            document: outcome.to_projection_document()?,
+        },
+    })
+}
+
+fn recorded_outcome(
+    result: &ProviderDispatchWorkerResult,
+    delivery: &EventDelivery,
+) -> Result<ProviderProcessCanonicalOutcome, SdkError> {
+    let request = result
+        .response
+        .enrichment_request
+        .as_ref()
+        .ok_or_else(provider_outcome_invalid)?;
+    let request_id = request
+        .enrichment_request_ref
+        .as_ref()
+        .map(|reference| reference.enrichment_request_id.clone())
+        .ok_or_else(provider_outcome_invalid)?;
+    let receipt_id = result
+        .response
+        .provider_response_receipt
+        .as_ref()
+        .and_then(|receipt| receipt.provider_response_receipt_ref.as_ref())
+        .map(|reference| reference.provider_response_receipt_id.clone())
+        .ok_or_else(provider_outcome_invalid)?;
+    ProviderProcessCanonicalOutcome::response_recorded(
+        request_id,
+        request.retry_generation,
+        receipt_id,
+        delivery.event_id.as_str().to_owned(),
+    )
+}
+
+fn provider_outcome_invalid() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_OUTCOME_INVALID",
+        crm_module_sdk::ErrorCategory::Internal,
+        false,
+        "The canonical provider-process outcome could not be derived.",
+    )
+}
+
+fn decode_created_event(
+    delivery: &EventDelivery,
+) -> Result<wire::EnrichmentRequestCreatedEvent, SdkError> {
+    delivery.validate()?;
+    let module_id = module_id()?;
+    let contract = support::protobuf_contract(
+        MODULE_ID,
+        ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA,
+        vec![DataClass::Personal],
+    )?;
+    if delivery.source_module_id != module_id
+        || delivery.consumer_module_id != module_id
+        || delivery.event_type.as_str() != ENRICHMENT_REQUEST_CREATED_EVENT_TYPE
+        || delivery.event_version.as_str() != support::CONTRACT_VERSION
+        || !contract.matches(&delivery.payload)
+        || delivery.payload.encoding != PayloadEncoding::Protobuf
+    {
+        return Err(created_event_invalid());
+    }
+    wire::EnrichmentRequestCreatedEvent::decode(delivery.payload.bytes.as_slice()).map_err(
+        |error| {
+            created_event_invalid()
+                .with_internal_reference(format!("created event decode: {error}"))
+        },
+    )
+}
+
+fn current_time_ms(now_unix_nanos: i64) -> Result<u64, SdkError> {
+    if now_unix_nanos <= 0 {
+        return Err(worker_configuration_invalid(
+            "provider-process worker clock is invalid",
+        ));
+    }
+    let now_unix_ms = u64::try_from(now_unix_nanos / 1_000_000).map_err(|_| {
+        worker_configuration_invalid("provider-process worker clock cannot be represented")
+    })?;
+    if now_unix_ms == 0 {
+        return Err(worker_configuration_invalid(
+            "provider-process worker clock has sub-millisecond precision only",
+        ));
+    }
+    Ok(now_unix_ms)
+}
+
+fn module_id() -> Result<ModuleId, SdkError> {
+    ModuleId::try_new(MODULE_ID).map_err(worker_identifier_invalid)
+}
+
+fn event_type() -> Result<EventType, SdkError> {
+    EventType::try_new(ENRICHMENT_REQUEST_CREATED_EVENT_TYPE).map_err(worker_identifier_invalid)
+}
+
+fn worker_identifier_invalid(error: crm_module_sdk::IdentifierError) -> SdkError {
+    worker_configuration_invalid(error.to_string())
+}
+
+fn worker_configuration_invalid(reference: impl Into<String>) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_CONFIGURATION_INVALID",
+        crm_module_sdk::ErrorCategory::Internal,
+        false,
+        "The Customer Enrichment provider process is not configured safely.",
+    )
+    .with_internal_reference(reference.into())
+}
+
+fn created_event_invalid() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_REQUEST_CREATED_EVENT_INVALID",
+        crm_module_sdk::ErrorCategory::Internal,
+        false,
+        "Customer Enrichment request-created evidence is invalid.",
+    )
+}
+
+fn unresolved_provider_conflict(conflict_id: &str) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_UNRESOLVED",
+        crm_module_sdk::ErrorCategory::Conflict,
+        true,
+        "Provider-response conflict resolution is required before processing can continue.",
+    )
+    .with_internal_reference(format!("conflict_id={conflict_id}"))
+}
+
+fn source_snapshot_invalid() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_SOURCE_SNAPSHOT_INVALID",
+        crm_module_sdk::ErrorCategory::Internal,
+        false,
+        "The provider process source snapshot is invalid.",
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crm_module_sdk::{
+        ActorId, CorrelationId, DeliveryId, EventId, EventVersion, RecordId, RecordRef, RecordType,
+        TraceId,
+    };
+
+    #[test]
+    fn worker_identity_and_event_coordinate_are_canonical() {
+        assert!(ActorId::try_new(PROVIDER_PROCESS_WORKER_ACTOR_ID).is_ok());
+        assert!(EventType::try_new(ENRICHMENT_REQUEST_CREATED_EVENT_TYPE).is_ok());
+        assert_eq!(
+            PROVIDER_PROCESS_PROJECTION_ID,
+            "customer-enrichment-provider-process-v1"
+        );
+    }
+
+    #[test]
+    fn unresolved_provider_conflict_is_a_retryable_checkpoint_hold() {
+        let error = unresolved_provider_conflict("enrichment-response-conflict-example");
+        assert_eq!(
+            error.code,
+            "CUSTOMER_ENRICHMENT_PROVIDER_RESPONSE_CONFLICT_UNRESOLVED"
+        );
+        assert!(error.retryable);
+    }
+
+    #[test]
+    fn worker_clock_requires_a_positive_representable_millisecond() {
+        let error = current_time_ms(999_999).unwrap_err();
+        assert_eq!(
+            error.code,
+            "CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_CONFIGURATION_INVALID"
+        );
+        assert_eq!(current_time_ms(1_999_999).unwrap(), 1);
+    }
+
+    #[test]
+    fn decodes_only_self_consumed_request_created_evidence() {
+        let payload = support::protobuf_payload(
+            MODULE_ID,
+            ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA,
+            DataClass::Personal,
+            &wire::EnrichmentRequestCreatedEvent {
+                enrichment_request: None,
+            },
+        )
+        .unwrap();
+        let mut delivery = EventDelivery {
+            delivery_id: DeliveryId::try_new("provider-created-delivery").unwrap(),
+            event_id: EventId::try_new("provider-created-event").unwrap(),
+            tenant_id: TenantId::try_new("tenant-1").unwrap(),
+            source_module_id: module_id().unwrap(),
+            consumer_module_id: module_id().unwrap(),
+            source_actor_id: ActorId::try_new("requester-1").unwrap(),
+            event_type: event_type().unwrap(),
+            event_version: EventVersion::try_new(support::CONTRACT_VERSION).unwrap(),
+            aggregate: RecordRef {
+                record_type: RecordType::try_new(ENRICHMENT_REQUEST_RECORD_TYPE).unwrap(),
+                record_id: RecordId::try_new("request-1").unwrap(),
+            },
+            aggregate_version: 1,
+            occurred_at_unix_nanos: 1_000_000,
+            correlation_id: CorrelationId::try_new("correlation-1").unwrap(),
+            trace_id: TraceId::try_new("trace-1").unwrap(),
+            payload,
+        };
+        assert!(decode_created_event(&delivery).is_ok());
+
+        delivery.consumer_module_id = ModuleId::try_new("crm.parties").unwrap();
+        let error = decode_created_event(&delivery).unwrap_err();
+        assert_eq!(
+            error.code,
+            "CUSTOMER_ENRICHMENT_REQUEST_CREATED_EVENT_INVALID"
+        );
+    }
+}

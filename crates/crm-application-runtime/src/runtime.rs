@@ -1,10 +1,17 @@
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
+    CustomerEnrichmentApplicationWorkerDependencies,
+    CustomerEnrichmentMaterializationProcessDependencies,
+    CustomerEnrichmentProviderProcessDependencies, CustomerEnrichmentProviderWorkerDependencies,
     GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
-    PostgresModuleActivation, ProcessIdentitySource, ProductionBackgroundWorkerDependencies,
-    ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
-    build_bootstrap_visibility_registry, build_production_background_workers,
-    build_production_composition,
+    PostgresModuleActivation, ProcessIdentitySource, ProcessProviderSecretValueSource,
+    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies, SystemClock,
+    bootstrap_export_selection_worker_access, build_bootstrap_visibility_registry,
+    build_customer_enrichment_application_worker,
+    build_customer_enrichment_materialization_process, build_customer_enrichment_provider_process,
+    build_customer_enrichment_provider_registry, build_customer_enrichment_provider_worker,
+    build_process_customer_enrichment_provider_transport_catalog,
+    build_production_background_workers, build_production_composition,
 };
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -25,6 +32,7 @@ use crm_capability_ingress::{
     HttpQueryMiddleware, HttpQueryRequest, QueryContextResolver, QueryIngress, TimeoutPolicy,
 };
 use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityGateway};
+use crm_consents_query_adapter::GET_CAPABILITY as CONSENT_GET_CAPABILITY;
 use crm_core_data::{PostgresDataStore, PostgresImmutableFileArtifactStore};
 use crm_customer_360_composition::Customer360ProjectionWorker;
 use crm_customer_data_operations_capability_adapter::internal_export_selection_capability_definitions;
@@ -38,6 +46,14 @@ use crm_customer_data_operations_execution_composition::{
 use crm_customer_data_operations_query_adapter::{
     PartyExportArtifactDownloadResolver, artifact_download_capability_definition,
 };
+use crm_customer_enrichment_application_adapter::record_application_outcome_capability_definition;
+use crm_customer_enrichment_application_composition::PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID;
+use crm_customer_enrichment_capability_adapter::{
+    provider_response_capability_definition, request_dispatch_capability_definition,
+};
+use crm_customer_enrichment_materialization_adapter::suggestion_materialization_capability_definition;
+use crm_customer_enrichment_materialization_composition::MATERIALIZATION_PROCESS_WORKER_ACTOR_ID;
+use crm_customer_enrichment_provider_process_composition::PROVIDER_PROCESS_WORKER_ACTOR_ID;
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, Clock, ModuleId, RandomSource, RecordType,
@@ -45,8 +61,9 @@ use crm_module_sdk::{
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
+    RECORD_TYPE as PARTY_RECORD_TYPE, UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
 };
-use crm_parties_query_adapter::PartyQueryAdapter;
+use crm_parties_query_adapter::{GET_CAPABILITY as PARTY_GET_CAPABILITY, PartyQueryAdapter};
 use crm_query_runtime::{CursorCodec, QueryGateway};
 use crm_sales_activities_capability_composition::{
     Phase6ProjectionWorker, SalesActivitiesLinkEventProcessor,
@@ -182,8 +199,8 @@ impl ApplicationRuntime {
             store: store.clone(),
             activation: activation.clone(),
             capability_authorizer,
-            query_authorizer,
-            visibility_authorizer: query_visibility,
+            query_authorizer: query_authorizer.clone(),
+            visibility_authorizer: query_visibility.clone(),
             cursor_key,
         })
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
@@ -203,11 +220,30 @@ impl ApplicationRuntime {
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let artifact_download_definition = artifact_download_capability_definition()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_application_outcome_definition =
+            record_application_outcome_capability_definition()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_dispatch_definition = request_dispatch_capability_definition()
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_response_definition = provider_response_capability_definition()
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_materialization_definition =
+            suggestion_materialization_capability_definition()
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let import_execution_worker_actor_id =
             ActorId::try_new(IMPORT_EXECUTION_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let export_selection_worker_actor_id =
             ActorId::try_new(EXPORT_SELECTION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_application_worker_actor_id =
+            ActorId::try_new(PARTY_DISPLAY_NAME_APPLICATION_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_provider_worker_actor_id =
+            ActorId::try_new(PROVIDER_PROCESS_WORKER_ACTOR_ID)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_materialization_worker_actor_id =
+            ActorId::try_new(MATERIALIZATION_PROCESS_WORKER_ACTOR_ID)
                 .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         if config.bootstrap_allow_phase6 {
             bootstrap_application_access(
@@ -236,6 +272,33 @@ impl ApplicationRuntime {
                 &internal_export_selection_definitions,
                 &export_selection_worker_actor_id,
             )?;
+            bootstrap_customer_enrichment_application_worker_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &mutation_definitions,
+                &query_definitions,
+                &customer_enrichment_application_outcome_definition,
+                &customer_enrichment_application_worker_actor_id,
+            )?;
+            bootstrap_customer_enrichment_provider_process_access(
+                &config,
+                now,
+                &authorization_store,
+                &visibility_store,
+                &query_definitions,
+                &customer_enrichment_dispatch_definition,
+                &customer_enrichment_response_definition,
+                &customer_enrichment_provider_worker_actor_id,
+            )?;
+            bootstrap_customer_enrichment_materialization_process_access(
+                &config,
+                now,
+                &authorization_store,
+                &customer_enrichment_materialization_definition,
+                &customer_enrichment_materialization_worker_actor_id,
+            )?;
         }
 
         let mutation_gateway = Arc::new(CapabilityGateway::new(
@@ -253,6 +316,69 @@ impl ApplicationRuntime {
             composition.mutation_executor(),
             Arc::clone(&clock),
         ));
+
+        let customer_enrichment_application_worker = build_customer_enrichment_application_worker(
+            CustomerEnrichmentApplicationWorkerDependencies {
+                store: store.clone(),
+                capabilities: Arc::new(GatewayCapabilityClient::new(Arc::clone(&mutation_gateway))),
+                capability_authorizer: authorizer.clone(),
+                query_authorizer: query_authorizer.clone(),
+                visibility_authorizer: query_visibility.clone(),
+                clock: Arc::clone(&clock),
+                cursor_key,
+                actor_id: customer_enrichment_application_worker_actor_id,
+            },
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+
+        // Concrete transports are explicit exact-coordinate host registrations. Endpoint
+        // configuration is resolved only for the selected exact coordinate; disabled and unrelated
+        // coordinates perform no transport or secret resolution.
+        let customer_enrichment_provider_transport_catalog = Arc::new(
+            build_process_customer_enrichment_provider_transport_catalog(
+                &config.customer_enrichment_provider_adapters,
+                Arc::clone(&clock),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
+        let customer_enrichment_provider_registry = Arc::new(
+            build_customer_enrichment_provider_registry(
+                &config.customer_enrichment_provider_adapters,
+                Arc::clone(&clock),
+                customer_enrichment_provider_transport_catalog,
+                Arc::new(ProcessProviderSecretValueSource),
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
+        let customer_enrichment_provider_executor = Arc::new(
+            build_customer_enrichment_provider_worker(
+                CustomerEnrichmentProviderWorkerDependencies {
+                    store: store.clone(),
+                    registry: customer_enrichment_provider_registry,
+                    authorizer: authorizer.clone(),
+                },
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
+        let customer_enrichment_provider_process = build_customer_enrichment_provider_process(
+            CustomerEnrichmentProviderProcessDependencies {
+                store: store.clone(),
+                executor: customer_enrichment_provider_executor,
+                query_authorizer,
+                visibility_authorizer: query_visibility,
+                cursor_key,
+            },
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let customer_enrichment_materialization_process = Arc::new(
+            build_customer_enrichment_materialization_process(
+                CustomerEnrichmentMaterializationProcessDependencies {
+                    store: store.clone(),
+                    authorizer: authorizer.clone(),
+                },
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
 
         let import_execution_reader =
             Arc::new(PostgresImportExecutionSnapshotReader::new(store.clone()));
@@ -342,7 +468,7 @@ impl ApplicationRuntime {
         let link_processor = Arc::new(
             SalesActivitiesLinkEventProcessor::new(
                 store.clone(),
-                mutation_gateway,
+                Arc::clone(&mutation_gateway),
                 SalesActivitiesLinkEventProcessorConfig {
                     worker_id: "crm-api-link-worker".to_owned(),
                     worker_actor_id: config.actor_id.clone(),
@@ -368,6 +494,9 @@ impl ApplicationRuntime {
                 store,
                 import_execution_worker,
                 export_selection_worker,
+                customer_enrichment_provider_process,
+                customer_enrichment_materialization_process,
+                customer_enrichment_application_worker,
                 link_processor,
                 projection_worker,
                 customer_360_worker,
@@ -776,7 +905,7 @@ fn bootstrap_application_access(
             for resource in resources {
                 upsert_bootstrap_visibility(
                     visibility_store,
-                    config,
+                    &config.actor_id,
                     tenant_id,
                     definition,
                     resource,
@@ -827,9 +956,166 @@ fn bootstrap_import_execution_worker_access(
     Ok(())
 }
 
+fn bootstrap_customer_enrichment_provider_process_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    visibility_store: &LiveQueryVisibilityStore,
+    query_definitions: &[CapabilityDefinition],
+    dispatch_definition: &CapabilityDefinition,
+    response_definition: &CapabilityDefinition,
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    let party_get = query_definitions
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+                && definition.capability_id.as_str() == PARTY_GET_CAPABILITY
+        })
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party get capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    for tenant_id in &config.tenant_ids {
+        for definition in [dispatch_definition, response_definition, party_get] {
+            authorization_store
+                .upsert(AuthorizationGrant {
+                    tenant_id: tenant_id.clone(),
+                    actor_id: worker_actor_id.clone(),
+                    policy_id: definition.authorization_policy_id.clone(),
+                    capability_id: definition.capability_id.clone(),
+                    capability_version: definition.capability_version.clone(),
+                    owner_module_id: definition.owner_module_id.clone(),
+                    policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                    expires_at_unix_nanos: Some(expires_at),
+                })
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        }
+        upsert_bootstrap_visibility(
+            visibility_store,
+            worker_actor_id,
+            tenant_id,
+            party_get,
+            BootstrapVisibilityResource {
+                owner_module_id: PARTIES_MODULE_ID,
+                resource_type: PARTY_RECORD_TYPE,
+                allowed_fields: BTreeSet::from(["display_name".to_owned()]),
+            },
+            expires_at,
+        )?;
+    }
+    Ok(())
+}
+
+fn bootstrap_customer_enrichment_materialization_process_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    materialization_definition: &CapabilityDefinition,
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    for tenant_id in &config.tenant_ids {
+        authorization_store
+            .upsert(AuthorizationGrant {
+                tenant_id: tenant_id.clone(),
+                actor_id: worker_actor_id.clone(),
+                policy_id: materialization_definition.authorization_policy_id.clone(),
+                capability_id: materialization_definition.capability_id.clone(),
+                capability_version: materialization_definition.capability_version.clone(),
+                owner_module_id: materialization_definition.owner_module_id.clone(),
+                policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                expires_at_unix_nanos: Some(expires_at),
+            })
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+    }
+    Ok(())
+}
+
+fn bootstrap_customer_enrichment_application_worker_access(
+    config: &ApplicationConfig,
+    now_unix_nanos: i64,
+    authorization_store: &LiveAuthorizationStore,
+    visibility_store: &LiveQueryVisibilityStore,
+    mutation_definitions: &[CapabilityDefinition],
+    query_definitions: &[CapabilityDefinition],
+    application_outcome_definition: &CapabilityDefinition,
+    worker_actor_id: &ActorId,
+) -> Result<(), ApplicationRuntimeError> {
+    let expires_at = expiry(now_unix_nanos)?;
+    let party_update = mutation_definitions
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+                && definition.capability_id.as_str() == PARTY_UPDATE_CAPABILITY
+        })
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party update capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    let party_get = query_definitions
+        .iter()
+        .find(|definition| definition.capability_id.as_str() == PARTY_GET_CAPABILITY)
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Party get capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    let consent_get = query_definitions
+        .iter()
+        .find(|definition| definition.capability_id.as_str() == CONSENT_GET_CAPABILITY)
+        .ok_or_else(|| {
+            ApplicationRuntimeError::Assembly(
+                "Consent get capability is missing from the production catalog".to_owned(),
+            )
+        })?;
+    let visibility = build_bootstrap_visibility_registry()
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+    for tenant_id in &config.tenant_ids {
+        for definition in [
+            party_update,
+            party_get,
+            consent_get,
+            application_outcome_definition,
+        ] {
+            authorization_store
+                .upsert(AuthorizationGrant {
+                    tenant_id: tenant_id.clone(),
+                    actor_id: worker_actor_id.clone(),
+                    policy_id: definition.authorization_policy_id.clone(),
+                    capability_id: definition.capability_id.clone(),
+                    capability_version: definition.capability_version.clone(),
+                    owner_module_id: definition.owner_module_id.clone(),
+                    policy_version: BOOTSTRAP_POLICY_VERSION.to_owned(),
+                    expires_at_unix_nanos: Some(expires_at),
+                })
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        }
+        for definition in [party_get, consent_get] {
+            let resources = visibility
+                .resources_for(definition)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+            for resource in resources {
+                upsert_bootstrap_visibility(
+                    visibility_store,
+                    worker_actor_id,
+                    tenant_id,
+                    definition,
+                    resource,
+                    expires_at,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn upsert_bootstrap_visibility(
     visibility_store: &LiveQueryVisibilityStore,
-    config: &ApplicationConfig,
+    actor_id: &ActorId,
     tenant_id: &TenantId,
     definition: &CapabilityDefinition,
     resource: BootstrapVisibilityResource,
@@ -838,7 +1124,7 @@ fn upsert_bootstrap_visibility(
     visibility_store
         .upsert(QueryVisibilityGrant {
             tenant_id: tenant_id.clone(),
-            actor_id: config.actor_id.clone(),
+            actor_id: actor_id.clone(),
             capability_id: definition.capability_id.clone(),
             capability_version: definition.capability_version.clone(),
             owner_module_id: ModuleId::try_new(resource.owner_module_id)

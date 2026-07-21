@@ -463,6 +463,182 @@
       ]
     },
     {
+      "module_id": "crm.customer-enrichment",
+      "capabilities": [
+        {
+          "id": "customer_enrichment.application.outcome.record",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.RecordApplicationOutcome",
+          "request": "crm.customer_enrichment.v1.RecordApplicationOutcomeRequest",
+          "response": "crm.customer_enrichment.v1.RecordApplicationOutcomeResponse"
+        },
+        {
+          "id": "customer_enrichment.mapping.get",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.GetMappingVersion",
+          "request": "crm.customer_enrichment.v1.GetMappingVersionRequest",
+          "response": "crm.customer_enrichment.v1.GetMappingVersionResponse"
+        },
+        {
+          "id": "customer_enrichment.mapping.publish",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.PublishMappingVersion",
+          "request": "crm.customer_enrichment.v1.PublishMappingVersionRequest",
+          "response": "crm.customer_enrichment.v1.PublishMappingVersionResponse"
+        },
+        {
+          "id": "customer_enrichment.party.display_name.apply",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.ApplyPartyDisplayNameSuggestion",
+          "request": "crm.customer_enrichment.v1.ApplyPartyDisplayNameSuggestionRequest",
+          "response": "crm.customer_enrichment.v1.ApplyPartyDisplayNameSuggestionResponse"
+        },
+        {
+          "id": "customer_enrichment.provider_profile.get",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.GetProviderProfileVersion",
+          "request": "crm.customer_enrichment.v1.GetProviderProfileVersionRequest",
+          "response": "crm.customer_enrichment.v1.GetProviderProfileVersionResponse"
+        },
+        {
+          "id": "customer_enrichment.provider_profile.publish",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.PublishProviderProfileVersion",
+          "request": "crm.customer_enrichment.v1.PublishProviderProfileVersionRequest",
+          "response": "crm.customer_enrichment.v1.PublishProviderProfileVersionResponse"
+        },
+        {
+          "id": "customer_enrichment.request.cancel",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentRequestService.CancelEnrichmentRequest",
+          "request": "crm.customer_enrichment.v1.CancelEnrichmentRequestRequest",
+          "response": "crm.customer_enrichment.v1.CancelEnrichmentRequestResponse"
+        },
+        {
+          "id": "customer_enrichment.request.create",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentRequestService.CreateEnrichmentRequest",
+          "request": "crm.customer_enrichment.v1.CreateEnrichmentRequestRequest",
+          "response": "crm.customer_enrichment.v1.CreateEnrichmentRequestResponse"
+        },
+        {
+          "id": "customer_enrichment.request.dispatch",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.DispatchEnrichmentRequest",
+          "request": "crm.customer_enrichment.v1.DispatchEnrichmentRequestRequest",
+          "response": "crm.customer_enrichment.v1.DispatchEnrichmentRequestResponse"
+        },
+        {
+          "id": "customer_enrichment.request.get",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentRequestService.GetEnrichmentRequest",
+          "request": "crm.customer_enrichment.v1.GetEnrichmentRequestRequest",
+          "response": "crm.customer_enrichment.v1.GetEnrichmentRequestResponse"
+        },
+        {
+          "id": "customer_enrichment.request.list",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentRequestService.ListEnrichmentRequests",
+          "request": "crm.customer_enrichment.v1.ListEnrichmentRequestsRequest",
+          "response": "crm.customer_enrichment.v1.ListEnrichmentRequestsResponse"
+        },
+        {
+          "id": "customer_enrichment.response.record",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.RecordProviderResponse",
+          "request": "crm.customer_enrichment.v1.RecordProviderResponseRequest",
+          "response": "crm.customer_enrichment.v1.RecordProviderResponseResponse"
+        },
+        {
+          "id": "customer_enrichment.suggestion.accept",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.AcceptSuggestion",
+          "request": "crm.customer_enrichment.v1.AcceptSuggestionRequest",
+          "response": "crm.customer_enrichment.v1.AcceptSuggestionResponse"
+        },
+        {
+          "id": "customer_enrichment.suggestion.get",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.GetSuggestion",
+          "request": "crm.customer_enrichment.v1.GetSuggestionRequest",
+          "response": "crm.customer_enrichment.v1.GetSuggestionResponse"
+        },
+        {
+          "id": "customer_enrichment.suggestion.list_by_party",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.ListSuggestionsByParty",
+          "request": "crm.customer_enrichment.v1.ListSuggestionsByPartyRequest",
+          "response": "crm.customer_enrichment.v1.ListSuggestionsByPartyResponse"
+        },
+        {
+          "id": "customer_enrichment.suggestion.reject",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.RejectSuggestion",
+          "request": "crm.customer_enrichment.v1.RejectSuggestionRequest",
+          "response": "crm.customer_enrichment.v1.RejectSuggestionResponse"
+        },
+        {
+          "id": "customer_enrichment.suggestions.materialize",
+          "version": "1.0.0",
+          "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.MaterializeSuggestions",
+          "request": "crm.customer_enrichment.v1.MaterializeSuggestionsRequest",
+          "response": "crm.customer_enrichment.v1.MaterializeSuggestionsResponse"
+        }
+      ],
+      "events": [
+        {
+          "id": "customer_enrichment.mapping.published",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.MappingVersionPublishedEvent"
+        },
+        {
+          "id": "customer_enrichment.provider_profile.published",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.ProviderProfileVersionPublishedEvent"
+        },
+        {
+          "id": "customer_enrichment.provider_response_conflict.recorded",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.ProviderResponseConflictRecordedEvent"
+        },
+        {
+          "id": "customer_enrichment.provider_usage.recorded",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.ProviderUsageRecordedEvent"
+        },
+        {
+          "id": "customer_enrichment.request.created",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.EnrichmentRequestCreatedEvent"
+        },
+        {
+          "id": "customer_enrichment.request.status_changed",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.EnrichmentRequestStatusChangedEvent"
+        },
+        {
+          "id": "customer_enrichment.response.recorded",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.ProviderResponseRecordedEvent"
+        },
+        {
+          "id": "customer_enrichment.suggestion.application_recorded",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.SuggestionApplicationRecordedEvent"
+        },
+        {
+          "id": "customer_enrichment.suggestion.materialized",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.SuggestionMaterializedEvent"
+        },
+        {
+          "id": "customer_enrichment.suggestion.reviewed",
+          "version": "1.0.0",
+          "message": "crm.customer_enrichment.v1.SuggestionReviewedEvent"
+        }
+      ]
+    },
+    {
       "module_id": "crm.customer360",
       "capabilities": [
         {

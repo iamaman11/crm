@@ -1,0 +1,103 @@
+{
+  "schema_version": "crm.customer-enrichment.production-promotion/v1",
+  "module_id": "crm.customer-enrichment",
+  "current_runtime_inventory": {
+    "mutations": [
+      "customer_enrichment.provider_profile.publish@1.0.0",
+      "customer_enrichment.mapping.publish@1.0.0",
+      "customer_enrichment.request.create@1.0.0",
+      "customer_enrichment.request.cancel@1.0.0",
+      "customer_enrichment.suggestion.reject@1.0.0",
+      "customer_enrichment.suggestion.accept@1.0.0"
+    ],
+    "queries": [
+      "customer_enrichment.provider_profile.get@1.0.0",
+      "customer_enrichment.mapping.get@1.0.0",
+      "customer_enrichment.request.get@1.0.0",
+      "customer_enrichment.request.list@1.0.0",
+      "customer_enrichment.suggestion.get@1.0.0",
+      "customer_enrichment.suggestion.list_by_party@1.0.0"
+    ],
+    "workers": [
+      "customer_enrichment.party.display_name.apply@1.0.0",
+      "customer_enrichment.application.outcome.record@1.0.0"
+    ]
+  },
+  "global_invariants": {
+    "activation_gate": "crm.module_installations",
+    "registration_owner": "module_owned_contribution",
+    "central_business_route_switches_allowed": false,
+    "production_readiness_requires_single_exact_head": true,
+    "required_exact_head_workflows": 17,
+    "retain_provenance_on_uninstall": true
+  },
+  "promotion_stages": [
+    {
+      "stage": 1,
+      "name": "provider_worker_pipeline",
+      "coordinates": [
+        {
+          "id": "customer_enrichment.request.dispatch",
+          "version": "1.0.0",
+          "route_kind": "worker_mutation",
+          "exposure": "worker_only",
+          "implementation_crate": "crm-customer-enrichment-worker-composition",
+          "depends_on": [
+            "customer_enrichment.request.create@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_worker_registration",
+            "exact_provider_registry",
+            "provider_disabled",
+            "quota_and_circuit_failure",
+            "sanitized_provider_errors",
+            "restart_recovery",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        },
+        {
+          "id": "customer_enrichment.response.record",
+          "version": "1.0.0",
+          "route_kind": "worker_mutation",
+          "exposure": "worker_only",
+          "implementation_crate": "crm-customer-enrichment-worker-composition",
+          "depends_on": [
+            "customer_enrichment.request.dispatch@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_worker_registration",
+            "conflicting_response_fail_closed",
+            "immutable_receipt_and_usage_evidence",
+            "response_reconciliation",
+            "sanitized_provider_errors",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        },
+        {
+          "id": "customer_enrichment.suggestions.materialize",
+          "version": "1.0.0",
+          "route_kind": "worker_mutation",
+          "exposure": "worker_only",
+          "implementation_crate": "crm-customer-enrichment-materialization-composition",
+          "depends_on": [
+            "customer_enrichment.response.record@1.0.0"
+          ],
+          "required_evidence": [
+            "activation_gated_worker_registration",
+            "immutable_dependency_validation",
+            "deterministic_materialization",
+            "response_materialization_recovery",
+            "expiry_reconciliation",
+            "disable_uninstall",
+            "cross_tenant",
+            "exact_head_17_workflows"
+          ]
+        }
+      ]
+    }
+  ]
+}

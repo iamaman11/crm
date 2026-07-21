@@ -1,0 +1,131 @@
+name: Customer Enrichment Review Process Runtime CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/customer_enrichment/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-plan-support/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-enrichment-review-adapter/**"
+      - "crates/crm-customer-enrichment-review-composition/**"
+      - "crates/crm-customer-enrichment-application-adapter/**"
+      - "crates/crm-customer-enrichment-application-composition/**"
+      - "crates/crm-customer-enrichment-suggestion-query-adapter/**"
+      - "crates/crm-customer-enrichment-visibility/**"
+      - "modules/crm-customer-enrichment/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0016_customer_enrichment_worker.sql"
+      - "database/tests/0017_customer_enrichment_review.sql"
+      - "database/tests/0019_customer_enrichment_consent_policy.sql"
+      - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
+      - "scripts/run_customer_enrichment_review_process.sh"
+      - ".github/workflows/customer-enrichment-review-process-runtime.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/customer_enrichment/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-plan-support/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-enrichment-review-adapter/**"
+      - "crates/crm-customer-enrichment-review-composition/**"
+      - "crates/crm-customer-enrichment-application-adapter/**"
+      - "crates/crm-customer-enrichment-application-composition/**"
+      - "crates/crm-customer-enrichment-suggestion-query-adapter/**"
+      - "crates/crm-customer-enrichment-visibility/**"
+      - "modules/crm-customer-enrichment/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0016_customer_enrichment_worker.sql"
+      - "database/tests/0017_customer_enrichment_review.sql"
+      - "database/tests/0019_customer_enrichment_consent_policy.sql"
+      - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
+      - "scripts/run_customer_enrichment_review_process.sh"
+      - ".github/workflows/customer-enrichment-review-process-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  review-process-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_enrichment_review_process_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5443:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_enrichment_review_process_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5443
+      PGDATABASE: crm_customer_enrichment_review_process_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5443/crm_customer_enrichment_review_process_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5443/crm_customer_enrichment_review_process_test
+      CRM_CURSOR_SIGNING_KEY: customer-enrichment-review-cursor-key-0123456789abcdef
+      CRM_APPROVAL_SIGNING_KEY: customer-enrichment-review-approval-key-0123456789abcdef
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Verify review, application evidence, suggestion lookup and replay
+        run: bash scripts/run_customer_enrichment_review_process.sh 2>&1 | tee database/customer-enrichment-review-process-runtime.log
+      - name: Prepare fresh Consent policy database
+        run: bash scripts/prepare_customer_enrichment_consent_policy_database.sh
+      - name: Verify production Consent denials before request persistence
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-application-runtime \
+            --test postgres_customer_enrichment_consent_policy \
+            production_request_creation_denies_invalid_consent_before_persistence \
+            -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-review-process-runtime.log
+      - name: Capture diagnostics
+        if: failure()
+        run: |
+          psql --no-psqlrc --pset pager=off --command "SELECT tenant_id, record_type, record_id, version FROM crm.records WHERE owner_module_id IN ('crm.customer-enrichment', 'crm.consents') ORDER BY tenant_id, owner_module_id, record_type, record_id" > database/customer-enrichment-review-process-runtime-state.log 2>&1 || true
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-enrichment-review-process-runtime-diagnostics
+          path: |
+            database/customer-enrichment-review-process-runtime.log
+            database/customer-enrichment-review-process-runtime-state.log
+            crates/crm-application-runtime/
+            crates/crm-customer-enrichment-review-adapter/
+            crates/crm-customer-enrichment-review-composition/
+            crates/crm-customer-enrichment-application-adapter/
+            crates/crm-customer-enrichment-application-composition/
+            crates/crm-customer-enrichment-suggestion-query-adapter/
+            crates/crm-customer-enrichment-visibility/
+            database/tests/0017_customer_enrichment_review.sql
+            database/tests/0019_customer_enrichment_consent_policy.sql
+            scripts/prepare_customer_enrichment_consent_policy_database.sh
+          if-no-files-found: error
+          retention-days: 7

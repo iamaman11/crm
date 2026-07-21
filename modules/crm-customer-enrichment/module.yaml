@@ -1,0 +1,252 @@
+schema_version: crm.module/v1
+module_id: crm.customer-enrichment
+version: 0.1.0
+display_name: CRM Customer Enrichment
+description: Governed provider-neutral customer enrichment requests, immutable suggestions and provenance, provider-response conflict resolution, review decisions and exact owner-capability application evidence without owning customer-master values.
+owner:
+  team: customer-platform
+  contact: crm-owner@example.com
+  codeowners:
+    - '@iamaman11'
+runtime:
+  kind: in_process
+  entrypoint: modules/crm-customer-enrichment
+platform:
+  minimum_version: 0.1.0
+dependencies:
+  required:
+    - module_id: crm.parties
+      version_range: '>=0.3.0, <1.0.0'
+  optional: []
+  conflicts: []
+provides:
+  capabilities:
+    - id: customer_enrichment.provider_profile.publish
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.PublishProviderProfileVersion
+        request: crm.customer_enrichment.v1.PublishProviderProfileVersionRequest
+        response: crm.customer_enrichment.v1.PublishProviderProfileVersionResponse
+    - id: customer_enrichment.provider_profile.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.GetProviderProfileVersion
+        request: crm.customer_enrichment.v1.GetProviderProfileVersionRequest
+        response: crm.customer_enrichment.v1.GetProviderProfileVersionResponse
+    - id: customer_enrichment.mapping.publish
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.PublishMappingVersion
+        request: crm.customer_enrichment.v1.PublishMappingVersionRequest
+        response: crm.customer_enrichment.v1.PublishMappingVersionResponse
+    - id: customer_enrichment.mapping.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.GetMappingVersion
+        request: crm.customer_enrichment.v1.GetMappingVersionRequest
+        response: crm.customer_enrichment.v1.GetMappingVersionResponse
+    - id: customer_enrichment.request.create
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentRequestService.CreateEnrichmentRequest
+        request: crm.customer_enrichment.v1.CreateEnrichmentRequestRequest
+        response: crm.customer_enrichment.v1.CreateEnrichmentRequestResponse
+    - id: customer_enrichment.request.cancel
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentRequestService.CancelEnrichmentRequest
+        request: crm.customer_enrichment.v1.CancelEnrichmentRequestRequest
+        response: crm.customer_enrichment.v1.CancelEnrichmentRequestResponse
+    - id: customer_enrichment.request.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentRequestService.GetEnrichmentRequest
+        request: crm.customer_enrichment.v1.GetEnrichmentRequestRequest
+        response: crm.customer_enrichment.v1.GetEnrichmentRequestResponse
+    - id: customer_enrichment.request.list
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentRequestService.ListEnrichmentRequests
+        request: crm.customer_enrichment.v1.ListEnrichmentRequestsRequest
+        response: crm.customer_enrichment.v1.ListEnrichmentRequestsResponse
+    - id: customer_enrichment.suggestion.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.GetSuggestion
+        request: crm.customer_enrichment.v1.GetSuggestionRequest
+        response: crm.customer_enrichment.v1.GetSuggestionResponse
+    - id: customer_enrichment.suggestion.list_by_party
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.ListSuggestionsByParty
+        request: crm.customer_enrichment.v1.ListSuggestionsByPartyRequest
+        response: crm.customer_enrichment.v1.ListSuggestionsByPartyResponse
+    - id: customer_enrichment.suggestion.accept
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.AcceptSuggestion
+        request: crm.customer_enrichment.v1.AcceptSuggestionRequest
+        response: crm.customer_enrichment.v1.AcceptSuggestionResponse
+    - id: customer_enrichment.suggestion.reject
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.RejectSuggestion
+        request: crm.customer_enrichment.v1.RejectSuggestionRequest
+        response: crm.customer_enrichment.v1.RejectSuggestionResponse
+    - id: customer_enrichment.party.display_name.apply
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentSuggestionService.ApplyPartyDisplayNameSuggestion
+        request: crm.customer_enrichment.v1.ApplyPartyDisplayNameSuggestionRequest
+        response: crm.customer_enrichment.v1.ApplyPartyDisplayNameSuggestionResponse
+    - id: customer_enrichment.request.dispatch
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.DispatchEnrichmentRequest
+        request: crm.customer_enrichment.v1.DispatchEnrichmentRequestRequest
+        response: crm.customer_enrichment.v1.DispatchEnrichmentRequestResponse
+    - id: customer_enrichment.response.record
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.RecordProviderResponse
+        request: crm.customer_enrichment.v1.RecordProviderResponseRequest
+        response: crm.customer_enrichment.v1.RecordProviderResponseResponse
+    - id: customer_enrichment.suggestions.materialize
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.MaterializeSuggestions
+        request: crm.customer_enrichment.v1.MaterializeSuggestionsRequest
+        response: crm.customer_enrichment.v1.MaterializeSuggestionsResponse
+    - id: customer_enrichment.application.outcome.record
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.RecordApplicationOutcome
+        request: crm.customer_enrichment.v1.RecordApplicationOutcomeRequest
+        response: crm.customer_enrichment.v1.RecordApplicationOutcomeResponse
+  events:
+    - id: customer_enrichment.provider_profile.published
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.ProviderProfileVersionPublishedEvent
+    - id: customer_enrichment.mapping.published
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.MappingVersionPublishedEvent
+    - id: customer_enrichment.request.created
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.EnrichmentRequestCreatedEvent
+    - id: customer_enrichment.request.status_changed
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.EnrichmentRequestStatusChangedEvent
+    - id: customer_enrichment.response.recorded
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.ProviderResponseRecordedEvent
+    - id: customer_enrichment.provider_response_conflict.recorded
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.ProviderResponseConflictRecordedEvent
+    - id: customer_enrichment.provider_usage.recorded
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.ProviderUsageRecordedEvent
+    - id: customer_enrichment.suggestion.materialized
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.SuggestionMaterializedEvent
+    - id: customer_enrichment.suggestion.reviewed
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.SuggestionReviewedEvent
+    - id: customer_enrichment.suggestion.application_recorded
+      version: 1.0.0
+      binding:
+        kind: protobuf_message
+        message: crm.customer_enrichment.v1.SuggestionApplicationRecordedEvent
+  objects:
+    - customer_enrichment.provider_profile_version
+    - customer_enrichment.mapping_version
+    - customer_enrichment.request
+    - customer_enrichment.provider_response_receipt
+    - customer_enrichment.provider_response_conflict
+    - customer_enrichment.suggestion
+    - customer_enrichment.review_decision
+    - customer_enrichment.application_attempt
+    - customer_enrichment.provider_usage_entry
+  ui_extensions: []
+consumes:
+  capabilities:
+    - id: parties.party.update
+      version: 1.0.0
+  events: []
+storage:
+  record_types:
+    - customer_enrichment.provider_profile_version
+    - customer_enrichment.mapping_version
+    - customer_enrichment.request
+    - customer_enrichment.provider_response_receipt
+    - customer_enrichment.provider_response_conflict
+    - customer_enrichment.suggestion
+    - customer_enrichment.review_decision
+    - customer_enrichment.application_attempt
+    - customer_enrichment.provider_usage_entry
+  private_state_namespaces:
+    - crm.customer-enrichment.provider_profile_version
+    - crm.customer-enrichment.mapping_version
+    - crm.customer-enrichment.request
+    - crm.customer-enrichment.provider_response_receipt
+    - crm.customer-enrichment.provider_response_conflict
+    - crm.customer-enrichment.suggestion
+    - crm.customer-enrichment.review_decision
+    - crm.customer-enrichment.application_attempt
+    - crm.customer-enrichment.provider_usage_entry
+security:
+  data_classes:
+    - internal
+    - confidential
+    - personal
+  network_egress: []
+  secret_handles: []
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-customer-enrichment/migrations
+  retained_record_types:
+    - customer_enrichment.provider_profile_version
+    - customer_enrichment.mapping_version
+    - customer_enrichment.request
+    - customer_enrichment.provider_response_receipt
+    - customer_enrichment.provider_response_conflict
+    - customer_enrichment.suggestion
+    - customer_enrichment.review_decision
+    - customer_enrichment.application_attempt
+    - customer_enrichment.provider_usage_entry

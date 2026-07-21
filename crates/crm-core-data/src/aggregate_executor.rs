@@ -4,6 +4,7 @@ use crm_capability_runtime::{
     TransactionalCapabilityExecutor,
 };
 use crm_module_sdk::{PortFuture, RecordRef, RecordSnapshot, SdkError};
+use sqlx::{Postgres, Transaction};
 use std::fmt;
 use std::sync::Arc;
 
@@ -40,10 +41,22 @@ pub trait TransactionalAggregatePlanner: Send + Sync {
     ) -> Result<CapabilityBatchExecutionPlan, SdkError>;
 }
 
+/// Runs after idempotency replay resolution and inside the same PostgreSQL transaction as the
+/// authoritative aggregate lock and mutation plan. Guards may acquire transaction-scoped locks
+/// and verify cross-aggregate invariants, but must not commit, perform external I/O or mutate data.
+pub trait TransactionalAggregateGuard: Send + Sync {
+    fn check<'a>(
+        &'a self,
+        transaction: &'a mut Transaction<'_, Postgres>,
+        request: &'a CapabilityRequest,
+    ) -> PortFuture<'a, Result<(), SdkError>>;
+}
+
 #[derive(Clone)]
 pub struct PostgresTransactionalAggregateExecutor {
     store: PostgresDataStore,
     planner: Arc<dyn TransactionalAggregatePlanner>,
+    guard: Option<Arc<dyn TransactionalAggregateGuard>>,
 }
 
 impl fmt::Debug for PostgresTransactionalAggregateExecutor {
@@ -52,13 +65,36 @@ impl fmt::Debug for PostgresTransactionalAggregateExecutor {
             .debug_struct("PostgresTransactionalAggregateExecutor")
             .field("store", &self.store)
             .field("planner", &"dyn TransactionalAggregatePlanner")
+            .field(
+                "guard",
+                &self
+                    .guard
+                    .as_ref()
+                    .map(|_| "dyn TransactionalAggregateGuard"),
+            )
             .finish()
     }
 }
 
 impl PostgresTransactionalAggregateExecutor {
     pub fn new(store: PostgresDataStore, planner: Arc<dyn TransactionalAggregatePlanner>) -> Self {
-        Self { store, planner }
+        Self {
+            store,
+            planner,
+            guard: None,
+        }
+    }
+
+    pub fn guarded(
+        store: PostgresDataStore,
+        planner: Arc<dyn TransactionalAggregatePlanner>,
+        guard: Arc<dyn TransactionalAggregateGuard>,
+    ) -> Self {
+        Self {
+            store,
+            planner,
+            guard: Some(guard),
+        }
     }
 }
 
@@ -75,7 +111,13 @@ impl TransactionalCapabilityExecutor for PostgresTransactionalAggregateExecutor 
             // the first awaited operation after the gateway's live authorization.
             let target = self.planner.target(definition, &request)?;
             self.store
-                .execute_transactional_aggregate(definition, request, target, self.planner.as_ref())
+                .execute_transactional_aggregate(
+                    definition,
+                    request,
+                    target,
+                    self.planner.as_ref(),
+                    self.guard.as_deref(),
+                )
                 .await
                 .map_err(capability_batch_error_to_sdk)
         })

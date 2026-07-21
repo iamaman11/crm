@@ -1,5 +1,5 @@
 use crate::aggregate_executor::{
-    AggregatePresence, AggregateTarget, TransactionalAggregatePlanner,
+    AggregatePresence, AggregateTarget, TransactionalAggregateGuard, TransactionalAggregatePlanner,
 };
 use crate::audit::{
     AuditIntent, AuditMaterializationError, MaterializedAuditRecord, materialize_audit_chain,

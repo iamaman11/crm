@@ -53,6 +53,7 @@ impl PostgresDataStore {
         request: CapabilityRequest,
         target: AggregateTarget,
         planner: &dyn TransactionalAggregatePlanner,
+        guard: Option<&dyn TransactionalAggregateGuard>,
     ) -> Result<CapabilityExecutionResult, BatchError> {
         let scope = capability_idempotency_scope(definition);
         let idempotency = capability_idempotency(&request, scope)?;
@@ -71,6 +72,12 @@ impl PostgresDataStore {
         }
 
         insert_idempotency_claim(&mut transaction, &request.context, &idempotency).await?;
+        if let Some(guard) = guard {
+            guard
+                .check(&mut transaction, &request)
+                .await
+                .map_err(BatchError::Sdk)?;
+        }
         let current = load_record_for_update(
             &mut transaction,
             &request.context,
