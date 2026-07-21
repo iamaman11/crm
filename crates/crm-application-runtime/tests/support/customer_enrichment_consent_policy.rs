@@ -4,14 +4,12 @@ use crm_capability_runtime::{
     CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
 };
 use crm_consents::{
-    CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId,
-    ConsentAuthorizationSnapshot, ConsentAuthorizationStatus, ConsentEffect,
-    CreateConsentAuthorization, EvidenceReference, JurisdictionCode, LegalBasisCode,
-    PartyReference, PurposeCode, SourceCode, WithdrawConsentAuthorization,
+    CommunicationChannel, ConsentAuthorization, ConsentAuthorizationId, ConsentEffect,
+    CreateConsentAuthorization, EvidenceReference, JurisdictionCode, LegalBasisCode, PartyReference,
+    PurposeCode, SourceCode, WithdrawConsentAuthorization,
 };
 use crm_consents_capability_adapter::{
-    MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
-    persisted_payload as consent_persisted_payload,
+    RECORD_TYPE as CONSENT_RECORD_TYPE, persisted_payload as consent_persisted_payload,
 };
 use crm_core_data::{
     AuditIntent, IdempotencyEvidence, PostgresDataStore, PostgresTransactionalAggregateExecutor,
@@ -38,7 +36,7 @@ use crm_parties_capability_adapter::{
 use crm_proto_contracts::crm::{customer::v1 as customer_wire, parties::v1 as party_wire};
 use std::sync::Arc;
 
-use super::customer_enrichment_suggestion_get::{ACTOR, NOW, TENANT, actor, tenant};
+use super::customer_enrichment_suggestion_get::{NOW, TENANT, actor, tenant};
 
 pub const PARTY_ID: &str = "party-consent-policy-1";
 pub const WRONG_PARTY_ID: &str = "party-consent-policy-wrong";
@@ -141,14 +139,14 @@ pub async fn seed_definitions(store: &PostgresDataStore) -> Result<DefinitionFix
 
     seed_record(
         store,
-        provider_profile_record_ref(profile.version_id().as_str())?,
+        provider_profile_record_ref(&profile)?,
         provider_profile_persisted_payload(&profile)?,
         "provider-profile",
     )
     .await?;
     seed_record(
         store,
-        mapping_record_ref(mapping.version_id().as_str())?,
+        mapping_record_ref(&mapping)?,
         mapping_persisted_payload(&mapping)?,
         "mapping",
     )
@@ -222,28 +220,6 @@ pub async fn seed_consent(
     Ok(authorization_id)
 }
 
-pub fn withdrawn_snapshot(authorization_id: &str) -> Result<ConsentAuthorization, SdkError> {
-    ConsentAuthorization::rehydrate(ConsentAuthorizationSnapshot {
-        authorization_id: ConsentAuthorizationId::try_new(authorization_id)?,
-        party_ref: PartyReference::try_new(PARTY_ID)?,
-        contact_point_ref: None,
-        purpose: PurposeCode::try_new(PURPOSE)?,
-        channel: CommunicationChannel::Email,
-        effect: ConsentEffect::Grant,
-        legal_basis: LegalBasisCode::try_new(LEGAL_BASIS)?,
-        jurisdiction: JurisdictionCode::try_new("eu")?,
-        source: SourceCode::try_new("consent_policy_fixture")?,
-        evidence_ref: EvidenceReference::try_new("withdrawn-evidence")?,
-        effective_from_unix_nanos: NOW - 2_000_000_000,
-        expires_at_unix_nanos: Some(NOW + 10_000_000_000),
-        status: ConsentAuthorizationStatus::Withdrawn,
-        withdrawn_at_unix_nanos: Some(NOW - 500_000_000),
-        created_at_unix_nanos: NOW - 3_000_000_000,
-        updated_at_unix_nanos: NOW - 500_000_000,
-        version: 2,
-    })
-}
-
 async fn seed_record(
     store: &PostgresDataStore,
     reference: RecordRef,
@@ -279,7 +255,8 @@ async fn seed_record(
                 occurred_at_unix_nanos: NOW - 100_000_000,
             },
         })
-        .await?;
+        .await
+        .map_err(configuration_error)?;
     Ok(())
 }
 
@@ -295,9 +272,11 @@ fn seed_context(identity: &str) -> Result<ModuleExecutionContext, SdkError> {
                 .map_err(configuration_error)?,
             causation_id: CausationId::try_new(format!("{identity}-causation"))
                 .map_err(configuration_error)?,
-            trace_id: TraceId::try_new(format!("{identity}-trace")).map_err(configuration_error)?,
+            trace_id: TraceId::try_new(format!("{identity}-trace"))
+                .map_err(configuration_error)?,
             capability_id: CapabilityId::try_new(SEED_CAPABILITY).map_err(configuration_error)?,
-            capability_version: CapabilityVersion::try_new("1.0.0").map_err(configuration_error)?,
+            capability_version: CapabilityVersion::try_new("1.0.0")
+                .map_err(configuration_error)?,
             idempotency_key: IdempotencyKey::try_new(identity).map_err(configuration_error)?,
             business_transaction_id: BusinessTransactionId::try_new(format!(
                 "{identity}-transaction"
