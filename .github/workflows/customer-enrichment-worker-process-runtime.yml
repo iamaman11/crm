@@ -113,6 +113,7 @@ jobs:
             --test postgres_customer_enrichment_provider_http_process \
             process::exact_host_http_transport_records_one_canonical_process_outcome \
             -- --exact --nocapture 2>&1 | tee -a database/customer-enrichment-worker-process-runtime.log
+      # Keep the full HTTP-to-materialization proof isolated on a freshly rebuilt database.
       - name: Prepare fresh concrete HTTP provider-materialization database
         run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
       - name: Verify concrete HTTP provider through governed materialization
