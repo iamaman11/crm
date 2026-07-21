@@ -1,0 +1,115 @@
+name: Customer Privacy Persistence CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-customer-privacy-persistence-adapter/**"
+      - "modules/crm-customer-privacy/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0021_customer_privacy_force_rls.sql"
+      - ".github/workflows/customer-privacy-persistence.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-customer-privacy-persistence-adapter/**"
+      - "modules/crm-customer-privacy/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0021_customer_privacy_force_rls.sql"
+      - ".github/workflows/customer-privacy-persistence.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  persistence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_privacy_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_privacy_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_privacy_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply clean migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+      - name: Build isolated runtime role fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify strict privacy snapshot adapter
+        run: cargo test -p crm-customer-privacy-persistence-adapter --all-features
+      - name: Verify clean-migration Customer Privacy FORCE RLS
+        run: psql --set ON_ERROR_STOP=1 --file database/tests/0021_customer_privacy_force_rls.sql
+      - name: Roll back every migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+      - name: Verify rollback removed authoritative schema
+        run: |
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply every migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+      - name: Rebuild isolated runtime role fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify reapplied Customer Privacy FORCE RLS
+        run: psql --set ON_ERROR_STOP=1 --file database/tests/0021_customer_privacy_force_rls.sql
+      - name: Upload Customer Privacy persistence diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-privacy-persistence-diagnostics
+          path: |
+            crates/crm-customer-privacy-persistence-adapter/
+            database/tests/0021_customer_privacy_force_rls.sql
+          if-no-files-found: error
+          retention-days: 7
