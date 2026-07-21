@@ -7,10 +7,12 @@ use crm_application_composition::TenantBackgroundWorker;
 use crm_capability_plan_support as support;
 use crm_core_data::PostgresDataStore;
 use crm_core_events::{
-    EventHistoryRequest, ProjectionEventApplication, ProjectionFailure, ProjectionStore,
+    EventHistoryRequest, ProjectionDocumentWrite, ProjectionEventApplication, ProjectionFailure,
+    ProjectionStore,
 };
 use crm_customer_enrichment::{
-    ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequest, PartySnapshot, ProviderProfileVersion,
+    ENRICHMENT_REQUEST_RECORD_TYPE, EnrichmentRequest, PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
+    PartySnapshot, ProviderProcessCanonicalOutcome, ProviderProfileVersion,
     ProviderResponseConflictDecision,
 };
 use crm_customer_enrichment_capability_adapter::{
@@ -30,7 +32,7 @@ use std::fmt;
 use std::sync::Arc;
 
 pub const PROVIDER_PROCESS_WORKER_ID: &str = "customer-enrichment-provider-process";
-pub const PROVIDER_PROCESS_PROJECTION_ID: &str = "customer-enrichment-provider-process-v1";
+pub use crm_customer_enrichment::PROVIDER_PROCESS_PROJECTION_ID;
 pub const PROVIDER_PROCESS_WORKER_ACTOR_ID: &str = "customer-enrichment-provider-worker";
 const DEFAULT_PAGE_SIZE: u32 = 100;
 
@@ -183,32 +185,11 @@ impl CustomerEnrichmentProviderProcessWorker {
                 let next_cursor = page.next_cursor.clone();
                 for delivery in page.deliveries {
                     cycle.created_events = cycle.created_events.saturating_add(1);
-                    match self
+                    let processed = match self
                         .process_delivery(&tenant_id, now_unix_ms, &delivery)
                         .await
                     {
-                        Ok(DeliveryDisposition::Executed(result)) => {
-                            cycle.dispatched = cycle.dispatched.saturating_add(1);
-                            if result.dispatch_replayed {
-                                cycle.dispatch_replays = cycle.dispatch_replays.saturating_add(1);
-                            }
-                            if result.response_replayed {
-                                cycle.response_replays = cycle.response_replays.saturating_add(1);
-                            }
-                        }
-                        Ok(DeliveryDisposition::Skipped) => {
-                            cycle.skipped = cycle.skipped.saturating_add(1);
-                        }
-                        Ok(DeliveryDisposition::RetainedFirstReceipt) => {
-                            cycle.retained_first_receipts =
-                                cycle.retained_first_receipts.saturating_add(1);
-                        }
-                        Ok(DeliveryDisposition::RejectedRequest { replayed }) => {
-                            cycle.rejected_requests = cycle.rejected_requests.saturating_add(1);
-                            if replayed {
-                                cycle.rejection_replays = cycle.rejection_replays.saturating_add(1);
-                            }
-                        }
+                        Ok(processed) => processed,
                         Err(error) => {
                             if !error.retryable {
                                 let _ = ProjectionStore::mark_projection_failed(
@@ -225,13 +206,37 @@ impl CustomerEnrichmentProviderProcessWorker {
                             }
                             return Err(error);
                         }
+                    };
+                    match processed.disposition {
+                        DeliveryDisposition::Executed(result) => {
+                            cycle.dispatched = cycle.dispatched.saturating_add(1);
+                            if result.dispatch_replayed {
+                                cycle.dispatch_replays = cycle.dispatch_replays.saturating_add(1);
+                            }
+                            if result.response_replayed {
+                                cycle.response_replays = cycle.response_replays.saturating_add(1);
+                            }
+                        }
+                        DeliveryDisposition::Skipped => {
+                            cycle.skipped = cycle.skipped.saturating_add(1);
+                        }
+                        DeliveryDisposition::RetainedFirstReceipt => {
+                            cycle.retained_first_receipts =
+                                cycle.retained_first_receipts.saturating_add(1);
+                        }
+                        DeliveryDisposition::RejectedRequest { replayed } => {
+                            cycle.rejected_requests = cycle.rejected_requests.saturating_add(1);
+                            if replayed {
+                                cycle.rejection_replays = cycle.rejection_replays.saturating_add(1);
+                            }
+                        }
                     }
                     ProjectionStore::apply_projection_event(
                         &self.store,
                         ProjectionEventApplication {
                             projection_id: PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
                             delivery,
-                            writes: Vec::new(),
+                            writes: vec![processed.outcome_write],
                         },
                     )
                     .await?;
@@ -250,7 +255,7 @@ impl CustomerEnrichmentProviderProcessWorker {
         tenant_id: &TenantId,
         now_unix_ms: u64,
         delivery: &EventDelivery,
-    ) -> Result<DeliveryDisposition, SdkError> {
+    ) -> Result<ProcessedDelivery, SdkError> {
         let event = decode_created_event(delivery)?;
         let created = event.enrichment_request.ok_or_else(created_event_invalid)?;
         let request_ref = created
@@ -278,9 +283,17 @@ impl CustomerEnrichmentProviderProcessWorker {
                 ));
             };
             return match resolution.decision() {
-                ProviderResponseConflictDecision::RetainFirstReceipt => {
-                    Ok(DeliveryDisposition::RetainedFirstReceipt)
-                }
+                ProviderResponseConflictDecision::RetainFirstReceipt => processed_delivery(
+                    DeliveryDisposition::RetainedFirstReceipt,
+                    ProviderProcessCanonicalOutcome::retain_first_receipt(
+                        conflict.request_id().as_str().to_owned(),
+                        conflict.retry_generation(),
+                        conflict.first_receipt_id().as_str().to_owned(),
+                        conflict.conflict_id().as_str().to_owned(),
+                        delivery.event_id.as_str().to_owned(),
+                    )?,
+                    delivery,
+                ),
                 ProviderResponseConflictDecision::RejectRequest => {
                     let result = self
                         .reject_executor
@@ -293,9 +306,19 @@ impl CustomerEnrichmentProviderProcessWorker {
                             },
                         )
                         .await?;
-                    Ok(DeliveryDisposition::RejectedRequest {
-                        replayed: result.replayed,
-                    })
+                    processed_delivery(
+                        DeliveryDisposition::RejectedRequest {
+                            replayed: result.replayed,
+                        },
+                        ProviderProcessCanonicalOutcome::reject_request(
+                            conflict.request_id().as_str().to_owned(),
+                            conflict.retry_generation(),
+                            conflict.first_receipt_id().as_str().to_owned(),
+                            conflict.conflict_id().as_str().to_owned(),
+                            delivery.event_id.as_str().to_owned(),
+                        )?,
+                        delivery,
+                    )
                 }
             };
         }
@@ -309,7 +332,15 @@ impl CustomerEnrichmentProviderProcessWorker {
             )
             .await?;
         let ProviderDispatchSourceDisposition::Ready(source) = source else {
-            return Ok(DeliveryDisposition::Skipped);
+            return processed_delivery(
+                DeliveryDisposition::Skipped,
+                ProviderProcessCanonicalOutcome::skipped(
+                    request_ref.enrichment_request_id.clone(),
+                    created.retry_generation,
+                    delivery.event_id.as_str().to_owned(),
+                )?,
+                delivery,
+            );
         };
         let party_resource_version = u64::try_from(source.party_snapshot.resource_version)
             .map_err(|_| source_snapshot_invalid())?;
@@ -333,7 +364,8 @@ impl CustomerEnrichmentProviderProcessWorker {
         })?;
         match self.executor.execute(work_item).await? {
             ProviderDispatchExecution::Recorded(result) => {
-                Ok(DeliveryDisposition::Executed(result))
+                let outcome = recorded_outcome(result.as_ref(), delivery)?;
+                processed_delivery(DeliveryDisposition::Executed(result), outcome, delivery)
             }
             ProviderDispatchExecution::Conflicting(draft) => {
                 let persisted = self
@@ -372,12 +404,72 @@ impl TenantBackgroundWorker for CustomerEnrichmentProviderProcessWorker {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
+struct ProcessedDelivery {
+    disposition: DeliveryDisposition,
+    outcome_write: ProjectionDocumentWrite,
+}
+
+#[derive(Debug)]
 enum DeliveryDisposition {
     Executed(Box<ProviderDispatchWorkerResult>),
     Skipped,
     RetainedFirstReceipt,
     RejectedRequest { replayed: bool },
+}
+
+fn processed_delivery(
+    disposition: DeliveryDisposition,
+    outcome: ProviderProcessCanonicalOutcome,
+    delivery: &EventDelivery,
+) -> Result<ProcessedDelivery, SdkError> {
+    Ok(ProcessedDelivery {
+        disposition,
+        outcome_write: ProjectionDocumentWrite {
+            resource_type: PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE.to_owned(),
+            resource_id: outcome.request_id().to_owned(),
+            source_version: delivery.aggregate_version,
+            document: outcome.to_projection_document()?,
+        },
+    })
+}
+
+fn recorded_outcome(
+    result: &ProviderDispatchWorkerResult,
+    delivery: &EventDelivery,
+) -> Result<ProviderProcessCanonicalOutcome, SdkError> {
+    let request = result
+        .response
+        .enrichment_request
+        .as_ref()
+        .ok_or_else(provider_outcome_invalid)?;
+    let request_id = request
+        .enrichment_request_ref
+        .as_ref()
+        .map(|reference| reference.enrichment_request_id.clone())
+        .ok_or_else(provider_outcome_invalid)?;
+    let receipt_id = result
+        .response
+        .provider_response_receipt
+        .as_ref()
+        .and_then(|receipt| receipt.provider_response_receipt_ref.as_ref())
+        .map(|reference| reference.provider_response_receipt_id.clone())
+        .ok_or_else(provider_outcome_invalid)?;
+    ProviderProcessCanonicalOutcome::response_recorded(
+        request_id,
+        request.retry_generation,
+        receipt_id,
+        delivery.event_id.as_str().to_owned(),
+    )
+}
+
+fn provider_outcome_invalid() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_PROCESS_OUTCOME_INVALID",
+        crm_module_sdk::ErrorCategory::Internal,
+        false,
+        "The canonical provider-process outcome could not be derived.",
+    )
 }
 
 fn decode_created_event(

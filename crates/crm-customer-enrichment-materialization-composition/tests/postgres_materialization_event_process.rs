@@ -7,19 +7,23 @@ use crm_core_data::{
     AuditIntent, IdempotencyEvidence, PostgresDataStore, PostgresImmutableFileArtifactStore,
     RecordCreatePlan,
 };
-use crm_core_events::ProjectionStore;
+use crm_core_events::{
+    EventHistoryRequest, ProjectionDocumentWrite, ProjectionEventApplication, ProjectionStore,
+};
 use crm_core_files::{
     AppendImmutableFileChunk, CreateImmutableFileArtifact, ImmutableFileArtifactStore,
 };
 use crm_customer_enrichment::{
     ApprovalRequirement, EnrichmentRequest, EnrichmentRequestDraft,
     LIFECYCLE_STATE_RETENTION_POLICY_ID, LIFECYCLE_STATE_SCHEMA_VERSION, MappingDraft,
-    MappingNormalization, MappingVersion, PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE,
+    MappingNormalization, MappingVersion, PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
+    PROVIDER_PROCESS_PROJECTION_ID, PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE,
     PROVIDER_RESPONSE_RECEIPT_STATE_MAXIMUM_BYTES, PROVIDER_RESPONSE_RECEIPT_STATE_SCHEMA_ID,
-    ProviderProfileDraft, ProviderProfileVersion, ProviderResponseClass, ProviderResponseReceipt,
-    ProviderResponseReceiptDraft, RawPayloadPolicy, RequestPolicyEvidence, ReviewDecision,
-    ReviewDecisionKind, Suggestion, SuggestionDraft, TargetField, TargetSnapshot,
-    encode_provider_response_receipt_state, provider_response_receipt_state_descriptor_hash,
+    ProviderProcessCanonicalOutcome, ProviderProfileDraft, ProviderProfileVersion,
+    ProviderResponseClass, ProviderResponseReceipt, ProviderResponseReceiptDraft, RawPayloadPolicy,
+    RequestPolicyEvidence, ReviewDecision, ReviewDecisionKind, Suggestion, SuggestionDraft,
+    TargetField, TargetSnapshot, encode_provider_response_receipt_state,
+    provider_response_receipt_state_descriptor_hash,
 };
 use crm_customer_enrichment_application_adapter::{
     APPLY_PARTY_DISPLAY_NAME_REQUEST_SCHEMA, RECORD_APPLICATION_OUTCOME_REQUEST_SCHEMA,
@@ -95,6 +99,31 @@ async fn response_event_waits_for_finalized_evidence_then_materializes_once() {
     let artifacts = Arc::new(PostgresImmutableFileArtifactStore::new(store.clone()));
     let process = materialization_process(store.clone(), artifacts.clone());
     let tenant_id = TenantId::try_new(TENANT_ID).unwrap();
+
+    let pending_choice = process
+        .run_cycle(tenant_id.clone(), 45_000_000)
+        .await
+        .expect_err("response event must wait for the provider canonical choice");
+    assert_eq!(
+        pending_choice.code,
+        "CUSTOMER_ENRICHMENT_PROVIDER_CANONICAL_CHOICE_PENDING"
+    );
+    assert!(pending_choice.retryable);
+    assert!(
+        ProjectionStore::projection_checkpoint(
+            &store,
+            tenant_id.clone(),
+            MATERIALIZATION_PROCESS_PROJECTION_ID.to_owned(),
+        )
+        .await
+        .unwrap()
+        .is_none()
+    );
+    assert_eq!(suggestion_count(&admin).await, 0);
+
+    apply_recorded_provider_outcome(&store, &fixture)
+        .await
+        .expect("apply canonical provider outcome with provider checkpoint");
 
     let missing = process
         .run_cycle(tenant_id.clone(), 50_000_000)
@@ -225,6 +254,52 @@ async fn response_event_waits_for_finalized_evidence_then_materializes_once() {
     assert_eq!(request_version(&admin, &fixture).await, 2);
     assert_eq!(application_attempt_count(&admin).await, 1);
     assert_eq!(evidence_counts(&admin).await, materialized_baseline);
+}
+
+async fn apply_recorded_provider_outcome(
+    store: &PostgresDataStore,
+    fixture: &Fixture,
+) -> Result<(), SdkError> {
+    let tenant_id = TenantId::try_new(TENANT_ID).unwrap();
+    let page = ProjectionStore::list_event_history(
+        store,
+        EventHistoryRequest {
+            tenant_id: tenant_id.clone(),
+            consumer_module_id: ModuleId::try_new(MODULE_ID).unwrap(),
+            event_types: vec![EventType::try_new(ENRICHMENT_REQUEST_CREATED_EVENT_TYPE).unwrap()],
+            after: None,
+            page_size: 100,
+        },
+    )
+    .await?;
+    let delivery = page
+        .deliveries
+        .into_iter()
+        .find(|delivery| {
+            delivery.aggregate.record_id.as_str() == fixture.request.request_id().as_str()
+        })
+        .expect("request-created delivery exists");
+    let outcome = ProviderProcessCanonicalOutcome::response_recorded(
+        fixture.request.request_id().as_str().to_owned(),
+        fixture.request.retry_generation(),
+        fixture.receipt.receipt_id().as_str().to_owned(),
+        delivery.event_id.as_str().to_owned(),
+    )?;
+    ProjectionStore::apply_projection_event(
+        store,
+        ProjectionEventApplication {
+            projection_id: PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
+            writes: vec![ProjectionDocumentWrite {
+                resource_type: PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE.to_owned(),
+                resource_id: fixture.request.request_id().as_str().to_owned(),
+                source_version: delivery.aggregate_version,
+                document: outcome.to_projection_document()?,
+            }],
+            delivery,
+        },
+    )
+    .await?;
+    Ok(())
 }
 
 fn materialization_process(

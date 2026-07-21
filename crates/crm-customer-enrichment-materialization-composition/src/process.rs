@@ -10,7 +10,11 @@ use crm_core_data::PostgresDataStore;
 use crm_core_events::{
     EventHistoryRequest, ProjectionEventApplication, ProjectionFailure, ProjectionStore,
 };
-use crm_customer_enrichment::PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE;
+use crm_customer_enrichment::{
+    PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE, PROVIDER_PROCESS_PROJECTION_ID,
+    PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE, ProviderProcessCanonicalOutcome,
+    ProviderProcessOutcomeKind,
+};
 use crm_customer_enrichment_capability_adapter::MODULE_ID;
 use crm_customer_enrichment_materialization_adapter::{
     MATERIALIZE_SUGGESTIONS_REQUEST_SCHEMA, suggestion_materialization_capability_definition,
@@ -65,6 +69,7 @@ pub struct MaterializationProcessCycle {
     pub response_events: u32,
     pub materialized: u32,
     pub skipped_failed_responses: u32,
+    pub skipped_rejected_requests: u32,
     pub replays: u32,
 }
 
@@ -170,6 +175,10 @@ impl CustomerEnrichmentMaterializationProcessWorker {
                             cycle.skipped_failed_responses =
                                 cycle.skipped_failed_responses.saturating_add(1);
                         }
+                        Ok(MaterializationDisposition::SkippedRejectedRequest) => {
+                            cycle.skipped_rejected_requests =
+                                cycle.skipped_rejected_requests.saturating_add(1);
+                        }
                         Err(error) => {
                             if !error.retryable {
                                 let _ = ProjectionStore::mark_projection_failed(
@@ -230,6 +239,32 @@ impl CustomerEnrichmentMaterializationProcessWorker {
             || delivery.aggregate.record_id.as_str() != receipt_id
         {
             return Err(response_event_invalid());
+        }
+
+        let canonical_document = self
+            .store
+            .projection_document(
+                tenant_id,
+                PROVIDER_PROCESS_PROJECTION_ID,
+                PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
+                &request_id,
+            )
+            .await?
+            .ok_or_else(canonical_choice_pending)?;
+        let canonical =
+            ProviderProcessCanonicalOutcome::from_projection_document(canonical_document)?;
+        if canonical.request_id() != request_id
+            || canonical.provider_response_receipt_id() != Some(receipt_id.as_str())
+        {
+            return Err(canonical_choice_mismatch());
+        }
+        match canonical.kind() {
+            ProviderProcessOutcomeKind::ResponseRecorded
+            | ProviderProcessOutcomeKind::RetainFirstReceipt => {}
+            ProviderProcessOutcomeKind::RejectRequest => {
+                return Ok(MaterializationDisposition::SkippedRejectedRequest);
+            }
+            ProviderProcessOutcomeKind::Skipped => return Err(canonical_choice_mismatch()),
         }
 
         let definition = suggestion_materialization_capability_definition()?;
@@ -303,6 +338,7 @@ impl TenantBackgroundWorker for CustomerEnrichmentMaterializationProcessWorker {
 enum MaterializationDisposition {
     Executed(CapabilityExecutionResult),
     SkippedFailedResponse,
+    SkippedRejectedRequest,
 }
 
 fn decode_response_recorded_event(
@@ -425,6 +461,24 @@ fn response_event_invalid() -> SdkError {
         crm_module_sdk::ErrorCategory::Internal,
         false,
         "Customer Enrichment provider-response evidence is invalid.",
+    )
+}
+
+fn canonical_choice_pending() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_CANONICAL_CHOICE_PENDING",
+        crm_module_sdk::ErrorCategory::Conflict,
+        true,
+        "The governed provider canonical choice is not available yet.",
+    )
+}
+
+fn canonical_choice_mismatch() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_ENRICHMENT_PROVIDER_CANONICAL_CHOICE_MISMATCH",
+        crm_module_sdk::ErrorCategory::Internal,
+        false,
+        "The provider response does not match the governed canonical choice.",
     )
 }
 

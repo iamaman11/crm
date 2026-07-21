@@ -369,6 +369,57 @@ impl PostgresDataStore {
         Ok(())
     }
 
+    pub async fn projection_document(
+        &self,
+        tenant_id: &TenantId,
+        projection_id: &str,
+        resource_type: &str,
+        resource_id: &str,
+    ) -> Result<Option<serde_json::Value>, SdkError> {
+        validate_projection_id(projection_id)?;
+        if resource_type.is_empty()
+            || resource_type.len() > 180
+            || resource_id.is_empty()
+            || resource_id.len() > 360
+        {
+            return Err(projection_request_invalid(
+                "projection resource identity is invalid",
+            ));
+        }
+        let mut transaction = self
+            .pool()
+            .begin()
+            .await
+            .map_err(projection_database_error)?;
+        bind_projection_tenant(&mut transaction, tenant_id).await?;
+        sqlx::query("SET TRANSACTION READ ONLY")
+            .execute(&mut *transaction)
+            .await
+            .map_err(projection_database_error)?;
+        let document = sqlx::query_scalar::<_, serde_json::Value>(
+            r#"
+            SELECT document
+            FROM crm.projection_documents
+            WHERE tenant_id = $1
+              AND projection_id = $2
+              AND resource_type = $3
+              AND resource_id = $4
+            "#,
+        )
+        .bind(tenant_id.as_str())
+        .bind(projection_id)
+        .bind(resource_type)
+        .bind(resource_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(projection_database_error)?;
+        transaction
+            .commit()
+            .await
+            .map_err(projection_database_error)?;
+        Ok(document)
+    }
+
     pub async fn projection_documents(
         &self,
         tenant_id: &TenantId,

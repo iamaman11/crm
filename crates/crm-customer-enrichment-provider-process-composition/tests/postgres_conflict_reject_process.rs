@@ -5,8 +5,9 @@ use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordC
 use crm_core_events::ProjectionStore;
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, EnrichmentRequestStatus, MappingDraft,
-    MappingNormalization, MappingVersion, ProviderProfileDraft, ProviderProfileVersion,
-    ProviderResponseConflictDecision, ProviderResponseConflictDraft,
+    MappingNormalization, MappingVersion, PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
+    ProviderProcessCanonicalOutcome, ProviderProcessOutcomeKind, ProviderProfileDraft,
+    ProviderProfileVersion, ProviderResponseConflictDecision, ProviderResponseConflictDraft,
     ProviderResponseConflictResolutionPolicyDecision, ProviderResponseConflictResolutionPolicyPort,
     ProviderResponseConflictResolutionPolicyRequest, ProviderResponseReceiptId, RawPayloadPolicy,
     RequestPolicyEvidence, TargetField, TargetSnapshot,
@@ -181,6 +182,18 @@ async fn approved_reject_terminalizes_once_then_resumes_checkpoint_without_provi
         .is_some()
     );
     assert_eq!(evidence_counts(&admin).await, after_terminal);
+    let outcome = provider_outcome(&store, &request)
+        .await
+        .expect("reject provider outcome exists");
+    assert_eq!(outcome.kind(), ProviderProcessOutcomeKind::RejectRequest);
+    assert_eq!(
+        outcome.provider_response_receipt_id(),
+        Some(resolved.conflict.first_receipt_id().as_str())
+    );
+    assert_eq!(
+        outcome.provider_response_conflict_id(),
+        Some(resolved.conflict.conflict_id().as_str())
+    );
 
     let snapshot = store
         .get_record(
@@ -204,6 +217,25 @@ async fn approved_reject_terminalizes_once_then_resumes_checkpoint_without_provi
     assert_eq!(source_calls.load(Ordering::SeqCst), 0);
     assert_eq!(executor_calls.load(Ordering::SeqCst), 0);
     assert_eq!(evidence_counts(&admin).await, after_terminal);
+}
+
+async fn provider_outcome(
+    store: &PostgresDataStore,
+    request: &EnrichmentRequest,
+) -> Option<ProviderProcessCanonicalOutcome> {
+    store
+        .projection_document(
+            &TenantId::try_new(TENANT_ID).unwrap(),
+            PROVIDER_PROCESS_PROJECTION_ID,
+            PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
+            request.request_id().as_str(),
+        )
+        .await
+        .expect("read reject provider outcome")
+        .map(|document| {
+            ProviderProcessCanonicalOutcome::from_projection_document(document)
+                .expect("decode reject provider outcome")
+        })
 }
 
 #[derive(Clone)]

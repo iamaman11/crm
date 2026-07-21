@@ -13,6 +13,8 @@ pub mod materialization;
 pub mod persistence;
 /// Pure-core governed reads, policy, provider dispatch and owner-application boundaries.
 pub mod ports;
+/// Canonical cross-process outcome written atomically with the provider checkpoint.
+pub mod provider_process_outcome;
 /// Exact identities for the nine manifest-owned enrichment record types.
 pub mod records;
 /// Durable provider-response conflict identity and operator-resolution evidence.
@@ -44,6 +46,7 @@ pub use lifecycle::{
 pub use materialization::*;
 pub use persistence::*;
 pub use ports::*;
+pub use provider_process_outcome::*;
 pub use provider_usage::*;
 pub use records::*;
 pub use response_conflict::*;

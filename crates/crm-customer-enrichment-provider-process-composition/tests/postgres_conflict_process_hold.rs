@@ -5,11 +5,12 @@ use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordC
 use crm_core_events::ProjectionStore;
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
-    PartySnapshot, ProviderProfileDraft, ProviderProfileVersion, ProviderResponseConflictDecision,
-    ProviderResponseConflictDraft, ProviderResponseConflictResolutionPolicyDecision,
-    ProviderResponseConflictResolutionPolicyPort, ProviderResponseConflictResolutionPolicyRequest,
-    ProviderResponseReceiptId, RawPayloadPolicy, RequestPolicyEvidence, TargetField,
-    TargetSnapshot,
+    PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE, PartySnapshot, ProviderProcessCanonicalOutcome,
+    ProviderProcessOutcomeKind, ProviderProfileDraft, ProviderProfileVersion,
+    ProviderResponseConflictDecision, ProviderResponseConflictDraft,
+    ProviderResponseConflictResolutionPolicyDecision, ProviderResponseConflictResolutionPolicyPort,
+    ProviderResponseConflictResolutionPolicyRequest, ProviderResponseReceiptId, RawPayloadPolicy,
+    RequestPolicyEvidence, TargetField, TargetSnapshot,
 };
 use crm_customer_enrichment_capability_adapter::{
     ENRICHMENT_REQUEST_CREATED_EVENT_SCHEMA, ENRICHMENT_REQUEST_CREATED_EVENT_TYPE, MODULE_ID,
@@ -199,6 +200,21 @@ async fn unresolved_conflict_is_persisted_once_and_holds_checkpoint_across_resta
         .is_some()
     );
     assert_eq!(evidence_counts(&admin).await, resolved_baseline);
+    let outcome = provider_outcome(&store, &fixture.request)
+        .await
+        .expect("retain-first provider outcome exists");
+    assert_eq!(
+        outcome.kind(),
+        ProviderProcessOutcomeKind::RetainFirstReceipt
+    );
+    assert_eq!(
+        outcome.provider_response_receipt_id(),
+        Some(first_receipt_id.as_str())
+    );
+    assert_eq!(
+        outcome.provider_response_conflict_id(),
+        Some(conflict.conflict_id().as_str())
+    );
 
     let resolved = conflict_store
         .recovery_conflict_for_request(
@@ -226,6 +242,25 @@ async fn unresolved_conflict_is_persisted_once_and_holds_checkpoint_across_resta
     assert_eq!(source_calls.load(Ordering::SeqCst), 1);
     assert_eq!(executor_calls.load(Ordering::SeqCst), 1);
     assert_eq!(evidence_counts(&admin).await, resolved_baseline);
+}
+
+async fn provider_outcome(
+    store: &PostgresDataStore,
+    request: &EnrichmentRequest,
+) -> Option<ProviderProcessCanonicalOutcome> {
+    store
+        .projection_document(
+            &TenantId::try_new(TENANT_ID).unwrap(),
+            PROVIDER_PROCESS_PROJECTION_ID,
+            PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
+            request.request_id().as_str(),
+        )
+        .await
+        .expect("read provider canonical outcome")
+        .map(|document| {
+            ProviderProcessCanonicalOutcome::from_projection_document(document)
+                .expect("decode provider canonical outcome")
+        })
 }
 
 #[derive(Clone)]
