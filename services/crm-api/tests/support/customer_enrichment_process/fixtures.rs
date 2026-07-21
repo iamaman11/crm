@@ -95,6 +95,28 @@ pub fn missing_consent_request_payload(
     profile_id: &str,
     mapping_id: &str,
 ) -> TypedPayload {
+    request_payload(definition, profile_id, mapping_id, "consent")
+}
+
+pub fn legitimate_interest_request_payload(
+    definition: &CapabilityDefinition,
+    profile_id: &str,
+    mapping_id: &str,
+) -> TypedPayload {
+    request_payload(
+        definition,
+        profile_id,
+        mapping_id,
+        "legitimate_interest",
+    )
+}
+
+fn request_payload(
+    definition: &CapabilityDefinition,
+    profile_id: &str,
+    mapping_id: &str,
+    legal_basis_code: &str,
+) -> TypedPayload {
     let now = now_millis();
     payload(
         definition,
@@ -115,7 +137,7 @@ pub fn missing_consent_request_payload(
             requested_fields: vec![enrichment::EnrichmentTargetField::PartyDisplayName as i32],
             policy_evidence: Some(enrichment::EnrichmentRequestPolicyEvidence {
                 purpose_code: PURPOSE.to_owned(),
-                legal_basis_code: "consent".to_owned(),
+                legal_basis_code: legal_basis_code.to_owned(),
                 consent_evidence_reference: None,
                 policy_version: "request-policy-v1".to_owned(),
             }),
