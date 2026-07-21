@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package crm.customer_privacy.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/customer_privacy/v1/reference.proto";
+import "crm/customer_privacy/v1/types.proto";
+
+message CreatePrivacyCaseRequest {
+  PrivacyCaseKind kind = 1;
+  string policy_version = 2;
+  PrivacyCaseRef previous_privacy_case_ref = 3;
+}
+
+message CreatePrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+}
+
+message SubmitPrivacyCaseRequest {
+  PrivacyCaseRef privacy_case_ref = 1;
+  int64 expected_version = 2;
+}
+
+message SubmitPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+}
+
+message VerifyPrivacyCaseSubjectRequest {
+  PrivacyCaseRef privacy_case_ref = 1;
+  int64 expected_version = 2;
+  crm.customer.v1.PartyRef submitted_party_ref = 3;
+  crm.customer.v1.PartyRef canonical_party_ref = 4;
+  uint64 identity_resolution_generation = 5;
+  SubjectVerificationMethod verification_method = 6;
+}
+
+message VerifyPrivacyCaseSubjectResponse {
+  PrivacyCase privacy_case = 1;
+}
+
+message ApprovePrivacyCaseRequest {
+  PrivacyCaseRef privacy_case_ref = 1;
+  int64 expected_version = 2;
+}
+
+message ApprovePrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+}
+
+message CancelPrivacyCaseRequest {
+  PrivacyCaseRef privacy_case_ref = 1;
+  int64 expected_version = 2;
+}
+
+message CancelPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+}
+
+message GetPrivacyCaseRequest {
+  PrivacyCaseRef privacy_case_ref = 1;
+}
+
+message GetPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+}
+
+message ListPrivacyCasesRequest {
+  crm.customer.v1.PartyRef canonical_party_ref = 1;
+  optional PrivacyCaseKind kind = 2;
+  optional PrivacyCaseStatus status = 3;
+  int32 page_size = 4;
+  string cursor = 5;
+}
+
+message ListPrivacyCasesResponse {
+  repeated PrivacyCase privacy_cases = 1;
+  string next_cursor = 2;
+}
+
+message GetPrivacyActionPlanRequest {
+  PrivacyCaseRef privacy_case_ref = 1;
+}
+
+message GetPrivacyActionPlanResponse {
+  PrivacyActionPlan privacy_action_plan = 1;
+}
+
+message ListPrivacyOwnerOutcomesRequest {
+  PrivacyCaseRef privacy_case_ref = 1;
+  optional string owner_module_id = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+message ListPrivacyOwnerOutcomesResponse {
+  repeated PrivacyOwnerOutcome privacy_owner_outcomes = 1;
+  string next_cursor = 2;
+}
+
+message PrivacyCaseCreatedEvent {
+  PrivacyCase privacy_case = 1;
+}
+
+message PrivacyCaseStatusChangedEvent {
+  PrivacyCase privacy_case = 1;
+}
+
+message PrivacyCaseSubjectVerifiedEvent {
+  PrivacyCase privacy_case = 1;
+  SubjectBindingEvidence subject_binding = 2;
+}

@@ -75,6 +75,7 @@ def command_conformance(_: argparse.Namespace) -> None:
             "unittest",
             "tests/test_contract_bindings.py",
             "tests/test_customer_privacy_architecture_freeze.py",
+            "tests/test_customer_privacy_contract_inventory.py",
             "tests/test_module_compatibility.py",
             "tests/test_module_manifest_validation.py",
             "tests/test_module_scaffolding.py",
@@ -179,26 +180,25 @@ def build_parser() -> argparse.ArgumentParser:
     fmt.set_defaults(handler=command_format)
 
     lock = subparsers.add_parser(
-        "lock", help="synchronize Cargo.lock from workspace metadata"
+        "lock", help="regenerate the committed Cargo lockfile"
     )
     lock.set_defaults(handler=command_lock)
 
-    focused = subparsers.add_parser(
-        "test", help="run focused tests for one Cargo package"
+    test = subparsers.add_parser(
+        "test", help="run one package or one package integration test"
     )
-    focused.add_argument("package")
-    focused.add_argument("--test-target")
-    focused.add_argument("passthrough", nargs=argparse.REMAINDER)
-    focused.set_defaults(handler=command_test)
+    test.add_argument("--package", "-p", required=True)
+    test.add_argument("--test-target")
+    test.add_argument("passthrough", nargs=argparse.REMAINDER)
+    test.set_defaults(handler=command_test)
 
-    full = subparsers.add_parser(
-        "test-all", help="run the complete Rust workspace test suite"
+    test_all = subparsers.add_parser(
+        "test-all", help="run the full Rust workspace test suite"
     )
-    full.set_defaults(handler=command_test_all)
+    test_all.set_defaults(handler=command_test_all)
 
     quality = subparsers.add_parser(
-        "quality",
-        help="run conformance, formatting, Clippy and full Rust tests",
+        "quality", help="run conformance, formatting, Clippy and all tests"
     )
     quality.set_defaults(handler=command_quality)
 
@@ -206,11 +206,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     try:
         args.handler(args)
-    except CommandError as exc:
-        print(f"Repository command failed: {exc}", file=sys.stderr)
+    except CommandError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
         return 1
     return 0
 

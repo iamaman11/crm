@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package crm.customer_privacy.v1;
+
+message PrivacyCaseRef {
+  string privacy_case_id = 1;
+}
+
+message ProcessingRestrictionRef {
+  string processing_restriction_id = 1;
+}
+
+message CustomerDataLegalHoldRef {
+  string customer_data_legal_hold_id = 1;
+}
+
+message PrivacyActionPlanRef {
+  string privacy_action_plan_id = 1;
+}
+
+message PrivacyOwnerOutcomeRef {
+  string privacy_owner_outcome_id = 1;
+}

@@ -88,13 +88,105 @@
       "id": "customer_data.import.party.rows.validate",
       "version": "1.0.0",
       "reason": "Legacy client-preparsed row-validation contract retained for compatibility; production validates rows only through the governed source-artifact route."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.create",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.submit",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.subject.verify",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.approve",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.cancel",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.get",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.list",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.plan.get",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.case.owner_outcomes.list",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.restriction.place",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.restriction.release",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.restriction.get",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.legal_hold.place",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.legal_hold.release",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.legal_hold.get",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+    },
+    {
+      "owner_module_id": "crm.customer-privacy",
+      "id": "customer_privacy.legal_hold.list_by_subject",
+      "version": "1.0.0",
+      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
     }
   ],
   "empty_runtime_modules": [
-    {
-      "module_id": "crm.customer-privacy",
-      "reason": "Phase 8A.11 owner foundation intentionally publishes no capability or route until compatible contracts, FORCE RLS persistence, shared subject-lock enforcement and production acceptance are implemented."
-    },
     {
       "module_id": "crm.sales-activities-link",
       "reason": "Link module contributes background event delivery but intentionally exposes no public mutation or query route."

@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package crm.customer_privacy.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/customer_privacy/v1/reference.proto";
+import "crm/customer_privacy/v1/types.proto";
+
+message PlaceProcessingRestrictionRequest {
+  crm.customer.v1.PartyRef canonical_party_ref = 1;
+  ProcessingRestrictionScope scope = 2;
+  string policy_version = 3;
+  int64 effective_from_unix_ms = 4;
+  optional int64 expires_at_unix_ms = 5;
+}
+
+message PlaceProcessingRestrictionResponse {
+  ProcessingRestriction processing_restriction = 1;
+}
+
+message ReleaseProcessingRestrictionRequest {
+  ProcessingRestrictionRef processing_restriction_ref = 1;
+  int64 expected_version = 2;
+}
+
+message ReleaseProcessingRestrictionResponse {
+  ProcessingRestriction processing_restriction = 1;
+}
+
+message GetProcessingRestrictionRequest {
+  ProcessingRestrictionRef processing_restriction_ref = 1;
+}
+
+message GetProcessingRestrictionResponse {
+  ProcessingRestriction processing_restriction = 1;
+}
+
+message PlaceCustomerDataLegalHoldRequest {
+  crm.customer.v1.PartyRef canonical_party_ref = 1;
+  CustomerDataLegalHoldScope scope = 2;
+  string authority_reference_id = 3;
+  string reason_code = 4;
+  string policy_version = 5;
+  int64 effective_from_unix_ms = 6;
+  optional int64 effective_until_unix_ms = 7;
+}
+
+message PlaceCustomerDataLegalHoldResponse {
+  CustomerDataLegalHold customer_data_legal_hold = 1;
+}
+
+message ReleaseCustomerDataLegalHoldRequest {
+  CustomerDataLegalHoldRef customer_data_legal_hold_ref = 1;
+  int64 expected_version = 2;
+}
+
+message ReleaseCustomerDataLegalHoldResponse {
+  CustomerDataLegalHold customer_data_legal_hold = 1;
+}
+
+message GetCustomerDataLegalHoldRequest {
+  CustomerDataLegalHoldRef customer_data_legal_hold_ref = 1;
+}
+
+message GetCustomerDataLegalHoldResponse {
+  CustomerDataLegalHold customer_data_legal_hold = 1;
+}
+
+message ListCustomerDataLegalHoldsBySubjectRequest {
+  crm.customer.v1.PartyRef canonical_party_ref = 1;
+  optional CustomerDataLegalHoldStatus status = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+message ListCustomerDataLegalHoldsBySubjectResponse {
+  repeated CustomerDataLegalHold customer_data_legal_holds = 1;
+  string next_cursor = 2;
+}
+
+message ProcessingRestrictionPlacedEvent {
+  ProcessingRestriction processing_restriction = 1;
+}
+
+message ProcessingRestrictionReleasedEvent {
+  ProcessingRestriction processing_restriction = 1;
+}
+
+message CustomerDataLegalHoldPlacedEvent {
+  CustomerDataLegalHold customer_data_legal_hold = 1;
+}
+
+message CustomerDataLegalHoldReleasedEvent {
+  CustomerDataLegalHold customer_data_legal_hold = 1;
+}
