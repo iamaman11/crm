@@ -89,7 +89,15 @@ mod process {
                         &read_context(),
                         &enrichment_request_record_ref(&self.initial_request)?,
                     )
-                    .await?
+                    .await
+                    .map_err(|_| {
+                        SdkError::new(
+                            "TEST_PROVIDER_REQUEST_READ_FAILED",
+                            ErrorCategory::Internal,
+                            true,
+                            "The persisted provider request could not be read safely.",
+                        )
+                    })?
                     .ok_or_else(|| {
                         SdkError::new(
                             "TEST_PROVIDER_REQUEST_MISSING",
