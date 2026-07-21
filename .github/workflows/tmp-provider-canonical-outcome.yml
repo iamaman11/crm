@@ -1,0 +1,230 @@
+name: Temporary Provider Canonical Outcome
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-provider-canonical-outcome-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-commit:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_enrichment_worker_process_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5442:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_enrichment_worker_process_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5442
+      PGDATABASE: crm_customer_enrichment_worker_process_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5442/crm_customer_enrichment_worker_process_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply canonical outcome patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/tmp_apply_provider_canonical_outcome.py
+          cargo fmt --all
+      - name: Reject unexpected patch scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+
+          allowed = {
+              "modules/crm-customer-enrichment/src/lib.rs",
+              "modules/crm-customer-enrichment/src/provider_process_outcome.rs",
+              "crates/crm-core-data/src/postgres_projection.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/src/worker.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_process_hold.rs",
+              "crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_reject_process.rs",
+              "crates/crm-customer-enrichment-materialization-composition/src/process.rs",
+              "crates/crm-customer-enrichment-materialization-composition/tests/postgres_materialization_event_process.rs",
+          }
+          modified = set(subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines())
+          untracked = set(subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard"], text=True).splitlines())
+          changed = modified | untracked
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected={sorted(unexpected)}")
+          missing = allowed - changed
+          if missing:
+              raise SystemExit(f"missing={sorted(missing)}")
+          print("canonical outcome diff:", sorted(changed))
+          PY
+      - name: Verify pure canonical outcome contracts
+        id: pure
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-enrichment provider_process_outcome --lib -- --nocapture 2>&1 | tee /tmp/provider-canonical-outcome-pure.log
+          cargo test -p crm-customer-enrichment-provider-process-composition --lib -- --nocapture 2>&1 | tee -a /tmp/provider-canonical-outcome-pure.log
+          cargo test -p crm-customer-enrichment-materialization-composition --lib -- --nocapture 2>&1 | tee -a /tmp/provider-canonical-outcome-pure.log
+      - name: Upload pure diagnostics
+        if: steps.pure.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-canonical-outcome-pure-diagnostics
+          path: /tmp/provider-canonical-outcome-pure.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after pure failure
+        if: steps.pure.outcome == 'failure'
+        run: exit 1
+      - name: Prepare fresh retain-first database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify retain-first canonical choice
+        id: retain
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-customer-enrichment-provider-process-composition \
+            --features postgres-integration \
+            --test postgres_conflict_process_hold \
+            -- --nocapture 2>&1 | tee /tmp/provider-canonical-outcome-retain.log
+      - name: Upload retain diagnostics
+        if: steps.retain.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-canonical-outcome-retain-diagnostics
+          path: /tmp/provider-canonical-outcome-retain.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after retain failure
+        if: steps.retain.outcome == 'failure'
+        run: exit 1
+      - name: Prepare fresh reject database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify reject canonical choice
+        id: reject
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-customer-enrichment-provider-process-composition \
+            --features postgres-integration \
+            --test postgres_conflict_reject_process \
+            -- --nocapture 2>&1 | tee /tmp/provider-canonical-outcome-reject.log
+      - name: Upload reject diagnostics
+        if: steps.reject.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-canonical-outcome-reject-diagnostics
+          path: /tmp/provider-canonical-outcome-reject.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after reject failure
+        if: steps.reject.outcome == 'failure'
+        run: exit 1
+      - name: Prepare fresh materialization database
+        run: bash scripts/prepare_customer_enrichment_worker_process_database.sh
+      - name: Verify materialization canonical gate
+        id: materialization
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-customer-enrichment-materialization-composition \
+            --features postgres-integration \
+            --test postgres_materialization_event_process \
+            -- --nocapture 2>&1 | tee /tmp/provider-canonical-outcome-materialization.log
+      - name: Upload materialization diagnostics
+        if: steps.materialization.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-canonical-outcome-materialization-diagnostics
+          path: /tmp/provider-canonical-outcome-materialization.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after materialization failure
+        if: steps.materialization.outcome == 'failure'
+        run: exit 1
+      - name: Verify production wrappers compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check -p crm-application-runtime
+          cargo test -p crm-application-runtime --test customer_enrichment_provider_source_contract --no-run
+      - name: Strict focused Clippy
+        id: focused_clippy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy \
+            -p crm-core-data \
+            -p crm-customer-enrichment \
+            -p crm-customer-enrichment-provider-process-composition \
+            -p crm-customer-enrichment-materialization-composition \
+            -p crm-application-runtime \
+            --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/provider-canonical-outcome-clippy.log
+      - name: Upload focused Clippy diagnostics
+        if: steps.focused_clippy.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-canonical-outcome-clippy-diagnostics
+          path: /tmp/provider-canonical-outcome-clippy.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after focused Clippy failure
+        if: steps.focused_clippy.outcome == 'failure'
+        run: exit 1
+      - name: Commit verified canonical outcome gate
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            modules/crm-customer-enrichment/src/lib.rs \
+            modules/crm-customer-enrichment/src/provider_process_outcome.rs \
+            crates/crm-core-data/src/postgres_projection.rs \
+            crates/crm-customer-enrichment-provider-process-composition/src/worker.rs \
+            crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_process_hold.rs \
+            crates/crm-customer-enrichment-provider-process-composition/tests/postgres_conflict_reject_process.rs \
+            crates/crm-customer-enrichment-materialization-composition/src/process.rs \
+            crates/crm-customer-enrichment-materialization-composition/tests/postgres_materialization_event_process.rs
+          git diff --cached --quiet && exit 0
+          git commit -m "Gate materialization on canonical provider outcomes"
+          git push origin "HEAD:${HEAD_BRANCH}"
