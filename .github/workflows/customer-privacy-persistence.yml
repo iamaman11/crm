@@ -90,7 +90,11 @@ jobs:
           cargo test -p crm-customer-privacy-persistence-adapter --all-features
           cargo test -p crm-customer-privacy-capability-adapter --all-features
       - name: Verify clean-migration case-create process
-        run: cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-create-clean.log
       - name: Verify clean-migration Customer Privacy FORCE RLS
         shell: bash
         run: |
@@ -123,7 +127,11 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify reapplied case-create process
-        run: cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-create-reapplied.log
       - name: Verify reapplied Customer Privacy FORCE RLS
         shell: bash
         run: |
@@ -140,6 +148,7 @@ jobs:
             crates/crm-customer-privacy-capability-composition/
             database/tests/0020_customer_privacy_persistence_fixture.sql
             database/tests/0021_customer_privacy_force_rls.sql
+            database/customer-privacy-case-create-*.log
             database/customer-privacy-force-rls-*.log
           if-no-files-found: error
           retention-days: 7
