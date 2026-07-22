@@ -174,7 +174,8 @@ Candidate boundary:
 - strict RLS-bound aggregate rehydration and optimistic terminal cancellation;
 - preservation of immutable subject binding, pending rescope, scope snapshot, action-plan and approval lineage;
 - exact sorted/deduplicated subject lock-set from canonical binding and pending rescope target;
-- subject locks acquired before case-row `FOR SHARE`, followed by strict lock-set revalidation;
+- subject locks acquired before the case row, followed by strict lock-set revalidation while taking and retaining the final `FOR UPDATE` row lock;
+- unbound cases serialize directly on the case row without a meaningless subject lock or a deadlock-prone `FOR SHARE` to `FOR UPDATE` upgrade;
 - retryable fail-closed response if binding/rescope changes between discovery and locked validation;
 - one record update, one status event, one audit intent and one idempotency claim in one transaction;
 - exact replay without duplicate evidence and incompatible replay rejection;
