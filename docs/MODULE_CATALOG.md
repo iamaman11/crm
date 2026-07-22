@@ -39,7 +39,7 @@ Technical crates, process shells, Protobuf packages, SQL migrations and generic 
 | `crm.customer-data-operations` | Governed import/export jobs and evidence | **Expert expansion** | Resumable import, deterministic export/artifacts/reconciliation and crash recovery | More resource profiles and privacy access/deletion integration |
 | `crm.data-quality` | Customer-data quality governance coordinator | **Vertical slice** | Exact-version Party evaluation, findings/completeness, stewardship and governed remediation | Additional owner-resource profiles and privacy coordination |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Exact provider transport/secret boundary, immutable provenance, review, deterministic Party owner-capability application and recovery | Additional providers, target fields, product UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Deterministic, live-authorized and activation-gated `customer_privacy.case.create@1.0.0` with FORCE RLS, replay-safe atomic evidence, guarded predecessor lineage and real-process acceptance | Subject verification, shared subject lock, submit/approval/cancel, permission-aware reads, restriction/legal-hold precedence, owner orchestration, export/deletion/convergence and workers |
+| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Deterministic, live-authorized and activation-gated case create/submit/subject verification with authoritative Party/topology guards, shared subject locks, FORCE RLS and permanent real-process acceptance | Permission-aware reads, approval/cancel, restriction/legal-hold precedence, owner orchestration, export/deletion/convergence and workers |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -72,15 +72,23 @@ Frozen production inventory:
 
 Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PR #145 accepted source `f37d9a5e025745abaaf0aeb351ff9bb534455aab` was merged as `721a1cf185ffbdea309bd1199c6c4568cf82d7a1`.
 
-The first production vertical slice is intentionally limited to `customer_privacy.case.create@1.0.0`:
+The accepted production vertical slices are deliberately bounded:
 
-- deterministic tenant/idempotency identity;
-- confidential Draft/version-1 canonical state;
-- one immutable event, audit, idempotency record and business transaction;
-- root absence guard and optional terminal-predecessor transaction guard;
-- common live authorization and activation through generic application ingress;
-- fresh-PostgreSQL, rollback/reapply and real-`crm-api` acceptance;
-- exactly fifteen remaining public privacy coordinates still non-runtime.
+- PR #146 / `customer_privacy.case.create@1.0.0` — accepted source `9b53c3ebd81b58518dc445b02b33b35403ffa7c3`, merge `2d28937a123e4ba31ab0d835c4c30e3dfed0f187`;
+- PR #147 / `customer_privacy.case.submit@1.0.0` — accepted source `8b41e8420b1a897777596c68cb615e2b8bf80c34`, merge `0eba56084405301eb667f2173b3aef6565b95f87`;
+- PR #148 / `customer_privacy.case.subject.verify@1.0.0` — accepted source `118327e09a6e31ba87b02bdab99289035b572ed9`, merge `8ee5538bf97031dd48ab3726a605b9f3ad4bfd1e`.
+
+The merged production boundary proves:
+
+- deterministic tenant/idempotency case identity and confidential Draft/version-1 state;
+- exact optimistic `Draft -> Submitted -> SubjectVerified` transitions with replay-safe atomic evidence;
+- authoritative Party existence/tenant visibility, canonical redirect and active merge lineage;
+- monotonic Identity Resolution topology generation and shared fail-fast topology/canonical-subject locks;
+- common live authorization and activation through generic HTTP/gRPC application ingress;
+- fresh PostgreSQL, non-privileged FORCE RLS, rollback/schema removal/reapply and permanent real-process acceptance;
+- exactly three runtime Customer Privacy mutations and thirteen remaining public privacy coordinates still non-runtime on merged `main`.
+
+Draft PR #149 is the separately bounded Gate-review candidate for permission-aware `customer_privacy.case.get@1.0.0`. It does not alter the merged-readiness count until accepted and merged.
 
 Ownership:
 
@@ -97,7 +105,7 @@ Non-ownership:
 - PostgreSQL composition guards remain infrastructure adapters outside the pure business core;
 - derived projections, search and caches remain non-authoritative.
 
-This vertical slice does not make the Customer Privacy module product-complete or complete Phase 8A.11.
+These vertical slices do not make the Customer Privacy module product-complete or complete Phase 8A.11.
 
 ## 8. Phase 8A packet accounting
 
@@ -116,7 +124,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. The first production mutation is merged independently from the remaining lifecycle; the packet remains incomplete.
+- 8A.11 / #126 — Customer Privacy. Three production mutations are merged independently; permission-aware `case.get` is in separate Gate review and the remaining lifecycle stays incomplete.
 
 ## 9. Customer-master ownership baseline
 
