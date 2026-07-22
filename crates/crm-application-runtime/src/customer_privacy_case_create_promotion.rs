@@ -17,7 +17,7 @@ use crm_customer_privacy_query_adapter::{
 use crm_customer_privacy_subject_capability_adapter::capability_definitions as customer_privacy_subject_definitions;
 use crm_customer_privacy_submit_capability_adapter::capability_definitions as customer_privacy_submit_definitions;
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
-use crm_query_runtime::{QueryExecutor, QuerySemanticValidator};
+use crm_query_runtime::{CursorCodec, QueryExecutor, QuerySemanticValidator};
 use std::sync::Arc;
 
 pub use base_runtime::PRODUCTION_REVIEW_POLICY_VERSION;
@@ -34,8 +34,8 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     Ok(definitions)
 }
 
-/// Returns the accepted query inventory plus exactly one permission-aware
-/// Customer Privacy coordinate: `customer_privacy.case.get@1.0.0`.
+/// Returns the accepted query inventory plus exactly two permission-aware
+/// Customer Privacy coordinates: `case.get` and subject-scoped `case.list`.
 pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_query_definitions()?;
     definitions.extend(customer_privacy_query_definitions()?);
@@ -45,8 +45,9 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
 /// Extends the existing production composition without capability-specific
 /// HTTP/gRPC switches. The generic application ingress owns exact resolution,
 /// validation, live authorization and dispatch. Subject verification and
-/// cancellation both use transaction-scoped shared subject locking; cancellation
-/// additionally rechecks its exact subject lock-set before the optimistic update.
+/// cancellation use transaction-scoped shared subject locking. Case reads use
+/// strict rehydration, live Party/case visibility, field redaction and a signed
+/// process cursor for bounded subject-scoped listing.
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
@@ -54,8 +55,9 @@ pub fn build_production_composition(
     let submit_executor = postgres_case_submit_executor(dependencies.store.clone());
     let subject_executor = postgres_case_subject_verify_executor(dependencies.store.clone());
     let cancel_executor = postgres_case_cancel_executor(dependencies.store.clone());
-    let query_adapter = Arc::new(CustomerPrivacyQueryAdapter::new(
+    let query_adapter = Arc::new(CustomerPrivacyQueryAdapter::new_with_cursor(
         dependencies.store.clone(),
+        cursor(dependencies.cursor_key)?,
         dependencies.visibility_authorizer.clone(),
     ));
 
@@ -154,6 +156,18 @@ pub fn build_production_composition(
             .map_err(composition_error)?;
     }
     contributions.build().map_err(composition_error)
+}
+
+fn cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {
+    CursorCodec::new(key).map_err(|error| {
+        SdkError::new(
+            "APPLICATION_CURSOR_CONFIGURATION_INVALID",
+            ErrorCategory::Internal,
+            false,
+            "The application cursor configuration is invalid.",
+        )
+        .with_internal_reference(error.to_string())
+    })
 }
 
 fn composition_error(error: impl std::fmt::Display) -> SdkError {

@@ -10,6 +10,7 @@ const SUBMIT: &str = "customer_privacy.case.submit";
 const SUBJECT_VERIFY: &str = "customer_privacy.case.subject.verify";
 const CANCEL: &str = "customer_privacy.case.cancel";
 const GET_CASE: &str = "customer_privacy.case.get";
+const LIST_CASES: &str = "customer_privacy.case.list";
 
 #[derive(Debug, Deserialize)]
 struct RouteClassifications {
@@ -25,7 +26,7 @@ struct ClassifiedRoute {
 }
 
 #[test]
-fn customer_privacy_runtime_inventory_promotes_four_mutations_and_one_query() {
+fn customer_privacy_runtime_inventory_promotes_four_mutations_and_two_queries() {
     let runtime_privacy_mutations = application_mutation_definitions()
         .unwrap()
         .into_iter()
@@ -60,7 +61,10 @@ fn customer_privacy_runtime_inventory_promotes_four_mutations_and_one_query() {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         runtime_privacy_queries,
-        BTreeSet::from([(GET_CASE.to_owned(), "1.0.0".to_owned())])
+        BTreeSet::from([
+            (GET_CASE.to_owned(), "1.0.0".to_owned()),
+            (LIST_CASES.to_owned(), "1.0.0".to_owned()),
+        ])
     );
 }
 
@@ -75,7 +79,6 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
         .collect::<BTreeSet<_>>();
     let expected_non_runtime = [
         "customer_privacy.case.approve",
-        "customer_privacy.case.list",
         "customer_privacy.case.plan.get",
         "customer_privacy.case.owner_outcomes.list",
         "customer_privacy.restriction.place",
@@ -90,7 +93,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
     .map(|id| (id.to_owned(), "1.0.0".to_owned()))
     .collect::<BTreeSet<_>>();
     assert_eq!(actual_non_runtime, expected_non_runtime);
-    for runtime_id in [CREATE, SUBMIT, SUBJECT_VERIFY, CANCEL, GET_CASE] {
+    for runtime_id in [CREATE, SUBMIT, SUBJECT_VERIFY, CANCEL, GET_CASE, LIST_CASES] {
         assert!(!actual_non_runtime.iter().any(|(id, _)| id == runtime_id));
     }
 
@@ -129,7 +132,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
             .iter()
             .chain(classifications.non_runtime_contract_routes.iter())
             .all(|route| !route.id.contains("crypto_shred") && !route.id.contains("crypto-shred")),
-        "case-cancel promotion may not introduce or reclassify crypto-shred coordinates"
+        "case-list promotion may not introduce or reclassify crypto-shred coordinates"
     );
 }
 

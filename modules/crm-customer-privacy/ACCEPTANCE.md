@@ -1,6 +1,6 @@
 # Acceptance gates for `crm.customer-privacy`
 
-Current state: **Four production mutations and one permission-aware query are merged**. Architecture, pure domain, canonical private persistence, immutable public contracts, FORCE RLS proof, `case.create`, `case.submit`, `case.subject.verify`, `case.cancel` and `case.get` are accepted. The remaining eleven public Customer Privacy coordinates stay non-runtime.
+Current state: **Gate review for the sixth production vertical slice**. Four public mutations and permission-aware `case.get` are merged. Draft PR #152 promotes only subject-scoped `customer_privacy.case.list@1.0.0`; the remaining ten public Customer Privacy coordinates stay non-runtime.
 
 - [x] Freeze immutable module identity and first ownership boundary.
 - [x] Keep the pure module core infrastructure-neutral and deny direct cross-owner storage access.
@@ -36,6 +36,14 @@ Current state: **Four production mutations and one permission-aware query are me
 - [x] Add permanent unit and real-process acceptance for verified and unbound cancellation, preserved binding, replay/conflict, stale and terminal states, tenant concealment, subject-lock contention/retry, module suspension, absent live grant and bounded safe transport errors.
 - [x] Freeze production route parity at exactly four runtime Customer Privacy mutations, one runtime Customer Privacy query and eleven non-runtime public Customer Privacy coordinates; worker-only and crypto-shred classifications remain unchanged.
 - [x] Accept PR #150 on unchanged post-Generated-Sync source SHA `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb` after all 18 permanent workflows passed, review state remained clean and the branch was zero commits behind `main`; squash merge as `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671` with the exact expected head.
+- [x] Implement `customer_privacy.case.list@1.0.0` as a required canonical-Party-scoped, permission-aware and side-effect-free query.
+- [x] Bind the signed cursor to tenant, actor, exact capability/version, Party, kind/status filters, updated-at sort and page size; reject tampering or rebinding with one bounded error.
+- [x] Scan only tenant-bound FORCE-RLS privacy-case records with deterministic keyset continuation and a hard 4096-candidate ceiling.
+- [x] Match only authoritative verified `subject_binding.canonical_party_id`; unbound cases and pending-rescope targets never grant disclosure.
+- [x] Apply live Party visibility before scanning, live per-case visibility before output and the same field-redaction model as `case.get` while preserving stable case identity.
+- [x] Add a permanent real-`crm-api` process proving two-page pagination without duplicates, subject/kind/status filtering, cursor tamper and filter rebinding denial, cross-tenant empty concealment, HTTP/gRPC parity, deployment redaction, module suspension, absent live grant, unchanged case versions and zero query-side writes.
+- [x] Freeze candidate route parity at four runtime mutations, two runtime permission-aware queries, ten non-runtime public coordinates and zero Customer Privacy workers.
+- [ ] Accept PR #152 only after Generated Sync stabilizes and all permanent workflows pass on one unchanged SHA with clean review, mergeability and zero branch lag.
 - [ ] Add the remaining permission-aware public case, restriction and legal-hold mutations/queries through separately bounded module-owned production contributions.
 - [ ] Prove privacy restriction is deny-only, live, race-free and cannot be bypassed by module disable/uninstall.
 - [ ] Add bounded owner scope/action contribution contracts without direct storage coupling.
@@ -46,6 +54,5 @@ Current state: **Four production mutations and one permission-aware query are me
 - [ ] Prove projection, search and cache tombstone/rebuild convergence.
 - [ ] Promote every remaining public, worker-only and reasoned non-runtime coordinate exactly once after its production proof.
 - [ ] Complete fresh-PostgreSQL worker-process, restriction/legal-hold, deletion/convergence and full-lifecycle acceptance.
-- [ ] Select exactly one next bounded coordinate after comparing `case.list`, `case.approve` and restriction placement.
 
-Phase 8A.11 remains **In progress** after `case.create`, `case.submit`, `case.subject.verify`, `case.get` and `case.cancel`; the next coordinate has not yet been promoted.
+Phase 8A.11 remains **In progress**. Draft PR #152 is the only active production candidate and promotes only `case.list`; approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred remain non-runtime.

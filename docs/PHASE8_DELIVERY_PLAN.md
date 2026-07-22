@@ -72,8 +72,8 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
 Accepted production coordinates: PRs #146–#150  
-Current production inventory: 4 mutations + 1 query + 11 public non-runtime coordinates + 0 Customer Privacy workers  
-Depends on: merged and synchronized 8A.10
+Merged production inventory: 4 mutations + 1 query + 11 public non-runtime coordinates + 0 Customer Privacy workers  
+Active bounded candidate: draft PR #152 / `customer_privacy.case.list@1.0.0`
 
 #### Objective
 
@@ -127,65 +127,52 @@ Accepted: authoritative Party visibility, canonical redirect/active merge lineag
 
 PR #149 accepted unchanged post-sync source `5a47318b24007cd534434ff6bac33fbd59215d38`, passed all 18 permanent workflows and merged as `5d580a7c253bcfa6c2dd981100612b222fd26825`.
 
-Accepted packet:
-
-- dedicated permission-aware query adapter with exact coordinate and confidential Protobuf contracts;
-- non-privileged FORCE-RLS tenant lookup and strict aggregate rehydration;
-- live case visibility and canonical Party visibility after subject verification;
-- uniform not-found concealment for missing, cross-tenant and hidden resources;
-- field-level redaction through shared visibility/deployment ceilings;
-- generic query registration, live authorization and activation;
-- side-effect-free execution with no record version change, audit, event, outbox, idempotency or business-transaction write;
-- production parity of three runtime mutations, one runtime query and twelve non-runtime public coordinates.
+Accepted: exact permission-aware query contract, FORCE-RLS lookup, strict aggregate rehydration, live case/canonical-Party visibility, concealment, field redaction, generic ingress and zero query-side writes.
 
 #### Bounded packet 8A.11.5 — `case.cancel` — Complete
 
 PR #150 accepted unchanged post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, passed all 18 permanent workflows and was squash-merged as `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`.
 
-Accepted packet:
+Accepted: exact optimistic terminal cancellation, immutable lineage preservation, sorted/deduplicated subject locks before a retained final case-row `FOR UPDATE`, direct row serialization for unbound cases, retryable TOCTOU denial, exact replay/conflict and permanent real-process proof. Merged production parity is four mutations, one query and eleven non-runtime public coordinates.
 
-- dedicated infrastructure-neutral cancellation planner;
-- exact owner/capability/version, confidential Protobuf and positive expected-version validation;
-- strict canonical state rehydration and optimistic terminal cancellation;
-- preservation of immutable subject binding, pending rescope, scope snapshot, action-plan and approval lineage;
-- an exact sorted/deduplicated subject lock-set from the canonical binding and pending rescope target;
-- shared subject locks acquired before the case row, followed by exact aggregate and lock-set revalidation while taking and retaining the final `FOR UPDATE` row lock;
-- direct row serialization for unbound cases without a meaningless subject lock or a deadlock-prone `FOR SHARE` to `FOR UPDATE` upgrade;
-- retryable fail-closed behavior if binding/rescope changes between discovery and locked validation;
-- one record update, one immutable status event, one audit intent and one capability-idempotency claim in the same PostgreSQL transaction;
-- exact replay without a second version or duplicate evidence and incompatible replay rejection;
-- generic `ApplicationComposition`, common live authorization and activation gating with no alternate endpoint;
-- permanent unit and real HTTP/gRPC process proof for verified/unbound cancellation, preserved binding, stale/terminal/conflict behavior, tenant concealment, subject-lock contention/retry, suspension, absent grant and safe bounded errors;
-- production parity of four runtime mutations, one runtime query and eleven non-runtime public coordinates.
+#### Bounded packet 8A.11.6 — `case.list` — Gate review
+
+Draft PR #152 promotes exactly one additional public coordinate:
+
+`customer_privacy.case.list@1.0.0`
+
+Candidate packet:
+
+- requires a canonical Party reference and accepts optional kind/status filters;
+- defaults page size to 50 and caps it at 100;
+- signs a cursor bound to tenant, actor, exact capability/version, Party, filters, updated-at sort and page size;
+- uses the shared read-only FORCE-RLS keyset scan and fails retryably after 4096 scanned candidates;
+- strictly rehydrates every candidate and matches only authoritative verified canonical subject bindings;
+- never treats an unbound case or pending-rescope target as disclosure authority;
+- applies live Party visibility before scan and live case visibility plus field redaction before output;
+- uses generic application query composition with live authorization and module activation;
+- writes no records, events, audits, outbox, idempotency or business transactions;
+- permanently proves real HTTP/gRPC pagination, no duplicates, subject/kind/status filtering, cursor tamper and filter rebinding denial, cross-tenant empty concealment, redaction, suspension and absent grants;
+- changes candidate route parity to four runtime mutations, two runtime queries, ten non-runtime public coordinates and zero Customer Privacy workers.
 
 Explicit exclusions:
 
 - `case.approve`;
-- all remaining privacy queries;
+- `case.plan.get` and `case.owner_outcomes.list`;
 - restriction routes;
 - legal-hold routes;
 - worker/internal coordinates;
 - owner execution;
 - crypto-shred.
 
-#### Next bounded selection
-
-Compare only:
-
-1. `customer_privacy.case.list@1.0.0`;
-2. `customer_privacy.case.approve@1.0.0`;
-3. restriction placement.
-
-Prefer `case.list` only if signed cursor, bounded candidate scan, permission-aware filtering and Party concealment can be proven without premature restriction, legal-hold or worker coupling. Promote exactly one coordinate in the next implementation PR.
-
 #### Remaining required behavior
 
-- bounded owner-resource discovery with live visibility;
 - access/export assembly using governed Customer Data Operations disclosure and artifact controls;
 - immediate processing/communication restriction using the accepted subject lock;
 - deterministic owner/data-class deletion or anonymization plans;
 - explicit retention and legal-hold precedence/conflict evidence;
 - resumable per-owner execution with deterministic idempotency and no duplicate effects;
+- plan/outcome disclosure with bounded visibility;
 - search/projection/cache tombstone or rebuild convergence;
 - preservation of audit, merge lineage, Consent, provenance and legal evidence where deletion is prohibited;
 - non-reusable erased Party tombstones and no orphan references;
@@ -193,7 +180,7 @@ Prefer `case.list` only if signed cursor, bounded candidate scan, permission-awa
 
 #### Completion rule
 
-Acceptance of `case.create`, `case.submit`, `case.subject.verify`, `case.get` and `case.cancel` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
+Acceptance of the five merged coordinates and candidate `case.list` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
 
 ### Phase 8A completion gate
 
