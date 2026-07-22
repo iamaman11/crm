@@ -27,6 +27,7 @@ members = [
   "crates/crm-capability-plan-support",
   "crates/crm-customer-privacy-persistence-adapter",
   "crates/crm-customer-privacy-capability-adapter",
+  "crates/crm-customer-privacy-capability-composition",
   "crates/crm-customer-enrichment-capability-adapter",
   "crates/crm-customer-enrichment-capability-composition",
   "crates/crm-customer-enrichment-query-adapter",
