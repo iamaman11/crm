@@ -8,6 +8,7 @@ const PRIVACY_OWNER: &str = "crm.customer-privacy";
 const CREATE: &str = "customer_privacy.case.create";
 const SUBMIT: &str = "customer_privacy.case.submit";
 const SUBJECT_VERIFY: &str = "customer_privacy.case.subject.verify";
+const GET_CASE: &str = "customer_privacy.case.get";
 
 #[derive(Debug, Deserialize)]
 struct RouteClassifications {
@@ -23,7 +24,7 @@ struct ClassifiedRoute {
 }
 
 #[test]
-fn customer_privacy_runtime_inventory_promotes_exactly_three_case_mutations() {
+fn customer_privacy_runtime_inventory_promotes_three_mutations_and_one_query() {
     let runtime_privacy_mutations = application_mutation_definitions()
         .unwrap()
         .into_iter()
@@ -44,12 +45,20 @@ fn customer_privacy_runtime_inventory_promotes_exactly_three_case_mutations() {
         ])
     );
 
-    assert!(
-        application_query_definitions()
-            .unwrap()
-            .iter()
-            .all(|definition| definition.owner_module_id.as_str() != PRIVACY_OWNER),
-        "no Customer Privacy query may enter runtime with subject verification"
+    let runtime_privacy_queries = application_query_definitions()
+        .unwrap()
+        .into_iter()
+        .filter(|definition| definition.owner_module_id.as_str() == PRIVACY_OWNER)
+        .map(|definition| {
+            (
+                definition.capability_id.as_str().to_owned(),
+                definition.capability_version.as_str().to_owned(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        runtime_privacy_queries,
+        BTreeSet::from([(GET_CASE.to_owned(), "1.0.0".to_owned())])
     );
 }
 
@@ -65,7 +74,6 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
     let expected_non_runtime = [
         "customer_privacy.case.approve",
         "customer_privacy.case.cancel",
-        "customer_privacy.case.get",
         "customer_privacy.case.list",
         "customer_privacy.case.plan.get",
         "customer_privacy.case.owner_outcomes.list",
@@ -81,7 +89,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
     .map(|id| (id.to_owned(), "1.0.0".to_owned()))
     .collect::<BTreeSet<_>>();
     assert_eq!(actual_non_runtime, expected_non_runtime);
-    for runtime_id in [CREATE, SUBMIT, SUBJECT_VERIFY] {
+    for runtime_id in [CREATE, SUBMIT, SUBJECT_VERIFY, GET_CASE] {
         assert!(!actual_non_runtime.iter().any(|(id, _)| id == runtime_id));
     }
 
@@ -120,7 +128,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
             .iter()
             .chain(classifications.non_runtime_contract_routes.iter())
             .all(|route| !route.id.contains("crypto_shred") && !route.id.contains("crypto-shred")),
-        "subject-verification promotion may not introduce or reclassify crypto-shred coordinates"
+        "case-get promotion may not introduce or reclassify crypto-shred coordinates"
     );
 }
 
