@@ -22,34 +22,13 @@ pub fn spawn_crm_api(
     bootstrap: bool,
     hidden_fields: Option<&str>,
 ) -> Child {
-    spawn_crm_api_with_actor(
-        database_url,
-        http_addr,
-        grpc_addr,
-        bootstrap,
-        hidden_fields,
-        ACTOR,
-    )
-}
-
-/// Spawns the same production process with an explicitly fixture-bound actor.
-/// Multi-tenant process tests must choose an actor that exists in every tenant
-/// granted to the bearer token so audit foreign keys remain authoritative.
-pub fn spawn_crm_api_with_actor(
-    database_url: &str,
-    http_addr: &str,
-    grpc_addr: &str,
-    bootstrap: bool,
-    hidden_fields: Option<&str>,
-    actor_id: &str,
-) -> Child {
     let mut command = Command::new(env!("CARGO_BIN_EXE_crm-api"));
     command
         .env("CRM_DATABASE_URL", database_url)
         .env("CRM_HTTP_BIND", http_addr)
         .env("CRM_GRPC_BIND", grpc_addr)
         .env("CRM_API_BEARER_TOKEN", TOKEN)
-        .env("CRM_API_ACTOR_ID", actor_id)
+        .env("CRM_API_ACTOR_ID", ACTOR)
         .env("CRM_API_TENANTS", format!("{TENANT_A},{TENANT_B}"))
         .env(
             "CRM_CURSOR_SIGNING_KEY",
