@@ -50,6 +50,7 @@ crm-customer-enrichment-review-composition = { path = "../crm-customer-enrichmen
 crm-customer-enrichment-suggestion-query-adapter = { path = "../crm-customer-enrichment-suggestion-query-adapter" }
 crm-customer-enrichment-visibility = { path = "../crm-customer-enrichment-visibility" }
 crm-customer-enrichment-worker-composition = { path = "../crm-customer-enrichment-worker-composition" }
+crm-customer-privacy-capability-adapter = { path = "../crm-customer-privacy-capability-adapter" }
 crm-data-quality-capability-adapter = { path = "../crm-data-quality-capability-adapter" }
 crm-data-quality-query-adapter = { path = "../crm-data-quality-query-adapter" }
 crm-data-quality-source-composition = { path = "../crm-data-quality-source-composition" }
