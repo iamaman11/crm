@@ -111,7 +111,10 @@ fn target_resolution_and_required_request_fields_are_exact() {
     let valid = request(Some(CASE_ID), 1, "cancel-target", 2_000_000_000);
     let target = planner.target(&definition, &valid).unwrap();
     assert_eq!(target.presence, AggregatePresence::MustExist);
-    assert_eq!(target.reference.record_type.as_str(), "customer-privacy.case");
+    assert_eq!(
+        target.reference.record_type.as_str(),
+        "customer-privacy.case"
+    );
     assert_eq!(target.reference.record_id.as_str(), CASE_ID);
 
     let missing = planner
@@ -275,18 +278,14 @@ fn cancellation_preserves_complete_immutable_lineage() {
             Some(&current),
         )
         .unwrap();
-    let output = wire::CancelPrivacyCaseResponse::decode(
-        plan.output.as_ref().unwrap().bytes.as_slice(),
-    )
-    .unwrap()
-    .privacy_case
-    .unwrap();
+    let output =
+        wire::CancelPrivacyCaseResponse::decode(plan.output.as_ref().unwrap().bytes.as_slice())
+            .unwrap()
+            .privacy_case
+            .unwrap();
 
     assert_eq!(
-        output
-            .previous_privacy_case_ref
-            .unwrap()
-            .privacy_case_id,
+        output.previous_privacy_case_ref.unwrap().privacy_case_id,
         "privacy-case-predecessor"
     );
     let binding = output.subject_binding.unwrap();
@@ -343,25 +342,18 @@ fn pending_rescope_is_preserved_and_produces_sorted_deduplicated_subject_locks()
             Some(&current),
         )
         .unwrap();
-    let output = wire::CancelPrivacyCaseResponse::decode(
-        plan.output.as_ref().unwrap().bytes.as_slice(),
-    )
-    .unwrap()
-    .privacy_case
-    .unwrap();
+    let output =
+        wire::CancelPrivacyCaseResponse::decode(plan.output.as_ref().unwrap().bytes.as_slice())
+            .unwrap()
+            .privacy_case
+            .unwrap();
     let rescope = output.pending_rescope.unwrap();
     assert_eq!(
-        rescope
-            .previous_canonical_party_ref
-            .unwrap()
-            .party_id,
+        rescope.previous_canonical_party_ref.unwrap().party_id,
         "party-canonical"
     );
     assert_eq!(
-        rescope
-            .proposed_canonical_party_ref
-            .unwrap()
-            .party_id,
+        rescope.proposed_canonical_party_ref.unwrap().party_id,
         "party-proposed"
     );
     assert_eq!(rescope.previous_identity_resolution_generation, 7);
@@ -381,9 +373,7 @@ fn every_terminal_state_rejects_cancellation() {
     cancelled.cancel(1, 2_000_000_000).unwrap();
 
     let mut failed_terminal = new_case(None);
-    failed_terminal
-        .fail_terminal(1, 2_000_000_000)
-        .unwrap();
+    failed_terminal.fail_terminal(1, 2_000_000_000).unwrap();
 
     let completed = completed_case(CompletionOutcome::Completed);
     let partially_completed = completed_case(CompletionOutcome::PartiallyCompleted);
@@ -465,12 +455,7 @@ fn stale_cross_tenant_and_malformed_snapshots_fail_closed() {
     let cross_tenant = planner
         .plan(
             &definition,
-            &request(
-                Some(CASE_ID),
-                1,
-                "cancel-cross-tenant",
-                2_000_000_000,
-            ),
+            &request(Some(CASE_ID), 1, "cancel-cross-tenant", 2_000_000_000),
             Some(&snapshot(&cross_tenant_case)),
         )
         .unwrap_err();
