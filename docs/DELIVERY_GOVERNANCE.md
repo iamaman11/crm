@@ -155,7 +155,7 @@ As of 2026-07-22:
 - Phases 0.1–7 are complete and Phase 8A is active.
 - Phase 8A.7 is complete through PR #121 / merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
 - Phase 8A.8 is complete through PR #130 / merge `0e7f9889362533446cc65d95dcf7969a60086a57`.
-- Phase 8A.9 is complete through PR #132 / merge `8a1664309be9dc08c1792563de03ec73f34aed1`.
+- Phase 8A.9 is complete through PR #132 / merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`.
 - Native module composition/lifecycle integrity is complete through PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`.
 - Phase 8A.10 is complete through PR #137; accepted source `f92d101206886e3ceaf94d0e56e52580cec21093`; merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 - Customer Enrichment runtime inventory is exactly 6 public mutations, 6 permission-aware queries and 5 activation-gated worker-only coordinates.
