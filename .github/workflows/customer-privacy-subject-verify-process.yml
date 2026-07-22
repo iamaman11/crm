@@ -100,6 +100,7 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-api \
+            --no-default-features \
             --features customer-privacy-subject-verify-candidate \
             --test customer_privacy_case_subject_verify_process_e2e \
             -- --nocapture \
@@ -136,6 +137,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql \
             2>&1 | tee database/customer-privacy-subject-process-force-rls-reapplied.log
           cargo test -p crm-api \
+            --no-default-features \
             --features customer-privacy-subject-verify-candidate \
             --test customer_privacy_case_subject_verify_process_e2e \
             -- --nocapture \
