@@ -48,7 +48,6 @@ fn exported_process_support_surface_remains_linked() {
     let _ = assert_customer_enrichment_owner;
 
     let _ = spawn_crm_api;
-    let _ = spawn_crm_api_with_actor;
     let _ = wait_until_ready;
     let _ = connect_grpc;
     let _ = mutate;
