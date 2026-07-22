@@ -1,5 +1,5 @@
 use crm_capability_plan_support as plan_support;
-use crm_capability_runtime::{CapabilityRequest, TransactionalCapabilityExecutor};
+use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::PostgresDataStore;
 use crm_customer_privacy::{
     MODULE_ID, PRIVACY_CASE_RECORD_TYPE, PRIVACY_CASE_STATE_MAXIMUM_BYTES,
@@ -31,9 +31,7 @@ const IDEMPOTENCY_SCOPE: &str = "capability:customer_privacy.case.create:1.0.0";
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!(
-            "skipping Customer Privacy case-create process proof because DATABASE_URL is absent"
-        );
+        eprintln!("skipping Customer Privacy case-create process proof because DATABASE_URL is absent");
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -55,11 +53,10 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
         "privacy-idempotency-root",
         None,
         wire::PrivacyCaseKind::Erasure,
-        "privacy-policy/1",
         1_000_000_000,
         7,
     );
-    let expected_root_id = deterministic_privacy_case_id(
+    let root_id = deterministic_privacy_case_id(
         TENANT_A,
         root_request.context.execution.idempotency_key.as_str(),
     )
@@ -70,22 +67,22 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
         .await
         .expect("commit root privacy case");
     assert!(!first.replayed);
-    let first_case = decode_output(&first.output.expect("case-create output"));
+    let first_case = decode_output(first.output.as_ref().expect("case-create output"));
     assert_eq!(
         first_case
             .privacy_case_ref
             .as_ref()
             .expect("public case reference")
             .privacy_case_id,
-        expected_root_id.as_str()
+        root_id.as_str()
     );
     assert_eq!(first_case.status, wire::PrivacyCaseStatus::Draft as i32);
     assert_eq!(first_case.version, 1);
-    assert_record_metadata(&admin, TENANT_A, &expected_root_id).await;
-    assert_single_atomic_evidence(
+    assert_record_metadata(&admin, TENANT_A, &root_id).await;
+    assert_committed_evidence(
         &admin,
         TENANT_A,
-        &expected_root_id,
+        &root_id,
         "privacy-idempotency-root",
         "privacy-tx-root",
     )
@@ -97,13 +94,13 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
         .expect("replay exact root privacy case");
     assert!(replay.replayed);
     assert_eq!(
-        decode_output(&replay.output.expect("replayed case-create output")),
+        decode_output(replay.output.as_ref().expect("replayed output")),
         first_case
     );
-    assert_single_atomic_evidence(
+    assert_committed_evidence(
         &admin,
         TENANT_A,
-        &expected_root_id,
+        &root_id,
         "privacy-idempotency-root",
         "privacy-tx-root",
     )
@@ -114,32 +111,31 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     let conflict = executor
         .execute(&definition, conflicting_replay)
         .await
-        .expect_err("incompatible request hash must conflict before a second write");
+        .expect_err("incompatible request hash must conflict");
     assert_eq!(conflict.code, "CAPABILITY_IDEMPOTENCY_KEY_REUSED");
     assert!(!conflict.retryable);
-    assert_single_atomic_evidence(
+    assert_committed_evidence(
         &admin,
         TENANT_A,
-        &expected_root_id,
+        &root_id,
         "privacy-idempotency-root",
         "privacy-tx-root",
     )
     .await;
 
-    make_predecessor_terminal(&admin, TENANT_A, &expected_root_id).await;
+    make_predecessor_terminal(&admin, TENANT_A, &root_id).await;
     let successor_request = request(
         TENANT_A,
         ACTOR_A,
         "privacy-create-successor",
         "privacy-tx-successor",
         "privacy-idempotency-successor",
-        Some(expected_root_id.as_str()),
+        Some(root_id.as_str()),
         wire::PrivacyCaseKind::Access,
-        "privacy-policy/1",
         2_000_000_000,
         9,
     );
-    let expected_successor_id = deterministic_privacy_case_id(
+    let successor_id = deterministic_privacy_case_id(
         TENANT_A,
         successor_request.context.execution.idempotency_key.as_str(),
     )
@@ -147,32 +143,32 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     let successor = executor
         .execute(&definition, successor_request)
         .await
-        .expect("terminal predecessor permits a separate successor");
-    let successor_case = decode_output(&successor.output.expect("successor output"));
+        .expect("terminal predecessor permits successor");
+    let successor_case = decode_output(successor.output.as_ref().expect("successor output"));
     assert_eq!(
         successor_case
             .previous_privacy_case_ref
             .expect("successor lineage")
             .privacy_case_id,
-        expected_root_id.as_str()
+        root_id.as_str()
     );
     assert_eq!(
         successor_case
             .privacy_case_ref
             .expect("successor reference")
             .privacy_case_id,
-        expected_successor_id.as_str()
+        successor_id.as_str()
     );
-    assert_single_atomic_evidence(
+    assert_committed_evidence(
         &admin,
         TENANT_A,
-        &expected_successor_id,
+        &successor_id,
         "privacy-idempotency-successor",
         "privacy-tx-successor",
     )
     .await;
 
-    let tenant_b_root = request(
+    let tenant_b_request = request(
         TENANT_B,
         ACTOR_B,
         "privacy-create-tenant-b",
@@ -180,145 +176,122 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
         "privacy-idempotency-root",
         None,
         wire::PrivacyCaseKind::RestrictProcessing,
-        "privacy-policy/1",
         3_000_000_000,
         11,
     );
-    let expected_tenant_b_id = deterministic_privacy_case_id(
+    let tenant_b_id = deterministic_privacy_case_id(
         TENANT_B,
-        tenant_b_root.context.execution.idempotency_key.as_str(),
+        tenant_b_request.context.execution.idempotency_key.as_str(),
     )
     .unwrap();
-    assert_ne!(expected_root_id, expected_tenant_b_id);
+    assert_ne!(root_id, tenant_b_id);
     executor
-        .execute(&definition, tenant_b_root.clone())
+        .execute(&definition, tenant_b_request.clone())
         .await
-        .expect("tenant B creates an independent deterministic case");
+        .expect("tenant B creates independent case");
     assert!(
         store
             .get_record(
-                &tenant_b_root.context,
-                &privacy_case_ref_from_id(&expected_root_id).unwrap(),
+                &tenant_b_request.context,
+                &privacy_case_ref_from_id(&root_id).unwrap(),
             )
             .await
             .expect("governed cross-tenant read")
-            .is_none(),
-        "tenant B must not observe tenant A's privacy case"
+            .is_none()
     );
 
-    let nonterminal_successor = request(
+    let nonterminal_request = request(
         TENANT_B,
         ACTOR_B,
         "privacy-create-nonterminal",
         "privacy-tx-nonterminal",
         "privacy-idempotency-nonterminal",
-        Some(expected_tenant_b_id.as_str()),
+        Some(tenant_b_id.as_str()),
         wire::PrivacyCaseKind::Access,
-        "privacy-policy/1",
         3_100_000_000,
         13,
     );
-    let nonterminal_successor_id = deterministic_privacy_case_id(
+    let nonterminal_id = deterministic_privacy_case_id(
         TENANT_B,
-        nonterminal_successor
-            .context
-            .execution
-            .idempotency_key
-            .as_str(),
+        nonterminal_request.context.execution.idempotency_key.as_str(),
     )
     .unwrap();
     let nonterminal = executor
-        .execute(&definition, nonterminal_successor)
+        .execute(&definition, nonterminal_request)
         .await
         .expect_err("nonterminal predecessor must fail closed");
     assert_eq!(
         nonterminal.code,
         "CUSTOMER_PRIVACY_PREVIOUS_CASE_NOT_TERMINAL"
     );
-    assert_no_attempt_evidence(
+    assert_no_evidence(
         &admin,
         TENANT_B,
-        &nonterminal_successor_id,
+        &nonterminal_id,
         "privacy-idempotency-nonterminal",
         "privacy-tx-nonterminal",
     )
     .await;
 
-    let cross_tenant_successor = request(
+    let concealed_request = request(
         TENANT_B,
         ACTOR_B,
         "privacy-create-cross-tenant",
         "privacy-tx-cross-tenant",
         "privacy-idempotency-cross-tenant",
-        Some(expected_root_id.as_str()),
+        Some(root_id.as_str()),
         wire::PrivacyCaseKind::Access,
-        "privacy-policy/1",
         3_200_000_000,
         15,
     );
-    let cross_tenant_successor_id = deterministic_privacy_case_id(
+    let concealed_id = deterministic_privacy_case_id(
         TENANT_B,
-        cross_tenant_successor
-            .context
-            .execution
-            .idempotency_key
-            .as_str(),
+        concealed_request.context.execution.idempotency_key.as_str(),
     )
     .unwrap();
     let concealed = executor
-        .execute(&definition, cross_tenant_successor)
+        .execute(&definition, concealed_request)
         .await
         .expect_err("cross-tenant predecessor must be concealed");
     assert_eq!(concealed.code, "CUSTOMER_PRIVACY_PREVIOUS_CASE_NOT_FOUND");
-    assert_no_attempt_evidence(
+    assert_no_evidence(
         &admin,
         TENANT_B,
-        &cross_tenant_successor_id,
+        &concealed_id,
         "privacy-idempotency-cross-tenant",
         "privacy-tx-cross-tenant",
     )
     .await;
 
     sqlx::query(
-        r#"
-        UPDATE crm.records
-        SET payload_bytes = $3
-        WHERE tenant_id = $1
-          AND record_type = $2
-          AND record_id = $4
-        "#,
+        "UPDATE crm.records SET payload_bytes = $3 WHERE tenant_id = $1 AND record_type = $2 AND record_id = $4",
     )
     .bind(TENANT_A)
     .bind(PRIVACY_CASE_RECORD_TYPE)
     .bind(b"{\"raw_secret\":\"must-not-leak\"}".as_slice())
-    .bind(expected_root_id.as_str())
+    .bind(root_id.as_str())
     .execute(&admin)
     .await
     .expect("corrupt predecessor fixture");
 
-    let malformed_successor = request(
+    let malformed_request = request(
         TENANT_A,
         ACTOR_A,
         "privacy-create-malformed",
         "privacy-tx-malformed",
         "privacy-idempotency-malformed",
-        Some(expected_root_id.as_str()),
+        Some(root_id.as_str()),
         wire::PrivacyCaseKind::Access,
-        "privacy-policy/1",
         4_000_000_000,
         17,
     );
-    let malformed_successor_id = deterministic_privacy_case_id(
+    let malformed_id = deterministic_privacy_case_id(
         TENANT_A,
-        malformed_successor
-            .context
-            .execution
-            .idempotency_key
-            .as_str(),
+        malformed_request.context.execution.idempotency_key.as_str(),
     )
     .unwrap();
     let malformed = executor
-        .execute(&definition, malformed_successor)
+        .execute(&definition, malformed_request)
         .await
         .expect_err("malformed predecessor must fail closed");
     assert_eq!(malformed.code, "CUSTOMER_PRIVACY_PREVIOUS_CASE_INVALID");
@@ -326,25 +299,20 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
         malformed.safe_message,
         "The previous privacy case could not be loaded safely."
     );
-    for forbidden in [
-        "raw_secret",
-        "must-not-leak",
-        "crm.records",
-        "SELECT",
-        "sqlx",
-    ] {
+    for forbidden in ["raw_secret", "must-not-leak", "crm.records", "SELECT", "sqlx"] {
         assert!(!malformed.safe_message.contains(forbidden));
     }
-    assert_no_attempt_evidence(
+    assert_no_evidence(
         &admin,
         TENANT_A,
-        &malformed_successor_id,
+        &malformed_id,
         "privacy-idempotency-malformed",
         "privacy-tx-malformed",
     )
     .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 fn request(
     tenant: &str,
     actor: &str,
@@ -353,13 +321,12 @@ fn request(
     idempotency_key: &str,
     previous_case_id: Option<&str>,
     kind: wire::PrivacyCaseKind,
-    policy_version: &str,
     started_at_unix_nanos: i64,
     hash_byte: u8,
 ) -> CapabilityRequest {
     let command = wire::CreatePrivacyCaseRequest {
         kind: kind as i32,
-        policy_version: policy_version.to_owned(),
+        policy_version: "privacy-policy/1".to_owned(),
         previous_privacy_case_ref: previous_case_id.map(|privacy_case_id| wire::PrivacyCaseRef {
             privacy_case_id: privacy_case_id.to_owned(),
         }),
@@ -404,20 +371,10 @@ fn decode_output(payload: &crm_module_sdk::TypedPayload) -> wire::PrivacyCase {
 async fn assert_record_metadata(admin: &PgPool, tenant: &str, case_id: &RecordId) {
     let row = sqlx::query(
         r#"
-        SELECT
-          version,
-          owner_module_id,
-          schema_id,
-          schema_version,
-          descriptor_hash,
-          data_class,
-          payload_encoding,
-          maximum_payload_size,
-          retention_policy_id
+        SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
+               data_class, payload_encoding, maximum_payload_size, retention_policy_id
         FROM crm.records
-        WHERE tenant_id = $1
-          AND record_type = $2
-          AND record_id = $3
+        WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3
         "#,
     )
     .bind(tenant)
@@ -429,10 +386,7 @@ async fn assert_record_metadata(admin: &PgPool, tenant: &str, case_id: &RecordId
 
     assert_eq!(row.get::<i64, _>("version"), 1);
     assert_eq!(row.get::<String, _>("owner_module_id"), MODULE_ID);
-    assert_eq!(
-        row.get::<String, _>("schema_id"),
-        PRIVACY_CASE_STATE_SCHEMA_ID
-    );
+    assert_eq!(row.get::<String, _>("schema_id"), PRIVACY_CASE_STATE_SCHEMA_ID);
     assert_eq!(
         row.get::<String, _>("schema_version"),
         PRIVACY_CASE_STATE_SCHEMA_VERSION
@@ -453,7 +407,7 @@ async fn assert_record_metadata(admin: &PgPool, tenant: &str, case_id: &RecordId
     );
 }
 
-async fn assert_single_atomic_evidence(
+async fn assert_committed_evidence(
     admin: &PgPool,
     tenant: &str,
     case_id: &RecordId,
@@ -462,7 +416,7 @@ async fn assert_single_atomic_evidence(
 ) {
     assert_eq!(record_count(admin, tenant, case_id).await, 1);
     assert_eq!(
-        scalar_count(
+        evidence_count(
             admin,
             "SELECT count(*) FROM crm.outbox_events WHERE tenant_id = $1 AND business_transaction_id = $2 AND event_type = 'customer_privacy.case.created'",
             tenant,
@@ -472,7 +426,7 @@ async fn assert_single_atomic_evidence(
         1
     );
     assert_eq!(
-        scalar_count(
+        evidence_count(
             admin,
             "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2 AND capability_id = 'customer_privacy.case.create'",
             tenant,
@@ -482,14 +436,7 @@ async fn assert_single_atomic_evidence(
         1
     );
     let idempotency_count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT count(*)
-        FROM crm.idempotency_records
-        WHERE tenant_id = $1
-          AND idempotency_scope = $2
-          AND idempotency_key = $3
-          AND status = 'completed'
-        "#,
+        "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = $2 AND idempotency_key = $3 AND status = 'completed'",
     )
     .bind(tenant)
     .bind(IDEMPOTENCY_SCOPE)
@@ -500,11 +447,7 @@ async fn assert_single_atomic_evidence(
     assert_eq!(idempotency_count, 1);
 
     let transaction = sqlx::query(
-        r#"
-        SELECT expected_outbox_events, expected_audit_records, expected_idempotency_records
-        FROM crm.business_transactions
-        WHERE tenant_id = $1 AND business_transaction_id = $2
-        "#,
+        "SELECT expected_outbox_events, expected_audit_records, expected_idempotency_records FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2",
     )
     .bind(tenant)
     .bind(transaction_id)
@@ -516,7 +459,7 @@ async fn assert_single_atomic_evidence(
     assert_eq!(transaction.get::<i32, _>("expected_idempotency_records"), 1);
 }
 
-async fn assert_no_attempt_evidence(
+async fn assert_no_evidence(
     admin: &PgPool,
     tenant: &str,
     case_id: &RecordId,
@@ -524,34 +467,15 @@ async fn assert_no_attempt_evidence(
     transaction_id: &str,
 ) {
     assert_eq!(record_count(admin, tenant, case_id).await, 0);
-    assert_eq!(
-        scalar_count(
-            admin,
-            "SELECT count(*) FROM crm.outbox_events WHERE tenant_id = $1 AND business_transaction_id = $2",
-            tenant,
-            transaction_id,
-        )
-        .await,
-        0
-    );
-    assert_eq!(
-        scalar_count(
-            admin,
-            "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2",
-            tenant,
-            transaction_id,
-        )
-        .await,
-        0
-    );
+    for sql in [
+        "SELECT count(*) FROM crm.outbox_events WHERE tenant_id = $1 AND business_transaction_id = $2",
+        "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2",
+        "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2",
+    ] {
+        assert_eq!(evidence_count(admin, sql, tenant, transaction_id).await, 0);
+    }
     let idempotency_count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT count(*)
-        FROM crm.idempotency_records
-        WHERE tenant_id = $1
-          AND idempotency_scope = $2
-          AND idempotency_key = $3
-        "#,
+        "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = $2 AND idempotency_key = $3",
     )
     .bind(tenant)
     .bind(IDEMPOTENCY_SCOPE)
@@ -560,27 +484,11 @@ async fn assert_no_attempt_evidence(
     .await
     .expect("count rolled-back idempotency claim");
     assert_eq!(idempotency_count, 0);
-    assert_eq!(
-        scalar_count(
-            admin,
-            "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2",
-            tenant,
-            transaction_id,
-        )
-        .await,
-        0
-    );
 }
 
 async fn record_count(admin: &PgPool, tenant: &str, case_id: &RecordId) -> i64 {
     sqlx::query_scalar(
-        r#"
-        SELECT count(*)
-        FROM crm.records
-        WHERE tenant_id = $1
-          AND record_type = $2
-          AND record_id = $3
-        "#,
+        "SELECT count(*) FROM crm.records WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
     )
     .bind(tenant)
     .bind(PRIVACY_CASE_RECORD_TYPE)
@@ -590,7 +498,12 @@ async fn record_count(admin: &PgPool, tenant: &str, case_id: &RecordId) -> i64 {
     .expect("count privacy cases")
 }
 
-async fn scalar_count(admin: &PgPool, sql: &str, tenant: &str, transaction_id: &str) -> i64 {
+async fn evidence_count(
+    admin: &PgPool,
+    sql: &'static str,
+    tenant: &str,
+    transaction_id: &str,
+) -> i64 {
     sqlx::query_scalar(sql)
         .bind(tenant)
         .bind(transaction_id)
@@ -612,13 +525,7 @@ async fn make_predecessor_terminal(admin: &PgPool, tenant: &str, case_id: &Recor
     predecessor.cancel(1, 1_100_000_000).unwrap();
     let payload = privacy_case_persisted_payload(&predecessor).unwrap();
     let affected = sqlx::query(
-        r#"
-        UPDATE crm.records
-        SET version = $4, payload_bytes = $5
-        WHERE tenant_id = $1
-          AND record_type = $2
-          AND record_id = $3
-        "#,
+        "UPDATE crm.records SET version = $4, payload_bytes = $5 WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
     )
     .bind(tenant)
     .bind(PRIVACY_CASE_RECORD_TYPE)
