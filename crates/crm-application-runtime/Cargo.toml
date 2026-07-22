@@ -4,16 +4,6 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
-[features]
-default = ["production-composition"]
-# Explicitly marks the accepted production process composition. When all features
-# are enabled, production wins so workspace-wide Clippy/tests cannot accidentally
-# promote a candidate coordinate.
-production-composition = []
-# Candidate-only process assembly for the real generic-ingress acceptance binary.
-# It is effective only when production-composition is disabled explicitly.
-customer-privacy-subject-verify-candidate = []
-
 [lints.clippy]
 # Module-specific assembly contributes independent adapters through the generic composition runtime.
 # Keep constructor breadth local to this compile-time composition boundary.

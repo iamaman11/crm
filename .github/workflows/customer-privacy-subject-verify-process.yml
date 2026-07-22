@@ -78,15 +78,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Verify candidate-only Clippy boundary
+      - name: Verify production subject-verification Clippy boundary
         shell: bash
         run: |
           set -o pipefail
-          cargo clippy -p crm-api \
-            --all-targets \
-            --no-default-features \
-            --features customer-privacy-subject-verify-candidate \
-            -- -D warnings \
+          cargo clippy -p crm-api --all-targets -- -D warnings \
             2>&1 | tee database/customer-privacy-subject-process-clippy.log
       - name: Prepare authoritative subject-verification database
         shell: bash
@@ -112,8 +108,6 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p crm-api \
-            --no-default-features \
-            --features customer-privacy-subject-verify-candidate \
             --test customer_privacy_case_subject_verify_process_e2e \
             -- --nocapture \
             2>&1 | tee database/customer-privacy-subject-process-clean.log
@@ -149,8 +143,6 @@ jobs:
           psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql \
             2>&1 | tee database/customer-privacy-subject-process-force-rls-reapplied.log
           cargo test -p crm-api \
-            --no-default-features \
-            --features customer-privacy-subject-verify-candidate \
             --test customer_privacy_case_subject_verify_process_e2e \
             -- --nocapture \
             2>&1 | tee database/customer-privacy-subject-process-reapplied.log

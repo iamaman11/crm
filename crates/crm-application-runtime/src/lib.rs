@@ -19,11 +19,6 @@ mod customer_enrichment_provider_worker;
 mod customer_enrichment_reject_promotion;
 mod customer_enrichment_suggestion_list_promotion;
 mod customer_privacy_case_create_promotion;
-#[cfg(all(
-    feature = "customer-privacy-subject-verify-candidate",
-    not(feature = "production-composition")
-))]
-mod customer_privacy_subject_verify_candidate;
 mod data_quality_capability_execution;
 mod data_quality_registration;
 mod export_artifact_download;

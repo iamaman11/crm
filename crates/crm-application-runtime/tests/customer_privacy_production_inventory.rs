@@ -7,6 +7,7 @@ use std::path::PathBuf;
 const PRIVACY_OWNER: &str = "crm.customer-privacy";
 const CREATE: &str = "customer_privacy.case.create";
 const SUBMIT: &str = "customer_privacy.case.submit";
+const SUBJECT_VERIFY: &str = "customer_privacy.case.subject.verify";
 
 #[derive(Debug, Deserialize)]
 struct RouteClassifications {
@@ -22,7 +23,7 @@ struct ClassifiedRoute {
 }
 
 #[test]
-fn customer_privacy_runtime_inventory_promotes_exactly_create_and_submit() {
+fn customer_privacy_runtime_inventory_promotes_exactly_three_case_mutations() {
     let runtime_privacy_mutations = application_mutation_definitions()
         .unwrap()
         .into_iter()
@@ -39,6 +40,7 @@ fn customer_privacy_runtime_inventory_promotes_exactly_create_and_submit() {
         BTreeSet::from([
             (CREATE.to_owned(), "1.0.0".to_owned()),
             (SUBMIT.to_owned(), "1.0.0".to_owned()),
+            (SUBJECT_VERIFY.to_owned(), "1.0.0".to_owned()),
         ])
     );
 
@@ -47,7 +49,7 @@ fn customer_privacy_runtime_inventory_promotes_exactly_create_and_submit() {
             .unwrap()
             .iter()
             .all(|definition| definition.owner_module_id.as_str() != PRIVACY_OWNER),
-        "no Customer Privacy query may enter runtime with the case-submit slice"
+        "no Customer Privacy query may enter runtime with subject verification"
     );
 }
 
@@ -61,7 +63,6 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
         .map(|route| (route.id.clone(), route.version.clone()))
         .collect::<BTreeSet<_>>();
     let expected_non_runtime = [
-        "customer_privacy.case.subject.verify",
         "customer_privacy.case.approve",
         "customer_privacy.case.cancel",
         "customer_privacy.case.get",
@@ -80,8 +81,9 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
     .map(|id| (id.to_owned(), "1.0.0".to_owned()))
     .collect::<BTreeSet<_>>();
     assert_eq!(actual_non_runtime, expected_non_runtime);
-    assert!(!actual_non_runtime.iter().any(|(id, _)| id == CREATE));
-    assert!(!actual_non_runtime.iter().any(|(id, _)| id == SUBMIT));
+    for runtime_id in [CREATE, SUBMIT, SUBJECT_VERIFY] {
+        assert!(!actual_non_runtime.iter().any(|(id, _)| id == runtime_id));
+    }
 
     let actual_workers = classifications
         .worker_runtime_routes
@@ -118,7 +120,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
             .iter()
             .chain(classifications.non_runtime_contract_routes.iter())
             .all(|route| !route.id.contains("crypto_shred") && !route.id.contains("crypto-shred")),
-        "case-submit promotion may not introduce or reclassify crypto-shred coordinates"
+        "subject-verification promotion may not introduce or reclassify crypto-shred coordinates"
     );
 }
 
