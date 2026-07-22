@@ -10,6 +10,7 @@ on:
       - "crates/crm-customer-privacy-capability-adapter/**"
       - "crates/crm-customer-privacy-submit-capability-adapter/**"
       - "crates/crm-customer-privacy-subject-capability-adapter/**"
+      - "crates/crm-customer-privacy-query-adapter/**"
       - "crates/crm-customer-privacy-capability-composition/**"
       - "crates/crm-identity-resolution-topology-composition/**"
       - "crates/crm-party-reference-composition/**"
@@ -34,6 +35,7 @@ on:
       - "crates/crm-customer-privacy-capability-adapter/**"
       - "crates/crm-customer-privacy-submit-capability-adapter/**"
       - "crates/crm-customer-privacy-subject-capability-adapter/**"
+      - "crates/crm-customer-privacy-query-adapter/**"
       - "crates/crm-customer-privacy-capability-composition/**"
       - "crates/crm-identity-resolution-topology-composition/**"
       - "crates/crm-party-reference-composition/**"
@@ -122,6 +124,7 @@ jobs:
           cargo test -p crm-customer-privacy-capability-adapter --all-features
           cargo test -p crm-customer-privacy-submit-capability-adapter --all-features
           cargo test -p crm-customer-privacy-subject-capability-adapter --all-features
+          cargo test -p crm-customer-privacy-query-adapter --all-features
           cargo test -p crm-identity-resolution-topology-composition --all-features
       - name: Verify clean create-process FORCE RLS
         shell: bash
@@ -248,6 +251,15 @@ jobs:
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_subject_verify_process_e2e -- --nocapture \
             2>&1 | tee database/customer-privacy-case-subject-verify-crm-api.log
+      - name: Verify real crm-api case-get process
+        shell: bash
+        env:
+          DATABASE_URL: ${{ env.SUBMIT_DATABASE_URL }}
+          ADMIN_DATABASE_URL: ${{ env.SUBMIT_ADMIN_DATABASE_URL }}
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test customer_privacy_case_get_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-get-crm-api.log
       - name: Upload Customer Privacy persistence diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -258,12 +270,14 @@ jobs:
             crates/crm-customer-privacy-capability-adapter/
             crates/crm-customer-privacy-submit-capability-adapter/
             crates/crm-customer-privacy-subject-capability-adapter/
+            crates/crm-customer-privacy-query-adapter/
             crates/crm-customer-privacy-capability-composition/
             crates/crm-identity-resolution-topology-composition/
             crates/crm-party-reference-composition/
             services/crm-api/tests/customer_privacy_case_create_process_e2e.rs
             services/crm-api/tests/customer_privacy_case_submit_process_e2e.rs
             services/crm-api/tests/customer_privacy_case_subject_verify_process_e2e.rs
+            services/crm-api/tests/customer_privacy_case_get_process_e2e.rs
             database/tests/0020_customer_privacy_persistence_fixture.sql
             database/tests/0021_customer_privacy_force_rls.sql
             database/tests/0022_customer_privacy_submit_fixture.sql
@@ -271,6 +285,7 @@ jobs:
             database/customer-privacy-case-create-*.log
             database/customer-privacy-case-submit-*.log
             database/customer-privacy-case-subject-verify-*.log
+            database/customer-privacy-case-get-*.log
             database/customer-privacy-force-rls-*.log
           if-no-files-found: error
           retention-days: 7
