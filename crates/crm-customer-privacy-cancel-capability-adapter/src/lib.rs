@@ -501,7 +501,7 @@ mod tests {
     use super::*;
     use crm_module_sdk::{
         ActorId, BusinessTransactionId, CausationId, CorrelationId, ExecutionContext,
-        IdempotencyKey, ModuleExecutionContext, RequestId, SchemaVersion, TenantId, TraceId,
+        IdempotencyKey, RequestId, SchemaVersion, TenantId, TraceId,
     };
     use prost::Message;
 
