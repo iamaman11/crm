@@ -18,8 +18,8 @@ use sqlx::{PgPool, Row};
 use tonic::{Code, Status};
 
 use support::{
-    TENANT_A, TENANT_B, TENANT_OUTSIDE_TOKEN, connect_grpc, free_port, mutate,
-    mutation_definition, payload, query, spawn_crm_api, stop_process, wait_until_ready,
+    TENANT_A, TENANT_B, TENANT_OUTSIDE_TOKEN, connect_grpc, free_port, mutate, mutation_definition,
+    payload, query, spawn_crm_api, stop_process, wait_until_ready,
 };
 
 const PRIVACY_MODULE: &str = "crm.customer-privacy";
@@ -55,7 +55,8 @@ async fn customer_privacy_case_get_real_process_is_permission_aware_and_side_eff
     let party_definition = mutation_definition(PARTY_CREATE);
     let create_definition = mutation_definition(CREATE_CASE);
     let submit_definition = mutation_definition(SUBMIT_CASE);
-    let verify_definition = subject_definition().expect("construct subject verification definition");
+    let verify_definition =
+        subject_definition().expect("construct subject verification definition");
     let get_definition = query_capability_definition().expect("construct case-get definition");
     assert_eq!(get_definition.owner_module_id.as_str(), PRIVACY_MODULE);
     assert_eq!(get_definition.capability_id.as_str(), GET_CASE);
@@ -200,11 +201,7 @@ async fn customer_privacy_case_get_real_process_is_permission_aware_and_side_eff
     )
     .await
     .expect_err("missing privacy case must be concealed");
-    assert_safe_status(
-        &missing,
-        Code::NotFound,
-        "CUSTOMER_PRIVACY_CASE_NOT_FOUND",
-    );
+    assert_safe_status(&missing, Code::NotFound, "CUSTOMER_PRIVACY_CASE_NOT_FOUND");
     assert_eq!(query_evidence_counts(&admin, TENANT_A).await, baseline);
 
     set_module_status(&admin, TENANT_A, "suspended").await;
@@ -425,9 +422,7 @@ async fn http_query(
     let mut request = client
         .post(format!(
             "http://{http_addr}/v1/queries/{}/{}/{}",
-            definition.owner_module_id,
-            definition.capability_id,
-            definition.capability_version
+            definition.owner_module_id, definition.capability_id, definition.capability_version
         ))
         .header("x-tenant-id", tenant_id)
         .json(input);
@@ -495,7 +490,10 @@ async fn set_module_status(pool: &PgPool, tenant: &str, status: &str) {
     for (name, value) in [
         ("app.tenant_id", tenant),
         ("app.actor_id", "customer-privacy-case-get-process-admin"),
-        ("app.request_id", "customer-privacy-case-get-process-activation"),
+        (
+            "app.request_id",
+            "customer-privacy-case-get-process-activation",
+        ),
         ("app.capability_id", "customer_privacy.process.activation"),
         ("app.capability_version", "1.0.0"),
         ("app.business_transaction_id", transaction_id.as_str()),
