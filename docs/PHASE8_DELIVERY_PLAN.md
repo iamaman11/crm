@@ -71,8 +71,8 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
-Accepted production coordinates: PRs #146–#149  
-Active bounded mutation: draft PR #150  
+Accepted production coordinates: PRs #146–#150  
+Current production inventory: 4 mutations + 1 query + 11 public non-runtime coordinates + 0 Customer Privacy workers  
 Depends on: merged and synchronized 8A.10
 
 #### Objective
@@ -138,13 +138,11 @@ Accepted packet:
 - side-effect-free execution with no record version change, audit, event, outbox, idempotency or business-transaction write;
 - production parity of three runtime mutations, one runtime query and twelve non-runtime public coordinates.
 
-#### Bounded packet 8A.11.5 — `case.cancel` — Gate review
+#### Bounded packet 8A.11.5 — `case.cancel` — Complete
 
-Draft PR #150 promotes exactly one additional public coordinate:
+PR #150 accepted unchanged post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, passed all 18 permanent workflows and was squash-merged as `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`.
 
-`customer_privacy.case.cancel@1.0.0`
-
-The candidate packet includes:
+Accepted packet:
 
 - dedicated infrastructure-neutral cancellation planner;
 - exact owner/capability/version, confidential Protobuf and positive expected-version validation;
@@ -158,7 +156,7 @@ The candidate packet includes:
 - exact replay without a second version or duplicate evidence and incompatible replay rejection;
 - generic `ApplicationComposition`, common live authorization and activation gating with no alternate endpoint;
 - permanent unit and real HTTP/gRPC process proof for verified/unbound cancellation, preserved binding, stale/terminal/conflict behavior, tenant concealment, subject-lock contention/retry, suspension, absent grant and safe bounded errors;
-- candidate production parity of four runtime mutations, one runtime query and eleven non-runtime public coordinates.
+- production parity of four runtime mutations, one runtime query and eleven non-runtime public coordinates.
 
 Explicit exclusions:
 
@@ -169,6 +167,16 @@ Explicit exclusions:
 - worker/internal coordinates;
 - owner execution;
 - crypto-shred.
+
+#### Next bounded selection
+
+Compare only:
+
+1. `customer_privacy.case.list@1.0.0`;
+2. `customer_privacy.case.approve@1.0.0`;
+3. restriction placement.
+
+Prefer `case.list` only if signed cursor, bounded candidate scan, permission-aware filtering and Party concealment can be proven without premature restriction, legal-hold or worker coupling. Promote exactly one coordinate in the next implementation PR.
 
 #### Remaining required behavior
 
@@ -185,7 +193,7 @@ Explicit exclusions:
 
 #### Completion rule
 
-Acceptance of `case.create`, `case.submit`, `case.subject.verify`, `case.get` and candidate `case.cancel` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
+Acceptance of `case.create`, `case.submit`, `case.subject.verify`, `case.get` and `case.cancel` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
 
 ### Phase 8A completion gate
 
