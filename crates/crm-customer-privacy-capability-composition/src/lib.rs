@@ -1,12 +1,15 @@
 #![forbid(unsafe_code)]
 
-//! PostgreSQL composition for the promoted Customer Privacy case mutations.
+//! PostgreSQL composition for the promoted and candidate Customer Privacy case mutations.
 //!
-//! Case creation adds the optional predecessor `FOR SHARE` reference guard.
-//! Case submission is a single-aggregate optimistic update and therefore uses
-//! the shared transactional aggregate executor directly, with no module-owned
-//! SQL mutation path.
+//! Case creation adds the optional predecessor `FOR SHARE` reference guard. Case
+//! submission is a single-aggregate optimistic update and therefore uses the shared
+//! transactional aggregate executor directly. Subject verification remains non-runtime
+//! while this composition proves authoritative Party existence, canonical merge lineage,
+//! exact Identity Resolution topology generation and the shared tenant + canonical Party
+//! subject lock inside the same business transaction as the case update and evidence.
 
+use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityRequest, TransactionalCapabilityExecutor};
 use crm_core_data::{
     PostgresDataStore, PostgresTransactionalAggregateExecutor, TransactionalAggregateGuard,
@@ -16,11 +19,19 @@ use crm_customer_privacy_capability_adapter::{
     CustomerPrivacyCaseCreateCapabilityPlanner, previous_case_id_from_request,
     previous_case_not_found, privacy_case_ref_from_id, validate_previous_case_snapshot,
 };
+use crm_customer_privacy_subject_capability_adapter::{
+    CustomerPrivacyCaseSubjectVerifyCapabilityPlanner, VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY,
+    VERIFY_PRIVACY_CASE_SUBJECT_REQUEST_SCHEMA,
+};
 use crm_customer_privacy_submit_capability_adapter::CustomerPrivacyCaseSubmitCapabilityPlanner;
+use crm_identity_resolution::PartyReference;
+use crm_identity_resolution_topology_composition::prove_canonical_party_in_transaction;
 use crm_module_sdk::{
-    DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture, RecordSnapshot,
+    DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture, RecordId, RecordSnapshot,
     RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
 };
+use crm_party_reference_composition::lock_customer_subject_in_transaction;
+use crm_proto_contracts::crm::{customer::v1 as customer_wire, customer_privacy::v1 as wire};
 use sqlx::{Postgres, Row, Transaction};
 use std::sync::Arc;
 
@@ -74,6 +85,76 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyPreviousCaseGuard {
     }
 }
 
+/// Final transaction-scoped guard for `customer_privacy.case.subject.verify@1.0.0`.
+/// It consumes owner-side Party and Identity Resolution proof APIs and never trusts the
+/// caller-provided canonical Party or generation without exact authoritative validation.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct PostgresCustomerPrivacySubjectVerificationGuard;
+
+impl TransactionalAggregateGuard for PostgresCustomerPrivacySubjectVerificationGuard {
+    fn check<'a>(
+        &'a self,
+        transaction: &'a mut Transaction<'_, Postgres>,
+        request: &'a CapabilityRequest,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            if request.context.execution.capability_id.as_str()
+                != VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY
+            {
+                return Err(subject_guard_unsupported());
+            }
+            let command: wire::VerifyPrivacyCaseSubjectRequest =
+                support::decode_request_with_data_class(
+                    request,
+                    MODULE_ID,
+                    VERIFY_PRIVACY_CASE_SUBJECT_REQUEST_SCHEMA,
+                    DataClass::Confidential,
+                )?;
+            let submitted = required_party_reference(
+                command.submitted_party_ref.as_ref(),
+                "customer_privacy.case.subject.submitted_party_ref",
+            )?;
+            let canonical = required_party_reference(
+                command.canonical_party_ref.as_ref(),
+                "customer_privacy.case.subject.canonical_party_ref",
+            )?;
+
+            let proof = prove_canonical_party_in_transaction(
+                transaction,
+                &request.context.execution.tenant_id,
+                &submitted,
+                &canonical,
+                command.identity_resolution_generation,
+            )
+            .await
+            .map_err(map_subject_proof_error)?;
+
+            if proof.requested_party != submitted
+                || proof.canonical_party != canonical
+                || proof.generation != command.identity_resolution_generation
+            {
+                return Err(subject_proof_invalid(
+                    "owner proof identity differs from the requested subject binding",
+                ));
+            }
+
+            let canonical_party_id = RecordId::try_new(canonical.as_str()).map_err(|error| {
+                SdkError::invalid_argument(
+                    "customer_privacy.case.subject.canonical_party_ref",
+                    format!("canonical Party reference is invalid: {error}"),
+                )
+            })?;
+            lock_customer_subject_in_transaction(
+                transaction,
+                &request.context.execution.tenant_id,
+                &canonical_party_id,
+            )
+            .await
+            .map_err(map_subject_lock_error)
+        })
+    }
+}
+
 pub fn postgres_case_create_executor(
     store: PostgresDataStore,
 ) -> Arc<dyn TransactionalCapabilityExecutor> {
@@ -91,6 +172,95 @@ pub fn postgres_case_submit_executor(
         store,
         Arc::new(CustomerPrivacyCaseSubmitCapabilityPlanner),
     ))
+}
+
+/// Candidate executor only. Application production registration remains unchanged until
+/// fresh PostgreSQL, real ingress and full permanent-CI proof are accepted.
+pub fn postgres_case_subject_verify_executor(
+    store: PostgresDataStore,
+) -> Arc<dyn TransactionalCapabilityExecutor> {
+    Arc::new(PostgresTransactionalAggregateExecutor::guarded(
+        store,
+        Arc::new(CustomerPrivacyCaseSubjectVerifyCapabilityPlanner),
+        Arc::new(PostgresCustomerPrivacySubjectVerificationGuard),
+    ))
+}
+
+fn required_party_reference(
+    value: Option<&customer_wire::PartyRef>,
+    field: &'static str,
+) -> Result<PartyReference, SdkError> {
+    let value =
+        value.ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required."))?;
+    PartyReference::try_new(value.party_id.clone()).map_err(|error| {
+        SdkError::invalid_argument(field, format!("Party reference is invalid: {error}"))
+    })
+}
+
+fn map_subject_proof_error(error: SdkError) -> SdkError {
+    let (code, category, retryable, safe_message) = match error.code.as_str() {
+        "PARTY_REFERENCE_UNAVAILABLE" => (
+            "CUSTOMER_PRIVACY_SUBJECT_REFERENCE_UNAVAILABLE",
+            ErrorCategory::NotFound,
+            false,
+            "One or more subject Party references are unavailable.",
+        ),
+        "IDENTITY_RESOLUTION_TOPOLOGY_GENERATION_STALE" => (
+            "CUSTOMER_PRIVACY_SUBJECT_GENERATION_STALE",
+            ErrorCategory::Conflict,
+            true,
+            "The Identity Resolution state changed before subject verification was committed.",
+        ),
+        "IDENTITY_RESOLUTION_CANONICAL_PARTY_MISMATCH" => (
+            "CUSTOMER_PRIVACY_SUBJECT_CANONICAL_REFERENCE_INVALID",
+            ErrorCategory::InvalidArgument,
+            false,
+            "The submitted Party does not resolve to the specified canonical Party.",
+        ),
+        "IDENTITY_RESOLUTION_CANONICAL_REDIRECT_INVALID" => (
+            "CUSTOMER_PRIVACY_SUBJECT_TOPOLOGY_INVALID",
+            ErrorCategory::Internal,
+            false,
+            "The subject Party topology could not be verified safely.",
+        ),
+        _ => (
+            "CUSTOMER_PRIVACY_SUBJECT_PROOF_UNAVAILABLE",
+            ErrorCategory::Unavailable,
+            true,
+            "The subject Party proof could not be verified atomically.",
+        ),
+    };
+    SdkError::new(code, category, retryable, safe_message)
+        .with_internal_reference(format!("owner subject proof failed with {}", error.code))
+}
+
+fn map_subject_lock_error(error: SdkError) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_SUBJECT_LOCK_UNAVAILABLE",
+        ErrorCategory::Unavailable,
+        true,
+        "The subject could not be locked safely.",
+    )
+    .with_internal_reference(format!("shared subject lock failed with {}", error.code))
+}
+
+fn subject_guard_unsupported() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_SUBJECT_GUARD_UNSUPPORTED",
+        ErrorCategory::Internal,
+        false,
+        "The Customer Privacy subject guard is not configured for this capability.",
+    )
+}
+
+fn subject_proof_invalid(reference: impl std::fmt::Display) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_SUBJECT_PROOF_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The subject Party proof is invalid.",
+    )
+    .with_internal_reference(reference.to_string())
 }
 
 fn decode_snapshot(

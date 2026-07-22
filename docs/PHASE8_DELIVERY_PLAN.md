@@ -71,8 +71,8 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
-Accepted first production mutation: PR #146  
-Active bounded mutation: draft PR #147  
+Accepted production mutations: PR #146 and PR #147  
+Active bounded mutation: draft PR #148  
 Depends on: merged and synchronized 8A.10
 
 #### Objective
@@ -127,25 +127,13 @@ The accepted packet includes:
 - permanent unit, fresh-PostgreSQL, full rollback/reapply and real-`crm-api` process proof;
 - bounded HTTP/gRPC errors without internal schema, SQL, credential or raw-payload leakage.
 
-Explicit exclusions:
+#### Bounded packet 8A.11.2 — `case.submit` — Complete
 
-- `case.submit`;
-- `case.subject.verify`;
-- `case.approve`;
-- `case.cancel`;
-- all privacy queries;
-- restriction routes;
-- legal-hold routes;
-- worker/internal coordinates;
-- crypto-shred.
-
-#### Bounded packet 8A.11.2 — `case.submit` — Gate review
-
-Draft PR #147 promotes exactly one additional public coordinate:
+PR #147 accepted unchanged source `8b41e8420b1a897777596c68cb615e2b8bf80c34`, passed all 18 permanent workflows and merged as `0eba56084405301eb667f2173b3aef6565b95f87`. It promotes exactly one additional public coordinate:
 
 `customer_privacy.case.submit@1.0.0`
 
-The candidate packet includes:
+The accepted packet includes:
 
 - a dedicated infrastructure-neutral submit planner;
 - exact request/response owner, capability, version and Protobuf-contract validation;
@@ -157,27 +145,48 @@ The candidate packet includes:
 - fail-closed incompatible replay, stale version, invalid transition, cross-tenant concealment and malformed-state rollback;
 - generic `ApplicationComposition` registration, common live authorization and activation gating with no alternate endpoint;
 - exact route parity: two runtime privacy mutations and fourteen non-runtime public privacy coordinates;
-- independent create/submit PostgreSQL databases, complete rollback/schema removal/reapply, repeated FORCE RLS and permanent real-`crm-api` acceptance;
+- independent PostgreSQL proof, complete rollback/schema removal/reapply, repeated FORCE RLS and permanent real-`crm-api` acceptance;
 - tenant-scoped governed actor and exact capability fixture evidence required by audit and business-transaction foreign keys.
+
+#### Bounded packet 8A.11.3 — `case.subject.verify` — Gate review
+
+Draft PR #148 promotes exactly one additional public coordinate:
+
+`customer_privacy.case.subject.verify@1.0.0`
+
+The candidate packet includes:
+
+- a dedicated infrastructure-neutral subject-verification planner;
+- exact owner, capability/version and public Protobuf request/response validation;
+- exactly one tenant-bound `customer-privacy.case` target with `AggregatePresence::MustExist`;
+- strict canonical confidential-state rehydration and optimistic `Submitted N -> SubjectVerified N + 1`;
+- immutable binding evidence for submitted Party, canonical Party, exact Identity Resolution generation, verification method, verifying actor and monotonic timestamp;
+- owner-side transaction-scoped Party existence/visibility proof under FORCE RLS;
+- authoritative canonical redirect traversal backed by strict active merge-operation lineage rehydration;
+- monotonic tenant topology generation advanced in the same transaction as accepted merge/unmerge topology mutations;
+- shared fail-fast Identity Resolution topology and tenant + canonical Party subject locks;
+- one record update, one immutable `customer_privacy.case.subject_verified` event, one audit intent and one capability-idempotency claim in the same business transaction as all guards;
+- exact replay, incompatible replay, stale version, wrong lifecycle, missing submitted/canonical Party, false canonical redirect, stale generation, cross-tenant concealment, malformed-state rollback and bounded lock contention;
+- generic `ApplicationComposition`, common live authorization and activation gating with no alternate endpoint or Customer Privacy topology store;
+- exact route parity: three runtime privacy mutations and thirteen non-runtime public privacy coordinates;
+- clean migrations, non-privileged FORCE RLS, full rollback/schema removal/reapply and repeated real HTTP/gRPC process acceptance with safe bounded errors.
 
 Explicit exclusions:
 
-- `case.subject.verify`;
 - `case.approve`;
 - `case.cancel`;
 - all privacy queries;
 - restriction routes;
 - legal-hold routes;
 - worker/internal coordinates;
+- owner execution;
 - crypto-shred.
 
 #### Remaining required behavior
 
-- exact subject identity/canonical redirect handling and identity-resolution generation validation;
-- a shared tenant + canonical Party subject lock before restriction or deletion orchestration;
 - bounded owner-resource discovery with live visibility;
 - access/export assembly using governed Customer Data Operations disclosure and artifact controls;
-- immediate processing/communication restriction;
+- immediate processing/communication restriction using the accepted subject lock;
 - deterministic owner/data-class deletion or anonymization plans;
 - explicit retention and legal-hold precedence/conflict evidence;
 - resumable per-owner execution with deterministic idempotency and no duplicate effects;
@@ -188,7 +197,7 @@ Explicit exclusions:
 
 #### Completion rule
 
-Acceptance of `case.create` and `case.submit` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
+Acceptance of `case.create`, `case.submit` and `case.subject.verify` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
 
 ### Phase 8A completion gate
 

@@ -95,8 +95,8 @@ Completed packets:
 
 Active sequence:
 
-1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `customer_privacy.case.create@1.0.0` is merged through PR #146; draft PR #147 is in Gate review for only `customer_privacy.case.submit@1.0.0`.
-2. **Next bounded slice:** subject verification with canonical Party lineage, identity-resolution generation validation and the shared tenant + canonical Party lock.
+1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `case.create` is merged through PR #146; `case.submit` is merged through PR #147; draft PR #148 is in Gate review for only `case.subject.verify`.
+2. **Next bounded slice after PR #148:** select exactly one remaining approval, cancellation, permission-aware query, restriction, legal-hold or worker boundary after reviewing its dependencies.
 3. **Remaining 8A.11 slices:** restriction/legal-hold precedence, permission-aware reads, owner orchestration, export/deletion/convergence and worker acceptance are selected and delivered separately.
 4. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
 5. **8B / #29:** starts only from the completed Phase 8A baseline.
@@ -148,15 +148,13 @@ Accepted boundary:
 - exact production inventory of one runtime privacy mutation plus fifteen non-runtime public privacy coordinates;
 - permanent unit, fresh-PostgreSQL, rollback/reapply and real-`crm-api` acceptance.
 
-The accepted slice excludes submit, subject verification, approval, cancellation, all privacy queries, restriction/legal-hold routes, worker coordinates and crypto-shred.
+### Phase 8A.11 second production vertical slice — Complete
 
-### Phase 8A.11 second production vertical slice — Gate review
-
-Draft PR #147 promotes only:
+PR #147 accepted unchanged source `8b41e8420b1a897777596c68cb615e2b8bf80c34`, passed all 18 permanent workflows and merged as `0eba56084405301eb667f2173b3aef6565b95f87`. It promotes only:
 
 `customer_privacy.case.submit@1.0.0`
 
-Candidate boundary:
+Accepted boundary:
 
 - exact owner/capability/version and Protobuf request/response validation;
 - exactly one tenant-bound `customer-privacy.case` aggregate with `MustExist`;
@@ -166,14 +164,33 @@ Candidate boundary:
 - exact replay without a second version or duplicate evidence;
 - fail-closed idempotency conflict, stale-version conflict, wrong-state rejection, cross-tenant concealment and malformed-state rollback;
 - generic application ingress with common live authorization and activation gating;
-- isolated create/submit PostgreSQL databases, full rollback/schema removal/reapply, repeated FORCE RLS and real-`crm-api` process acceptance;
+- isolated PostgreSQL proof, full rollback/schema removal/reapply, repeated FORCE RLS and real-`crm-api` process acceptance;
 - exact production partition of two runtime privacy mutations plus fourteen non-runtime public privacy coordinates.
 
-The candidate slice excludes subject verification, approval, cancellation, all privacy queries, restriction/legal-hold routes, worker coordinates and crypto-shred.
+### Phase 8A.11 third production vertical slice — Gate review
+
+Draft PR #148 promotes only:
+
+`customer_privacy.case.subject.verify@1.0.0`
+
+Candidate boundary:
+
+- infrastructure-neutral planner with strict `Submitted N -> SubjectVerified N + 1` transition and canonical confidential rehydration;
+- exact submitted Party, canonical Party, current Identity Resolution topology generation, verification method, verifying actor and monotonic timestamp evidence;
+- owner-side RLS-bound Party reference proof and active canonical redirect/merge-operation lineage proof;
+- authoritative monotonic topology generation advanced in the same transaction as accepted merge/unmerge topology mutations;
+- shared fail-fast topology and tenant + canonical Party subject locks;
+- one optimistic case update, one immutable subject-verified event, one audit intent and one capability-idempotency claim in the same PostgreSQL business transaction as all guards;
+- exact replay, incompatible replay, stale expected version, wrong lifecycle, missing references, false canonical Party, stale generation, cross-tenant concealment, malformed state rollback and bounded lock contention;
+- generic production composition and existing HTTP/gRPC ingress with common live authorization and activation gating; no capability-specific endpoint or alternate storage path;
+- non-privileged FORCE RLS, clean migrations, complete rollback/schema removal/reapply and repeated real-process acceptance;
+- exact production partition of three runtime privacy mutations plus thirteen non-runtime public privacy coordinates.
+
+The candidate slice excludes approval, cancellation, all privacy queries, restriction/legal-hold routes, workers, owner execution and crypto-shred.
 
 ### Phase 8A.11 remaining acceptance boundary
 
-The remaining program must prove subject and owner-resource discovery without unauthorized bulk disclosure; access/export through existing governed artifacts; immediate restriction through a shared tenant + canonical Party lock; deterministic owner/data-class action plans; legal-hold/retention precedence; resumable orchestration; search/projection/cache convergence; non-reusable erased Party tombstones; immutable evidence preservation; cross-tenant denial; migration safety; and complete real-process acceptance.
+The remaining program must prove subject and owner-resource discovery without unauthorized bulk disclosure; access/export through existing governed artifacts; immediate restriction through the accepted shared tenant + canonical Party lock; deterministic owner/data-class action plans; legal-hold/retention precedence; resumable orchestration; search/projection/cache convergence; non-reusable erased Party tombstones; immutable evidence preservation; cross-tenant denial; migration safety; and complete real-process acceptance.
 
 Phase 8A is complete only when privacy access/export/restriction/deletion/legal-hold interactions are merged and reconciled with Consent, Identity Resolution, Import/Export, Data Quality and Customer Enrichment.
 
@@ -206,9 +223,9 @@ Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarc
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Accept PR #147 only on one unchanged exact source SHA after every applicable workflow passes and review threads are resolved.
-2. Merge `case.submit` with expected unchanged head and record source/merge SHAs in PR #147 and issue #126.
-3. Implement `customer_privacy.case.subject.verify@1.0.0` separately with canonical Party lineage, identity-resolution generation validation and shared subject locking.
+1. Accept PR #148 only on one unchanged post-Generated-Sync source SHA after all 18 applicable workflows pass and review threads are resolved.
+2. Merge `case.subject.verify` with expected unchanged head and record source/merge SHAs in PR #148 and issue #126.
+3. Select the next Customer Privacy coordinate as a separate bounded production slice; do not combine approval, cancellation, queries, restriction, legal hold or workers.
 4. Keep all remaining privacy coordinates non-runtime until their own production proofs are complete.
 5. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
 6. Begin Phase 8B / #29 from the completed customer-master baseline.

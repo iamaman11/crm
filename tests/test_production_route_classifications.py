@@ -48,7 +48,6 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                 "1.0.0",
             ),
             ("crm.customer-privacy", "customer_privacy.case.plan.get", "1.0.0"),
-            ("crm.customer-privacy", "customer_privacy.case.subject.verify", "1.0.0"),
             ("crm.customer-privacy", "customer_privacy.legal_hold.get", "1.0.0"),
             (
                 "crm.customer-privacy",
@@ -80,6 +79,7 @@ class ProductionRouteClassificationTests(unittest.TestCase):
         for runtime_id in {
             "customer_privacy.case.create",
             "customer_privacy.case.submit",
+            "customer_privacy.case.subject.verify",
         }:
             self.assertNotIn(
                 ("crm.customer-privacy", runtime_id, "1.0.0"),

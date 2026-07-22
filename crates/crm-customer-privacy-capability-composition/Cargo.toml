@@ -5,17 +5,22 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
 crm-customer-privacy-capability-adapter = { path = "../crm-customer-privacy-capability-adapter" }
 crm-customer-privacy-submit-capability-adapter = { path = "../crm-customer-privacy-submit-capability-adapter" }
+crm-customer-privacy-subject-capability-adapter = { path = "../crm-customer-privacy-subject-capability-adapter" }
+crm-identity-resolution = { path = "../../modules/crm-identity-resolution" }
+crm-identity-resolution-topology-composition = { path = "../crm-identity-resolution-topology-composition" }
 crm-module-sdk = { path = "../crm-module-sdk" }
+crm-party-reference-composition = { path = "../crm-party-reference-composition" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 
 [dev-dependencies]
-crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-customer-privacy-persistence-adapter = { path = "../crm-customer-privacy-persistence-adapter" }
-crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
 prost = "0.14"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
