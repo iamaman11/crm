@@ -41,7 +41,9 @@ struct CancelEvidence {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_safe() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping Customer Privacy cancellation process test because DATABASE_URL is absent");
+        eprintln!(
+            "skipping Customer Privacy cancellation process test because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -161,7 +163,10 @@ async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_s
     .await
     .expect("exact cancellation replay returns committed output");
     assert_eq!(decode_cancel(&replay), first_case);
-    assert_eq!(cancel_evidence(&admin, TENANT_A, &success_case, success_key).await, committed);
+    assert_eq!(
+        cancel_evidence(&admin, TENANT_A, &success_case, success_key).await,
+        committed
+    );
 
     let conflict = mutate(
         &mut grpc,
@@ -225,17 +230,15 @@ async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_s
     .await
     .expect("unbound Draft case cancels without a subject lock");
     let draft_cancelled = decode_cancel(&draft_cancel);
-    assert_eq!(draft_cancelled.status, wire::PrivacyCaseStatus::Cancelled as i32);
+    assert_eq!(
+        draft_cancelled.status,
+        wire::PrivacyCaseStatus::Cancelled as i32
+    );
     assert_eq!(draft_cancelled.version, 2);
     assert!(draft_cancelled.subject_binding.is_none());
 
-    let stale_case = submitted_case(
-        &mut grpc,
-        &create_definition,
-        &submit_definition,
-        "stale",
-    )
-    .await;
+    let stale_case =
+        submitted_case(&mut grpc, &create_definition, &submit_definition, "stale").await;
     let stale = mutate(
         &mut grpc,
         &cancel_definition,
@@ -246,11 +249,7 @@ async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_s
     )
     .await
     .expect_err("stale expected version must conflict");
-    assert_safe_status(
-        &stale,
-        Code::Aborted,
-        "CUSTOMER_PRIVACY_VERSION_CONFLICT",
-    );
+    assert_safe_status(&stale, Code::Aborted, "CUSTOMER_PRIVACY_VERSION_CONFLICT");
     assert_record_version(&admin, TENANT_A, &stale_case, 2).await;
 
     let contended_case = verified_case(
@@ -604,7 +603,10 @@ async fn set_module_status(pool: &PgPool, tenant: &str, status: &str) {
     for (name, value) in [
         ("app.tenant_id", tenant),
         ("app.actor_id", "customer-privacy-cancel-process-admin"),
-        ("app.request_id", "customer-privacy-cancel-process-activation"),
+        (
+            "app.request_id",
+            "customer-privacy-cancel-process-activation",
+        ),
         ("app.capability_id", "customer_privacy.process.activation"),
         ("app.capability_version", "1.0.0"),
         ("app.business_transaction_id", transaction_id.as_str()),
@@ -674,8 +676,7 @@ fn assert_safe_status(status: &Status, expected_code: Code, expected_error_code:
             .expect("retryability metadata")
             .to_str()
             .expect("ASCII retryability metadata"),
-        if expected_error_code
-            == "CUSTOMER_PRIVACY_CANCELLATION_SUBJECT_LOCK_UNAVAILABLE"
+        if expected_error_code == "CUSTOMER_PRIVACY_CANCELLATION_SUBJECT_LOCK_UNAVAILABLE"
             || expected_error_code == "CUSTOMER_PRIVACY_VERSION_CONFLICT"
         {
             "true"
