@@ -95,8 +95,8 @@ Completed packets:
 
 Active sequence:
 
-1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `case.create`, `case.submit`, `case.subject.verify` and `case.get` are merged through PR #149; draft PR #150 is in Gate review for only `case.cancel`.
-2. **Next bounded slice after PR #150:** select exactly one remaining approval, permission-aware query, restriction, legal-hold or worker boundary after reviewing its dependencies.
+1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `case.create`, `case.submit`, `case.subject.verify`, `case.get` and `case.cancel` are merged through PR #150.
+2. **Next bounded slice:** compare only `case.list`, `case.approve` and restriction placement; select one coordinate after reviewing trust boundaries and dependencies.
 3. **Remaining 8A.11 slices:** restriction/legal-hold precedence, remaining permission-aware reads, owner orchestration, export/deletion/convergence and worker acceptance are selected and delivered separately.
 4. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
 5. **8B / #29:** starts only from the completed Phase 8A baseline.
@@ -162,13 +162,11 @@ Accepted boundary:
 - side-effect-free execution with no record mutation, audit, idempotency, event, outbox or business-transaction writes;
 - exact production partition of three runtime privacy mutations, one runtime privacy query and twelve non-runtime public privacy coordinates.
 
-### Phase 8A.11.5 — `case.cancel` — Gate review
+### Phase 8A.11.5 — `case.cancel` — Complete
 
-Draft PR #150 promotes only:
+PR #150 accepted unchanged post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, passed all 18 permanent workflows and was squash-merged as `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`.
 
-`customer_privacy.case.cancel@1.0.0`
-
-Candidate boundary:
+Accepted boundary:
 
 - exact confidential Protobuf request/response, coordinate and positive expected-version validation;
 - strict RLS-bound aggregate rehydration and optimistic terminal cancellation;
@@ -181,9 +179,9 @@ Candidate boundary:
 - exact replay without duplicate evidence and incompatible replay rejection;
 - generic mutation composition and existing HTTP/gRPC ingress with live authorization and activation gating;
 - permanent unit and real-process proof for verified/unbound cancellation, preserved binding, stale/terminal/conflict behavior, tenant concealment, lock contention/retry, suspension, absent grant and safe bounded errors;
-- candidate production partition of four runtime privacy mutations, one runtime privacy query and eleven non-runtime public privacy coordinates.
+- exact production partition of four runtime privacy mutations, one runtime privacy query and eleven non-runtime public privacy coordinates.
 
-The candidate excludes approval, remaining privacy queries, restriction/legal-hold routes, workers, owner execution and crypto-shred.
+The accepted packet excludes approval, remaining privacy queries, restriction/legal-hold routes, workers, owner execution and crypto-shred.
 
 ### Phase 8A.11 remaining acceptance boundary
 
@@ -220,9 +218,9 @@ Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarc
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Accept PR #150 only on one unchanged post-Generated-Sync source SHA after all 18 applicable workflows pass and review threads are resolved.
-2. Merge `case.cancel` with expected unchanged head and record source/merge SHAs in PR #150 and issue #126.
-3. Select the next Customer Privacy coordinate as a separate bounded production slice; do not combine approval, remaining queries, restriction, legal hold or workers.
+1. Complete this post-merge governance synchronization for PR #150 without changing runtime inventory.
+2. Compare only `customer_privacy.case.list@1.0.0`, `customer_privacy.case.approve@1.0.0` and restriction placement.
+3. Select exactly one next Customer Privacy coordinate; do not combine approval, queries, restriction, legal hold or workers.
 4. Keep all remaining privacy coordinates non-runtime until their own production proofs are complete.
 5. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
 6. Begin Phase 8B / #29 from the completed customer-master baseline.
