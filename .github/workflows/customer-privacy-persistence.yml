@@ -263,6 +263,15 @@ jobs:
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_get_process_e2e -- --nocapture \
             2>&1 | tee database/customer-privacy-case-get-crm-api.log
+      - name: Verify real crm-api case-list process
+        shell: bash
+        env:
+          DATABASE_URL: ${{ env.SUBMIT_DATABASE_URL }}
+          ADMIN_DATABASE_URL: ${{ env.SUBMIT_ADMIN_DATABASE_URL }}
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test customer_privacy_case_list_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-list-crm-api.log
       - name: Verify real crm-api case-cancel process
         shell: bash
         env:
@@ -291,6 +300,7 @@ jobs:
             services/crm-api/tests/customer_privacy_case_submit_process_e2e.rs
             services/crm-api/tests/customer_privacy_case_subject_verify_process_e2e.rs
             services/crm-api/tests/customer_privacy_case_get_process_e2e.rs
+            services/crm-api/tests/customer_privacy_case_list_process_e2e.rs
             services/crm-api/tests/customer_privacy_case_cancel_process_e2e.rs
             database/tests/0020_customer_privacy_persistence_fixture.sql
             database/tests/0021_customer_privacy_force_rls.sql
@@ -300,6 +310,7 @@ jobs:
             database/customer-privacy-case-submit-*.log
             database/customer-privacy-case-subject-verify-*.log
             database/customer-privacy-case-get-*.log
+            database/customer-privacy-case-list-*.log
             database/customer-privacy-case-cancel-*.log
             database/customer-privacy-force-rls-*.log
           if-no-files-found: error
