@@ -34,10 +34,8 @@ async fn expose_raw_create_batch_error_for_submit_fixture() {
                 capability_id: CapabilityId::try_new(CREATE_PRIVACY_CASE_CAPABILITY).unwrap(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
                 idempotency_key: IdempotencyKey::try_new("privacy-submit-create-key").unwrap(),
-                business_transaction_id: BusinessTransactionId::try_new(
-                    "privacy-submit-create-tx",
-                )
-                .unwrap(),
+                business_transaction_id: BusinessTransactionId::try_new("privacy-submit-create-tx")
+                    .unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 request_started_at_unix_nanos: 1_000_000_000,
             },
