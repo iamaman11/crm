@@ -20,8 +20,8 @@ use std::collections::BTreeSet;
 use tonic::{Code, Status};
 
 use support::{
-    TENANT_A, TENANT_B, TENANT_OUTSIDE_TOKEN, connect_grpc, free_port, mutate,
-    mutation_definition, payload, query, spawn_crm_api, stop_process, wait_until_ready,
+    TENANT_A, TENANT_B, TENANT_OUTSIDE_TOKEN, connect_grpc, free_port, mutate, mutation_definition,
+    payload, query, spawn_crm_api, stop_process, wait_until_ready,
 };
 
 const PRIVACY_MODULE: &str = "crm.customer-privacy";
@@ -44,9 +44,12 @@ struct QueryEvidenceCounts {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn customer_privacy_case_list_real_process_is_bounded_permission_aware_and_side_effect_free() {
+async fn customer_privacy_case_list_real_process_is_bounded_permission_aware_and_side_effect_free()
+{
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping Customer Privacy case-list crm-api test because DATABASE_URL is absent");
+        eprintln!(
+            "skipping Customer Privacy case-list crm-api test because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -58,7 +61,8 @@ async fn customer_privacy_case_list_real_process_is_bounded_permission_aware_and
     let party_definition = mutation_definition(PARTY_CREATE);
     let create_definition = mutation_definition(CREATE_CASE);
     let submit_definition = mutation_definition(SUBMIT_CASE);
-    let verify_definition = subject_definition().expect("construct subject verification definition");
+    let verify_definition =
+        subject_definition().expect("construct subject verification definition");
     let cancel_definition = cancel_definition().expect("construct cancellation definition");
     let list_definition =
         list_privacy_cases_capability_definition().expect("construct case-list definition");
@@ -169,7 +173,12 @@ async fn customer_privacy_case_list_real_process_is_bounded_permission_aware_and
     )
     .await
     .expect_err("tenant outside bearer grant must be denied before case-list scan");
-    assert_safe_status(&outside_token, Code::PermissionDenied, "TENANT_FORBIDDEN", false);
+    assert_safe_status(
+        &outside_token,
+        Code::PermissionDenied,
+        "TENANT_FORBIDDEN",
+        false,
+    );
 
     let first = query(
         &mut grpc,
@@ -669,7 +678,10 @@ async fn set_module_status(pool: &PgPool, status: &str) {
     for (name, value) in [
         ("app.tenant_id", TENANT_A),
         ("app.actor_id", "customer-privacy-case-list-process-admin"),
-        ("app.request_id", "customer-privacy-case-list-process-activation"),
+        (
+            "app.request_id",
+            "customer-privacy-case-list-process-activation",
+        ),
         ("app.capability_id", "customer_privacy.process.activation"),
         ("app.capability_version", "1.0.0"),
         ("app.business_transaction_id", transaction_id.as_str()),
