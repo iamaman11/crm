@@ -57,7 +57,8 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
     let party_definition = mutation_definition(PARTY_CREATE);
     let create_definition = mutation_definition(CREATE_CASE);
     let submit_definition = mutation_definition(SUBMIT_CASE);
-    let verify_definition = subject_definition().expect("construct subject verification definition");
+    let verify_definition =
+        subject_definition().expect("construct subject verification definition");
     assert_eq!(verify_definition.owner_module_id.as_str(), PRIVACY_MODULE);
     assert_eq!(verify_definition.capability_id.as_str(), VERIFY_SUBJECT);
 
@@ -157,14 +158,7 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
     let first = mutate(
         &mut grpc,
         &verify_definition,
-        verify_payload(
-            &verify_definition,
-            &success_case,
-            2,
-            PARTY_A,
-            PARTY_A,
-            1,
-        ),
+        verify_payload(&verify_definition, &success_case, 2, PARTY_A, PARTY_A, 1),
         TENANT_A,
         verify_key,
         true,
@@ -208,14 +202,7 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
     let replay = mutate(
         &mut grpc,
         &verify_definition,
-        verify_payload(
-            &verify_definition,
-            &success_case,
-            2,
-            PARTY_A,
-            PARTY_A,
-            1,
-        ),
+        verify_payload(&verify_definition, &success_case, 2, PARTY_A, PARTY_A, 1),
         TENANT_A,
         verify_key,
         true,
@@ -230,14 +217,7 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
         &http,
         &http_addr,
         &verify_definition,
-        &verify_payload(
-            &verify_definition,
-            &success_case,
-            3,
-            PARTY_A,
-            PARTY_A,
-            1,
-        ),
+        &verify_payload(&verify_definition, &success_case, 3, PARTY_A, PARTY_A, 1),
         TENANT_A,
         verify_key,
         true,
@@ -254,14 +234,7 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
     let conflicting_grpc = mutate(
         &mut grpc,
         &verify_definition,
-        verify_payload(
-            &verify_definition,
-            &success_case,
-            3,
-            PARTY_A,
-            PARTY_A,
-            1,
-        ),
+        verify_payload(&verify_definition, &success_case, 3, PARTY_A, PARTY_A, 1),
         TENANT_A,
         verify_key,
         true,
@@ -289,14 +262,7 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
         &http,
         &http_addr,
         &verify_definition,
-        &verify_payload(
-            &verify_definition,
-            &stale_case,
-            2,
-            PARTY_A,
-            PARTY_A,
-            2,
-        ),
+        &verify_payload(&verify_definition, &stale_case, 2, PARTY_A, PARTY_A, 2),
         TENANT_A,
         stale_key,
         true,
@@ -314,14 +280,7 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
     let stale_grpc = mutate(
         &mut grpc,
         &verify_definition,
-        verify_payload(
-            &verify_definition,
-            &stale_case,
-            2,
-            PARTY_A,
-            PARTY_A,
-            2,
-        ),
+        verify_payload(&verify_definition, &stale_case, 2, PARTY_A, PARTY_A, 2),
         TENANT_A,
         stale_key,
         true,
@@ -383,14 +342,7 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
     let inactive = mutate(
         &mut grpc,
         &verify_definition,
-        verify_payload(
-            &verify_definition,
-            &inactive_case,
-            2,
-            PARTY_A,
-            PARTY_A,
-            1,
-        ),
+        verify_payload(&verify_definition, &inactive_case, 2, PARTY_A, PARTY_A, 1),
         TENANT_A,
         "privacy-subject-process-inactive-verify",
         true,
@@ -418,14 +370,7 @@ async fn customer_privacy_subject_verify_real_process_is_bounded_and_replay_safe
     let authorization_denied = mutate(
         &mut denied_grpc,
         &verify_definition,
-        verify_payload(
-            &verify_definition,
-            &inactive_case,
-            2,
-            PARTY_A,
-            PARTY_A,
-            1,
-        ),
+        verify_payload(&verify_definition, &inactive_case, 2, PARTY_A, PARTY_A, 1),
         TENANT_A,
         "privacy-subject-process-no-capability-grant",
         true,

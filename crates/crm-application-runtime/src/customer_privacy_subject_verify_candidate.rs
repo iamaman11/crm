@@ -16,8 +16,7 @@ use std::sync::Arc;
 pub(crate) fn build_candidate_process_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
-    let subject_executor =
-        postgres_case_subject_verify_executor(dependencies.store.clone());
+    let subject_executor = postgres_case_subject_verify_executor(dependencies.store.clone());
     let base_dependencies = ProductionCompositionDependencies {
         store: dependencies.store,
         activation: dependencies.activation.clone(),
