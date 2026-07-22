@@ -1097,8 +1097,13 @@ dependencies = [
  "crm-customer-privacy",
  "crm-customer-privacy-capability-adapter",
  "crm-customer-privacy-persistence-adapter",
+ "crm-customer-privacy-subject-capability-adapter",
  "crm-customer-privacy-submit-capability-adapter",
+ "crm-identity-resolution",
+ "crm-identity-resolution-topology-composition",
  "crm-module-sdk",
+ "crm-parties-capability-adapter",
+ "crm-party-reference-composition",
  "crm-proto-contracts",
  "prost",
  "sqlx",
@@ -1259,9 +1264,7 @@ dependencies = [
  "crm-identity-resolution-capability-adapter",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
- "crm-party-reference-composition",
  "crm-proto-contracts",
- "sqlx",
 ]
 
 [[package]]
@@ -1293,6 +1296,18 @@ dependencies = [
  "crm-proto-contracts",
  "crm-query-runtime",
  "prost",
+]
+
+[[package]]
+name = "crm-identity-resolution-topology-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-identity-resolution",
+ "crm-identity-resolution-capability-adapter",
+ "crm-module-sdk",
+ "crm-parties-capability-adapter",
+ "crm-party-reference-composition",
+ "sqlx",
 ]
 
 [[package]]

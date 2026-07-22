@@ -254,9 +254,7 @@ async fn active_operation_for_edge(
         matching = Some(operation);
     }
     matching.ok_or_else(|| {
-        canonical_redirect_invalid(
-            "canonical redirect edge has no matching active merge operation",
-        )
+        canonical_redirect_invalid("canonical redirect edge has no matching active merge operation")
     })
 }
 

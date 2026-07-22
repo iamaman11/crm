@@ -190,8 +190,8 @@ fn required_party_reference(
     value: Option<&customer_wire::PartyRef>,
     field: &'static str,
 ) -> Result<PartyReference, SdkError> {
-    let value = value
-        .ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required."))?;
+    let value =
+        value.ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required."))?;
     PartyReference::try_new(value.party_id.clone()).map_err(|error| {
         SdkError::invalid_argument(field, format!("Party reference is invalid: {error}"))
     })
