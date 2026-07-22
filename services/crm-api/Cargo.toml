@@ -19,6 +19,7 @@ crm-capability-runtime = { path = "../../crates/crm-capability-runtime" }
 crm-core-data = { path = "../../crates/crm-core-data" }
 crm-customer-360-composition = { path = "../../crates/crm-customer-360-composition" }
 crm-customer-privacy-capability-adapter = { path = "../../crates/crm-customer-privacy-capability-adapter" }
+crm-customer-privacy-query-adapter = { path = "../../crates/crm-customer-privacy-query-adapter" }
 crm-customer-privacy-subject-capability-adapter = { path = "../../crates/crm-customer-privacy-subject-capability-adapter" }
 crm-data-quality = { path = "../../modules/crm-data-quality" }
 crm-data-quality-capability-adapter = { path = "../../crates/crm-data-quality-capability-adapter" }
