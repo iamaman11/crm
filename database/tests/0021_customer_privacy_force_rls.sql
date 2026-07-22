@@ -250,20 +250,23 @@ INSERT INTO crm.audit_records (
   canonical_envelope,
   occurred_at
 )
-VALUES (
+SELECT
   'tenant-a',
-  2,
+  audit_sequence + 1,
   'audit-customer-privacy-force-rls',
   'tx-customer-privacy-force-rls',
   'actor-a',
   'customer_privacy.persistence.probe',
   '1.0.0',
   'crm.cjson/v1',
-  decode(repeat('11', 32), 'hex'),
+  record_hash,
   decode(repeat('67', 32), 'hex'),
   convert_to('{"customer_privacy":"force_rls"}', 'UTF8'),
   clock_timestamp()
-);
+FROM crm.audit_records
+WHERE tenant_id = 'tenant-a'
+ORDER BY audit_sequence DESC
+LIMIT 1;
 
 SET CONSTRAINTS ALL IMMEDIATE;
 
