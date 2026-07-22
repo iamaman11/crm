@@ -6,7 +6,7 @@
 //! optimistic aggregate executor. Subject verification proves authoritative Party
 //! and Identity Resolution lineage before taking the shared subject lock. Cancellation
 //! derives the exact bound/rescope subject lock-set from RLS-protected case state,
-//! locks it deterministically, then rechecks the case under `FOR SHARE` before update.
+//! locks it deterministically, then rechecks and holds the case under `FOR UPDATE`.
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityRequest, TransactionalCapabilityExecutor};
@@ -52,7 +52,7 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyPreviousCaseGuard {
             let Some(previous_case_id) = previous_case_id_from_request(request)? else {
                 return Ok(());
             };
-            let row = select_case_row(transaction, &previous_case_id, true)
+            let row = select_case_row(transaction, &previous_case_id, CaseRowLock::Share)
                 .await?
                 .ok_or_else(previous_case_not_found)?;
             let snapshot = decode_snapshot(previous_case_id, row)?;
@@ -133,8 +133,10 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacySubjectVerificationG
 
 /// Locks the exact canonical subject set for cancellation without accepting a TOCTOU
 /// transition from an unbound to a bound case. The first read is non-locking so subject
-/// locks are always acquired before the case row. The second read is `FOR SHARE` and must
-/// produce the same sorted lock-set; otherwise the caller retries from fresh state.
+/// locks are always acquired before the case row. The second read takes the final
+/// `FOR UPDATE` lock and must produce the same sorted lock-set; otherwise the caller
+/// retries from fresh state. Unbound cases therefore serialize directly on the row
+/// without taking a meaningless subject lock or performing a deadlock-prone lock upgrade.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PostgresCustomerPrivacyCancellationGuard;
 
@@ -149,8 +151,13 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyCancellationGuard {
                 return Err(cancellation_guard_unsupported());
             }
             let reference = cancellation_case_ref(request)?;
-            let initial =
-                load_cancellation_snapshot(transaction, request, &reference, false).await?;
+            let initial = load_cancellation_snapshot(
+                transaction,
+                request,
+                &reference,
+                CaseRowLock::Unlocked,
+            )
+            .await?;
             let initial_lock_ids = cancellation_subject_lock_ids(&initial)?;
 
             for subject_id in &initial_lock_ids {
@@ -163,7 +170,13 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyCancellationGuard {
                 .map_err(map_cancellation_lock_error)?;
             }
 
-            let locked = load_cancellation_snapshot(transaction, request, &reference, true).await?;
+            let locked = load_cancellation_snapshot(
+                transaction,
+                request,
+                &reference,
+                CaseRowLock::Update,
+            )
+            .await?;
             let locked_ids = cancellation_subject_lock_ids(&locked)?;
             if locked_ids != initial_lock_ids {
                 return Err(cancellation_subject_changed());
@@ -216,7 +229,7 @@ async fn load_cancellation_snapshot(
     transaction: &mut Transaction<'_, Postgres>,
     request: &CapabilityRequest,
     reference: &RecordRef,
-    lock: bool,
+    lock: CaseRowLock,
 ) -> Result<RecordSnapshot, SdkError> {
     let row = select_case_row(transaction, &reference.record_id, lock)
         .await?
@@ -234,13 +247,20 @@ async fn load_cancellation_snapshot(
     Ok(snapshot)
 }
 
+#[derive(Debug, Clone, Copy)]
+enum CaseRowLock {
+    Unlocked,
+    Share,
+    Update,
+}
+
 async fn select_case_row(
     transaction: &mut Transaction<'_, Postgres>,
     case_id: &RecordId,
-    lock: bool,
+    lock: CaseRowLock,
 ) -> Result<Option<sqlx::postgres::PgRow>, SdkError> {
-    let sql = if lock {
-        r#"
+    let sql = match lock {
+        CaseRowLock::Share => r#"
         SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
                data_class, payload_encoding, maximum_payload_size, retention_policy_id,
                payload_bytes
@@ -251,9 +271,8 @@ async fn select_case_row(
           AND record_id = $3
           AND deleted_at IS NULL
         FOR SHARE
-        "#
-    } else {
-        r#"
+        "#,
+        CaseRowLock::Update => r#"
         SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
                data_class, payload_encoding, maximum_payload_size, retention_policy_id,
                payload_bytes
@@ -263,7 +282,19 @@ async fn select_case_row(
           AND record_type = $2
           AND record_id = $3
           AND deleted_at IS NULL
-        "#
+        FOR UPDATE
+        "#,
+        CaseRowLock::Unlocked => r#"
+        SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
+               data_class, payload_encoding, maximum_payload_size, retention_policy_id,
+               payload_bytes
+        FROM crm.records
+        WHERE tenant_id = current_setting('app.tenant_id', true)
+          AND owner_module_id = $1
+          AND record_type = $2
+          AND record_id = $3
+          AND deleted_at IS NULL
+        "#,
     };
     sqlx::query(sql)
         .bind(MODULE_ID)
