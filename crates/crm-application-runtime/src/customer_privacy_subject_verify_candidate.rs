@@ -10,10 +10,9 @@ use crm_customer_privacy_subject_capability_adapter::capability_definitions;
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
 use std::sync::Arc;
 
-/// Builds the real process composition used only by the compile-time candidate
-/// acceptance feature. The public production definition and composition APIs remain
-/// unchanged, so default builds and production inventory parity stay at exactly two
-/// Customer Privacy runtime mutations.
+/// Builds the real process composition used only by the explicit compile-time
+/// candidate acceptance feature. Public production inventory definitions remain
+/// unchanged, and default builds retain exactly two Customer Privacy mutations.
 pub(crate) fn build_candidate_process_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
@@ -27,7 +26,7 @@ pub(crate) fn build_candidate_process_composition(
         visibility_authorizer: dependencies.visibility_authorizer,
         cursor_key: dependencies.cursor_key,
     };
-    let base = production::build_production_composition(base_dependencies)?;
+    let base = production::build_accepted_production_composition(base_dependencies)?;
     let mut contributions = ModuleContributionSet::new();
     contributions
         .add_mutations(
