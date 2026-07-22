@@ -5,7 +5,8 @@ edition = "2024"
 publish = false
 
 [features]
-default = []
+default = ["production-composition"]
+production-composition = ["crm-application-runtime/production-composition"]
 customer-privacy-subject-verify-candidate = [
   "crm-application-runtime/customer-privacy-subject-verify-candidate",
 ]
@@ -16,7 +17,7 @@ customer-privacy-subject-verify-candidate = [
 too_many_arguments = "allow"
 
 [dependencies]
-crm-application-runtime = { path = "../../crates/crm-application-runtime" }
+crm-application-runtime = { path = "../../crates/crm-application-runtime", default-features = false }
 
 [dev-dependencies]
 crm-capability-adapters = { path = "../../crates/crm-capability-adapters" }
