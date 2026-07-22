@@ -41,15 +41,6 @@ struct RequestSpec<'a> {
     hash_byte: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct EvidenceCounts {
-    records: i64,
-    events: i64,
-    audits: i64,
-    idempotency: i64,
-    transactions: i64,
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
@@ -237,11 +228,7 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     });
     let nonterminal_id = deterministic_privacy_case_id(
         TENANT_B,
-        nonterminal_request
-            .context
-            .execution
-            .idempotency_key
-            .as_str(),
+        nonterminal_request.context.execution.idempotency_key.as_str(),
     )
     .unwrap();
     let nonterminal = executor
@@ -291,7 +278,7 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     )
     .await;
 
-    overwrite_record_payload(
+    governed_replace_payload(
         &admin,
         TENANT_A,
         &root_id,
@@ -361,9 +348,13 @@ fn request(spec: RequestSpec<'_>) -> CapabilityRequest {
                 tenant_id: TenantId::try_new(spec.tenant).unwrap(),
                 actor_id: ActorId::try_new(spec.actor).unwrap(),
                 request_id: RequestId::try_new(format!("request-{}", spec.identity)).unwrap(),
-                correlation_id: CorrelationId::try_new(format!("correlation-{}", spec.identity))
+                correlation_id: CorrelationId::try_new(format!(
+                    "correlation-{}",
+                    spec.identity
+                ))
+                .unwrap(),
+                causation_id: CausationId::try_new(format!("causation-{}", spec.identity))
                     .unwrap(),
-                causation_id: CausationId::try_new(format!("causation-{}", spec.identity)).unwrap(),
                 trace_id: TraceId::try_new(format!("trace-{}", spec.identity)).unwrap(),
                 capability_id: CapabilityId::try_new(CREATE_PRIVACY_CASE_CAPABILITY).unwrap(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
@@ -410,10 +401,7 @@ async fn assert_record_metadata(admin: &PgPool, tenant: &str, case_id: &RecordId
 
     assert_eq!(row.get::<i64, _>("version"), 1);
     assert_eq!(row.get::<String, _>("owner_module_id"), MODULE_ID);
-    assert_eq!(
-        row.get::<String, _>("schema_id"),
-        PRIVACY_CASE_STATE_SCHEMA_ID
-    );
+    assert_eq!(row.get::<String, _>("schema_id"), PRIVACY_CASE_STATE_SCHEMA_ID);
     assert_eq!(
         row.get::<String, _>("schema_version"),
         PRIVACY_CASE_STATE_SCHEMA_VERSION
@@ -551,7 +539,7 @@ async fn make_predecessor_terminal(admin: &PgPool, tenant: &str, case_id: &Recor
     .unwrap();
     predecessor.cancel(1, 1_100_000_000).unwrap();
     let payload = privacy_case_persisted_payload(&predecessor).unwrap();
-    overwrite_record_payload(
+    governed_replace_payload(
         admin,
         tenant,
         case_id,
@@ -562,7 +550,7 @@ async fn make_predecessor_terminal(admin: &PgPool, tenant: &str, case_id: &Recor
     .await;
 }
 
-async fn overwrite_record_payload(
+async fn governed_replace_payload(
     admin: &PgPool,
     tenant: &str,
     case_id: &RecordId,
@@ -570,17 +558,27 @@ async fn overwrite_record_payload(
     payload_bytes: Vec<u8>,
     request_id: &str,
 ) {
+    let business_transaction_id: String = sqlx::query_scalar(
+        "SELECT last_business_transaction_id FROM crm.records WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
+    )
+    .bind(tenant)
+    .bind(PRIVACY_CASE_RECORD_TYPE)
+    .bind(case_id.as_str())
+    .fetch_one(admin)
+    .await
+    .expect("read predecessor transaction context");
+
     let mut transaction = admin.begin().await.expect("start governed fixture update");
     bind_write_context(
         &mut transaction,
         tenant,
         request_id,
-        &format!("transaction-{request_id}"),
+        &business_transaction_id,
     )
     .await;
     let affected = if let Some(version) = version {
         sqlx::query(
-            "UPDATE crm.records SET version = $4, payload_bytes = $5 WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
+            "UPDATE crm.records SET version = $4, payload_bytes = $5, updated_at = clock_timestamp() WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
         )
         .bind(tenant)
         .bind(PRIVACY_CASE_RECORD_TYPE)
@@ -593,7 +591,7 @@ async fn overwrite_record_payload(
         .rows_affected()
     } else {
         sqlx::query(
-            "UPDATE crm.records SET payload_bytes = $4 WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
+            "UPDATE crm.records SET payload_bytes = $4, updated_at = clock_timestamp() WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
         )
         .bind(tenant)
         .bind(PRIVACY_CASE_RECORD_TYPE)
