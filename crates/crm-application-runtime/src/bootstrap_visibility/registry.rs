@@ -25,6 +25,10 @@ use crm_customer_data_operations_capability_adapter::{
 use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_customer_enrichment::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_customer_enrichment_visibility::query_visibility_resources as customer_enrichment_query_visibility_resources;
+use crm_customer_privacy_query_adapter::{
+    query_visibility_resources as customer_privacy_query_visibility_resources,
+};
+use crm_customer_privacy_query_adapter::GET_PRIVACY_CASE_CAPABILITY;
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
@@ -45,6 +49,7 @@ pub(super) const SALES_MODULE_ID: &str = "crm.sales";
 pub(super) const ACTIVITIES_MODULE_ID: &str = "crm.activities";
 pub(super) const DATA_QUALITY_MODULE_ID: &str = "crm.data-quality";
 pub(super) const DATA_QUALITY_RULE_SET_RECORD_TYPE: &str = "data_quality.party_rule_set_version";
+pub(super) const CUSTOMER_PRIVACY_MODULE_ID: &str = "crm.customer-privacy";
 
 pub(super) type VisibilityProvider = fn(&CapabilityDefinition) -> Vec<BootstrapVisibilityResource>;
 
@@ -105,6 +110,11 @@ pub(crate) fn build_bootstrap_visibility_registry() -> Result<BootstrapVisibilit
         &mut providers,
         CUSTOMER_ENRICHMENT_MODULE_ID,
         customer_enrichment_visibility,
+    )?;
+    register(
+        &mut providers,
+        CUSTOMER_PRIVACY_MODULE_ID,
+        customer_privacy_visibility,
     )?;
     register(
         &mut providers,
@@ -239,6 +249,20 @@ fn customer_enrichment_visibility(
     definition: &CapabilityDefinition,
 ) -> Vec<BootstrapVisibilityResource> {
     customer_enrichment_query_visibility_resources(definition.capability_id.as_str())
+        .into_iter()
+        .map(|resource| BootstrapVisibilityResource {
+            owner_module_id: resource.owner_module_id,
+            resource_type: resource.resource_type,
+            allowed_fields: resource.allowed_fields,
+        })
+        .collect()
+}
+
+fn customer_privacy_visibility(
+    definition: &CapabilityDefinition,
+) -> Vec<BootstrapVisibilityResource> {
+    debug_assert_eq!(definition.capability_id.as_str(), GET_PRIVACY_CASE_CAPABILITY);
+    customer_privacy_query_visibility_resources(definition.capability_id.as_str())
         .into_iter()
         .map(|resource| BootstrapVisibilityResource {
             owner_module_id: resource.owner_module_id,
