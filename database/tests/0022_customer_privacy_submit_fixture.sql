@@ -77,12 +77,99 @@ VALUES (
   'active',
   'Tenant A privacy officer fixture',
   'tx-customer-privacy-submit-fixture-a'
+);
+
+INSERT INTO crm.idempotency_records (
+  tenant_id,
+  idempotency_scope,
+  idempotency_key,
+  request_hash,
+  status,
+  business_transaction_id,
+  expires_at
 )
-ON CONFLICT (tenant_id, actor_id) DO UPDATE
-SET actor_type = EXCLUDED.actor_type,
-    status = EXCLUDED.status,
-    display_name = EXCLUDED.display_name,
-    last_business_transaction_id = EXCLUDED.last_business_transaction_id;
+VALUES (
+  'tenant-a',
+  'customer_privacy.case.submit@1.0.0',
+  'customer-privacy-submit-fixture-a',
+  decode(repeat('6d', 32), 'hex'),
+  'completed',
+  'tx-customer-privacy-submit-fixture-a',
+  clock_timestamp() + interval '1 day'
+);
+
+INSERT INTO crm.outbox_events (
+  tenant_id,
+  event_id,
+  business_transaction_id,
+  aggregate_type,
+  aggregate_id,
+  aggregate_version,
+  event_sequence,
+  event_type,
+  deduplication_key,
+  schema_id,
+  schema_version,
+  descriptor_hash,
+  data_class,
+  payload_encoding,
+  maximum_payload_size,
+  retention_policy_id,
+  payload_bytes,
+  occurred_at
+)
+VALUES (
+  'tenant-a',
+  'event-customer-privacy-submit-fixture-a',
+  'tx-customer-privacy-submit-fixture-a',
+  'crm.actor',
+  'privacy-officer',
+  1,
+  1,
+  'actor.created',
+  'customer-privacy-submit-fixture-a',
+  'crm.actor.created.v1',
+  '1.0.0',
+  decode(repeat('6e', 32), 'hex'),
+  'internal',
+  'protobuf',
+  16,
+  'standard',
+  decode('01', 'hex'),
+  clock_timestamp()
+);
+
+INSERT INTO crm.audit_records (
+  tenant_id,
+  audit_sequence,
+  audit_record_id,
+  business_transaction_id,
+  actor_id,
+  capability_id,
+  capability_version,
+  canonicalization_profile,
+  previous_hash,
+  record_hash,
+  canonical_envelope,
+  occurred_at
+)
+SELECT
+  'tenant-a',
+  audit_sequence + 1,
+  'audit-customer-privacy-submit-fixture-a',
+  'tx-customer-privacy-submit-fixture-a',
+  'privacy-officer',
+  'customer_privacy.case.submit',
+  '1.0.0',
+  'crm.cjson/v1',
+  record_hash,
+  decode(repeat('6f', 32), 'hex'),
+  convert_to('{"customer_privacy":"submit_fixture_a"}', 'UTF8'),
+  clock_timestamp()
+FROM crm.audit_records
+WHERE tenant_id = 'tenant-a'
+ORDER BY audit_sequence DESC
+LIMIT 1;
 
 INSERT INTO crm.business_transactions (
   tenant_id,
@@ -102,11 +189,12 @@ VALUES (
   'request-customer-privacy-submit-fixture-a',
   'customer_privacy.case.submit',
   '1.0.0',
-  0,
-  0,
-  0
-)
-ON CONFLICT (tenant_id, business_transaction_id) DO NOTHING;
+  1,
+  1,
+  1
+);
+
+SET CONSTRAINTS ALL IMMEDIATE;
 COMMIT;
 
 BEGIN;
@@ -132,12 +220,99 @@ VALUES (
   'active',
   'Tenant B privacy officer fixture',
   'tx-customer-privacy-submit-fixture-b'
+);
+
+INSERT INTO crm.idempotency_records (
+  tenant_id,
+  idempotency_scope,
+  idempotency_key,
+  request_hash,
+  status,
+  business_transaction_id,
+  expires_at
 )
-ON CONFLICT (tenant_id, actor_id) DO UPDATE
-SET actor_type = EXCLUDED.actor_type,
-    status = EXCLUDED.status,
-    display_name = EXCLUDED.display_name,
-    last_business_transaction_id = EXCLUDED.last_business_transaction_id;
+VALUES (
+  'tenant-b',
+  'customer_privacy.case.submit@1.0.0',
+  'customer-privacy-submit-fixture-b',
+  decode(repeat('70', 32), 'hex'),
+  'completed',
+  'tx-customer-privacy-submit-fixture-b',
+  clock_timestamp() + interval '1 day'
+);
+
+INSERT INTO crm.outbox_events (
+  tenant_id,
+  event_id,
+  business_transaction_id,
+  aggregate_type,
+  aggregate_id,
+  aggregate_version,
+  event_sequence,
+  event_type,
+  deduplication_key,
+  schema_id,
+  schema_version,
+  descriptor_hash,
+  data_class,
+  payload_encoding,
+  maximum_payload_size,
+  retention_policy_id,
+  payload_bytes,
+  occurred_at
+)
+VALUES (
+  'tenant-b',
+  'event-customer-privacy-submit-fixture-b',
+  'tx-customer-privacy-submit-fixture-b',
+  'crm.actor',
+  'privacy-officer',
+  1,
+  1,
+  'actor.created',
+  'customer-privacy-submit-fixture-b',
+  'crm.actor.created.v1',
+  '1.0.0',
+  decode(repeat('71', 32), 'hex'),
+  'internal',
+  'protobuf',
+  16,
+  'standard',
+  decode('02', 'hex'),
+  clock_timestamp()
+);
+
+INSERT INTO crm.audit_records (
+  tenant_id,
+  audit_sequence,
+  audit_record_id,
+  business_transaction_id,
+  actor_id,
+  capability_id,
+  capability_version,
+  canonicalization_profile,
+  previous_hash,
+  record_hash,
+  canonical_envelope,
+  occurred_at
+)
+SELECT
+  'tenant-b',
+  audit_sequence + 1,
+  'audit-customer-privacy-submit-fixture-b',
+  'tx-customer-privacy-submit-fixture-b',
+  'privacy-officer',
+  'customer_privacy.case.submit',
+  '1.0.0',
+  'crm.cjson/v1',
+  record_hash,
+  decode(repeat('72', 32), 'hex'),
+  convert_to('{"customer_privacy":"submit_fixture_b"}', 'UTF8'),
+  clock_timestamp()
+FROM crm.audit_records
+WHERE tenant_id = 'tenant-b'
+ORDER BY audit_sequence DESC
+LIMIT 1;
 
 INSERT INTO crm.business_transactions (
   tenant_id,
@@ -157,11 +332,12 @@ VALUES (
   'request-customer-privacy-submit-fixture-b',
   'customer_privacy.case.submit',
   '1.0.0',
-  0,
-  0,
-  0
-)
-ON CONFLICT (tenant_id, business_transaction_id) DO NOTHING;
+  1,
+  1,
+  1
+);
+
+SET CONSTRAINTS ALL IMMEDIATE;
 COMMIT;
 
 RESET ROLE;
