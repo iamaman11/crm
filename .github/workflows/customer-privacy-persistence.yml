@@ -156,12 +156,18 @@ jobs:
           set -o pipefail
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_submit --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-submit-reapplied.log
-      - name: Verify real crm-api Customer Privacy process
+      - name: Verify real crm-api case-create process
         shell: bash
         run: |
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_create_process_e2e -- --nocapture \
             2>&1 | tee database/customer-privacy-case-create-crm-api.log
+      - name: Verify real crm-api case-submit process
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test customer_privacy_case_submit_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-submit-crm-api.log
       - name: Upload Customer Privacy persistence diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -173,6 +179,7 @@ jobs:
             crates/crm-customer-privacy-submit-capability-adapter/
             crates/crm-customer-privacy-capability-composition/
             services/crm-api/tests/customer_privacy_case_create_process_e2e.rs
+            services/crm-api/tests/customer_privacy_case_submit_process_e2e.rs
             database/tests/0020_customer_privacy_persistence_fixture.sql
             database/tests/0021_customer_privacy_force_rls.sql
             database/customer-privacy-case-create-*.log
