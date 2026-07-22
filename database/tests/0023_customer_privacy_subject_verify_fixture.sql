@@ -11,10 +11,10 @@ INSERT INTO crm.module_versions (
 )
 VALUES (
   'crm.parties',
-  '0.2.0',
+  '0.3.0',
   'crm.cjson/v1',
   decode(repeat('73', 32), 'hex'),
-  '{"module_id":"crm.parties","version":"0.2.0"}'::jsonb,
+  '{"module_id":"crm.parties","version":"0.3.0"}'::jsonb,
   clock_timestamp(),
   'customer-platform'
 )
@@ -44,7 +44,7 @@ VALUES
     'parties.party.create',
     '1.0.0',
     'crm.parties',
-    '0.2.0',
+    '0.3.0',
     'crm.parties.v1.PartyService',
     'CreateParty',
     decode(repeat('74', 32), 'hex'),
