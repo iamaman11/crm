@@ -1,11 +1,5 @@
 \set ON_ERROR_STOP on
 
-INSERT INTO crm.tenants (tenant_id, status, data_region)
-VALUES ('tenant-privacy-a', 'active', 'eu-central')
-ON CONFLICT (tenant_id) DO UPDATE
-SET status = EXCLUDED.status,
-    data_region = EXCLUDED.data_region;
-
 INSERT INTO crm.module_versions (
   module_id,
   version,
