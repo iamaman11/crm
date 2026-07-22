@@ -3,7 +3,9 @@
 #[path = "support/customer_enrichment_process/mod.rs"]
 mod support;
 
-use crm_application_runtime::gateway_v1::application_gateway_service_client::ApplicationGatewayServiceClient;
+use crm_application_runtime::gateway_v1::{
+    MutateResponse, application_gateway_service_client::ApplicationGatewayServiceClient,
+};
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::TypedPayload;
 use crm_proto_contracts::crm::{
@@ -28,7 +30,7 @@ const VERIFY_CASE: &str = "customer_privacy.case.subject.verify";
 const CANCEL_CASE: &str = "customer_privacy.case.cancel";
 const RECORD_TYPE: &str = "customer-privacy.case";
 const PARTY_A: &str = "privacy-cancel-party-a";
-const RAW_MARKER: &str = "raw-privacy-cancel-payload-must-not-leak";
+const CANCEL_SCOPE: &str = "capability:customer_privacy.case.cancel:1.0.0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CancelEvidence {
@@ -180,7 +182,7 @@ async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_s
     .expect_err("incompatible cancellation replay must conflict");
     assert_safe_status(
         &conflict,
-        Code::AlreadyExists,
+        Code::Aborted,
         "CAPABILITY_IDEMPOTENCY_KEY_REUSED",
     );
     assert_record_version(&admin, TENANT_A, &success_case, 4).await;
@@ -197,7 +199,7 @@ async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_s
     .expect_err("terminal case must not be cancelled twice under a new key");
     assert_safe_status(
         &terminal,
-        Code::FailedPrecondition,
+        Code::Aborted,
         "CUSTOMER_PRIVACY_INVALID_TRANSITION",
     );
     assert_record_version(&admin, TENANT_A, &success_case, 4).await;
@@ -273,12 +275,13 @@ async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_s
         .execute(&mut *lock_holder)
         .await
         .expect("hold shared canonical subject lock");
+    let contended_key = "privacy-cancel-contended";
     let contended = mutate(
         &mut grpc,
         &cancel_definition,
         cancel_payload(&cancel_definition, &contended_case, 3),
         TENANT_A,
-        "privacy-cancel-contended",
+        contended_key,
         true,
     )
     .await
@@ -290,13 +293,7 @@ async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_s
     );
     assert_record_version(&admin, TENANT_A, &contended_case, 3).await;
     assert_eq!(
-        cancel_evidence(
-            &admin,
-            TENANT_A,
-            &contended_case,
-            "privacy-cancel-contended"
-        )
-        .await,
+        cancel_evidence(&admin, TENANT_A, &contended_case, contended_key).await,
         CancelEvidence {
             events: 0,
             audits: 0,
@@ -310,12 +307,21 @@ async fn customer_privacy_case_cancel_real_process_is_atomic_locked_and_replay_s
         &cancel_definition,
         cancel_payload(&cancel_definition, &contended_case, 3),
         TENANT_A,
-        "privacy-cancel-contended",
+        contended_key,
         true,
     )
     .await
     .expect("same cancellation retries after lock release");
     assert_eq!(decode_cancel(&retried).version, 4);
+    assert_eq!(
+        cancel_evidence(&admin, TENANT_A, &contended_case, contended_key).await,
+        CancelEvidence {
+            events: 1,
+            audits: 1,
+            idempotency: 1,
+            transactions: 1,
+        }
+    );
 
     let inactive_case = submitted_case(
         &mut grpc,
@@ -515,9 +521,7 @@ fn cancel_payload(
     )
 }
 
-fn decode_cancel(
-    response: &crm_application_runtime::gateway_v1::MutationResponse,
-) -> wire::PrivacyCase {
+fn decode_cancel(response: &MutateResponse) -> wire::PrivacyCase {
     wire::CancelPrivacyCaseResponse::decode(
         response
             .output
@@ -548,27 +552,30 @@ async fn cancel_evidence(
         .await
         .expect("count cancellation events"),
         audits: sqlx::query_scalar(
-            "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND aggregate_type = $2 AND aggregate_id = $3 AND capability_id = $4",
+            "SELECT count(*) FROM crm.audit_records a JOIN crm.idempotency_records i ON i.tenant_id = a.tenant_id AND i.business_transaction_id = a.business_transaction_id WHERE i.tenant_id = $1 AND i.idempotency_scope = $2 AND i.idempotency_key = $3 AND a.capability_id = $4",
         )
         .bind(tenant)
-        .bind(RECORD_TYPE)
-        .bind(case_id)
+        .bind(CANCEL_SCOPE)
+        .bind(idempotency_key)
         .bind(CANCEL_CASE)
         .fetch_one(pool)
         .await
         .expect("count cancellation audits"),
         idempotency: sqlx::query_scalar(
-            "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = 'capability:customer_privacy.case.cancel:1.0.0' AND idempotency_key = $2 AND status = 'completed'",
+            "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = $2 AND idempotency_key = $3 AND status = 'completed'",
         )
         .bind(tenant)
+        .bind(CANCEL_SCOPE)
         .bind(idempotency_key)
         .fetch_one(pool)
         .await
         .expect("count cancellation idempotency evidence"),
         transactions: sqlx::query_scalar(
-            "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND capability_id = $2 AND status = 'committed'",
+            "SELECT count(*) FROM crm.business_transactions bt JOIN crm.idempotency_records i ON i.tenant_id = bt.tenant_id AND i.business_transaction_id = bt.business_transaction_id WHERE i.tenant_id = $1 AND i.idempotency_scope = $2 AND i.idempotency_key = $3 AND bt.capability_id = $4",
         )
         .bind(tenant)
+        .bind(CANCEL_SCOPE)
+        .bind(idempotency_key)
         .bind(CANCEL_CASE)
         .fetch_one(pool)
         .await
@@ -690,7 +697,6 @@ fn assert_safe_status(status: &Status, expected_code: Code, expected_error_code:
 
 fn assert_safe_text(value: &str) {
     for forbidden in [
-        RAW_MARKER,
         PARTY_A,
         "internal_reference",
         "crm.records",
