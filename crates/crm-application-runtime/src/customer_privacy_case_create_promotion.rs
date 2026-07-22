@@ -5,30 +5,36 @@ use crm_application_composition::{
     NoopMutationSemanticValidator,
 };
 use crm_capability_runtime::{CapabilityDefinition, CapabilitySemanticValidator};
-use crm_customer_privacy_capability_adapter::capability_definitions as customer_privacy_capability_definitions;
-use crm_customer_privacy_capability_composition::postgres_case_create_executor;
+use crm_customer_privacy_capability_adapter::capability_definitions as customer_privacy_create_definitions;
+use crm_customer_privacy_capability_composition::{
+    postgres_case_create_executor, postgres_case_submit_executor,
+};
+use crm_customer_privacy_submit_capability_adapter::capability_definitions as customer_privacy_submit_definitions;
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
 use std::sync::Arc;
 
 pub use base_runtime::{PRODUCTION_REVIEW_POLICY_VERSION, application_query_definitions};
 
-/// Returns the accepted public mutation inventory plus exactly one Customer
-/// Privacy production coordinate: `customer_privacy.case.create@1.0.0`.
+/// Returns the accepted public mutation inventory plus exactly two Customer
+/// Privacy production coordinates: case creation and the optimistic
+/// `Draft -> Submitted` lifecycle transition.
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_mutation_definitions()?;
-    definitions.extend(customer_privacy_capability_definitions()?);
+    definitions.extend(customer_privacy_create_definitions()?);
+    definitions.extend(customer_privacy_submit_definitions()?);
     Ok(definitions)
 }
 
 /// Extends the existing production composition without adding a capability-
 /// specific HTTP/gRPC switch. The generic application ingress still owns exact
-/// version resolution, validation, live authorization and dispatch. Optional
-/// predecessor lineage is protected by the dedicated transactional reference
-/// guard before the shared executor locks and creates the deterministic case.
+/// version resolution, validation, live authorization and dispatch. Creation
+/// keeps its optional predecessor guard, while submission uses the shared
+/// single-aggregate optimistic executor directly.
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
-    let privacy_executor = postgres_case_create_executor(dependencies.store.clone());
+    let create_executor = postgres_case_create_executor(dependencies.store.clone());
+    let submit_executor = postgres_case_submit_executor(dependencies.store.clone());
 
     let base_dependencies = ProductionCompositionDependencies {
         store: dependencies.store,
@@ -55,16 +61,29 @@ pub fn build_production_composition(
         )
         .map_err(composition_error)?;
 
-    let privacy_validator: Arc<dyn CapabilitySemanticValidator> =
+    let create_validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ActivationGatedMutationValidator::new(
+            dependencies.activation.clone(),
+            Arc::new(NoopMutationSemanticValidator),
+        ));
+    contributions
+        .add_mutations(
+            customer_privacy_create_definitions()?,
+            create_validator,
+            create_executor,
+        )
+        .map_err(composition_error)?;
+
+    let submit_validator: Arc<dyn CapabilitySemanticValidator> =
         Arc::new(ActivationGatedMutationValidator::new(
             dependencies.activation,
             Arc::new(NoopMutationSemanticValidator),
         ));
     contributions
         .add_mutations(
-            customer_privacy_capability_definitions()?,
-            privacy_validator,
-            privacy_executor,
+            customer_privacy_submit_definitions()?,
+            submit_validator,
+            submit_executor,
         )
         .map_err(composition_error)?;
 
