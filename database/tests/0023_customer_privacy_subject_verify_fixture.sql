@@ -20,6 +20,10 @@ VALUES (
 )
 ON CONFLICT (module_id, version) DO NOTHING;
 
+-- This shared submit/subject/query/cancel process database must register every
+-- audited mutation coordinate exercised by the real crm-api process. The
+-- runtime registry remains authoritative for execution; these rows satisfy the
+-- durable audit foreign key without weakening or bypassing that constraint.
 INSERT INTO crm.capability_registry (
   capability_id,
   capability_version,
@@ -68,6 +72,25 @@ VALUES
     'VerifyPrivacyCaseSubject',
     decode(repeat('76', 32), 'hex'),
     decode(repeat('77', 32), 'hex'),
+    'critical',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    ARRAY['personal', 'confidential']::text[]
+  ),
+  (
+    'customer_privacy.case.cancel',
+    '1.0.0',
+    'crm.customer-privacy',
+    '0.2.0',
+    'crm.customer_privacy.v1.CustomerPrivacyCaseService',
+    'CancelPrivacyCase',
+    decode(repeat('7b', 32), 'hex'),
+    decode(repeat('7c', 32), 'hex'),
     'critical',
     true,
     true,
