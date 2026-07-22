@@ -29,18 +29,15 @@ use crm_module_sdk::{
 use crm_proto_contracts::crm::customer::v1 as customer_wire;
 use crm_proto_contracts::crm::customer_privacy::v1 as wire;
 
-pub const VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY: &str =
-    "customer_privacy.case.subject.verify";
+pub const VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY: &str = "customer_privacy.case.subject.verify";
 pub const VERIFY_PRIVACY_CASE_SUBJECT_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.VerifyPrivacyCaseSubjectRequest";
 pub const VERIFY_PRIVACY_CASE_SUBJECT_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.VerifyPrivacyCaseSubjectResponse";
-pub const PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_TYPE: &str =
-    "customer_privacy.case.subject_verified";
+pub const PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_TYPE: &str = "customer_privacy.case.subject_verified";
 pub const PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.PrivacyCaseSubjectVerifiedEvent";
-pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] =
-    &[VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY];
+pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY];
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CustomerPrivacyCaseSubjectVerifyCapabilityPlanner;
@@ -354,8 +351,12 @@ fn case_ref(reference: wire::PrivacyCaseRef) -> Result<RecordRef, SdkError> {
     )
 }
 
-fn party_id(reference: Option<customer_wire::PartyRef>, field: &'static str) -> Result<RecordId, SdkError> {
-    let reference = reference.ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required."))?;
+fn party_id(
+    reference: Option<customer_wire::PartyRef>,
+    field: &'static str,
+) -> Result<RecordId, SdkError> {
+    let reference = reference
+        .ok_or_else(|| SdkError::invalid_argument(field, "Party reference is required."))?;
     RecordId::try_new(reference.party_id)
         .map_err(|error| SdkError::invalid_argument(field, error.to_string()))
 }

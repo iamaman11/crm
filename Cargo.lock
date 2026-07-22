@@ -1115,6 +1115,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-privacy-subject-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-privacy",
+ "crm-customer-privacy-persistence-adapter",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
+]
+
+[[package]]
 name = "crm-customer-privacy-submit-capability-adapter"
 version = "0.1.0"
 dependencies = [
