@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn missing_tenant_stale_and_wrong_state_fail_closed() {
         let definition = capability_definition().unwrap();
-        let request = request(
+        let base_request = request(
             "tenant-a",
             Some("privacy-case-a"),
             1,
@@ -525,7 +525,7 @@ mod tests {
         );
         assert_eq!(
             CustomerPrivacyCaseSubmitCapabilityPlanner
-                .plan(&definition, &request, None)
+                .plan(&definition, &base_request, None)
                 .unwrap_err()
                 .code,
             "CUSTOMER_PRIVACY_CASE_NOT_FOUND"
@@ -534,7 +534,7 @@ mod tests {
             CustomerPrivacyCaseSubmitCapabilityPlanner
                 .plan(
                     &definition,
-                    &request,
+                    &base_request,
                     Some(&snapshot("tenant-b", "privacy-case-a", false)),
                 )
                 .unwrap_err()
@@ -583,7 +583,7 @@ mod tests {
     #[test]
     fn malformed_state_and_invalid_request_are_bounded() {
         let definition = capability_definition().unwrap();
-        let request = request(
+        let base_request = request(
             "tenant-a",
             Some("privacy-case-a"),
             1,
@@ -593,7 +593,7 @@ mod tests {
         let mut malformed = snapshot("tenant-a", "privacy-case-a", false);
         malformed.payload.bytes = b"{\"raw_secret\":\"must-not-leak\"}".to_vec();
         let error = CustomerPrivacyCaseSubmitCapabilityPlanner
-            .plan(&definition, &request, Some(&malformed))
+            .plan(&definition, &base_request, Some(&malformed))
             .unwrap_err();
         assert_eq!(error.code, "CUSTOMER_PRIVACY_CASE_INVALID");
         assert_eq!(
