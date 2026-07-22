@@ -79,7 +79,9 @@ impl TransactionalAggregatePlanner for CustomerPrivacyCaseCreateCapabilityPlanne
                 validate_previous_case(request, previous_case_id, current)?;
             }
             None if current.is_some() => {
-                return Err(plan_invalid("deterministic root privacy case already exists"));
+                return Err(plan_invalid(
+                    "deterministic root privacy case already exists",
+                ));
             }
             None => {}
         }
@@ -135,16 +137,15 @@ pub fn privacy_case_from_create_request(
     request: &CapabilityRequest,
 ) -> Result<PrivacyCase, SdkError> {
     request.context.validate()?;
-    let command: wire::CreatePrivacyCaseRequest = support::decode_request(
-        request,
-        MODULE_ID,
-        CREATE_PRIVACY_CASE_REQUEST_SCHEMA,
-    )?;
+    let command: wire::CreatePrivacyCaseRequest =
+        support::decode_request(request, MODULE_ID, CREATE_PRIVACY_CASE_REQUEST_SCHEMA)?;
     let kind = privacy_case_kind_from_wire(command.kind)?;
     let policy_version = policy_version(command.policy_version)?;
     let previous_case_id = command
         .previous_privacy_case_ref
-        .map(|reference| privacy_case_id_from_wire(reference, "customer_privacy.previous_privacy_case_ref"))
+        .map(|reference| {
+            privacy_case_id_from_wire(reference, "customer_privacy.previous_privacy_case_ref")
+        })
         .transpose()?;
     let case_id = deterministic_privacy_case_id(
         request.context.execution.tenant_id.as_str(),
@@ -331,10 +332,7 @@ fn policy_version(value: String) -> Result<SchemaVersion, SdkError> {
         ));
     }
     SchemaVersion::try_new(value).map_err(|error| {
-        SdkError::invalid_argument(
-            "customer_privacy.case.policy_version",
-            error.to_string(),
-        )
+        SdkError::invalid_argument("customer_privacy.case.policy_version", error.to_string())
     })
 }
 
@@ -413,9 +411,7 @@ fn plan_invalid(reference: impl Into<String>) -> SdkError {
     .with_internal_reference(reference.into())
 }
 
-fn configured<T>(
-    value: Result<T, crm_module_sdk::IdentifierError>,
-) -> Result<T, SdkError> {
+fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
     value.map_err(configuration_error)
 }
 
@@ -565,10 +561,9 @@ mod tests {
         assert_eq!(payload.data_class, DataClass::Confidential);
         assert_eq!(plan.batch.events[0].event.aggregate, *reference);
 
-        let response = wire::CreatePrivacyCaseResponse::decode(
-            plan.output.as_ref().unwrap().bytes.as_slice(),
-        )
-        .unwrap();
+        let response =
+            wire::CreatePrivacyCaseResponse::decode(plan.output.as_ref().unwrap().bytes.as_slice())
+                .unwrap();
         let privacy_case = response.privacy_case.unwrap();
         assert_eq!(
             privacy_case.privacy_case_ref.unwrap().privacy_case_id,
@@ -611,10 +606,8 @@ mod tests {
             panic!("successor must be a new record");
         };
         assert_ne!(reference, &predecessor.reference);
-        let response = wire::CreatePrivacyCaseResponse::decode(
-            plan.output.unwrap().bytes.as_slice(),
-        )
-        .unwrap();
+        let response =
+            wire::CreatePrivacyCaseResponse::decode(plan.output.unwrap().bytes.as_slice()).unwrap();
         assert_eq!(
             response
                 .privacy_case

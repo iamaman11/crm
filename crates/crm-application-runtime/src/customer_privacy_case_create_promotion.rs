@@ -31,12 +31,11 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
-    let privacy_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        PostgresTransactionalAggregateExecutor::new(
+    let privacy_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(PostgresTransactionalAggregateExecutor::new(
             dependencies.store.clone(),
             Arc::new(CustomerPrivacyCaseCreateCapabilityPlanner),
-        ),
-    );
+        ));
 
     let base_dependencies = ProductionCompositionDependencies {
         store: dependencies.store,
@@ -63,12 +62,11 @@ pub fn build_production_composition(
         )
         .map_err(composition_error)?;
 
-    let privacy_validator: Arc<dyn CapabilitySemanticValidator> = Arc::new(
-        ActivationGatedMutationValidator::new(
+    let privacy_validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ActivationGatedMutationValidator::new(
             dependencies.activation,
             Arc::new(NoopMutationSemanticValidator),
-        ),
-    );
+        ));
     contributions
         .add_mutations(
             customer_privacy_capability_definitions()?,
