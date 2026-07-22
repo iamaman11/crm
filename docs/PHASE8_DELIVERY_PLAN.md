@@ -71,8 +71,8 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
-Accepted production mutations: PR #146 and PR #147  
-Active bounded mutation: draft PR #148  
+Accepted production mutations: PRs #146–#148  
+Active bounded query: draft PR #149  
 Depends on: merged and synchronized 8A.10
 
 #### Objective
@@ -148,13 +148,13 @@ The accepted packet includes:
 - independent PostgreSQL proof, complete rollback/schema removal/reapply, repeated FORCE RLS and permanent real-`crm-api` acceptance;
 - tenant-scoped governed actor and exact capability fixture evidence required by audit and business-transaction foreign keys.
 
-#### Bounded packet 8A.11.3 — `case.subject.verify` — Gate review
+#### Bounded packet 8A.11.3 — `case.subject.verify` — Complete
 
-Draft PR #148 promotes exactly one additional public coordinate:
+PR #148 accepted unchanged source `118327e09a6e31ba87b02bdab99289035b572ed9`, passed all 18 permanent workflows and merged as `8ee5538bf97031dd48ab3726a605b9f3ad4bfd1e`. It promotes exactly one additional public coordinate:
 
 `customer_privacy.case.subject.verify@1.0.0`
 
-The candidate packet includes:
+The accepted packet includes:
 
 - a dedicated infrastructure-neutral subject-verification planner;
 - exact owner, capability/version and public Protobuf request/response validation;
@@ -171,11 +171,30 @@ The candidate packet includes:
 - exact route parity: three runtime privacy mutations and thirteen non-runtime public privacy coordinates;
 - clean migrations, non-privileged FORCE RLS, full rollback/schema removal/reapply and repeated real HTTP/gRPC process acceptance with safe bounded errors.
 
+#### Bounded packet 8A.11.4 — `case.get` — Gate review
+
+Draft PR #149 promotes exactly one additional public coordinate:
+
+`customer_privacy.case.get@1.0.0`
+
+The candidate packet includes:
+
+- a dedicated permission-aware query adapter with exact owner, capability/version and confidential Protobuf request/response validation;
+- non-privileged FORCE-RLS tenant lookup through the accepted governed record adapter;
+- strict persisted envelope and canonical aggregate rehydration before disclosure;
+- live privacy-case resource visibility and live canonical Party visibility after subject verification;
+- uniform not-found concealment for missing, cross-tenant and hidden resources;
+- field-level redaction through the shared query visibility policy and deployment ceiling;
+- generic `ApplicationComposition` query registration, live query authorization and activation gating with no alternate endpoint;
+- side-effect-free execution with no record version change, audit, event, outbox, idempotency or business-transaction write;
+- exact route parity: three runtime privacy mutations, one runtime privacy query and twelve non-runtime public privacy coordinates;
+- permanent unit and real HTTP/gRPC process acceptance for success, redaction, token scope, concealment, suspension, absent grant and safe bounded errors.
+
 Explicit exclusions:
 
 - `case.approve`;
 - `case.cancel`;
-- all privacy queries;
+- all remaining privacy queries;
 - restriction routes;
 - legal-hold routes;
 - worker/internal coordinates;
@@ -197,7 +216,7 @@ Explicit exclusions:
 
 #### Completion rule
 
-Acceptance of `case.create`, `case.submit` and `case.subject.verify` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
+Acceptance of `case.create`, `case.submit`, `case.subject.verify` and `case.get` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
 
 ### Phase 8A completion gate
 
