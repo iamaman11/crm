@@ -81,7 +81,7 @@ pub fn legal_hold_persisted_contract() -> PersistedPayloadContract<'static> {
 pub fn privacy_case_persisted_payload(case: &PrivacyCase) -> Result<TypedPayload, SdkError> {
     support::persisted_json_payload_with_data_class(
         privacy_case_persisted_contract(),
-        DataClass::Personal,
+        DataClass::Confidential,
         encode_privacy_case_state(case)?,
     )
 }
@@ -111,7 +111,7 @@ pub fn privacy_case_from_snapshot(snapshot: &RecordSnapshot) -> Result<PrivacyCa
     let bytes = support::persisted_json_bytes_with_data_class(
         snapshot,
         privacy_case_persisted_contract(),
-        DataClass::Personal,
+        DataClass::Confidential,
     )?;
     let case = decode_privacy_case_state(bytes)?;
     ensure_snapshot_identity_and_version(
@@ -279,7 +279,7 @@ mod tests {
         let payload = privacy_case_persisted_payload(&case).unwrap();
         assert_eq!(payload.owner.as_str(), MODULE_ID);
         assert_eq!(payload.schema_id.as_str(), PRIVACY_CASE_STATE_SCHEMA_ID);
-        assert_eq!(payload.data_class, DataClass::Personal);
+        assert_eq!(payload.data_class, DataClass::Confidential);
 
         let snapshot = RecordSnapshot {
             reference: privacy_case_record_ref(&case).unwrap(),
