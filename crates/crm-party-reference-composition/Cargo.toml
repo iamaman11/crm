@@ -8,3 +8,4 @@ publish = false
 crm-core-data = { path = "../crm-core-data" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
