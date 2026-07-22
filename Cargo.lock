@@ -1259,7 +1259,9 @@ dependencies = [
  "crm-identity-resolution-capability-adapter",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
+ "crm-party-reference-composition",
  "crm-proto-contracts",
+ "sqlx",
 ]
 
 [[package]]
@@ -1416,6 +1418,7 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
+ "sqlx",
 ]
 
 [[package]]
