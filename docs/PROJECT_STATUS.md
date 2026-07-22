@@ -16,7 +16,7 @@ Authoritative references:
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress and draft PR #146 is in Gate review for its first production mutation.**
+**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; `case.create` is merged and draft PR #147 is in Gate review for `case.submit`.**
 
 Current Phase 8A baseline:
 
@@ -25,11 +25,11 @@ Current Phase 8A baseline:
 - **8A.8 — Complete:** governed customer export, artifacts and reconciliation (#123 / PR #130).
 - **8A.9 — Complete:** Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132).
 - **8A.10 — Complete:** Governed Customer Enrichment and Provenance (#125 / PR #137).
-- **8A.11 — In progress:** architecture, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS persistence are merged through PR #145. Draft PR #146 promotes only `customer_privacy.case.create@1.0.0`.
+- **8A.11 — In progress:** architecture, owner foundation, deterministic domain, canonical persistence, immutable public contracts, FORCE RLS persistence and `customer_privacy.case.create@1.0.0` are merged through PR #146. Draft PR #147 promotes only `customer_privacy.case.submit@1.0.0`.
 
 The active dependency lane is:
 
-`8A.11 case.create gate review -> separately bounded remaining privacy slices -> Phase 8A closure -> 8B`
+`8A.11 case.submit gate review -> subject verification and shared subject lock -> separately bounded remaining privacy slices -> Phase 8A closure -> 8B`
 
 ## Phase 8A.10 accepted result
 
@@ -43,7 +43,7 @@ The frozen production inventory is exactly:
 
 All 17 manifest-bound Customer Enrichment coordinates are classified as public runtime or worker runtime. Provider dispatch/response run in phase 240, materialization in phase 245 and owner application/outcome recovery in phase 250.
 
-## Phase 8A.11 merged foundation
+## Phase 8A.11 merged foundation and first mutation
 
 The following bounded PRs are merged:
 
@@ -52,37 +52,40 @@ The following bounded PRs are merged:
 - PR #142 — deterministic pure-domain lifecycles;
 - PR #143 — canonical private persistence;
 - PR #144 — immutable public Protobuf contracts;
-- PR #145 — FORCE RLS persistence proof.
+- PR #145 — FORCE RLS persistence proof;
+- PR #146 — first production mutation, `customer_privacy.case.create@1.0.0`.
 
-PR #145 was accepted on source SHA `f37d9a5e025745abaaf0aeb351ff9bb534455aab` and merged as `721a1cf185ffbdea309bd1199c6c4568cf82d7a1`. Its 17 applicable workflows proved clean migrations, FORCE RLS under `NOSUPERUSER + NOBYPASSRLS`, tenant isolation, missing-context concealment, `row_security=off` resistance, full rollback, schema removal, reapply and repeated FORCE RLS proof. The strict persistence adapter validates record identity/version plus schema, descriptor, data class, encoding, byte ceiling and retention metadata.
+PR #145 was accepted on source SHA `f37d9a5e025745abaaf0aeb351ff9bb534455aab` and merged as `721a1cf185ffbdea309bd1199c6c4568cf82d7a1`. Its 17 applicable workflows proved clean migrations, FORCE RLS under `NOSUPERUSER + NOBYPASSRLS`, tenant isolation, missing-context concealment, `row_security=off` resistance, full rollback, schema removal, reapply and repeated FORCE RLS proof.
 
-## Active packet: first Customer Privacy production mutation
+PR #146 was accepted on unchanged source SHA `9b53c3ebd81b58518dc445b02b33b35403ffa7c3`, passed all 18 applicable workflows and merged as `2d28937a123e4ba31ab0d835c4c30e3dfed0f187`. It provides deterministic tenant/idempotency case identity, confidential Draft/version-1 state, optional terminal predecessor lineage, exact replay/conflict behavior, generic HTTP/gRPC ingress, live authorization, activation gating and permanent fresh-PostgreSQL plus real-process evidence.
 
-Draft PR #146 is deliberately bounded to:
+## Active packet: Customer Privacy case submission
 
-`customer_privacy.case.create@1.0.0`
+Draft PR #147 is deliberately bounded to:
+
+`customer_privacy.case.submit@1.0.0`
 
 The candidate implementation provides:
 
-- a dedicated infrastructure-neutral capability planner;
-- deterministic length-framed SHA-256 case identity from tenant and idempotency key;
-- canonical confidential Draft/version-1 state;
-- one immutable `customer_privacy.case.created` event, one audit intent, one idempotency claim and one atomic batch;
-- `MustBeAbsent` successor locking;
-- optional predecessor lineage through a transaction-scoped PostgreSQL `FOR SHARE` guard, strict snapshot rehydration, tenant concealment and terminal-only validation;
-- production registration only through the generic application mutation ingress, shared live authorizer and activation gate;
-- permanent unit, fresh-PostgreSQL, rollback/reapply and real-`crm-api` acceptance;
-- exact route parity: one runtime privacy mutation and fifteen non-runtime public privacy coordinates.
+- a dedicated infrastructure-neutral submit planner;
+- exact request/response owner, capability, version and Protobuf-contract validation;
+- one tenant-bound `customer-privacy.case` target with `AggregatePresence::MustExist`;
+- strict canonical confidential state rehydration through the accepted persistence adapter;
+- exact optimistic `Draft -> Submitted` transition using the public expected version;
+- one record update, one immutable `customer_privacy.case.status_changed` event, one audit intent and one idempotency claim in one transaction;
+- production registration only through generic application mutation ingress, shared live authorization and activation gating;
+- permanent candidate unit, fresh-PostgreSQL, rollback/reapply and real-`crm-api` process evidence;
+- route parity of exactly two runtime privacy mutations and fourteen non-runtime public privacy coordinates.
 
-No privacy query, submit, subject verification, approval, cancellation, restriction, legal-hold, worker or crypto-shred coordinate is promoted by this slice.
+No subject verification, approval, cancellation, privacy query, restriction, legal-hold, worker or crypto-shred coordinate is promoted by this slice.
 
 ## Remaining Phase 8A.11 boundary
 
-Phase 8A.11 is not complete. Remaining work includes subject verification, the shared canonical-Party subject lock, live restriction and legal-hold precedence, permission-aware query visibility, bounded owner contribution/orchestration, privacy export, deletion/anonymization convergence, immutable-evidence preservation, worker recovery and complete real-process acceptance.
+Phase 8A.11 is not complete. Remaining work includes verified subject binding, canonical Party lineage and identity-resolution generation, the shared canonical-Party subject lock, live restriction and legal-hold precedence, permission-aware query visibility, bounded owner contribution/orchestration, privacy export, deletion/anonymization convergence, immutable-evidence preservation, worker recovery and complete real-process acceptance.
 
 ## Merged platform and customer-master baseline
 
-Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality and Customer Enrichment.
+Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and Customer Privacy case creation.
 
 ## Product completeness reality
 
@@ -90,8 +93,8 @@ The project is **not yet a complete universal CRM**. Major required families sti
 
 ## Immediate next actions
 
-1. Accept draft PR #146 only after all applicable workflows pass on one unchanged exact source SHA and review threads are resolved.
-2. Merge `case.create` with expected unchanged head and record source/merge SHAs in PR #146 and issue #126.
-3. Select the next bounded Customer Privacy slice separately; do not batch submit, subject verification, restriction or legal hold into `case.create`.
-4. Close Phase 8A only after the full privacy/customer-master interaction baseline is merged and reconciled.
-5. Begin Phase 8B / #29 only after Phase 8A closure.
+1. Accept draft PR #147 only after all applicable workflows pass on one unchanged exact source SHA and review threads are resolved.
+2. Merge `case.submit` with expected unchanged head and record source/merge SHAs in PR #147 and issue #126.
+3. Implement `customer_privacy.case.subject.verify@1.0.0` separately with canonical Party lineage, identity-resolution generation validation and shared subject locking.
+4. Keep all remaining privacy coordinates non-runtime until their own production proofs are complete.
+5. Close Phase 8A only after the full privacy/customer-master interaction baseline is merged and reconciled; begin Phase 8B / #29 only afterward.
