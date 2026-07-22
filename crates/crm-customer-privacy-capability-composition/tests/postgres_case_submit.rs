@@ -32,7 +32,9 @@ const SUBMIT_SCOPE: &str = "capability:customer_privacy.case.submit:1.0.0";
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_case_submit_is_atomic_replay_safe_and_fail_closed() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping Customer Privacy case-submit process proof because DATABASE_URL is absent");
+        eprintln!(
+            "skipping Customer Privacy case-submit process proof because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -56,11 +58,9 @@ async fn postgres_case_submit_is_atomic_replay_safe_and_fail_closed() {
         1_000_000_000,
         3,
     );
-    let case_id = deterministic_privacy_case_id(
-        TENANT_A,
-        create.context.execution.idempotency_key.as_str(),
-    )
-    .unwrap();
+    let case_id =
+        deterministic_privacy_case_id(TENANT_A, create.context.execution.idempotency_key.as_str())
+            .unwrap();
     create_executor
         .execute(&create_definition, create)
         .await
@@ -246,7 +246,13 @@ async fn postgres_case_submit_is_atomic_replay_safe_and_fail_closed() {
         malformed_error.safe_message,
         "The privacy case could not be loaded safely."
     );
-    for forbidden in ["raw_secret", "must-not-leak", "crm.records", "sqlx", "SELECT"] {
+    for forbidden in [
+        "raw_secret",
+        "must-not-leak",
+        "crm.records",
+        "sqlx",
+        "SELECT",
+    ] {
         assert!(!malformed_error.safe_message.contains(forbidden));
     }
     assert_record_version(&admin, TENANT_A, &malformed_id, 1).await;
@@ -276,11 +282,9 @@ async fn create_draft(
         started_at,
         5,
     );
-    let id = deterministic_privacy_case_id(
-        tenant,
-        request.context.execution.idempotency_key.as_str(),
-    )
-    .unwrap();
+    let id =
+        deterministic_privacy_case_id(tenant, request.context.execution.idempotency_key.as_str())
+            .unwrap();
     executor
         .execute(definition, request)
         .await
@@ -397,13 +401,19 @@ async fn assert_submitted_record(
     case_id: &RecordId,
 ) {
     let snapshot = store
-        .get_record(&request.context, &privacy_case_ref_from_id(case_id).unwrap())
+        .get_record(
+            &request.context,
+            &privacy_case_ref_from_id(case_id).unwrap(),
+        )
         .await
         .expect("read submitted case")
         .expect("submitted case exists");
     assert_eq!(snapshot.version, 2);
     let case = privacy_case_from_snapshot(&snapshot).expect("strictly rehydrate submitted case");
-    assert_eq!(case.status(), crm_customer_privacy::PrivacyCaseStatus::Submitted);
+    assert_eq!(
+        case.status(),
+        crm_customer_privacy::PrivacyCaseStatus::Submitted
+    );
     assert_eq!(case.version(), 2);
 }
 
@@ -524,7 +534,10 @@ async fn corrupt_record_payload(admin: &PgPool, tenant: &str, case_id: &RecordId
     .fetch_one(admin)
     .await
     .expect("read malformed fixture transaction context");
-    let mut transaction = admin.begin().await.expect("start governed malformed update");
+    let mut transaction = admin
+        .begin()
+        .await
+        .expect("start governed malformed update");
     bind_write_context(
         &mut transaction,
         tenant,
