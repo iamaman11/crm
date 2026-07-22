@@ -95,8 +95,6 @@ SET owner_module_id = EXCLUDED.owner_module_id,
     export_allowed = EXCLUDED.export_allowed,
     data_classes_touched = EXCLUDED.data_classes_touched;
 
--- The isolated process proof deliberately converts shared-subject contention into a
--- bounded PostgreSQL lock-timeout error instead of allowing an unbounded test hang.
-ALTER ROLE crm_app_test SET lock_timeout = '500ms';
-
+-- Subject-lock contention is bounded by the shared fail-fast SQL primitive itself;
+-- the process proof intentionally relies on no role-specific lock timeout.
 SELECT 'Customer Privacy subject-verification fixture PASS' AS result;
