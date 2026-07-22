@@ -1,0 +1,13 @@
+[package]
+name = "crm-identity-resolution-topology-composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-identity-resolution = { path = "../../modules/crm-identity-resolution" }
+crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+crm-party-reference-composition = { path = "../crm-party-reference-composition" }
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
