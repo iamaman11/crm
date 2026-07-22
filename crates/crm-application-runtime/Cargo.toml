@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = []
+# Candidate-only process assembly for the real generic-ingress acceptance test.
+# Production definition/inventory APIs remain unchanged and this feature is disabled by default.
+customer-privacy-subject-verify-candidate = []
+
 [lints.clippy]
 # Module-specific assembly contributes independent adapters through the generic composition runtime.
 # Keep constructor breadth local to this compile-time composition boundary.
@@ -52,6 +58,7 @@ crm-customer-enrichment-visibility = { path = "../crm-customer-enrichment-visibi
 crm-customer-enrichment-worker-composition = { path = "../crm-customer-enrichment-worker-composition" }
 crm-customer-privacy-capability-adapter = { path = "../crm-customer-privacy-capability-adapter" }
 crm-customer-privacy-submit-capability-adapter = { path = "../crm-customer-privacy-submit-capability-adapter" }
+crm-customer-privacy-subject-capability-adapter = { path = "../crm-customer-privacy-subject-capability-adapter" }
 crm-customer-privacy-capability-composition = { path = "../crm-customer-privacy-capability-composition" }
 crm-data-quality-capability-adapter = { path = "../crm-data-quality-capability-adapter" }
 crm-data-quality-query-adapter = { path = "../crm-data-quality-query-adapter" }
