@@ -26,13 +26,14 @@ const TENANT_A: &str = "tenant-a";
 const TENANT_B: &str = "tenant-b";
 const ACTOR_A: &str = "actor-a";
 const ACTOR_B: &str = "actor-b";
-const IDEMPOTENCY_SCOPE: &str =
-    "capability:customer_privacy.case.create:1.0.0";
+const IDEMPOTENCY_SCOPE: &str = "capability:customer_privacy.case.create:1.0.0";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping Customer Privacy case-create process proof because DATABASE_URL is absent");
+        eprintln!(
+            "skipping Customer Privacy case-create process proof because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -219,7 +220,11 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     );
     let nonterminal_successor_id = deterministic_privacy_case_id(
         TENANT_B,
-        nonterminal_successor.context.execution.idempotency_key.as_str(),
+        nonterminal_successor
+            .context
+            .execution
+            .idempotency_key
+            .as_str(),
     )
     .unwrap();
     let nonterminal = executor
@@ -305,7 +310,11 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     );
     let malformed_successor_id = deterministic_privacy_case_id(
         TENANT_A,
-        malformed_successor.context.execution.idempotency_key.as_str(),
+        malformed_successor
+            .context
+            .execution
+            .idempotency_key
+            .as_str(),
     )
     .unwrap();
     let malformed = executor
@@ -317,7 +326,13 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
         malformed.safe_message,
         "The previous privacy case could not be loaded safely."
     );
-    for forbidden in ["raw_secret", "must-not-leak", "crm.records", "SELECT", "sqlx"] {
+    for forbidden in [
+        "raw_secret",
+        "must-not-leak",
+        "crm.records",
+        "SELECT",
+        "sqlx",
+    ] {
         assert!(!malformed.safe_message.contains(forbidden));
     }
     assert_no_attempt_evidence(
