@@ -11,3 +11,10 @@ crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
 crm-customer-privacy-capability-adapter = { path = "../crm-customer-privacy-capability-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
+
+[dev-dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-customer-privacy-persistence-adapter = { path = "../crm-customer-privacy-persistence-adapter" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+prost = "0.14"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
