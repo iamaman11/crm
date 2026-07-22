@@ -26,17 +26,23 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     Ok(definitions)
 }
 
-/// Default builds assemble only the accepted production composition. The explicit
-/// candidate feature changes process assembly solely for the real generic-ingress
-/// acceptance binary; it does not add an environment switch or a new endpoint.
-#[cfg(not(feature = "customer-privacy-subject-verify-candidate"))]
+/// Default builds and workspace-wide `--all-features` builds assemble only the
+/// accepted production composition. Candidate assembly is selected exclusively by
+/// disabling defaults and enabling the dedicated candidate feature.
+#[cfg(any(
+    feature = "production-composition",
+    not(feature = "customer-privacy-subject-verify-candidate")
+))]
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
     build_accepted_production_composition(dependencies)
 }
 
-#[cfg(feature = "customer-privacy-subject-verify-candidate")]
+#[cfg(all(
+    feature = "customer-privacy-subject-verify-candidate",
+    not(feature = "production-composition")
+))]
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
