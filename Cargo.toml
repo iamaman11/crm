@@ -73,6 +73,7 @@ members = [
   "crates/crm-identity-resolution-capability-adapter",
   "crates/crm-identity-resolution-capability-composition",
   "crates/crm-identity-resolution-merge-composition",
+  "crates/crm-identity-resolution-topology-composition",
   "crates/crm-identity-resolution-query-adapter",
   "crates/crm-customer-data-operations-capability-adapter",
   "crates/crm-customer-data-operations-query-adapter",
