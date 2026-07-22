@@ -85,6 +85,8 @@ jobs:
       ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_test
       SUBMIT_DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_privacy_submit_test
       SUBMIT_ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_submit_test
+      LIST_DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_privacy_list_test
+      LIST_ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_list_test
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -120,6 +122,19 @@ jobs:
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0023_customer_privacy_subject_verify_fixture.sql
+      - name: Build isolated case-list database
+        shell: bash
+        run: |
+          set -euo pipefail
+          createdb crm_privacy_list_test
+          while IFS= read -r migration; do
+            PGDATABASE=crm_privacy_list_test psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          PGDATABASE=crm_privacy_list_test psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          PGDATABASE=crm_privacy_list_test psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          PGDATABASE=crm_privacy_list_test psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          PGDATABASE=crm_privacy_list_test psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
+          PGDATABASE=crm_privacy_list_test psql --set ON_ERROR_STOP=1 --file database/tests/0023_customer_privacy_subject_verify_fixture.sql
       - name: Verify strict privacy adapters and planners
         run: |
           cargo test -p crm-customer-privacy-persistence-adapter --all-features
@@ -266,8 +281,8 @@ jobs:
       - name: Verify real crm-api case-list process
         shell: bash
         env:
-          DATABASE_URL: ${{ env.SUBMIT_DATABASE_URL }}
-          ADMIN_DATABASE_URL: ${{ env.SUBMIT_ADMIN_DATABASE_URL }}
+          DATABASE_URL: ${{ env.LIST_DATABASE_URL }}
+          ADMIN_DATABASE_URL: ${{ env.LIST_ADMIN_DATABASE_URL }}
         run: |
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_list_process_e2e -- --nocapture \
