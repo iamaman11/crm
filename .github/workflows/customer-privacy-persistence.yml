@@ -69,6 +69,8 @@ jobs:
       PGPASSWORD: postgres
       DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_privacy_test
       ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_test
+      SUBMIT_DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_privacy_submit_test
+      SUBMIT_ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_submit_test
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -76,14 +78,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Apply clean migrations
+      - name: Apply clean migrations to create-process database
         shell: bash
         run: |
           set -euo pipefail
           while IFS= read -r migration; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
           done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
-      - name: Build isolated runtime role fixture
+      - name: Build create-process runtime role fixture
         shell: bash
         run: |
           set -euo pipefail
@@ -91,69 +93,108 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Build isolated submit-process database
+        shell: bash
+        run: |
+          set -euo pipefail
+          createdb crm_privacy_submit_test
+          while IFS= read -r migration; do
+            PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
       - name: Verify strict privacy adapters and planners
         run: |
           cargo test -p crm-customer-privacy-persistence-adapter --all-features
           cargo test -p crm-customer-privacy-capability-adapter --all-features
           cargo test -p crm-customer-privacy-submit-capability-adapter --all-features
-      - name: Verify clean-migration Customer Privacy FORCE RLS
+      - name: Verify clean create-process FORCE RLS
         shell: bash
         run: |
           set -o pipefail
-          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-clean.log
-      - name: Verify clean-migration case-create process
+          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-create-clean.log
+      - name: Verify clean case-create process
         shell: bash
         run: |
           set -o pipefail
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-create-clean.log
-      - name: Verify clean-migration case-submit process
+      - name: Verify clean submit-process FORCE RLS
         shell: bash
+        run: |
+          set -o pipefail
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql \
+            2>&1 | tee database/customer-privacy-force-rls-submit-clean.log
+      - name: Verify clean case-submit process
+        shell: bash
+        env:
+          DATABASE_URL: ${{ env.SUBMIT_DATABASE_URL }}
+          ADMIN_DATABASE_URL: ${{ env.SUBMIT_ADMIN_DATABASE_URL }}
         run: |
           set -o pipefail
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_submit --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-submit-clean.log
-      - name: Roll back every migration
+      - name: Roll back create-process database
         shell: bash
         run: |
           set -euo pipefail
           while IFS= read -r migration; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
           done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
-      - name: Verify rollback removed authoritative schema
+      - name: Verify create-process rollback removed authoritative schema
         run: |
           count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
           test "${count}" = "0"
-      - name: Reapply every migration
+      - name: Reapply create-process database and fixture
         shell: bash
         run: |
           set -euo pipefail
           while IFS= read -r migration; do
             psql --set ON_ERROR_STOP=1 --file "${migration}"
           done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
-      - name: Rebuild isolated runtime role fixture
-        shell: bash
-        run: |
-          set -euo pipefail
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
-      - name: Verify reapplied Customer Privacy FORCE RLS
+      - name: Verify reapplied create-process FORCE RLS and process
         shell: bash
         run: |
           set -o pipefail
-          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-reapplied.log
-      - name: Verify reapplied case-create process
-        shell: bash
-        run: |
-          set -o pipefail
+          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql \
+            2>&1 | tee database/customer-privacy-force-rls-create-reapplied.log
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-create-reapplied.log
-      - name: Verify reapplied case-submit process
+      - name: Roll back submit-process database
         shell: bash
         run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+      - name: Verify submit-process rollback removed authoritative schema
+        run: |
+          count="$(PGDATABASE=crm_privacy_submit_test psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply submit-process database and fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+      - name: Verify reapplied submit-process FORCE RLS and process
+        shell: bash
+        env:
+          DATABASE_URL: ${{ env.SUBMIT_DATABASE_URL }}
+          ADMIN_DATABASE_URL: ${{ env.SUBMIT_ADMIN_DATABASE_URL }}
+        run: |
           set -o pipefail
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql \
+            2>&1 | tee database/customer-privacy-force-rls-submit-reapplied.log
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_submit --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-submit-reapplied.log
       - name: Verify real crm-api case-create process
@@ -164,6 +205,9 @@ jobs:
             2>&1 | tee database/customer-privacy-case-create-crm-api.log
       - name: Verify real crm-api case-submit process
         shell: bash
+        env:
+          DATABASE_URL: ${{ env.SUBMIT_DATABASE_URL }}
+          ADMIN_DATABASE_URL: ${{ env.SUBMIT_ADMIN_DATABASE_URL }}
         run: |
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_submit_process_e2e -- --nocapture \
