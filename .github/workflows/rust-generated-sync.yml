@@ -40,28 +40,6 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Repair promoted subject process cfg and restore canonical workflow
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("services/crm-api/tests/customer_privacy_case_subject_verify_process_e2e.rs")
-          source = path.read_text(encoding="utf-8")
-          stale = '#![cfg(all(unix, feature = "customer-privacy-subject-verify-candidate"))]'
-          promoted = '#![cfg(unix)]'
-          if not source.startswith(stale + "\n"):
-              raise SystemExit("subject process test no longer has the expected stale candidate cfg")
-          path.write_text(promoted + source[len(stale):], encoding="utf-8")
-          PY
-          git fetch origin main --depth=1
-          git checkout FETCH_HEAD -- .github/workflows/rust-generated-sync.yml
-          git config user.name "github-actions[bot]"
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add services/crm-api/tests/customer_privacy_case_subject_verify_process_e2e.rs .github/workflows/rust-generated-sync.yml
-          git commit -m "Fix promoted Customer Privacy subject process test"
-          git push origin "HEAD:${HEAD_BRANCH}"
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"

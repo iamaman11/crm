@@ -1,4 +1,4 @@
-#![cfg(all(unix, feature = "customer-privacy-subject-verify-candidate"))]
+#![cfg(unix)]
 
 #[path = "support/customer_enrichment_process/mod.rs"]
 mod support;
