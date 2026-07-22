@@ -1,13 +1,12 @@
 #![forbid(unsafe_code)]
 
-//! PostgreSQL composition for the promoted and candidate Customer Privacy case mutations.
+//! PostgreSQL composition for promoted Customer Privacy case mutations.
 //!
-//! Case creation adds the optional predecessor `FOR SHARE` reference guard. Case
-//! submission is a single-aggregate optimistic update and therefore uses the shared
-//! transactional aggregate executor directly. Subject verification remains non-runtime
-//! while this composition proves authoritative Party existence, canonical merge lineage,
-//! exact Identity Resolution topology generation and the shared tenant + canonical Party
-//! subject lock inside the same business transaction as the case update and evidence.
+//! Creation validates optional predecessor lineage. Submission uses the shared
+//! optimistic aggregate executor. Subject verification proves authoritative Party
+//! and Identity Resolution lineage before taking the shared subject lock. Cancellation
+//! derives the exact bound/rescope subject lock-set from RLS-protected case state,
+//! locks it deterministically, then rechecks the case under `FOR SHARE` before update.
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityRequest, TransactionalCapabilityExecutor};
@@ -19,6 +18,11 @@ use crm_customer_privacy_capability_adapter::{
     CustomerPrivacyCaseCreateCapabilityPlanner, previous_case_id_from_request,
     previous_case_not_found, privacy_case_ref_from_id, validate_previous_case_snapshot,
 };
+use crm_customer_privacy_cancel_capability_adapter::{
+    CANCEL_PRIVACY_CASE_CAPABILITY, CustomerPrivacyCaseCancelCapabilityPlanner,
+    cancellation_subject_lock_ids, privacy_case_ref_from_request as cancellation_case_ref,
+};
+use crm_customer_privacy_persistence_adapter::privacy_case_from_snapshot;
 use crm_customer_privacy_subject_capability_adapter::{
     CustomerPrivacyCaseSubjectVerifyCapabilityPlanner, VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY,
     VERIFY_PRIVACY_CASE_SUBJECT_REQUEST_SCHEMA,
@@ -27,8 +31,8 @@ use crm_customer_privacy_submit_capability_adapter::CustomerPrivacyCaseSubmitCap
 use crm_identity_resolution::PartyReference;
 use crm_identity_resolution_topology_composition::prove_canonical_party_in_transaction;
 use crm_module_sdk::{
-    DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture, RecordId, RecordSnapshot,
-    RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
+    DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture, RecordId, RecordRef,
+    RecordSnapshot, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
 };
 use crm_party_reference_composition::lock_customer_subject_in_transaction;
 use crm_proto_contracts::crm::{customer::v1 as customer_wire, customer_privacy::v1 as wire};
@@ -48,37 +52,9 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyPreviousCaseGuard {
             let Some(previous_case_id) = previous_case_id_from_request(request)? else {
                 return Ok(());
             };
-            let row = sqlx::query(
-                r#"
-                SELECT
-                  version,
-                  owner_module_id,
-                  schema_id,
-                  schema_version,
-                  descriptor_hash,
-                  data_class,
-                  payload_encoding,
-                  maximum_payload_size,
-                  retention_policy_id,
-                  payload_bytes
-                FROM crm.records
-                WHERE tenant_id = $1
-                  AND owner_module_id = $2
-                  AND record_type = $3
-                  AND record_id = $4
-                  AND deleted_at IS NULL
-                FOR SHARE
-                "#,
-            )
-            .bind(request.context.execution.tenant_id.as_str())
-            .bind(MODULE_ID)
-            .bind(PRIVACY_CASE_RECORD_TYPE)
-            .bind(previous_case_id.as_str())
-            .fetch_optional(&mut **transaction)
-            .await
-            .map_err(reference_store_unavailable)?
-            .ok_or_else(previous_case_not_found)?;
-
+            let row = select_case_row(transaction, &previous_case_id, true)
+                .await?
+                .ok_or_else(previous_case_not_found)?;
             let snapshot = decode_snapshot(previous_case_id, row)?;
             validate_previous_case_snapshot(request, &snapshot.reference.record_id, &snapshot)
         })
@@ -155,6 +131,47 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacySubjectVerificationG
     }
 }
 
+/// Locks the exact canonical subject set for cancellation without accepting a TOCTOU
+/// transition from an unbound to a bound case. The first read is non-locking so subject
+/// locks are always acquired before the case row. The second read is `FOR SHARE` and must
+/// produce the same sorted lock-set; otherwise the caller retries from fresh state.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct PostgresCustomerPrivacyCancellationGuard;
+
+impl TransactionalAggregateGuard for PostgresCustomerPrivacyCancellationGuard {
+    fn check<'a>(
+        &'a self,
+        transaction: &'a mut Transaction<'_, Postgres>,
+        request: &'a CapabilityRequest,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            if request.context.execution.capability_id.as_str() != CANCEL_PRIVACY_CASE_CAPABILITY {
+                return Err(cancellation_guard_unsupported());
+            }
+            let reference = cancellation_case_ref(request)?;
+            let initial = load_cancellation_snapshot(transaction, request, &reference, false).await?;
+            let initial_lock_ids = cancellation_subject_lock_ids(&initial)?;
+
+            for subject_id in &initial_lock_ids {
+                lock_customer_subject_in_transaction(
+                    transaction,
+                    &request.context.execution.tenant_id,
+                    subject_id,
+                )
+                .await
+                .map_err(map_cancellation_lock_error)?;
+            }
+
+            let locked = load_cancellation_snapshot(transaction, request, &reference, true).await?;
+            let locked_ids = cancellation_subject_lock_ids(&locked)?;
+            if locked_ids != initial_lock_ids {
+                return Err(cancellation_subject_changed());
+            }
+            Ok(())
+        })
+    }
+}
+
 pub fn postgres_case_create_executor(
     store: PostgresDataStore,
 ) -> Arc<dyn TransactionalCapabilityExecutor> {
@@ -174,8 +191,6 @@ pub fn postgres_case_submit_executor(
     ))
 }
 
-/// Candidate executor only. Application production registration remains unchanged until
-/// fresh PostgreSQL, real ingress and full permanent-CI proof are accepted.
 pub fn postgres_case_subject_verify_executor(
     store: PostgresDataStore,
 ) -> Arc<dyn TransactionalCapabilityExecutor> {
@@ -184,6 +199,78 @@ pub fn postgres_case_subject_verify_executor(
         Arc::new(CustomerPrivacyCaseSubjectVerifyCapabilityPlanner),
         Arc::new(PostgresCustomerPrivacySubjectVerificationGuard),
     ))
+}
+
+pub fn postgres_case_cancel_executor(
+    store: PostgresDataStore,
+) -> Arc<dyn TransactionalCapabilityExecutor> {
+    Arc::new(PostgresTransactionalAggregateExecutor::guarded(
+        store,
+        Arc::new(CustomerPrivacyCaseCancelCapabilityPlanner),
+        Arc::new(PostgresCustomerPrivacyCancellationGuard),
+    ))
+}
+
+async fn load_cancellation_snapshot(
+    transaction: &mut Transaction<'_, Postgres>,
+    request: &CapabilityRequest,
+    reference: &RecordRef,
+    lock: bool,
+) -> Result<RecordSnapshot, SdkError> {
+    let row = select_case_row(transaction, &reference.record_id, lock)
+        .await?
+        .ok_or_else(cancellation_case_not_found)?;
+    let snapshot = decode_snapshot(reference.record_id.clone(), row)?;
+    if snapshot.reference != *reference {
+        return Err(cancellation_case_not_found());
+    }
+    let privacy_case = privacy_case_from_snapshot(&snapshot).map_err(cancellation_state_invalid)?;
+    if privacy_case.case_id() != &reference.record_id
+        || privacy_case.tenant_id() != &request.context.execution.tenant_id
+    {
+        return Err(cancellation_case_not_found());
+    }
+    Ok(snapshot)
+}
+
+async fn select_case_row(
+    transaction: &mut Transaction<'_, Postgres>,
+    case_id: &RecordId,
+    lock: bool,
+) -> Result<Option<sqlx::postgres::PgRow>, SdkError> {
+    let sql = if lock {
+        r#"
+        SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
+               data_class, payload_encoding, maximum_payload_size, retention_policy_id,
+               payload_bytes
+        FROM crm.records
+        WHERE tenant_id = current_setting('app.tenant_id', true)
+          AND owner_module_id = $1
+          AND record_type = $2
+          AND record_id = $3
+          AND deleted_at IS NULL
+        FOR SHARE
+        "#
+    } else {
+        r#"
+        SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
+               data_class, payload_encoding, maximum_payload_size, retention_policy_id,
+               payload_bytes
+        FROM crm.records
+        WHERE tenant_id = current_setting('app.tenant_id', true)
+          AND owner_module_id = $1
+          AND record_type = $2
+          AND record_id = $3
+          AND deleted_at IS NULL
+        "#
+    };
+    sqlx::query(sql)
+        .bind(MODULE_ID)
+        .bind(PRIVACY_CASE_RECORD_TYPE)
+        .bind(case_id.as_str())
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(reference_store_unavailable)
 }
 
 fn required_party_reference(
@@ -244,12 +331,40 @@ fn map_subject_lock_error(error: SdkError) -> SdkError {
     .with_internal_reference(format!("shared subject lock failed with {}", error.code))
 }
 
+fn map_cancellation_lock_error(error: SdkError) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_CANCELLATION_SUBJECT_LOCK_UNAVAILABLE",
+        ErrorCategory::Unavailable,
+        true,
+        "The privacy case subject could not be locked for cancellation.",
+    )
+    .with_internal_reference(format!("shared subject lock failed with {}", error.code))
+}
+
 fn subject_guard_unsupported() -> SdkError {
     SdkError::new(
         "CUSTOMER_PRIVACY_SUBJECT_GUARD_UNSUPPORTED",
         ErrorCategory::Internal,
         false,
         "The Customer Privacy subject guard is not configured for this capability.",
+    )
+}
+
+fn cancellation_guard_unsupported() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_CANCELLATION_GUARD_UNSUPPORTED",
+        ErrorCategory::Internal,
+        false,
+        "The Customer Privacy cancellation guard is not configured for this capability.",
+    )
+}
+
+fn cancellation_subject_changed() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_CANCELLATION_SUBJECT_CHANGED",
+        ErrorCategory::Conflict,
+        true,
+        "The privacy case subject changed before cancellation could be committed.",
     )
 }
 
@@ -264,7 +379,7 @@ fn subject_proof_invalid(reference: impl std::fmt::Display) -> SdkError {
 }
 
 fn decode_snapshot(
-    case_id: crm_module_sdk::RecordId,
+    case_id: RecordId,
     row: sqlx::postgres::PgRow,
 ) -> Result<RecordSnapshot, SdkError> {
     let version: i64 = row.try_get("version").map_err(reference_state_invalid)?;
@@ -294,14 +409,14 @@ fn decode_snapshot(
 
     if data_class != "confidential" || payload_encoding != "json" {
         return Err(reference_state_invalid(
-            "previous case payload class or encoding differs from its contract",
+            "privacy case payload class or encoding differs from its contract",
         ));
     }
     let descriptor_hash: [u8; 32] = descriptor_hash.try_into().map_err(|_| {
-        reference_state_invalid("previous case descriptor hash must contain exactly 32 bytes")
+        reference_state_invalid("privacy case descriptor hash must contain exactly 32 bytes")
     })?;
     let maximum_size_bytes = u64::try_from(maximum_payload_size)
-        .map_err(|_| reference_state_invalid("previous case maximum payload size is negative"))?;
+        .map_err(|_| reference_state_invalid("privacy case maximum payload size is negative"))?;
 
     Ok(RecordSnapshot {
         reference: privacy_case_ref_from_id(&case_id)?,
@@ -322,22 +437,41 @@ fn decode_snapshot(
     })
 }
 
+fn cancellation_case_not_found() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_CASE_NOT_FOUND",
+        ErrorCategory::NotFound,
+        false,
+        "The privacy case was not found.",
+    )
+}
+
+fn cancellation_state_invalid(error: SdkError) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_CASE_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The privacy case could not be loaded safely.",
+    )
+    .with_internal_reference(error.code)
+}
+
 fn reference_store_unavailable(reference: impl std::fmt::Display) -> SdkError {
     SdkError::new(
-        "CUSTOMER_PRIVACY_PREVIOUS_CASE_STORE_UNAVAILABLE",
+        "CUSTOMER_PRIVACY_CASE_STORE_UNAVAILABLE",
         ErrorCategory::Unavailable,
         true,
-        "The previous privacy case could not be verified atomically.",
+        "The privacy case could not be verified atomically.",
     )
     .with_internal_reference(reference.to_string())
 }
 
 fn reference_state_invalid(reference: impl std::fmt::Display) -> SdkError {
     SdkError::new(
-        "CUSTOMER_PRIVACY_PREVIOUS_CASE_INVALID",
+        "CUSTOMER_PRIVACY_CASE_INVALID",
         ErrorCategory::Internal,
         false,
-        "The previous privacy case could not be loaded safely.",
+        "The privacy case could not be loaded safely.",
     )
     .with_internal_reference(reference.to_string())
 }
