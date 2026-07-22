@@ -228,7 +228,11 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     });
     let nonterminal_id = deterministic_privacy_case_id(
         TENANT_B,
-        nonterminal_request.context.execution.idempotency_key.as_str(),
+        nonterminal_request
+            .context
+            .execution
+            .idempotency_key
+            .as_str(),
     )
     .unwrap();
     let nonterminal = executor
@@ -348,13 +352,9 @@ fn request(spec: RequestSpec<'_>) -> CapabilityRequest {
                 tenant_id: TenantId::try_new(spec.tenant).unwrap(),
                 actor_id: ActorId::try_new(spec.actor).unwrap(),
                 request_id: RequestId::try_new(format!("request-{}", spec.identity)).unwrap(),
-                correlation_id: CorrelationId::try_new(format!(
-                    "correlation-{}",
-                    spec.identity
-                ))
-                .unwrap(),
-                causation_id: CausationId::try_new(format!("causation-{}", spec.identity))
+                correlation_id: CorrelationId::try_new(format!("correlation-{}", spec.identity))
                     .unwrap(),
+                causation_id: CausationId::try_new(format!("causation-{}", spec.identity)).unwrap(),
                 trace_id: TraceId::try_new(format!("trace-{}", spec.identity)).unwrap(),
                 capability_id: CapabilityId::try_new(CREATE_PRIVACY_CASE_CAPABILITY).unwrap(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
@@ -401,7 +401,10 @@ async fn assert_record_metadata(admin: &PgPool, tenant: &str, case_id: &RecordId
 
     assert_eq!(row.get::<i64, _>("version"), 1);
     assert_eq!(row.get::<String, _>("owner_module_id"), MODULE_ID);
-    assert_eq!(row.get::<String, _>("schema_id"), PRIVACY_CASE_STATE_SCHEMA_ID);
+    assert_eq!(
+        row.get::<String, _>("schema_id"),
+        PRIVACY_CASE_STATE_SCHEMA_ID
+    );
     assert_eq!(
         row.get::<String, _>("schema_version"),
         PRIVACY_CASE_STATE_SCHEMA_VERSION
