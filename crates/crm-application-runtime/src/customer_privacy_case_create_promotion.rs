@@ -17,7 +17,8 @@ pub use base_runtime::{PRODUCTION_REVIEW_POLICY_VERSION, application_query_defin
 
 /// Returns the accepted public mutation inventory plus exactly two Customer
 /// Privacy production coordinates: case creation and the optimistic
-/// `Draft -> Submitted` lifecycle transition.
+/// `Draft -> Submitted` lifecycle transition. Candidate process features never
+/// change this inventory API.
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_mutation_definitions()?;
     definitions.extend(customer_privacy_create_definitions()?);
@@ -25,12 +26,31 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     Ok(definitions)
 }
 
+/// Default builds assemble only the accepted production composition. The explicit
+/// candidate feature changes process assembly solely for the real generic-ingress
+/// acceptance binary; it does not add an environment switch or a new endpoint.
+#[cfg(not(feature = "customer-privacy-subject-verify-candidate"))]
+pub fn build_production_composition(
+    dependencies: ProductionCompositionDependencies,
+) -> Result<ApplicationComposition, SdkError> {
+    build_accepted_production_composition(dependencies)
+}
+
+#[cfg(feature = "customer-privacy-subject-verify-candidate")]
+pub fn build_production_composition(
+    dependencies: ProductionCompositionDependencies,
+) -> Result<ApplicationComposition, SdkError> {
+    crate::customer_privacy_subject_verify_candidate::build_candidate_process_composition(
+        dependencies,
+    )
+}
+
 /// Extends the existing production composition without adding a capability-
 /// specific HTTP/gRPC switch. The generic application ingress still owns exact
 /// version resolution, validation, live authorization and dispatch. Creation
 /// keeps its optional predecessor guard, while submission uses the shared
 /// single-aggregate optimistic executor directly.
-pub fn build_production_composition(
+pub(crate) fn build_accepted_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
     let create_executor = postgres_case_create_executor(dependencies.store.clone());
