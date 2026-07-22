@@ -1,5 +1,7 @@
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor};
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
+};
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
 use crm_customer_privacy::{MODULE_ID, PRIVACY_CASE_RECORD_TYPE, PrivacyCaseStatus};
 use crm_customer_privacy_capability_adapter::{
@@ -8,8 +10,8 @@ use crm_customer_privacy_capability_adapter::{
     privacy_case_ref_from_id,
 };
 use crm_customer_privacy_capability_composition::{
-    postgres_case_create_executor, postgres_case_submit_executor,
-    postgres_case_subject_verify_executor,
+    postgres_case_create_executor, postgres_case_subject_verify_executor,
+    postgres_case_submit_executor,
 };
 use crm_customer_privacy_persistence_adapter::privacy_case_from_snapshot;
 use crm_customer_privacy_subject_capability_adapter::{
@@ -60,12 +62,11 @@ async fn subject_verify_is_atomic_replay_safe_and_authoritative() {
         .await
         .expect("connect subject verification evidence reader");
 
-    let party_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        PostgresTransactionalAggregateExecutor::new(
+    let party_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(PostgresTransactionalAggregateExecutor::new(
             store.clone(),
             Arc::new(PartyCapabilityPlanner),
-        ),
-    );
+        ));
     let create_executor = postgres_case_create_executor(store.clone());
     let submit_executor = postgres_case_submit_executor(store.clone());
     let verify_executor = postgres_case_subject_verify_executor(store.clone());
@@ -267,7 +268,12 @@ async fn subject_verify_is_atomic_replay_safe_and_authoritative() {
     )
     .await;
     let mut lock_holder = admin.begin().await.unwrap();
-    bind_context(&mut lock_holder, "subject-lock-holder", "subject-lock-holder-tx").await;
+    bind_context(
+        &mut lock_holder,
+        "subject-lock-holder",
+        "subject-lock-holder-tx",
+    )
+    .await;
     sqlx::query("SELECT crm.lock_customer_subject($1, $2)")
         .bind(TENANT_A)
         .bind("party-submitted")
@@ -416,11 +422,9 @@ async fn create_case(
             previous_privacy_case_ref: None,
         },
     );
-    let case_id = deterministic_privacy_case_id(
-        tenant,
-        request.context.execution.idempotency_key.as_str(),
-    )
-    .unwrap();
+    let case_id =
+        deterministic_privacy_case_id(tenant, request.context.execution.idempotency_key.as_str())
+            .unwrap();
     executor.execute(definition, request).await.unwrap();
     case_id
 }
@@ -522,10 +526,8 @@ fn request<M: Message>(
                 capability_id: CapabilityId::try_new(capability).unwrap(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
                 idempotency_key: IdempotencyKey::try_new(format!("{identity}-key")).unwrap(),
-                business_transaction_id: BusinessTransactionId::try_new(format!(
-                    "{identity}-tx"
-                ))
-                .unwrap(),
+                business_transaction_id: BusinessTransactionId::try_new(format!("{identity}-tx"))
+                    .unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 request_started_at_unix_nanos: started_at,
             },
@@ -576,7 +578,12 @@ async fn assert_failure(
     expected_version: Option<(&RecordId, i64)>,
 ) {
     let tenant = request.context.execution.tenant_id.as_str().to_owned();
-    let key = request.context.execution.idempotency_key.as_str().to_owned();
+    let key = request
+        .context
+        .execution
+        .idempotency_key
+        .as_str()
+        .to_owned();
     let transaction = request
         .context
         .execution
@@ -605,7 +612,10 @@ async fn assert_failure(
         "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2",
         "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2",
     ] {
-        assert_eq!(count_for_transaction(admin, sql, &tenant, &transaction).await, 0);
+        assert_eq!(
+            count_for_transaction(admin, sql, &tenant, &transaction).await,
+            0
+        );
     }
     let idempotency: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = $2 AND idempotency_key = $3",
@@ -619,12 +629,7 @@ async fn assert_failure(
     assert_eq!(idempotency, 0);
 }
 
-async fn assert_success_evidence(
-    admin: &PgPool,
-    tenant: &str,
-    name: &str,
-    case_id: &RecordId,
-) {
+async fn assert_success_evidence(admin: &PgPool, tenant: &str, name: &str, case_id: &RecordId) {
     assert_eq!(record_version(admin, tenant, case_id).await, 3);
     let transaction = format!("{name}-verify-tx");
     for sql in [
@@ -632,7 +637,10 @@ async fn assert_success_evidence(
         "SELECT count(*) FROM crm.audit_records WHERE tenant_id = $1 AND business_transaction_id = $2 AND capability_id = 'customer_privacy.case.subject.verify'",
         "SELECT count(*) FROM crm.business_transactions WHERE tenant_id = $1 AND business_transaction_id = $2",
     ] {
-        assert_eq!(count_for_transaction(admin, sql, tenant, &transaction).await, 1);
+        assert_eq!(
+            count_for_transaction(admin, sql, tenant, &transaction).await,
+            1
+        );
     }
     let idempotency: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = $2 AND idempotency_key = $3 AND status = 'completed'",
