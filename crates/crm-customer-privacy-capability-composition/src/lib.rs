@@ -151,13 +151,9 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyCancellationGuard {
                 return Err(cancellation_guard_unsupported());
             }
             let reference = cancellation_case_ref(request)?;
-            let initial = load_cancellation_snapshot(
-                transaction,
-                request,
-                &reference,
-                CaseRowLock::Unlocked,
-            )
-            .await?;
+            let initial =
+                load_cancellation_snapshot(transaction, request, &reference, CaseRowLock::Unlocked)
+                    .await?;
             let initial_lock_ids = cancellation_subject_lock_ids(&initial)?;
 
             for subject_id in &initial_lock_ids {
@@ -170,13 +166,9 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyCancellationGuard {
                 .map_err(map_cancellation_lock_error)?;
             }
 
-            let locked = load_cancellation_snapshot(
-                transaction,
-                request,
-                &reference,
-                CaseRowLock::Update,
-            )
-            .await?;
+            let locked =
+                load_cancellation_snapshot(transaction, request, &reference, CaseRowLock::Update)
+                    .await?;
             let locked_ids = cancellation_subject_lock_ids(&locked)?;
             if locked_ids != initial_lock_ids {
                 return Err(cancellation_subject_changed());
@@ -260,7 +252,8 @@ async fn select_case_row(
     lock: CaseRowLock,
 ) -> Result<Option<sqlx::postgres::PgRow>, SdkError> {
     let sql = match lock {
-        CaseRowLock::Share => r#"
+        CaseRowLock::Share => {
+            r#"
         SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
                data_class, payload_encoding, maximum_payload_size, retention_policy_id,
                payload_bytes
@@ -271,8 +264,10 @@ async fn select_case_row(
           AND record_id = $3
           AND deleted_at IS NULL
         FOR SHARE
-        "#,
-        CaseRowLock::Update => r#"
+        "#
+        }
+        CaseRowLock::Update => {
+            r#"
         SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
                data_class, payload_encoding, maximum_payload_size, retention_policy_id,
                payload_bytes
@@ -283,8 +278,10 @@ async fn select_case_row(
           AND record_id = $3
           AND deleted_at IS NULL
         FOR UPDATE
-        "#,
-        CaseRowLock::Unlocked => r#"
+        "#
+        }
+        CaseRowLock::Unlocked => {
+            r#"
         SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
                data_class, payload_encoding, maximum_payload_size, retention_policy_id,
                payload_bytes
@@ -294,7 +291,8 @@ async fn select_case_row(
           AND record_type = $2
           AND record_id = $3
           AND deleted_at IS NULL
-        "#,
+        "#
+        }
     };
     sqlx::query(sql)
         .bind(MODULE_ID)
