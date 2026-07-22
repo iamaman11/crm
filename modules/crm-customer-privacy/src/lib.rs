@@ -13,6 +13,7 @@ mod canonicalization;
 
 pub mod domain {
     include!("domain.rs");
+    include!("query_access.rs");
 
     pub mod persistence {
         use crate::canonicalization::persisted_state_json as serde_json;
