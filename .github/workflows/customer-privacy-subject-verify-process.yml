@@ -154,6 +154,29 @@ jobs:
             --test customer_privacy_case_subject_verify_process_e2e \
             -- --nocapture \
             2>&1 | tee database/customer-privacy-subject-process-reapplied.log
+      - name: Capture PostgreSQL and bounded state diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/customer-privacy-subject-process-postgres.log 2>&1
+          else
+            echo "PostgreSQL service container was not found." > database/customer-privacy-subject-process-postgres.log
+            docker ps -a >> database/customer-privacy-subject-process-postgres.log 2>&1
+          fi
+          psql --set ON_ERROR_STOP=0 --tuples-only --no-align <<'SQL' \
+            > database/customer-privacy-subject-process-state.log 2>&1
+          SELECT 'records=' || count(*) FROM crm.records;
+          SELECT 'privacy_cases=' || count(*) FROM crm.records WHERE record_type = 'customer-privacy.case';
+          SELECT 'party_records=' || count(*) FROM crm.records WHERE record_type = 'party';
+          SELECT 'events=' || count(*) FROM crm.outbox_events;
+          SELECT 'audits=' || count(*) FROM crm.audit_records;
+          SELECT 'idempotency=' || count(*) FROM crm.idempotency_records;
+          SELECT 'transactions=' || count(*) FROM crm.business_transactions;
+          SELECT 'audit_head=' || next_sequence FROM crm.audit_heads WHERE tenant_id = 'tenant-a';
+          SQL
       - name: Upload subject-verification process diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
