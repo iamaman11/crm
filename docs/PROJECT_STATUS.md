@@ -80,7 +80,8 @@ The candidate implementation provides:
 - strict RLS-bound case rehydration and optimistic expected-version handling;
 - a terminal `Cancelled` transition from every currently cancellable state while preserving immutable subject, rescope, scope, plan and approval lineage;
 - an exact sorted/deduplicated subject lock-set from canonical binding plus pending rescope target;
-- shared subject locks acquired before the case row, followed by a strict `FOR SHARE` recheck of the same lock-set;
+- shared subject locks acquired before the case row, followed by strict lock-set rehydration while taking and retaining the final `FOR UPDATE` row lock;
+- unbound Draft/Submitted cases serialize directly on the case row without a meaningless subject lock or a deadlock-prone `FOR SHARE` to `FOR UPDATE` upgrade;
 - retryable fail-closed behavior if subject binding/rescope changes between discovery and locked validation;
 - one record update, one immutable status event, one audit intent and one idempotency claim in one PostgreSQL business transaction;
 - exact replay without duplicate evidence and incompatible replay rejection;
