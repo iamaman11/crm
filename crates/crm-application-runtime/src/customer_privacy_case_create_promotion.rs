@@ -4,14 +4,9 @@ use crm_application_composition::{
     ActivationGatedMutationValidator, ApplicationComposition, ModuleContributionSet,
     NoopMutationSemanticValidator,
 };
-use crm_capability_runtime::{
-    CapabilityDefinition, CapabilitySemanticValidator, TransactionalCapabilityExecutor,
-};
-use crm_core_data::PostgresTransactionalAggregateExecutor;
-use crm_customer_privacy_capability_adapter::{
-    CustomerPrivacyCaseCreateCapabilityPlanner,
-    capability_definitions as customer_privacy_capability_definitions,
-};
+use crm_capability_runtime::{CapabilityDefinition, CapabilitySemanticValidator};
+use crm_customer_privacy_capability_adapter::capability_definitions as customer_privacy_capability_definitions;
+use crm_customer_privacy_capability_composition::postgres_case_create_executor;
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
 use std::sync::Arc;
 
@@ -27,15 +22,13 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
 
 /// Extends the existing production composition without adding a capability-
 /// specific HTTP/gRPC switch. The generic application ingress still owns exact
-/// version resolution, validation, live authorization and dispatch.
+/// version resolution, validation, live authorization and dispatch. Optional
+/// predecessor lineage is protected by the dedicated transactional reference
+/// guard before the shared executor locks and creates the deterministic case.
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
-    let privacy_executor: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(PostgresTransactionalAggregateExecutor::new(
-            dependencies.store.clone(),
-            Arc::new(CustomerPrivacyCaseCreateCapabilityPlanner),
-        ));
+    let privacy_executor = postgres_case_create_executor(dependencies.store.clone());
 
     let base_dependencies = ProductionCompositionDependencies {
         store: dependencies.store,
@@ -62,11 +55,12 @@ pub fn build_production_composition(
         )
         .map_err(composition_error)?;
 
-    let privacy_validator: Arc<dyn CapabilitySemanticValidator> =
-        Arc::new(ActivationGatedMutationValidator::new(
+    let privacy_validator: Arc<dyn CapabilitySemanticValidator> = Arc::new(
+        ActivationGatedMutationValidator::new(
             dependencies.activation,
             Arc::new(NoopMutationSemanticValidator),
-        ));
+        ),
+    );
     contributions
         .add_mutations(
             customer_privacy_capability_definitions()?,
