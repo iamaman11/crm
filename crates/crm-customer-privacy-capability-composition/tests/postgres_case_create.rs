@@ -20,7 +20,7 @@ use crm_module_sdk::{
 };
 use crm_proto_contracts::crm::customer_privacy::v1 as wire;
 use prost::Message;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 
 const TENANT_A: &str = "tenant-a";
 const TENANT_B: &str = "tenant-b";
@@ -28,12 +28,32 @@ const ACTOR_A: &str = "actor-a";
 const ACTOR_B: &str = "actor-b";
 const IDEMPOTENCY_SCOPE: &str = "capability:customer_privacy.case.create:1.0.0";
 
+#[derive(Debug, Clone, Copy)]
+struct RequestSpec<'a> {
+    tenant: &'a str,
+    actor: &'a str,
+    identity: &'a str,
+    transaction: &'a str,
+    idempotency_key: &'a str,
+    previous_case_id: Option<&'a str>,
+    kind: wire::PrivacyCaseKind,
+    started_at_unix_nanos: i64,
+    hash_byte: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct EvidenceCounts {
+    records: i64,
+    events: i64,
+    audits: i64,
+    idempotency: i64,
+    transactions: i64,
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!(
-            "skipping Customer Privacy case-create process proof because DATABASE_URL is absent"
-        );
+        eprintln!("skipping Customer Privacy case-create process proof because DATABASE_URL is absent");
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -47,17 +67,17 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     let executor = postgres_case_create_executor(store.clone());
     let definition = capability_definition().expect("construct exact case-create definition");
 
-    let root_request = request(
-        TENANT_A,
-        ACTOR_A,
-        "privacy-create-root",
-        "privacy-tx-root",
-        "privacy-idempotency-root",
-        None,
-        wire::PrivacyCaseKind::Erasure,
-        1_000_000_000,
-        7,
-    );
+    let root_request = request(RequestSpec {
+        tenant: TENANT_A,
+        actor: ACTOR_A,
+        identity: "privacy-create-root",
+        transaction: "privacy-tx-root",
+        idempotency_key: "privacy-idempotency-root",
+        previous_case_id: None,
+        kind: wire::PrivacyCaseKind::Erasure,
+        started_at_unix_nanos: 1_000_000_000,
+        hash_byte: 7,
+    });
     let root_id = deterministic_privacy_case_id(
         TENANT_A,
         root_request.context.execution.idempotency_key.as_str(),
@@ -126,17 +146,17 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     .await;
 
     make_predecessor_terminal(&admin, TENANT_A, &root_id).await;
-    let successor_request = request(
-        TENANT_A,
-        ACTOR_A,
-        "privacy-create-successor",
-        "privacy-tx-successor",
-        "privacy-idempotency-successor",
-        Some(root_id.as_str()),
-        wire::PrivacyCaseKind::Access,
-        2_000_000_000,
-        9,
-    );
+    let successor_request = request(RequestSpec {
+        tenant: TENANT_A,
+        actor: ACTOR_A,
+        identity: "privacy-create-successor",
+        transaction: "privacy-tx-successor",
+        idempotency_key: "privacy-idempotency-successor",
+        previous_case_id: Some(root_id.as_str()),
+        kind: wire::PrivacyCaseKind::Access,
+        started_at_unix_nanos: 2_000_000_000,
+        hash_byte: 9,
+    });
     let successor_id = deterministic_privacy_case_id(
         TENANT_A,
         successor_request.context.execution.idempotency_key.as_str(),
@@ -170,17 +190,17 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     )
     .await;
 
-    let tenant_b_request = request(
-        TENANT_B,
-        ACTOR_B,
-        "privacy-create-tenant-b",
-        "privacy-tx-tenant-b",
-        "privacy-idempotency-root",
-        None,
-        wire::PrivacyCaseKind::RestrictProcessing,
-        3_000_000_000,
-        11,
-    );
+    let tenant_b_request = request(RequestSpec {
+        tenant: TENANT_B,
+        actor: ACTOR_B,
+        identity: "privacy-create-tenant-b",
+        transaction: "privacy-tx-tenant-b",
+        idempotency_key: "privacy-idempotency-root",
+        previous_case_id: None,
+        kind: wire::PrivacyCaseKind::RestrictProcessing,
+        started_at_unix_nanos: 3_000_000_000,
+        hash_byte: 11,
+    });
     let tenant_b_id = deterministic_privacy_case_id(
         TENANT_B,
         tenant_b_request.context.execution.idempotency_key.as_str(),
@@ -202,24 +222,20 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
             .is_none()
     );
 
-    let nonterminal_request = request(
-        TENANT_B,
-        ACTOR_B,
-        "privacy-create-nonterminal",
-        "privacy-tx-nonterminal",
-        "privacy-idempotency-nonterminal",
-        Some(tenant_b_id.as_str()),
-        wire::PrivacyCaseKind::Access,
-        3_100_000_000,
-        13,
-    );
+    let nonterminal_request = request(RequestSpec {
+        tenant: TENANT_B,
+        actor: ACTOR_B,
+        identity: "privacy-create-nonterminal",
+        transaction: "privacy-tx-nonterminal",
+        idempotency_key: "privacy-idempotency-nonterminal",
+        previous_case_id: Some(tenant_b_id.as_str()),
+        kind: wire::PrivacyCaseKind::Access,
+        started_at_unix_nanos: 3_100_000_000,
+        hash_byte: 13,
+    });
     let nonterminal_id = deterministic_privacy_case_id(
         TENANT_B,
-        nonterminal_request
-            .context
-            .execution
-            .idempotency_key
-            .as_str(),
+        nonterminal_request.context.execution.idempotency_key.as_str(),
     )
     .unwrap();
     let nonterminal = executor
@@ -239,17 +255,17 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     )
     .await;
 
-    let concealed_request = request(
-        TENANT_B,
-        ACTOR_B,
-        "privacy-create-cross-tenant",
-        "privacy-tx-cross-tenant",
-        "privacy-idempotency-cross-tenant",
-        Some(root_id.as_str()),
-        wire::PrivacyCaseKind::Access,
-        3_200_000_000,
-        15,
-    );
+    let concealed_request = request(RequestSpec {
+        tenant: TENANT_B,
+        actor: ACTOR_B,
+        identity: "privacy-create-cross-tenant",
+        transaction: "privacy-tx-cross-tenant",
+        idempotency_key: "privacy-idempotency-cross-tenant",
+        previous_case_id: Some(root_id.as_str()),
+        kind: wire::PrivacyCaseKind::Access,
+        started_at_unix_nanos: 3_200_000_000,
+        hash_byte: 15,
+    });
     let concealed_id = deterministic_privacy_case_id(
         TENANT_B,
         concealed_request.context.execution.idempotency_key.as_str(),
@@ -269,28 +285,26 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     )
     .await;
 
-    sqlx::query(
-        "UPDATE crm.records SET payload_bytes = $3 WHERE tenant_id = $1 AND record_type = $2 AND record_id = $4",
-    )
-    .bind(TENANT_A)
-    .bind(PRIVACY_CASE_RECORD_TYPE)
-    .bind(b"{\"raw_secret\":\"must-not-leak\"}".as_slice())
-    .bind(root_id.as_str())
-    .execute(&admin)
-    .await
-    .expect("corrupt predecessor fixture");
-
-    let malformed_request = request(
+    overwrite_record_payload(
+        &admin,
         TENANT_A,
-        ACTOR_A,
-        "privacy-create-malformed",
-        "privacy-tx-malformed",
-        "privacy-idempotency-malformed",
-        Some(root_id.as_str()),
-        wire::PrivacyCaseKind::Access,
-        4_000_000_000,
-        17,
-    );
+        &root_id,
+        None,
+        b"{\"raw_secret\":\"must-not-leak\"}".to_vec(),
+        "privacy-fixture-corrupt",
+    )
+    .await;
+    let malformed_request = request(RequestSpec {
+        tenant: TENANT_A,
+        actor: ACTOR_A,
+        identity: "privacy-create-malformed",
+        transaction: "privacy-tx-malformed",
+        idempotency_key: "privacy-idempotency-malformed",
+        previous_case_id: Some(root_id.as_str()),
+        kind: wire::PrivacyCaseKind::Access,
+        started_at_unix_nanos: 4_000_000_000,
+        hash_byte: 17,
+    });
     let malformed_id = deterministic_privacy_case_id(
         TENANT_A,
         malformed_request.context.execution.idempotency_key.as_str(),
@@ -305,13 +319,7 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
         malformed.safe_message,
         "The previous privacy case could not be loaded safely."
     );
-    for forbidden in [
-        "raw_secret",
-        "must-not-leak",
-        "crm.records",
-        "SELECT",
-        "sqlx",
-    ] {
+    for forbidden in ["raw_secret", "must-not-leak", "crm.records", "SELECT", "sqlx"] {
         assert!(!malformed.safe_message.contains(forbidden));
     }
     assert_no_evidence(
@@ -324,41 +332,37 @@ async fn postgres_case_create_is_atomic_replay_safe_and_tenant_isolated() {
     .await;
 }
 
-#[allow(clippy::too_many_arguments)]
-fn request(
-    tenant: &str,
-    actor: &str,
-    identity: &str,
-    transaction: &str,
-    idempotency_key: &str,
-    previous_case_id: Option<&str>,
-    kind: wire::PrivacyCaseKind,
-    started_at_unix_nanos: i64,
-    hash_byte: u8,
-) -> CapabilityRequest {
+fn request(spec: RequestSpec<'_>) -> CapabilityRequest {
     let command = wire::CreatePrivacyCaseRequest {
-        kind: kind as i32,
+        kind: spec.kind as i32,
         policy_version: "privacy-policy/1".to_owned(),
-        previous_privacy_case_ref: previous_case_id.map(|privacy_case_id| wire::PrivacyCaseRef {
-            privacy_case_id: privacy_case_id.to_owned(),
+        previous_privacy_case_ref: spec.previous_case_id.map(|privacy_case_id| {
+            wire::PrivacyCaseRef {
+                privacy_case_id: privacy_case_id.to_owned(),
+            }
         }),
     };
     CapabilityRequest {
         context: ModuleExecutionContext {
             module_id: crm_module_sdk::ModuleId::try_new(MODULE_ID).unwrap(),
             execution: ExecutionContext {
-                tenant_id: TenantId::try_new(tenant).unwrap(),
-                actor_id: ActorId::try_new(actor).unwrap(),
-                request_id: RequestId::try_new(format!("request-{identity}")).unwrap(),
-                correlation_id: CorrelationId::try_new(format!("correlation-{identity}")).unwrap(),
-                causation_id: CausationId::try_new(format!("causation-{identity}")).unwrap(),
-                trace_id: TraceId::try_new(format!("trace-{identity}")).unwrap(),
+                tenant_id: TenantId::try_new(spec.tenant).unwrap(),
+                actor_id: ActorId::try_new(spec.actor).unwrap(),
+                request_id: RequestId::try_new(format!("request-{}", spec.identity)).unwrap(),
+                correlation_id: CorrelationId::try_new(format!(
+                    "correlation-{}",
+                    spec.identity
+                ))
+                .unwrap(),
+                causation_id: CausationId::try_new(format!("causation-{}", spec.identity))
+                    .unwrap(),
+                trace_id: TraceId::try_new(format!("trace-{}", spec.identity)).unwrap(),
                 capability_id: CapabilityId::try_new(CREATE_PRIVACY_CASE_CAPABILITY).unwrap(),
                 capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
-                idempotency_key: IdempotencyKey::try_new(idempotency_key).unwrap(),
-                business_transaction_id: BusinessTransactionId::try_new(transaction).unwrap(),
+                idempotency_key: IdempotencyKey::try_new(spec.idempotency_key).unwrap(),
+                business_transaction_id: BusinessTransactionId::try_new(spec.transaction).unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
-                request_started_at_unix_nanos: started_at_unix_nanos,
+                request_started_at_unix_nanos: spec.started_at_unix_nanos,
             },
         },
         input: plan_support::protobuf_payload(
@@ -368,7 +372,7 @@ fn request(
             &command,
         )
         .unwrap(),
-        input_hash: [hash_byte; 32],
+        input_hash: [spec.hash_byte; 32],
         approval: None,
     }
 }
@@ -398,10 +402,7 @@ async fn assert_record_metadata(admin: &PgPool, tenant: &str, case_id: &RecordId
 
     assert_eq!(row.get::<i64, _>("version"), 1);
     assert_eq!(row.get::<String, _>("owner_module_id"), MODULE_ID);
-    assert_eq!(
-        row.get::<String, _>("schema_id"),
-        PRIVACY_CASE_STATE_SCHEMA_ID
-    );
+    assert_eq!(row.get::<String, _>("schema_id"), PRIVACY_CASE_STATE_SCHEMA_ID);
     assert_eq!(
         row.get::<String, _>("schema_version"),
         PRIVACY_CASE_STATE_SCHEMA_VERSION
@@ -539,17 +540,85 @@ async fn make_predecessor_terminal(admin: &PgPool, tenant: &str, case_id: &Recor
     .unwrap();
     predecessor.cancel(1, 1_100_000_000).unwrap();
     let payload = privacy_case_persisted_payload(&predecessor).unwrap();
-    let affected = sqlx::query(
-        "UPDATE crm.records SET version = $4, payload_bytes = $5 WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
+    overwrite_record_payload(
+        admin,
+        tenant,
+        case_id,
+        Some(i64::try_from(predecessor.version()).unwrap()),
+        payload.bytes,
+        "privacy-fixture-terminal",
     )
-    .bind(tenant)
-    .bind(PRIVACY_CASE_RECORD_TYPE)
-    .bind(case_id.as_str())
-    .bind(i64::try_from(predecessor.version()).unwrap())
-    .bind(payload.bytes)
-    .execute(admin)
-    .await
-    .expect("seed canonical terminal predecessor")
-    .rows_affected();
+    .await;
+}
+
+async fn overwrite_record_payload(
+    admin: &PgPool,
+    tenant: &str,
+    case_id: &RecordId,
+    version: Option<i64>,
+    payload_bytes: Vec<u8>,
+    request_id: &str,
+) {
+    let mut transaction = admin.begin().await.expect("start governed fixture update");
+    bind_write_context(
+        &mut transaction,
+        tenant,
+        request_id,
+        &format!("transaction-{request_id}"),
+    )
+    .await;
+    let affected = if let Some(version) = version {
+        sqlx::query(
+            "UPDATE crm.records SET version = $4, payload_bytes = $5 WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
+        )
+        .bind(tenant)
+        .bind(PRIVACY_CASE_RECORD_TYPE)
+        .bind(case_id.as_str())
+        .bind(version)
+        .bind(payload_bytes)
+        .execute(&mut *transaction)
+        .await
+        .expect("update canonical terminal predecessor")
+        .rows_affected()
+    } else {
+        sqlx::query(
+            "UPDATE crm.records SET payload_bytes = $4 WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
+        )
+        .bind(tenant)
+        .bind(PRIVACY_CASE_RECORD_TYPE)
+        .bind(case_id.as_str())
+        .bind(payload_bytes)
+        .execute(&mut *transaction)
+        .await
+        .expect("corrupt predecessor fixture")
+        .rows_affected()
+    };
     assert_eq!(affected, 1);
+    transaction
+        .commit()
+        .await
+        .expect("commit governed fixture update");
+}
+
+async fn bind_write_context(
+    transaction: &mut Transaction<'_, Postgres>,
+    tenant: &str,
+    request_id: &str,
+    business_transaction_id: &str,
+) {
+    for (name, value) in [
+        ("app.tenant_id", tenant),
+        ("app.actor_id", "customer-privacy-process-fixture"),
+        ("app.request_id", request_id),
+        ("app.capability_id", "customer_privacy.case.fixture"),
+        ("app.capability_version", "1.0.0"),
+        ("app.business_transaction_id", business_transaction_id),
+    ] {
+        sqlx::query("SELECT set_config($1, $2, true)")
+            .bind(name)
+            .bind(value)
+            .execute(&mut **transaction)
+            .await
+            .expect("bind governed fixture execution context");
+    }
 }
