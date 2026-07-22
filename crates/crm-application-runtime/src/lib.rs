@@ -40,10 +40,6 @@ pub(crate) use background::{
 pub(crate) use bootstrap_visibility::{
     BootstrapVisibilityResource, build_bootstrap_visibility_registry,
 };
-#[cfg(not(feature = "customer-privacy-subject-verify-candidate"))]
-pub(crate) use customer_privacy_case_create_promotion::build_production_composition as build_process_composition;
-#[cfg(feature = "customer-privacy-subject-verify-candidate")]
-pub(crate) use customer_privacy_subject_verify_candidate::build_candidate_process_composition as build_process_composition;
 pub use config::*;
 pub use customer_enrichment_application_worker::{
     CustomerEnrichmentApplicationWorkerDependencies, OWNER_APPLICATION_POLICY_VERSION,
