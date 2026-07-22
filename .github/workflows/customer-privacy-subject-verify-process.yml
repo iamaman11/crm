@@ -1,0 +1,161 @@
+name: Customer Privacy Subject Verification Process CI
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/customer_privacy/**"
+      - "proto/crm/parties/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-customer-privacy-*/**"
+      - "crates/crm-identity-resolution-topology-composition/**"
+      - "crates/crm-party-reference-composition/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - "database/tests/0021_customer_privacy_force_rls.sql"
+      - "database/tests/0022_customer_privacy_submit_fixture.sql"
+      - "database/tests/0023_customer_privacy_subject_verify_fixture.sql"
+      - ".github/workflows/customer-privacy-subject-verify-process.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "proto/crm/customer_privacy/**"
+      - "proto/crm/parties/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-customer-privacy-*/**"
+      - "crates/crm-identity-resolution-topology-composition/**"
+      - "crates/crm-party-reference-composition/**"
+      - "services/crm-api/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - "database/tests/0021_customer_privacy_force_rls.sql"
+      - "database/tests/0022_customer_privacy_submit_fixture.sql"
+      - "database/tests/0023_customer_privacy_subject_verify_fixture.sql"
+      - ".github/workflows/customer-privacy-subject-verify-process.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  subject-verify-process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_privacy_subject_process_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_privacy_subject_process_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_privacy_subject_process_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_privacy_subject_process_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_subject_process_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Prepare authoritative subject-verification database
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0023_customer_privacy_subject_verify_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify clean FORCE RLS
+        shell: bash
+        run: |
+          set -o pipefail
+          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql \
+            2>&1 | tee database/customer-privacy-subject-process-force-rls-clean.log
+      - name: Verify real generic HTTP and gRPC subject-verification ingress
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api \
+            --features customer-privacy-subject-verify-candidate \
+            --test customer_privacy_case_subject_verify_process_e2e \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-subject-process-clean.log
+      - name: Roll back authoritative database
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+      - name: Verify rollback removed authoritative schema
+        shell: bash
+        run: |
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply authoritative subject-verification database
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0023_customer_privacy_subject_verify_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify reapplied FORCE RLS and real ingress
+        shell: bash
+        run: |
+          set -o pipefail
+          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql \
+            2>&1 | tee database/customer-privacy-subject-process-force-rls-reapplied.log
+          cargo test -p crm-api \
+            --features customer-privacy-subject-verify-candidate \
+            --test customer_privacy_case_subject_verify_process_e2e \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-subject-process-reapplied.log
+      - name: Upload subject-verification process diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-privacy-subject-verification-process-diagnostics
+          path: |
+            crates/crm-application-runtime/
+            crates/crm-customer-privacy-capability-composition/
+            crates/crm-customer-privacy-subject-capability-adapter/
+            crates/crm-identity-resolution-topology-composition/
+            crates/crm-party-reference-composition/
+            services/crm-api/tests/customer_privacy_case_subject_verify_process_e2e.rs
+            database/tests/0020_customer_privacy_persistence_fixture.sql
+            database/tests/0021_customer_privacy_force_rls.sql
+            database/tests/0022_customer_privacy_submit_fixture.sql
+            database/tests/0023_customer_privacy_subject_verify_fixture.sql
+            database/customer-privacy-subject-process-*.log
+          if-no-files-found: error
+          retention-days: 7
