@@ -352,6 +352,7 @@ dependencies = [
  "crm-customer-enrichment-worker-composition",
  "crm-customer-privacy-capability-adapter",
  "crm-customer-privacy-capability-composition",
+ "crm-customer-privacy-submit-capability-adapter",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",
@@ -1096,6 +1097,7 @@ dependencies = [
  "crm-customer-privacy",
  "crm-customer-privacy-capability-adapter",
  "crm-customer-privacy-persistence-adapter",
+ "crm-customer-privacy-submit-capability-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
  "prost",
@@ -1110,6 +1112,20 @@ dependencies = [
  "crm-capability-plan-support",
  "crm-customer-privacy",
  "crm-module-sdk",
+]
+
+[[package]]
+name = "crm-customer-privacy-submit-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-privacy",
+ "crm-customer-privacy-persistence-adapter",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
 ]
 
 [[package]]
