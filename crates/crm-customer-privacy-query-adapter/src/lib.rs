@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
-//! Permission-aware query adapter for `customer_privacy.case.get@1.0.0`.
+//! Permission-aware Customer Privacy case queries.
+
+mod list;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
@@ -16,7 +18,7 @@ use crm_module_sdk::{
 };
 use crm_proto_contracts::crm::{customer::v1 as customer_wire, customer_privacy::v1 as wire};
 use crm_query_runtime::{
-    QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator,
+    CursorCodec, QueryExecutionResult, QueryExecutor, QueryRequest, QuerySemanticValidator,
     QueryVisibilityAuthorizer,
 };
 use prost::Message;
@@ -26,7 +28,15 @@ use std::sync::Arc;
 pub const GET_PRIVACY_CASE_CAPABILITY: &str = "customer_privacy.case.get";
 pub const GET_PRIVACY_CASE_REQUEST_SCHEMA: &str = "crm.customer_privacy.v1.GetPrivacyCaseRequest";
 pub const GET_PRIVACY_CASE_RESPONSE_SCHEMA: &str = "crm.customer_privacy.v1.GetPrivacyCaseResponse";
-pub const QUERY_CAPABILITY_IDS: &[&str] = &[GET_PRIVACY_CASE_CAPABILITY];
+pub const LIST_PRIVACY_CASES_CAPABILITY: &str = "customer_privacy.case.list";
+pub const LIST_PRIVACY_CASES_REQUEST_SCHEMA: &str =
+    "crm.customer_privacy.v1.ListPrivacyCasesRequest";
+pub const LIST_PRIVACY_CASES_RESPONSE_SCHEMA: &str =
+    "crm.customer_privacy.v1.ListPrivacyCasesResponse";
+pub const QUERY_CAPABILITY_IDS: &[&str] = &[
+    GET_PRIVACY_CASE_CAPABILITY,
+    LIST_PRIVACY_CASES_CAPABILITY,
+];
 pub const PARTY_RECORD_TYPE: &str = "parties.party";
 
 const PRIVACY_CASE_FIELDS: &[&str] = &[
@@ -53,7 +63,7 @@ pub struct CustomerPrivacyVisibilityResource {
 }
 
 pub fn query_visibility_resources(capability_id: &str) -> Vec<CustomerPrivacyVisibilityResource> {
-    if capability_id != GET_PRIVACY_CASE_CAPABILITY {
+    if !QUERY_CAPABILITY_IDS.contains(&capability_id) {
         return Vec::new();
     }
     vec![
@@ -76,17 +86,41 @@ pub fn query_visibility_resources(capability_id: &str) -> Vec<CustomerPrivacyVis
 
 #[derive(Clone)]
 pub struct CustomerPrivacyQueryAdapter {
-    store: PostgresDataStore,
-    visibility: Arc<dyn QueryVisibilityAuthorizer>,
+    pub(crate) store: PostgresDataStore,
+    pub(crate) visibility: Arc<dyn QueryVisibilityAuthorizer>,
+    cursor_codec: Option<CursorCodec>,
 }
 
 impl CustomerPrivacyQueryAdapter {
     pub fn new(store: PostgresDataStore, visibility: Arc<dyn QueryVisibilityAuthorizer>) -> Self {
-        Self { store, visibility }
+        Self {
+            store,
+            visibility,
+            cursor_codec: None,
+        }
+    }
+
+    pub fn new_with_cursor(
+        store: PostgresDataStore,
+        cursor_codec: CursorCodec,
+        visibility: Arc<dyn QueryVisibilityAuthorizer>,
+    ) -> Self {
+        Self {
+            store,
+            visibility,
+            cursor_codec: Some(cursor_codec),
+        }
+    }
+
+    pub(crate) fn cursor_codec(&self) -> Result<&CursorCodec, SdkError> {
+        self.cursor_codec.as_ref().ok_or_else(|| {
+            query_configuration_invalid("privacy case list cursor codec is not configured")
+        })
     }
 
     async fn execute_get_case(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
-        let command: wire::GetPrivacyCaseRequest = decode_input(request)?;
+        let command: wire::GetPrivacyCaseRequest =
+            decode_input(request, GET_PRIVACY_CASE_REQUEST_SCHEMA)?;
         let case_reference = privacy_case_ref(command.privacy_case_ref)?;
         let snapshot = self
             .store
@@ -149,6 +183,7 @@ impl std::fmt::Debug for CustomerPrivacyQueryAdapter {
             .debug_struct("CustomerPrivacyQueryAdapter")
             .field("store", &self.store)
             .field("visibility", &"dyn QueryVisibilityAuthorizer")
+            .field("cursor_codec_configured", &self.cursor_codec.is_some())
             .finish()
     }
 }
@@ -161,8 +196,15 @@ impl QuerySemanticValidator for CustomerPrivacyQueryAdapter {
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
             ensure_definition(definition)?;
-            let command: wire::GetPrivacyCaseRequest = decode_input(request)?;
-            privacy_case_ref(command.privacy_case_ref).map(|_| ())
+            match definition.capability_id.as_str() {
+                GET_PRIVACY_CASE_CAPABILITY => {
+                    let command: wire::GetPrivacyCaseRequest =
+                        decode_input(request, GET_PRIVACY_CASE_REQUEST_SCHEMA)?;
+                    privacy_case_ref(command.privacy_case_ref).map(|_| ())
+                }
+                LIST_PRIVACY_CASES_CAPABILITY => list::validate(self, request),
+                _ => Err(unsupported_query()),
+            }
         })
     }
 }
@@ -175,39 +217,69 @@ impl QueryExecutor for CustomerPrivacyQueryAdapter {
     ) -> PortFuture<'a, Result<QueryExecutionResult, SdkError>> {
         Box::pin(async move {
             ensure_definition(definition)?;
-            Ok(QueryExecutionResult {
-                output: self.execute_get_case(&request).await?,
-            })
+            let output = match definition.capability_id.as_str() {
+                GET_PRIVACY_CASE_CAPABILITY => self.execute_get_case(&request).await?,
+                LIST_PRIVACY_CASES_CAPABILITY => list::execute(self, &request).await?,
+                _ => return Err(unsupported_query()),
+            };
+            Ok(QueryExecutionResult { output })
         })
     }
 }
 
 pub fn query_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    get_privacy_case_capability_definition()
+}
+
+pub fn get_privacy_case_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    query_definition(
+        GET_PRIVACY_CASE_CAPABILITY,
+        GET_PRIVACY_CASE_REQUEST_SCHEMA,
+        GET_PRIVACY_CASE_RESPONSE_SCHEMA,
+    )
+}
+
+pub fn list_privacy_cases_capability_definition() -> Result<CapabilityDefinition, SdkError> {
+    query_definition(
+        LIST_PRIVACY_CASES_CAPABILITY,
+        LIST_PRIVACY_CASES_REQUEST_SCHEMA,
+        LIST_PRIVACY_CASES_RESPONSE_SCHEMA,
+    )
+}
+
+fn query_definition(
+    capability_id: &'static str,
+    request_schema: &'static str,
+    response_schema: &'static str,
+) -> Result<CapabilityDefinition, SdkError> {
     Ok(CapabilityDefinition {
-        capability_id: configured(CapabilityId::try_new(GET_PRIVACY_CASE_CAPABILITY))?,
+        capability_id: configured(CapabilityId::try_new(capability_id))?,
         capability_version: configured(CapabilityVersion::try_new(support::CONTRACT_VERSION))?,
         owner_module_id: configured(ModuleId::try_new(MODULE_ID))?,
         input_contract: support::protobuf_contract(
             MODULE_ID,
-            GET_PRIVACY_CASE_REQUEST_SCHEMA,
+            request_schema,
             vec![DataClass::Confidential],
         )?,
         output_contract: Some(support::protobuf_contract(
             MODULE_ID,
-            GET_PRIVACY_CASE_RESPONSE_SCHEMA,
+            response_schema,
             vec![DataClass::Confidential],
         )?),
         risk: CapabilityRisk::Low,
         mutation: false,
         requires_idempotency: false,
         requires_approval: false,
-        authorization_policy_id: GET_PRIVACY_CASE_CAPABILITY.to_owned(),
+        authorization_policy_id: capability_id.to_owned(),
         rate_limit_policy_id: None,
     })
 }
 
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    Ok(vec![query_capability_definition()?])
+    Ok(vec![
+        get_privacy_case_capability_definition()?,
+        list_privacy_cases_capability_definition()?,
+    ])
 }
 
 pub fn privacy_case_to_wire(privacy_case: &PrivacyCase) -> Result<wire::PrivacyCase, SdkError> {
@@ -306,7 +378,10 @@ fn rescope_to_wire(
     })
 }
 
-fn redact_privacy_case(output: &mut wire::PrivacyCase, allows_field: impl Fn(&str) -> bool) {
+pub(crate) fn redact_privacy_case(
+    output: &mut wire::PrivacyCase,
+    allows_field: impl Fn(&str) -> bool,
+) {
     if !allows_field("kind") {
         output.kind = wire::PrivacyCaseKind::Unspecified as i32;
     }
@@ -348,13 +423,18 @@ fn redact_privacy_case(output: &mut wire::PrivacyCase, allows_field: impl Fn(&st
     }
 }
 
-fn decode_input(request: &QueryRequest) -> Result<wire::GetPrivacyCaseRequest, SdkError> {
+pub(crate) fn decode_input<M>(
+    request: &QueryRequest,
+    schema: &'static str,
+) -> Result<M, SdkError>
+where
+    M: Message + Default,
+{
     let payload = &request.input;
     if payload.owner.as_str() != MODULE_ID
-        || payload.schema_id.as_str() != GET_PRIVACY_CASE_REQUEST_SCHEMA
+        || payload.schema_id.as_str() != schema
         || payload.schema_version.as_str() != support::CONTRACT_VERSION
-        || payload.descriptor_hash
-            != support::message_descriptor_hash(GET_PRIVACY_CASE_REQUEST_SCHEMA)
+        || payload.descriptor_hash != support::message_descriptor_hash(schema)
         || payload.data_class != DataClass::Confidential
         || payload.encoding != PayloadEncoding::Protobuf
         || payload.maximum_size_bytes != support::MAX_PROTOBUF_BYTES
@@ -367,7 +447,7 @@ fn decode_input(request: &QueryRequest) -> Result<wire::GetPrivacyCaseRequest, S
             "The Customer Privacy query input does not match the required contract.",
         ));
     }
-    wire::GetPrivacyCaseRequest::decode(payload.bytes.as_slice()).map_err(|_| {
+    M::decode(payload.bytes.as_slice()).map_err(|_| {
         SdkError::new(
             "CUSTOMER_PRIVACY_QUERY_PROTOBUF_INVALID",
             ErrorCategory::InvalidArgument,
@@ -399,38 +479,27 @@ fn privacy_case_ref(value: Option<wire::PrivacyCaseRef>) -> Result<RecordRef, Sd
 
 fn ensure_definition(definition: &CapabilityDefinition) -> Result<(), SdkError> {
     if definition.owner_module_id.as_str() != MODULE_ID
-        || definition.capability_id.as_str() != GET_PRIVACY_CASE_CAPABILITY
+        || !QUERY_CAPABILITY_IDS.contains(&definition.capability_id.as_str())
         || definition.capability_version.as_str() != support::CONTRACT_VERSION
         || definition.mutation
     {
-        return Err(SdkError::new(
-            "CUSTOMER_PRIVACY_QUERY_UNSUPPORTED",
-            ErrorCategory::InvalidArgument,
-            false,
-            "The requested Customer Privacy query is not supported.",
-        ));
+        return Err(unsupported_query());
     }
     Ok(())
 }
 
-fn module_id() -> Result<ModuleId, SdkError> {
+pub(crate) fn module_id() -> Result<ModuleId, SdkError> {
     configured(ModuleId::try_new(MODULE_ID))
 }
 
-fn privacy_case_record_type() -> Result<RecordType, SdkError> {
+pub(crate) fn privacy_case_record_type() -> Result<RecordType, SdkError> {
     configured(RecordType::try_new(PRIVACY_CASE_RECORD_TYPE))
 }
 
-fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
-    value.map_err(|error| {
-        SdkError::new(
-            "CUSTOMER_PRIVACY_QUERY_CONFIGURATION_INVALID",
-            ErrorCategory::Internal,
-            false,
-            "The Customer Privacy query configuration is invalid.",
-        )
-        .with_internal_reference(error.to_string())
-    })
+pub(crate) fn configured<T>(
+    value: Result<T, crm_module_sdk::IdentifierError>,
+) -> Result<T, SdkError> {
+    value.map_err(query_configuration_invalid)
 }
 
 fn case_not_found() -> SdkError {
@@ -442,7 +511,7 @@ fn case_not_found() -> SdkError {
     )
 }
 
-fn case_state_invalid(reference: impl Into<String>) -> SdkError {
+pub(crate) fn case_state_invalid(reference: impl Into<String>) -> SdkError {
     SdkError::new(
         "CUSTOMER_PRIVACY_CASE_STATE_INVALID",
         ErrorCategory::Internal,
@@ -450,6 +519,25 @@ fn case_state_invalid(reference: impl Into<String>) -> SdkError {
         "The privacy case could not be loaded safely.",
     )
     .with_internal_reference(reference.into())
+}
+
+fn unsupported_query() -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_QUERY_UNSUPPORTED",
+        ErrorCategory::InvalidArgument,
+        false,
+        "The requested Customer Privacy query is not supported.",
+    )
+}
+
+pub(crate) fn query_configuration_invalid(error: impl std::fmt::Display) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_QUERY_CONFIGURATION_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The Customer Privacy query configuration is invalid.",
+    )
+    .with_internal_reference(error.to_string())
 }
 
 fn nanos_to_millis(value: i64, reference: &'static str) -> Result<i64, SdkError> {
@@ -527,23 +615,31 @@ mod tests {
 
     #[test]
     fn query_catalog_and_visibility_are_exact() {
-        let definition = query_capability_definition().unwrap();
-        assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
+        let definitions = query_capability_definitions().unwrap();
+        assert_eq!(definitions.len(), 2);
         assert_eq!(
-            definition.capability_id.as_str(),
-            GET_PRIVACY_CASE_CAPABILITY
+            definitions
+                .iter()
+                .map(|definition| definition.capability_id.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY])
         );
-        assert!(!definition.mutation);
-        assert!(!definition.requires_idempotency);
-        assert!(!definition.requires_approval);
-        assert_eq!(definition.risk, CapabilityRisk::Low);
+        for definition in definitions {
+            assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
+            assert!(!definition.mutation);
+            assert!(!definition.requires_idempotency);
+            assert!(!definition.requires_approval);
+            assert_eq!(definition.risk, CapabilityRisk::Low);
+        }
 
-        let resources = query_visibility_resources(GET_PRIVACY_CASE_CAPABILITY);
-        assert_eq!(resources.len(), 2);
-        assert_eq!(resources[0].resource_type, PARTY_RECORD_TYPE);
-        assert!(resources[0].allowed_fields.is_empty());
-        assert_eq!(resources[1].resource_type, PRIVACY_CASE_RECORD_TYPE);
-        assert_eq!(resources[1].allowed_fields.len(), PRIVACY_CASE_FIELDS.len());
+        for capability in QUERY_CAPABILITY_IDS {
+            let resources = query_visibility_resources(capability);
+            assert_eq!(resources.len(), 2);
+            assert_eq!(resources[0].resource_type, PARTY_RECORD_TYPE);
+            assert!(resources[0].allowed_fields.is_empty());
+            assert_eq!(resources[1].resource_type, PRIVACY_CASE_RECORD_TYPE);
+            assert_eq!(resources[1].allowed_fields.len(), PRIVACY_CASE_FIELDS.len());
+        }
         assert!(query_visibility_resources("customer_privacy.unknown").is_empty());
     }
 
