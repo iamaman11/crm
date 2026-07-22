@@ -97,12 +97,6 @@
     },
     {
       "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.case.list",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but this query remains non-runtime until permission-aware candidate filtering, cursor semantics and cross-tenant concealment acceptance are complete."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.plan.get",
       "version": "1.0.0",
       "reason": "FORCE RLS persistence is proven, but action-plan disclosure remains non-runtime until worker orchestration and permission-aware query visibility are complete."
