@@ -76,8 +76,8 @@ $$;
 SET ROLE crm_app_test;
 
 BEGIN;
-SET LOCAL app.tenant_id = 'tenant-privacy-a';
-SET LOCAL app.actor_id = 'privacy-actor-a';
+SET LOCAL app.tenant_id = 'tenant-a';
+SET LOCAL app.actor_id = 'actor-a';
 SET LOCAL app.request_id = 'request-customer-privacy-force-rls';
 SET LOCAL app.capability_id = 'customer_privacy.persistence.probe';
 SET LOCAL app.capability_version = '1.0.0';
@@ -95,9 +95,9 @@ INSERT INTO crm.business_transactions (
   expected_idempotency_records
 )
 VALUES (
-  'tenant-privacy-a',
+  'tenant-a',
   'tx-customer-privacy-force-rls',
-  'privacy-actor-a',
+  'actor-a',
   'request-customer-privacy-force-rls',
   'customer_privacy.persistence.probe',
   '1.0.0',
@@ -125,7 +125,7 @@ INSERT INTO crm.records (
 )
 VALUES
   (
-    'tenant-privacy-a',
+    'tenant-a',
     'customer-privacy.case',
     'privacy-case-force-rls',
     1,
@@ -137,12 +137,12 @@ VALUES
     'json',
     65536,
     'crm.customer_privacy.case',
-    convert_to('{"canonicalization_profile":"crm.cjson/v1","case_id":"privacy-case-force-rls","created_at_unix_nanos":"10","kind":"erasure","last_transition_at_unix_nanos":"10","policy_version":"privacy-policy/1","status":{"code":"draft"},"tenant_id":"tenant-privacy-a","version":"1"}', 'UTF8'),
+    convert_to('{"canonicalization_profile":"crm.cjson/v1","case_id":"privacy-case-force-rls","created_at_unix_nanos":"10","kind":"erasure","last_transition_at_unix_nanos":"10","policy_version":"privacy-policy/1","status":{"code":"draft"},"tenant_id":"tenant-a","version":"1"}', 'UTF8'),
     '{"kind":"erasure","status":"draft"}'::jsonb,
     'tx-customer-privacy-force-rls'
   ),
   (
-    'tenant-privacy-a',
+    'tenant-a',
     'customer-privacy.restriction',
     'privacy-restriction-force-rls',
     1,
@@ -154,12 +154,12 @@ VALUES
     'json',
     16384,
     'crm.customer_privacy.restriction',
-    convert_to('{"canonicalization_profile":"crm.cjson/v1","canonical_party_id":"party-force-rls","effective_from_unix_nanos":"20","placed_at_unix_nanos":"20","placed_by":"privacy-actor-a","policy_version":"privacy-policy/1","restriction_id":"privacy-restriction-force-rls","scope":"processing_and_communication","status":"active","tenant_id":"tenant-privacy-a","version":"1"}', 'UTF8'),
+    convert_to('{"canonicalization_profile":"crm.cjson/v1","canonical_party_id":"party-force-rls","effective_from_unix_nanos":"20","placed_at_unix_nanos":"20","placed_by":"actor-a","policy_version":"privacy-policy/1","restriction_id":"privacy-restriction-force-rls","scope":"processing_and_communication","status":"active","tenant_id":"tenant-a","version":"1"}', 'UTF8'),
     '{"canonical_party_id":"party-force-rls","scope":"processing_and_communication","status":"active"}'::jsonb,
     'tx-customer-privacy-force-rls'
   ),
   (
-    'tenant-privacy-a',
+    'tenant-a',
     'customer-privacy.legal-hold',
     'privacy-legal-hold-force-rls',
     1,
@@ -171,7 +171,7 @@ VALUES
     'json',
     16384,
     'crm.customer_privacy.legal_hold',
-    convert_to('{"authority_reference":"authority-force-rls","canonical_party_id":"party-force-rls","canonicalization_profile":"crm.cjson/v1","effective_from_unix_nanos":"30","hold_id":"privacy-legal-hold-force-rls","placed_by":"legal-actor-a","policy_version":"privacy-policy/1","reason_code":"LITIGATION_HOLD","scope":{"kind":"all_customer_data"},"status":"active","tenant_id":"tenant-privacy-a","version":"1"}', 'UTF8'),
+    convert_to('{"authority_reference":"authority-force-rls","canonical_party_id":"party-force-rls","canonicalization_profile":"crm.cjson/v1","effective_from_unix_nanos":"30","hold_id":"privacy-legal-hold-force-rls","placed_by":"legal-actor-a","policy_version":"privacy-policy/1","reason_code":"LITIGATION_HOLD","scope":{"kind":"all_customer_data"},"status":"active","tenant_id":"tenant-a","version":"1"}', 'UTF8'),
     '{"canonical_party_id":"party-force-rls","reason_code":"LITIGATION_HOLD","status":"active"}'::jsonb,
     'tx-customer-privacy-force-rls'
   );
@@ -186,7 +186,7 @@ INSERT INTO crm.idempotency_records (
   expires_at
 )
 VALUES (
-  'tenant-privacy-a',
+  'tenant-a',
   'customer_privacy.persistence.probe@1.0.0',
   'customer-privacy-force-rls',
   decode(repeat('65', 32), 'hex'),
@@ -216,7 +216,7 @@ INSERT INTO crm.outbox_events (
   occurred_at
 )
 VALUES (
-  'tenant-privacy-a',
+  'tenant-a',
   'event-customer-privacy-force-rls',
   'tx-customer-privacy-force-rls',
   'customer-privacy.case',
@@ -251,15 +251,15 @@ INSERT INTO crm.audit_records (
   occurred_at
 )
 VALUES (
-  'tenant-privacy-a',
-  1,
+  'tenant-a',
+  2,
   'audit-customer-privacy-force-rls',
   'tx-customer-privacy-force-rls',
-  'privacy-actor-a',
+  'actor-a',
   'customer_privacy.persistence.probe',
   '1.0.0',
   'crm.cjson/v1',
-  decode(repeat('00', 32), 'hex'),
+  decode(repeat('11', 32), 'hex'),
   decode(repeat('67', 32), 'hex'),
   convert_to('{"customer_privacy":"force_rls"}', 'UTF8'),
   clock_timestamp()
@@ -276,13 +276,13 @@ BEGIN
     FROM crm.records
    WHERE owner_module_id = 'crm.customer-privacy';
   IF visible_count <> 3 THEN
-    RAISE EXCEPTION 'tenant-privacy-a could not read its three Customer Privacy records';
+    RAISE EXCEPTION 'tenant-a could not read its three Customer Privacy records';
   END IF;
 END;
 $$;
 
-SELECT set_config('app.tenant_id', 'tenant-privacy-b', true);
-SELECT set_config('app.actor_id', 'privacy-actor-b', true);
+SELECT set_config('app.tenant_id', 'tenant-b', true);
+SELECT set_config('app.actor_id', 'actor-b', true);
 SELECT set_config('app.request_id', 'request-customer-privacy-force-rls-b', true);
 SELECT set_config('app.business_transaction_id', 'tx-customer-privacy-force-rls-b', true);
 
@@ -297,16 +297,16 @@ BEGIN
     FROM crm.records
    WHERE owner_module_id = 'crm.customer-privacy';
   IF visible_count <> 0 THEN
-    RAISE EXCEPTION 'tenant-privacy-b read tenant-privacy-a Customer Privacy state';
+    RAISE EXCEPTION 'tenant-b read tenant-a Customer Privacy state';
   END IF;
 
   UPDATE crm.records
      SET typed_projection = '{"status":"mutated"}'::jsonb
-   WHERE tenant_id = 'tenant-privacy-a'
+   WHERE tenant_id = 'tenant-a'
      AND owner_module_id = 'crm.customer-privacy';
   GET DIAGNOSTICS affected_count = ROW_COUNT;
   IF affected_count <> 0 THEN
-    RAISE EXCEPTION 'tenant-privacy-b updated tenant-privacy-a Customer Privacy state';
+    RAISE EXCEPTION 'tenant-b updated tenant-a Customer Privacy state';
   END IF;
 
   BEGIN
@@ -327,7 +327,7 @@ BEGIN
       last_business_transaction_id
     )
     VALUES (
-      'tenant-privacy-a',
+      'tenant-a',
       'customer-privacy.case',
       'privacy-cross-tenant-write',
       1,
@@ -366,7 +366,7 @@ BEGIN
 END;
 $$;
 
-SELECT set_config('app.tenant_id', 'tenant-privacy-b', true);
+SELECT set_config('app.tenant_id', 'tenant-b', true);
 DO $$
 DECLARE
   blocked boolean := false;
