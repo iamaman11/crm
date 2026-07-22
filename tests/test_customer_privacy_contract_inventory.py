@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CustomerPrivacyContractInventoryTests(unittest.TestCase):
-    def test_public_contract_inventory_matches_freeze_and_is_contract_only(self) -> None:
+    def test_public_contract_inventory_matches_freeze_and_promotes_only_create(self) -> None:
         manifest_path = ROOT / "modules/crm-customer-privacy/module.yaml"
         manifest = strict_yaml_load(
             manifest_path.read_text(encoding="utf-8"), str(manifest_path)
@@ -66,17 +66,25 @@ class CustomerPrivacyContractInventoryTests(unittest.TestCase):
             },
         )
 
-        contract_only = {
+        non_runtime = {
             (route["owner_module_id"], route["id"], route["version"])
             for route in classifications["non_runtime_contract_routes"]
             if route["owner_module_id"] == "crm.customer-privacy"
         }
-        self.assertEqual(
-            contract_only,
-            {
-                ("crm.customer-privacy", capability_id, "1.0.0")
-                for capability_id in expected_capabilities
-            },
+        expected_non_runtime = {
+            ("crm.customer-privacy", capability_id, "1.0.0")
+            for capability_id in expected_capabilities
+            if capability_id != "customer_privacy.case.create"
+        }
+        self.assertEqual(non_runtime, expected_non_runtime)
+        self.assertEqual(len(non_runtime), 15)
+        self.assertNotIn(
+            (
+                "crm.customer-privacy",
+                "customer_privacy.case.create",
+                "1.0.0",
+            ),
+            non_runtime,
         )
         self.assertFalse(
             any(
