@@ -1,6 +1,6 @@
 # Acceptance gates for `crm.customer-privacy`
 
-Current state: **Gate review for the third production vertical slice**. The architecture, pure domain, canonical private persistence, immutable public contracts, FORCE RLS proof, `customer_privacy.case.create@1.0.0` and `customer_privacy.case.submit@1.0.0` are merged. Draft PR #148 promotes only `customer_privacy.case.subject.verify@1.0.0`; the remaining thirteen public Customer Privacy coordinates stay non-runtime.
+Current state: **Gate review for the fourth production vertical slice**. Architecture, pure domain, canonical private persistence, immutable public contracts, FORCE RLS proof and the first three production coordinates are merged. Draft PR #149 promotes only `customer_privacy.case.get@1.0.0`; the remaining twelve public Customer Privacy coordinates stay non-runtime.
 
 - [x] Freeze immutable module identity and first ownership boundary.
 - [x] Keep the pure module core infrastructure-neutral and deny direct cross-owner storage access.
@@ -23,8 +23,13 @@ Current state: **Gate review for the third production vertical slice**. The arch
 - [x] Prove `Submitted N -> SubjectVerified N + 1`, exact replay, incompatible replay, stale version/generation, invalid canonical redirect, missing/cross-tenant Party concealment, malformed state rollback and subject-lock contention.
 - [x] Prove candidate-only and accepted production composition through the existing generic HTTP/gRPC ingress on clean migrations and after full rollback/schema removal/reapply, under a non-privileged FORCE-RLS runtime role, with bounded safe transport errors.
 - [x] Consolidate create, submit and subject-verification real-process acceptance in the permanent Customer Privacy Persistence CI; no temporary subject-specific workflow remains in the accepted branch.
-- [x] Freeze candidate production-route parity at exactly three runtime Customer Privacy mutations and thirteen non-runtime public Customer Privacy coordinates; worker-only and crypto-shred classifications remain unchanged.
-- [ ] Accept draft PR #148 on one unchanged post-Generated-Sync source SHA after all 18 applicable workflows pass and review threads are resolved.
+- [x] Accept `customer_privacy.case.subject.verify@1.0.0` on unchanged source SHA `118327e09a6e31ba87b02bdab99289035b572ed9` after 18/18 permanent workflows passed and no review submissions or inline threads remained; merge PR #148 as `8ee5538bf97031dd48ab3726a605b9f3ad4bfd1e`.
+- [x] Implement `customer_privacy.case.get@1.0.0` as a permission-aware, side-effect-free query using FORCE-RLS tenant lookup, strict confidential-state rehydration and the generic HTTP/gRPC query ingress.
+- [x] Require live case visibility and, after subject verification, live canonical Party visibility; conceal missing, cross-tenant and hidden resources with the same not-found surface.
+- [x] Apply field-level redaction to case lifecycle, subject-binding, rescope, plan and approval fields without redacting stable case identity.
+- [x] Add permanent unit and real-process acceptance for authenticated HTTP/gRPC success, deployment field ceilings, tenant-token scope, cross-tenant/missing concealment, module suspension, absent live query grant, unchanged aggregate version and zero query-side audit/idempotency/business-transaction writes.
+- [x] Freeze candidate route parity at exactly three runtime Customer Privacy mutations, one runtime Customer Privacy query and twelve non-runtime public Customer Privacy coordinates; worker-only and crypto-shred classifications remain unchanged.
+- [ ] Accept draft PR #149 on one unchanged post-Generated-Sync source SHA after all 18 applicable workflows pass and review threads are resolved.
 - [ ] Add the remaining permission-aware public case, restriction and legal-hold mutations/queries through separately bounded module-owned production contributions.
 - [ ] Prove privacy restriction is deny-only, live, race-free and cannot be bypassed by module disable/uninstall.
 - [ ] Add bounded owner scope/action contribution contracts without direct storage coupling.
@@ -37,4 +42,4 @@ Current state: **Gate review for the third production vertical slice**. The arch
 - [ ] Complete fresh-PostgreSQL worker-process, restriction/legal-hold, deletion/convergence and full-lifecycle acceptance.
 - [ ] Synchronize module catalog, roadmap/status, issue #126 and PR evidence on the final unchanged accepted source SHA.
 
-Phase 8A.11 remains **In progress** after `case.create` and `case.submit`; `case.subject.verify` is the active separately bounded gate-review slice.
+Phase 8A.11 remains **In progress** after `case.create`, `case.submit` and `case.subject.verify`; `case.get` is the active separately bounded gate-review slice.
