@@ -93,17 +93,17 @@ jobs:
         run: |
           cargo test -p crm-customer-privacy-persistence-adapter --all-features
           cargo test -p crm-customer-privacy-capability-adapter --all-features
+      - name: Verify clean-migration Customer Privacy FORCE RLS
+        shell: bash
+        run: |
+          set -o pipefail
+          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-clean.log
       - name: Verify clean-migration case-create process
         shell: bash
         run: |
           set -o pipefail
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-create-clean.log
-      - name: Verify clean-migration Customer Privacy FORCE RLS
-        shell: bash
-        run: |
-          set -o pipefail
-          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-clean.log
       - name: Roll back every migration
         shell: bash
         run: |
@@ -130,17 +130,17 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify reapplied Customer Privacy FORCE RLS
+        shell: bash
+        run: |
+          set -o pipefail
+          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-reapplied.log
       - name: Verify reapplied case-create process
         shell: bash
         run: |
           set -o pipefail
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-create-reapplied.log
-      - name: Verify reapplied Customer Privacy FORCE RLS
-        shell: bash
-        run: |
-          set -o pipefail
-          psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-reapplied.log
       - name: Verify real crm-api case-create process
         shell: bash
         run: |
