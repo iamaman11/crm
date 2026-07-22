@@ -95,9 +95,9 @@ Completed packets:
 
 Active sequence:
 
-1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `case.create`, `case.submit`, `case.subject.verify`, `case.get` and `case.cancel` are merged through PR #150.
-2. **PR #152 — Gate review:** promote only subject-scoped `customer_privacy.case.list@1.0.0` after exact-head process, cursor, visibility and route-parity proof.
-3. **Remaining 8A.11 slices:** approval, restriction/legal-hold precedence, plan/outcome reads, owner orchestration, export/deletion/convergence and workers remain separate packets.
+1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `case.create`, `case.submit`, `case.subject.verify`, `case.get`, `case.cancel` and `case.list` are merged through PR #152.
+2. **Next bounded slice:** compare approval, restriction placement, legal-hold precedence, plan/outcome reads and worker dependencies; select exactly one production boundary after this post-merge synchronization.
+3. **Remaining 8A.11 slices:** owner orchestration, export/deletion/convergence and workers remain separate packets.
 4. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
 5. **8B / #29:** starts only from the completed Phase 8A baseline.
 
@@ -157,15 +157,13 @@ Accepted: exact confidential contracts, FORCE-RLS lookup, strict aggregate rehyd
 
 PR #150 accepted unchanged post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, passed all 18 permanent workflows and was squash-merged as `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`.
 
-Accepted: strict optimistic terminal cancellation; immutable subject/rescope/scope/plan/approval lineage; sorted/deduplicated subject locks before a retained final case-row `FOR UPDATE`; direct row serialization for unbound cases; retryable TOCTOU denial; one atomic record/event/audit/idempotency transaction; exact replay/conflict; generic ingress; permanent clean/reapplied process proof; merged partition of four mutations, one query and eleven public non-runtime coordinates.
+Accepted: strict optimistic terminal cancellation; immutable subject/rescope/scope/plan/approval lineage; sorted/deduplicated subject locks before a retained final case-row `FOR UPDATE`; direct row serialization for unbound cases; retryable TOCTOU denial; one atomic record/event/audit/idempotency transaction; exact replay/conflict; generic ingress; permanent clean/reapplied process proof.
 
-### Phase 8A.11.6 — `case.list` — Gate review
+### Phase 8A.11.6 — `case.list` — Complete
 
-Draft PR #152 promotes only:
+PR #152 accepted unchanged source `9de6048f951c0797a94871457d2bdd73357aee59`, passed all 18 permanent workflows and was squash-merged as `26f5b4644c935001806343b2feaf802a78c90eae`.
 
-`customer_privacy.case.list@1.0.0`
-
-Candidate boundary:
+Accepted boundary:
 
 - required canonical Party scope with optional kind/status filters;
 - page size default 50 and maximum 100;
@@ -178,10 +176,10 @@ Candidate boundary:
 - per-case field redaction preserving stable case identity;
 - generic HTTP/gRPC query composition with activation and live authorization;
 - no audit, idempotency, business-transaction, event, outbox or record writes;
-- permanent real-process proof for two-page pagination, no duplicates, filters, cursor tamper/rebinding, cross-tenant empty concealment, redaction, suspension and missing grants;
-- candidate partition of four runtime mutations, two runtime queries, ten public non-runtime coordinates and zero Customer Privacy workers.
+- permanent isolated real-process proof for two-page pagination, no duplicates, filters, cursor tamper/rebinding, cross-tenant empty concealment, redaction, suspension and missing grants;
+- merged production partition of four runtime mutations, two runtime queries, ten public non-runtime coordinates and zero Customer Privacy workers.
 
-The candidate excludes approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred.
+The accepted packet excludes approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred.
 
 ### Phase 8A.11 remaining acceptance boundary
 
@@ -218,10 +216,9 @@ Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarc
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Stabilize PR #152 after Generated Sync on one unchanged SHA.
-2. Require all permanent workflows, clean review state, mergeability and zero branch lag.
-3. Merge exactly `customer_privacy.case.list@1.0.0` with its accepted expected head.
-4. Select one next bounded privacy coordinate without combining approval, plan/outcome reads, restrictions, legal holds or workers.
-5. Keep all remaining privacy coordinates non-runtime until their own production proofs are complete.
-6. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
-7. Begin Phase 8B / #29 from the completed customer-master baseline.
+1. Complete this post-merge documentation synchronization for PR #152 without changing runtime inventory.
+2. Compare approval, restriction placement, legal-hold precedence, plan/outcome reads and worker dependencies.
+3. Select exactly one next Customer Privacy production boundary; do not combine unrelated trust surfaces.
+4. Keep all remaining privacy coordinates non-runtime until their own production proofs are complete.
+5. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
+6. Begin Phase 8B / #29 from the completed customer-master baseline.

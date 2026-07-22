@@ -39,7 +39,7 @@ Technical crates, process shells, Protobuf packages, SQL migrations and generic 
 | `crm.customer-data-operations` | Governed import/export jobs and evidence | **Expert expansion** | Resumable import, deterministic export/artifacts/reconciliation and crash recovery | More resource profiles and privacy access/deletion integration |
 | `crm.data-quality` | Customer-data quality governance coordinator | **Vertical slice** | Exact-version Party evaluation, findings/completeness, stewardship and governed remediation | Additional owner-resource profiles and privacy coordination |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Exact provider transport/secret boundary, immutable provenance, review, deterministic Party owner-capability application and recovery | Additional providers, target fields, product UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Case create/submit/subject verification/cancel plus permission-aware case get, authoritative Party/topology guards, shared subject locks, FORCE RLS and permanent real-process acceptance | Case list Gate review, approval, plan/outcome reads, restriction/legal-hold precedence, owner orchestration, export/deletion/convergence and workers |
+| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Case create/submit/subject verification/cancel plus permission-aware case get and subject-scoped case list, authoritative Party/topology guards, shared subject locks, FORCE RLS and permanent real-process acceptance | Approval, plan/outcome reads, restriction/legal-hold precedence, owner orchestration, export/deletion/convergence and workers |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -78,7 +78,8 @@ Accepted production vertical slices:
 - PR #147 / `customer_privacy.case.submit@1.0.0` — accepted source `8b41e8420b1a897777596c68cb615e2b8bf80c34`, merge `0eba56084405301eb667f2173b3aef6565b95f87`;
 - PR #148 / `customer_privacy.case.subject.verify@1.0.0` — accepted source `118327e09a6e31ba87b02bdab99289035b572ed9`, merge `8ee5538bf97031dd48ab3726a605b9f3ad4bfd1e`;
 - PR #149 / `customer_privacy.case.get@1.0.0` — accepted post-sync source `5a47318b24007cd534434ff6bac33fbd59215d38`, merge `5d580a7c253bcfa6c2dd981100612b222fd26825`;
-- PR #150 / `customer_privacy.case.cancel@1.0.0` — accepted post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, merge `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`.
+- PR #150 / `customer_privacy.case.cancel@1.0.0` — accepted post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, merge `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`;
+- PR #152 / `customer_privacy.case.list@1.0.0` — accepted source `9de6048f951c0797a94871457d2bdd73357aee59`, merge `26f5b4644c935001806343b2feaf802a78c90eae`.
 
 The merged production boundary proves:
 
@@ -88,13 +89,10 @@ The merged production boundary proves:
 - monotonic Identity Resolution topology generation and shared fail-fast topology/canonical-subject locks;
 - permission-aware `case.get` with strict FORCE-RLS rehydration, live case/canonical-Party visibility, field redaction and uniform concealment;
 - race-free terminal cancellation preserving immutable lineage, with subject locks before a retained final case-row `FOR UPDATE` and direct row serialization for unbound cases;
+- subject-scoped `case.list` with signed filter-bound pagination, bounded FORCE-RLS keyset scan, strict verified-subject matching, live Party/case visibility, field redaction and empty concealment;
 - common live authorization and activation through generic HTTP/gRPC application ingress;
 - fresh PostgreSQL, non-privileged FORCE RLS, rollback/schema removal/reapply and permanent real-process acceptance;
-- exactly four runtime Customer Privacy mutations, one runtime Customer Privacy query, eleven public non-runtime coordinates and zero Customer Privacy workers on merged `main`.
-
-Draft PR #152 is the separately bounded Gate-review candidate for `customer_privacy.case.list@1.0.0`. It requires canonical Party scope, signed filter-bound pagination, FORCE-RLS keyset scanning, strict verified-subject matching, live Party/case visibility, field redaction, a hard candidate-scan ceiling and side-effect-free real HTTP/gRPC acceptance.
-
-The PR #152 candidate inventory is four runtime mutations, two runtime permission-aware queries, ten public non-runtime coordinates and zero Customer Privacy workers. It does not promote approval, plan/outcome reads, restrictions, legal holds, workers, owner execution or crypto-shred.
+- exactly four runtime Customer Privacy mutations, two permission-aware runtime queries, ten public non-runtime coordinates and zero Customer Privacy workers on merged `main`.
 
 Ownership:
 
@@ -130,7 +128,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Four production mutations and one permission-aware query are merged independently; `case.list` is the only active Gate-review candidate and the remaining lifecycle stays incomplete.
+- 8A.11 / #126 — Customer Privacy. Four production mutations and two permission-aware queries are merged independently; the remaining lifecycle stays incomplete and the next bounded packet is not yet selected.
 
 ## 9. Customer-master ownership baseline
 

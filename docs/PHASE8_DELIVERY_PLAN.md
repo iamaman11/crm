@@ -71,9 +71,9 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
-Accepted production coordinates: PRs #146–#150  
-Merged production inventory: 4 mutations + 1 query + 11 public non-runtime coordinates + 0 Customer Privacy workers  
-Active bounded candidate: draft PR #152 / `customer_privacy.case.list@1.0.0`
+Accepted production coordinates: PRs #146–#150 and #152  
+Merged production inventory: 4 mutations + 2 permission-aware queries + 10 public non-runtime coordinates + 0 Customer Privacy workers  
+Next bounded production slice: not selected until remaining dependencies are compared
 
 #### Objective
 
@@ -133,15 +133,13 @@ Accepted: exact permission-aware query contract, FORCE-RLS lookup, strict aggreg
 
 PR #150 accepted unchanged post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, passed all 18 permanent workflows and was squash-merged as `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`.
 
-Accepted: exact optimistic terminal cancellation, immutable lineage preservation, sorted/deduplicated subject locks before a retained final case-row `FOR UPDATE`, direct row serialization for unbound cases, retryable TOCTOU denial, exact replay/conflict and permanent real-process proof. Merged production parity is four mutations, one query and eleven non-runtime public coordinates.
+Accepted: exact optimistic terminal cancellation, immutable lineage preservation, sorted/deduplicated subject locks before a retained final case-row `FOR UPDATE`, direct row serialization for unbound cases, retryable TOCTOU denial, exact replay/conflict and permanent real-process proof.
 
-#### Bounded packet 8A.11.6 — `case.list` — Gate review
+#### Bounded packet 8A.11.6 — `case.list` — Complete
 
-Draft PR #152 promotes exactly one additional public coordinate:
+PR #152 accepted unchanged source `9de6048f951c0797a94871457d2bdd73357aee59`, passed all 18 permanent workflows and was squash-merged as `26f5b4644c935001806343b2feaf802a78c90eae`.
 
-`customer_privacy.case.list@1.0.0`
-
-Candidate packet:
+Accepted packet:
 
 - requires a canonical Party reference and accepts optional kind/status filters;
 - defaults page size to 50 and caps it at 100;
@@ -152,8 +150,8 @@ Candidate packet:
 - applies live Party visibility before scan and live case visibility plus field redaction before output;
 - uses generic application query composition with live authorization and module activation;
 - writes no records, events, audits, outbox, idempotency or business transactions;
-- permanently proves real HTTP/gRPC pagination, no duplicates, subject/kind/status filtering, cursor tamper and filter rebinding denial, cross-tenant empty concealment, redaction, suspension and absent grants;
-- changes candidate route parity to four runtime mutations, two runtime queries, ten non-runtime public coordinates and zero Customer Privacy workers.
+- permanently proves real HTTP/gRPC pagination, no duplicates, subject/kind/status filtering, cursor tamper and filter rebinding denial, cross-tenant empty concealment, redaction, suspension and absent grants on an isolated fresh database;
+- establishes merged route parity of four runtime mutations, two runtime queries, ten non-runtime public coordinates and zero Customer Privacy workers.
 
 Explicit exclusions:
 
@@ -180,7 +178,7 @@ Explicit exclusions:
 
 #### Completion rule
 
-Acceptance of the five merged coordinates and candidate `case.list` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
+Acceptance of the six merged public coordinates does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
 
 ### Phase 8A completion gate
 

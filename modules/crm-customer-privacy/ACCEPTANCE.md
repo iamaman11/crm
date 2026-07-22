@@ -1,6 +1,6 @@
 # Acceptance gates for `crm.customer-privacy`
 
-Current state: **Gate review for the sixth production vertical slice**. Four public mutations and permission-aware `case.get` are merged. Draft PR #152 promotes only subject-scoped `customer_privacy.case.list@1.0.0`; the remaining ten public Customer Privacy coordinates stay non-runtime.
+Current state: **In progress after six accepted production vertical slices**. Four public mutations plus permission-aware `case.get` and subject-scoped `case.list` are merged. The remaining ten public Customer Privacy coordinates stay non-runtime.
 
 - [x] Freeze immutable module identity and first ownership boundary.
 - [x] Keep the pure module core infrastructure-neutral and deny direct cross-owner storage access.
@@ -42,8 +42,8 @@ Current state: **Gate review for the sixth production vertical slice**. Four pub
 - [x] Match only authoritative verified `subject_binding.canonical_party_id`; unbound cases and pending-rescope targets never grant disclosure.
 - [x] Apply live Party visibility before scanning, live per-case visibility before output and the same field-redaction model as `case.get` while preserving stable case identity.
 - [x] Add a permanent real-`crm-api` process proving two-page pagination without duplicates, subject/kind/status filtering, cursor tamper and filter rebinding denial, cross-tenant empty concealment, HTTP/gRPC parity, deployment redaction, module suspension, absent live grant, unchanged case versions and zero query-side writes.
-- [x] Freeze candidate route parity at four runtime mutations, two runtime permission-aware queries, ten non-runtime public coordinates and zero Customer Privacy workers.
-- [ ] Accept PR #152 only after Generated Sync stabilizes and all permanent workflows pass on one unchanged SHA with clean review, mergeability and zero branch lag.
+- [x] Freeze production route parity at four runtime mutations, two runtime permission-aware queries, ten non-runtime public coordinates and zero Customer Privacy workers.
+- [x] Accept PR #152 on unchanged source SHA `9de6048f951c0797a94871457d2bdd73357aee59` after Generated Sync preserved the head, all 18 permanent workflows passed, review state remained clean and the branch was zero commits behind `main`; squash merge as `26f5b4644c935001806343b2feaf802a78c90eae` with the exact expected head.
 - [ ] Add the remaining permission-aware public case, restriction and legal-hold mutations/queries through separately bounded module-owned production contributions.
 - [ ] Prove privacy restriction is deny-only, live, race-free and cannot be bypassed by module disable/uninstall.
 - [ ] Add bounded owner scope/action contribution contracts without direct storage coupling.
@@ -55,4 +55,4 @@ Current state: **Gate review for the sixth production vertical slice**. Four pub
 - [ ] Promote every remaining public, worker-only and reasoned non-runtime coordinate exactly once after its production proof.
 - [ ] Complete fresh-PostgreSQL worker-process, restriction/legal-hold, deletion/convergence and full-lifecycle acceptance.
 
-Phase 8A.11 remains **In progress**. Draft PR #152 is the only active production candidate and promotes only `case.list`; approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred remain non-runtime.
+Phase 8A.11 remains **In progress** after six accepted public production coordinates. Approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred remain non-runtime; the next bounded packet is not yet selected.
