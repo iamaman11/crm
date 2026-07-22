@@ -2,6 +2,7 @@ mod database;
 mod fixtures;
 mod transport;
 
+pub use database::*;
 pub use fixtures::*;
 pub use transport::*;
 
