@@ -1,6 +1,6 @@
 # Acceptance gates for `crm.customer-privacy`
 
-Current state: **Foundation, pure domain, canonical private persistence and public contract publication**. These gates block any claim of a production vertical slice.
+Current state: **Foundation, pure domain, canonical private persistence, public contracts and FORCE RLS persistence proof**. These gates block any claim of a production vertical slice.
 
 - [x] Freeze immutable module identity and first ownership boundary.
 - [x] Keep the pure module core infrastructure-neutral and deny direct cross-owner storage access.
@@ -8,7 +8,7 @@ Current state: **Foundation, pure domain, canonical private persistence and publ
 - [x] Implement deterministic in-memory privacy case, restriction and legal-hold aggregates with optimistic versions, monotonic transition time, bounded errors, exact retry/resume and canonical-lineage rescope semantics.
 - [x] Define immutable private state identities, descriptor hashes, byte ceilings, `crm.cjson/v1` encoding and strict rehydration for privacy case, restriction and legal-hold aggregates.
 - [x] Publish compatible versioned privacy case, restriction and legal-hold Protobuf contracts, exact manifest bindings and contract-only route classification.
-- [ ] Implement FORCE RLS persistence, rollback/reapply and `NOBYPASSRLS` tenant isolation.
+- [x] Implement the governed `crm.records` persistence adapter and prove ENABLE + FORCE RLS, rollback/reapply, missing-tenant denial and `NOBYPASSRLS` isolation on clean and reapplied PostgreSQL schemas.
 - [ ] Add permission-aware public case, restriction and legal-hold mutations/queries through module-owned production contributions.
 - [ ] Add the shared `tenant_id + canonical_party_id` final subject-lock enforcement port to protected owner paths.
 - [ ] Prove privacy restriction is deny-only, live, race-free and cannot be bypassed by module disable/uninstall.

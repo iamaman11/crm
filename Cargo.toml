@@ -25,6 +25,7 @@ members = [
   "crates/crm-capability-ingress",
   "crates/crm-proto-contracts",
   "crates/crm-capability-plan-support",
+  "crates/crm-customer-privacy-persistence-adapter",
   "crates/crm-customer-enrichment-capability-adapter",
   "crates/crm-customer-enrichment-capability-composition",
   "crates/crm-customer-enrichment-query-adapter",
