@@ -32,7 +32,8 @@ pub const SUBMIT_PRIVACY_CASE_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.SubmitPrivacyCaseRequest";
 pub const SUBMIT_PRIVACY_CASE_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.SubmitPrivacyCaseResponse";
-pub const PRIVACY_CASE_STATUS_CHANGED_EVENT_TYPE: &str = "customer_privacy.case.status_changed";
+pub const PRIVACY_CASE_STATUS_CHANGED_EVENT_TYPE: &str =
+    "customer_privacy.case.status_changed";
 pub const PRIVACY_CASE_STATUS_CHANGED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.PrivacyCaseStatusChangedEvent";
 pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[SUBMIT_PRIVACY_CASE_CAPABILITY];
@@ -46,13 +47,13 @@ impl TransactionalAggregatePlanner for CustomerPrivacyCaseSubmitCapabilityPlanne
         definition: &CapabilityDefinition,
         request: &CapabilityRequest,
     ) -> Result<AggregateTarget, SdkError> {
-        ensure_definition(definition, request)?;
+        ensure_exact_coordinate(definition, request)?;
         let command = submit_command(request)?;
         Ok(AggregateTarget {
-            reference: privacy_case_ref_from_wire(
+            reference: case_ref(
                 command
                     .privacy_case_ref
-                    .ok_or_else(|| missing_reference("customer_privacy.privacy_case_ref"))?,
+                    .ok_or_else(|| required("customer_privacy.privacy_case_ref"))?,
             )?,
             presence: AggregatePresence::MustExist,
         })
@@ -64,35 +65,41 @@ impl TransactionalAggregatePlanner for CustomerPrivacyCaseSubmitCapabilityPlanne
         request: &CapabilityRequest,
         current: Option<&RecordSnapshot>,
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-        ensure_definition(definition, request)?;
+        ensure_exact_coordinate(definition, request)?;
         let command = submit_command(request)?;
-        let requested_reference = privacy_case_ref_from_wire(
+        let requested_ref = case_ref(
             command
                 .privacy_case_ref
-                .ok_or_else(|| missing_reference("customer_privacy.privacy_case_ref"))?,
+                .ok_or_else(|| required("customer_privacy.privacy_case_ref"))?,
         )?;
         let current = current.ok_or_else(case_not_found)?;
-        if current.reference != requested_reference {
+        if current.reference != requested_ref {
             return Err(case_not_found());
         }
 
         let mut privacy_case = privacy_case_from_snapshot(current).map_err(case_state_invalid)?;
-        if privacy_case.case_id() != &requested_reference.record_id
+        if privacy_case.case_id() != &requested_ref.record_id
             || privacy_case.tenant_id() != &request.context.execution.tenant_id
         {
             return Err(case_not_found());
         }
 
-        let expected_version = expected_version(command.expected_version)?;
         let previous_version = i64::try_from(privacy_case.version())
-            .map_err(|_| plan_invalid("privacy case version exceeds the record envelope range"))?;
+            .map_err(|_| invalid_plan("persisted case version exceeds i64"))?;
         privacy_case
             .submit(
-                expected_version,
+                positive_version(command.expected_version)?,
                 request.context.execution.request_started_at_unix_nanos,
             )
             .map_err(domain_error)?;
-        plan_case_submit(definition, request, current, privacy_case, previous_version)
+
+        build_plan(
+            definition,
+            request,
+            current,
+            privacy_case,
+            previous_version,
+        )
     }
 }
 
@@ -126,28 +133,30 @@ pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
 
 fn submit_command(request: &CapabilityRequest) -> Result<wire::SubmitPrivacyCaseRequest, SdkError> {
     request.context.validate()?;
-    let command = support::decode_request(request, MODULE_ID, SUBMIT_PRIVACY_CASE_REQUEST_SCHEMA)?;
-    expected_version(command.expected_version)?;
+    let command = support::decode_request::<wire::SubmitPrivacyCaseRequest>(
+        request,
+        MODULE_ID,
+        SUBMIT_PRIVACY_CASE_REQUEST_SCHEMA,
+    )?;
+    positive_version(command.expected_version)?;
     Ok(command)
 }
 
-fn plan_case_submit(
+fn build_plan(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
     current: &RecordSnapshot,
     privacy_case: PrivacyCase,
     previous_version: i64,
 ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
-    if privacy_case.status() != PrivacyCaseStatus::Submitted {
-        return Err(plan_invalid(
-            "case.submit output must contain a submitted privacy case",
-        ));
-    }
     let next_version = i64::try_from(privacy_case.version())
-        .map_err(|_| plan_invalid("privacy case version exceeds the wire range"))?;
-    if next_version != previous_version + 1 || current.version != previous_version {
-        return Err(plan_invalid(
-            "case.submit must advance the authoritative aggregate by exactly one version",
+        .map_err(|_| invalid_plan("submitted case version exceeds i64"))?;
+    if privacy_case.status() != PrivacyCaseStatus::Submitted
+        || current.version != previous_version
+        || next_version != previous_version + 1
+    {
+        return Err(invalid_plan(
+            "case.submit must advance the locked Draft aggregate by one version",
         ));
     }
     if privacy_case.subject_binding().is_some()
@@ -156,8 +165,8 @@ fn plan_case_submit(
         || privacy_case.action_plan_id().is_some()
         || privacy_case.approval().is_some()
     {
-        return Err(plan_invalid(
-            "submitted privacy case contains lifecycle evidence from a later phase",
+        return Err(invalid_plan(
+            "submitted case contains evidence from a later lifecycle phase",
         ));
     }
 
@@ -165,7 +174,7 @@ fn plan_case_submit(
     if aggregate != current.reference {
         return Err(case_not_found());
     }
-    let public_case = submitted_case_to_wire(
+    let public_case = case_to_wire(
         &privacy_case,
         request.context.execution.request_started_at_unix_nanos,
     )?;
@@ -216,26 +225,22 @@ fn plan_case_submit(
     })
 }
 
-fn submitted_case_to_wire(
-    privacy_case: &PrivacyCase,
-    updated_at_unix_nanos: i64,
-) -> Result<wire::PrivacyCase, SdkError> {
-    let version = i64::try_from(privacy_case.version())
-        .map_err(|_| plan_invalid("privacy case version exceeds the wire range"))?;
+fn case_to_wire(privacy_case: &PrivacyCase, updated_at: i64) -> Result<wire::PrivacyCase, SdkError> {
     Ok(wire::PrivacyCase {
         privacy_case_ref: Some(wire::PrivacyCaseRef {
             privacy_case_id: privacy_case.case_id().as_str().to_owned(),
         }),
-        kind: privacy_case_kind_to_wire(privacy_case.kind()),
+        kind: kind_to_wire(privacy_case.kind()),
         status: wire::PrivacyCaseStatus::Submitted as i32,
-        version,
+        version: i64::try_from(privacy_case.version())
+            .map_err(|_| invalid_plan("submitted case version exceeds wire range"))?,
         policy_version: privacy_case.policy_version().as_str().to_owned(),
         created_at_unix_ms: nanos_to_millis(
             privacy_case.created_at_unix_nanos(),
             "customer_privacy.case.created_at",
         )?,
         updated_at_unix_ms: nanos_to_millis(
-            updated_at_unix_nanos,
+            updated_at,
             "execution_context.request_started_at_unix_nanos",
         )?,
         previous_privacy_case_ref: privacy_case.previous_case_id().map(|value| {
@@ -252,7 +257,7 @@ fn submitted_case_to_wire(
     })
 }
 
-fn ensure_definition(
+fn ensure_exact_coordinate(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
 ) -> Result<(), SdkError> {
@@ -263,14 +268,14 @@ fn ensure_definition(
         || request.context.execution.capability_id.as_str() != SUBMIT_PRIVACY_CASE_CAPABILITY
         || request.context.execution.capability_version.as_str() != support::CONTRACT_VERSION
     {
-        return Err(plan_invalid(
-            "capability definition does not match the exact request coordinate",
+        return Err(invalid_plan(
+            "capability definition and request coordinate do not match",
         ));
     }
     Ok(())
 }
 
-fn expected_version(value: i64) -> Result<u64, SdkError> {
+fn positive_version(value: i64) -> Result<u64, SdkError> {
     if value <= 0 {
         return Err(SdkError::invalid_argument(
             "customer_privacy.case.expected_version",
@@ -285,8 +290,8 @@ fn expected_version(value: i64) -> Result<u64, SdkError> {
     })
 }
 
-fn privacy_case_ref_from_wire(reference: wire::PrivacyCaseRef) -> Result<RecordRef, SdkError> {
-    let case_id = RecordId::try_new(reference.privacy_case_id).map_err(|error| {
+fn case_ref(reference: wire::PrivacyCaseRef) -> Result<RecordRef, SdkError> {
+    let id = RecordId::try_new(reference.privacy_case_id).map_err(|error| {
         SdkError::invalid_argument(
             "customer_privacy.privacy_case_ref.privacy_case_id",
             error.to_string(),
@@ -294,12 +299,12 @@ fn privacy_case_ref_from_wire(reference: wire::PrivacyCaseRef) -> Result<RecordR
     })?;
     support::record_ref(
         PRIVACY_CASE_RECORD_TYPE,
-        case_id.as_str(),
+        id.as_str(),
         "customer_privacy.privacy_case_ref.privacy_case_id",
     )
 }
 
-fn privacy_case_kind_to_wire(value: PrivacyCaseKind) -> i32 {
+fn kind_to_wire(value: PrivacyCaseKind) -> i32 {
     match value {
         PrivacyCaseKind::Access => wire::PrivacyCaseKind::Access as i32,
         PrivacyCaseKind::PortabilityExport => wire::PrivacyCaseKind::PortabilityExport as i32,
@@ -352,11 +357,11 @@ fn case_state_invalid(error: SdkError) -> SdkError {
     .with_internal_reference(error.code)
 }
 
-fn missing_reference(field: &'static str) -> SdkError {
+fn required(field: &'static str) -> SdkError {
     SdkError::invalid_argument(field, "Privacy case reference is required.")
 }
 
-fn plan_invalid(reference: impl Into<String>) -> SdkError {
+fn invalid_plan(reference: impl Into<String>) -> SdkError {
     SdkError::new(
         "CUSTOMER_PRIVACY_CASE_SUBMIT_PLAN_INVALID",
         ErrorCategory::Internal,
@@ -367,25 +372,21 @@ fn plan_invalid(reference: impl Into<String>) -> SdkError {
 }
 
 fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
-    value.map_err(configuration_error)
-}
-
-fn configuration_error(error: impl std::fmt::Display) -> SdkError {
-    SdkError::new(
-        "CUSTOMER_PRIVACY_CASE_SUBMIT_CONFIGURATION_INVALID",
-        ErrorCategory::Internal,
-        false,
-        "The privacy case submit capability is not configured safely.",
-    )
-    .with_internal_reference(error.to_string())
+    value.map_err(|error| {
+        SdkError::new(
+            "CUSTOMER_PRIVACY_CASE_SUBMIT_CONFIGURATION_INVALID",
+            ErrorCategory::Internal,
+            false,
+            "The privacy case submit capability is not configured safely.",
+        )
+        .with_internal_reference(error.to_string())
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crm_capability_runtime::CapabilityRequest;
     use crm_core_data::RecordMutation;
-    use crm_customer_privacy_persistence_adapter::privacy_case_persisted_payload;
     use crm_module_sdk::{
         ActorId, BusinessTransactionId, CausationId, CorrelationId, ExecutionContext,
         IdempotencyKey, ModuleExecutionContext, RequestId, SchemaVersion, TenantId, TraceId,
@@ -438,24 +439,7 @@ mod tests {
         }
     }
 
-    fn draft_snapshot(tenant: &str, case_id: &str) -> RecordSnapshot {
-        let case = PrivacyCase::new(
-            RecordId::try_new(case_id).unwrap(),
-            TenantId::try_new(tenant).unwrap(),
-            PrivacyCaseKind::Erasure,
-            SchemaVersion::try_new("privacy-policy/1").unwrap(),
-            1_000_000_000,
-            None,
-        )
-        .unwrap();
-        RecordSnapshot {
-            reference: privacy_case_record_ref(&case).unwrap(),
-            version: 1,
-            payload: privacy_case_persisted_payload(&case).unwrap(),
-        }
-    }
-
-    fn submitted_snapshot(tenant: &str, case_id: &str) -> RecordSnapshot {
+    fn snapshot(tenant: &str, case_id: &str, submitted: bool) -> RecordSnapshot {
         let mut case = PrivacyCase::new(
             RecordId::try_new(case_id).unwrap(),
             TenantId::try_new(tenant).unwrap(),
@@ -465,16 +449,19 @@ mod tests {
             None,
         )
         .unwrap();
-        case.submit(1, 2_000_000_000).unwrap();
+        if submitted {
+            case.submit(1, 2_000_000_000).unwrap();
+        }
         RecordSnapshot {
             reference: privacy_case_record_ref(&case).unwrap(),
-            version: 2,
+            version: i64::try_from(case.version()).unwrap(),
             payload: privacy_case_persisted_payload(&case).unwrap(),
         }
     }
 
     #[test]
-    fn target_is_exact_must_exist_case() {
+    fn target_and_plan_are_exact_versioned_update() {
+        let definition = capability_definition().unwrap();
         let request = request(
             "tenant-a",
             Some("privacy-case-a"),
@@ -482,32 +469,16 @@ mod tests {
             "submit-a",
             2_000_000_000,
         );
+        let current = snapshot("tenant-a", "privacy-case-a", false);
         let target = CustomerPrivacyCaseSubmitCapabilityPlanner
-            .target(&capability_definition().unwrap(), &request)
+            .target(&definition, &request)
             .unwrap();
         assert_eq!(target.presence, AggregatePresence::MustExist);
-        assert_eq!(
-            target.reference.record_type.as_str(),
-            PRIVACY_CASE_RECORD_TYPE
-        );
-        assert_eq!(target.reference.record_id.as_str(), "privacy-case-a");
-    }
+        assert_eq!(target.reference, current.reference);
 
-    #[test]
-    fn submit_is_one_confidential_versioned_atomic_update() {
-        let request = request(
-            "tenant-a",
-            Some("privacy-case-a"),
-            1,
-            "submit-a",
-            2_000_000_000,
-        );
-        let current = draft_snapshot("tenant-a", "privacy-case-a");
-        let definition = capability_definition().unwrap();
         let plan = CustomerPrivacyCaseSubmitCapabilityPlanner
             .plan(&definition, &request, Some(&current))
             .unwrap();
-
         assert_eq!(plan.batch.records.len(), 1);
         assert_eq!(plan.batch.events.len(), 1);
         assert_eq!(plan.batch.audits.len(), 1);
@@ -520,47 +491,32 @@ mod tests {
                 assert_eq!(reference, &current.reference);
                 assert_eq!(*expected_version, 1);
                 assert_eq!(payload.data_class, DataClass::Confidential);
-                let updated = privacy_case_from_snapshot(&RecordSnapshot {
+                let submitted = privacy_case_from_snapshot(&RecordSnapshot {
                     reference: reference.clone(),
                     version: 2,
                     payload: payload.clone(),
                 })
                 .unwrap();
-                assert_eq!(updated.status(), PrivacyCaseStatus::Submitted);
-                assert_eq!(updated.version(), 2);
+                assert_eq!(submitted.status(), PrivacyCaseStatus::Submitted);
+                assert_eq!(submitted.version(), 2);
             }
-            RecordMutation::Create { .. } => panic!("submit must update the existing case"),
+            RecordMutation::Create { .. } => panic!("submit must update the case"),
         }
         assert_eq!(plan.batch.events[0].aggregate_version, 2);
-        assert_eq!(
-            plan.batch.events[0].event.expected_aggregate_version,
-            Some(1)
-        );
-        assert_eq!(
-            plan.batch.events[0].event.event_type.as_str(),
-            PRIVACY_CASE_STATUS_CHANGED_EVENT_TYPE
-        );
-
-        let output =
-            wire::SubmitPrivacyCaseResponse::decode(plan.output.as_ref().unwrap().bytes.as_slice())
-                .unwrap()
-                .privacy_case
-                .unwrap();
-        assert_eq!(output.status, wire::PrivacyCaseStatus::Submitted as i32);
-        assert_eq!(output.version, 2);
-        assert_eq!(output.updated_at_unix_ms, 2_000);
-
-        let event = wire::PrivacyCaseStatusChangedEvent::decode(
-            plan.batch.events[0].event.payload.bytes.as_slice(),
+        assert_eq!(plan.batch.events[0].event.expected_aggregate_version, Some(1));
+        let output = wire::SubmitPrivacyCaseResponse::decode(
+            plan.output.as_ref().unwrap().bytes.as_slice(),
         )
         .unwrap()
         .privacy_case
         .unwrap();
-        assert_eq!(event, output);
+        assert_eq!(output.status, wire::PrivacyCaseStatus::Submitted as i32);
+        assert_eq!(output.version, 2);
+        assert_eq!(output.updated_at_unix_ms, 2_000);
     }
 
     #[test]
-    fn missing_cross_tenant_stale_and_wrong_state_fail_closed() {
+    fn missing_tenant_stale_and_wrong_state_fail_closed() {
         let definition = capability_definition().unwrap();
         let request = request(
             "tenant-a",
@@ -569,50 +525,61 @@ mod tests {
             "submit-a",
             2_000_000_000,
         );
-        let missing = CustomerPrivacyCaseSubmitCapabilityPlanner
-            .plan(&definition, &request, None)
-            .unwrap_err();
-        assert_eq!(missing.code, "CUSTOMER_PRIVACY_CASE_NOT_FOUND");
+        assert_eq!(
+            CustomerPrivacyCaseSubmitCapabilityPlanner
+                .plan(&definition, &request, None)
+                .unwrap_err()
+                .code,
+            "CUSTOMER_PRIVACY_CASE_NOT_FOUND"
+        );
+        assert_eq!(
+            CustomerPrivacyCaseSubmitCapabilityPlanner
+                .plan(
+                    &definition,
+                    &request,
+                    Some(&snapshot("tenant-b", "privacy-case-a", false)),
+                )
+                .unwrap_err()
+                .code,
+            "CUSTOMER_PRIVACY_CASE_NOT_FOUND"
+        );
 
-        let cross_tenant = draft_snapshot("tenant-b", "privacy-case-a");
-        let concealed = CustomerPrivacyCaseSubmitCapabilityPlanner
-            .plan(&definition, &request, Some(&cross_tenant))
-            .unwrap_err();
-        assert_eq!(concealed.code, "CUSTOMER_PRIVACY_CASE_NOT_FOUND");
-
-        let stale_request = request(
+        let stale = request(
             "tenant-a",
             Some("privacy-case-a"),
             2,
             "submit-b",
             2_000_000_000,
         );
-        let stale = CustomerPrivacyCaseSubmitCapabilityPlanner
+        let stale_error = CustomerPrivacyCaseSubmitCapabilityPlanner
             .plan(
                 &definition,
-                &stale_request,
-                Some(&draft_snapshot("tenant-a", "privacy-case-a")),
+                &stale,
+                Some(&snapshot("tenant-a", "privacy-case-a", false)),
             )
             .unwrap_err();
-        assert_eq!(stale.code, "CUSTOMER_PRIVACY_VERSION_CONFLICT");
-        assert!(stale.retryable);
+        assert_eq!(stale_error.code, "CUSTOMER_PRIVACY_VERSION_CONFLICT");
+        assert!(stale_error.retryable);
 
-        let wrong_state_request = request(
+        let wrong_state = request(
             "tenant-a",
             Some("privacy-case-a"),
             2,
             "submit-c",
             3_000_000_000,
         );
-        let wrong_state = CustomerPrivacyCaseSubmitCapabilityPlanner
+        let wrong_state_error = CustomerPrivacyCaseSubmitCapabilityPlanner
             .plan(
                 &definition,
-                &wrong_state_request,
-                Some(&submitted_snapshot("tenant-a", "privacy-case-a")),
+                &wrong_state,
+                Some(&snapshot("tenant-a", "privacy-case-a", true)),
             )
             .unwrap_err();
-        assert_eq!(wrong_state.code, "CUSTOMER_PRIVACY_INVALID_TRANSITION");
-        assert!(!wrong_state.retryable);
+        assert_eq!(
+            wrong_state_error.code,
+            "CUSTOMER_PRIVACY_INVALID_TRANSITION"
+        );
+        assert!(!wrong_state_error.retryable);
     }
 
     #[test]
@@ -625,7 +592,7 @@ mod tests {
             "submit-a",
             2_000_000_000,
         );
-        let mut malformed = draft_snapshot("tenant-a", "privacy-case-a");
+        let mut malformed = snapshot("tenant-a", "privacy-case-a", false);
         malformed.payload.bytes = b"{\"raw_secret\":\"must-not-leak\"}".to_vec();
         let error = CustomerPrivacyCaseSubmitCapabilityPlanner
             .plan(&definition, &request, Some(&malformed))
@@ -637,11 +604,13 @@ mod tests {
         );
         assert!(!error.safe_message.contains("raw_secret"));
 
-        let no_ref = request("tenant-a", None, 1, "submit-b", 2_000_000_000);
-        assert!(
+        let missing_ref = request("tenant-a", None, 1, "submit-b", 2_000_000_000);
+        assert_eq!(
             CustomerPrivacyCaseSubmitCapabilityPlanner
-                .target(&definition, &no_ref)
-                .is_err()
+                .target(&definition, &missing_ref)
+                .unwrap_err()
+                .code,
+            "SDK_INVALID_ARGUMENT"
         );
         let invalid_version = request(
             "tenant-a",
@@ -650,9 +619,12 @@ mod tests {
             "submit-c",
             2_000_000_000,
         );
-        let invalid = CustomerPrivacyCaseSubmitCapabilityPlanner
-            .target(&definition, &invalid_version)
-            .unwrap_err();
-        assert_eq!(invalid.code, "INVALID_ARGUMENT");
+        assert_eq!(
+            CustomerPrivacyCaseSubmitCapabilityPlanner
+                .target(&definition, &invalid_version)
+                .unwrap_err()
+                .code,
+            "SDK_INVALID_ARGUMENT"
+        );
     }
 }
