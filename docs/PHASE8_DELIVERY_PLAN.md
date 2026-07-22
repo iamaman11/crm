@@ -151,7 +151,8 @@ The candidate packet includes:
 - strict canonical state rehydration and optimistic terminal cancellation;
 - preservation of immutable subject binding, pending rescope, scope snapshot, action-plan and approval lineage;
 - an exact sorted/deduplicated subject lock-set from the canonical binding and pending rescope target;
-- shared subject locks acquired before the case row, then exact aggregate and lock-set revalidation under `FOR SHARE`;
+- shared subject locks acquired before the case row, followed by exact aggregate and lock-set revalidation while taking and retaining the final `FOR UPDATE` row lock;
+- direct row serialization for unbound cases without a meaningless subject lock or a deadlock-prone `FOR SHARE` to `FOR UPDATE` upgrade;
 - retryable fail-closed behavior if binding/rescope changes between discovery and locked validation;
 - one record update, one immutable status event, one audit intent and one capability-idempotency claim in the same PostgreSQL transaction;
 - exact replay without a second version or duplicate evidence and incompatible replay rejection;
