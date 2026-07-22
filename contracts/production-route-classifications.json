@@ -91,15 +91,9 @@
     },
     {
       "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.case.submit",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but submit remains non-runtime until subject verification prerequisites, the shared subject lock, restriction/legal-hold precedence and real-process acceptance are composed."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.subject.verify",
       "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but subject verification remains non-runtime until canonical Party lineage, shared subject locking, live authorization/composition and real-process acceptance are complete."
+      "reason": "Case creation and submission are runtime, but subject verification remains non-runtime until canonical Party lineage, identity-resolution generation validation, shared subject locking, live authorization/composition and real-process acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",

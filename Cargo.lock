@@ -352,6 +352,7 @@ dependencies = [
  "crm-customer-enrichment-worker-composition",
  "crm-customer-privacy-capability-adapter",
  "crm-customer-privacy-capability-composition",
+ "crm-customer-privacy-submit-capability-adapter",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",
@@ -1096,6 +1097,7 @@ dependencies = [
  "crm-customer-privacy",
  "crm-customer-privacy-capability-adapter",
  "crm-customer-privacy-persistence-adapter",
+ "crm-customer-privacy-submit-capability-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
  "prost",
@@ -1110,6 +1112,20 @@ dependencies = [
  "crm-capability-plan-support",
  "crm-customer-privacy",
  "crm-module-sdk",
+]
+
+[[package]]
+name = "crm-customer-privacy-submit-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-privacy",
+ "crm-customer-privacy-persistence-adapter",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
 ]
 
 [[package]]
@@ -3393,9 +3409,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+checksum = "a3d06f0b082ba57c26b79407372e57cf2a1e28124f78e9479fe80322cf53420b"
 dependencies = [
  "futures-core",
  "pin-project-lite",

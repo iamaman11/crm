@@ -95,10 +95,11 @@ Completed packets:
 
 Active sequence:
 
-1. **8A.11 / #126 — In progress:** merged architecture/domain/contracts/FORCE-RLS foundation through PR #145; first production mutation `customer_privacy.case.create@1.0.0` is in Gate review in draft PR #146.
-2. **Remaining 8A.11 slices:** subject verification, shared subject lock, restriction/legal-hold precedence, permission-aware reads, owner orchestration, export/deletion/convergence and worker acceptance are selected and delivered separately.
-3. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
-4. **8B / #29:** starts only from the completed Phase 8A baseline.
+1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `customer_privacy.case.create@1.0.0` is merged through PR #146; draft PR #147 is in Gate review for only `customer_privacy.case.submit@1.0.0`.
+2. **Next bounded slice:** subject verification with canonical Party lineage, identity-resolution generation validation and the shared tenant + canonical Party lock.
+3. **Remaining 8A.11 slices:** restriction/legal-hold precedence, permission-aware reads, owner orchestration, export/deletion/convergence and worker acceptance are selected and delivered separately.
+4. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
+5. **8B / #29:** starts only from the completed Phase 8A baseline.
 
 ### Phase 8A.10 accepted boundary
 
@@ -128,13 +129,13 @@ The architecture inventory remains:
 - **9 trusted worker/internal coordinates** in deterministic phases 260 → 270 → 280 → 290;
 - **1 reasoned non-runtime crypto-shredding coordinate**.
 
-### Phase 8A.11 first production vertical slice — Gate review
+### Phase 8A.11 first production vertical slice — Complete
 
-Draft PR #146 promotes only:
+PR #146 accepted unchanged source `9b53c3ebd81b58518dc445b02b33b35403ffa7c3`, passed all 18 applicable workflows and merged as `2d28937a123e4ba31ab0d835c4c30e3dfed0f187`. It promotes only:
 
 `customer_privacy.case.create@1.0.0`
 
-Required and implemented candidate boundary:
+Accepted boundary:
 
 - exact request/owner/capability/version decoding and validation;
 - deterministic tenant + idempotency-key identity using versioned length-framed SHA-256;
@@ -147,7 +148,28 @@ Required and implemented candidate boundary:
 - exact production inventory of one runtime privacy mutation plus fifteen non-runtime public privacy coordinates;
 - permanent unit, fresh-PostgreSQL, rollback/reapply and real-`crm-api` acceptance.
 
-The slice explicitly excludes submit, subject verification, approval, cancellation, all privacy queries, restriction/legal-hold routes, worker coordinates and crypto-shred.
+The accepted slice excludes submit, subject verification, approval, cancellation, all privacy queries, restriction/legal-hold routes, worker coordinates and crypto-shred.
+
+### Phase 8A.11 second production vertical slice — Gate review
+
+Draft PR #147 promotes only:
+
+`customer_privacy.case.submit@1.0.0`
+
+Candidate boundary:
+
+- exact owner/capability/version and Protobuf request/response validation;
+- exactly one tenant-bound `customer-privacy.case` aggregate with `MustExist`;
+- strict canonical confidential-state rehydration through the accepted persistence adapter;
+- optimistic `Draft -> Submitted` transition using the public `expected_version`;
+- one record update, one immutable status-changed event, one audit intent and one capability-idempotency claim in one transaction;
+- exact replay without a second version or duplicate evidence;
+- fail-closed idempotency conflict, stale-version conflict, wrong-state rejection, cross-tenant concealment and malformed-state rollback;
+- generic application ingress with common live authorization and activation gating;
+- isolated create/submit PostgreSQL databases, full rollback/schema removal/reapply, repeated FORCE RLS and real-`crm-api` process acceptance;
+- exact production partition of two runtime privacy mutations plus fourteen non-runtime public privacy coordinates.
+
+The candidate slice excludes subject verification, approval, cancellation, all privacy queries, restriction/legal-hold routes, worker coordinates and crypto-shred.
 
 ### Phase 8A.11 remaining acceptance boundary
 
@@ -184,8 +206,9 @@ Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarc
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Accept PR #146 only on one unchanged exact source SHA after every applicable workflow passes and review threads are resolved.
-2. Merge `case.create` with expected unchanged head and record source/merge SHAs in PR #146 and issue #126.
-3. Select the next bounded Customer Privacy slice independently; do not batch unrelated public or worker coordinates.
-4. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
-5. Begin Phase 8B / #29 from the completed customer-master baseline.
+1. Accept PR #147 only on one unchanged exact source SHA after every applicable workflow passes and review threads are resolved.
+2. Merge `case.submit` with expected unchanged head and record source/merge SHAs in PR #147 and issue #126.
+3. Implement `customer_privacy.case.subject.verify@1.0.0` separately with canonical Party lineage, identity-resolution generation validation and shared subject locking.
+4. Keep all remaining privacy coordinates non-runtime until their own production proofs are complete.
+5. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
+6. Begin Phase 8B / #29 from the completed customer-master baseline.

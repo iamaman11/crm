@@ -1,11 +1,11 @@
 #![forbid(unsafe_code)]
 
-//! PostgreSQL reference locking for the Customer Privacy case-create slice.
+//! PostgreSQL composition for the promoted Customer Privacy case mutations.
 //!
-//! The shared aggregate executor owns the deterministic successor lock and all
-//! writes. This crate adds only the optional predecessor `FOR SHARE` guard,
-//! reconstructs the governed record envelope and delegates strict state
-//! validation back to the capability/persistence adapters.
+//! Case creation adds the optional predecessor `FOR SHARE` reference guard.
+//! Case submission is a single-aggregate optimistic update and therefore uses
+//! the shared transactional aggregate executor directly, with no module-owned
+//! SQL mutation path.
 
 use crm_capability_runtime::{CapabilityRequest, TransactionalCapabilityExecutor};
 use crm_core_data::{
@@ -16,6 +16,7 @@ use crm_customer_privacy_capability_adapter::{
     CustomerPrivacyCaseCreateCapabilityPlanner, previous_case_id_from_request,
     previous_case_not_found, privacy_case_ref_from_id, validate_previous_case_snapshot,
 };
+use crm_customer_privacy_submit_capability_adapter::CustomerPrivacyCaseSubmitCapabilityPlanner;
 use crm_module_sdk::{
     DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture, RecordSnapshot,
     RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
@@ -80,6 +81,15 @@ pub fn postgres_case_create_executor(
         store,
         Arc::new(CustomerPrivacyCaseCreateCapabilityPlanner),
         Arc::new(PostgresCustomerPrivacyPreviousCaseGuard),
+    ))
+}
+
+pub fn postgres_case_submit_executor(
+    store: PostgresDataStore,
+) -> Arc<dyn TransactionalCapabilityExecutor> {
+    Arc::new(PostgresTransactionalAggregateExecutor::new(
+        store,
+        Arc::new(CustomerPrivacyCaseSubmitCapabilityPlanner),
     ))
 }
 

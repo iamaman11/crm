@@ -71,7 +71,8 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
-First production mutation PR: draft #146  
+Accepted first production mutation: PR #146  
+Active bounded mutation: draft PR #147  
 Depends on: merged and synchronized 8A.10
 
 #### Objective
@@ -104,13 +105,13 @@ The machine-readable authority is `contracts/customer-privacy-architecture-freez
 
 PR #145 accepted source `f37d9a5e025745abaaf0aeb351ff9bb534455aab` and merge `721a1cf185ffbdea309bd1199c6c4568cf82d7a1` prove clean migrations, FORCE RLS under the non-privileged runtime role, tenant isolation/concealment, rollback/schema removal/reapply and strict record-envelope rehydration.
 
-#### Bounded packet 8A.11.1 — `case.create` — Gate review
+#### Bounded packet 8A.11.1 — `case.create` — Complete
 
-Draft PR #146 promotes exactly one public coordinate:
+PR #146 accepted unchanged source `9b53c3ebd81b58518dc445b02b33b35403ffa7c3`, passed all 18 applicable workflows and merged as `2d28937a123e4ba31ab0d835c4c30e3dfed0f187`. It promotes exactly one public coordinate:
 
 `customer_privacy.case.create@1.0.0`
 
-The packet includes:
+The accepted packet includes:
 
 - exact public Protobuf request/response decoding;
 - owner/capability/version validation;
@@ -138,12 +139,45 @@ Explicit exclusions:
 - worker/internal coordinates;
 - crypto-shred.
 
+#### Bounded packet 8A.11.2 — `case.submit` — Gate review
+
+Draft PR #147 promotes exactly one additional public coordinate:
+
+`customer_privacy.case.submit@1.0.0`
+
+The candidate packet includes:
+
+- a dedicated infrastructure-neutral submit planner;
+- exact request/response owner, capability, version and Protobuf-contract validation;
+- exactly one tenant-bound `customer-privacy.case` target with `AggregatePresence::MustExist`;
+- strict canonical confidential-state rehydration through the accepted persistence adapter;
+- optimistic `Draft -> Submitted` transition using the public expected version;
+- one record update, one immutable `customer_privacy.case.status_changed` event, one audit intent and one capability-idempotency claim in one atomic transaction;
+- exact replay without a second record version or duplicate evidence;
+- fail-closed incompatible replay, stale version, invalid transition, cross-tenant concealment and malformed-state rollback;
+- generic `ApplicationComposition` registration, common live authorization and activation gating with no alternate endpoint;
+- exact route parity: two runtime privacy mutations and fourteen non-runtime public privacy coordinates;
+- independent create/submit PostgreSQL databases, complete rollback/schema removal/reapply, repeated FORCE RLS and permanent real-`crm-api` acceptance;
+- tenant-scoped governed actor and exact capability fixture evidence required by audit and business-transaction foreign keys.
+
+Explicit exclusions:
+
+- `case.subject.verify`;
+- `case.approve`;
+- `case.cancel`;
+- all privacy queries;
+- restriction routes;
+- legal-hold routes;
+- worker/internal coordinates;
+- crypto-shred.
+
 #### Remaining required behavior
 
-- exact subject identity/canonical redirect handling;
+- exact subject identity/canonical redirect handling and identity-resolution generation validation;
+- a shared tenant + canonical Party subject lock before restriction or deletion orchestration;
 - bounded owner-resource discovery with live visibility;
 - access/export assembly using governed Customer Data Operations disclosure and artifact controls;
-- immediate processing/communication restriction through a shared tenant + canonical Party lock;
+- immediate processing/communication restriction;
 - deterministic owner/data-class deletion or anonymization plans;
 - explicit retention and legal-hold precedence/conflict evidence;
 - resumable per-owner execution with deterministic idempotency and no duplicate effects;
@@ -154,7 +188,7 @@ Explicit exclusions:
 
 #### Completion rule
 
-Acceptance of `case.create` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
+Acceptance of `case.create` and `case.submit` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
 
 ### Phase 8A completion gate
 
