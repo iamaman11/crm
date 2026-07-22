@@ -25,10 +25,8 @@ use crm_customer_data_operations_capability_adapter::{
 use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_customer_enrichment::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_customer_enrichment_visibility::query_visibility_resources as customer_enrichment_query_visibility_resources;
-use crm_customer_privacy_query_adapter::{
-    query_visibility_resources as customer_privacy_query_visibility_resources,
-};
 use crm_customer_privacy_query_adapter::GET_PRIVACY_CASE_CAPABILITY;
+use crm_customer_privacy_query_adapter::query_visibility_resources as customer_privacy_query_visibility_resources;
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
@@ -261,7 +259,10 @@ fn customer_enrichment_visibility(
 fn customer_privacy_visibility(
     definition: &CapabilityDefinition,
 ) -> Vec<BootstrapVisibilityResource> {
-    debug_assert_eq!(definition.capability_id.as_str(), GET_PRIVACY_CASE_CAPABILITY);
+    debug_assert_eq!(
+        definition.capability_id.as_str(),
+        GET_PRIVACY_CASE_CAPABILITY
+    );
     customer_privacy_query_visibility_resources(definition.capability_id.as_str())
         .into_iter()
         .map(|resource| BootstrapVisibilityResource {

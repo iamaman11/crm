@@ -121,11 +121,9 @@ pub fn build_production_composition(
         )
         .map_err(composition_error)?;
 
-    let query_validator: Arc<dyn QuerySemanticValidator> =
-        Arc::new(ActivationGatedQueryValidator::new(
-            dependencies.activation,
-            query_adapter.clone(),
-        ));
+    let query_validator: Arc<dyn QuerySemanticValidator> = Arc::new(
+        ActivationGatedQueryValidator::new(dependencies.activation, query_adapter.clone()),
+    );
     let query_executor: Arc<dyn QueryExecutor> = query_adapter;
     contributions
         .add_queries(

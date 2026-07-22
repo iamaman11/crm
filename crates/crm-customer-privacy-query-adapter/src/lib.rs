@@ -11,8 +11,8 @@ use crm_customer_privacy::{
 };
 use crm_customer_privacy_persistence_adapter::privacy_case_from_snapshot;
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture,
-    RecordId, RecordRef, RecordType, SdkError, TypedPayload,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordRef, RecordType, SdkError, TypedPayload,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer_wire, customer_privacy::v1 as wire};
 use crm_query_runtime::{
@@ -24,10 +24,8 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub const GET_PRIVACY_CASE_CAPABILITY: &str = "customer_privacy.case.get";
-pub const GET_PRIVACY_CASE_REQUEST_SCHEMA: &str =
-    "crm.customer_privacy.v1.GetPrivacyCaseRequest";
-pub const GET_PRIVACY_CASE_RESPONSE_SCHEMA: &str =
-    "crm.customer_privacy.v1.GetPrivacyCaseResponse";
+pub const GET_PRIVACY_CASE_REQUEST_SCHEMA: &str = "crm.customer_privacy.v1.GetPrivacyCaseRequest";
+pub const GET_PRIVACY_CASE_RESPONSE_SCHEMA: &str = "crm.customer_privacy.v1.GetPrivacyCaseResponse";
 pub const QUERY_CAPABILITY_IDS: &[&str] = &[GET_PRIVACY_CASE_CAPABILITY];
 pub const PARTY_RECORD_TYPE: &str = "parties.party";
 
@@ -54,9 +52,7 @@ pub struct CustomerPrivacyVisibilityResource {
     pub allowed_fields: BTreeSet<String>,
 }
 
-pub fn query_visibility_resources(
-    capability_id: &str,
-) -> Vec<CustomerPrivacyVisibilityResource> {
+pub fn query_visibility_resources(capability_id: &str) -> Vec<CustomerPrivacyVisibilityResource> {
     if capability_id != GET_PRIVACY_CASE_CAPABILITY {
         return Vec::new();
     }
@@ -270,7 +266,9 @@ pub fn privacy_case_to_wire(privacy_case: &PrivacyCase) -> Result<wire::PrivacyC
     })
 }
 
-fn subject_binding_to_wire(value: &SubjectBinding) -> Result<wire::SubjectBindingEvidence, SdkError> {
+fn subject_binding_to_wire(
+    value: &SubjectBinding,
+) -> Result<wire::SubjectBindingEvidence, SdkError> {
     Ok(wire::SubjectBindingEvidence {
         submitted_party_ref: Some(customer_wire::PartyRef {
             party_id: value.submitted_party_id.as_str().to_owned(),
@@ -288,7 +286,9 @@ fn subject_binding_to_wire(value: &SubjectBinding) -> Result<wire::SubjectBindin
     })
 }
 
-fn rescope_to_wire(value: &RescopeRequirement) -> Result<wire::PrivacyRescopeRequirement, SdkError> {
+fn rescope_to_wire(
+    value: &RescopeRequirement,
+) -> Result<wire::PrivacyRescopeRequirement, SdkError> {
     Ok(wire::PrivacyRescopeRequirement {
         previous_canonical_party_ref: Some(customer_wire::PartyRef {
             party_id: value.previous_canonical_party_id.as_str().to_owned(),
@@ -352,7 +352,8 @@ fn decode_input(request: &QueryRequest) -> Result<wire::GetPrivacyCaseRequest, S
     if payload.owner.as_str() != MODULE_ID
         || payload.schema_id.as_str() != GET_PRIVACY_CASE_REQUEST_SCHEMA
         || payload.schema_version.as_str() != support::CONTRACT_VERSION
-        || payload.descriptor_hash != support::message_descriptor_hash(GET_PRIVACY_CASE_REQUEST_SCHEMA)
+        || payload.descriptor_hash
+            != support::message_descriptor_hash(GET_PRIVACY_CASE_REQUEST_SCHEMA)
         || payload.data_class != DataClass::Confidential
         || payload.encoding != PayloadEncoding::Protobuf
         || payload.maximum_size_bytes != support::MAX_PROTOBUF_BYTES
@@ -527,7 +528,10 @@ mod tests {
     fn query_catalog_and_visibility_are_exact() {
         let definition = query_capability_definition().unwrap();
         assert_eq!(definition.owner_module_id.as_str(), MODULE_ID);
-        assert_eq!(definition.capability_id.as_str(), GET_PRIVACY_CASE_CAPABILITY);
+        assert_eq!(
+            definition.capability_id.as_str(),
+            GET_PRIVACY_CASE_CAPABILITY
+        );
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);
         assert!(!definition.requires_approval);
