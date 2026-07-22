@@ -58,50 +58,20 @@ PR: #137
 Accepted source: `f92d101206886e3ceaf94d0e56e52580cec21093`  
 Merge: `150e44b95d9dbdc08c1792563de03ec73f34aed1`
 
-#### Frozen production inventory
+Frozen production inventory:
 
 - 6 public mutations;
 - 6 permission-aware queries;
 - 5 activation-gated worker-only coordinates;
 - no completed Customer Enrichment non-runtime coordinates.
 
-The machine-readable source of truth is `contracts/customer-enrichment-production-promotion.json`.
-
-#### Ownership and architecture
-
-`crm.customer-enrichment` owns enrichment requests and immutable provider/mapping, response, conflict, suggestion, review, usage and application evidence. It does not own mutable Party, Account, Contact Point, Consent, Identity Resolution or Data Quality values.
-
-Provider HTTP, credentials, quotas/circuits and PostgreSQL transaction guards remain host-owned infrastructure outside the pure module core. Accepted values enter authoritative Party state only through `parties.party.update@1.0.0`.
-
-#### Accepted production behavior
-
-- immutable content-derived provider-profile and mapping versions;
-- deterministic request, response, conflict, suggestion, review and application identities;
-- exact registry HTTP transport with endpoint allowlisting, bounded bodies/deadlines, redirect rejection and sanitized failures;
-- tenant-bound secret resolution without credential leakage;
-- quota and circuit behavior;
-- commit-before-provider-I/O and crash-safe recovery using the same provider idempotency lineage;
-- independent live dispatch, response, materialization and application authorization;
-- exact/semantic duplicate reconciliation and fail-closed canonical response conflicts;
-- immutable retain-first and terminal-reject operator resolution evidence;
-- deterministic materialization and owner-application recovery;
-- permission-aware provider/mapping/request/suggestion reads with declarative redaction;
-- live activation shutdown, disable/uninstall and cross-tenant concealment;
-- transaction-scoped provider-profile and exact Party-version guards;
-- FORCE RLS and migration rollback/reapply proof.
-
-#### Production acceptance
-
-A permanent fresh-database Application Runtime step starts the real `crm-api` binary and proves successful public persistence plus bounded authentication, tenant, visibility, Consent, activation and authorization denials through actual HTTP/gRPC ingress.
-
-Dedicated fresh-PostgreSQL provider/materialization/review/application workflows exercise worker-only coordinates, exact transport and secret boundaries, replay/reconciliation, crash windows and owner-application recovery. Background registration tests prove exact phase order 240 → 245 → 250 and disable/uninstall shutdown.
-
-All 17 permanent workflows passed on the unchanged accepted source SHA before merge.
+Accepted behavior includes immutable provider/mapping/request/response/conflict/suggestion/review/usage/application evidence, exact transport and secret isolation, quota/circuit controls, commit-before-I/O, independent live worker authorization, replay/reconciliation/recovery, governed Party owner-capability application, permission-aware reads, transaction-scoped reference guards, FORCE RLS and permanent real-process acceptance.
 
 ### 8A.11 — Customer Privacy Lifecycle — In progress
 
 Issue: #126  
-Architecture-freeze PR: #140  
+Architecture and foundation PRs: #140–#145  
+First production mutation PR: draft #146  
 Depends on: merged and synchronized 8A.10
 
 #### Objective
@@ -123,9 +93,53 @@ The machine-readable authority is `contracts/customer-privacy-architecture-freez
 - 9 trusted worker/internal coordinates in phases 260 → 270 → 280 → 290;
 - 1 non-runtime crypto-shredding coordinate pending subject-scoped key architecture.
 
-#### Required behavior
+#### Merged foundation
 
-- immutable privacy case/request identity and lifecycle;
+- PR #140 — architecture and guardrail freeze;
+- PR #141 — owner foundation;
+- PR #142 — deterministic pure-domain lifecycles;
+- PR #143 — canonical private persistence;
+- PR #144 — immutable public Protobuf contracts;
+- PR #145 — FORCE RLS persistence proof.
+
+PR #145 accepted source `f37d9a5e025745abaaf0aeb351ff9bb534455aab` and merge `721a1cf185ffbdea309bd1199c6c4568cf82d7a1` prove clean migrations, FORCE RLS under the non-privileged runtime role, tenant isolation/concealment, rollback/schema removal/reapply and strict record-envelope rehydration.
+
+#### Bounded packet 8A.11.1 — `case.create` — Gate review
+
+Draft PR #146 promotes exactly one public coordinate:
+
+`customer_privacy.case.create@1.0.0`
+
+The packet includes:
+
+- exact public Protobuf request/response decoding;
+- owner/capability/version validation;
+- confidential input, output and private state;
+- deterministic case ID from tenant and idempotency key using versioned length-framed SHA-256;
+- Draft/version-1 state with no client-generated case ID;
+- one immutable created event, one audit intent, one capability idempotency claim and one atomic business transaction;
+- root `AggregatePresence::MustBeAbsent`;
+- optional predecessor `FOR SHARE` lock, strict persisted snapshot validation, tenant concealment and terminal-only lineage;
+- generic `ApplicationComposition` registration, activation gate and common live authorization;
+- no privacy-specific HTTP/gRPC endpoint or ingress switch;
+- exact route parity: one runtime privacy mutation, fifteen non-runtime public privacy coordinates, unchanged worker-only and crypto-shred classification;
+- permanent unit, fresh-PostgreSQL, full rollback/reapply and real-`crm-api` process proof;
+- bounded HTTP/gRPC errors without internal schema, SQL, credential or raw-payload leakage.
+
+Explicit exclusions:
+
+- `case.submit`;
+- `case.subject.verify`;
+- `case.approve`;
+- `case.cancel`;
+- all privacy queries;
+- restriction routes;
+- legal-hold routes;
+- worker/internal coordinates;
+- crypto-shred.
+
+#### Remaining required behavior
+
 - exact subject identity/canonical redirect handling;
 - bounded owner-resource discovery with live visibility;
 - access/export assembly using governed Customer Data Operations disclosure and artifact controls;
@@ -136,28 +150,15 @@ The machine-readable authority is `contracts/customer-privacy-architecture-freez
 - search/projection/cache tombstone or rebuild convergence;
 - preservation of audit, merge lineage, Consent, provenance and legal evidence where deletion is prohibited;
 - non-reusable erased Party tombstones and no orphan references;
-- bounded safe errors, tenant isolation and fail-closed enforcement;
 - tenant-aware crypto-shredding only after key ownership, legal-hold, backup and restore semantics exist.
 
-#### Acceptance gate
+#### Completion rule
 
-The implementation packet must prove access/export, immediate restriction including races, legal-hold blocking, deletion/anonymization convergence, immutable-evidence preservation, restart recovery, cross-tenant denial, migration rollback/reapply and real-process behavior on one unchanged exact SHA.
-
-The architecture-freeze PR itself claims no Protobuf, manifest, migration, production-route or runtime implementation. Contract expansion begins only after the freeze is accepted.
+Acceptance of `case.create` does not complete Phase 8A.11. Each later coordinate or tightly coupled lifecycle slice requires its own bounded production proof and exact route reclassification. Phase 8A.11 completes only after the full privacy lifecycle and worker/convergence acceptance is merged.
 
 ### Phase 8A completion gate
 
-Phase 8A is complete only when merged `main` proves:
-
-- canonical stable customer identities and references;
-- Account, Contact Point and Party Relationship ownership;
-- permission-aware Customer 360;
-- authoritative Consent and immediate withdrawal semantics;
-- explainable duplicate candidates and reversible merge/unmerge;
-- deterministic import/export and data-quality/stewardship evidence;
-- governed enrichment provenance;
-- privacy access/export/restriction/deletion/legal-hold interactions;
-- cross-tenant isolation, compatibility, migration rollback/reapply and production acceptance evidence.
+Phase 8A is complete only when merged `main` proves canonical customer identity/reference ownership, permission-aware Customer 360, authoritative Consent, reversible Identity Resolution, deterministic import/export/Data Quality/Enrichment evidence, complete privacy access/export/restriction/deletion/legal-hold interactions, tenant isolation, migration safety and production acceptance.
 
 ## 4. Wave 8B — Product Catalog and Quote-to-Revenue
 

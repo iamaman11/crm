@@ -39,8 +39,9 @@ Technical crates, process shells, Protobuf packages, SQL migrations and generic 
 | `crm.customer-data-operations` | Governed import/export jobs and evidence | **Expert expansion** | Resumable import, deterministic export/artifacts/reconciliation and crash recovery | More resource profiles and privacy access/deletion integration |
 | `crm.data-quality` | Customer-data quality governance coordinator | **Vertical slice** | Exact-version Party evaluation, findings/completeness, stewardship and governed remediation | Additional owner-resource profiles and privacy coordination |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Exact provider transport/secret boundary, immutable provenance, review, deterministic Party owner-capability application and recovery | Additional providers, target fields, product UX and privacy interaction |
+| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Deterministic, live-authorized and activation-gated `customer_privacy.case.create@1.0.0` with FORCE RLS, replay-safe atomic evidence, guarded predecessor lineage and real-process acceptance | Subject verification, shared subject lock, submit/approval/cancel, permission-aware reads, restriction/legal-hold precedence, owner orchestration, export/deletion/convergence and workers |
 
-Current merged authoritative/coordination module count: **11**.
+Current merged authoritative/coordination module count: **12**.
 
 ## 4. Implemented link module
 
@@ -48,29 +49,17 @@ Current merged authoritative/coordination module count: **11**.
 |---|---|---|---|
 | `crm.sales-activities-link` | Optional link module | **Production integration slice — Complete** | Restart-safe stage-event delivery, lifecycle gating and governed Activities invocation with retry/dead-letter/idempotency evidence |
 
-Current merged business-module total: **12** — eleven authoritative/coordination modules plus one optional link module.
+Current merged business-module total: **13** — twelve authoritative/coordination modules plus one optional link module.
 
 ## 5. Independently governed read composition
 
 `crm.customer360` is a lifecycle-managed read-composition module. It owns versioned Customer 360 contracts, rebuildable contributions and permission-aware assembly/freshness metadata. It owns no mutable customer-master values and is tracked separately from the owner/link count.
 
-## 6. Merged Customer Enrichment boundary
+## 6. Customer Enrichment boundary
 
 Phase 8A.10 / issue #125 / PR #137 is Complete. Accepted source `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged and was squash-merged as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
-Ownership:
-
-- provider-neutral enrichment requests;
-- immutable provider-profile and mapping versions;
-- response receipts and provider-response conflicts;
-- suggestions/provenance and review decisions;
-- provider usage and exact owner-capability application evidence.
-
-Non-ownership:
-
-- mutable Party, Account, Contact Point, Consent, Identity Resolution and Data Quality values remain with their authoritative modules;
-- Party display-name changes occur only through `parties.party.update@1.0.0`;
-- provider HTTP, credentials, quotas/circuits and PostgreSQL reference guards remain host-owned infrastructure outside the pure module core.
+Ownership includes provider-neutral requests and immutable provider-profile, mapping, response/conflict, suggestion/provenance, review, usage and owner-application evidence. Mutable customer values remain with authoritative modules; provider HTTP, secrets, quotas/circuits and PostgreSQL reference guards remain host-owned infrastructure.
 
 Frozen production inventory:
 
@@ -79,9 +68,38 @@ Frozen production inventory:
 - **5 activation-gated worker-only coordinates**;
 - **0 completed non-runtime coordinates**.
 
-Permanent acceptance includes exact transport/secret isolation, replay/reconciliation/materialization/review/application recovery, FORCE RLS, disable/uninstall and real `crm-api` plus fresh-PostgreSQL process evidence.
+## 7. Customer Privacy boundary
 
-## 7. Phase 8A packet accounting
+Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PR #145 accepted source `f37d9a5e025745abaaf0aeb351ff9bb534455aab` was merged as `721a1cf185ffbdea309bd1199c6c4568cf82d7a1`.
+
+The first production vertical slice is intentionally limited to `customer_privacy.case.create@1.0.0`:
+
+- deterministic tenant/idempotency identity;
+- confidential Draft/version-1 canonical state;
+- one immutable event, audit, idempotency record and business transaction;
+- root absence guard and optional terminal-predecessor transaction guard;
+- common live authorization and activation through generic application ingress;
+- fresh-PostgreSQL, rollback/reapply and real-`crm-api` acceptance;
+- exactly fifteen remaining public privacy coordinates still non-runtime.
+
+Ownership:
+
+- privacy cases and verified-subject orchestration;
+- immutable scope snapshots;
+- processing/communication restrictions;
+- customer-data legal holds and retention decisions;
+- deterministic owner plans, attempts/outcomes and checkpoints;
+- governed export references and convergence evidence.
+
+Non-ownership:
+
+- Party, Account, Contact Point, Relationship, Consent, Identity Resolution, import/export, Data Quality and Enrichment authoritative state remains with those modules;
+- PostgreSQL composition guards remain infrastructure adapters outside the pure business core;
+- derived projections, search and caches remain non-authoritative.
+
+This vertical slice does not make the Customer Privacy module product-complete or complete Phase 8A.11.
+
+## 8. Phase 8A packet accounting
 
 Completed:
 
@@ -98,9 +116,9 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 / draft PR #140 — Customer Privacy ownership and enforcement architecture freeze; no merged runtime module is counted yet.
+- 8A.11 / #126 — Customer Privacy. The first production mutation is merged independently from the remaining lifecycle; the packet remains incomplete.
 
-## 8. Customer-master ownership baseline
+## 9. Customer-master ownership baseline
 
 - `crm.parties` owns canonical Party identity and lifecycle.
 - `crm.customer-accounts` owns commercial Account identity/lifecycle and Party associations.
@@ -111,13 +129,10 @@ In progress:
 - `crm.customer-data-operations` owns import/export job/evidence lifecycles, not customer values.
 - `crm.data-quality` owns quality definitions/evidence/stewardship, not customer values.
 - `crm.customer-enrichment` owns enrichment coordination/evidence, not customer values.
+- `crm.customer-privacy` owns privacy coordination/evidence, not customer values.
 - `crm.customer360` owns only rebuildable read composition.
 
-The active Phase 8A.11 freeze introduces `crm.customer-privacy` as the future explicit coordinator for privacy cases, subject binding, restrictions, customer-data legal holds, retention decisions, owner plans/outcomes, export references and convergence evidence. It does not count as a merged module until its manifest, implementation and production acceptance are merged.
-
-The privacy coordinator must not absorb mutable customer values, Consent, Identity Resolution, import/export artifact ownership, Data Quality or Enrichment provenance. Initial owner integrations use exact bounded scope-contribution and action-application capabilities.
-
-## 9. Mandatory commercial lifecycle domains
+## 10. Mandatory commercial lifecycle domains
 
 Tracked by Phase 8B / #29 and currently **Planned**:
 
@@ -132,11 +147,11 @@ Tracked by Phase 8B / #29 and currently **Planned**:
 
 These domains must not be absorbed into Sales.
 
-## 10. Other expert CRM domains still required
+## 11. Other expert CRM domains still required
 
-The implemented Phase 8A.11 privacy runtime, Sales/Activities expansion, omnichannel, Service/Knowledge/Field Service, Marketing, Customer Success, optional PRM, projects/configurable work, documents/e-signature, analytics/performance management, workflow/approvals/collaboration, AI governance, marketplace and enterprise operational proof remain incomplete or planned.
+The remaining Phase 8A.11 privacy runtime, Sales/Activities expansion, omnichannel, Service/Knowledge/Field Service, Marketing, Customer Success, optional PRM, projects/configurable work, documents/e-signature, analytics/performance management, workflow/approvals/collaboration, AI governance, marketplace and enterprise operational proof remain incomplete or planned.
 
-## 11. Module creation checklist
+## 12. Module creation checklist
 
 Before introducing a module:
 
@@ -148,7 +163,7 @@ Before introducing a module:
 6. Add architecture and real production acceptance gates.
 7. Update roadmap/status/catalog/issue/PR state under `DELIVERY_GOVERNANCE.md`.
 
-## 12. Completion accounting
+## 13. Completion accounting
 
 Current product-complete expert modules: **0**.
 

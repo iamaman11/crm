@@ -31,7 +31,7 @@ checksum = "ae36dc4177970ef04fde5178d3e2429882def40e57a451f919c098f72baa6cec"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -276,6 +276,7 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-360-composition",
+ "crm-customer-privacy-capability-adapter",
  "crm-data-quality",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-source-composition",
@@ -349,6 +350,8 @@ dependencies = [
  "crm-customer-enrichment-suggestion-query-adapter",
  "crm-customer-enrichment-visibility",
  "crm-customer-enrichment-worker-composition",
+ "crm-customer-privacy-capability-adapter",
+ "crm-customer-privacy-capability-composition",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",
@@ -1066,6 +1069,38 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-customer-privacy-capability-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-privacy",
+ "crm-customer-privacy-persistence-adapter",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-customer-privacy-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-privacy",
+ "crm-customer-privacy-capability-adapter",
+ "crm-customer-privacy-persistence-adapter",
+ "crm-module-sdk",
+ "crm-proto-contracts",
+ "prost",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]
@@ -2904,7 +2939,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -3232,9 +3267,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "3.0.2"
+version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a207d6d6a2b7fc470b80443726053f18a2481b7e1eee970597051596567987a3"
+checksum = "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3291,7 +3326,7 @@ checksum = "43cbfe0cf76104d42a574802844187e84a305e531ed54455f11fbde0f10541cd"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.3",
 ]
 
 [[package]]

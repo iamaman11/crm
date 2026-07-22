@@ -95,55 +95,63 @@ Completed packets:
 
 Active sequence:
 
-1. **8A.11 / #126 — In progress:** ownership/enforcement architecture freeze in draft PR #140, followed by Customer Privacy runtime implementation.
-2. **Phase 8A closure:** only after 8A.11 is merged and the full customer-master baseline is reconciled.
-3. **8B / #29:** starts only from the completed Phase 8A baseline.
+1. **8A.11 / #126 — In progress:** merged architecture/domain/contracts/FORCE-RLS foundation through PR #145; first production mutation `customer_privacy.case.create@1.0.0` is in Gate review in draft PR #146.
+2. **Remaining 8A.11 slices:** subject verification, shared subject lock, restriction/legal-hold precedence, permission-aware reads, owner orchestration, export/deletion/convergence and worker acceptance are selected and delivered separately.
+3. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
+4. **8B / #29:** starts only from the completed Phase 8A baseline.
 
 ### Phase 8A.10 accepted boundary
 
 The frozen inventory is exactly **6 public mutations + 6 permission-aware queries + 5 activation-gated worker-only coordinates**. All 17 manifest-bound coordinates are public runtime or worker runtime; no completed Customer Enrichment coordinate remains non-runtime.
 
-The merged packet includes:
+The merged packet includes immutable provider/mapping/request/response/conflict/suggestion/review/usage/application evidence, exact provider transport and secret boundaries, independent worker authorization, deterministic replay/recovery, governed Party application, permission-aware reads, transaction-scoped reference guards, FORCE RLS, rollback/reapply and permanent real-process acceptance.
 
-- immutable provider-profile, mapping, request, response receipt/conflict, suggestion, review, usage and application evidence;
-- exact registry HTTP transport outside the pure module core;
-- tenant-bound secret resolution, endpoint allowlisting, bounded network behavior, quota and circuit controls;
-- independent live authorization for dispatch, response, materialization and owner application;
-- deterministic replay, exact/semantic duplicate reconciliation and fail-closed response conflicts;
-- governed review and exact Party owner-capability application;
-- permission-aware reads, declarative redaction, activation shutdown and cross-tenant concealment;
-- transaction-scoped immutable provider-profile and exact Party-version guards;
-- FORCE RLS, migration rollback/reapply and fresh-PostgreSQL process evidence;
-- permanent real-`crm-api` public-ingress acceptance and dedicated provider/materialization/review/application worker-process acceptance;
-- exact background phase order 240 → 245 → 250 and disable/uninstall shutdown.
+### Phase 8A.11 merged foundation
 
-### Phase 8A.11 active architecture freeze
+Issue #126 freezes `crm.customer-privacy` as the privacy case and orchestration owner while existing modules retain authoritative Party, Account, Contact Point, Relationship, Consent, Identity Resolution, import/export, Data Quality and Enrichment values.
 
-Issue #126 / draft PR #140 freezes `crm.customer-privacy` as the privacy case and orchestration owner before contract expansion.
+Merged bounded layers:
 
-The coordinator owns privacy cases, verified subject binding, scope snapshots, current restrictions, customer-data legal holds, retention decisions, deterministic action plans, per-owner attempts/outcomes, orchestration checkpoints, governed export references and convergence evidence. Existing modules retain all authoritative Party, Account, Contact Point, Relationship, Consent, Identity Resolution, import/export, Data Quality and Enrichment values.
+- PR #140 — ownership/enforcement architecture freeze;
+- PR #141 — owner foundation;
+- PR #142 — deterministic pure-domain lifecycles;
+- PR #143 — canonical private persistence;
+- PR #144 — immutable public contracts;
+- PR #145 — FORCE RLS persistence proof.
 
-The initial inventory is exactly:
+PR #145 was accepted on `f37d9a5e025745abaaf0aeb351ff9bb534455aab` and merged as `721a1cf185ffbdea309bd1199c6c4568cf82d7a1`. It proves clean migrations, FORCE RLS under a non-privileged runtime role, tenant isolation and concealment, full rollback/schema removal/reapply, repeated FORCE RLS and strict persistence-envelope metadata validation.
+
+The architecture inventory remains:
 
 - **9 public mutations**;
 - **7 permission-aware public queries**;
 - **9 trusted worker/internal coordinates** in deterministic phases 260 → 270 → 280 → 290;
 - **1 reasoned non-runtime crypto-shredding coordinate**.
 
-The freeze requires:
+### Phase 8A.11 first production vertical slice — Gate review
 
-- subject and owner-resource discovery without unauthorized bulk disclosure;
-- access/export integrated with existing governed Customer Data Operations artifacts;
-- immediate processing and communication restrictions enforced by a shared tenant + canonical Party lock;
-- deletion/anonymization planning by authoritative owner and data class;
-- legal-hold and retention precedence with immutable blocking reasons;
-- resumable per-owner orchestration with deterministic attempts/outcomes;
-- search, projection and cache convergence without treating derived state as authority;
-- non-reusable erased Party tombstones and no orphaned authoritative references;
-- immutable audit/Consent/identity/provenance evidence preservation where deletion is prohibited;
-- fresh-PostgreSQL, real-process, cross-tenant, migration and exact-head acceptance.
+Draft PR #146 promotes only:
 
-The architecture freeze does not claim Protobuf, manifest, migration, route or runtime implementation.
+`customer_privacy.case.create@1.0.0`
+
+Required and implemented candidate boundary:
+
+- exact request/owner/capability/version decoding and validation;
+- deterministic tenant + idempotency-key identity using versioned length-framed SHA-256;
+- no client-generated case ID;
+- canonical confidential Draft/version-1 privacy-case state;
+- one immutable created event, one audit intent, one capability-idempotency record and one atomic batch;
+- root `MustBeAbsent` locking;
+- optional exact predecessor `FOR SHARE` guard, strict rehydration, tenant concealment and terminal-only lineage;
+- generic application ingress, common live authorization and activation gating without alternate endpoint;
+- exact production inventory of one runtime privacy mutation plus fifteen non-runtime public privacy coordinates;
+- permanent unit, fresh-PostgreSQL, rollback/reapply and real-`crm-api` acceptance.
+
+The slice explicitly excludes submit, subject verification, approval, cancellation, all privacy queries, restriction/legal-hold routes, worker coordinates and crypto-shred.
+
+### Phase 8A.11 remaining acceptance boundary
+
+The remaining program must prove subject and owner-resource discovery without unauthorized bulk disclosure; access/export through existing governed artifacts; immediate restriction through a shared tenant + canonical Party lock; deterministic owner/data-class action plans; legal-hold/retention precedence; resumable orchestration; search/projection/cache convergence; non-reusable erased Party tombstones; immutable evidence preservation; cross-tenant denial; migration safety; and complete real-process acceptance.
 
 Phase 8A is complete only when privacy access/export/restriction/deletion/legal-hold interactions are merged and reconciled with Consent, Identity Resolution, Import/Export, Data Quality and Customer Enrichment.
 
@@ -176,8 +184,8 @@ Required outcomes include OIDC/SAML, SCIM, enterprise authorization, key hierarc
 
 ## 10. Immediate authoritative delivery sequence
 
-1. Validate and merge the Phase 8A.11 ownership/enforcement architecture freeze in draft PR #140 on one unchanged exact SHA.
-2. Scaffold `crm.customer-privacy` and publish immutable contracts only from the accepted freeze.
-3. Implement FORCE RLS persistence, shared-lock live enforcement, owner contributions, governed privacy export, retention/legal-hold planning, replay-safe execution and convergence evidence.
+1. Accept PR #146 only on one unchanged exact source SHA after every applicable workflow passes and review threads are resolved.
+2. Merge `case.create` with expected unchanged head and record source/merge SHAs in PR #146 and issue #126.
+3. Select the next bounded Customer Privacy slice independently; do not batch unrelated public or worker coordinates.
 4. Close Phase 8A only after the full merged customer-master acceptance baseline is proven.
 5. Begin Phase 8B / #29 from the completed customer-master baseline.

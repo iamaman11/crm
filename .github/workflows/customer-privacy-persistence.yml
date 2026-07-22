@@ -5,8 +5,14 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "proto/crm/customer_privacy/**"
       - "crates/crm-customer-privacy-persistence-adapter/**"
+      - "crates/crm-customer-privacy-capability-adapter/**"
+      - "crates/crm-customer-privacy-capability-composition/**"
+      - "crates/crm-application-runtime/**"
+      - "contracts/production-route-classifications.json"
       - "modules/crm-customer-privacy/**"
+      - "services/crm-api/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0004_search_runtime_role_grants.sql"
@@ -17,8 +23,14 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "proto/crm/customer_privacy/**"
       - "crates/crm-customer-privacy-persistence-adapter/**"
+      - "crates/crm-customer-privacy-capability-adapter/**"
+      - "crates/crm-customer-privacy-capability-composition/**"
+      - "crates/crm-application-runtime/**"
+      - "contracts/production-route-classifications.json"
       - "modules/crm-customer-privacy/**"
+      - "services/crm-api/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0004_search_runtime_role_grants.sql"
@@ -32,7 +44,7 @@ permissions:
 jobs:
   persistence:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17-alpine
@@ -53,6 +65,8 @@ jobs:
       PGDATABASE: crm_privacy_test
       PGUSER: postgres
       PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_privacy_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_test
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -75,13 +89,21 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
-      - name: Verify strict privacy snapshot adapter
-        run: cargo test -p crm-customer-privacy-persistence-adapter --all-features
+      - name: Verify strict privacy adapters and planner
+        run: |
+          cargo test -p crm-customer-privacy-persistence-adapter --all-features
+          cargo test -p crm-customer-privacy-capability-adapter --all-features
       - name: Verify clean-migration Customer Privacy FORCE RLS
         shell: bash
         run: |
           set -o pipefail
           psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-clean.log
+      - name: Verify clean-migration case-create process
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-create-clean.log
       - name: Roll back every migration
         shell: bash
         run: |
@@ -113,6 +135,18 @@ jobs:
         run: |
           set -o pipefail
           psql --set ON_ERROR_STOP=1 --echo-errors --file database/tests/0021_customer_privacy_force_rls.sql 2>&1 | tee database/customer-privacy-force-rls-reapplied.log
+      - name: Verify reapplied case-create process
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-create-reapplied.log
+      - name: Verify real crm-api case-create process
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test customer_privacy_case_create_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-create-crm-api.log
       - name: Upload Customer Privacy persistence diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -120,8 +154,12 @@ jobs:
           name: customer-privacy-persistence-diagnostics
           path: |
             crates/crm-customer-privacy-persistence-adapter/
+            crates/crm-customer-privacy-capability-adapter/
+            crates/crm-customer-privacy-capability-composition/
+            services/crm-api/tests/customer_privacy_case_create_process_e2e.rs
             database/tests/0020_customer_privacy_persistence_fixture.sql
             database/tests/0021_customer_privacy_force_rls.sql
+            database/customer-privacy-case-create-*.log
             database/customer-privacy-force-rls-*.log
           if-no-files-found: error
           retention-days: 7
