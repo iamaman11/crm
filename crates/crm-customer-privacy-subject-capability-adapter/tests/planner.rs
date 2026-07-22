@@ -8,9 +8,9 @@ use crm_customer_privacy_persistence_adapter::{
     privacy_case_from_snapshot, privacy_case_persisted_payload, privacy_case_record_ref,
 };
 use crm_customer_privacy_subject_capability_adapter::{
-    PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_SCHEMA, PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_TYPE,
-    VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY, VERIFY_PRIVACY_CASE_SUBJECT_REQUEST_SCHEMA,
-    CustomerPrivacyCaseSubjectVerifyCapabilityPlanner, capability_definition,
+    CustomerPrivacyCaseSubjectVerifyCapabilityPlanner, PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_SCHEMA,
+    PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_TYPE, VERIFY_PRIVACY_CASE_SUBJECT_CAPABILITY,
+    VERIFY_PRIVACY_CASE_SUBJECT_REQUEST_SCHEMA, capability_definition,
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
@@ -58,12 +58,16 @@ fn request(spec: RequestSpec<'_>) -> CapabilityRequest {
             privacy_case_id: value.to_owned(),
         }),
         expected_version: spec.expected_version,
-        submitted_party_ref: spec.submitted_party_id.map(|value| customer_wire::PartyRef {
-            party_id: value.to_owned(),
-        }),
-        canonical_party_ref: spec.canonical_party_id.map(|value| customer_wire::PartyRef {
-            party_id: value.to_owned(),
-        }),
+        submitted_party_ref: spec
+            .submitted_party_id
+            .map(|value| customer_wire::PartyRef {
+                party_id: value.to_owned(),
+            }),
+        canonical_party_ref: spec
+            .canonical_party_id
+            .map(|value| customer_wire::PartyRef {
+                party_id: value.to_owned(),
+            }),
         identity_resolution_generation: spec.identity_resolution_generation,
         verification_method: spec.verification_method,
     };
@@ -102,11 +106,7 @@ fn request(spec: RequestSpec<'_>) -> CapabilityRequest {
     }
 }
 
-fn snapshot(
-    tenant: &str,
-    case_id: &str,
-    status: PrivacyCaseStatus,
-) -> RecordSnapshot {
+fn snapshot(tenant: &str, case_id: &str, status: PrivacyCaseStatus) -> RecordSnapshot {
     let mut privacy_case = PrivacyCase::new(
         RecordId::try_new(case_id).unwrap(),
         TenantId::try_new(tenant).unwrap(),
@@ -191,16 +191,21 @@ fn successful_transition_binds_subject_and_emits_exact_evidence() {
     }
 
     let event = &plan.batch.events[0];
-    assert_eq!(event.event.event_type.as_str(), PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_TYPE);
-    assert_eq!(event.event.payload.schema_id.as_str(), PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_SCHEMA);
+    assert_eq!(
+        event.event.event_type.as_str(),
+        PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_TYPE
+    );
+    assert_eq!(
+        event.event.payload.schema_id.as_str(),
+        PRIVACY_CASE_SUBJECT_VERIFIED_EVENT_SCHEMA
+    );
     assert_eq!(event.aggregate_version, 3);
     assert_eq!(event.event_sequence, 3);
     assert_eq!(event.event.expected_aggregate_version, Some(2));
     assert_eq!(event.event.deduplication_key, event.event_id);
-    let event_message = wire::PrivacyCaseSubjectVerifiedEvent::decode(
-        event.event.payload.bytes.as_slice(),
-    )
-    .unwrap();
+    let event_message =
+        wire::PrivacyCaseSubjectVerifiedEvent::decode(event.event.payload.bytes.as_slice())
+            .unwrap();
     let event_binding = event_message.subject_binding.unwrap();
     assert_eq!(
         event_binding.submitted_party_ref.unwrap().party_id,
@@ -224,7 +229,10 @@ fn successful_transition_binds_subject_and_emits_exact_evidence() {
     .unwrap()
     .privacy_case
     .unwrap();
-    assert_eq!(output.status, wire::PrivacyCaseStatus::SubjectVerified as i32);
+    assert_eq!(
+        output.status,
+        wire::PrivacyCaseStatus::SubjectVerified as i32
+    );
     assert_eq!(output.version, 3);
     assert_eq!(output.updated_at_unix_ms, 3_000);
     assert_eq!(
@@ -244,7 +252,10 @@ fn planning_is_stable_for_exact_replay_input() {
     let first = planner.plan(&definition, &request, Some(&current)).unwrap();
     let second = planner.plan(&definition, &request, Some(&current)).unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.batch.events[0].event_id, second.batch.events[0].event_id);
+    assert_eq!(
+        first.batch.events[0].event_id,
+        second.batch.events[0].event_id
+    );
     assert_eq!(
         first.batch.audits[0].audit_record_id,
         second.batch.audits[0].audit_record_id
@@ -260,7 +271,10 @@ fn missing_references_and_invalid_scalars_fail_closed() {
     let mut spec = base_spec();
     spec.case_id = None;
     assert_eq!(
-        planner.target(&definition, &request(spec)).unwrap_err().code,
+        planner
+            .target(&definition, &request(spec))
+            .unwrap_err()
+            .code,
         "SDK_INVALID_ARGUMENT"
     );
 
@@ -288,7 +302,10 @@ fn missing_references_and_invalid_scalars_fail_closed() {
         let mut spec = base_spec();
         spec.expected_version = invalid_version;
         assert_eq!(
-            planner.target(&definition, &request(spec)).unwrap_err().code,
+            planner
+                .target(&definition, &request(spec))
+                .unwrap_err()
+                .code,
             "SDK_INVALID_ARGUMENT"
         );
     }
@@ -296,14 +313,20 @@ fn missing_references_and_invalid_scalars_fail_closed() {
     let mut spec = base_spec();
     spec.identity_resolution_generation = 0;
     assert_eq!(
-        planner.target(&definition, &request(spec)).unwrap_err().code,
+        planner
+            .target(&definition, &request(spec))
+            .unwrap_err()
+            .code,
         "SDK_INVALID_ARGUMENT"
     );
 
     let mut spec = base_spec();
     spec.verification_method = i32::MAX;
     assert_eq!(
-        planner.target(&definition, &request(spec)).unwrap_err().code,
+        planner
+            .target(&definition, &request(spec))
+            .unwrap_err()
+            .code,
         "SDK_INVALID_ARGUMENT"
     );
 }
