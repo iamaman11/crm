@@ -19,6 +19,8 @@ mod customer_enrichment_provider_worker;
 mod customer_enrichment_reject_promotion;
 mod customer_enrichment_suggestion_list_promotion;
 mod customer_privacy_case_create_promotion;
+#[cfg(feature = "customer-privacy-subject-verify-candidate")]
+mod customer_privacy_subject_verify_candidate;
 mod data_quality_capability_execution;
 mod data_quality_registration;
 mod export_artifact_download;
@@ -38,6 +40,10 @@ pub(crate) use background::{
 pub(crate) use bootstrap_visibility::{
     BootstrapVisibilityResource, build_bootstrap_visibility_registry,
 };
+#[cfg(not(feature = "customer-privacy-subject-verify-candidate"))]
+pub(crate) use customer_privacy_case_create_promotion::build_production_composition as build_process_composition;
+#[cfg(feature = "customer-privacy-subject-verify-candidate")]
+pub(crate) use customer_privacy_subject_verify_candidate::build_candidate_process_composition as build_process_composition;
 pub use config::*;
 pub use customer_enrichment_application_worker::{
     CustomerEnrichmentApplicationWorkerDependencies, OWNER_APPLICATION_POLICY_VERSION,
