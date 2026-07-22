@@ -14,8 +14,7 @@ use crm_core_data::{
 };
 use crm_customer_privacy::{
     MODULE_ID, PRIVACY_CASE_RECORD_TYPE, PrivacyCase, PrivacyCaseKind, PrivacyCaseStatus,
-    PrivacyDomainError, RescopeRequirement, ResumeStage, SubjectBinding,
-    SubjectVerificationMethod,
+    PrivacyDomainError, RescopeRequirement, ResumeStage, SubjectBinding, SubjectVerificationMethod,
 };
 use crm_customer_privacy_persistence_adapter::{
     privacy_case_from_snapshot, privacy_case_persisted_payload, privacy_case_record_ref,
@@ -127,9 +126,7 @@ pub fn privacy_case_ref_from_request(request: &CapabilityRequest) -> Result<Reco
     )
 }
 
-pub fn cancellation_subject_lock_ids(
-    snapshot: &RecordSnapshot,
-) -> Result<Vec<RecordId>, SdkError> {
+pub fn cancellation_subject_lock_ids(snapshot: &RecordSnapshot) -> Result<Vec<RecordId>, SdkError> {
     let privacy_case = privacy_case_from_snapshot(snapshot).map_err(case_state_invalid)?;
     let mut ids = Vec::with_capacity(2);
     if let Some(binding) = privacy_case.subject_binding() {
@@ -645,11 +642,7 @@ mod tests {
         assert_eq!(error.code, "CUSTOMER_PRIVACY_VERSION_CONFLICT");
         assert!(error.retryable);
 
-        let terminal = snapshot(
-            "tenant-a",
-            "privacy-case-a",
-            PrivacyCaseStatus::Cancelled,
-        );
+        let terminal = snapshot("tenant-a", "privacy-case-a", PrivacyCaseStatus::Cancelled);
         let terminal_request = request(
             "tenant-a",
             Some("privacy-case-a"),

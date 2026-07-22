@@ -14,13 +14,13 @@ use crm_core_data::{
     PostgresDataStore, PostgresTransactionalAggregateExecutor, TransactionalAggregateGuard,
 };
 use crm_customer_privacy::{MODULE_ID, PRIVACY_CASE_RECORD_TYPE};
-use crm_customer_privacy_capability_adapter::{
-    CustomerPrivacyCaseCreateCapabilityPlanner, previous_case_id_from_request,
-    previous_case_not_found, privacy_case_ref_from_id, validate_previous_case_snapshot,
-};
 use crm_customer_privacy_cancel_capability_adapter::{
     CANCEL_PRIVACY_CASE_CAPABILITY, CustomerPrivacyCaseCancelCapabilityPlanner,
     cancellation_subject_lock_ids, privacy_case_ref_from_request as cancellation_case_ref,
+};
+use crm_customer_privacy_capability_adapter::{
+    CustomerPrivacyCaseCreateCapabilityPlanner, previous_case_id_from_request,
+    previous_case_not_found, privacy_case_ref_from_id, validate_previous_case_snapshot,
 };
 use crm_customer_privacy_persistence_adapter::privacy_case_from_snapshot;
 use crm_customer_privacy_subject_capability_adapter::{
@@ -149,7 +149,8 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyCancellationGuard {
                 return Err(cancellation_guard_unsupported());
             }
             let reference = cancellation_case_ref(request)?;
-            let initial = load_cancellation_snapshot(transaction, request, &reference, false).await?;
+            let initial =
+                load_cancellation_snapshot(transaction, request, &reference, false).await?;
             let initial_lock_ids = cancellation_subject_lock_ids(&initial)?;
 
             for subject_id in &initial_lock_ids {
