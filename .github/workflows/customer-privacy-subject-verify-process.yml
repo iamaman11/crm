@@ -72,10 +72,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
+      - name: Verify candidate-only Clippy boundary
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy -p crm-api \
+            --all-targets \
+            --no-default-features \
+            --features customer-privacy-subject-verify-candidate \
+            -- -D warnings \
+            2>&1 | tee database/customer-privacy-subject-process-clippy.log
       - name: Prepare authoritative subject-verification database
         shell: bash
         run: |
