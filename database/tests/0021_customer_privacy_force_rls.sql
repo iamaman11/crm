@@ -79,7 +79,7 @@ BEGIN;
 SET LOCAL app.tenant_id = 'tenant-a';
 SET LOCAL app.actor_id = 'actor-a';
 SET LOCAL app.request_id = 'request-customer-privacy-force-rls';
-SET LOCAL app.capability_id = 'customer_privacy.persistence.probe';
+SET LOCAL app.capability_id = 'customer_privacy.case.create';
 SET LOCAL app.capability_version = '1.0.0';
 SET LOCAL app.business_transaction_id = 'tx-customer-privacy-force-rls';
 
@@ -99,7 +99,7 @@ VALUES (
   'tx-customer-privacy-force-rls',
   'actor-a',
   'request-customer-privacy-force-rls',
-  'customer_privacy.persistence.probe',
+  'customer_privacy.case.create',
   '1.0.0',
   1,
   1,
@@ -187,7 +187,7 @@ INSERT INTO crm.idempotency_records (
 )
 VALUES (
   'tenant-a',
-  'customer_privacy.persistence.probe@1.0.0',
+  'customer_privacy.case.create@1.0.0',
   'customer-privacy-force-rls',
   decode(repeat('65', 32), 'hex'),
   'completed',
@@ -223,9 +223,9 @@ VALUES (
   'privacy-case-force-rls',
   1,
   1,
-  'customer_privacy.persistence.probe.recorded',
+  'customer_privacy.case.created',
   'customer-privacy-force-rls',
-  'crm.customer_privacy.persistence_probe.recorded',
+  'crm.customer_privacy.v1.PrivacyCaseCreatedEvent',
   '1.0.0',
   decode(repeat('66', 32), 'hex'),
   'personal',
@@ -256,7 +256,7 @@ SELECT
   'audit-customer-privacy-force-rls',
   'tx-customer-privacy-force-rls',
   'actor-a',
-  'customer_privacy.persistence.probe',
+  'customer_privacy.case.create',
   '1.0.0',
   'crm.cjson/v1',
   record_hash,
