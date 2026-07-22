@@ -40,7 +40,6 @@ class ProductionRouteClassificationTests(unittest.TestCase):
         privacy_contract_only = {
             ("crm.customer-privacy", "customer_privacy.case.approve", "1.0.0"),
             ("crm.customer-privacy", "customer_privacy.case.cancel", "1.0.0"),
-            ("crm.customer-privacy", "customer_privacy.case.get", "1.0.0"),
             ("crm.customer-privacy", "customer_privacy.case.list", "1.0.0"),
             (
                 "crm.customer-privacy",
@@ -80,6 +79,7 @@ class ProductionRouteClassificationTests(unittest.TestCase):
             "customer_privacy.case.create",
             "customer_privacy.case.submit",
             "customer_privacy.case.subject.verify",
+            "customer_privacy.case.get",
         }:
             self.assertNotIn(
                 ("crm.customer-privacy", runtime_id, "1.0.0"),
