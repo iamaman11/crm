@@ -22,6 +22,7 @@ Current state: **Gate review for the third production vertical slice**. The arch
 - [x] Apply shared fail-fast topology and `tenant_id + canonical_party_id` subject locks inside the same PostgreSQL transaction as case update, event, audit and idempotency.
 - [x] Prove `Submitted N -> SubjectVerified N + 1`, exact replay, incompatible replay, stale version/generation, invalid canonical redirect, missing/cross-tenant Party concealment, malformed state rollback and subject-lock contention.
 - [x] Prove candidate-only and accepted production composition through the existing generic HTTP/gRPC ingress on clean migrations and after full rollback/schema removal/reapply, under a non-privileged FORCE-RLS runtime role, with bounded safe transport errors.
+- [x] Consolidate create, submit and subject-verification real-process acceptance in the permanent Customer Privacy Persistence CI; no temporary subject-specific workflow remains in the accepted branch.
 - [x] Freeze candidate production-route parity at exactly three runtime Customer Privacy mutations and thirteen non-runtime public Customer Privacy coordinates; worker-only and crypto-shred classifications remain unchanged.
 - [ ] Accept draft PR #148 on one unchanged post-Generated-Sync source SHA after all 18 applicable workflows pass and review threads are resolved.
 - [ ] Add the remaining permission-aware public case, restriction and legal-hold mutations/queries through separately bounded module-owned production contributions.
