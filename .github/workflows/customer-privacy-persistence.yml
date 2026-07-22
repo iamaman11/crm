@@ -10,6 +10,7 @@ on:
       - "crates/crm-customer-privacy-capability-adapter/**"
       - "crates/crm-customer-privacy-submit-capability-adapter/**"
       - "crates/crm-customer-privacy-subject-capability-adapter/**"
+      - "crates/crm-customer-privacy-cancel-capability-adapter/**"
       - "crates/crm-customer-privacy-query-adapter/**"
       - "crates/crm-customer-privacy-capability-composition/**"
       - "crates/crm-identity-resolution-topology-composition/**"
@@ -35,6 +36,7 @@ on:
       - "crates/crm-customer-privacy-capability-adapter/**"
       - "crates/crm-customer-privacy-submit-capability-adapter/**"
       - "crates/crm-customer-privacy-subject-capability-adapter/**"
+      - "crates/crm-customer-privacy-cancel-capability-adapter/**"
       - "crates/crm-customer-privacy-query-adapter/**"
       - "crates/crm-customer-privacy-capability-composition/**"
       - "crates/crm-identity-resolution-topology-composition/**"
@@ -58,7 +60,7 @@ permissions:
 jobs:
   persistence:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     services:
       postgres:
         image: postgres:17-alpine
@@ -105,7 +107,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
-      - name: Build isolated submit-and-subject-process database
+      - name: Build isolated submit-subject-query-cancel database
         shell: bash
         run: |
           set -euo pipefail
@@ -124,6 +126,7 @@ jobs:
           cargo test -p crm-customer-privacy-capability-adapter --all-features
           cargo test -p crm-customer-privacy-submit-capability-adapter --all-features
           cargo test -p crm-customer-privacy-subject-capability-adapter --all-features
+          cargo test -p crm-customer-privacy-cancel-capability-adapter --all-features
           cargo test -p crm-customer-privacy-query-adapter --all-features
           cargo test -p crm-identity-resolution-topology-composition --all-features
       - name: Verify clean create-process FORCE RLS
@@ -137,7 +140,7 @@ jobs:
           set -o pipefail
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-create-clean.log
-      - name: Verify clean submit-and-subject-process FORCE RLS
+      - name: Verify clean submit-subject-query-cancel FORCE RLS
         shell: bash
         run: |
           set -o pipefail
@@ -191,18 +194,18 @@ jobs:
             2>&1 | tee database/customer-privacy-force-rls-create-reapplied.log
           cargo test -p crm-customer-privacy-capability-composition --test postgres_case_create --all-features -- --nocapture \
             2>&1 | tee database/customer-privacy-case-create-reapplied.log
-      - name: Roll back submit-and-subject-process database
+      - name: Roll back submit-subject-query-cancel database
         shell: bash
         run: |
           set -euo pipefail
           while IFS= read -r migration; do
             PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file "${migration}"
           done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
-      - name: Verify submit-and-subject rollback removed authoritative schema
+      - name: Verify submit-subject-query-cancel rollback removed authoritative schema
         run: |
           count="$(PGDATABASE=crm_privacy_submit_test psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
           test "${count}" = "0"
-      - name: Reapply submit-and-subject database and fixture
+      - name: Reapply submit-subject-query-cancel database and fixture
         shell: bash
         run: |
           set -euo pipefail
@@ -214,7 +217,7 @@ jobs:
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0023_customer_privacy_subject_verify_fixture.sql
-      - name: Verify reapplied submit-and-subject FORCE RLS and processes
+      - name: Verify reapplied submit-subject-query-cancel FORCE RLS and processes
         shell: bash
         env:
           DATABASE_URL: ${{ env.SUBMIT_DATABASE_URL }}
@@ -260,6 +263,15 @@ jobs:
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_get_process_e2e -- --nocapture \
             2>&1 | tee database/customer-privacy-case-get-crm-api.log
+      - name: Verify real crm-api case-cancel process
+        shell: bash
+        env:
+          DATABASE_URL: ${{ env.SUBMIT_DATABASE_URL }}
+          ADMIN_DATABASE_URL: ${{ env.SUBMIT_ADMIN_DATABASE_URL }}
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test customer_privacy_case_cancel_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-case-cancel-crm-api.log
       - name: Upload Customer Privacy persistence diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -270,6 +282,7 @@ jobs:
             crates/crm-customer-privacy-capability-adapter/
             crates/crm-customer-privacy-submit-capability-adapter/
             crates/crm-customer-privacy-subject-capability-adapter/
+            crates/crm-customer-privacy-cancel-capability-adapter/
             crates/crm-customer-privacy-query-adapter/
             crates/crm-customer-privacy-capability-composition/
             crates/crm-identity-resolution-topology-composition/
@@ -278,6 +291,7 @@ jobs:
             services/crm-api/tests/customer_privacy_case_submit_process_e2e.rs
             services/crm-api/tests/customer_privacy_case_subject_verify_process_e2e.rs
             services/crm-api/tests/customer_privacy_case_get_process_e2e.rs
+            services/crm-api/tests/customer_privacy_case_cancel_process_e2e.rs
             database/tests/0020_customer_privacy_persistence_fixture.sql
             database/tests/0021_customer_privacy_force_rls.sql
             database/tests/0022_customer_privacy_submit_fixture.sql
@@ -286,6 +300,7 @@ jobs:
             database/customer-privacy-case-submit-*.log
             database/customer-privacy-case-subject-verify-*.log
             database/customer-privacy-case-get-*.log
+            database/customer-privacy-case-cancel-*.log
             database/customer-privacy-force-rls-*.log
           if-no-files-found: error
           retention-days: 7
