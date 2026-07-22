@@ -25,10 +25,10 @@ use crm_customer_data_operations_capability_adapter::{
 use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_customer_enrichment::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_customer_enrichment_visibility::query_visibility_resources as customer_enrichment_query_visibility_resources;
+use crm_customer_privacy_query_adapter::query_visibility_resources as customer_privacy_query_visibility_resources;
 use crm_customer_privacy_query_adapter::{
     GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY,
 };
-use crm_customer_privacy_query_adapter::query_visibility_resources as customer_privacy_query_visibility_resources;
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,

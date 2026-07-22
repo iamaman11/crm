@@ -33,10 +33,8 @@ pub const LIST_PRIVACY_CASES_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.ListPrivacyCasesRequest";
 pub const LIST_PRIVACY_CASES_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.ListPrivacyCasesResponse";
-pub const QUERY_CAPABILITY_IDS: &[&str] = &[
-    GET_PRIVACY_CASE_CAPABILITY,
-    LIST_PRIVACY_CASES_CAPABILITY,
-];
+pub const QUERY_CAPABILITY_IDS: &[&str] =
+    &[GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY];
 pub const PARTY_RECORD_TYPE: &str = "parties.party";
 
 const PRIVACY_CASE_FIELDS: &[&str] = &[
@@ -423,10 +421,7 @@ pub(crate) fn redact_privacy_case(
     }
 }
 
-pub(crate) fn decode_input<M>(
-    request: &QueryRequest,
-    schema: &'static str,
-) -> Result<M, SdkError>
+pub(crate) fn decode_input<M>(request: &QueryRequest, schema: &'static str) -> Result<M, SdkError>
 where
     M: Message + Default,
 {

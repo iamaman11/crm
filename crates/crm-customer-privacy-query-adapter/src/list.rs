@@ -10,9 +10,7 @@ use crm_customer_privacy::PrivacyCase;
 use crm_customer_privacy_persistence_adapter::privacy_case_from_snapshot;
 use crm_module_sdk::{DataClass, ErrorCategory, RecordId, SdkError, TypedPayload};
 use crm_proto_contracts::crm::{customer::v1::PartyRef, customer_privacy::v1 as wire};
-use crm_query_runtime::{
-    CursorBinding, CursorContinuation, QueryRequest, normalized_filter_hash,
-};
+use crm_query_runtime::{CursorBinding, CursorContinuation, QueryRequest, normalized_filter_hash};
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAXIMUM_PAGE_SIZE: u32 = 100;
@@ -72,14 +70,7 @@ async fn collect(
         let remaining = parameters.page_size as usize - output.len();
         if remaining == 0 {
             let anchor = after.clone();
-            let more = has_more(
-                adapter,
-                request,
-                parameters,
-                anchor.clone(),
-                &mut scanned,
-            )
-            .await?;
+            let more = has_more(adapter, request, parameters, anchor.clone(), &mut scanned).await?;
             return Ok((output, more.then_some(anchor).flatten()));
         }
 
@@ -190,7 +181,9 @@ fn matches_filters(
     }
     let public = privacy_case_to_wire(privacy_case)?;
     Ok(parameters.kind.is_none_or(|kind| public.kind == kind)
-        && parameters.status.is_none_or(|status| public.status == status))
+        && parameters
+            .status
+            .is_none_or(|status| public.status == status))
 }
 
 fn parameters(
@@ -390,7 +383,10 @@ mod tests {
     #[test]
     fn list_bounds_and_filters_are_strict() {
         assert_eq!(page_size(0).unwrap(), DEFAULT_PAGE_SIZE);
-        assert_eq!(page_size(MAXIMUM_PAGE_SIZE as i32).unwrap(), MAXIMUM_PAGE_SIZE);
+        assert_eq!(
+            page_size(MAXIMUM_PAGE_SIZE as i32).unwrap(),
+            MAXIMUM_PAGE_SIZE
+        );
         assert!(page_size(-1).is_err());
         assert!(page_size(MAXIMUM_PAGE_SIZE as i32 + 1).is_err());
         assert!(kind(Some(wire::PrivacyCaseKind::Erasure as i32)).is_ok());
