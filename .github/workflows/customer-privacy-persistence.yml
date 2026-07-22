@@ -10,6 +10,7 @@ on:
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
       - "database/tests/0021_customer_privacy_force_rls.sql"
       - ".github/workflows/customer-privacy-persistence.yml"
   pull_request:
@@ -21,6 +22,7 @@ on:
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
       - "database/tests/0021_customer_privacy_force_rls.sql"
       - ".github/workflows/customer-privacy-persistence.yml"
 
@@ -71,6 +73,7 @@ jobs:
           set -euo pipefail
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify strict privacy snapshot adapter
         run: cargo test -p crm-customer-privacy-persistence-adapter --all-features
@@ -103,6 +106,7 @@ jobs:
           set -euo pipefail
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify reapplied Customer Privacy FORCE RLS
         shell: bash
@@ -116,6 +120,7 @@ jobs:
           name: customer-privacy-persistence-diagnostics
           path: |
             crates/crm-customer-privacy-persistence-adapter/
+            database/tests/0020_customer_privacy_persistence_fixture.sql
             database/tests/0021_customer_privacy_force_rls.sql
             database/customer-privacy-force-rls-*.log
           if-no-files-found: error
