@@ -19,6 +19,7 @@ on:
       - "database/tests/0004_search_runtime_role_grants.sql"
       - "database/tests/0020_customer_privacy_persistence_fixture.sql"
       - "database/tests/0021_customer_privacy_force_rls.sql"
+      - "database/tests/0022_customer_privacy_submit_fixture.sql"
       - ".github/workflows/customer-privacy-persistence.yml"
   pull_request:
     paths:
@@ -38,6 +39,7 @@ on:
       - "database/tests/0004_search_runtime_role_grants.sql"
       - "database/tests/0020_customer_privacy_persistence_fixture.sql"
       - "database/tests/0021_customer_privacy_force_rls.sql"
+      - "database/tests/0022_customer_privacy_submit_fixture.sql"
       - ".github/workflows/customer-privacy-persistence.yml"
 
 permissions:
@@ -71,8 +73,6 @@ jobs:
       ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_test
       SUBMIT_DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_privacy_submit_test
       SUBMIT_ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_submit_test
-      DIAGNOSTIC_DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_privacy_submit_diagnostic_test
-      DIAGNOSTIC_ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_privacy_submit_diagnostic_test
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -106,31 +106,12 @@ jobs:
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
-      - name: Build raw storage diagnostic database
-        shell: bash
-        run: |
-          set -euo pipefail
-          createdb crm_privacy_submit_diagnostic_test
-          while IFS= read -r migration; do
-            PGDATABASE=crm_privacy_submit_diagnostic_test psql --set ON_ERROR_STOP=1 --file "${migration}"
-          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
-          PGDATABASE=crm_privacy_submit_diagnostic_test psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
-          PGDATABASE=crm_privacy_submit_diagnostic_test psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
-          PGDATABASE=crm_privacy_submit_diagnostic_test psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
       - name: Verify strict privacy adapters and planners
         run: |
           cargo test -p crm-customer-privacy-persistence-adapter --all-features
           cargo test -p crm-customer-privacy-capability-adapter --all-features
           cargo test -p crm-customer-privacy-submit-capability-adapter --all-features
-      - name: Expose raw submit-fixture storage diagnostic
-        shell: bash
-        env:
-          DATABASE_URL: ${{ env.DIAGNOSTIC_DATABASE_URL }}
-          ADMIN_DATABASE_URL: ${{ env.DIAGNOSTIC_ADMIN_DATABASE_URL }}
-        run: |
-          set -o pipefail
-          cargo test -p crm-customer-privacy-capability-composition --test postgres_case_submit_diagnostic --all-features -- --nocapture \
-            2>&1 | tee database/customer-privacy-case-submit-diagnostic.log
       - name: Verify clean create-process FORCE RLS
         shell: bash
         run: |
@@ -208,6 +189,7 @@ jobs:
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          PGDATABASE=crm_privacy_submit_test psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
       - name: Verify reapplied submit-process FORCE RLS and process
         shell: bash
         env:
@@ -248,6 +230,7 @@ jobs:
             services/crm-api/tests/customer_privacy_case_submit_process_e2e.rs
             database/tests/0020_customer_privacy_persistence_fixture.sql
             database/tests/0021_customer_privacy_force_rls.sql
+            database/tests/0022_customer_privacy_submit_fixture.sql
             database/customer-privacy-case-create-*.log
             database/customer-privacy-case-submit-*.log
             database/customer-privacy-force-rls-*.log
