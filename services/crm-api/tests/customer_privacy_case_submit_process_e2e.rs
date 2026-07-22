@@ -35,7 +35,9 @@ struct SubmitEvidenceCounts {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn customer_privacy_case_submit_real_process_is_bounded_and_replay_safe() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping Customer Privacy case-submit crm-api test because DATABASE_URL is absent");
+        eprintln!(
+            "skipping Customer Privacy case-submit crm-api test because DATABASE_URL is absent"
+        );
         return;
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
@@ -213,12 +215,11 @@ async fn customer_privacy_case_submit_real_process_is_bounded_and_replay_safe() 
     )
     .await
     .expect_err("tenant B must not observe tenant A case");
-    assert_safe_status(
-        &concealed,
-        Code::NotFound,
-        "CAPABILITY_AGGREGATE_NOT_FOUND",
+    assert_safe_status(&concealed, Code::NotFound, "CAPABILITY_AGGREGATE_NOT_FOUND");
+    assert_eq!(
+        submit_evidence_counts(&admin, TENANT_B).await,
+        tenant_b_before
     );
-    assert_eq!(submit_evidence_counts(&admin, TENANT_B).await, tenant_b_before);
 
     set_module_status(&admin, TENANT_A, "suspended").await;
     let inactive = mutate(
@@ -390,7 +391,10 @@ async fn set_module_status(pool: &PgPool, tenant: &str, status: &str) {
     for (name, value) in [
         ("app.tenant_id", tenant),
         ("app.actor_id", "customer-privacy-submit-process-admin"),
-        ("app.request_id", "customer-privacy-submit-process-activation"),
+        (
+            "app.request_id",
+            "customer-privacy-submit-process-activation",
+        ),
         ("app.capability_id", "customer_privacy.process.activation"),
         ("app.capability_version", "1.0.0"),
         ("app.business_transaction_id", transaction_id.as_str()),
