@@ -107,7 +107,8 @@ impl CustomerPrivacyQueryAdapter {
             return Err(case_not_found());
         }
 
-        let privacy_case = privacy_case_from_snapshot(&snapshot).map_err(case_state_invalid)?;
+        let privacy_case = privacy_case_from_snapshot(&snapshot)
+            .map_err(|error| case_state_invalid(error.to_string()))?;
         if privacy_case.case_id() != &case_reference.record_id
             || privacy_case.tenant_id() != &request.context.tenant_id
         {
