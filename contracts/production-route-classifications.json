@@ -91,99 +91,93 @@
     },
     {
       "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.case.create",
-      "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.submit",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but submit remains non-runtime until subject verification prerequisites, the shared subject lock, restriction/legal-hold precedence and real-process acceptance are composed."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.subject.verify",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but subject verification remains non-runtime until canonical Party lineage, shared subject locking, live authorization/composition and real-process acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.approve",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but approval remains non-runtime until verified-subject lineage, restriction/legal-hold precedence, live authorization/composition and real-process acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.cancel",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but cancellation remains non-runtime until lifecycle composition, shared subject-lock interaction and real-process authorization acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.get",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but this query remains non-runtime until permission-aware resource and field visibility plus concealment acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.list",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but this query remains non-runtime until permission-aware candidate filtering, cursor semantics and cross-tenant concealment acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.plan.get",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but action-plan disclosure remains non-runtime until worker orchestration and permission-aware query visibility are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.owner_outcomes.list",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but owner-outcome disclosure remains non-runtime until worker orchestration, bounded evidence visibility and real-process acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.restriction.place",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but restriction placement remains non-runtime until the shared subject lock, deny-only precedence enforcement, live composition and real-process acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.restriction.release",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but restriction release remains non-runtime until the shared subject lock, legal-hold/retention precedence and real-process authorization acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.restriction.get",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but restriction reads remain non-runtime until permission-aware visibility and cross-tenant concealment acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.legal_hold.place",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but legal-hold placement remains non-runtime until shared subject locking, retention precedence, live composition and real-process acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.legal_hold.release",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but legal-hold release remains non-runtime until immutable release evidence, retention precedence, live composition and real-process acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.legal_hold.get",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but legal-hold reads remain non-runtime until permission-aware visibility and concealment acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.legal_hold.list_by_subject",
       "version": "1.0.0",
-      "reason": "Phase 8A.11 public contract is published for compatibility, but production ingress remains disabled until FORCE RLS persistence, live authorization, shared subject-lock enforcement and real-process acceptance are implemented."
+      "reason": "FORCE RLS persistence is proven, but subject-scoped legal-hold listing remains non-runtime until shared subject locking, permission-aware visibility and real-process acceptance are complete."
     }
   ],
   "empty_runtime_modules": [
