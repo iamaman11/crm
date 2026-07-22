@@ -3,11 +3,12 @@
 //! Governed production mutation planning for `crm.customer-privacy`.
 //!
 //! This crate currently promotes exactly one public coordinate:
-//! `customer_privacy.case.create@1.0.0`. Root creation locks the deterministic
-//! case record as absent. Lineage creation locks and strictly rehydrates the
-//! referenced predecessor, requires a terminal predecessor, and creates the new
-//! deterministic case as a separate immutable version-1 record. SQL,
-//! authorization, activation and transport remain owned by the shared host.
+//! `customer_privacy.case.create@1.0.0`. The executable planner always locks the
+//! deterministic successor as absent. Optional predecessor lineage is verified
+//! by the PostgreSQL composition guard before this infrastructure-neutral plan
+//! is built. A separate reference planner preserves the exact `MustExist`
+//! predecessor contract for unit-level lineage proof without weakening the
+//! shared aggregate executor.
 
 use crm_capability_plan_support::{self as support, EventSpec};
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, CapabilityRisk};
@@ -42,10 +43,49 @@ pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[CREATE_PRIVACY_CASE_C
 const PRIVACY_CASE_ID_DOMAIN: &[u8] = b"crm.customer-privacy.case/v1";
 const PRIVACY_CASE_ID_PREFIX: &str = "privacy-case-";
 
+/// Executable aggregate planner. The optional predecessor is checked by the
+/// transactional reference guard before the deterministic successor is locked
+/// and created through the shared executor.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CustomerPrivacyCaseCreateCapabilityPlanner;
 
 impl TransactionalAggregatePlanner for CustomerPrivacyCaseCreateCapabilityPlanner {
+    fn target(
+        &self,
+        definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+    ) -> Result<AggregateTarget, SdkError> {
+        ensure_definition(definition, request)?;
+        let privacy_case = privacy_case_from_create_request(request)?;
+        Ok(AggregateTarget {
+            reference: privacy_case_record_ref(&privacy_case)?,
+            presence: AggregatePresence::MustBeAbsent,
+        })
+    }
+
+    fn plan(
+        &self,
+        definition: &CapabilityDefinition,
+        request: &CapabilityRequest,
+        current: Option<&RecordSnapshot>,
+    ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
+        ensure_definition(definition, request)?;
+        if current.is_some() {
+            return Err(plan_invalid("deterministic successor privacy case already exists"));
+        }
+        plan_case_create(definition, request, privacy_case_from_create_request(request)?)
+    }
+}
+
+/// Unit-proof planner for optional predecessor lineage. It is intentionally not
+/// wired directly to `PostgresTransactionalAggregateExecutor`, whose invariant
+/// requires the resolved target to be the mutated aggregate. Production uses
+/// the equivalent transactional `FOR SHARE` guard and the executable planner
+/// above.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct CustomerPrivacyCasePreviousReferencePlanner;
+
+impl TransactionalAggregatePlanner for CustomerPrivacyCasePreviousReferencePlanner {
     fn target(
         &self,
         definition: &CapabilityDefinition,
@@ -73,19 +113,16 @@ impl TransactionalAggregatePlanner for CustomerPrivacyCaseCreateCapabilityPlanne
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
         ensure_definition(definition, request)?;
         let privacy_case = privacy_case_from_create_request(request)?;
-
         match privacy_case.previous_case_id() {
             Some(previous_case_id) => {
-                validate_previous_case(request, previous_case_id, current)?;
+                let snapshot = current.ok_or_else(previous_case_not_found)?;
+                validate_previous_case_snapshot(request, previous_case_id, snapshot)?;
             }
             None if current.is_some() => {
-                return Err(plan_invalid(
-                    "deterministic root privacy case already exists",
-                ));
+                return Err(plan_invalid("deterministic root privacy case already exists"));
             }
             None => {}
         }
-
         plan_case_create(definition, request, privacy_case)
     }
 }
@@ -137,8 +174,7 @@ pub fn privacy_case_from_create_request(
     request: &CapabilityRequest,
 ) -> Result<PrivacyCase, SdkError> {
     request.context.validate()?;
-    let command: wire::CreatePrivacyCaseRequest =
-        support::decode_request(request, MODULE_ID, CREATE_PRIVACY_CASE_REQUEST_SCHEMA)?;
+    let command = decode_create_request(request)?;
     let kind = privacy_case_kind_from_wire(command.kind)?;
     let policy_version = policy_version(command.policy_version)?;
     let previous_case_id = command
@@ -161,6 +197,66 @@ pub fn privacy_case_from_create_request(
         previous_case_id,
     )
     .map_err(domain_error)
+}
+
+/// Returns the exact optional predecessor identity from the published request.
+/// This is consumed by the transactional PostgreSQL reference guard.
+pub fn previous_case_id_from_request(
+    request: &CapabilityRequest,
+) -> Result<Option<RecordId>, SdkError> {
+    request.context.validate()?;
+    decode_create_request(request)?
+        .previous_privacy_case_ref
+        .map(|reference| {
+            privacy_case_id_from_wire(reference, "customer_privacy.previous_privacy_case_ref")
+        })
+        .transpose()
+}
+
+/// Strictly validates the exact predecessor snapshot after the infrastructure
+/// guard has locked it in the same transaction as successor creation.
+pub fn validate_previous_case_snapshot(
+    request: &CapabilityRequest,
+    expected_id: &RecordId,
+    snapshot: &RecordSnapshot,
+) -> Result<(), SdkError> {
+    let expected_reference = privacy_case_ref_from_id(expected_id)?;
+    if snapshot.reference != expected_reference {
+        return Err(previous_case_not_found());
+    }
+    let predecessor = privacy_case_from_snapshot(snapshot).map_err(|error| {
+        SdkError::new(
+            "CUSTOMER_PRIVACY_PREVIOUS_CASE_INVALID",
+            ErrorCategory::Internal,
+            false,
+            "The previous privacy case could not be loaded safely.",
+        )
+        .with_internal_reference(error.code)
+    })?;
+    if predecessor.case_id() != expected_id
+        || predecessor.tenant_id() != &request.context.execution.tenant_id
+    {
+        return Err(previous_case_not_found());
+    }
+    if !predecessor.status().is_terminal() {
+        return Err(SdkError::new(
+            "CUSTOMER_PRIVACY_PREVIOUS_CASE_NOT_TERMINAL",
+            ErrorCategory::Conflict,
+            false,
+            "The previous privacy case must be terminal before a successor can be created.",
+        ));
+    }
+    Ok(())
+}
+
+fn decode_create_request(
+    request: &CapabilityRequest,
+) -> Result<wire::CreatePrivacyCaseRequest, SdkError> {
+    support::decode_request(
+        request,
+        MODULE_ID,
+        CREATE_PRIVACY_CASE_REQUEST_SCHEMA,
+    )
 }
 
 fn plan_case_create(
@@ -214,41 +310,6 @@ fn plan_case_create(
         },
         output: Some(output),
     })
-}
-
-fn validate_previous_case(
-    request: &CapabilityRequest,
-    expected_id: &RecordId,
-    current: Option<&RecordSnapshot>,
-) -> Result<(), SdkError> {
-    let expected_reference = privacy_case_ref_from_id(expected_id)?;
-    let snapshot = current.ok_or_else(previous_case_not_found)?;
-    if snapshot.reference != expected_reference {
-        return Err(previous_case_not_found());
-    }
-    let predecessor = privacy_case_from_snapshot(snapshot).map_err(|error| {
-        SdkError::new(
-            "CUSTOMER_PRIVACY_PREVIOUS_CASE_INVALID",
-            ErrorCategory::Internal,
-            false,
-            "The previous privacy case could not be loaded safely.",
-        )
-        .with_internal_reference(error.code)
-    })?;
-    if predecessor.case_id() != expected_id
-        || predecessor.tenant_id() != &request.context.execution.tenant_id
-    {
-        return Err(previous_case_not_found());
-    }
-    if !predecessor.status().is_terminal() {
-        return Err(SdkError::new(
-            "CUSTOMER_PRIVACY_PREVIOUS_CASE_NOT_TERMINAL",
-            ErrorCategory::Conflict,
-            false,
-            "The previous privacy case must be terminal before a successor can be created.",
-        ));
-    }
-    Ok(())
 }
 
 fn privacy_case_to_wire(privacy_case: &PrivacyCase) -> Result<wire::PrivacyCase, SdkError> {
@@ -332,7 +393,10 @@ fn policy_version(value: String) -> Result<SchemaVersion, SdkError> {
         ));
     }
     SchemaVersion::try_new(value).map_err(|error| {
-        SdkError::invalid_argument("customer_privacy.case.policy_version", error.to_string())
+        SdkError::invalid_argument(
+            "customer_privacy.case.policy_version",
+            error.to_string(),
+        )
     })
 }
 
@@ -344,7 +408,7 @@ fn privacy_case_id_from_wire(
         .map_err(|error| SdkError::invalid_argument(field, error.to_string()))
 }
 
-fn privacy_case_ref_from_id(case_id: &RecordId) -> Result<RecordRef, SdkError> {
+pub fn privacy_case_ref_from_id(case_id: &RecordId) -> Result<RecordRef, SdkError> {
     support::record_ref(
         PRIVACY_CASE_RECORD_TYPE,
         case_id.as_str(),
@@ -392,7 +456,7 @@ fn domain_error(error: PrivacyDomainError) -> SdkError {
     .with_internal_reference(error.to_string())
 }
 
-fn previous_case_not_found() -> SdkError {
+pub fn previous_case_not_found() -> SdkError {
     SdkError::new(
         "CUSTOMER_PRIVACY_PREVIOUS_CASE_NOT_FOUND",
         ErrorCategory::NotFound,
@@ -411,7 +475,9 @@ fn plan_invalid(reference: impl Into<String>) -> SdkError {
     .with_internal_reference(reference.into())
 }
 
-fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
+fn configured<T>(
+    value: Result<T, crm_module_sdk::IdentifierError>,
+) -> Result<T, SdkError> {
     value.map_err(configuration_error)
 }
 
@@ -561,9 +627,10 @@ mod tests {
         assert_eq!(payload.data_class, DataClass::Confidential);
         assert_eq!(plan.batch.events[0].event.aggregate, *reference);
 
-        let response =
-            wire::CreatePrivacyCaseResponse::decode(plan.output.as_ref().unwrap().bytes.as_slice())
-                .unwrap();
+        let response = wire::CreatePrivacyCaseResponse::decode(
+            plan.output.as_ref().unwrap().bytes.as_slice(),
+        )
+        .unwrap();
         let privacy_case = response.privacy_case.unwrap();
         assert_eq!(
             privacy_case.privacy_case_ref.unwrap().privacy_case_id,
@@ -588,26 +655,42 @@ mod tests {
     }
 
     #[test]
-    fn terminal_predecessor_allows_separate_successor_without_mutating_lineage() {
+    fn executable_lineage_target_remains_the_new_absent_successor() {
+        let request = request(
+            "tenant-a",
+            "key-successor",
+            Some("privacy-case-predecessor"),
+        );
+        let target = CustomerPrivacyCaseCreateCapabilityPlanner
+            .target(&capability_definition().unwrap(), &request)
+            .unwrap();
+        assert_eq!(target.presence, AggregatePresence::MustBeAbsent);
+        assert_ne!(target.reference.record_id.as_str(), "privacy-case-predecessor");
+    }
+
+    #[test]
+    fn reference_planner_requires_exact_terminal_predecessor() {
         let predecessor_id = "privacy-case-predecessor";
         let request = request("tenant-a", "key-successor", Some(predecessor_id));
         let definition = capability_definition().unwrap();
         let predecessor = predecessor_snapshot("tenant-a", predecessor_id, true);
-        let target = CustomerPrivacyCaseCreateCapabilityPlanner
+        let target = CustomerPrivacyCasePreviousReferencePlanner
             .target(&definition, &request)
             .unwrap();
         assert_eq!(target.presence, AggregatePresence::MustExist);
         assert_eq!(target.reference, predecessor.reference);
 
-        let plan = CustomerPrivacyCaseCreateCapabilityPlanner
+        let plan = CustomerPrivacyCasePreviousReferencePlanner
             .plan(&definition, &request, Some(&predecessor))
             .unwrap();
         let RecordMutation::Create { reference, .. } = &plan.batch.records[0] else {
             panic!("successor must be a new record");
         };
         assert_ne!(reference, &predecessor.reference);
-        let response =
-            wire::CreatePrivacyCaseResponse::decode(plan.output.unwrap().bytes.as_slice()).unwrap();
+        let response = wire::CreatePrivacyCaseResponse::decode(
+            plan.output.unwrap().bytes.as_slice(),
+        )
+        .unwrap();
         assert_eq!(
             response
                 .privacy_case
@@ -626,20 +709,20 @@ mod tests {
         let request = request("tenant-a", "key-successor", Some(predecessor_id));
 
         let nonterminal = predecessor_snapshot("tenant-a", predecessor_id, false);
-        let error = CustomerPrivacyCaseCreateCapabilityPlanner
+        let error = CustomerPrivacyCasePreviousReferencePlanner
             .plan(&definition, &request, Some(&nonterminal))
             .unwrap_err();
         assert_eq!(error.code, "CUSTOMER_PRIVACY_PREVIOUS_CASE_NOT_TERMINAL");
 
         let other_tenant = predecessor_snapshot("tenant-b", predecessor_id, true);
-        let error = CustomerPrivacyCaseCreateCapabilityPlanner
+        let error = CustomerPrivacyCasePreviousReferencePlanner
             .plan(&definition, &request, Some(&other_tenant))
             .unwrap_err();
         assert_eq!(error.code, "CUSTOMER_PRIVACY_PREVIOUS_CASE_NOT_FOUND");
 
         let mut malformed = predecessor_snapshot("tenant-a", predecessor_id, true);
         malformed.payload.bytes = b"{}".to_vec();
-        let error = CustomerPrivacyCaseCreateCapabilityPlanner
+        let error = CustomerPrivacyCasePreviousReferencePlanner
             .plan(&definition, &request, Some(&malformed))
             .unwrap_err();
         assert_eq!(error.code, "CUSTOMER_PRIVACY_PREVIOUS_CASE_INVALID");
