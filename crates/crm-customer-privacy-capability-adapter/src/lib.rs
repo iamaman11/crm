@@ -71,9 +71,15 @@ impl TransactionalAggregatePlanner for CustomerPrivacyCaseCreateCapabilityPlanne
     ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
         ensure_definition(definition, request)?;
         if current.is_some() {
-            return Err(plan_invalid("deterministic successor privacy case already exists"));
+            return Err(plan_invalid(
+                "deterministic successor privacy case already exists",
+            ));
         }
-        plan_case_create(definition, request, privacy_case_from_create_request(request)?)
+        plan_case_create(
+            definition,
+            request,
+            privacy_case_from_create_request(request)?,
+        )
     }
 }
 
@@ -119,7 +125,9 @@ impl TransactionalAggregatePlanner for CustomerPrivacyCasePreviousReferencePlann
                 validate_previous_case_snapshot(request, previous_case_id, snapshot)?;
             }
             None if current.is_some() => {
-                return Err(plan_invalid("deterministic root privacy case already exists"));
+                return Err(plan_invalid(
+                    "deterministic root privacy case already exists",
+                ));
             }
             None => {}
         }
@@ -252,11 +260,7 @@ pub fn validate_previous_case_snapshot(
 fn decode_create_request(
     request: &CapabilityRequest,
 ) -> Result<wire::CreatePrivacyCaseRequest, SdkError> {
-    support::decode_request(
-        request,
-        MODULE_ID,
-        CREATE_PRIVACY_CASE_REQUEST_SCHEMA,
-    )
+    support::decode_request(request, MODULE_ID, CREATE_PRIVACY_CASE_REQUEST_SCHEMA)
 }
 
 fn plan_case_create(
@@ -393,10 +397,7 @@ fn policy_version(value: String) -> Result<SchemaVersion, SdkError> {
         ));
     }
     SchemaVersion::try_new(value).map_err(|error| {
-        SdkError::invalid_argument(
-            "customer_privacy.case.policy_version",
-            error.to_string(),
-        )
+        SdkError::invalid_argument("customer_privacy.case.policy_version", error.to_string())
     })
 }
 
@@ -475,9 +476,7 @@ fn plan_invalid(reference: impl Into<String>) -> SdkError {
     .with_internal_reference(reference.into())
 }
 
-fn configured<T>(
-    value: Result<T, crm_module_sdk::IdentifierError>,
-) -> Result<T, SdkError> {
+fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
     value.map_err(configuration_error)
 }
 
@@ -627,10 +626,9 @@ mod tests {
         assert_eq!(payload.data_class, DataClass::Confidential);
         assert_eq!(plan.batch.events[0].event.aggregate, *reference);
 
-        let response = wire::CreatePrivacyCaseResponse::decode(
-            plan.output.as_ref().unwrap().bytes.as_slice(),
-        )
-        .unwrap();
+        let response =
+            wire::CreatePrivacyCaseResponse::decode(plan.output.as_ref().unwrap().bytes.as_slice())
+                .unwrap();
         let privacy_case = response.privacy_case.unwrap();
         assert_eq!(
             privacy_case.privacy_case_ref.unwrap().privacy_case_id,
@@ -665,7 +663,10 @@ mod tests {
             .target(&capability_definition().unwrap(), &request)
             .unwrap();
         assert_eq!(target.presence, AggregatePresence::MustBeAbsent);
-        assert_ne!(target.reference.record_id.as_str(), "privacy-case-predecessor");
+        assert_ne!(
+            target.reference.record_id.as_str(),
+            "privacy-case-predecessor"
+        );
     }
 
     #[test]
@@ -687,10 +688,8 @@ mod tests {
             panic!("successor must be a new record");
         };
         assert_ne!(reference, &predecessor.reference);
-        let response = wire::CreatePrivacyCaseResponse::decode(
-            plan.output.unwrap().bytes.as_slice(),
-        )
-        .unwrap();
+        let response =
+            wire::CreatePrivacyCaseResponse::decode(plan.output.unwrap().bytes.as_slice()).unwrap();
         assert_eq!(
             response
                 .privacy_case

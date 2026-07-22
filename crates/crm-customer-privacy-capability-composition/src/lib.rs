@@ -7,9 +7,7 @@
 //! reconstructs the governed record envelope and delegates strict state
 //! validation back to the capability/persistence adapters.
 
-use crm_capability_runtime::{
-    CapabilityRequest, TransactionalCapabilityExecutor,
-};
+use crm_capability_runtime::{CapabilityRequest, TransactionalCapabilityExecutor};
 use crm_core_data::{
     PostgresDataStore, PostgresTransactionalAggregateExecutor, TransactionalAggregateGuard,
 };
@@ -70,11 +68,7 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyPreviousCaseGuard {
             .ok_or_else(previous_case_not_found)?;
 
             let snapshot = decode_snapshot(previous_case_id, row)?;
-            validate_previous_case_snapshot(
-                request,
-                &snapshot.reference.record_id,
-                &snapshot,
-            )
+            validate_previous_case_snapshot(request, &snapshot.reference.record_id, &snapshot)
         })
     }
 }
@@ -126,9 +120,8 @@ fn decode_snapshot(
     let descriptor_hash: [u8; 32] = descriptor_hash.try_into().map_err(|_| {
         reference_state_invalid("previous case descriptor hash must contain exactly 32 bytes")
     })?;
-    let maximum_size_bytes = u64::try_from(maximum_payload_size).map_err(|_| {
-        reference_state_invalid("previous case maximum payload size is negative")
-    })?;
+    let maximum_size_bytes = u64::try_from(maximum_payload_size)
+        .map_err(|_| reference_state_invalid("previous case maximum payload size is negative"))?;
 
     Ok(RecordSnapshot {
         reference: privacy_case_ref_from_id(&case_id)?,

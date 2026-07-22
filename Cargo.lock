@@ -350,6 +350,7 @@ dependencies = [
  "crm-customer-enrichment-visibility",
  "crm-customer-enrichment-worker-composition",
  "crm-customer-privacy-capability-adapter",
+ "crm-customer-privacy-capability-composition",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",
@@ -1082,6 +1083,18 @@ dependencies = [
  "crm-proto-contracts",
  "prost",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "crm-customer-privacy-capability-composition"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-privacy",
+ "crm-customer-privacy-capability-adapter",
+ "crm-module-sdk",
+ "sqlx",
 ]
 
 [[package]]
