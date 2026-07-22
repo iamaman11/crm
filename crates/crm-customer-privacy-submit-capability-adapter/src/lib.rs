@@ -32,8 +32,7 @@ pub const SUBMIT_PRIVACY_CASE_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.SubmitPrivacyCaseRequest";
 pub const SUBMIT_PRIVACY_CASE_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.SubmitPrivacyCaseResponse";
-pub const PRIVACY_CASE_STATUS_CHANGED_EVENT_TYPE: &str =
-    "customer_privacy.case.status_changed";
+pub const PRIVACY_CASE_STATUS_CHANGED_EVENT_TYPE: &str = "customer_privacy.case.status_changed";
 pub const PRIVACY_CASE_STATUS_CHANGED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.PrivacyCaseStatusChangedEvent";
 pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[SUBMIT_PRIVACY_CASE_CAPABILITY];
@@ -93,13 +92,7 @@ impl TransactionalAggregatePlanner for CustomerPrivacyCaseSubmitCapabilityPlanne
             )
             .map_err(domain_error)?;
 
-        build_plan(
-            definition,
-            request,
-            current,
-            privacy_case,
-            previous_version,
-        )
+        build_plan(definition, request, current, privacy_case, previous_version)
     }
 }
 
@@ -225,7 +218,10 @@ fn build_plan(
     })
 }
 
-fn case_to_wire(privacy_case: &PrivacyCase, updated_at: i64) -> Result<wire::PrivacyCase, SdkError> {
+fn case_to_wire(
+    privacy_case: &PrivacyCase,
+    updated_at: i64,
+) -> Result<wire::PrivacyCase, SdkError> {
     Ok(wire::PrivacyCase {
         privacy_case_ref: Some(wire::PrivacyCaseRef {
             privacy_case_id: privacy_case.case_id().as_str().to_owned(),
@@ -503,13 +499,15 @@ mod tests {
             RecordMutation::Create { .. } => panic!("submit must update the case"),
         }
         assert_eq!(plan.batch.events[0].aggregate_version, 2);
-        assert_eq!(plan.batch.events[0].event.expected_aggregate_version, Some(1));
-        let output = wire::SubmitPrivacyCaseResponse::decode(
-            plan.output.as_ref().unwrap().bytes.as_slice(),
-        )
-        .unwrap()
-        .privacy_case
-        .unwrap();
+        assert_eq!(
+            plan.batch.events[0].event.expected_aggregate_version,
+            Some(1)
+        );
+        let output =
+            wire::SubmitPrivacyCaseResponse::decode(plan.output.as_ref().unwrap().bytes.as_slice())
+                .unwrap()
+                .privacy_case
+                .unwrap();
         assert_eq!(output.status, wire::PrivacyCaseStatus::Submitted as i32);
         assert_eq!(output.version, 2);
         assert_eq!(output.updated_at_unix_ms, 2_000);
