@@ -75,7 +75,10 @@ async fn customer_privacy_case_create_real_process_is_bounded_and_replay_safe() 
         .json()
         .await
         .expect("decode unauthenticated response");
-    assert_eq!(unauthenticated_body, serde_json::json!({"error": "request_failed"}));
+    assert_eq!(
+        unauthenticated_body,
+        serde_json::json!({"error": "request_failed"})
+    );
     assert_safe_text(&unauthenticated_body.to_string());
     assert_eq!(evidence_counts(&admin, TENANT_A).await, initial);
 
@@ -258,7 +261,9 @@ fn create_payload(
     )
 }
 
-fn decode_case(response: &crm_application_runtime::gateway_v1::MutateResponse) -> wire::PrivacyCase {
+fn decode_case(
+    response: &crm_application_runtime::gateway_v1::MutateResponse,
+) -> wire::PrivacyCase {
     wire::CreatePrivacyCaseResponse::decode(
         response
             .output
