@@ -21,7 +21,7 @@ use support::{
 
 const PRIVACY_MODULE: &str = "crm.customer-privacy";
 const CREATE_CASE: &str = "customer_privacy.case.create";
-const RECORD_TYPE: &str = "customer_privacy.privacy_case";
+const RECORD_TYPE: &str = "customer-privacy.case";
 const RAW_MARKER: &str = "raw-privacy-payload-must-not-leak";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -282,7 +282,7 @@ async fn evidence_counts(pool: &PgPool, tenant: &str) -> EvidenceCounts {
         records: count(
             pool,
             tenant,
-            "SELECT count(*) FROM crm.records WHERE tenant_id = $1 AND owner_module_id = 'crm.customer-privacy' AND record_type = 'customer_privacy.privacy_case'",
+            "SELECT count(*) FROM crm.records WHERE tenant_id = $1 AND owner_module_id = 'crm.customer-privacy' AND record_type = 'customer-privacy.case'",
         )
         .await,
         events: count(
