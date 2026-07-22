@@ -1,6 +1,6 @@
 # Acceptance gates for `crm.customer-privacy`
 
-Current state: **Gate review for the fifth production vertical slice**. Architecture, pure domain, canonical private persistence, immutable public contracts, FORCE RLS proof, three public mutations and permission-aware `case.get` are merged. Draft PR #150 promotes only `customer_privacy.case.cancel@1.0.0`; the remaining eleven public Customer Privacy coordinates stay non-runtime.
+Current state: **Four production mutations and one permission-aware query are merged**. Architecture, pure domain, canonical private persistence, immutable public contracts, FORCE RLS proof, `case.create`, `case.submit`, `case.subject.verify`, `case.cancel` and `case.get` are accepted. The remaining eleven public Customer Privacy coordinates stay non-runtime.
 
 - [x] Freeze immutable module identity and first ownership boundary.
 - [x] Keep the pure module core infrastructure-neutral and deny direct cross-owner storage access.
@@ -34,8 +34,8 @@ Current state: **Gate review for the fifth production vertical slice**. Architec
 - [x] Fail retryably if the subject lock-set changes between discovery and locked recheck; never accept an unbound-to-bound TOCTOU transition, never reverse the subject-before-case lock order and never perform a deadlock-prone `FOR SHARE` to `FOR UPDATE` upgrade for unbound cases.
 - [x] Plan one case update, one status-changed event, one audit intent and one idempotency claim in the same PostgreSQL business transaction; exact replay creates no duplicate evidence.
 - [x] Add permanent unit and real-process acceptance for verified and unbound cancellation, preserved binding, replay/conflict, stale and terminal states, tenant concealment, subject-lock contention/retry, module suspension, absent live grant and bounded safe transport errors.
-- [x] Freeze candidate route parity at exactly four runtime Customer Privacy mutations, one runtime Customer Privacy query and eleven non-runtime public Customer Privacy coordinates; worker-only and crypto-shred classifications remain unchanged.
-- [ ] Accept draft PR #150 on one unchanged post-Generated-Sync source SHA after all 18 applicable workflows pass and review threads are resolved.
+- [x] Freeze production route parity at exactly four runtime Customer Privacy mutations, one runtime Customer Privacy query and eleven non-runtime public Customer Privacy coordinates; worker-only and crypto-shred classifications remain unchanged.
+- [x] Accept PR #150 on unchanged post-Generated-Sync source SHA `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb` after all 18 permanent workflows passed, review state remained clean and the branch was zero commits behind `main`; squash merge as `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671` with the exact expected head.
 - [ ] Add the remaining permission-aware public case, restriction and legal-hold mutations/queries through separately bounded module-owned production contributions.
 - [ ] Prove privacy restriction is deny-only, live, race-free and cannot be bypassed by module disable/uninstall.
 - [ ] Add bounded owner scope/action contribution contracts without direct storage coupling.
@@ -46,6 +46,6 @@ Current state: **Gate review for the fifth production vertical slice**. Architec
 - [ ] Prove projection, search and cache tombstone/rebuild convergence.
 - [ ] Promote every remaining public, worker-only and reasoned non-runtime coordinate exactly once after its production proof.
 - [ ] Complete fresh-PostgreSQL worker-process, restriction/legal-hold, deletion/convergence and full-lifecycle acceptance.
-- [ ] Synchronize module catalog, roadmap/status, issue #126 and PR evidence on the final unchanged accepted source SHA.
+- [ ] Select exactly one next bounded coordinate after comparing `case.list`, `case.approve` and restriction placement.
 
-Phase 8A.11 remains **In progress** after `case.create`, `case.submit`, `case.subject.verify` and `case.get`; `case.cancel` is the active separately bounded gate-review slice.
+Phase 8A.11 remains **In progress** after `case.create`, `case.submit`, `case.subject.verify`, `case.get` and `case.cancel`; the next coordinate has not yet been promoted.

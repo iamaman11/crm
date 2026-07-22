@@ -47,9 +47,10 @@ Current customer-master lane:
 3. **8A.9 / #124 / PR #132** — Customer Data Quality — **Complete**.
 4. **Architecture integrity / #134 / PR #135** — native composition/lifecycle gating — **Complete**.
 5. **8A.10 / #125 / PR #137** — Governed Customer Enrichment and Provenance — **Complete**.
-6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **Ready** and next in the lane.
-7. **Phase 8A closure** — after merged privacy interaction proof.
-8. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
+6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **In progress**; foundation plus `case.create`, `case.submit`, `case.subject.verify`, `case.get` and `case.cancel` are merged through PR #150.
+7. **Next bounded 8A.11 slice** — select exactly one of `case.list`, `case.approve` or restriction placement after this post-merge synchronization.
+8. **Phase 8A closure** — after merged privacy interaction proof.
+9. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
 
 Parallel work is allowed only when ownership boundaries and dependencies are explicit and the work cannot invalidate another packet's exact candidate.
 
@@ -157,7 +158,8 @@ As of 2026-07-22:
 - Native module composition/lifecycle integrity is complete through PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`.
 - Phase 8A.10 is complete through PR #137; accepted source `f92d101206886e3ceaf94d0e56e52580cec21093`; merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 - Customer Enrichment runtime inventory is exactly 6 public mutations, 6 permission-aware queries and 5 activation-gated worker-only coordinates.
-- Phase 8A.11 / #126 is **Ready** after the post-8A.10 integrity synchronization merges.
+- Phase 8A.11 / #126 is **In progress**. PR #150 accepted source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb` and merge `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671` established four runtime Customer Privacy mutations, one runtime query, eleven public non-runtime coordinates and zero Customer Privacy workers.
+- The next Customer Privacy implementation coordinate is not selected until this corrective documentation branch merges and `case.list`, `case.approve` and restriction placement are compared.
 - Phase 8B / #29 remains planned after Phase 8A closure.
 
 This baseline must be updated whenever the active packet or merged completion state changes.

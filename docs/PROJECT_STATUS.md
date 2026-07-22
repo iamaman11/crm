@@ -16,7 +16,7 @@ Authoritative references:
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; `case.create`, `case.submit`, `case.subject.verify` and permission-aware `case.get` are merged, and draft PR #150 is in Gate review for `case.cancel`.**
+**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; `case.create`, `case.submit`, `case.subject.verify`, `case.cancel` and permission-aware `case.get` are merged through PR #150.**
 
 Current Phase 8A baseline:
 
@@ -25,11 +25,11 @@ Current Phase 8A baseline:
 - **8A.8 — Complete:** governed customer export, artifacts and reconciliation (#123 / PR #130).
 - **8A.9 — Complete:** Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132).
 - **8A.10 — Complete:** Governed Customer Enrichment and Provenance (#125 / PR #137).
-- **8A.11 — In progress:** architecture, owner foundation, deterministic domain, canonical persistence, immutable public contracts, FORCE RLS persistence, three public mutations and one permission-aware query are merged through PR #149. Draft PR #150 promotes only `customer_privacy.case.cancel@1.0.0`.
+- **8A.11 — In progress:** architecture, owner foundation, deterministic domain, canonical persistence, immutable public contracts, FORCE RLS persistence, four public mutations and one permission-aware query are merged through PR #150.
 
 The active dependency lane is:
 
-`8A.11 case.cancel gate review -> separately bounded approval/remaining queries/restriction/legal-hold/worker slices -> Phase 8A closure -> 8B`
+`post-merge PR #150 governance sync -> one bounded case.list / case.approve / restriction slice -> remaining privacy lifecycle -> Phase 8A closure -> 8B`
 
 ## Phase 8A.10 accepted result
 
@@ -56,7 +56,8 @@ The following bounded PRs are merged:
 - PR #146 — `customer_privacy.case.create@1.0.0`;
 - PR #147 — `customer_privacy.case.submit@1.0.0`;
 - PR #148 — `customer_privacy.case.subject.verify@1.0.0`;
-- PR #149 — `customer_privacy.case.get@1.0.0`.
+- PR #149 — `customer_privacy.case.get@1.0.0`;
+- PR #150 — `customer_privacy.case.cancel@1.0.0`.
 
 PR #145 was accepted on source SHA `f37d9a5e025745abaaf0aeb351ff9bb534455aab` and merged as `721a1cf185ffbdea309bd1199c6c4568cf82d7a1`. Its applicable workflows proved clean migrations, FORCE RLS under `NOSUPERUSER + NOBYPASSRLS`, tenant isolation, missing-context concealment, `row_security=off` resistance, full rollback, schema removal, reapply and repeated FORCE RLS proof.
 
@@ -68,28 +69,19 @@ PR #148 was accepted on unchanged source SHA `118327e09a6e31ba87b02bdab99289035b
 
 PR #149 was accepted on unchanged post-sync source SHA `5a47318b24007cd534434ff6bac33fbd59215d38`, passed all 18 permanent workflows and merged as `5d580a7c253bcfa6c2dd981100612b222fd26825`. It provides strict FORCE-RLS case lookup, canonical aggregate rehydration, live case and canonical Party visibility, field redaction, uniform concealment and side-effect-free real HTTP/gRPC query acceptance.
 
-## Active packet: race-free Customer Privacy case cancellation
+PR #150 was accepted on unchanged post-sync source SHA `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, passed all 18 permanent workflows and was squash-merged as `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`. It provides race-free terminal cancellation with shared sorted/deduplicated subject locks before a retained final case-row `FOR UPDATE`, direct row serialization for unbound cases, immutable lineage preservation, exact replay/conflict, lock-contention rollback/retry, generic ingress, live authorization/activation and permanent clean/reapplied FORCE-RLS process acceptance.
 
-Draft PR #150 is deliberately bounded to:
+## Current Customer Privacy production inventory
 
-`customer_privacy.case.cancel@1.0.0`
+The merged inventory is exactly:
 
-The candidate implementation provides:
+- **4 public mutations:** create, submit, subject verification and cancel;
+- **1 permission-aware query:** case get;
+- **11 public non-runtime coordinates**;
+- **0 Customer Privacy worker runtime routes**;
+- crypto-shred remains reasoned non-runtime and is not introduced as a public, worker or platform route.
 
-- exact mutation owner, capability/version and confidential Protobuf request/response validation;
-- strict RLS-bound case rehydration and optimistic expected-version handling;
-- a terminal `Cancelled` transition from every currently cancellable state while preserving immutable subject, rescope, scope, plan and approval lineage;
-- an exact sorted/deduplicated subject lock-set from canonical binding plus pending rescope target;
-- shared subject locks acquired before the case row, followed by strict lock-set rehydration while taking and retaining the final `FOR UPDATE` row lock;
-- unbound Draft/Submitted cases serialize directly on the case row without a meaningless subject lock or a deadlock-prone `FOR SHARE` to `FOR UPDATE` upgrade;
-- retryable fail-closed behavior if subject binding/rescope changes between discovery and locked validation;
-- one record update, one immutable status event, one audit intent and one idempotency claim in one PostgreSQL business transaction;
-- exact replay without duplicate evidence and incompatible replay rejection;
-- generic production HTTP/gRPC mutation ingress with live authorization and activation gating;
-- permanent real-process acceptance for verified and unbound cancellation, preserved binding, stale/terminal/conflict behavior, tenant concealment, lock contention/retry, suspension, absent grant and safe bounded errors;
-- candidate route parity of exactly four runtime Customer Privacy mutations, one runtime query and eleven non-runtime public coordinates.
-
-No approval, remaining privacy query, restriction, legal-hold, worker, owner-execution or crypto-shred coordinate is promoted by this slice.
+No approval, remaining query, restriction, legal-hold, worker or owner-execution coordinate was promoted by PR #150.
 
 ## Remaining Phase 8A.11 boundary
 
@@ -97,7 +89,7 @@ Phase 8A.11 is not complete. Remaining work includes approval, live restriction 
 
 ## Merged platform and customer-master baseline
 
-Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and four accepted Customer Privacy coordinates.
+Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and five accepted Customer Privacy coordinates.
 
 ## Product completeness reality
 
@@ -105,8 +97,8 @@ The project is **not yet a complete universal CRM**. Major required families sti
 
 ## Immediate next actions
 
-1. Accept draft PR #150 only after all 18 applicable workflows pass on one unchanged post-Generated-Sync source SHA and review threads are resolved.
-2. Merge `case.cancel` with the expected unchanged head and record source/merge SHAs in PR #150 and issue #126.
-3. Select the next bounded Customer Privacy coordinate without combining approval, remaining queries, restrictions, legal holds or workers in one slice.
+1. Merge this post-PR #150 documentation synchronization after its own applicable exact-head gates.
+2. Compare only `customer_privacy.case.list@1.0.0`, `customer_privacy.case.approve@1.0.0` and restriction placement.
+3. Select one next bounded Customer Privacy coordinate without combining approval, queries, restrictions, legal holds or workers.
 4. Keep all remaining privacy coordinates non-runtime until their own production proofs are complete.
 5. Close Phase 8A only after the full privacy/customer-master interaction baseline is merged and reconciled; begin Phase 8B / #29 only afterward.
