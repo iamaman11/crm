@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = []
+customer-privacy-subject-verify-candidate = [
+  "crm-application-runtime/customer-privacy-subject-verify-candidate",
+]
+
 [lints.clippy]
 # Process-acceptance helpers intentionally pass explicit governed context values.
 # Keep the exception local to the executable/test crate rather than weakening workspace policy.
@@ -19,6 +25,7 @@ crm-capability-runtime = { path = "../../crates/crm-capability-runtime" }
 crm-core-data = { path = "../../crates/crm-core-data" }
 crm-customer-360-composition = { path = "../../crates/crm-customer-360-composition" }
 crm-customer-privacy-capability-adapter = { path = "../../crates/crm-customer-privacy-capability-adapter" }
+crm-customer-privacy-subject-capability-adapter = { path = "../../crates/crm-customer-privacy-subject-capability-adapter" }
 crm-data-quality = { path = "../../modules/crm-data-quality" }
 crm-data-quality-capability-adapter = { path = "../../crates/crm-data-quality-capability-adapter" }
 crm-data-quality-source-composition = { path = "../../crates/crm-data-quality-source-composition" }
