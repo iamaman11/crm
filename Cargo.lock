@@ -188,7 +188,7 @@ checksum = "d524456ba66e72eb8b115ff89e01e497f8e6d11d78b70b1aa13c0fbd97540a81"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
- "rand_core",
+ "rand_core 0.10.1",
 ]
 
 [[package]]
@@ -261,8 +261,8 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
- "sqlx",
+ "prost 0.14.4",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -289,11 +289,11 @@ dependencies = [
  "crm-proto-contracts",
  "crm-query-runtime",
  "crm-sales-activities-capability-composition",
- "prost",
+ "prost 0.14.4",
  "reqwest",
  "serde_json",
  "sha2 0.10.9",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
  "tonic",
 ]
@@ -386,13 +386,13 @@ dependencies = [
  "crm-search-query-adapter",
  "crm-search-runtime",
  "http",
- "prost",
+ "prost 0.14.4",
  "prost-build",
  "protoc-bin-vendored",
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
  "tokio-stream",
  "tonic",
@@ -426,9 +426,9 @@ dependencies = [
  "crm-sales-activities-capability-composition",
  "crm-sales-activities-query-adapter",
  "http",
- "prost",
+ "prost 0.14.4",
  "sha2 0.10.9",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
  "tonic",
 ]
@@ -442,7 +442,7 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "prost-types",
  "serde_json",
  "sha2 0.10.9",
@@ -505,7 +505,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -531,7 +531,7 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -556,7 +556,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -578,11 +578,11 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-search-runtime",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -635,7 +635,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-projection-runtime",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
 ]
@@ -651,9 +651,9 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
  "serde_json",
- "sqlx",
+ "sqlx 0.9.0",
 ]
 
 [[package]]
@@ -677,7 +677,7 @@ dependencies = [
  "crm-customer-accounts",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde_json",
 ]
 
@@ -703,7 +703,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -727,7 +727,7 @@ dependencies = [
  "crm-customer-data-operations",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -744,7 +744,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "sha2 0.10.9",
  "tokio",
 ]
@@ -761,7 +761,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -801,7 +801,7 @@ dependencies = [
  "crm-customer-enrichment-review-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
 ]
@@ -823,10 +823,10 @@ dependencies = [
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -840,7 +840,7 @@ dependencies = [
  "crm-customer-enrichment",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
 ]
@@ -860,7 +860,7 @@ dependencies = [
  "crm-parties-query-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -874,7 +874,7 @@ dependencies = [
  "crm-customer-enrichment-capability-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
 ]
@@ -898,11 +898,11 @@ dependencies = [
  "crm-customer-enrichment-review-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -921,10 +921,10 @@ dependencies = [
  "crm-customer-enrichment-worker-composition",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde_json",
  "sha2 0.10.9",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -948,7 +948,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -978,7 +978,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -992,7 +992,7 @@ dependencies = [
  "crm-customer-enrichment-capability-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
 ]
@@ -1012,10 +1012,10 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -1032,7 +1032,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1060,10 +1060,10 @@ dependencies = [
  "crm-customer-enrichment-registry-http-transport",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde_json",
  "sha2 0.10.9",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -1089,7 +1089,7 @@ dependencies = [
  "crm-customer-privacy-persistence-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1103,7 +1103,7 @@ dependencies = [
  "crm-customer-privacy-persistence-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "sha2 0.10.9",
 ]
 
@@ -1126,8 +1126,8 @@ dependencies = [
  "crm-parties-capability-adapter",
  "crm-party-reference-composition",
  "crm-proto-contracts",
- "prost",
- "sqlx",
+ "prost 0.14.4",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -1152,7 +1152,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1166,7 +1166,7 @@ dependencies = [
  "crm-customer-privacy-persistence-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1180,7 +1180,7 @@ dependencies = [
  "crm-customer-privacy-persistence-adapter",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1203,7 +1203,7 @@ dependencies = [
  "crm-data-quality",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1219,7 +1219,7 @@ dependencies = [
  "crm-parties-query-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1236,7 +1236,7 @@ dependencies = [
  "crm-parties-query-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1249,7 +1249,7 @@ dependencies = [
  "crm-projection-runtime",
  "crm-proto-contracts",
  "crm-search-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1316,7 +1316,7 @@ dependencies = [
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1331,7 +1331,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1343,7 +1343,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-party-reference-composition",
- "sqlx",
+ "sqlx 0.9.0",
 ]
 
 [[package]]
@@ -1355,7 +1355,7 @@ dependencies = [
  "crm-metadata-schema",
  "crm-module-sdk",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde_json",
 ]
 
@@ -1369,7 +1369,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
  "tokio",
 ]
 
@@ -1442,9 +1442,27 @@ dependencies = [
  "crm-parties",
  "crm-proto-contracts",
  "http",
- "prost",
- "sqlx",
+ "prost 0.14.4",
+ "sqlx 0.9.0",
  "tokio",
+]
+
+[[package]]
+name = "crm-parties-privacy-scope-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-privacy",
+ "crm-identity-resolution-topology-composition",
+ "crm-module-sdk",
+ "crm-parties",
+ "crm-parties-capability-adapter",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost 0.13.5",
+ "sha2 0.10.9",
+ "sqlx 0.8.6",
 ]
 
 [[package]]
@@ -1459,7 +1477,7 @@ dependencies = [
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1469,7 +1487,7 @@ dependencies = [
  "crm-core-data",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
- "sqlx",
+ "sqlx 0.9.0",
 ]
 
 [[package]]
@@ -1492,7 +1510,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-party-relationships",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1514,7 +1532,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-projection-runtime",
  "crm-proto-contracts",
- "prost",
+ "prost 0.14.4",
  "serde",
  "serde_json",
 ]
@@ -1531,7 +1549,7 @@ dependencies = [
  "crm-party-relationships-capability-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1548,7 +1566,7 @@ dependencies = [
 name = "crm-proto-contracts"
 version = "0.1.0"
 dependencies = [
- "prost",
+ "prost 0.14.4",
  "prost-build",
  "prost-types",
  "protoc-bin-vendored",
@@ -1598,9 +1616,9 @@ dependencies = [
  "crm-sales-capability-adapter",
  "crm-search-query-adapter",
  "crm-search-runtime",
- "prost",
+ "prost 0.14.4",
  "serde_json",
- "sqlx",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -1621,7 +1639,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-sales-activities-link",
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -1636,7 +1654,7 @@ dependencies = [
  "crm-proto-contracts",
  "crm-query-runtime",
  "crm-sales",
- "prost",
+ "prost 0.14.4",
  "tokio",
 ]
 
@@ -1651,8 +1669,8 @@ dependencies = [
  "crm-module-sdk",
  "crm-proto-contracts",
  "crm-sales",
- "prost",
- "sqlx",
+ "prost 0.14.4",
+ "sqlx 0.9.0",
  "tokio",
 ]
 
@@ -1667,7 +1685,7 @@ dependencies = [
  "crm-proto-contracts",
  "crm-query-runtime",
  "crm-search-runtime",
- "prost",
+ "prost 0.14.4",
  "tokio",
 ]
 
@@ -1811,6 +1829,17 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "etcetera"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "136d1b5283a1ab77bd9257427ffd09d8667ced0570b6f938942bc7568ed5b943"
+dependencies = [
+ "cfg-if",
+ "home",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2006,7 +2035,7 @@ dependencies = [
  "js-sys",
  "libc",
  "r-efi",
- "rand_core",
+ "rand_core 0.10.1",
  "wasm-bindgen",
 ]
 
@@ -2035,6 +2064,8 @@ version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
+ "allocator-api2",
+ "equivalent",
  "foldhash 0.1.5",
 ]
 
@@ -2057,6 +2088,15 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hashlink"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
+dependencies = [
+ "hashbrown 0.15.5",
+]
+
+[[package]]
+name = "hashlink"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "824e001ac4f3012dd16a264bec811403a67ca9deb6c102fc5049b32c4574b35f"
@@ -2075,6 +2115,15 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hkdf"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
+dependencies = [
+ "hmac 0.12.1",
+]
 
 [[package]]
 name = "hkdf"
@@ -2101,6 +2150,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest 0.11.3",
+]
+
+[[package]]
+name = "home"
+version = "0.5.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2192,7 +2250,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]
@@ -2383,6 +2441,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
+name = "libredox"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c943259e342f1e06ff2da7a83eabdfe7f92ce10262688dbf1895ff0b3e6e4652"
+dependencies = [
+ "bitflags",
+ "libc",
+ "plain",
+ "redox_syscall 0.9.0",
+]
+
+[[package]]
 name = "libsqlite3-sys"
 version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2430,6 +2500,16 @@ name = "matchit"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
+
+[[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest 0.10.7",
+]
 
 [[package]]
 name = "md-5"
@@ -2509,7 +2589,7 @@ checksum = "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.5.18",
  "smallvec",
  "windows-link",
 ]
@@ -2564,12 +2644,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
+name = "plain"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
+
+[[package]]
 name = "potential_utf"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0103b1cef7ec0cf76490e969665504990193874ea05c85ff9bab8b911d0a0564"
 dependencies = [
  "zerovec",
+]
+
+[[package]]
+name = "ppv-lite86"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
+dependencies = [
+ "zerocopy",
 ]
 
 [[package]]
@@ -2593,12 +2688,22 @@ dependencies = [
 
 [[package]]
 name = "prost"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2796faa41db3ec313a31f7624d9286acf277b52de526150b7e69f3debf891ee5"
+dependencies = [
+ "bytes",
+ "prost-derive 0.13.5",
+]
+
+[[package]]
+name = "prost"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.14.4",
 ]
 
 [[package]]
@@ -2613,13 +2718,26 @@ dependencies = [
  "multimap",
  "petgraph",
  "prettyplease",
- "prost",
+ "prost 0.14.4",
  "prost-types",
  "pulldown-cmark",
  "pulldown-cmark-to-cmark",
  "regex",
  "syn 2.0.119",
  "tempfile",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -2641,7 +2759,7 @@ version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f94967dc7688f3054c7fac87473ffae4cc4c3904800e2d9f5b857246d8963b0a"
 dependencies = [
- "prost",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -2757,7 +2875,7 @@ dependencies = [
  "bytes",
  "getrandom 0.4.3",
  "lru-slab",
- "rand",
+ "rand 0.10.2",
  "rand_pcg",
  "ring",
  "rustc-hash",
@@ -2801,13 +2919,43 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rand"
+version = "0.8.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22f6172bdec972074665ed81ed53b71da00bfc44b65a753cfde883ec4c702a1a"
+dependencies = [
+ "libc",
+ "rand_chacha",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"
 dependencies = [
  "chacha20",
  "getrandom 0.4.3",
- "rand_core",
+ "rand_core 0.10.1",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+dependencies = [
+ "getrandom 0.2.17",
 ]
 
 [[package]]
@@ -2822,7 +2970,7 @@ version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caa0f4137e1c0a72f4c651489402276c8e8e1cf081f3b0ba156d2cbeef09e86a"
 dependencies = [
- "rand_core",
+ "rand_core 0.10.1",
 ]
 
 [[package]]
@@ -2830,6 +2978,15 @@ name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
+name = "redox_syscall"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5102a6aaa05aa011a238e178e6bca86d2cb56fc9f586d37cb80f5bca6e07759"
 dependencies = [
  "bitflags",
 ]
@@ -2901,7 +3058,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "webpki-roots",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]
@@ -2953,9 +3110,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.15.0"
+version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "764899a24af3980067ee14bc143654f297b22eaebfe3c7b6b211920a5a59b046"
+checksum = "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96"
 dependencies = [
  "web-time",
  "zeroize",
@@ -3147,15 +3304,62 @@ dependencies = [
 
 [[package]]
 name = "sqlx"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fefb893899429669dcdd979aff487bd78f4064e5e7907e4269081e0ef7d97dc"
+dependencies = [
+ "sqlx-core 0.8.6",
+ "sqlx-macros 0.8.6",
+ "sqlx-postgres 0.8.6",
+]
+
+[[package]]
+name = "sqlx"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "378620ccc25c62c89d8be1c819e76a88d59bdcc3304733330788948e619bfd71"
 dependencies = [
- "sqlx-core",
- "sqlx-macros",
+ "sqlx-core 0.9.0",
+ "sqlx-macros 0.9.0",
  "sqlx-mysql",
- "sqlx-postgres",
+ "sqlx-postgres 0.9.0",
  "sqlx-sqlite",
+]
+
+[[package]]
+name = "sqlx-core"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee6798b1838b6a0f69c007c133b8df5866302197e404e8b6ee8ed3e3a5e68dc6"
+dependencies = [
+ "base64",
+ "bytes",
+ "crc",
+ "crossbeam-queue",
+ "either",
+ "event-listener",
+ "futures-core",
+ "futures-intrusive",
+ "futures-io",
+ "futures-util",
+ "hashbrown 0.15.5",
+ "hashlink 0.10.0",
+ "indexmap",
+ "log",
+ "memchr",
+ "once_cell",
+ "percent-encoding",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "smallvec",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "url",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -3176,7 +3380,7 @@ dependencies = [
  "futures-io",
  "futures-util",
  "hashbrown 0.16.1",
- "hashlink",
+ "hashlink 0.11.1",
  "indexmap",
  "log",
  "memchr",
@@ -3194,15 +3398,51 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2d452988ccaacfbf5e0bdbc348fb91d7c8af5bee192173ac3636b5fb6e6715d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "sqlx-core 0.8.6",
+ "sqlx-macros-core 0.8.6",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "sqlx-macros"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd2b84f2bc39a5705ef27ec785a11c934a41bbd4a24941e257927cddc26b60bf"
 dependencies = [
  "proc-macro2",
  "quote",
- "sqlx-core",
- "sqlx-macros-core",
+ "sqlx-core 0.9.0",
+ "sqlx-macros-core 0.9.0",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "sqlx-macros-core"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19a9c1841124ac5a61741f96e1d9e2ec77424bf323962dd894bdb93f37d5219b"
+dependencies = [
+ "dotenvy",
+ "either",
+ "heck",
+ "hex",
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx-core 0.8.6",
+ "sqlx-postgres 0.8.6",
+ "syn 2.0.119",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -3221,9 +3461,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sqlx-core",
+ "sqlx-core 0.9.0",
  "sqlx-mysql",
- "sqlx-postgres",
+ "sqlx-postgres 0.9.0",
  "sqlx-sqlite",
  "syn 2.0.119",
  "tokio",
@@ -3251,9 +3491,46 @@ dependencies = [
  "serde",
  "sha1",
  "sha2 0.11.0",
- "sqlx-core",
+ "sqlx-core 0.9.0",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "sqlx-postgres"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db58fcd5a53cf07c184b154801ff91347e4c30d17a3562a635ff028ad5deda46"
+dependencies = [
+ "atoi",
+ "base64",
+ "bitflags",
+ "byteorder",
+ "crc",
+ "dotenvy",
+ "etcetera 0.8.0",
+ "futures-channel",
+ "futures-core",
+ "futures-util",
+ "hex",
+ "hkdf 0.12.4",
+ "hmac 0.12.1",
+ "home",
+ "itoa",
+ "log",
+ "md-5 0.10.6",
+ "memchr",
+ "once_cell",
+ "rand 0.8.7",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "smallvec",
+ "sqlx-core 0.8.6",
+ "stringprep",
+ "thiserror",
+ "tracing",
+ "whoami 1.6.1",
 ]
 
 [[package]]
@@ -3268,27 +3545,27 @@ dependencies = [
  "byteorder",
  "crc",
  "dotenvy",
- "etcetera",
+ "etcetera 0.11.0",
  "futures-channel",
  "futures-core",
  "futures-util",
  "hex",
- "hkdf",
+ "hkdf 0.13.0",
  "hmac 0.13.0",
  "itoa",
  "log",
- "md-5",
+ "md-5 0.11.0",
  "memchr",
- "rand",
+ "rand 0.10.2",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "smallvec",
- "sqlx-core",
+ "sqlx-core 0.9.0",
  "stringprep",
  "thiserror",
  "tracing",
- "whoami",
+ "whoami 2.1.2",
 ]
 
 [[package]]
@@ -3309,7 +3586,7 @@ dependencies = [
  "log",
  "percent-encoding",
  "serde",
- "sqlx-core",
+ "sqlx-core 0.9.0",
  "thiserror",
  "tracing",
  "url",
@@ -3548,7 +3825,7 @@ version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcfab99db777fba2802f0dfa861d1628d1ae916fb199d29819941f139ae85082"
 dependencies = [
- "prost",
+ "prost 0.14.4",
  "tokio",
  "tokio-stream",
  "tonic",
@@ -3562,7 +3839,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50849f68853be452acf590cde0b146665b8d507b3b8af17261df47e02c209ea0"
 dependencies = [
  "bytes",
- "prost",
+ "prost 0.14.4",
  "tonic",
 ]
 
@@ -3778,6 +4055,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
+name = "wasite"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8dad83b4f25e74f184f64c43b150b91efe7647395b42289f38e50566d82855b"
+
+[[package]]
 name = "wasm-bindgen"
 version = "0.2.126"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3867,11 +4150,30 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
+version = "0.26.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
+dependencies = [
+ "webpki-roots 1.0.9",
+]
+
+[[package]]
+name = "webpki-roots"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
 dependencies = [
  "rustls-pki-types",
+]
+
+[[package]]
+name = "whoami"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d4a4db5077702ca3015d3d02d74974948aba2ad9e12ab7df718ee64ccd7e97d"
+dependencies = [
+ "libredox",
+ "wasite",
 ]
 
 [[package]]
@@ -3888,11 +4190,20 @@ checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 
 [[package]]
 name = "windows-sys"
+version = "0.48.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9"
+dependencies = [
+ "windows-targets 0.48.5",
+]
+
+[[package]]
+name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
 dependencies = [
- "windows-targets",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3906,19 +4217,40 @@ dependencies = [
 
 [[package]]
 name = "windows-targets"
+version = "0.48.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a2fa6e2155d7247be68c096456083145c183cbbbc2764150dda45a87197940c"
+dependencies = [
+ "windows_aarch64_gnullvm 0.48.5",
+ "windows_aarch64_msvc 0.48.5",
+ "windows_i686_gnu 0.48.5",
+ "windows_i686_msvc 0.48.5",
+ "windows_x86_64_gnu 0.48.5",
+ "windows_x86_64_gnullvm 0.48.5",
+ "windows_x86_64_msvc 0.48.5",
+]
+
+[[package]]
+name = "windows-targets"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b724f72796e036ab90c1021d4780d4d3d648aca59e491e6b98e725b84e99973"
 dependencies = [
- "windows_aarch64_gnullvm",
- "windows_aarch64_msvc",
- "windows_i686_gnu",
+ "windows_aarch64_gnullvm 0.52.6",
+ "windows_aarch64_msvc 0.52.6",
+ "windows_i686_gnu 0.52.6",
  "windows_i686_gnullvm",
- "windows_i686_msvc",
- "windows_x86_64_gnu",
- "windows_x86_64_gnullvm",
- "windows_x86_64_msvc",
+ "windows_i686_msvc 0.52.6",
+ "windows_x86_64_gnu 0.52.6",
+ "windows_x86_64_gnullvm 0.52.6",
+ "windows_x86_64_msvc 0.52.6",
 ]
+
+[[package]]
+name = "windows_aarch64_gnullvm"
+version = "0.48.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b38e32f0abccf9987a4e3079dfb67dcd799fb61361e53e2882c3cbaf0d905d8"
 
 [[package]]
 name = "windows_aarch64_gnullvm"
@@ -3928,9 +4260,21 @@ checksum = "32a4622180e7a0ec044bb555404c800bc9fd9ec262ec147edd5989ccd0c02cd3"
 
 [[package]]
 name = "windows_aarch64_msvc"
+version = "0.48.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc35310971f3b2dbbf3f0690a219f40e2d9afcf64f9ab7cc1be722937c26b4bc"
+
+[[package]]
+name = "windows_aarch64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09ec2a7bb152e2252b53fa7803150007879548bc709c039df7627cabbd05d469"
+
+[[package]]
+name = "windows_i686_gnu"
+version = "0.48.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a75915e7def60c94dcef72200b9a8e58e5091744960da64ec734a6c6e9b3743e"
 
 [[package]]
 name = "windows_i686_gnu"
@@ -3946,9 +4290,21 @@ checksum = "0eee52d38c090b3caa76c563b86c3a4bd71ef1a819287c19d586d7334ae8ed66"
 
 [[package]]
 name = "windows_i686_msvc"
+version = "0.48.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f55c233f70c4b27f66c523580f78f1004e8b5a8b659e05a4eb49d4166cca406"
+
+[[package]]
+name = "windows_i686_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "240948bc05c5e7c6dabba28bf89d89ffce3e303022809e73deaefe4f6ec56c66"
+
+[[package]]
+name = "windows_x86_64_gnu"
+version = "0.48.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53d40abd2583d23e4718fddf1ebec84dbff8381c07cae67ff7768bbf19c6718e"
 
 [[package]]
 name = "windows_x86_64_gnu"
@@ -3958,9 +4314,21 @@ checksum = "147a5c80aabfbf0c7d901cb5895d1de30ef2907eb21fbbab29ca94c5b08b1a78"
 
 [[package]]
 name = "windows_x86_64_gnullvm"
+version = "0.48.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b7b52767868a23d5bab768e390dc5f5c55825b6d30b86c844ff2dc7414044cc"
+
+[[package]]
+name = "windows_x86_64_gnullvm"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24d5b23dc417412679681396f2b49f3de8c1473deb516bd34410872eff51ed0d"
+
+[[package]]
+name = "windows_x86_64_msvc"
+version = "0.48.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
 
 [[package]]
 name = "windows_x86_64_msvc"
@@ -3995,6 +4363,26 @@ dependencies = [
  "quote",
  "syn 2.0.119",
  "synstructure",
+]
+
+[[package]]
+name = "zerocopy"
+version = "0.8.55"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5a105cd7b140f6eeec8acff2ea38135d3cab283ada58540f629fe51e46696eb"
+dependencies = [
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.8.55"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fe976fb70c78cd64cccfe3a6fc142244e8a77b70959b30faf9d0ac37ee228eb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

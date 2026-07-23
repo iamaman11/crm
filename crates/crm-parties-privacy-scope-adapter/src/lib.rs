@@ -108,9 +108,9 @@ impl PartiesPrivacyScopeQueryAdapter {
 
         let snapshot = strict_party_snapshot(&validated.canonical_party_id, row)?;
         let party = party_from_snapshot(snapshot)?;
-        let resource_version = u64::try_from(party.version()).map_err(|_| stored_state_invalid(
-            "persisted Party version must be positive".to_owned(),
-        ))?;
+        let resource_version = u64::try_from(party.version()).map_err(|_| {
+            stored_state_invalid("persisted Party version must be positive".to_owned())
+        })?;
         if party.party_id().as_str() != validated.canonical_party_id.as_str() {
             return Err(stored_state_invalid(
                 "persisted Party identity does not match the locked record".to_owned(),
@@ -231,13 +231,14 @@ fn validate_wire_request(
     context: &QueryExecutionContext,
     bytes: &[u8],
 ) -> Result<ValidatedRequest, SdkError> {
-    let request = privacy::PartiesPrivacyScopeContributionRequest::decode(bytes).map_err(|error| {
-        invalid_contract_with_reference(
-            "PARTIES_PRIVACY_SCOPE_REQUEST_INVALID",
-            "The Parties privacy scope request is invalid.",
-            error.to_string(),
-        )
-    })?;
+    let request =
+        privacy::PartiesPrivacyScopeContributionRequest::decode(bytes).map_err(|error| {
+            invalid_contract_with_reference(
+                "PARTIES_PRIVACY_SCOPE_REQUEST_INVALID",
+                "The Parties privacy scope request is invalid.",
+                error.to_string(),
+            )
+        })?;
     let contribution = request.contribution.ok_or_else(|| {
         invalid_contract(
             "PARTIES_PRIVACY_SCOPE_REQUEST_INVALID",
@@ -411,7 +412,10 @@ fn build_response(
         &[
             request.lineage.tenant_id.as_bytes(),
             request.canonical_party_id.as_str().as_bytes(),
-            request.identity_resolution_generation.to_string().as_bytes(),
+            request
+                .identity_resolution_generation
+                .to_string()
+                .as_bytes(),
             request.lineage.registry_digest_sha256.as_slice(),
             request.page_size.to_string().as_bytes(),
             b"terminal",
@@ -594,9 +598,7 @@ fn record_type(value: &'static str) -> RecordType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crm_module_sdk::{
-        ActorId, CorrelationId, RequestId, TraceId,
-    };
+    use crm_module_sdk::{ActorId, CorrelationId, RequestId, TraceId};
 
     fn context() -> QueryExecutionContext {
         QueryExecutionContext {
@@ -619,11 +621,9 @@ mod tests {
                 lineage: Some(privacy::PrivacyScopeContributionLineage {
                     privacy_case_id: "privacy-case-1".to_owned(),
                     tenant_id: "tenant-a".to_owned(),
-                    canonical_party_ref: Some(
-                        crm_proto_contracts::crm::customer::v1::PartyRef {
-                            party_id: "party-1".to_owned(),
-                        },
-                    ),
+                    canonical_party_ref: Some(crm_proto_contracts::crm::customer::v1::PartyRef {
+                        party_id: "party-1".to_owned(),
+                    }),
                     identity_resolution_generation: 7,
                     registry_version: CANONICAL_SCOPE_REGISTRY_VERSION.to_owned(),
                     registry_digest_sha256: registry.digest().to_vec(),
@@ -645,7 +645,10 @@ mod tests {
         assert!(!definition.mutation);
         assert!(!definition.requires_idempotency);
         assert!(!definition.requires_approval);
-        assert_eq!(definition.authorization_policy_id, "privacy.scope.contribute");
+        assert_eq!(
+            definition.authorization_policy_id,
+            "privacy.scope.contribute"
+        );
     }
 
     #[test]
