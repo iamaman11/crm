@@ -49,6 +49,13 @@ provides:
         rpc: crm.party_relationships.v1.PartyRelationshipService.ListPartyRelationships
         request: crm.party_relationships.v1.ListPartyRelationshipsRequest
         response: crm.party_relationships.v1.ListPartyRelationshipsResponse
+    - id: party_relationships.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.ContributePrivacyScope
+        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
+        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
   events:
     - id: party-relationships.party-relationship.created
       version: 1.0.0
