@@ -1029,8 +1029,8 @@ fn normalize_resources(
     resources.sort_by(scope_resource_cmp);
     let mut normalized: Vec<ScopeResource> = Vec::with_capacity(resources.len());
     for resource in resources {
-        if let Some(previous) = normalized.last() {
-            if previous.identity_key() == resource.identity_key() {
+        if let Some(previous) = normalized.last()
+            && previous.identity_key() == resource.identity_key() {
                 if previous == &resource {
                     continue;
                 }
@@ -1040,7 +1040,6 @@ fn normalize_resources(
                         "one owner resource has conflicting version or classification",
                 });
             }
-        }
         normalized.push(resource);
     }
     Ok(normalized)
