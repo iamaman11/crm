@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.consents
-version: 0.1.0
+version: 0.2.0
 display_name: CRM Consents
 description: Authoritative purpose-specific consent assertions and communication authorization evidence; Contact Point verification or preference never implies authorization.
 owner:
