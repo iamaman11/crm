@@ -147,6 +147,13 @@ provides:
         rpc: crm.customer_data_operations.v1.CustomerDataExportService.ListPartyExportJobs
         request: crm.customer_data_operations.v1.ListPartyExportJobsRequest
         response: crm.customer_data_operations.v1.ListPartyExportJobsResponse
+    - id: customer_data.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionService.ContributePrivacyScope
+        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
+        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
   events:
     - id: customer_data.import.party.source.created
       version: 1.0.0
