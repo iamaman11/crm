@@ -123,7 +123,7 @@ provides:
       version: 1.0.0
       binding:
         kind: protobuf_rpc
-        rpc: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.ContributePrivacyScope
+        rpc: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.DataQualityPrivacyScopeContribution
         request: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionResponse
   events:
