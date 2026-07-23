@@ -111,7 +111,7 @@
         {
           "id": "consents.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionService.ConsentsPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionResponse"
         }
@@ -170,7 +170,7 @@
         {
           "id": "contact_points.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionService.ContactPointsPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionResponse"
         }
@@ -227,7 +227,7 @@
         {
           "id": "customer_accounts.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.CustomerAccountsPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionResponse"
         }
@@ -377,7 +377,7 @@
         {
           "id": "customer_data.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionService.CustomerDataPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionResponse"
         }
@@ -524,7 +524,7 @@
         {
           "id": "customer_enrichment.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionService.CustomerEnrichmentPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionResponse"
         },
@@ -944,7 +944,7 @@
         {
           "id": "data_quality.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.DataQualityPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.DataQualityPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.DataQualityPrivacyScopeContributionResponse"
         }
@@ -1075,7 +1075,7 @@
         {
           "id": "identity_resolution.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionService.IdentityResolutionPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionResponse"
         }
@@ -1147,7 +1147,7 @@
         {
           "id": "parties.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.PartiesPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.PartiesPrivacyScopeContributionService.PartiesPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.PartiesPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.PartiesPrivacyScopeContributionResponse"
         }
@@ -1199,7 +1199,7 @@
         {
           "id": "party_relationships.privacy.scope.contribute",
           "version": "1.0.0",
-          "rpc": "crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.ContributePrivacyScope",
+          "rpc": "crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.PartyRelationshipsPrivacyScopeContribution",
           "request": "crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionRequest",
           "response": "crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionResponse"
         }

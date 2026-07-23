@@ -85,10 +85,8 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
         .collect::<BTreeSet<_>>();
     assert_eq!(worker_coordinates, expected_workers);
 
-    let non_runtime = classified_coordinates(
-        &classifications["non_runtime_contract_routes"],
-        MODULE_ID,
-    );
+    let non_runtime =
+        classified_coordinates(&classifications["non_runtime_contract_routes"], MODULE_ID);
     assert_eq!(
         non_runtime,
         BTreeSet::from(["customer_enrichment.privacy.scope.contribute@1.0.0".to_owned()]),
