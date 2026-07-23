@@ -29,6 +29,14 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertEqual(packet["state"], "contract_only_non_runtime")
         self.assertEqual(packet["wire"]["digest_algorithm"], "sha256")
         self.assertEqual(packet["wire"]["digest_bytes"], 32)
+        self.assertEqual(
+            packet["wire"]["request_envelope"],
+            "crm.customer_privacy.v1.PrivacyScopeContributionRequestEnvelope",
+        )
+        self.assertEqual(
+            packet["wire"]["response_envelope"],
+            "crm.customer_privacy.v1.PrivacyScopeContributionResponseEnvelope",
+        )
         self.assertEqual(packet["bounded_page"]["default_page_size"], 64)
         self.assertEqual(packet["bounded_page"]["maximum_page_size"], 128)
         self.assertEqual(packet["bounded_page"]["maximum_cursor_bytes"], 2048)
@@ -38,6 +46,8 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertEqual(len({entry["module_id"] for entry in owners}), 9)
         self.assertEqual(len({entry["capability_id"] for entry in owners}), 9)
         self.assertEqual(len({entry["rpc"] for entry in owners}), 9)
+        self.assertEqual(len({entry["request"] for entry in owners}), 9)
+        self.assertEqual(len({entry["response"] for entry in owners}), 9)
 
         frozen = {
             entry["module_id"]: entry["scope"].rsplit("@", 1)
@@ -65,8 +75,8 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             binding = capabilities[coordinate]["binding"]
             self.assertEqual(binding["kind"], "protobuf_rpc")
             self.assertEqual(binding["rpc"], entry["rpc"])
-            self.assertEqual(binding["request"], packet["wire"]["request"])
-            self.assertEqual(binding["response"], packet["wire"]["response"])
+            self.assertEqual(binding["request"], entry["request"])
+            self.assertEqual(binding["response"], entry["response"])
             expected_non_runtime.add(
                 (entry["module_id"], entry["capability_id"], entry["version"])
             )
@@ -110,8 +120,13 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
+        self.assertEqual(contributions.count("rpc ContributePrivacyScope("), 9)
         self.assertEqual(
-            contributions.count("rpc ContributePrivacyScope("),
+            contributions.count("PrivacyScopeContributionRequestEnvelope contribution = 1;"),
+            9,
+        )
+        self.assertEqual(
+            contributions.count("PrivacyScopeContributionResponseEnvelope contribution = 1;"),
             9,
         )
         self.assertNotIn("bytes resource_payload", contributions)
