@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.identity-resolution
-version: 0.2.0
+version: 0.3.0
 display_name: CRM Identity Resolution
 description: Authoritative duplicate-candidate review, reversible merge lineage, canonical Party redirection and survivorship provenance without a competing Party master.
 owner:
