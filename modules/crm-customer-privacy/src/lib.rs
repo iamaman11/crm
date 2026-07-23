@@ -13,6 +13,7 @@ mod canonicalization;
 
 pub mod domain {
     include!("domain.rs");
+    include!("scope.rs");
     include!("query_access.rs");
 
     pub mod persistence {
@@ -37,6 +38,11 @@ pub const PRIVACY_CASE_RECORD_TYPE: &str = "customer-privacy.case";
 pub const RESTRICTION_RECORD_TYPE: &str = "customer-privacy.restriction";
 /// Authoritative customer-data legal-hold record type.
 pub const LEGAL_HOLD_RECORD_TYPE: &str = "customer-privacy.legal-hold";
+/// Immutable complete privacy scope snapshot record type.
+pub const SCOPE_SNAPSHOT_RECORD_TYPE: &str = "customer-privacy.scope-snapshot";
+/// Immutable receipt for one exact owner scope contribution.
+pub const OWNER_SCOPE_CONTRIBUTION_RECEIPT_RECORD_TYPE: &str =
+    "customer-privacy.owner-scope-contribution";
 /// Immutable owner-aware privacy action plan record type.
 pub const ACTION_PLAN_RECORD_TYPE: &str = "customer-privacy.action-plan";
 /// Deterministic owner action attempt record type.
@@ -58,11 +64,13 @@ mod tests {
             PRIVACY_CASE_RECORD_TYPE,
             RESTRICTION_RECORD_TYPE,
             LEGAL_HOLD_RECORD_TYPE,
+            SCOPE_SNAPSHOT_RECORD_TYPE,
+            OWNER_SCOPE_CONTRIBUTION_RECEIPT_RECORD_TYPE,
             ACTION_PLAN_RECORD_TYPE,
             OWNER_ACTION_ATTEMPT_RECORD_TYPE,
             OWNER_ACTION_OUTCOME_RECORD_TYPE,
         ];
-        assert_eq!(record_types.len(), 6);
+        assert_eq!(record_types.len(), 8);
         assert!(
             record_types
                 .iter()
