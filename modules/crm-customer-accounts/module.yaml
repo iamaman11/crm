@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.customer-accounts
-version: 0.2.0
+version: 0.3.0
 display_name: CRM Customer Accounts
 description: Canonical owner domain for customer and commercial relationships anchored to Parties.
 owner:
