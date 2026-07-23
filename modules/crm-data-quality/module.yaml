@@ -124,8 +124,8 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.ContributePrivacyScope
-        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
-        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
+        request: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionResponse
   events:
     - id: data_quality.party.rule_set.published
       version: 1.0.0
