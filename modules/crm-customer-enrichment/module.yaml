@@ -140,6 +140,13 @@ provides:
         rpc: crm.customer_enrichment.v1.CustomerEnrichmentWorkerService.RecordApplicationOutcome
         request: crm.customer_enrichment.v1.RecordApplicationOutcomeRequest
         response: crm.customer_enrichment.v1.RecordApplicationOutcomeResponse
+    - id: customer_enrichment.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionService.ContributePrivacyScope
+        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
+        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
   events:
     - id: customer_enrichment.provider_profile.published
       version: 1.0.0
