@@ -54,8 +54,8 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.ContributePrivacyScope
-        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
-        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
+        request: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionResponse
   events:
     - id: party-relationships.party-relationship.created
       version: 1.0.0
