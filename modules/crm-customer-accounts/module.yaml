@@ -54,8 +54,8 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.ContributePrivacyScope
-        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
-        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
+        request: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionResponse
   events:
     - id: accounts.account.created
       version: 1.0.0
