@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.party-relationships
-version: 0.1.0
+version: 0.2.0
 display_name: CRM Party Relationships
 description: Authoritative owner domain for typed, temporal Party-to-Party relationship state and hierarchy foundations.
 owner:
