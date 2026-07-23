@@ -50,9 +50,14 @@ Current state: **In progress after six accepted production vertical slices**. Fo
 - [x] Deterministically sort and deduplicate owner resources by owner, type, identity, exact version, data class, evidence class and retention policy while rejecting conflicting classifications.
 - [x] Define the immutable canonical scope-snapshot envelope with domain-separated length-framed SHA-256 identities, bounded `crm.cjson/v1`, decimal-string integers, deny-unknown-fields decoding and strict re-encode parity.
 - [x] Keep this foundation pure and inventory-neutral: no direct owner storage read, no public or worker registration, no route-classification change and no runtime promotion.
+- [x] Accept PR #154 on unchanged source SHA `ea09e8fe22b906036c3afd979ee861c563b02eac` after Rust CI, Rust Generated Sync and Customer Privacy Persistence CI passed; squash merge as `6cbc4c1c56458b85dbed0b0f89b616e8be429111` with exact expected head and zero branch lag.
+- [x] Define one shared reference-only scope contribution envelope with exact tenant/Party/generation/registry/purpose lineage, bounded page evidence and SHA-256 digest fields.
+- [x] Publish nine unique owner-owned `*.privacy.scope.contribute@1.0.0` capability/RPC bindings matching the architecture-frozen registry.
+- [x] Represent every SDK data class including `Restricted`, and expose only exact resource/version/classification/retention references rather than owner values.
+- [x] Freeze machine-readable owner/manifest/RPC parity and classify all nine owner contributions as contract-only non-runtime without adding Customer Privacy consumption or worker registration.
+- [ ] Implement each owner-side scope contribution capability through its authoritative storage/ports with bounded signed cursor semantics, live authorization, activation and no raw-value disclosure.
 - [ ] Add the remaining permission-aware public case, restriction and legal-hold mutations/queries through separately bounded module-owned production contributions.
 - [ ] Prove privacy restriction is deny-only, live, race-free and cannot be bypassed by module disable/uninstall.
-- [ ] Implement the nine owner-side scope contribution capabilities and later owner action capabilities through governed exact-version contracts without direct storage coupling.
 - [ ] Reuse Customer Data Operations jobs, manifests, artifacts and audited disclosure for privacy export.
 - [ ] Implement legal-hold and retention precedence with immutable reasoned evidence.
 - [ ] Implement deterministic resumable owner attempts/outcomes and crash-window recovery without duplicate effects.
@@ -61,4 +66,4 @@ Current state: **In progress after six accepted production vertical slices**. Fo
 - [ ] Promote every remaining public, worker-only and reasoned non-runtime coordinate exactly once after its production proof.
 - [ ] Complete fresh-PostgreSQL worker-process, restriction/legal-hold, deletion/convergence and full-lifecycle acceptance.
 
-Phase 8A.11 remains **In progress** after six accepted public production coordinates. Approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred remain non-runtime. The active prerequisite packet is immutable scope discovery foundation; `customer_privacy.scope.discover@1.0.0` remains non-runtime and becomes the first worker candidate only after sufficient owner contributions exist to prove a complete snapshot.
+Phase 8A.11 remains **In progress** after six accepted public production coordinates. Approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred remain non-runtime. The active prerequisite packet publishes the exact nine-owner scope contribution wire plane without runtime implementation; `customer_privacy.scope.discover@1.0.0` remains non-runtime until a sufficient complete owner set is production-proven.
