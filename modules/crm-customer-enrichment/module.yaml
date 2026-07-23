@@ -144,7 +144,7 @@ provides:
       version: 1.0.0
       binding:
         kind: protobuf_rpc
-        rpc: crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionService.ContributePrivacyScope
+        rpc: crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionService.CustomerEnrichmentPrivacyScopeContribution
         request: crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionResponse
   events:
