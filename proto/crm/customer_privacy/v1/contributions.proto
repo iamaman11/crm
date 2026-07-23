@@ -46,13 +46,13 @@ message PrivacyScopeContributionPageEvidence {
   bytes page_digest_sha256 = 7;
 }
 
-message ContributePrivacyScopeRequest {
+message PrivacyScopeContributionRequestEnvelope {
   PrivacyScopeContributionLineage lineage = 1;
   uint32 page_size = 2;
   string cursor = 3;
 }
 
-message ContributePrivacyScopeResponse {
+message PrivacyScopeContributionResponseEnvelope {
   string owner_module_id = 1;
   string capability_id = 2;
   string capability_version = 3;
@@ -61,38 +61,101 @@ message ContributePrivacyScopeResponse {
   PrivacyScopeContributionPageEvidence page_evidence = 6;
 }
 
+message PartiesPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message PartiesPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message CustomerAccountsPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message CustomerAccountsPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message ContactPointsPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message ContactPointsPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message PartyRelationshipsPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message PartyRelationshipsPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message ConsentsPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message ConsentsPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message IdentityResolutionPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message IdentityResolutionPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message CustomerDataPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message CustomerDataPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message DataQualityPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message DataQualityPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message CustomerEnrichmentPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message CustomerEnrichmentPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
 service PartiesPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(PartiesPrivacyScopeContributionRequest) returns (PartiesPrivacyScopeContributionResponse);
 }
 
 service CustomerAccountsPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(CustomerAccountsPrivacyScopeContributionRequest) returns (CustomerAccountsPrivacyScopeContributionResponse);
 }
 
 service ContactPointsPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(ContactPointsPrivacyScopeContributionRequest) returns (ContactPointsPrivacyScopeContributionResponse);
 }
 
 service PartyRelationshipsPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(PartyRelationshipsPrivacyScopeContributionRequest) returns (PartyRelationshipsPrivacyScopeContributionResponse);
 }
 
 service ConsentsPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(ConsentsPrivacyScopeContributionRequest) returns (ConsentsPrivacyScopeContributionResponse);
 }
 
 service IdentityResolutionPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(IdentityResolutionPrivacyScopeContributionRequest) returns (IdentityResolutionPrivacyScopeContributionResponse);
 }
 
 service CustomerDataPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(CustomerDataPrivacyScopeContributionRequest) returns (CustomerDataPrivacyScopeContributionResponse);
 }
 
 service DataQualityPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(DataQualityPrivacyScopeContributionRequest) returns (DataQualityPrivacyScopeContributionResponse);
 }
 
 service CustomerEnrichmentPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContributePrivacyScopeRequest) returns (ContributePrivacyScopeResponse);
+  rpc ContributePrivacyScope(CustomerEnrichmentPrivacyScopeContributionRequest) returns (CustomerEnrichmentPrivacyScopeContributionResponse);
 }
