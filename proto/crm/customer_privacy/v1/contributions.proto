@@ -125,37 +125,37 @@ message CustomerEnrichmentPrivacyScopeContributionResponse {
 }
 
 service PartiesPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(PartiesPrivacyScopeContributionRequest) returns (PartiesPrivacyScopeContributionResponse);
+  rpc PartiesPrivacyScopeContribution(PartiesPrivacyScopeContributionRequest) returns (PartiesPrivacyScopeContributionResponse);
 }
 
 service CustomerAccountsPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(CustomerAccountsPrivacyScopeContributionRequest) returns (CustomerAccountsPrivacyScopeContributionResponse);
+  rpc CustomerAccountsPrivacyScopeContribution(CustomerAccountsPrivacyScopeContributionRequest) returns (CustomerAccountsPrivacyScopeContributionResponse);
 }
 
 service ContactPointsPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ContactPointsPrivacyScopeContributionRequest) returns (ContactPointsPrivacyScopeContributionResponse);
+  rpc ContactPointsPrivacyScopeContribution(ContactPointsPrivacyScopeContributionRequest) returns (ContactPointsPrivacyScopeContributionResponse);
 }
 
 service PartyRelationshipsPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(PartyRelationshipsPrivacyScopeContributionRequest) returns (PartyRelationshipsPrivacyScopeContributionResponse);
+  rpc PartyRelationshipsPrivacyScopeContribution(PartyRelationshipsPrivacyScopeContributionRequest) returns (PartyRelationshipsPrivacyScopeContributionResponse);
 }
 
 service ConsentsPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(ConsentsPrivacyScopeContributionRequest) returns (ConsentsPrivacyScopeContributionResponse);
+  rpc ConsentsPrivacyScopeContribution(ConsentsPrivacyScopeContributionRequest) returns (ConsentsPrivacyScopeContributionResponse);
 }
 
 service IdentityResolutionPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(IdentityResolutionPrivacyScopeContributionRequest) returns (IdentityResolutionPrivacyScopeContributionResponse);
+  rpc IdentityResolutionPrivacyScopeContribution(IdentityResolutionPrivacyScopeContributionRequest) returns (IdentityResolutionPrivacyScopeContributionResponse);
 }
 
 service CustomerDataPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(CustomerDataPrivacyScopeContributionRequest) returns (CustomerDataPrivacyScopeContributionResponse);
+  rpc CustomerDataPrivacyScopeContribution(CustomerDataPrivacyScopeContributionRequest) returns (CustomerDataPrivacyScopeContributionResponse);
 }
 
 service DataQualityPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(DataQualityPrivacyScopeContributionRequest) returns (DataQualityPrivacyScopeContributionResponse);
+  rpc DataQualityPrivacyScopeContribution(DataQualityPrivacyScopeContributionRequest) returns (DataQualityPrivacyScopeContributionResponse);
 }
 
 service CustomerEnrichmentPrivacyScopeContributionService {
-  rpc ContributePrivacyScope(CustomerEnrichmentPrivacyScopeContributionRequest) returns (CustomerEnrichmentPrivacyScopeContributionResponse);
+  rpc CustomerEnrichmentPrivacyScopeContribution(CustomerEnrichmentPrivacyScopeContributionRequest) returns (CustomerEnrichmentPrivacyScopeContributionResponse);
 }
