@@ -119,6 +119,13 @@ provides:
         rpc: crm.data_quality.v1.DataQualityRemediationService.RemediatePartyDisplayName
         request: crm.data_quality.v1.RemediatePartyDisplayNameRequest
         response: crm.data_quality.v1.RemediatePartyDisplayNameResponse
+    - id: data_quality.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.ContributePrivacyScope
+        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
+        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
   events:
     - id: data_quality.party.rule_set.published
       version: 1.0.0
