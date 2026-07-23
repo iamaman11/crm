@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.customer-enrichment
-version: 0.1.0
+version: 0.2.0
 display_name: CRM Customer Enrichment
 description: Governed provider-neutral customer enrichment requests, immutable suggestions and provenance, provider-response conflict resolution, review decisions and exact owner-capability application evidence without owning customer-master values.
 owner:
