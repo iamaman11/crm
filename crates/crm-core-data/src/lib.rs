@@ -37,7 +37,6 @@ pub use metadata_query_store::*;
 pub use metadata_store::*;
 pub use postgres::*;
 pub use postgres_batch::*;
-pub use postgres_bound_read::*;
 pub use postgres_event_delivery::EventDeliveryQuery;
 pub use postgres_event_delivery_ledger::{
     ClaimedEventDelivery, EventDeliveryClaim, EventDeliveryCompletion,
