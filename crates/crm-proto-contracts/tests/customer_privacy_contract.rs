@@ -121,11 +121,57 @@ fn privacy_plan_and_owner_outcome_queries_expose_references_not_owner_payloads()
 }
 
 #[test]
+fn owner_scope_contribution_contract_preserves_lineage_references_and_page_evidence() {
+    let response = privacy::ContributePrivacyScopeResponse {
+        owner_module_id: "crm.parties".to_owned(),
+        capability_id: "parties.privacy.scope.contribute".to_owned(),
+        capability_version: "1.0.0".to_owned(),
+        lineage: Some(privacy::PrivacyScopeContributionLineage {
+            privacy_case_id: "privacy-case-1".to_owned(),
+            tenant_id: "tenant-a".to_owned(),
+            canonical_party_ref: Some(customer::PartyRef {
+                party_id: "party-canonical".to_owned(),
+            }),
+            identity_resolution_generation: 7,
+            registry_version: "crm.customer-privacy.scope-registry/1.0.0".to_owned(),
+            registry_digest_sha256: vec![1; 32],
+            purpose_code: "PRIVACY_ERASURE_SCOPE".to_owned(),
+            effective_request_at_unix_ms: 100,
+        }),
+        resources: vec![privacy::PrivacyScopeResourceReference {
+            resource_type: "parties.party".to_owned(),
+            resource_id: "party-canonical".to_owned(),
+            resource_version: 3,
+            data_class: privacy::CustomerDataClass::Restricted as i32,
+            evidence_class: privacy::PrivacyScopeEvidenceClass::RetainMinimizedEvidence as i32,
+            retention_policy_id: "crm.parties.party".to_owned(),
+        }],
+        page_evidence: Some(privacy::PrivacyScopeContributionPageEvidence {
+            page_number: 1,
+            scanned_resource_count: 1,
+            emitted_resource_count: 1,
+            next_cursor: String::new(),
+            terminal_complete: true,
+            cursor_digest_sha256: vec![2; 32],
+            page_digest_sha256: vec![3; 32],
+        }),
+    };
+
+    assert_eq!(
+        privacy::ContributePrivacyScopeResponse::decode(response.encode_to_vec().as_slice())
+            .unwrap(),
+        response
+    );
+}
+
+#[test]
 fn customer_privacy_descriptor_identities_are_stable_and_distinct() {
     let case = message_descriptor_hash("crm.customer_privacy.v1.PrivacyCase");
     let restriction = message_descriptor_hash("crm.customer_privacy.v1.ProcessingRestriction");
     let hold = message_descriptor_hash("crm.customer_privacy.v1.CustomerDataLegalHold");
     let create = message_descriptor_hash("crm.customer_privacy.v1.CreatePrivacyCaseRequest");
+    let contribution =
+        message_descriptor_hash("crm.customer_privacy.v1.ContributePrivacyScopeRequest");
 
     assert_eq!(
         case,
@@ -134,4 +180,5 @@ fn customer_privacy_descriptor_identities_are_stable_and_distinct() {
     assert_ne!(case, restriction);
     assert_ne!(restriction, hold);
     assert_ne!(hold, create);
+    assert_ne!(create, contribution);
 }
