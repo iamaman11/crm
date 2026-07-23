@@ -44,9 +44,15 @@ Current state: **In progress after six accepted production vertical slices**. Fo
 - [x] Add a permanent real-`crm-api` process proving two-page pagination without duplicates, subject/kind/status filtering, cursor tamper and filter rebinding denial, cross-tenant empty concealment, HTTP/gRPC parity, deployment redaction, module suspension, absent live grant, unchanged case versions and zero query-side writes.
 - [x] Freeze production route parity at four runtime mutations, two runtime permission-aware queries, ten non-runtime public coordinates and zero Customer Privacy workers.
 - [x] Accept PR #152 on unchanged source SHA `9de6048f951c0797a94871457d2bdd73357aee59` after Generated Sync preserved the head, all 18 permanent workflows passed, review state remained clean and the branch was zero commits behind `main`; squash merge as `26f5b4644c935001806343b2feaf802a78c90eae` with the exact expected head.
+- [x] Define the immutable scope-discovery foundation with one exact versioned contribution contract for each of the nine architecture-frozen owner modules and a deterministic registry digest.
+- [x] Bind every contribution to tenant, canonical Party, exact Identity Resolution generation and its registered owner/capability/version tuple; reject stale lineage and registry substitution.
+- [x] Require exactly one terminal-complete contribution from every registered owner before a scope snapshot can finalize; missing, duplicate, partial, extra or count-inconsistent evidence fails closed.
+- [x] Deterministically sort and deduplicate owner resources by owner, type, identity, exact version, data class, evidence class and retention policy while rejecting conflicting classifications.
+- [x] Define the immutable canonical scope-snapshot envelope with domain-separated length-framed SHA-256 identities, bounded `crm.cjson/v1`, decimal-string integers, deny-unknown-fields decoding and strict re-encode parity.
+- [x] Keep this foundation pure and inventory-neutral: no direct owner storage read, no public or worker registration, no route-classification change and no runtime promotion.
 - [ ] Add the remaining permission-aware public case, restriction and legal-hold mutations/queries through separately bounded module-owned production contributions.
 - [ ] Prove privacy restriction is deny-only, live, race-free and cannot be bypassed by module disable/uninstall.
-- [ ] Add bounded owner scope/action contribution contracts without direct storage coupling.
+- [ ] Implement the nine owner-side scope contribution capabilities and later owner action capabilities through governed exact-version contracts without direct storage coupling.
 - [ ] Reuse Customer Data Operations jobs, manifests, artifacts and audited disclosure for privacy export.
 - [ ] Implement legal-hold and retention precedence with immutable reasoned evidence.
 - [ ] Implement deterministic resumable owner attempts/outcomes and crash-window recovery without duplicate effects.
@@ -55,4 +61,4 @@ Current state: **In progress after six accepted production vertical slices**. Fo
 - [ ] Promote every remaining public, worker-only and reasoned non-runtime coordinate exactly once after its production proof.
 - [ ] Complete fresh-PostgreSQL worker-process, restriction/legal-hold, deletion/convergence and full-lifecycle acceptance.
 
-Phase 8A.11 remains **In progress** after six accepted public production coordinates. Approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred remain non-runtime; the next bounded packet is not yet selected.
+Phase 8A.11 remains **In progress** after six accepted public production coordinates. Approval, plan/outcome reads, restrictions, legal holds, workers, owner execution and crypto-shred remain non-runtime. The active prerequisite packet is immutable scope discovery foundation; `customer_privacy.scope.discover@1.0.0` remains non-runtime and becomes the first worker candidate only after sufficient owner contributions exist to prove a complete snapshot.
