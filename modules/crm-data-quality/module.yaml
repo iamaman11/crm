@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.data-quality
-version: 0.1.0
+version: 0.2.0
 display_name: CRM Data Quality
 description: Governed versioned quality rules, exact source-version findings, deterministic completeness evidence and stewardship lifecycle without owning customer-master values.
 owner:
