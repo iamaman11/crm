@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.contact-points
-version: 0.2.0
+version: 0.3.0
 display_name: CRM Contact Points
 description: Canonical owner domain for Party-associated email, phone, postal, web and messaging endpoints.
 owner:
