@@ -49,6 +49,13 @@ provides:
         rpc: crm.accounts.v1.AccountService.ListAccounts
         request: crm.accounts.v1.ListAccountsRequest
         response: crm.accounts.v1.ListAccountsResponse
+    - id: customer_accounts.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.ContributePrivacyScope
+        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
+        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
   events:
     - id: accounts.account.created
       version: 1.0.0
