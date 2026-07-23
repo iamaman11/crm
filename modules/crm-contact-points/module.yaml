@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.contact-points
-version: 0.2.0
+version: 0.3.0
 display_name: CRM Contact Points
 description: Canonical owner domain for Party-associated email, phone, postal, web and messaging endpoints.
 owner:
@@ -56,6 +56,13 @@ provides:
         rpc: crm.contact_points.v1.ContactPointService.ListContactPoints
         request: crm.contact_points.v1.ListContactPointsRequest
         response: crm.contact_points.v1.ListContactPointsResponse
+    - id: contact_points.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionService.ContactPointsPrivacyScopeContribution
+        request: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionResponse
   events:
     - id: contact-points.contact-point.created
       version: 1.0.0

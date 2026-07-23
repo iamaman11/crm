@@ -84,11 +84,43 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
         })
         .collect::<BTreeSet<_>>();
     assert_eq!(worker_coordinates, expected_workers);
-    assert!(
-        classified_coordinates(&classifications["non_runtime_contract_routes"], MODULE_ID)
-            .is_empty(),
-        "a completed Customer Enrichment coordinate may not remain non-runtime"
+
+    let non_runtime =
+        classified_coordinates(&classifications["non_runtime_contract_routes"], MODULE_ID);
+    assert_eq!(
+        non_runtime,
+        BTreeSet::from(["customer_enrichment.privacy.scope.contribute@1.0.0".to_owned()]),
+        "only the separately governed privacy scope contribution may remain contract-only"
     );
+    for category in ["mutations", "queries", "workers"] {
+        for coordinate in inventory[category]
+            .as_array()
+            .expect("runtime inventory category must be an array")
+        {
+            let coordinate = coordinate
+                .as_str()
+                .expect("runtime inventory coordinate must be a string");
+            assert!(
+                !non_runtime.contains(coordinate),
+                "completed production coordinate remained non-runtime: {coordinate}"
+            );
+        }
+    }
+
+    let owner_scope =
+        read_json(&root.join("contracts/customer-privacy-owner-scope-contracts.json"));
+    let enrichment_scope = owner_scope["owners"]
+        .as_array()
+        .expect("owner scope registry must be an array")
+        .iter()
+        .find(|entry| entry["module_id"] == MODULE_ID)
+        .expect("Customer Enrichment scope contract must be registered");
+    assert_eq!(
+        enrichment_scope["capability_id"],
+        "customer_enrichment.privacy.scope.contribute"
+    );
+    assert_eq!(enrichment_scope["version"], "1.0.0");
+    assert_eq!(owner_scope["state"], "contract_only_non_runtime");
 
     let workflow = read_text(&root.join(".github/workflows/application-runtime.yml"));
     assert!(workflow.contains("customer_enrichment_process_e2e"));

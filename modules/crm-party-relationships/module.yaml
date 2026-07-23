@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.party-relationships
-version: 0.1.0
+version: 0.2.0
 display_name: CRM Party Relationships
 description: Authoritative owner domain for typed, temporal Party-to-Party relationship state and hierarchy foundations.
 owner:
@@ -49,6 +49,13 @@ provides:
         rpc: crm.party_relationships.v1.PartyRelationshipService.ListPartyRelationships
         request: crm.party_relationships.v1.ListPartyRelationshipsRequest
         response: crm.party_relationships.v1.ListPartyRelationshipsResponse
+    - id: party_relationships.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.PartyRelationshipsPrivacyScopeContribution
+        request: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionResponse
   events:
     - id: party-relationships.party-relationship.created
       version: 1.0.0

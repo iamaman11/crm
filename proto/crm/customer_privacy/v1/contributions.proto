@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package crm.customer_privacy.v1;
+
+import "crm/customer/v1/reference.proto";
+import "crm/customer_privacy/v1/types.proto";
+
+// Immutable lineage that every authoritative owner must echo unchanged.
+message PrivacyScopeContributionLineage {
+  string privacy_case_id = 1;
+  string tenant_id = 2;
+  crm.customer.v1.PartyRef canonical_party_ref = 3;
+  uint64 identity_resolution_generation = 4;
+  string registry_version = 5;
+  bytes registry_digest_sha256 = 6;
+  string purpose_code = 7;
+  int64 effective_request_at_unix_ms = 8;
+}
+
+enum PrivacyScopeEvidenceClass {
+  PRIVACY_SCOPE_EVIDENCE_CLASS_UNSPECIFIED = 0;
+  PRIVACY_SCOPE_EVIDENCE_CLASS_DESTROYABLE_SUBJECT_DATA = 1;
+  PRIVACY_SCOPE_EVIDENCE_CLASS_RETAIN_MINIMIZED_EVIDENCE = 2;
+  PRIVACY_SCOPE_EVIDENCE_CLASS_IMMUTABLE_REQUIRED_EVIDENCE = 3;
+  PRIVACY_SCOPE_EVIDENCE_CLASS_DERIVED_REBUILDABLE_STATE = 4;
+  PRIVACY_SCOPE_EVIDENCE_CLASS_CRYPTO_SHREDDABLE_DATA = 5;
+}
+
+// Reference-only owner evidence. Raw owner values are never returned.
+message PrivacyScopeResourceReference {
+  string resource_type = 1;
+  string resource_id = 2;
+  uint64 resource_version = 3;
+  CustomerDataClass data_class = 4;
+  PrivacyScopeEvidenceClass evidence_class = 5;
+  string retention_policy_id = 6;
+}
+
+message PrivacyScopeContributionPageEvidence {
+  uint32 page_number = 1;
+  uint64 scanned_resource_count = 2;
+  uint64 emitted_resource_count = 3;
+  string next_cursor = 4;
+  bool terminal_complete = 5;
+  bytes cursor_digest_sha256 = 6;
+  bytes page_digest_sha256 = 7;
+}
+
+message PrivacyScopeContributionRequestEnvelope {
+  PrivacyScopeContributionLineage lineage = 1;
+  uint32 page_size = 2;
+  string cursor = 3;
+}
+
+message PrivacyScopeContributionResponseEnvelope {
+  string owner_module_id = 1;
+  string capability_id = 2;
+  string capability_version = 3;
+  PrivacyScopeContributionLineage lineage = 4;
+  repeated PrivacyScopeResourceReference resources = 5;
+  PrivacyScopeContributionPageEvidence page_evidence = 6;
+}
+
+message PartiesPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message PartiesPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message CustomerAccountsPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message CustomerAccountsPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message ContactPointsPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message ContactPointsPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message PartyRelationshipsPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message PartyRelationshipsPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message ConsentsPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message ConsentsPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message IdentityResolutionPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message IdentityResolutionPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message CustomerDataPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message CustomerDataPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message DataQualityPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message DataQualityPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+message CustomerEnrichmentPrivacyScopeContributionRequest {
+  PrivacyScopeContributionRequestEnvelope contribution = 1;
+}
+message CustomerEnrichmentPrivacyScopeContributionResponse {
+  PrivacyScopeContributionResponseEnvelope contribution = 1;
+}
+
+service PartiesPrivacyScopeContributionService {
+  rpc PartiesPrivacyScopeContribution(PartiesPrivacyScopeContributionRequest) returns (PartiesPrivacyScopeContributionResponse);
+}
+
+service CustomerAccountsPrivacyScopeContributionService {
+  rpc CustomerAccountsPrivacyScopeContribution(CustomerAccountsPrivacyScopeContributionRequest) returns (CustomerAccountsPrivacyScopeContributionResponse);
+}
+
+service ContactPointsPrivacyScopeContributionService {
+  rpc ContactPointsPrivacyScopeContribution(ContactPointsPrivacyScopeContributionRequest) returns (ContactPointsPrivacyScopeContributionResponse);
+}
+
+service PartyRelationshipsPrivacyScopeContributionService {
+  rpc PartyRelationshipsPrivacyScopeContribution(PartyRelationshipsPrivacyScopeContributionRequest) returns (PartyRelationshipsPrivacyScopeContributionResponse);
+}
+
+service ConsentsPrivacyScopeContributionService {
+  rpc ConsentsPrivacyScopeContribution(ConsentsPrivacyScopeContributionRequest) returns (ConsentsPrivacyScopeContributionResponse);
+}
+
+service IdentityResolutionPrivacyScopeContributionService {
+  rpc IdentityResolutionPrivacyScopeContribution(IdentityResolutionPrivacyScopeContributionRequest) returns (IdentityResolutionPrivacyScopeContributionResponse);
+}
+
+service CustomerDataPrivacyScopeContributionService {
+  rpc CustomerDataPrivacyScopeContribution(CustomerDataPrivacyScopeContributionRequest) returns (CustomerDataPrivacyScopeContributionResponse);
+}
+
+service DataQualityPrivacyScopeContributionService {
+  rpc DataQualityPrivacyScopeContribution(DataQualityPrivacyScopeContributionRequest) returns (DataQualityPrivacyScopeContributionResponse);
+}
+
+service CustomerEnrichmentPrivacyScopeContributionService {
+  rpc CustomerEnrichmentPrivacyScopeContribution(CustomerEnrichmentPrivacyScopeContributionRequest) returns (CustomerEnrichmentPrivacyScopeContributionResponse);
+}

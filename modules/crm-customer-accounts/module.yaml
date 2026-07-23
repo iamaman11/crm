@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.customer-accounts
-version: 0.2.0
+version: 0.3.0
 display_name: CRM Customer Accounts
 description: Canonical owner domain for customer and commercial relationships anchored to Parties.
 owner:
@@ -49,6 +49,13 @@ provides:
         rpc: crm.accounts.v1.AccountService.ListAccounts
         request: crm.accounts.v1.ListAccountsRequest
         response: crm.accounts.v1.ListAccountsResponse
+    - id: customer_accounts.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.CustomerAccountsPrivacyScopeContribution
+        request: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionResponse
   events:
     - id: accounts.account.created
       version: 1.0.0

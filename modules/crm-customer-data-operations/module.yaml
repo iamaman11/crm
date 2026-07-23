@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.customer-data-operations
-version: 0.2.0
+version: 0.3.0
 display_name: CRM Customer Data Operations
 description: Governed customer import and export jobs, immutable source/specification evidence, resumable execution, derived artifacts and reconciliation without owning customer-master records.
 owner:
@@ -147,6 +147,13 @@ provides:
         rpc: crm.customer_data_operations.v1.CustomerDataExportService.ListPartyExportJobs
         request: crm.customer_data_operations.v1.ListPartyExportJobsRequest
         response: crm.customer_data_operations.v1.ListPartyExportJobsResponse
+    - id: customer_data.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionService.CustomerDataPrivacyScopeContribution
+        request: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionResponse
   events:
     - id: customer_data.import.party.source.created
       version: 1.0.0

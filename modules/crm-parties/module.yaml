@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.parties
-version: 0.3.0
+version: 0.4.0
 display_name: CRM Parties
 description: Canonical owner domain for person and organization identity.
 owner:
@@ -47,6 +47,13 @@ provides:
         rpc: crm.parties.v1.PartyService.ListParties
         request: crm.parties.v1.ListPartiesRequest
         response: crm.parties.v1.ListPartiesResponse
+    - id: parties.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.PartiesPrivacyScopeContributionService.PartiesPrivacyScopeContribution
+        request: crm.customer_privacy.v1.PartiesPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.PartiesPrivacyScopeContributionResponse
   events:
     - id: parties.party.created
       version: 1.0.0

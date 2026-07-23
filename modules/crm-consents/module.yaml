@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.consents
-version: 0.1.0
+version: 0.2.0
 display_name: CRM Consents
 description: Authoritative purpose-specific consent assertions and communication authorization evidence; Contact Point verification or preference never implies authorization.
 owner:
@@ -58,6 +58,13 @@ provides:
         rpc: crm.consents.v1.ConsentAuthorizationService.AuthorizeCommunication
         request: crm.consents.v1.AuthorizeCommunicationRequest
         response: crm.consents.v1.AuthorizeCommunicationResponse
+    - id: consents.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionService.ConsentsPrivacyScopeContribution
+        request: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionResponse
   events:
     - id: consents.authorization.created
       version: 1.0.0

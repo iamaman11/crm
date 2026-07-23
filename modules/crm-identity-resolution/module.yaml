@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.identity-resolution
-version: 0.2.0
+version: 0.3.0
 display_name: CRM Identity Resolution
 description: Authoritative duplicate-candidate review, reversible merge lineage, canonical Party redirection and survivorship provenance without a competing Party master.
 owner:
@@ -98,6 +98,13 @@ provides:
         rpc: crm.identity_resolution.v1.IdentityResolutionService.ResolveCanonicalParty
         request: crm.identity_resolution.v1.ResolveCanonicalPartyRequest
         response: crm.identity_resolution.v1.ResolveCanonicalPartyResponse
+    - id: identity_resolution.privacy.scope.contribute
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionService.IdentityResolutionPrivacyScopeContribution
+        request: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionResponse
   events:
     - id: identity_resolution.candidate.registered
       version: 1.0.0
