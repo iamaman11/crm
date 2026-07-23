@@ -3,8 +3,8 @@
   "state": "contract_only_non_runtime",
   "wire": {
     "package": "crm.customer_privacy.v1",
-    "request": "crm.customer_privacy.v1.ContributePrivacyScopeRequest",
-    "response": "crm.customer_privacy.v1.ContributePrivacyScopeResponse",
+    "request_envelope": "crm.customer_privacy.v1.PrivacyScopeContributionRequestEnvelope",
+    "response_envelope": "crm.customer_privacy.v1.PrivacyScopeContributionResponseEnvelope",
     "lineage": "crm.customer_privacy.v1.PrivacyScopeContributionLineage",
     "resource": "crm.customer_privacy.v1.PrivacyScopeResourceReference",
     "page_evidence": "crm.customer_privacy.v1.PrivacyScopeContributionPageEvidence",
@@ -26,6 +26,7 @@
     "terminal_pages_require_no_next_cursor_and_a_nonzero_cursor_digest",
     "page_emitted_count_matches_the_resource_reference_count",
     "page_and_cursor_digests_are_exactly_32_bytes",
+    "each_rpc_uses_unique_owner_specific_request_and_response_wrappers",
     "no_public_ingress_or_worker_registration_exists_in_this_packet"
   ],
   "owners": [
@@ -34,63 +35,81 @@
       "manifest": "modules/crm-parties/module.yaml",
       "capability_id": "parties.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.PartiesPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.PartiesPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.PartiesPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.PartiesPrivacyScopeContributionResponse"
     },
     {
       "module_id": "crm.customer-accounts",
       "manifest": "modules/crm-customer-accounts/module.yaml",
       "capability_id": "customer_accounts.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionResponse"
     },
     {
       "module_id": "crm.contact-points",
       "manifest": "modules/crm-contact-points/module.yaml",
       "capability_id": "contact_points.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionResponse"
     },
     {
       "module_id": "crm.party-relationships",
       "manifest": "modules/crm-party-relationships/module.yaml",
       "capability_id": "party_relationships.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionResponse"
     },
     {
       "module_id": "crm.consents",
       "manifest": "modules/crm-consents/module.yaml",
       "capability_id": "consents.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionResponse"
     },
     {
       "module_id": "crm.identity-resolution",
       "manifest": "modules/crm-identity-resolution/module.yaml",
       "capability_id": "identity_resolution.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionResponse"
     },
     {
       "module_id": "crm.customer-data-operations",
       "manifest": "modules/crm-customer-data-operations/module.yaml",
       "capability_id": "customer_data.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionResponse"
     },
     {
       "module_id": "crm.data-quality",
       "manifest": "modules/crm-data-quality/module.yaml",
       "capability_id": "data_quality.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.DataQualityPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.DataQualityPrivacyScopeContributionResponse"
     },
     {
       "module_id": "crm.customer-enrichment",
       "manifest": "modules/crm-customer-enrichment/module.yaml",
       "capability_id": "customer_enrichment.privacy.scope.contribute",
       "version": "1.0.0",
-      "rpc": "crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionService.ContributePrivacyScope"
+      "rpc": "crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionService.ContributePrivacyScope",
+      "request": "crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionRequest",
+      "response": "crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionResponse"
     }
   ]
 }
