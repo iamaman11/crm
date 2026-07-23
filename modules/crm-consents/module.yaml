@@ -63,8 +63,8 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionService.ContributePrivacyScope
-        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
-        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
+        request: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionResponse
   events:
     - id: consents.authorization.created
       version: 1.0.0
