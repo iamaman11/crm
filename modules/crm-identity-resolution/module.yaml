@@ -103,8 +103,8 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionService.ContributePrivacyScope
-        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
-        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
+        request: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionResponse
   events:
     - id: identity_resolution.candidate.registered
       version: 1.0.0
