@@ -90,6 +90,60 @@
       "reason": "Legacy client-preparsed row-validation contract retained for compatibility; production validates rows only through the governed source-artifact route."
     },
     {
+      "owner_module_id": "crm.parties",
+      "id": "parties.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
+      "owner_module_id": "crm.customer-accounts",
+      "id": "customer_accounts.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
+      "owner_module_id": "crm.contact-points",
+      "id": "contact_points.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
+      "owner_module_id": "crm.party-relationships",
+      "id": "party_relationships.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
+      "owner_module_id": "crm.consents",
+      "id": "consents.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
+      "owner_module_id": "crm.identity-resolution",
+      "id": "identity_resolution.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
+      "owner_module_id": "crm.customer-data-operations",
+      "id": "customer_data.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
+      "owner_module_id": "crm.data-quality",
+      "id": "data_quality.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
+      "owner_module_id": "crm.customer-enrichment",
+      "id": "customer_enrichment.privacy.scope.contribute",
+      "version": "1.0.0",
+      "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
+    },
+    {
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.case.approve",
       "version": "1.0.0",
