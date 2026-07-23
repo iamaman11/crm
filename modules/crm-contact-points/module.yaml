@@ -61,8 +61,8 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionService.ContributePrivacyScope
-        request: crm.customer_privacy.v1.ContributePrivacyScopeRequest
-        response: crm.customer_privacy.v1.ContributePrivacyScopeResponse
+        request: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionRequest
+        response: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionResponse
   events:
     - id: contact-points.contact-point.created
       version: 1.0.0
