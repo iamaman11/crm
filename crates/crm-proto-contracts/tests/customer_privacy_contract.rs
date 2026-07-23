@@ -174,9 +174,8 @@ fn customer_privacy_descriptor_identities_are_stable_and_distinct() {
     let restriction = message_descriptor_hash("crm.customer_privacy.v1.ProcessingRestriction");
     let hold = message_descriptor_hash("crm.customer_privacy.v1.CustomerDataLegalHold");
     let create = message_descriptor_hash("crm.customer_privacy.v1.CreatePrivacyCaseRequest");
-    let contribution = message_descriptor_hash(
-        "crm.customer_privacy.v1.PartiesPrivacyScopeContributionRequest",
-    );
+    let contribution =
+        message_descriptor_hash("crm.customer_privacy.v1.PartiesPrivacyScopeContributionRequest");
 
     assert_eq!(
         case,
