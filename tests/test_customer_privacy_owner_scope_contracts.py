@@ -113,6 +113,11 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         )
 
     def test_wire_contract_is_reference_only_and_represents_every_data_class(self) -> None:
+        packet = json.loads(
+            (ROOT / "contracts/customer-privacy-owner-scope-contracts.json").read_text(
+                encoding="utf-8"
+            )
+        )
         contributions = (
             ROOT / "proto/crm/customer_privacy/v1/contributions.proto"
         ).read_text(encoding="utf-8")
@@ -120,7 +125,21 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(contributions.count("rpc ContributePrivacyScope("), 9)
+        self.assertEqual(contributions.count("  rpc "), 9)
+        for owner in packet["owners"]:
+            service_and_method = owner["rpc"].removeprefix(
+                "crm.customer_privacy.v1."
+            )
+            service, method = service_and_method.rsplit(".", 1)
+            request = owner["request"].rsplit(".", 1)[1]
+            response = owner["response"].rsplit(".", 1)[1]
+            self.assertIn(f"service {service} {{", contributions)
+            self.assertIn(
+                f"rpc {method}({request}) returns ({response});",
+                contributions,
+            )
+            self.assertTrue(request.startswith(method))
+            self.assertTrue(response.startswith(method))
         self.assertEqual(
             contributions.count("PrivacyScopeContributionRequestEnvelope contribution = 1;"),
             9,
