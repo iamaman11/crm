@@ -13,7 +13,12 @@ mod canonicalization;
 
 pub mod domain {
     include!("domain.rs");
-    include!("scope.rs");
+
+    pub mod scope {
+        include!("scope.rs");
+    }
+    pub use scope::*;
+
     include!("query_access.rs");
 
     pub mod persistence {
