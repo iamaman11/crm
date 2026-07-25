@@ -3,7 +3,7 @@ use crate::contract::{
     parties_privacy_scope_definition,
 };
 use crate::errors::{invalid_contract, invalid_contract_with_reference};
-use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, canonical_scope_registry};
+use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_identity_resolution::PartyReference;
 use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
 use crm_parties::MODULE_ID;
@@ -136,7 +136,7 @@ pub(crate) fn validate_wire_request(
         ));
     }
 
-    let registry = canonical_scope_registry().map_err(|error| {
+    let registry = OwnerScopeRegistry::canonical_v1().map_err(|error| {
         SdkError::new(
             "PARTIES_PRIVACY_SCOPE_REGISTRY_UNAVAILABLE",
             ErrorCategory::Internal,

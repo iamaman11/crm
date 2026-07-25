@@ -3,7 +3,7 @@ use crm_capability_runtime::{
     CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
 };
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
-use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, canonical_scope_registry};
+use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
     DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
@@ -137,7 +137,7 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
     )
     .bind(TENANT_A)
     .bind(crm_parties::MODULE_ID)
-    .bind(crm_parties::PARTY_RECORD_TYPE)
+    .bind(crm_parties_capability_adapter::RECORD_TYPE)
     .bind("party-malformed")
     .execute(&admin)
     .await
@@ -222,7 +222,7 @@ fn capability_request<M: Message>(
 }
 
 fn scope_request(tenant: &str, party_id: &str, generation: u64, identity: &str) -> QueryRequest {
-    let registry = canonical_scope_registry().unwrap();
+    let registry = OwnerScopeRegistry::canonical_v1().unwrap();
     let wire = privacy::PartiesPrivacyScopeContributionRequest {
         contribution: Some(privacy::PrivacyScopeContributionRequestEnvelope {
             lineage: Some(privacy::PrivacyScopeContributionLineage {

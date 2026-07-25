@@ -7,7 +7,7 @@ use crate::contract::{
 use crate::errors::configured;
 use crate::request::{validate_request_contract, validate_wire_request};
 use crate::response::build_response;
-use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, canonical_scope_registry};
+use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, PayloadEncoding, RequestId,
     RetentionPolicyId, TraceId, TypedPayload,
@@ -32,7 +32,7 @@ fn context() -> QueryExecutionContext {
 }
 
 fn valid_wire_request() -> privacy::PartiesPrivacyScopeContributionRequest {
-    let registry = canonical_scope_registry().unwrap();
+    let registry = OwnerScopeRegistry::canonical_v1().unwrap();
     privacy::PartiesPrivacyScopeContributionRequest {
         contribution: Some(privacy::PrivacyScopeContributionRequestEnvelope {
             lineage: Some(privacy::PrivacyScopeContributionLineage {

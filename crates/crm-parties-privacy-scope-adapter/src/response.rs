@@ -6,7 +6,8 @@ use crate::contract::{
 use crate::errors::configured;
 use crate::request::ValidatedRequest;
 use crm_module_sdk::{DataClass, PayloadEncoding, RetentionPolicyId, SdkError, TypedPayload};
-use crm_parties::{MODULE_ID, PARTY_RECORD_TYPE, PARTY_STATE_RETENTION_POLICY_ID};
+use crm_parties::{MODULE_ID, PARTY_STATE_RETENTION_POLICY_ID};
+use crm_parties_capability_adapter::RECORD_TYPE as PARTY_RECORD_TYPE;
 use crm_proto_contracts::crm::customer_privacy::v1 as privacy;
 use sha2::{Digest, Sha256};
 

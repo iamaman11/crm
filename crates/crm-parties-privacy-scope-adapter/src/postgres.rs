@@ -13,10 +13,10 @@ use crm_module_sdk::{
     RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
 };
 use crm_parties::{
-    MODULE_ID, PARTY_RECORD_TYPE, PARTY_STATE_MAXIMUM_BYTES, PARTY_STATE_RETENTION_POLICY_ID,
+    MODULE_ID, PARTY_STATE_MAXIMUM_BYTES, PARTY_STATE_RETENTION_POLICY_ID,
     PARTY_STATE_SCHEMA_ID, PARTY_STATE_SCHEMA_VERSION, party_state_descriptor_hash,
 };
-use crm_parties_capability_adapter::party_from_snapshot;
+use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, party_from_snapshot};
 use crm_query_runtime::{QueryExecutionResult, QueryExecutor, QueryRequest};
 use prost::Message;
 use sqlx::Row;
@@ -95,7 +95,7 @@ impl PartiesPrivacyScopeQueryAdapter {
         .ok_or_else(subject_not_found)?;
 
         let snapshot = strict_party_snapshot(&validated.canonical_party_id, row)?;
-        let party = party_from_snapshot(snapshot)?;
+        let party = party_from_snapshot(&snapshot)?;
         let resource_version = u64::try_from(party.version())
             .map_err(|_| stored_state_invalid("persisted Party version must be positive"))?;
         if party.party_id().as_str() != validated.canonical_party_id.as_str() {
