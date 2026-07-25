@@ -10,15 +10,17 @@ Authoritative references:
 2. `ARCHITECTURE_READINESS.md` — accepted native-composition baseline.
 3. `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` — code/package/dependency scalability plan.
 4. `ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md` — CI, PostgreSQL isolation and real-device execution plan.
-5. `DELIVERY_GOVERNANCE.md` — packet-state and synchronization policy.
-6. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
-7. `PHASE8_DELIVERY_PLAN.md` — detailed Phase 8 packet sequence.
-8. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
-9. `MODULE_CATALOG.md` — merged business-module readiness accounting.
+5. `WORKSPACE_COMPLEXITY_BASELINE.md` — reviewed static workspace and workflow measurement snapshot.
+6. `CI_TELEMETRY_BASELINE.md` — reviewed initial GitHub Actions runtime telemetry snapshot.
+7. `DELIVERY_GOVERNANCE.md` — packet-state and synchronization policy.
+8. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
+9. `PHASE8_DELIVERY_PLAN.md` — detailed Phase 8 packet sequence.
+10. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
+11. `MODULE_CATALOG.md` — merged business-module readiness accounting.
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; six Customer Privacy runtime coordinates, the immutable owner-scope protocol foundation, nine contract-only owner contribution coordinates and the first authoritative non-runtime Parties owner implementation are merged through PR #156.**
+**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; six Customer Privacy runtime coordinates, the immutable owner-scope protocol foundation, nine contract-only owner contribution coordinates and the first authoritative non-runtime Parties owner implementation are merged through PR #156. Architecture scalability Phase A is accepted, immediate CI controls are merged through PR #160 and Phase B measurement baselines are merged through PR #162.**
 
 Current Phase 8A baseline:
 
@@ -31,7 +33,7 @@ Current Phase 8A baseline:
 
 The active dependency lane is:
 
-`Immediate CI event/concurrency/action-pinning and status controls -> complexity and CI critical-path baseline -> golden package/contribution aggregation/affected CI -> second contrasting owner -> shared privacy contribution protocol -> remaining privacy lifecycle -> Phase 8A closure -> 8B`
+`Complete Phase B with controlled cache and step-level timing pilots -> golden package -> module-owned contribution aggregation -> affected-scope CI and PostgreSQL isolation pilot -> second contrasting owner -> shared privacy contribution protocol -> remaining privacy lifecycle -> Phase 8A closure -> 8B`
 
 ## Phase 8A.10 accepted result
 
@@ -99,6 +101,15 @@ The accepted architecture direction now requires:
 
 PR #158 adds the normative CI scalability, PostgreSQL E2E isolation, immutable Action pinning, cache trust and secure device-lab companion plan.
 
+## Accepted CI controls and Phase B evidence
+
+- PR #159 was accepted on unchanged source SHA `75b5194f1d79f68e8b1c17dc7bc5373bb87c688d`, passed all 17 applicable workflows and merged as `8d45e9f37c0f21dc4a7d530c6dacdecbe2fa1a4f`. It restricts branch push runs to `main`, cancels only superseded pull-request runs and enforces the policy in Governance CI.
+- PR #160 was accepted on unchanged source SHA `7bcc0b37cd323010f03e4f5abfb61660bad4dd52`, passed all 18 applicable workflows and merged as `f89b3238a05e8825e48f418bc86457769604ba9c`. It pins every external GitHub Action reference to a reviewed full commit SHA and enforces immutable pinning through Governance CI.
+- PR #161 was accepted on unchanged source SHA `755f91b25c36fe14b4dd418599b5e4c992fae037`, passed all 3 applicable workflows and merged as `466ded7185fadbfc0d5ceeb2574e34d40ef457b6`. It adds exact-head static workspace and workflow complexity reporting plus the reviewed initial snapshot.
+- PR #162 was accepted on unchanged source SHA `fa510b87066723295d0f64781c4c87b7e55bf44e`, passed all 4 applicable workflows and merged as `62d3d2622331a11b6b27c88c3501a385b1aa2d80`. It adds read-only CI runtime telemetry, daily artifacts and the reviewed initial burst snapshot.
+
+The reviewed static snapshot records 100 workspace packages, 638 declared internal dependency edges, 28 one-consumer packages, 11 duplicate external dependency families and 847 manually maintained workflow path-filter entries. The initial runtime burst snapshot records execution p50/p95 of 85/232 seconds across 100 recent completed runs and confirms active cancellation of superseded pull-request work. Both snapshots remain non-blocking and require repeated evidence before budgets, cache or runner-size decisions.
+
 ## Current merged Customer Privacy production inventory
 
 Merged `main` is exactly:
@@ -119,7 +130,7 @@ Phase 8A.11 is not complete. Remaining work includes a contrasting second owner 
 
 ## Merged platform and customer-master baseline
 
-Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and six accepted Customer Privacy runtime coordinates. It also contains the first proven non-runtime Parties privacy scope owner implementation.
+Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and six accepted Customer Privacy runtime coordinates. It also contains the first proven non-runtime Parties privacy scope owner implementation, governed CI event/cancellation policy, immutable Action pins and permanent static/runtime complexity telemetry.
 
 ## Product completeness reality
 
@@ -127,8 +138,8 @@ The project is **not yet a complete universal CRM**. Major required families sti
 
 ## Immediate next actions
 
-1. Land immediate CI controls in separately gated PRs: normalize push/PR events, cancel superseded PR runs, pin third-party Actions to full SHAs and begin CI critical-path measurement.
-2. Execute complexity Phase B, then golden package, module-owned contribution aggregation and affected-scope CI with a PostgreSQL isolation pilot.
+1. Complete Phase B with a controlled Rust cache pilot and step-level Rust/PostgreSQL timing; do not introduce budgets until repeated telemetry exists.
+2. Establish the golden domain package and module-owned contribution aggregation, then implement affected-scope CI with a PostgreSQL isolation pilot while preserving full exact-head acceptance.
 3. Implement a contrasting second privacy owner, compare it with Parties and extract only proven common protocol behavior.
 4. Continue the remaining privacy lifecycle without promoting contract-only coordinates before their own production proof.
 5. Close Phase 8A only after the full privacy/customer-master interaction baseline is merged and reconciled; begin Phase 8B / #29 only afterward.
