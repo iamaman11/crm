@@ -92,8 +92,8 @@ jobs:
       CRM_CURSOR_SIGNING_KEY: customer-enrichment-review-cursor-key-0123456789abcdef
       CRM_APPROVAL_SIGNING_KEY: customer-enrichment-review-approval-key-0123456789abcdef
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
@@ -117,7 +117,7 @@ jobs:
           psql --no-psqlrc --pset pager=off --command "SELECT tenant_id, record_type, record_id, version FROM crm.records WHERE owner_module_id IN ('crm.customer-enrichment', 'crm.consents') ORDER BY tenant_id, owner_module_id, record_type, record_id" > database/customer-enrichment-review-process-runtime-state.log 2>&1 || true
       - name: Upload diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: customer-enrichment-review-process-runtime-diagnostics
           path: |
