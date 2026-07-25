@@ -12,19 +12,18 @@ pub(crate) fn configured<T>(value: Result<T, IdentifierError>) -> Result<T, SdkE
     })
 }
 
-pub(crate) fn map_lineage_error(error: SdkError) -> SdkError {
-    let category = if error.category == ErrorCategory::NotFound {
-        ErrorCategory::NotFound
-    } else {
-        ErrorCategory::Conflict
-    };
+pub(crate) fn lineage_invalid(
+    category: ErrorCategory,
+    retryable: bool,
+    reference: impl Into<String>,
+) -> SdkError {
     SdkError::new(
         "PARTIES_PRIVACY_SCOPE_LINEAGE_INVALID",
         category,
-        error.retryable,
+        retryable,
         "The requested Parties privacy scope is not available.",
     )
-    .with_internal_reference(error.code)
+    .with_internal_reference(reference.into())
 }
 
 pub(crate) fn subject_not_found() -> SdkError {
