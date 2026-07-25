@@ -194,7 +194,7 @@ fn capability_request<M: Message>(
             module_id: ModuleId::try_new(crm_parties::MODULE_ID).unwrap(),
             execution: ExecutionContext {
                 tenant_id: TenantId::try_new(tenant).unwrap(),
-                actor_id: ActorId::try_new("party-fixture").unwrap(),
+                actor_id: ActorId::try_new("actor-a").unwrap(),
                 request_id: RequestId::try_new(format!("request-{identity}")).unwrap(),
                 correlation_id: CorrelationId::try_new(format!("correlation-{identity}")).unwrap(),
                 causation_id: CausationId::try_new(format!("causation-{identity}")).unwrap(),
