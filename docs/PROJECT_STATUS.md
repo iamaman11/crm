@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-22
+Status date: 2026-07-25
 
 This is the concise human-readable status page. Normative delivery order remains in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`.
 
@@ -8,15 +8,17 @@ Authoritative references:
 
 1. `SYSTEM_INVARIANTS.md` — absolute architecture rules.
 2. `ARCHITECTURE_READINESS.md` — accepted native-composition baseline.
-3. `DELIVERY_GOVERNANCE.md` — packet-state and synchronization policy.
-4. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
-5. `PHASE8_DELIVERY_PLAN.md` — detailed Phase 8 packet sequence.
-6. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
-7. `MODULE_CATALOG.md` — merged business-module readiness accounting.
+3. `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` — code/package/dependency scalability plan.
+4. `ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md` — CI, PostgreSQL isolation and real-device execution plan.
+5. `DELIVERY_GOVERNANCE.md` — packet-state and synchronization policy.
+6. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
+7. `PHASE8_DELIVERY_PLAN.md` — detailed Phase 8 packet sequence.
+8. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
+9. `MODULE_CATALOG.md` — merged business-module readiness accounting.
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; `case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, permission-aware `case.get` and subject-scoped `case.list` are merged through PR #152.**
+**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; six Customer Privacy runtime coordinates, the immutable owner-scope protocol foundation and nine contract-only owner contribution coordinates are merged through PR #155. The first owner implementation is active in draft PR #156.**
 
 Current Phase 8A baseline:
 
@@ -25,11 +27,11 @@ Current Phase 8A baseline:
 - **8A.8 — Complete:** governed customer export, artifacts and reconciliation (#123 / PR #130).
 - **8A.9 — Complete:** Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132).
 - **8A.10 — Complete:** Governed Customer Enrichment and Provenance (#125 / PR #137).
-- **8A.11 — In progress:** architecture, owner foundation, deterministic domain, canonical persistence, immutable public contracts, FORCE RLS persistence, four public mutations and two permission-aware queries are merged.
+- **8A.11 — In progress:** architecture, owner foundation, deterministic domain, canonical persistence, immutable public contracts, FORCE RLS persistence, four public mutations, two permission-aware queries, immutable owner-scope envelopes and nine owner-specific contract-only contribution coordinates are merged.
 
 The active dependency lane is:
 
-`post-merge case.list governance sync -> one separately bounded approval/restriction/legal-hold/plan/outcome/worker slice -> remaining privacy lifecycle -> Phase 8A closure -> 8B`
+`Parties owner privacy scope adapter proof (#156) -> immediate CI event/concurrency/action-pinning and status controls -> complexity and CI critical-path baseline -> golden package/contribution aggregation/affected CI -> second contrasting owner -> shared privacy contribution protocol -> remaining privacy lifecycle -> Phase 8A closure -> 8B`
 
 ## Phase 8A.10 accepted result
 
@@ -58,7 +60,10 @@ The following bounded PRs are merged:
 - PR #148 — `customer_privacy.case.subject.verify@1.0.0`;
 - PR #149 — `customer_privacy.case.get@1.0.0`;
 - PR #150 — `customer_privacy.case.cancel@1.0.0`;
-- PR #152 — `customer_privacy.case.list@1.0.0`.
+- PR #152 — `customer_privacy.case.list@1.0.0`;
+- PR #153 — post-merge `case.list` governance synchronization;
+- PR #154 — immutable privacy owner-scope protocol foundation;
+- PR #155 — nine owner-specific privacy scope contribution contracts, all contract-only non-runtime.
 
 PR #145 was accepted on source SHA `f37d9a5e025745abaaf0aeb351ff9bb534455aab` and merged as `721a1cf185ffbdea309bd1199c6c4568cf82d7a1`. Its applicable workflows proved clean migrations, FORCE RLS under `NOSUPERUSER + NOBYPASSRLS`, tenant isolation, missing-context concealment, `row_security=off` resistance, full rollback, schema removal, reapply and repeated FORCE RLS proof.
 
@@ -74,25 +79,43 @@ PR #150 was accepted on unchanged post-sync source SHA `be05e874b21ab33cb8b6a84f
 
 PR #152 was accepted on unchanged source SHA `9de6048f951c0797a94871457d2bdd73357aee59`, passed all 18 permanent workflows and was squash-merged as `26f5b4644c935001806343b2feaf802a78c90eae`. It provides canonical-Party-scoped listing, signed filter-bound pagination, bounded FORCE-RLS keyset scanning, strict verified-subject matching, live Party/case visibility, field redaction, uniform empty concealment and side-effect-free real HTTP/gRPC acceptance on an isolated fresh database.
 
+PR #155 was accepted on unchanged source SHA `7574297ed9c7a28b0e5612052898d43a6e156dcc`, passed 15 applicable workflows and was squash-merged as `624f7f3dd5099384cd7304db6bab78bc4cfc9c51`. It publishes one immutable reference-only owner contribution coordinate for each of Parties, Customer Accounts, Contact Points, Party Relationships, Consents, Identity Resolution, Customer Data Operations, Data Quality and Customer Enrichment. No owner implementation, worker registration, public ingress or runtime promotion was introduced.
+
+## Architecture scalability governance
+
+PR #157 was accepted on unchanged source SHA `aca66bf56b206e5f01ed4fa2fa76486a0860290d`, passed all 16 applicable workflows and was squash-merged as `6195fb631b9f01e2de4a4975c1f44de24610938a`.
+
+The accepted architecture direction now requires:
+
+- business modules to remain authoritative while normal capabilities add zero crates;
+- measured dependency, fan-out, build and test complexity;
+- module-owned contribution aggregation;
+- affected-scope iteration with unchanged exact-head final acceptance;
+- two contrasting privacy owner implementations before shared protocol extraction;
+- gradual behavior-neutral consolidation rather than a workspace rewrite.
+
+PR #158 adds the normative CI scalability, PostgreSQL E2E isolation, immutable Action pinning, cache trust and secure device-lab companion plan.
+
 ## Current merged Customer Privacy production inventory
 
 Merged `main` is exactly:
 
 - **4 public mutations:** create, submit, subject verification and cancel;
 - **2 permission-aware queries:** case get and subject-scoped case list;
-- **10 public non-runtime coordinates**;
+- **10 public Customer Privacy non-runtime coordinates**;
+- **9 owner privacy scope contribution coordinates**, all contract-only non-runtime;
 - **0 Customer Privacy worker runtime routes**;
 - crypto-shred remains reasoned non-runtime and is not introduced as a public, worker or platform route.
 
-No approval, plan/outcome read, restriction, legal-hold, worker, owner-execution or crypto-shred coordinate was promoted by PR #152.
+No approval, plan/outcome read, restriction, legal-hold, worker, owner-execution or crypto-shred coordinate has been promoted. No owner privacy scope implementation has been merged; Parties implementation remains draft PR #156.
 
 ## Remaining Phase 8A.11 boundary
 
-Phase 8A.11 is not complete. Remaining work includes approval, live restriction and legal-hold precedence, plan and owner-outcome reads, bounded owner contribution/orchestration, privacy export, deletion/anonymization convergence, immutable-evidence preservation, worker recovery and complete lifecycle acceptance.
+Phase 8A.11 is not complete. Remaining work includes fully proven owner privacy scope contributions, approval, live restriction and legal-hold precedence, plan and owner-outcome reads, bounded owner contribution/orchestration, privacy export, deletion/anonymization convergence, immutable-evidence preservation, worker recovery and complete lifecycle acceptance.
 
 ## Merged platform and customer-master baseline
 
-Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and six accepted Customer Privacy coordinates.
+Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and six accepted Customer Privacy runtime coordinates.
 
 ## Product completeness reality
 
@@ -100,8 +123,9 @@ The project is **not yet a complete universal CRM**. Major required families sti
 
 ## Immediate next actions
 
-1. Merge this post-PR #152 documentation synchronization after its own applicable exact-head gates.
-2. Compare the remaining approval, restriction, legal-hold, plan/outcome-read and worker dependencies.
-3. Select exactly one next bounded Customer Privacy coordinate or tightly coupled lifecycle slice.
-4. Keep all remaining privacy coordinates non-runtime until their own production proofs are complete.
-5. Close Phase 8A only after the full privacy/customer-master interaction baseline is merged and reconciled; begin Phase 8B / #29 only afterward.
+1. Finish draft PR #156 as the bounded Parties privacy scope adapter Phase A pilot: dependency alignment, internal layering, mechanically restricted bound-read access, malformed/cross-tenant/stale-lineage/no-write proof and unchanged exact-head checks.
+2. Land the immediate CI controls in separately gated PRs: normalize push/PR events, cancel superseded PR runs, pin third-party Actions to full SHAs and begin CI critical-path measurement.
+3. Execute complexity Phase B, then golden package, module-owned contribution aggregation and affected-scope CI with a PostgreSQL isolation pilot.
+4. Implement a contrasting second privacy owner, compare it with Parties and extract only proven common protocol behavior.
+5. Continue the remaining privacy lifecycle without promoting contract-only coordinates before their own production proof.
+6. Close Phase 8A only after the full privacy/customer-master interaction baseline is merged and reconciled; begin Phase 8B / #29 only afterward.
