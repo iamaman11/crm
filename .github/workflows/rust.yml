@@ -22,70 +22,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: rustfmt, clippy
-      - name: Resolve Rust cache identity
-        id: rust-cache-identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          rustc -Vv | tee rust-toolchain-identity.txt
-          echo "toolchain=$(sha256sum rust-toolchain-identity.txt | cut -d' ' -f1)" >> "${GITHUB_OUTPUT}"
-          echo "restore_started_ns=$(date +%s%N)" >> "${GITHUB_OUTPUT}"
-      - name: Restore trusted Rust CI cache
-        id: rust-cache-restore
-        uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: rust-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            rust-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-
-      - name: Record Rust cache restore telemetry
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          restore_started_ns="${{ steps.rust-cache-identity.outputs.restore_started_ns }}"
-          restore_finished_ns="$(date +%s%N)"
-          restore_duration_ms=$(( (restore_finished_ns - restore_started_ns) / 1000000 ))
-          cache_paths_bytes="$(
-            {
-              for cache_path in \
-                "${HOME}/.cargo/registry/index" \
-                "${HOME}/.cargo/registry/cache" \
-                "${HOME}/.cargo/git/db"; do
-                if [ -e "${cache_path}" ]; then
-                  du -sb "${cache_path}"
-                fi
-              done
-            } | awk '{ total += $1 } END { print total + 0 }'
-          )"
-          cat > artifacts/rust-cache-telemetry.json <<EOF
-          {
-            "schema_version": "crm.rust-cache-telemetry/v3",
-            "cache_scope": "cargo-dependencies",
-            "event_name": "${{ github.event_name }}",
-            "ref": "${{ github.ref }}",
-            "candidate_sha": "${{ github.event.pull_request.head.sha || github.sha }}",
-            "toolchain_identity": "${{ steps.rust-cache-identity.outputs.toolchain }}",
-            "exact_hit": "${{ steps.rust-cache-restore.outputs.cache-hit || 'false' }}",
-            "primary_key": "${{ steps.rust-cache-restore.outputs.cache-primary-key }}",
-            "matched_key": "${{ steps.rust-cache-restore.outputs.cache-matched-key || 'none' }}",
-            "main_write_eligible": "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}",
-            "restore_duration_ms": ${restore_duration_ms},
-            "cache_paths_bytes": ${cache_paths_bytes}
-          }
-          EOF
-          {
-            echo "### Trusted Rust dependency cache pilot"
-            echo "- Exact hit: \`${{ steps.rust-cache-restore.outputs.cache-hit || 'false' }}\`"
-            echo "- Primary key: \`${{ steps.rust-cache-restore.outputs.cache-primary-key }}\`"
-            echo "- Matched key: \`${{ steps.rust-cache-restore.outputs.cache-matched-key || 'none' }}\`"
-            echo "- Main write eligible: \`${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\`"
-            echo "- Restore duration: \`${restore_duration_ms} ms\`"
-            echo "- Restored dependency footprint: \`${cache_paths_bytes} bytes\`"
-          } >> "${GITHUB_STEP_SUMMARY}"
       - run: python scripts/check_architecture.py
       - name: Generate resolved Cargo lockfile
         run: cargo generate-lockfile
@@ -127,16 +63,9 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          started_ns="$(date +%s%N)"
-          set +e
           cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1 | tee clippy.txt
-          status=$?
-          set -e
-          finished_ns="$(date +%s%N)"
-          echo "duration_ms=$(( (finished_ns - started_ns) / 1000000 ))" >> "${GITHUB_OUTPUT}"
-          exit "${status}"
       - name: Upload Clippy diagnostics
-        if: steps.clippy.outcome == 'success' || steps.clippy.outcome == 'failure'
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: clippy-diagnostics
@@ -148,91 +77,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          started_ns="$(date +%s%N)"
-          set +e
           cargo test --workspace --all-features 2>&1 | tee tests.txt
-          status=$?
-          set -e
-          finished_ns="$(date +%s%N)"
-          echo "duration_ms=$(( (finished_ns - started_ns) / 1000000 ))" >> "${GITHUB_OUTPUT}"
-          exit "${status}"
       - name: Upload test diagnostics
-        if: steps.tests.outcome == 'success' || steps.tests.outcome == 'failure'
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-diagnostics
           path: tests.txt
           if-no-files-found: error
           retention-days: 7
-      - name: Start trusted Rust cache save timer
-        id: rust-cache-save-timer
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success() && steps.rust-cache-restore.outputs.cache-hit != 'true'
-        shell: bash
-        run: echo "started_ns=$(date +%s%N)" >> "${GITHUB_OUTPUT}"
-      - name: Save trusted Rust CI cache
-        id: rust-cache-save
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success() && steps.rust-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ steps.rust-cache-restore.outputs.cache-primary-key }}
-      - name: Finalize Rust cache telemetry
-        if: always()
-        shell: bash
-        env:
-          CLIPPY_DURATION_MS: ${{ steps.clippy.outputs.duration_ms }}
-          CLIPPY_OUTCOME: ${{ steps.clippy.outcome }}
-          TEST_DURATION_MS: ${{ steps.tests.outputs.duration_ms }}
-          TEST_OUTCOME: ${{ steps.tests.outcome }}
-          SAVE_STARTED_NS: ${{ steps.rust-cache-save-timer.outputs.started_ns }}
-          SAVE_OUTCOME: ${{ steps.rust-cache-save.outcome }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          import time
-
-          path = Path("artifacts/rust-cache-telemetry.json")
-          if path.exists():
-              report = json.loads(path.read_text(encoding="utf-8"))
-          else:
-              path.parent.mkdir(parents=True, exist_ok=True)
-              report = {
-                  "schema_version": "crm.rust-cache-telemetry/v3",
-                  "cache_scope": "cargo-dependencies",
-                  "telemetry_initialization_failed": True,
-              }
-
-          def optional_integer(name: str):
-              value = os.environ.get(name, "").strip()
-              return int(value) if value else None
-
-          save_started = optional_integer("SAVE_STARTED_NS")
-          report.update(
-              {
-                  "clippy_duration_ms": optional_integer("CLIPPY_DURATION_MS"),
-                  "clippy_outcome": os.environ.get("CLIPPY_OUTCOME") or "skipped",
-                  "test_duration_ms": optional_integer("TEST_DURATION_MS"),
-                  "test_outcome": os.environ.get("TEST_OUTCOME") or "skipped",
-                  "save_duration_ms": (
-                      (time.time_ns() - save_started) // 1_000_000
-                      if save_started is not None
-                      else None
-                  ),
-                  "save_outcome": os.environ.get("SAVE_OUTCOME") or "skipped",
-              }
-          )
-          path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-          PY
-      - name: Upload Rust cache telemetry
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: rust-cache-telemetry
-          path: artifacts/rust-cache-telemetry.json
-          if-no-files-found: error
-          retention-days: 30
