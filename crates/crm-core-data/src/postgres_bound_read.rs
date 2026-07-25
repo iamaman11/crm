@@ -3,11 +3,12 @@ use crm_module_sdk::{ErrorCategory, SdkError, TenantId};
 use sqlx::{Postgres, Transaction};
 use std::ops::{Deref, DerefMut};
 
-/// Tenant-bound PostgreSQL transaction whose database mode is READ ONLY.
+/// Tenant-bound PostgreSQL transaction with one repeatable READ ONLY snapshot.
 ///
 /// Construction is restricted by architecture policy to approved infrastructure
 /// adapters. Dereferencing exposes the existing SQLx transaction surface only
-/// after the database has enforced read-only mode and tenant-local RLS context.
+/// after the database has enforced repeatable-read, read-only mode and tenant-local
+/// RLS context.
 pub struct BoundReadTransaction<'a> {
     inner: Transaction<'a, Postgres>,
 }
@@ -16,6 +17,7 @@ impl std::fmt::Debug for BoundReadTransaction<'_> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("BoundReadTransaction")
+            .field("isolation", &"REPEATABLE READ")
             .field("mode", &"READ ONLY")
             .finish_non_exhaustive()
     }
@@ -42,14 +44,15 @@ impl BoundReadTransaction<'_> {
 }
 
 impl PostgresDataStore {
-    /// Begins a tenant-bound read-only transaction for an architecture-approved
-    /// infrastructure adapter that must combine authoritative reads atomically.
+    /// Begins a tenant-bound repeatable read-only transaction for an
+    /// architecture-approved infrastructure adapter that must combine
+    /// authoritative reads atomically without row-locking statements.
     pub async fn begin_bound_read_transaction(
         &self,
         tenant_id: &TenantId,
     ) -> Result<BoundReadTransaction<'_>, SdkError> {
         let mut transaction = self.pool().begin().await.map_err(database_unavailable)?;
-        sqlx::query("SET TRANSACTION READ ONLY")
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             .execute(&mut *transaction)
             .await
             .map_err(database_unavailable)?;
