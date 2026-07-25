@@ -71,10 +71,6 @@ pub(crate) fn schema_version(value: &str) -> Result<SchemaVersion, SdkError> {
     configured(SchemaVersion::try_new(value))
 }
 
-pub(crate) fn input_descriptor_hash() -> [u8; 32] {
-    message_descriptor_hash(INPUT_SCHEMA_ID)
-}
-
 pub(crate) fn output_descriptor_hash() -> [u8; 32] {
     message_descriptor_hash(OUTPUT_SCHEMA_ID)
 }
