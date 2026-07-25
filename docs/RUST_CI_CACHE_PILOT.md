@@ -45,10 +45,21 @@ A restore prefix may reuse an older cache only within the same operating system,
 
 - Rust cache identity resolution;
 - trusted cache restore;
-- restore outcome reporting;
+- machine-readable restore telemetry publication;
 - trusted cache save.
 
-The Rust job summary records exact hit, primary key, matched key and whether the run is eligible to write.
+Every Rust run publishes `rust-cache-telemetry.json` with event, ref, candidate SHA, toolchain identity, exact hit, primary key, matched key and main-write eligibility. The same data remains visible in the job summary.
+
+## Validation attempts
+
+The first follow-up run started while the cold post-merge `main` run was still building. Its artifact correctly recorded:
+
+- event: `pull_request`;
+- exact hit: `false`;
+- matched key: `none`;
+- main write eligible: `false`.
+
+That run proves miss tolerance and PR write denial, but it is not warm-cache acceptance. A newer exact head must demonstrate an exact trusted hit after the successful `main` save.
 
 ## Acceptance sequence
 
