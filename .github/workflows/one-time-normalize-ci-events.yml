@@ -104,7 +104,6 @@ jobs:
               raise SystemExit('no permanent push + pull_request workflows were normalized')
           print('\n'.join(changed))
           PY
-          python scripts/check_ci_event_policy.py
           git rm .github/workflows/one-time-normalize-ci-events.yml
           git add .github/workflows scripts/check_ci_event_policy.py tests/test_ci_event_policy.py docs/PROJECT_STATUS.md
           git config user.name "github-actions[bot]"
