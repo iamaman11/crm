@@ -7,26 +7,34 @@
 //! to the transactional owner executor, so invalid references cannot create
 //! Consent records, audit entries, outbox events or idempotency evidence.
 
+use crm_application_composition::{
+    ActivationGatedMutationValidator, ActivationGatedQueryValidator, ModuleActivationPort,
+    ModuleContributionSet,
+};
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,
     CapabilitySemanticValidator, TransactionalCapabilityExecutor,
 };
 use crm_consents::{CommunicationChannel, PartyReference};
 use crm_consents_capability_adapter::{
-    CREATE_CAPABILITY, CreateConsentReferenceScope, MUTATION_CAPABILITY_IDS,
-    referenced_scope_from_create,
+    CREATE_CAPABILITY, ConsentCapabilityPlanner, CreateConsentReferenceScope,
+    MUTATION_CAPABILITY_IDS, capability_definitions, referenced_scope_from_create,
 };
+use crm_consents_query_adapter::{ConsentQueryAdapter, query_capability_definitions};
 use crm_contact_points::ContactPointKind;
 use crm_contact_points_capability_adapter::{
     MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
     contact_point_from_snapshot,
 };
-use crm_core_data::{PostgresDataStore, RecordGetQuery};
+use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor, RecordGetQuery};
 use crm_module_sdk::{
     ErrorCategory, ModuleId, PortFuture, RecordId, RecordType, SdkError, TenantId,
 };
 use crm_parties_capability_adapter::{
     MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
+};
+use crm_query_runtime::{
+    CursorCodec, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -230,6 +238,91 @@ pub const fn channel_is_compatible(channel: CommunicationChannel, kind: ContactP
         CommunicationChannel::Messaging => matches!(kind, ContactPointKind::Messaging),
         CommunicationChannel::Push => true,
     }
+}
+
+#[derive(Clone)]
+pub struct ConsentsProductionDependencies {
+    pub store: PostgresDataStore,
+    pub activation: Arc<dyn ModuleActivationPort>,
+    pub visibility_authorizer: Arc<dyn QueryVisibilityAuthorizer>,
+    pub cursor_key: [u8; 32],
+}
+
+/// Builds the complete Consents mutation/query contribution inside the owner
+/// composition package while preserving the module's richer reference checks.
+pub fn build_contribution(
+    dependencies: ConsentsProductionDependencies,
+) -> Result<ModuleContributionSet, SdkError> {
+    let ConsentsProductionDependencies {
+        store,
+        activation,
+        visibility_authorizer,
+        cursor_key,
+    } = dependencies;
+    let mut contributions = ModuleContributionSet::new();
+
+    let aggregate: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(PostgresTransactionalAggregateExecutor::new(
+            store.clone(),
+            Arc::new(ConsentCapabilityPlanner),
+        ));
+    let mutation_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(ConsentCapabilityExecutor::new(aggregate));
+    let mutation_validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ActivationGatedMutationValidator::new(
+            activation.clone(),
+            Arc::new(ConsentCapabilitySemanticValidator::new(Arc::new(
+                PostgresConsentReferenceReader::new(store.clone()),
+            ))),
+        ));
+    contributions
+        .add_mutations(
+            capability_definitions()?,
+            mutation_validator,
+            mutation_executor,
+        )
+        .map_err(production_composition_error)?;
+
+    let query_adapter = Arc::new(ConsentQueryAdapter::new(
+        store,
+        consents_cursor(cursor_key)?,
+        visibility_authorizer,
+    )?);
+    let query_validator: Arc<dyn QuerySemanticValidator> = Arc::new(
+        ActivationGatedQueryValidator::new(activation, query_adapter.clone()),
+    );
+    let query_executor: Arc<dyn QueryExecutor> = query_adapter;
+    contributions
+        .add_queries(
+            query_capability_definitions()?,
+            query_validator,
+            query_executor,
+        )
+        .map_err(production_composition_error)?;
+
+    Ok(contributions)
+}
+
+fn consents_cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {
+    CursorCodec::new(key).map_err(|error| {
+        SdkError::new(
+            "CONSENTS_CURSOR_CONFIGURATION_INVALID",
+            ErrorCategory::Internal,
+            false,
+            "The Consents cursor configuration is invalid.",
+        )
+        .with_internal_reference(error.to_string())
+    })
+}
+
+fn production_composition_error(error: impl fmt::Display) -> SdkError {
+    SdkError::new(
+        "CONSENTS_PRODUCTION_COMPOSITION_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The Consents production contribution is invalid.",
+    )
+    .with_internal_reference(error.to_string())
 }
 
 fn reference_unavailable() -> SdkError {
