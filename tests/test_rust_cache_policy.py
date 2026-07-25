@@ -59,6 +59,15 @@ class RustCachePolicyTests(unittest.TestCase):
     def test_accepts_main_write_only_lockfile_bound_cache(self) -> None:
         self.assertEqual(self.check(VALID_WORKFLOW), ())
 
+    def test_ignores_unrelated_environment_access(self) -> None:
+        workflow = VALID_WORKFLOW.replace(
+            "      - name: Run Clippy\n",
+            "      - name: Finalize telemetry\n"
+            "        run: python -c \"import os; print(os.environ)\"\n"
+            "      - name: Run Clippy\n",
+        )
+        self.assertEqual(self.check(workflow), ())
+
     def test_rejects_save_without_main_only_condition(self) -> None:
         failures = self.check(
             VALID_WORKFLOW.replace(
