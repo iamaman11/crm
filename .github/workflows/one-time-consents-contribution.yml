@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: Build and validate Consents contribution commit
+      - name: Prepare Consents contribution patch
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,15 +58,33 @@ jobs:
           '''
           path.write_text(prefix + tail, encoding="utf-8")
           PY
-
           python scripts/one_time_consents_contribution.py
+
+      - name: Validate formatting lockfile and architecture guard
+        shell: bash
+        run: |
+          set -euo pipefail
           cargo fmt --all
           cargo generate-lockfile
           python -m unittest -v tests.test_native_module_composition
           python scripts/check_native_module_composition.py
-          cargo test -p crm-application-composition -p crm-consents-capability-composition -p crm-application-runtime --lib
-          cargo check --workspace
 
+      - name: Run focused contribution tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-application-composition -p crm-consents-capability-composition -p crm-application-runtime --lib 2>&1 | tee /tmp/consents-focused-tests.log
+
+      - name: Check complete workspace
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo check --workspace 2>&1 | tee /tmp/consents-workspace-check.log
+
+      - name: Publish validated Consents contribution commit
+        shell: bash
+        run: |
+          set -euo pipefail
           git rm .github/workflows/one-time-consents-contribution.yml
           git rm scripts/one_time_consents_contribution.py
           git add \
