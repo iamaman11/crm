@@ -38,10 +38,9 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
-          key: rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-${{ hashFiles('Cargo.lock') }}
+          key: rust-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-
+            rust-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-
       - name: Record Rust cache restore telemetry
         shell: bash
         run: |
@@ -55,8 +54,7 @@ jobs:
               for cache_path in \
                 "${HOME}/.cargo/registry/index" \
                 "${HOME}/.cargo/registry/cache" \
-                "${HOME}/.cargo/git/db" \
-                "target"; do
+                "${HOME}/.cargo/git/db"; do
                 if [ -e "${cache_path}" ]; then
                   du -sb "${cache_path}"
                 fi
@@ -65,7 +63,8 @@ jobs:
           )"
           cat > artifacts/rust-cache-telemetry.json <<EOF
           {
-            "schema_version": "crm.rust-cache-telemetry/v2",
+            "schema_version": "crm.rust-cache-telemetry/v3",
+            "cache_scope": "cargo-dependencies",
             "event_name": "${{ github.event_name }}",
             "ref": "${{ github.ref }}",
             "candidate_sha": "${{ github.event.pull_request.head.sha || github.sha }}",
@@ -79,13 +78,13 @@ jobs:
           }
           EOF
           {
-            echo "### Trusted Rust cache pilot"
+            echo "### Trusted Rust dependency cache pilot"
             echo "- Exact hit: \`${{ steps.rust-cache-restore.outputs.cache-hit || 'false' }}\`"
             echo "- Primary key: \`${{ steps.rust-cache-restore.outputs.cache-primary-key }}\`"
             echo "- Matched key: \`${{ steps.rust-cache-restore.outputs.cache-matched-key || 'none' }}\`"
             echo "- Main write eligible: \`${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\`"
             echo "- Restore duration: \`${restore_duration_ms} ms\`"
-            echo "- Restored path footprint: \`${cache_paths_bytes} bytes\`"
+            echo "- Restored dependency footprint: \`${cache_paths_bytes} bytes\`"
           } >> "${GITHUB_STEP_SUMMARY}"
       - run: python scripts/check_architecture.py
       - name: Generate resolved Cargo lockfile
@@ -179,7 +178,6 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
           key: ${{ steps.rust-cache-restore.outputs.cache-primary-key }}
       - name: Finalize Rust cache telemetry
         if: always()
@@ -204,7 +202,8 @@ jobs:
           else:
               path.parent.mkdir(parents=True, exist_ok=True)
               report = {
-                  "schema_version": "crm.rust-cache-telemetry/v2",
+                  "schema_version": "crm.rust-cache-telemetry/v3",
+                  "cache_scope": "cargo-dependencies",
                   "telemetry_initialization_failed": True,
               }
 
