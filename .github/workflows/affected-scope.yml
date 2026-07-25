@@ -13,7 +13,7 @@ permissions:
 jobs:
   affected-scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -34,7 +34,15 @@ jobs:
         env:
           BASE_REF: origin/${{ github.base_ref }}
         run: python scripts/repo.py affected --base "${BASE_REF}"
-      - name: Run affected structural and package checks
+      - name: Run affected structural preflight
         env:
           BASE_REF: origin/${{ github.base_ref }}
-        run: python scripts/repo.py check-affected --base "${BASE_REF}"
+        run: python scripts/repo.py check-affected --base "${BASE_REF}" --phase structural
+      - name: Run affected Clippy closure
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: python scripts/repo.py check-affected --base "${BASE_REF}" --phase clippy
+      - name: Run affected test closure
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: python scripts/repo.py check-affected --base "${BASE_REF}" --phase test
