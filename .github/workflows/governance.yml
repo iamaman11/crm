@@ -139,6 +139,6 @@ jobs:
       - name: Enforce CI event and concurrency policy
         run: python scripts/check_ci_event_policy.py
       - name: Test CI event and concurrency policy
-        run: python -m pytest tests/test_ci_event_policy.py
+        run: python -m unittest tests.test_ci_event_policy
       - name: Run permanent native architecture conformance preflight
         run: python scripts/repo.py conformance
