@@ -1,3 +1,5 @@
+"""Focused tests for deterministic measurement-only workspace analysis."""
+
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
