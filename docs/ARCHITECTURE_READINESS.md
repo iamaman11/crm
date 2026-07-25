@@ -4,6 +4,8 @@ Status: **Ready for modular product development**
 Accepted implementation: issue #134 / PR #135
 Merged baseline: `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`
 Exact verification head: `c73a3eb830893477a4d535acc9383e006d74367d`
+Architecture scalability evolution: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`
+Adoption rule: the scalability plan becomes normative only after its review PR merges; every implementation phase defined there remains a separately gated delivery packet.
 
 This document records the accepted non-regression baseline for continued CRM development. It does not claim that the universal CRM product is complete; it confirms that the production architecture is prepared for further owner-domain and link-module delivery without returning to central business routing or hidden lifecycle bypasses.
 
@@ -48,5 +50,7 @@ Every new delivery packet must begin from current `main`, read `SYSTEM_INVARIANT
 - persistence, authorization, audit, idempotency and rollback semantics;
 - route-parity/classification impact;
 - required unit, PostgreSQL, process, browser and operational acceptance.
+
+Packets that add workspace members, shared protocol support, production composition wiring, raw infrastructure access or test-selection logic MUST also follow `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` and provide the metrics, justification and acceptance evidence required there.
 
 Use `python scripts/repo.py conformance` for the permanent local architecture preflight and run all specialized GitHub workflows affected by the packet. Architecture readiness remains valid only while these mechanical gates stay green.
