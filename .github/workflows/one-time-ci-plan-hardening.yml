@@ -1,0 +1,306 @@
+name: One-time CI plan hardening
+
+on:
+  push:
+    branches:
+      - docs/ci-scalability-plan-hardening
+    paths:
+      - .github/workflows/one-time-ci-plan-hardening.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: docs/ci-scalability-plan-hardening
+          fetch-depth: 0
+      - name: Harden architecture scalability plan
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          plan_path = Path("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
+          plan = plan_path.read_text(encoding="utf-8")
+
+          marker = "## 16. Phased implementation plan"
+          section_title = "## 15.6 CI execution architecture and runner policy"
+          if section_title in plan:
+              raise SystemExit("CI execution architecture section already exists")
+          if marker not in plan:
+              raise SystemExit("Phase plan marker not found")
+
+          section = r'''## 15.6 CI execution architecture and runner policy
+
+The repository must scale the mechanism that selects, schedules and isolates verification work. Buying faster runners or copying more path filters is not a substitute for an architecture-derived check graph.
+
+### 15.6.1 Trigger model and duplicate-run control
+
+Normal feature-branch development must not run equivalent `push` and `pull_request` suites for the same commit.
+
+Required policy:
+
+- ordinary PR iteration runs from `pull_request`;
+- `push` verification is limited to `main`, explicitly governed release branches and tags unless another branch trigger has a documented purpose;
+- a workflow that intentionally handles both feature-branch push and PR events must prove that the two runs have different acceptance responsibilities;
+- iterative PR workflows use a concurrency group derived from workflow identity and PR number;
+- a newer PR commit cancels superseded iterative runs with `cancel-in-progress: true`;
+- `main`, release, phase-closure and final exact-head acceptance runs are never cancelled merely because another run was queued;
+- once a candidate SHA is selected for Gate review, final evidence must come from a non-superseded run on that unchanged SHA.
+
+Concurrency reduces wasted iterations only. It does not change the exact-head acceptance contract.
+
+### 15.6.2 Rust cache trust and measurement policy
+
+Rust caching is introduced only through a measured pilot. Correctness must never depend on a cache hit.
+
+Required controls:
+
+- capture clean-build and warm-build baselines before enabling blocking cache policy;
+- include operating system, Rust toolchain, target triple, profile, lockfile digest and material feature grouping in cache identity;
+- untrusted pull-request and fork contexts may restore an approved cache but must not publish into a shared trusted cache namespace;
+- trusted `main` or dedicated maintenance runs may update shared caches;
+- cache restore/save duration and hit rate are reported with compile duration;
+- cache misses and cache service outages fall back to a correct clean build;
+- compare ordinary Cargo dependency/target caching with `sccache` on a representative workflow before standardizing either approach;
+- do not hide an excessively broad dependency closure behind cache performance.
+
+### 15.6.3 GitHub Actions supply-chain policy
+
+Every third-party Action used by permanent workflows must be immutable and reviewable.
+
+Required controls:
+
+- pin external Actions to a full commit SHA;
+- retain the human-readable release tag in an adjacent comment;
+- update pinned SHAs through a bounded dependency-maintenance PR with normal checks;
+- maintain an allowlist of approved Action publishers/repositories;
+- keep job and workflow token permissions at the minimum required level;
+- prohibit moving references such as `@main`, `@master` or `@stable` in permanent workflows;
+- treat workflow and composite-action changes as production supply-chain changes.
+
+### 15.6.4 Reusable workflow and composite-action boundary
+
+Repeated setup must be centralized to prevent YAML drift:
+
+- use reusable workflows for repeated job-level orchestration;
+- use composite Actions for repeated step sequences inside jobs;
+- standardize checkout, toolchain, Python, Buf, PostgreSQL client, cache bootstrap, diagnostics and environment validation;
+- keep domain-specific commands and acceptance ownership visible in the calling workflow;
+- do not claim setup reuse alone as a performance optimization because each hosted job still receives an isolated runner.
+
+Generated or shared workflow inputs must be derived from the same module, contract, migration and production-route metadata used by architecture governance.
+
+### 15.6.5 PostgreSQL process-test architecture
+
+Full migration correctness and process isolation are different acceptance responsibilities and should not force every E2E scenario through the same repeated reset sequence.
+
+Maintain two lanes:
+
+1. **Sequential migration lane**
+   - clean cluster/database creation;
+   - full migration apply;
+   - rollback and reapply where supported;
+   - FORCE RLS, role, grant and cluster-level semantics;
+   - ordering and irreversible-migration evidence.
+2. **Parallel process lane**
+   - prepare one accepted migrated baseline per job or shard;
+   - create a unique isolated database for each independent test group, using a PostgreSQL template database or a separate service-container matrix;
+   - assign a unique `DATABASE_URL` and artifact namespace to every shard;
+   - prohibit shared mutable fixtures, fixed database names and cross-shard advisory-lock collisions;
+   - clean up databases and processes after every shard.
+
+Template cloning must account for PostgreSQL cluster-wide roles, database-level grants/configuration and the requirement that the template has no active connections. Start with a two-domain pilot, measure migration/setup and test time separately, and expand only after isolation and failure diagnostics are proven.
+
+### 15.6.6 Device-lab security boundary
+
+A public repository must never execute untrusted PR code on a persistent personal workstation or ordinary long-lived self-hosted runner.
+
+The real-device contour must use:
+
+- a dedicated machine, VM or isolated host without personal data;
+- a private control repository or equivalent trusted dispatcher;
+- only a merged SHA, signed artifact or explicitly approved release candidate from the public repository;
+- manual or protected-environment approval before device access;
+- ephemeral or just-in-time single-job runners where practical;
+- minimal short-lived tokens and no broad repository secrets;
+- no execution of fork PR code and no unsafe `pull_request_target` checkout;
+- separate network placement and a dedicated label such as `device-lab`;
+- deterministic environment and device-state cleanup after every job;
+- externally retained diagnostics sufficient to investigate runner compromise or device failure.
+
+Device acceptance supplements software CI. It does not replace deterministic simulation, protocol, persistence or process tests that can run without hardware.
+
+### 15.6.7 Platform and larger-runner decision
+
+GitHub remains the default source-control and CI platform while the repository is public and its security/governance model remains suitable. Provider pricing and free-minute quantities are dated operational inputs, not permanent architecture facts.
+
+A larger hosted runner may be piloted only after measurements show that the critical path:
+
+- remains CPU- or memory-bound after cache and fan-out improvements;
+- has enough parallel work to benefit from additional resources;
+- materially blocks delivery;
+- produces a better cost/time result than test-graph or database-isolation improvements.
+
+Start with a bounded 8–16 vCPU comparison. Do not assume 32–96 vCPU will linearly accelerate Rust linking, migrations or single-process E2E commands.
+
+### 15.6.8 Immediate cross-cutting controls
+
+The following controls are low-risk and may land before or alongside Phase A/B packets without waiting for calibrated performance budgets:
+
+1. restrict ordinary `push` workflow triggers to `main` and explicitly governed release refs;
+2. add PR-scoped concurrency cancellation for superseded iterations;
+3. pin permanent third-party Actions to full SHAs;
+4. ensure governance path coverage includes this plan and every normative generated/check-selection source;
+5. synchronize `PROJECT_STATUS.md`, roadmap, delivery plan and active packet after accepted merges;
+6. begin measurement of workflow count, queue time, execution time and duplicate push/PR runs.
+
+Each control must land in a bounded PR and obtain its own unchanged exact-head evidence.
+'''
+
+          plan = plan.replace(marker, section + "\n\n" + marker, 1)
+
+          old_metrics = '''- clean build duration;
+- incremental leaf-domain build duration;
+- focused/domain/full test duration;
+- central composition manual LOC;'''
+          new_metrics = '''- clean build duration;
+- incremental leaf-domain build duration;
+- focused/domain/full test duration;
+- workflow queue time and runner execution time, including p50 and p95;
+- workflow runs and total compute per PR, separated into push and pull-request triggers;
+- superseded-run cancellation count and time saved;
+- cache hit rate plus restore/save/compile duration;
+- migration/reset preparation time separated from E2E execution time;
+- critical-path duration across all required checks;
+- retry, rerun and flake rate;
+- artifact and cache storage growth;
+- central composition manual LOC;'''
+          if old_metrics not in plan:
+              raise SystemExit("Metrics anchor not found")
+          plan = plan.replace(old_metrics, new_metrics, 1)
+
+          old_invariants = '''- generic router/worker algorithm edits required only to register one feature;
+- unapproved consumer of raw infrastructure transaction APIs.'''
+          new_invariants = '''- generic router/worker algorithm edits required only to register one feature;
+- unapproved consumer of raw infrastructure transaction APIs;
+- duplicate equivalent feature-branch `push` and `pull_request` verification without documented distinct responsibilities;
+- permanent third-party Action referenced by a moving tag or branch instead of a full commit SHA;
+- untrusted PR context publishing into a shared trusted build-cache namespace;
+- public-repository PR code executing on a persistent personal or ordinary long-lived self-hosted runner;
+- skipped affected-scope check without a machine-readable reason.'''
+          if old_invariants not in plan:
+              raise SystemExit("Hard invariant anchor not found")
+          plan = plan.replace(old_invariants, new_invariants, 1)
+
+          old_phase_b = '''1. Add workspace analyzer.
+2. Categorize existing crates.
+3. Capture clean and incremental build baselines.
+4. Capture CI/test duration baselines.
+5. Add new-crate justification warnings.
+6. Add duplicate dependency and fan-out reports.
+7. Publish reports as CI artifacts and PR summaries.'''
+          new_phase_b = '''1. Add workspace analyzer.
+2. Categorize existing crates.
+3. Capture clean and incremental build baselines.
+4. Capture workflow queue, runner execution, CI critical-path and focused/full test baselines.
+5. Count push versus pull-request runs, superseded runs, retries and total compute per PR.
+6. Measure migration/reset time separately from process-test execution.
+7. Add new-crate justification warnings.
+8. Add duplicate dependency and fan-out reports.
+9. Record cache hit/restore/save metrics when cache pilots begin.
+10. Publish machine-readable reports as CI artifacts and concise PR summaries.'''
+          if old_phase_b not in plan:
+              raise SystemExit("Phase B action block not found")
+          plan = plan.replace(old_phase_b, new_phase_b, 1)
+
+          old_phase_e = '''1. Implement affected package calculation.
+2. Map contracts, migrations, routes and frontend packages to checks.
+3. Add explainable `check-affected` output.
+4. Split GitHub workflows into preflight, affected Rust, affected database, affected process and affected web.
+5. Retain full nightly, phase-closure and release matrices.
+6. Retain exact-head final gate rules.'''
+          new_phase_e = '''1. Normalize workflow events so ordinary feature branches do not receive duplicate equivalent push and PR runs.
+2. Add PR-scoped concurrency cancellation for superseded iterative runs while protecting main/release/final acceptance.
+3. Pin permanent third-party Actions to full commit SHAs and centralize repeated setup.
+4. Implement affected package calculation.
+5. Map contracts, migrations, routes, owner adapters, workers, device requirements and frontend packages to checks.
+6. Add explainable `check-affected` output.
+7. Split GitHub workflows into preflight, affected Rust, affected database, affected process and affected web.
+8. Pilot trusted Rust cache behavior and publish cache/compile metrics.
+9. Pilot PostgreSQL process-test isolation with at least two independent shards while retaining the sequential migration lane.
+10. Generate or mechanically validate path/check filters from governed metadata.
+11. Retain full nightly, phase-closure and release matrices.
+12. Retain unchanged exact-head final gate rules.'''
+          if old_phase_e not in plan:
+              raise SystemExit("Phase E action block not found")
+          plan = plan.replace(old_phase_e, new_phase_e, 1)
+
+          old_phase_i = '''1. Remove no-test pass-through as the normal frontend standard.
+2. Add component tests and Playwright smoke/e2e coverage.
+3. Split session, routing, navigation and search concerns.
+4. Organize frontend features by stable domain surfaces.
+5. Add accessibility and contract-compatibility checks.
+6. Add backup/restore, SLO, performance, security and supply-chain operational evidence.'''
+          new_phase_i = '''1. Remove no-test pass-through as the normal frontend standard.
+2. Add component tests and Playwright smoke/e2e coverage.
+3. Split session, routing, navigation and search concerns.
+4. Organize frontend features by stable domain surfaces.
+5. Add accessibility and contract-compatibility checks.
+6. Add backup/restore, SLO, performance, security and supply-chain operational evidence.
+7. Establish the private, approval-gated, ephemeral/JIT `device-lab` contour before real-device CI.
+8. Prove device reset, runner cleanup, minimal-token operation and retained diagnostics.
+9. Keep hardware-independent protocol and process acceptance in hosted CI.'''
+          if old_phase_i not in plan:
+              raise SystemExit("Phase I action block not found")
+          plan = plan.replace(old_phase_i, new_phase_i, 1)
+
+          old_order = '''active Privacy adapter hygiene and proof
+-> complexity baseline and dependency governance
+-> golden domain production package
+-> first-party contribution aggregation
+-> affected-scope CI
+-> second Privacy owner implementation
+-> shared Privacy protocol extraction
+-> remaining owner contributions
+-> gradual transitional-crate consolidation
+-> frontend and operational parity'''
+          new_order = '''active Privacy adapter hygiene and proof
+-> immediate workflow event/concurrency/action-pinning and status-sync controls
+-> complexity and CI critical-path baseline
+-> golden domain production package
+-> first-party contribution aggregation
+-> affected-scope CI plus PostgreSQL isolation pilot
+-> second Privacy owner implementation
+-> shared Privacy protocol extraction
+-> remaining owner contributions
+-> gradual transitional-crate consolidation
+-> frontend, operational and secure device-lab parity'''
+          if old_order not in plan:
+              raise SystemExit("Recommended order block not found")
+          plan = plan.replace(old_order, new_order, 1)
+
+          plan_path.write_text(plan, encoding="utf-8")
+
+          governance_path = Path(".github/workflows/governance.yml")
+          governance = governance_path.read_text(encoding="utf-8")
+          anchor = '      - "docs/ARCHITECTURE_READINESS.md"\n'
+          addition = anchor + '      - "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md"\n'
+          if governance.count(anchor) != 2:
+              raise SystemExit("Unexpected governance readiness path count")
+          governance = governance.replace(anchor, addition)
+          governance_path.write_text(governance, encoding="utf-8")
+          PY
+      - name: Remove one-time workflow and commit
+        shell: bash
+        run: |
+          rm .github/workflows/one-time-ci-plan-hardening.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md .github/workflows/governance.yml .github/workflows/one-time-ci-plan-hardening.yml
+          git commit -m "Harden CI scalability and device-lab architecture plan"
+          git push origin HEAD:docs/ci-scalability-plan-hardening
