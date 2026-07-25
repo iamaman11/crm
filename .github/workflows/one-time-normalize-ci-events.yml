@@ -11,26 +11,28 @@ on:
       - ".github/workflows/one-time-normalize-ci-events.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   normalize:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate normalized permanent workflows
+      - name: Normalize and push permanent workflows
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          exec > >(tee normalize.log) 2>&1
           set -euo pipefail
+          auth_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git init --quiet .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "${auth_remote}"
           git fetch --quiet --no-tags --depth=1 origin ci/normalize-events-and-concurrency
-          git checkout --quiet --detach FETCH_HEAD
+          git checkout --quiet -B ci/normalize-events-and-concurrency FETCH_HEAD
           python - <<'PY'
           from pathlib import Path
-          import shutil
 
           workflow_dir = Path('.github/workflows')
-          output = Path('normalized-output')
           temporary = workflow_dir / 'one-time-normalize-ci-events.yml'
           expression_open = '$' + '{{'
           expression_close = '}}'
@@ -97,22 +99,23 @@ jobs:
                   lines[insertion:insertion] = expected
 
               path.write_text(''.join(lines), encoding='utf-8')
-              destination = output / path
-              destination.parent.mkdir(parents=True, exist_ok=True)
-              shutil.copy2(path, destination)
               changed.append(str(path))
 
           if not changed:
               raise SystemExit('no permanent push + pull_request workflows were normalized')
-          output.mkdir(exist_ok=True)
-          (output / 'manifest.txt').write_text('\n'.join(changed) + '\n', encoding='utf-8')
           print('\n'.join(changed))
           PY
-      - name: Upload normalized workflow artifact
+          git rm .github/workflows/one-time-normalize-ci-events.yml
+          git add .github/workflows scripts/check_ci_event_policy.py tests/test_ci_event_policy.py docs/PROJECT_STATUS.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Normalize CI events and PR concurrency"
+          git push origin HEAD:ci/normalize-events-and-concurrency
+      - name: Upload normalization push diagnostics
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: normalized-ci-workflows
-          path: normalized-output
-          include-hidden-files: true
+          name: normalize-ci-push-log
+          path: normalize.log
           if-no-files-found: error
           retention-days: 7
