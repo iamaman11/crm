@@ -156,6 +156,7 @@ class CiTelemetryTests(unittest.TestCase):
         steps = [
             self.step_sample(runs[0], "Run workspace tests", 70),
             self.step_sample(runs[1], "Run workspace tests", 10, "cancelled"),
+            self.step_sample(runs[1], "Run workspace tests", 0, "skipped"),
             self.step_sample(runs[0], "Set up job", 2),
             StepSample(
                 run_id=3,
@@ -176,7 +177,7 @@ class CiTelemetryTests(unittest.TestCase):
         summary = summarize_runs(runs, jobs, steps)
         self.assertEqual(summary["sample_count"], 3)
         self.assertEqual(summary["sampled_job_count"], 2)
-        self.assertEqual(summary["sampled_step_count"], 3)
+        self.assertEqual(summary["sampled_step_count"], 4)
         self.assertEqual(summary["pull_request_cancelled_run_count"], 1)
         self.assertEqual(summary["conclusions"], {"cancelled": 1, "failure": 1, "success": 1})
         self.assertEqual(summary["sampled_runner_compute_minutes"], 2.5)
@@ -184,16 +185,26 @@ class CiTelemetryTests(unittest.TestCase):
         self.assertEqual(workflows["Rust CI"]["sample_count"], 2)
         self.assertEqual(workflows["Rust CI"]["cancelled_count"], 1)
         self.assertEqual(workflows["Rust CI"]["execution_seconds_p95"], 100)
-        self.assertEqual(workflows["Rust CI"]["sampled_step_count"], 2)
+        self.assertEqual(workflows["Rust CI"]["sampled_step_count"], 3)
         step_summaries = {
             (item["workflow_name"], item["step_name"]): item
             for item in summary["steps"]
         }
         rust_tests = step_summaries[("Rust CI", "Run workspace tests")]
-        self.assertEqual(rust_tests["sample_count"], 2)
+        self.assertEqual(rust_tests["sample_count"], 3)
         self.assertEqual(rust_tests["execution_seconds_p50"], 10)
         self.assertEqual(rust_tests["execution_seconds_p95"], 70)
         self.assertEqual(rust_tests["cancelled_count"], 1)
+        self.assertEqual(rust_tests["skipped_count"], 1)
+        self.assertEqual(rust_tests["other_count"], 0)
+        self.assertEqual(
+            rust_tests["success_count"]
+            + rust_tests["failure_count"]
+            + rust_tests["cancelled_count"]
+            + rust_tests["skipped_count"]
+            + rust_tests["other_count"],
+            rust_tests["sample_count"],
+        )
         self.assertNotIn(("Rust CI", "Set up job"), step_summaries)
 
     def test_markdown_report_is_explicitly_measurement_only(self) -> None:
@@ -211,6 +222,7 @@ class CiTelemetryTests(unittest.TestCase):
         markdown = markdown_report(report)
         self.assertIn("Measurement-only report", markdown)
         self.assertIn("Slowest sampled workflow steps", markdown)
+        self.assertIn("S/F/C/K/O", markdown)
         self.assertIn("Run workspace tests", markdown)
         self.assertIn("does not establish performance budgets", markdown)
 
