@@ -15,6 +15,7 @@ on:
       - "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md"
       - "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
+      - "docs/CI_TELEMETRY_BASELINE.md"
       - "docs/SYSTEM_INVARIANTS.md"
       - "docs/APPLICATION_ARCHITECTURE.md"
       - "docs/DELIVERY_GOVERNANCE.md"
@@ -36,6 +37,7 @@ on:
       - "scripts/check_ci_event_policy.py"
       - "scripts/check_action_pinning.py"
       - "scripts/analyze_workspace.py"
+      - "scripts/analyze_ci_telemetry.py"
       - "scripts/compile_module_manifest_ir.py"
       - "scripts/module_manifest_projection.py"
       - "scripts/validate_module_manifests.py"
@@ -49,6 +51,7 @@ on:
       - "tests/test_ci_event_policy.py"
       - "tests/test_action_pinning.py"
       - "tests/test_workspace_analysis.py"
+      - "tests/test_ci_telemetry.py"
       - "tests/test_module_compatibility.py"
       - "tests/test_module_manifest_validation.py"
       - "tests/test_module_scaffolding.py"
@@ -70,6 +73,7 @@ on:
       - "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md"
       - "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
+      - "docs/CI_TELEMETRY_BASELINE.md"
       - "docs/SYSTEM_INVARIANTS.md"
       - "docs/APPLICATION_ARCHITECTURE.md"
       - "docs/DELIVERY_GOVERNANCE.md"
@@ -91,6 +95,7 @@ on:
       - "scripts/check_ci_event_policy.py"
       - "scripts/check_action_pinning.py"
       - "scripts/analyze_workspace.py"
+      - "scripts/analyze_ci_telemetry.py"
       - "scripts/compile_module_manifest_ir.py"
       - "scripts/module_manifest_projection.py"
       - "scripts/validate_module_manifests.py"
@@ -104,6 +109,7 @@ on:
       - "tests/test_ci_event_policy.py"
       - "tests/test_action_pinning.py"
       - "tests/test_workspace_analysis.py"
+      - "tests/test_ci_telemetry.py"
       - "tests/test_module_compatibility.py"
       - "tests/test_module_manifest_validation.py"
       - "tests/test_module_scaffolding.py"
@@ -156,5 +162,7 @@ jobs:
         run: python -m unittest tests.test_action_pinning
       - name: Test workspace complexity analyzer
         run: python -m unittest tests.test_workspace_analysis
+      - name: Test CI runtime telemetry analyzer
+        run: python -m unittest tests.test_ci_telemetry
       - name: Run permanent native architecture conformance preflight
         run: python scripts/repo.py conformance
