@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect measurement-only GitHub Actions queue, execution and compute telemetry."""
+"""Collect measurement-only GitHub Actions run, job and step telemetry."""
 
 from __future__ import annotations
 
@@ -17,7 +17,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-SCHEMA_VERSION = "crm.ci-telemetry-baseline/v1"
+SCHEMA_VERSION = "crm.ci-telemetry-baseline/v2"
+INTERNAL_STEP_NAMES = {"Set up job", "Complete job"}
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,19 @@ class JobSample:
     run_id: int
     workflow_name: str
     job_name: str
+    conclusion: str
+    started_at: datetime
+    completed_at: datetime
+    execution_seconds: float
+
+
+@dataclass(frozen=True)
+class StepSample:
+    run_id: int
+    workflow_name: str
+    job_name: str
+    step_name: str
+    step_number: int
     conclusion: str
     started_at: datetime
     completed_at: datetime
@@ -104,6 +118,33 @@ def parse_job(run: RunSample, payload: dict[str, Any]) -> JobSample | None:
     )
 
 
+def parse_step(
+    run: RunSample,
+    job_name: str,
+    payload: dict[str, Any],
+) -> StepSample | None:
+    started_at = parse_timestamp(payload.get("started_at"))
+    completed_at = parse_timestamp(payload.get("completed_at"))
+    conclusion = payload.get("conclusion")
+    if started_at is None or completed_at is None or not conclusion:
+        return None
+    return StepSample(
+        run_id=run.run_id,
+        workflow_name=run.workflow_name,
+        job_name=job_name,
+        step_name=str(payload.get("name") or "unknown"),
+        step_number=int(payload.get("number") or 0),
+        conclusion=str(conclusion),
+        started_at=started_at,
+        completed_at=completed_at,
+        execution_seconds=non_negative_seconds(started_at, completed_at),
+    )
+
+
+def is_internal_step(step: StepSample) -> bool:
+    return step.step_name in INTERNAL_STEP_NAMES or step.step_name.startswith("Post ")
+
+
 def percentile(values: Iterable[float], percentile_value: float) -> float:
     ordered = sorted(float(value) for value in values)
     if not ordered:
@@ -116,10 +157,55 @@ def rounded_seconds(value: float) -> int:
     return int(round(value))
 
 
-def summarize_runs(runs: list[RunSample], jobs: list[JobSample]) -> dict[str, Any]:
+def summarize_steps(steps: list[StepSample]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], list[StepSample]] = defaultdict(list)
+    for step in steps:
+        if not is_internal_step(step):
+            grouped[(step.workflow_name, step.job_name, step.step_name)].append(step)
+
+    summaries: list[dict[str, Any]] = []
+    for (workflow_name, job_name, step_name), samples in grouped.items():
+        conclusions = Counter(sample.conclusion for sample in samples)
+        durations = [sample.execution_seconds for sample in samples]
+        summaries.append(
+            {
+                "workflow_name": workflow_name,
+                "job_name": job_name,
+                "step_name": step_name,
+                "sample_count": len(samples),
+                "success_count": conclusions.get("success", 0),
+                "failure_count": conclusions.get("failure", 0),
+                "cancelled_count": conclusions.get("cancelled", 0),
+                "execution_seconds_p50": rounded_seconds(percentile(durations, 0.50)),
+                "execution_seconds_p95": rounded_seconds(percentile(durations, 0.95)),
+                "execution_seconds_max": rounded_seconds(max(durations, default=0.0)),
+                "sampled_execution_minutes": round(sum(durations) / 60.0, 2),
+            }
+        )
+    return sorted(
+        summaries,
+        key=lambda item: (
+            -item["execution_seconds_p95"],
+            item["workflow_name"],
+            item["job_name"],
+            item["step_name"],
+        ),
+    )
+
+
+def summarize_runs(
+    runs: list[RunSample],
+    jobs: list[JobSample],
+    steps: list[StepSample] | None = None,
+) -> dict[str, Any]:
+    steps = steps or []
     jobs_by_run: dict[int, list[JobSample]] = defaultdict(list)
     for job in jobs:
         jobs_by_run[job.run_id].append(job)
+
+    steps_by_run: dict[int, list[StepSample]] = defaultdict(list)
+    for step in steps:
+        steps_by_run[step.run_id].append(step)
 
     workflow_runs: dict[str, list[RunSample]] = defaultdict(list)
     for run in runs:
@@ -129,6 +215,12 @@ def summarize_runs(runs: list[RunSample], jobs: list[JobSample]) -> dict[str, An
     for workflow_name, samples in sorted(workflow_runs.items()):
         conclusions = Counter(sample.conclusion for sample in samples)
         sampled_jobs = [job for sample in samples for job in jobs_by_run.get(sample.run_id, [])]
+        sampled_steps = [
+            step
+            for sample in samples
+            for step in steps_by_run.get(sample.run_id, [])
+            if not is_internal_step(step)
+        ]
         workflow_summaries.append(
             {
                 "workflow_name": workflow_name,
@@ -158,6 +250,7 @@ def summarize_runs(runs: list[RunSample], jobs: list[JobSample]) -> dict[str, An
                     percentile((sample.total_seconds for sample in samples), 0.95)
                 ),
                 "sampled_job_count": len(sampled_jobs),
+                "sampled_step_count": len(sampled_steps),
                 "sampled_runner_compute_minutes": round(
                     sum(job.execution_seconds for job in sampled_jobs) / 60.0, 2
                 ),
@@ -170,6 +263,7 @@ def summarize_runs(runs: list[RunSample], jobs: list[JobSample]) -> dict[str, An
         1 for run in runs if run.event == "pull_request" and run.conclusion == "cancelled"
     )
     sampled_runner_seconds = sum(job.execution_seconds for job in jobs)
+    user_steps = [step for step in steps if not is_internal_step(step)]
     longest_runs = sorted(runs, key=lambda run: (-run.total_seconds, run.run_id))[:20]
 
     completed_at_values = [run.completed_at for run in runs]
@@ -177,6 +271,7 @@ def summarize_runs(runs: list[RunSample], jobs: list[JobSample]) -> dict[str, An
     return {
         "sample_count": len(runs),
         "sampled_job_count": len(jobs),
+        "sampled_step_count": len(user_steps),
         "sample_window_started_at": min(created_at_values).isoformat()
         if created_at_values
         else None,
@@ -206,6 +301,7 @@ def summarize_runs(runs: list[RunSample], jobs: list[JobSample]) -> dict[str, An
         ),
         "sampled_runner_compute_minutes": round(sampled_runner_seconds / 60.0, 2),
         "workflows": workflow_summaries,
+        "steps": summarize_steps(steps),
         "longest_runs": [
             {
                 **asdict(run),
@@ -259,13 +355,26 @@ class GitHubActionsClient:
         parsed = [parse_run(item) for item in payload.get("workflow_runs", [])[:limit]]
         return [run for run in parsed if run is not None]
 
-    def jobs_for_run(self, run: RunSample) -> list[JobSample]:
+    def jobs_and_steps_for_run(
+        self,
+        run: RunSample,
+    ) -> tuple[list[JobSample], list[StepSample]]:
         payload = self.get_json(
             f"/repos/{self.repository}/actions/runs/{run.run_id}/jobs",
             {"per_page": 100, "filter": "latest"},
         )
-        parsed = [parse_job(run, item) for item in payload.get("jobs", [])]
-        return [job for job in parsed if job is not None]
+        jobs: list[JobSample] = []
+        steps: list[StepSample] = []
+        for item in payload.get("jobs", []):
+            job = parse_job(run, item)
+            if job is None:
+                continue
+            jobs.append(job)
+            for step_payload in item.get("steps", []):
+                step = parse_step(run, job.job_name, step_payload)
+                if step is not None:
+                    steps.append(step)
+        return jobs, steps
 
 
 def markdown_report(report: dict[str, Any]) -> str:
@@ -277,7 +386,7 @@ def markdown_report(report: dict[str, Any]) -> str:
         f"Repository: `{report['repository']}`",
         f"Generated at: `{report['generated_at']}`",
         "",
-        "> Measurement-only report. Queue and runtime values are historical observations, not blocking budgets.",
+        "> Measurement-only report. Queue, runtime and step values are historical observations, not blocking budgets.",
         "",
         "## Headline metrics",
         "",
@@ -285,6 +394,7 @@ def markdown_report(report: dict[str, Any]) -> str:
         "|---|---:|",
         f"| Completed workflow runs sampled | {telemetry['sample_count']} |",
         f"| Jobs sampled | {telemetry['sampled_job_count']} |",
+        f"| User/action steps sampled | {telemetry['sampled_step_count']} |",
         f"| Successful runs | {conclusions.get('success', 0)} |",
         f"| Failed runs | {conclusions.get('failure', 0)} |",
         f"| Cancelled runs | {conclusions.get('cancelled', 0)} |",
@@ -318,6 +428,22 @@ def markdown_report(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
+            "## Slowest sampled workflow steps",
+            "",
+            "| Workflow | Job | Step | Samples | Success/Failure/Cancelled | Execution p50/p95/max |",
+            "|---|---|---|---:|---:|---:|",
+        ]
+    )
+    for step in telemetry["steps"][:30]:
+        lines.append(
+            f"| {step['workflow_name']} | {step['job_name']} | {step['step_name']} | "
+            f"{step['sample_count']} | {step['success_count']}/{step['failure_count']}/{step['cancelled_count']} | "
+            f"{step['execution_seconds_p50']}/{step['execution_seconds_p95']}/{step['execution_seconds_max']} s |"
+        )
+
+    lines.extend(
+        [
+            "",
             "## Longest sampled runs",
             "",
             "| Workflow | Event | Conclusion | Queue | Execution | Total | Head |",
@@ -337,10 +463,11 @@ def markdown_report(report: dict[str, Any]) -> str:
             "## Interpretation limits",
             "",
             "- `updated_at - run_started_at` is used as workflow execution duration.",
-            "- Job execution durations are summed only for the configured recent run sample.",
+            "- Job and step durations are collected only for the configured recent run sample.",
+            "- Step timestamps may include process startup/teardown but exclude internal setup, complete and post steps from the ranked table.",
             "- Cancelled pull-request runs are observable; whether each cancellation was superseded is not inferred without change-lineage correlation.",
             "- GitHub-hosted runner hardware and queue conditions may change between samples.",
-            "- This report does not establish performance budgets or justify larger runners by itself.",
+            "- This report does not establish performance budgets or justify cache/larger runners by itself.",
             "",
         ]
     )
@@ -351,6 +478,7 @@ def build_report(
     repository: str,
     runs: list[RunSample],
     jobs: list[JobSample],
+    steps: list[StepSample],
     run_limit: int,
     job_sample_limit: int,
 ) -> dict[str, Any]:
@@ -361,7 +489,7 @@ def build_report(
         "measurement_mode": "non-blocking",
         "requested_run_limit": run_limit,
         "requested_job_sample_limit": job_sample_limit,
-        "telemetry": summarize_runs(runs, jobs),
+        "telemetry": summarize_runs(runs, jobs, steps),
     }
 
 
@@ -389,15 +517,17 @@ def main() -> int:
     client = GitHubActionsClient(args.api_url, args.repository, args.token)
     try:
         runs = client.completed_runs(args.run_limit)
-        jobs = [
-            job
-            for run in runs[: args.job_sample_limit]
-            for job in client.jobs_for_run(run)
-        ]
+        jobs: list[JobSample] = []
+        steps: list[StepSample] = []
+        for run in runs[: args.job_sample_limit]:
+            run_jobs, run_steps = client.jobs_and_steps_for_run(run)
+            jobs.extend(run_jobs)
+            steps.extend(run_steps)
         report = build_report(
             args.repository,
             runs,
             jobs,
+            steps,
             args.run_limit,
             args.job_sample_limit,
         )
