@@ -1,6 +1,6 @@
 # Trusted Rust CI Cache Pilot
 
-Status: dependency-only warm validation
+Status: accepted dependency-only Phase B pilot
 
 This packet evaluates one bounded cache experiment in `Rust CI`. It does not change test scope, runner size, exact-head acceptance, dependency resolution or production behavior.
 
@@ -45,11 +45,11 @@ Machine-readable telemetry on exact-head SHA `fdb51ca8591a306899bb24941e46441bf8
 
 The complete warm path was worse than the p50-derived pre-cache path (`154` seconds) and slightly worse than the p95-derived path (`303` seconds). The cache reduced Clippy time but transferred an excessive archive and did not reduce test execution enough to recover the restore cost.
 
-**Decision:** the complete `target/` cache is rejected. Its `rust-quality-v1` key epoch is no longer referenced and will expire naturally. `target/` is now forbidden by the permanent cache-policy check.
+**Decision:** the complete `target/` cache is rejected. Its `rust-quality-v1` key epoch is no longer referenced and will expire naturally. `target/` is forbidden by the permanent cache-policy check.
 
-## Dependency-only revision
+## Dependency-only experiment
 
-The active `rust-deps-v2` experiment stores only Cargo registry index/archive data and Cargo git database data. It deliberately excludes `target/`. Clippy and tests continue to build and execute from a clean build-output directory, while repeated dependency downloads may be avoided.
+The active `rust-deps-v2` entry stores only Cargo registry index/archive data and Cargo git database data. It deliberately excludes `target/`. Clippy and tests continue to build and execute from a clean build-output directory, while repeated dependency downloads are avoided.
 
 Every Rust run publishes `rust-cache-telemetry.json` with cache scope, exact candidate SHA, hit/key information, publish eligibility, restore duration and footprint, and Clippy/test durations and outcomes.
 
@@ -66,32 +66,34 @@ Exact-head SHA `75a6f610eef60c08edb7a188ec5036de7149a42b` passed Complexity Base
 - main write eligible: `false`;
 - save outcome: `skipped`.
 
-This proved the cold path, full quality scope and pull-request publication denial. The merged `main` run is permitted to create the first dependency-only entry only after the same full suite passes.
+This proved the cold path, full quality scope and pull-request publication denial.
 
-### First validation attempt
+### Premature validation miss
 
-The first documentation-only validation run on SHA `70367ac41fcaf6d935e1b040c061a1786424f259` started before the merged cold `main` run had completed publication. It remained a valid cold/miss execution:
+The first documentation-only validation run on SHA `70367ac41fcaf6d935e1b040c061a1786424f259` started before the merged cold `main` run had completed publication. It remained a valid cold/miss execution and passed the full Rust quality suite, but did not satisfy warm acceptance.
 
-- exact hit: `false`;
-- restored footprint: `0` bytes;
-- restore duration: `297` ms;
-- Clippy duration: `73,437` ms;
-- workspace-test duration: `211,504` ms;
-- combined restore plus Clippy plus tests: `285,238` ms;
+### Warm acceptance
+
+Exact-head SHA `3273ed1e33f8cd6e5c92ece4d0fa6a0026f26d72` proved the entry published by `main`:
+
+- cache scope: `cargo-dependencies`;
+- exact hit: `true`;
+- primary and matched keys: identical;
+- restored footprint: `74,881,152` bytes (`71.41 MiB`);
+- restore duration: `2,307` ms;
+- Clippy duration: `57,719` ms;
+- workspace-test duration: `197,931` ms;
+- combined restore plus Clippy plus tests: `257,957` ms;
 - main write eligible: `false`;
 - save outcome: `skipped`;
-- full Rust quality suite: successful.
+- architecture, lockfile freshness, formatting, Clippy and full workspace tests: successful.
 
-This attempt is retained as miss-tolerance evidence but does not satisfy warm acceptance. A newer exact head must prove the published dependency entry.
+Against the exact cold dependency-only sample, the warm path reduced the measured total by `11,298` ms (`4.2%`). Restore overhead remained small, the entry was approximately 71 MiB, and pull-request publication remained impossible.
 
-## Warm acceptance requirement
+## Decision and continued measurement
 
-This documentation-only branch intentionally leaves cache logic unchanged. Its final exact-head Rust run must prove:
+The dependency-only cache is accepted as a bounded pilot because it produced a modest positive exact-sample result without caching build outputs or weakening any quality gate.
 
-1. `cache_scope` is `cargo-dependencies`;
-2. exact hit is `true` with identical primary and matched keys;
-3. main write eligibility is `false` and save outcome is `skipped`;
-4. architecture, lockfile freshness, formatting, Clippy and full workspace tests all pass;
-5. restore plus Clippy plus test duration is compared with the `269,255` ms cold measurement and the rejected `320,537` ms full-target result.
+It is not treated as a permanent performance guarantee. Daily CI telemetry must continue to observe restore duration, cache footprint, Clippy/test duration, misses and key churn. The policy epoch should be revised or the cache removed if repeated representative samples become neutral or negative.
 
-The dependency cache is retained only if repeated evidence shows neutral or positive total runtime without weakening correctness. No absolute performance budget is introduced by this document.
+No absolute performance budget is introduced by this document.
