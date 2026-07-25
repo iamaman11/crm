@@ -68,9 +68,25 @@ Exact-head SHA `75a6f610eef60c08edb7a188ec5036de7149a42b` passed Complexity Base
 
 This proved the cold path, full quality scope and pull-request publication denial. The merged `main` run is permitted to create the first dependency-only entry only after the same full suite passes.
 
+### First validation attempt
+
+The first documentation-only validation run on SHA `70367ac41fcaf6d935e1b040c061a1786424f259` started before the merged cold `main` run had completed publication. It remained a valid cold/miss execution:
+
+- exact hit: `false`;
+- restored footprint: `0` bytes;
+- restore duration: `297` ms;
+- Clippy duration: `73,437` ms;
+- workspace-test duration: `211,504` ms;
+- combined restore plus Clippy plus tests: `285,238` ms;
+- main write eligible: `false`;
+- save outcome: `skipped`;
+- full Rust quality suite: successful.
+
+This attempt is retained as miss-tolerance evidence but does not satisfy warm acceptance. A newer exact head must prove the published dependency entry.
+
 ## Warm acceptance requirement
 
-This documentation-only branch intentionally leaves cache logic unchanged. Its exact-head Rust run must prove:
+This documentation-only branch intentionally leaves cache logic unchanged. Its final exact-head Rust run must prove:
 
 1. `cache_scope` is `cargo-dependencies`;
 2. exact hit is `true` with identical primary and matched keys;
