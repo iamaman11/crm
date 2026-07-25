@@ -2,6 +2,8 @@ name: Event Runtime CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -29,6 +31,10 @@ on:
       - "database/migrations/**"
       - "database/tests/**"
       - ".github/workflows/event-runtime.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

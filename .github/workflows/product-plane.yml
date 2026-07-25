@@ -2,6 +2,8 @@ name: Product Plane CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "package.json"
       - "requirements-dev.txt"
@@ -51,8 +53,8 @@ on:
 # Only the newest Product Plane validation for a PR/ref is useful. Cancelling stale runs
 # prevents old exact-SHA candidates from consuming hosted runners while the current head waits.
 concurrency:
-  group: product-plane-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
