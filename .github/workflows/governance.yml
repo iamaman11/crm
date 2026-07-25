@@ -17,6 +17,7 @@ on:
       - "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
       - "docs/CI_TELEMETRY_BASELINE.md"
+      - "docs/AFFECTED_SCOPE_CI.md"
       - "docs/RUST_CI_CACHE_PILOT.md"
       - "docs/SYSTEM_INVARIANTS.md"
       - "docs/APPLICATION_ARCHITECTURE.md"
@@ -38,6 +39,7 @@ on:
       - "scripts/check_native_module_composition.py"
       - "scripts/check_ci_event_policy.py"
       - "scripts/check_action_pinning.py"
+      - "scripts/affected_scope.py"
       - "scripts/analyze_workspace.py"
       - "scripts/analyze_ci_telemetry.py"
       - "scripts/compile_module_manifest_ir.py"
@@ -52,6 +54,7 @@ on:
       - "tests/test_customer_privacy_owner_scope_contracts.py"
       - "tests/test_ci_event_policy.py"
       - "tests/test_action_pinning.py"
+      - "tests/test_affected_scope.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_ci_telemetry.py"
       - "tests/test_module_compatibility.py"
@@ -77,6 +80,7 @@ on:
       - "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
       - "docs/CI_TELEMETRY_BASELINE.md"
+      - "docs/AFFECTED_SCOPE_CI.md"
       - "docs/RUST_CI_CACHE_PILOT.md"
       - "docs/SYSTEM_INVARIANTS.md"
       - "docs/APPLICATION_ARCHITECTURE.md"
@@ -98,6 +102,7 @@ on:
       - "scripts/check_native_module_composition.py"
       - "scripts/check_ci_event_policy.py"
       - "scripts/check_action_pinning.py"
+      - "scripts/affected_scope.py"
       - "scripts/analyze_workspace.py"
       - "scripts/analyze_ci_telemetry.py"
       - "scripts/compile_module_manifest_ir.py"
@@ -112,6 +117,7 @@ on:
       - "tests/test_customer_privacy_owner_scope_contracts.py"
       - "tests/test_ci_event_policy.py"
       - "tests/test_action_pinning.py"
+      - "tests/test_affected_scope.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_ci_telemetry.py"
       - "tests/test_module_compatibility.py"
@@ -164,6 +170,8 @@ jobs:
         run: python scripts/check_action_pinning.py
       - name: Test immutable third-party Action pinning
         run: python -m unittest tests.test_action_pinning
+      - name: Test affected-scope analyzer
+        run: python -m unittest tests.test_affected_scope
       - name: Test workspace complexity analyzer
         run: python -m unittest tests.test_workspace_analysis
       - name: Test CI runtime telemetry analyzer
