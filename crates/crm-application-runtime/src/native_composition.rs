@@ -36,13 +36,12 @@ use crm_customer_360_query_adapter::{
     Customer360QueryAdapter,
     query_capability_definitions as customer_360_query_capability_definitions,
 };
-use crm_customer_accounts_capability_adapter::{
-    CustomerAccountCapabilityPlanner, capability_definitions as account_capability_definitions,
+use crm_customer_accounts_capability_adapter::capability_definitions as account_capability_definitions;
+use crm_customer_accounts_capability_composition::{
+    CustomerAccountsProductionDependencies,
+    build_contribution as build_customer_accounts_contribution,
 };
-use crm_customer_accounts_capability_composition::AccountPartyReferenceSemanticValidator;
-use crm_customer_accounts_query_adapter::{
-    AccountQueryAdapter, query_capability_definitions as account_query_capability_definitions,
-};
+use crm_customer_accounts_query_adapter::query_capability_definitions as account_query_capability_definitions;
 use crm_customer_data_operations_capability_adapter::{
     CREATE_PARTY_IMPORT_JOB_CAPABILITY, CustomerDataOperationsCapabilityPlanner,
     VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
@@ -259,14 +258,15 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let account_executor = aggregate_executor(store.clone(), CustomerAccountCapabilityPlanner);
-    add_activated_mutations(
-        &mut contributions,
-        account_capability_definitions()?,
-        Arc::new(AccountPartyReferenceSemanticValidator::new(parties.clone())),
-        account_executor,
-        activation.clone(),
-    )?;
+    contributions.merge(build_customer_accounts_contribution(
+        CustomerAccountsProductionDependencies {
+            store: store.clone(),
+            parties: parties.clone(),
+            activation: activation.clone(),
+            visibility_authorizer: visibility_authorizer.clone(),
+            cursor_key,
+        },
+    )?);
 
     let contact_point_executor = aggregate_executor(store.clone(), ContactPointCapabilityPlanner);
     add_activated_mutations(
@@ -449,18 +449,6 @@ pub fn build_production_composition(
         &mut contributions,
         party_query_capability_definitions()?,
         party_queries,
-        activation.clone(),
-    )?;
-
-    let account_queries = Arc::new(AccountQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        account_query_capability_definitions()?,
-        account_queries,
         activation.clone(),
     )?;
 

@@ -685,10 +685,14 @@ dependencies = [
 name = "crm-customer-accounts-capability-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-runtime",
+ "crm-core-data",
  "crm-customer-accounts-capability-adapter",
+ "crm-customer-accounts-query-adapter",
  "crm-module-sdk",
  "crm-party-reference-composition",
+ "crm-query-runtime",
 ]
 
 [[package]]

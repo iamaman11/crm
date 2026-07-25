@@ -79,6 +79,21 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
         "pub export_selection_worker:",
         "background work is still represented by fixed process fields",
     ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "CustomerAccountCapabilityPlanner",
+        "Customer Accounts mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "AccountPartyReferenceSemanticValidator",
+        "Customer Accounts semantic validation returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "AccountQueryAdapter::new",
+        "Customer Accounts query construction returned to the generic process host",
+    ),
 )
 
 
