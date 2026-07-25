@@ -1,6 +1,6 @@
 # Trusted Rust CI Cache Pilot
 
-Status: dependency-only Phase B pilot
+Status: dependency-only warm validation
 
 This packet evaluates one bounded cache experiment in `Rust CI`. It does not change test scope, runner size, exact-head acceptance, dependency resolution or production behavior.
 
@@ -53,12 +53,29 @@ The active `rust-deps-v2` experiment stores only Cargo registry index/archive da
 
 Every Rust run publishes `rust-cache-telemetry.json` with cache scope, exact candidate SHA, hit/key information, publish eligibility, restore duration and footprint, and Clippy/test durations and outcomes.
 
-## Acceptance sequence
+### Cold acceptance
 
-1. The dependency-only revision must pass a complete cold/miss exact-head pull-request gate and prove that publishing remains skipped.
-2. After merge, a successful `main` Rust run may create the dependency entry.
-3. A separate exact-head pull request must prove a warm dependency restore while executing the unchanged full quality suite.
-4. Restore cost and Clippy/test duration must be compared with both the pre-cache baseline and the rejected full-target experiment.
-5. The dependency cache is retained only if repeated evidence shows neutral or positive total runtime without weakening correctness.
+Exact-head SHA `75a6f610eef60c08edb7a188ec5036de7149a42b` passed Complexity Baseline CI, Governance CI and the complete Rust CI suite. Its pull-request telemetry measured:
 
-No absolute performance budget is introduced by this document.
+- exact hit: `false` under the new epoch;
+- restored footprint: `0` bytes;
+- restore duration: `278` ms;
+- Clippy duration: `71,985` ms;
+- workspace-test duration: `196,992` ms;
+- combined restore plus Clippy plus tests: `269,255` ms;
+- main write eligible: `false`;
+- save outcome: `skipped`.
+
+This proved the cold path, full quality scope and pull-request publication denial. The merged `main` run is permitted to create the first dependency-only entry only after the same full suite passes.
+
+## Warm acceptance requirement
+
+This documentation-only branch intentionally leaves cache logic unchanged. Its exact-head Rust run must prove:
+
+1. `cache_scope` is `cargo-dependencies`;
+2. exact hit is `true` with identical primary and matched keys;
+3. main write eligibility is `false` and save outcome is `skipped`;
+4. architecture, lockfile freshness, formatting, Clippy and full workspace tests all pass;
+5. restore plus Clippy plus test duration is compared with the `269,255` ms cold measurement and the rejected `320,537` ms full-target result.
+
+The dependency cache is retained only if repeated evidence shows neutral or positive total runtime without weakening correctness. No absolute performance budget is introduced by this document.
