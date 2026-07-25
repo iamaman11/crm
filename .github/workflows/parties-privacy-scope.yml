@@ -140,3 +140,12 @@ jobs:
           fi
           find crates/crm-parties-privacy-scope-adapter -maxdepth 3 -type f -print
           find database -maxdepth 1 -name 'parties-privacy-scope-*.log' -print
+      - name: Upload Parties privacy scope diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: parties-privacy-scope-diagnostics
+          path: |
+            database/parties-privacy-scope-*.log
+          if-no-files-found: warn
+          retention-days: 7
