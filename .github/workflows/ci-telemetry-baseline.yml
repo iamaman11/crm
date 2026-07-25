@@ -1,0 +1,64 @@
+name: CI Telemetry Baseline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ci-telemetry-baseline.yml"
+      - "scripts/analyze_ci_telemetry.py"
+      - "tests/test_ci_telemetry.py"
+      - "docs/CI_TELEMETRY_BASELINE.md"
+  pull_request:
+    paths:
+      - ".github/workflows/ci-telemetry-baseline.yml"
+      - "scripts/analyze_ci_telemetry.py"
+      - "tests/test_ci_telemetry.py"
+      - "docs/CI_TELEMETRY_BASELINE.md"
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  telemetry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out exact candidate SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test CI telemetry analyzer
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          python -m unittest -v tests.test_ci_telemetry \
+            2>&1 | tee artifacts/ci-telemetry-tests.log
+      - name: Collect measurement-only CI telemetry
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python scripts/analyze_ci_telemetry.py \
+            --run-limit 100 \
+            --job-sample-limit 60 \
+            --json-output artifacts/ci-telemetry-baseline.json \
+            --markdown-output artifacts/ci-telemetry-baseline.md
+          cat artifacts/ci-telemetry-baseline.md >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload CI telemetry baseline and diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-telemetry-baseline
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
