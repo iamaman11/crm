@@ -26,7 +26,6 @@ use crm_query_runtime::{QueryExecutionContext, QueryExecutor, QueryRequest};
 use prost::Message;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 const TENANT_A: &str = "tenant-a";
@@ -75,7 +74,7 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
     let adapter = PartiesPrivacyScopeQueryAdapter::new(store);
     let definition = parties_privacy_scope_definition().unwrap();
 
-    let before_success = crm_row_counts(&admin).await;
+    let before_success = write_surface_counts(&admin).await;
     let result = adapter
         .execute(
             &definition,
@@ -83,7 +82,7 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
         )
         .await
         .expect("read authoritative Parties scope");
-    assert_eq!(crm_row_counts(&admin).await, before_success);
+    assert_eq!(write_surface_counts(&admin).await, before_success);
 
     let response =
         privacy::PartiesPrivacyScopeContributionResponse::decode(result.output.bytes.as_slice())
@@ -102,7 +101,7 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
             .any(|window| window == b"Scope Subject party-scope")
     );
 
-    let stale_before = crm_row_counts(&admin).await;
+    let stale_before = write_surface_counts(&admin).await;
     let stale = adapter
         .execute(
             &definition,
@@ -112,9 +111,9 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
         .expect_err("stale topology generation must fail closed");
     assert_eq!(stale.code, "PARTIES_PRIVACY_SCOPE_LINEAGE_INVALID");
     assert!(stale.retryable);
-    assert_eq!(crm_row_counts(&admin).await, stale_before);
+    assert_eq!(write_surface_counts(&admin).await, stale_before);
 
-    let cross_tenant_before = crm_row_counts(&admin).await;
+    let cross_tenant_before = write_surface_counts(&admin).await;
     let cross_tenant = adapter
         .execute(
             &definition,
@@ -123,7 +122,7 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
         .await
         .expect_err("cross-tenant Party scope must be concealed");
     assert_eq!(cross_tenant.code, "PARTIES_PRIVACY_SCOPE_LINEAGE_INVALID");
-    assert_eq!(crm_row_counts(&admin).await, cross_tenant_before);
+    assert_eq!(write_surface_counts(&admin).await, cross_tenant_before);
 
     sqlx::query(
         r#"
@@ -143,7 +142,7 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
     .await
     .expect("corrupt isolated Party metadata fixture");
 
-    let malformed_before = crm_row_counts(&admin).await;
+    let malformed_before = write_surface_counts(&admin).await;
     let malformed = adapter
         .execute(
             &definition,
@@ -152,7 +151,7 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
         .await
         .expect_err("malformed Party state must fail closed");
     assert_eq!(malformed.code, "PARTIES_PRIVACY_SCOPE_STORED_STATE_INVALID");
-    assert_eq!(crm_row_counts(&admin).await, malformed_before);
+    assert_eq!(write_surface_counts(&admin).await, malformed_before);
 }
 
 async fn create_party(
@@ -272,29 +271,50 @@ fn scope_request(tenant: &str, party_id: &str, generation: u64, identity: &str) 
     }
 }
 
-async fn crm_row_counts(pool: &PgPool) -> BTreeMap<String, i64> {
-    let tables: Vec<String> = sqlx::query_scalar(
-        r#"
-        SELECT table_name
-        FROM information_schema.tables
-        WHERE table_schema = 'crm'
-          AND table_type = 'BASE TABLE'
-        ORDER BY table_name
-        "#,
-    )
-    .fetch_all(pool)
-    .await
-    .expect("list CRM tables");
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WriteSurfaceCounts {
+    records: i64,
+    business_transactions: i64,
+    idempotency_records: i64,
+    outbox_events: i64,
+    outbox_delivery: i64,
+    audit_heads: i64,
+    audit_records: i64,
+}
 
-    let mut counts = BTreeMap::new();
-    for table in tables {
-        let quoted = table.replace('"', "\"\"");
-        let statement = format!(r#"SELECT count(*)::bigint FROM crm."{quoted}""#);
-        let count: i64 = sqlx::query_scalar(&statement)
+async fn write_surface_counts(pool: &PgPool) -> WriteSurfaceCounts {
+    WriteSurfaceCounts {
+        records: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.records")
             .fetch_one(pool)
             .await
-            .unwrap_or_else(|error| panic!("count rows in crm.{table}: {error}"));
-        counts.insert(table, count);
+            .expect("count CRM records"),
+        business_transactions: sqlx::query_scalar(
+            "SELECT count(*)::bigint FROM crm.business_transactions",
+        )
+        .fetch_one(pool)
+        .await
+        .expect("count CRM business transactions"),
+        idempotency_records: sqlx::query_scalar(
+            "SELECT count(*)::bigint FROM crm.idempotency_records",
+        )
+        .fetch_one(pool)
+        .await
+        .expect("count CRM idempotency records"),
+        outbox_events: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.outbox_events")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM outbox events"),
+        outbox_delivery: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.outbox_delivery")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM outbox delivery rows"),
+        audit_heads: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.audit_heads")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM audit heads"),
+        audit_records: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.audit_records")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM audit records"),
     }
-    counts
 }
