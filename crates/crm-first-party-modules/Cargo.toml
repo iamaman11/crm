@@ -1,0 +1,14 @@
+[package]
+name = "crm-first-party-modules"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-application-composition = { path = "../crm-application-composition" }
+crm-core-data = { path = "../crm-core-data" }
+crm-customer-accounts-capability-composition = { path = "../crm-customer-accounts-capability-composition" }
+crm-consents-capability-composition = { path = "../crm-consents-capability-composition" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-party-reference-composition = { path = "../crm-party-reference-composition" }
+crm-query-runtime = { path = "../crm-query-runtime" }

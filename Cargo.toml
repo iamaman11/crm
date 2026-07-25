@@ -21,6 +21,7 @@ members = [
   "crates/crm-capability-runtime",
   "crates/crm-capability-adapters",
   "crates/crm-application-composition",
+  "crates/crm-first-party-modules",
   "crates/crm-activities-capability-adapter",
   "crates/crm-capability-ingress",
   "crates/crm-proto-contracts",

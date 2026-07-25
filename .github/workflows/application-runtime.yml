@@ -19,6 +19,7 @@ on:
       - "proto/crm/identity_resolution/**"
       - "proto/crm/customer_enrichment/**"
       - "crates/crm-application-runtime/**"
+      - "crates/crm-first-party-modules/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
@@ -79,6 +80,7 @@ on:
       - "proto/crm/identity_resolution/**"
       - "proto/crm/customer_enrichment/**"
       - "crates/crm-application-runtime/**"
+      - "crates/crm-first-party-modules/**"
       - "crates/crm-capability-adapters/**"
       - "crates/crm-capability-ingress/**"
       - "crates/crm-capability-runtime/**"
@@ -272,6 +274,7 @@ jobs:
             database/application-runtime-customer-enrichment-process.log
             database/application-runtime-postgres.log
             crates/crm-application-runtime/
+            crates/crm-first-party-modules/
             crates/crm-consents-capability-adapter/
             crates/crm-consents-capability-composition/
             crates/crm-consents-query-adapter/

@@ -11,9 +11,6 @@ use crm_capability_runtime::{
     TransactionalCapabilityExecutor,
 };
 use crm_consents_capability_adapter::capability_definitions as consent_capability_definitions;
-use crm_consents_capability_composition::{
-    ConsentsProductionDependencies, build_contribution as build_consents_contribution,
-};
 use crm_consents_query_adapter::{
     ConsentQueryAdapter, query_capability_definitions as consent_query_capability_definitions,
 };
@@ -35,10 +32,6 @@ use crm_customer_360_query_adapter::{
     query_capability_definitions as customer_360_query_capability_definitions,
 };
 use crm_customer_accounts_capability_adapter::capability_definitions as account_capability_definitions;
-use crm_customer_accounts_capability_composition::{
-    CustomerAccountsProductionDependencies,
-    build_contribution as build_customer_accounts_contribution,
-};
 use crm_customer_accounts_query_adapter::query_capability_definitions as account_query_capability_definitions;
 use crm_customer_data_operations_capability_adapter::{
     CREATE_PARTY_IMPORT_JOB_CAPABILITY, CustomerDataOperationsCapabilityPlanner,
@@ -74,6 +67,9 @@ use crm_data_quality_capability_adapter::capability_definitions as data_quality_
 use crm_data_quality_query_adapter::{
     DataQualityQueryAdapter,
     query_capability_definitions as data_quality_query_capability_definitions,
+};
+use crm_first_party_modules::{
+    FirstPartyProductionDependencies, build_all as build_first_party_modules,
 };
 use crm_global_search_composition::GLOBAL_SEARCH_INDEX_ID;
 use crm_identity_resolution_capability_adapter::{
@@ -256,8 +252,8 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    contributions.merge(build_customer_accounts_contribution(
-        CustomerAccountsProductionDependencies {
+    contributions.merge(build_first_party_modules(
+        FirstPartyProductionDependencies {
             store: store.clone(),
             parties: parties.clone(),
             activation: activation.clone(),
@@ -288,15 +284,6 @@ pub fn build_production_composition(
         party_relationship_executor,
         activation.clone(),
     )?;
-
-    contributions.merge(build_consents_contribution(
-        ConsentsProductionDependencies {
-            store: store.clone(),
-            activation: activation.clone(),
-            visibility_authorizer: visibility_authorizer.clone(),
-            cursor_key,
-        },
-    )?);
 
     let identity_aggregate = aggregate_executor(store.clone(), IdentityResolutionCapabilityPlanner);
     let identity_definitions = identity_resolution_capability_definitions()?;
