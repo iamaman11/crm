@@ -58,6 +58,7 @@ members = [
   "crates/crm-sales-capability-adapter",
   "crates/crm-parties-capability-adapter",
   "crates/crm-parties-query-adapter",
+  "crates/crm-parties-privacy-scope-adapter",
   "crates/crm-party-reference-composition",
   "crates/crm-customer-accounts-capability-adapter",
   "crates/crm-customer-accounts-capability-composition",
