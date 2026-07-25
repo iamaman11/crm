@@ -1,16 +1,20 @@
 use crate::contract::validate_definition;
 use crate::errors::{
-    database_unavailable, map_lineage_error, row_decode_error, stored_state_invalid,
+    database_unavailable, lineage_invalid, row_decode_error, stored_state_invalid,
     subject_not_found,
 };
 use crate::request::{validate_request_contract, validate_wire_request};
 use crate::response::{build_response, typed_output};
 use crm_capability_runtime::CapabilityDefinition;
-use crm_core_data::PostgresDataStore;
-use crm_identity_resolution_topology_composition::prove_canonical_party_in_transaction;
+use crm_core_data::{BoundReadTransaction, PostgresDataStore};
+use crm_identity_resolution_capability_adapter::{
+    CANONICAL_REDIRECT_PARTY_RECORD_TYPE, CANONICAL_REDIRECT_RELATIONSHIP_TYPE,
+    MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID,
+};
 use crm_module_sdk::{
-    DataClass, ModuleId, PayloadEncoding, PortFuture, RecordRef, RecordSnapshot, RecordType,
-    RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
+    DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture, RecordId, RecordRef,
+    RecordSnapshot, RecordType, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TenantId,
+    TypedPayload,
 };
 use crm_parties::{
     MODULE_ID, PARTY_STATE_MAXIMUM_BYTES, PARTY_STATE_RETENTION_POLICY_ID, PARTY_STATE_SCHEMA_ID,
@@ -53,15 +57,13 @@ impl PartiesPrivacyScopeQueryAdapter {
             .store
             .begin_bound_read_transaction(&request.context.tenant_id)
             .await?;
-        prove_canonical_party_in_transaction(
+        prove_canonical_claim(
             &mut transaction,
             &request.context.tenant_id,
-            &validated.canonical_party,
-            &validated.canonical_party,
+            &validated.canonical_party_id,
             validated.identity_resolution_generation,
         )
-        .await
-        .map_err(map_lineage_error)?;
+        .await?;
 
         let row = sqlx::query(
             r#"
@@ -82,7 +84,6 @@ impl PartiesPrivacyScopeQueryAdapter {
               AND record_type = $3
               AND record_id = $4
               AND deleted_at IS NULL
-            FOR SHARE
             "#,
         )
         .bind(request.context.tenant_id.as_str())
@@ -100,7 +101,7 @@ impl PartiesPrivacyScopeQueryAdapter {
             .map_err(|_| stored_state_invalid("persisted Party version must be positive"))?;
         if party.party_id().as_str() != validated.canonical_party_id.as_str() {
             return Err(stored_state_invalid(
-                "persisted Party identity does not match the locked record",
+                "persisted Party identity does not match the canonical record",
             ));
         }
 
@@ -121,8 +122,100 @@ impl QueryExecutor for PartiesPrivacyScopeQueryAdapter {
     }
 }
 
+async fn prove_canonical_claim(
+    transaction: &mut BoundReadTransaction<'_>,
+    tenant_id: &TenantId,
+    canonical_party_id: &RecordId,
+    claimed_generation: u64,
+) -> Result<(), SdkError> {
+    sqlx::query("SELECT crm.lock_identity_resolution_topology($1)")
+        .bind(tenant_id.as_str())
+        .execute(&mut **transaction)
+        .await
+        .map_err(database_unavailable)?;
+
+    let actual_generation: i64 =
+        sqlx::query_scalar("SELECT crm.current_identity_resolution_generation($1)")
+            .bind(tenant_id.as_str())
+            .fetch_one(&mut **transaction)
+            .await
+            .map_err(database_unavailable)?;
+    let actual_generation = u64::try_from(actual_generation).map_err(|_| {
+        lineage_invalid(
+            ErrorCategory::Conflict,
+            true,
+            "authoritative Identity Resolution generation is not positive",
+        )
+    })?;
+    if actual_generation != claimed_generation {
+        return Err(lineage_invalid(
+            ErrorCategory::Conflict,
+            true,
+            "claimed Identity Resolution generation is stale",
+        ));
+    }
+
+    let party_exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS (
+          SELECT 1
+          FROM crm.records
+          WHERE tenant_id = $1
+            AND owner_module_id = $2
+            AND record_type = $3
+            AND record_id = $4
+            AND deleted_at IS NULL
+        )
+        "#,
+    )
+    .bind(tenant_id.as_str())
+    .bind(MODULE_ID)
+    .bind(PARTY_RECORD_TYPE)
+    .bind(canonical_party_id.as_str())
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(database_unavailable)?;
+    if !party_exists {
+        return Err(lineage_invalid(
+            ErrorCategory::NotFound,
+            false,
+            "claimed canonical Party is not visible in the tenant snapshot",
+        ));
+    }
+
+    let outgoing_redirects: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::bigint
+        FROM crm.relationships
+        WHERE tenant_id = $1
+          AND owner_module_id = $2
+          AND relationship_type = $3
+          AND source_record_type = $4
+          AND source_record_id = $5
+          AND target_record_type = $4
+        "#,
+    )
+    .bind(tenant_id.as_str())
+    .bind(IDENTITY_RESOLUTION_MODULE_ID)
+    .bind(CANONICAL_REDIRECT_RELATIONSHIP_TYPE)
+    .bind(CANONICAL_REDIRECT_PARTY_RECORD_TYPE)
+    .bind(canonical_party_id.as_str())
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(database_unavailable)?;
+    if outgoing_redirects != 0 {
+        return Err(lineage_invalid(
+            ErrorCategory::Conflict,
+            false,
+            "claimed Party has an active canonical redirect",
+        ));
+    }
+
+    Ok(())
+}
+
 fn strict_party_snapshot(
-    canonical_party_id: &crm_module_sdk::RecordId,
+    canonical_party_id: &RecordId,
     row: sqlx::postgres::PgRow,
 ) -> Result<RecordSnapshot, SdkError> {
     let version: i64 = row.try_get("version").map_err(row_decode_error)?;
