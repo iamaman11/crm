@@ -22,6 +22,35 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: rustfmt, clippy
+      - name: Resolve Rust cache identity
+        id: rust-cache-identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc -Vv | tee rust-toolchain-identity.txt
+          echo "toolchain=$(sha256sum rust-toolchain-identity.txt | cut -d' ' -f1)" >> "${GITHUB_OUTPUT}"
+      - name: Restore trusted Rust CI cache
+        id: rust-cache-restore
+        uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-
+      - name: Report Rust cache restore
+        shell: bash
+        run: |
+          {
+            echo "### Trusted Rust cache pilot"
+            echo "- Exact hit: \`${{ steps.rust-cache-restore.outputs.cache-hit || 'false' }}\`"
+            echo "- Primary key: \`${{ steps.rust-cache-restore.outputs.cache-primary-key }}\`"
+            echo "- Matched key: \`${{ steps.rust-cache-restore.outputs.cache-matched-key || 'none' }}\`"
+            echo "- Main write eligible: \`${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
       - run: python scripts/check_architecture.py
       - name: Generate resolved Cargo lockfile
         run: cargo generate-lockfile
@@ -86,3 +115,13 @@ jobs:
           path: tests.txt
           if-no-files-found: error
           retention-days: 7
+      - name: Save trusted Rust CI cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success() && steps.rust-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ steps.rust-cache-restore.outputs.cache-primary-key }}
