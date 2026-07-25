@@ -2,6 +2,8 @@ name: Import Process Runtime CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -47,6 +49,10 @@ on:
       - "database/migrations/**"
       - "database/tests/0012_customer_data_operations_adapter.sql"
       - ".github/workflows/import-process-runtime.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -2,6 +2,8 @@ name: Metadata Runtime CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -27,6 +29,10 @@ on:
       - "database/migrations/0010_metadata_publication_runtime.*.sql"
       - "database/tests/0001_platform_foundation.sql"
       - ".github/workflows/metadata-runtime.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

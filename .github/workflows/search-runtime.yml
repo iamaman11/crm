@@ -2,6 +2,8 @@ name: Search Runtime CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -49,6 +51,10 @@ on:
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0004_search_runtime_role_grants.sql"
       - ".github/workflows/search-runtime.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

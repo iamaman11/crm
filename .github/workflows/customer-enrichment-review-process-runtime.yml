@@ -2,6 +2,8 @@ name: Customer Enrichment Review Process Runtime CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -53,6 +55,10 @@ on:
       - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
       - "scripts/run_customer_enrichment_review_process.sh"
       - ".github/workflows/customer-enrichment-review-process-runtime.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -2,6 +2,8 @@ name: Data Quality Process Runtime CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -41,6 +43,10 @@ on:
       - "database/tests/0015_data_quality_completeness_profile_adapter.sql"
       - "scripts/prepare_data_quality_process_database.sh"
       - ".github/workflows/data-quality-process-runtime.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -2,6 +2,8 @@ name: Customer Privacy Persistence CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -53,6 +55,10 @@ on:
       - "database/tests/0022_customer_privacy_submit_fixture.sql"
       - "database/tests/0023_customer_privacy_subject_verify_fixture.sql"
       - ".github/workflows/customer-privacy-persistence.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -2,6 +2,8 @@ name: Projection Runtime CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -45,6 +47,10 @@ on:
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0003_sales_activities_adapters.sql"
       - ".github/workflows/projection-runtime.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

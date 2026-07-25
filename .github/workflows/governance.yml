@@ -2,6 +2,8 @@ name: Governance CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "AGENTS.md"
       - "Cargo.toml"
@@ -30,6 +32,7 @@ on:
       - "scripts/check_module_compatibility.py"
       - "scripts/check_production_route_classifications.py"
       - "scripts/check_native_module_composition.py"
+      - "scripts/check_ci_event_policy.py"
       - "scripts/compile_module_manifest_ir.py"
       - "scripts/module_manifest_projection.py"
       - "scripts/validate_module_manifests.py"
@@ -40,6 +43,7 @@ on:
       - "tests/test_customer_privacy_architecture_freeze.py"
       - "tests/test_customer_privacy_contract_inventory.py"
       - "tests/test_customer_privacy_owner_scope_contracts.py"
+      - "tests/test_ci_event_policy.py"
       - "tests/test_module_compatibility.py"
       - "tests/test_module_manifest_validation.py"
       - "tests/test_module_scaffolding.py"
@@ -48,7 +52,7 @@ on:
       - "architecture-policy.json"
       - "requirements-dev.txt"
       - ".github/pull_request_template.md"
-      - ".github/workflows/governance.yml"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "AGENTS.md"
@@ -78,6 +82,7 @@ on:
       - "scripts/check_module_compatibility.py"
       - "scripts/check_production_route_classifications.py"
       - "scripts/check_native_module_composition.py"
+      - "scripts/check_ci_event_policy.py"
       - "scripts/compile_module_manifest_ir.py"
       - "scripts/module_manifest_projection.py"
       - "scripts/validate_module_manifests.py"
@@ -88,6 +93,7 @@ on:
       - "tests/test_customer_privacy_architecture_freeze.py"
       - "tests/test_customer_privacy_contract_inventory.py"
       - "tests/test_customer_privacy_owner_scope_contracts.py"
+      - "tests/test_ci_event_policy.py"
       - "tests/test_module_compatibility.py"
       - "tests/test_module_manifest_validation.py"
       - "tests/test_module_scaffolding.py"
@@ -96,7 +102,11 @@ on:
       - "architecture-policy.json"
       - "requirements-dev.txt"
       - ".github/pull_request_template.md"
-      - ".github/workflows/governance.yml"
+      - ".github/workflows/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -126,5 +136,9 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: python scripts/check_module_compatibility.py --base-ref "origin/${BASE_REF}"
+      - name: Enforce CI event and concurrency policy
+        run: python scripts/check_ci_event_policy.py
+      - name: Test CI event and concurrency policy
+        run: python -m unittest tests.test_ci_event_policy
       - name: Run permanent native architecture conformance preflight
         run: python scripts/repo.py conformance
