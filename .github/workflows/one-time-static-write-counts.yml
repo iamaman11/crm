@@ -1,0 +1,126 @@
+name: One-time static write-surface counts
+
+on:
+  push:
+    branches:
+      - agent/phase8a11-parties-privacy-scope
+    paths:
+      - ".github/workflows/one-time-static-write-counts.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Replace dynamic table scan with static write-surface proof
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          auth_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git init --quiet .
+          git remote add origin "${auth_remote}"
+          git fetch --quiet --no-tags --depth=1 origin agent/phase8a11-parties-privacy-scope
+          git checkout --quiet -B agent/phase8a11-parties-privacy-scope FETCH_HEAD
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-parties-privacy-scope-adapter/tests/postgres_scope.rs")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace("use std::collections::BTreeMap;\n", "")
+          old = '''async fn crm_row_counts(pool: &PgPool) -> BTreeMap<String, i64> {
+              let tables: Vec<String> = sqlx::query_scalar(
+                  r#"
+                  SELECT table_name
+                  FROM information_schema.tables
+                  WHERE table_schema = 'crm'
+                    AND table_type = 'BASE TABLE'
+                  ORDER BY table_name
+                  "#,
+              )
+              .fetch_all(pool)
+              .await
+              .expect("list CRM tables");
+          
+              let mut counts = BTreeMap::new();
+              for table in tables {
+                  let quoted = table.replace('"', "\"\"");
+                  let statement = format!(r#"SELECT count(*)::bigint FROM crm."{quoted}""#);
+                  let count: i64 = sqlx::query_scalar(&statement)
+                      .fetch_one(pool)
+                      .await
+                      .unwrap_or_else(|error| panic!("count rows in crm.{table}: {error}"));
+                  counts.insert(table, count);
+              }
+              counts
+          }
+          '''
+          new = '''#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          struct WriteSurfaceCounts {
+              records: i64,
+              business_transactions: i64,
+              idempotency_records: i64,
+              outbox_events: i64,
+              outbox_delivery: i64,
+              audit_heads: i64,
+              audit_records: i64,
+          }
+          
+          async fn crm_row_counts(pool: &PgPool) -> WriteSurfaceCounts {
+              WriteSurfaceCounts {
+                  records: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.records")
+                      .fetch_one(pool)
+                      .await
+                      .expect("count CRM records"),
+                  business_transactions: sqlx::query_scalar(
+                      "SELECT count(*)::bigint FROM crm.business_transactions",
+                  )
+                  .fetch_one(pool)
+                  .await
+                  .expect("count CRM business transactions"),
+                  idempotency_records: sqlx::query_scalar(
+                      "SELECT count(*)::bigint FROM crm.idempotency_records",
+                  )
+                  .fetch_one(pool)
+                  .await
+                  .expect("count CRM idempotency records"),
+                  outbox_events: sqlx::query_scalar(
+                      "SELECT count(*)::bigint FROM crm.outbox_events",
+                  )
+                  .fetch_one(pool)
+                  .await
+                  .expect("count CRM outbox events"),
+                  outbox_delivery: sqlx::query_scalar(
+                      "SELECT count(*)::bigint FROM crm.outbox_delivery",
+                  )
+                  .fetch_one(pool)
+                  .await
+                  .expect("count CRM outbox delivery rows"),
+                  audit_heads: sqlx::query_scalar(
+                      "SELECT count(*)::bigint FROM crm.audit_heads",
+                  )
+                  .fetch_one(pool)
+                  .await
+                  .expect("count CRM audit heads"),
+                  audit_records: sqlx::query_scalar(
+                      "SELECT count(*)::bigint FROM crm.audit_records",
+                  )
+                  .fetch_one(pool)
+                  .await
+                  .expect("count CRM audit records"),
+              }
+          }
+          '''
+          if old not in text:
+              raise SystemExit("dynamic row-count helper anchor not found")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
+          git rm .github/workflows/one-time-static-write-counts.yml
+          git add crates/crm-parties-privacy-scope-adapter/tests/postgres_scope.rs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Use static Parties privacy write-surface proof"
+          git push origin HEAD:agent/phase8a11-parties-privacy-scope
