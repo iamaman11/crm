@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 
 SCHEMA_VERSION = "crm.ci-telemetry-baseline/v2"
 INTERNAL_STEP_NAMES = {"Set up job", "Complete job"}
+KNOWN_STEP_CONCLUSIONS = {"success", "failure", "cancelled", "skipped"}
 
 
 @dataclass(frozen=True)
@@ -176,6 +177,12 @@ def summarize_steps(steps: list[StepSample]) -> list[dict[str, Any]]:
                 "success_count": conclusions.get("success", 0),
                 "failure_count": conclusions.get("failure", 0),
                 "cancelled_count": conclusions.get("cancelled", 0),
+                "skipped_count": conclusions.get("skipped", 0),
+                "other_count": sum(
+                    count
+                    for conclusion, count in conclusions.items()
+                    if conclusion not in KNOWN_STEP_CONCLUSIONS
+                ),
                 "execution_seconds_p50": rounded_seconds(percentile(durations, 0.50)),
                 "execution_seconds_p95": rounded_seconds(percentile(durations, 0.95)),
                 "execution_seconds_max": rounded_seconds(max(durations, default=0.0)),
@@ -430,15 +437,17 @@ def markdown_report(report: dict[str, Any]) -> str:
             "",
             "## Slowest sampled workflow steps",
             "",
-            "| Workflow | Job | Step | Samples | Success/Failure/Cancelled | Execution p50/p95/max |",
+            "| Workflow | Job | Step | Samples | S/F/C/K/O | Execution p50/p95/max |",
             "|---|---|---|---:|---:|---:|",
         ]
     )
     for step in telemetry["steps"][:30]:
         lines.append(
             f"| {step['workflow_name']} | {step['job_name']} | {step['step_name']} | "
-            f"{step['sample_count']} | {step['success_count']}/{step['failure_count']}/{step['cancelled_count']} | "
-            f"{step['execution_seconds_p50']}/{step['execution_seconds_p95']}/{step['execution_seconds_max']} s |"
+            f"{step['sample_count']} | {step['success_count']}/{step['failure_count']}/"
+            f"{step['cancelled_count']}/{step['skipped_count']}/{step['other_count']} | "
+            f"{step['execution_seconds_p50']}/{step['execution_seconds_p95']}/"
+            f"{step['execution_seconds_max']} s |"
         )
 
     lines.extend(
@@ -465,6 +474,7 @@ def markdown_report(report: dict[str, Any]) -> str:
             "- `updated_at - run_started_at` is used as workflow execution duration.",
             "- Job and step durations are collected only for the configured recent run sample.",
             "- Step timestamps may include process startup/teardown but exclude internal setup, complete and post steps from the ranked table.",
+            "- `S/F/C/K/O` means success, failure, cancelled, skipped and other conclusion counts.",
             "- Cancelled pull-request runs are observable; whether each cancellation was superseded is not inferred without change-lineage correlation.",
             "- GitHub-hosted runner hardware and queue conditions may change between samples.",
             "- This report does not establish performance budgets or justify cache/larger runners by itself.",
