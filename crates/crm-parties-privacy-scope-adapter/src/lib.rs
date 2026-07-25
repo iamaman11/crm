@@ -1,0 +1,24 @@
+#![forbid(unsafe_code)]
+
+//! Authoritative non-runtime Parties privacy-scope contribution adapter.
+//!
+//! The adapter validates the exact owner contract, proves canonical Party lineage,
+//! reads one strict Party snapshot inside a tenant-bound PostgreSQL READ ONLY
+//! transaction and returns only resource/evidence references.
+
+mod contract;
+mod errors;
+mod postgres;
+mod request;
+mod response;
+
+#[cfg(test)]
+mod tests;
+
+pub use contract::{
+    CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, DEFAULT_PAGE_SIZE,
+    INPUT_MAXIMUM_BYTES, INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, MAXIMUM_PAGE_SIZE,
+    OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID,
+    parties_privacy_scope_definition,
+};
+pub use postgres::PartiesPrivacyScopeQueryAdapter;
