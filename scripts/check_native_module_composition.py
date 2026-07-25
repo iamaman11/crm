@@ -114,6 +114,26 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
         "let consent_queries = Arc::new(ConsentQueryAdapter::new(",
         "Consents route registration returned to the generic process host",
     ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "CustomerAccountsProductionDependencies",
+        "Customer Accounts owner contribution bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "build_customer_accounts_contribution",
+        "Customer Accounts owner builder bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "ConsentsProductionDependencies",
+        "Consents owner contribution bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "build_consents_contribution",
+        "Consents owner builder bypassed the first-party aggregate",
+    ),
 )
 
 

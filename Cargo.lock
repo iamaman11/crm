@@ -320,7 +320,6 @@ dependencies = [
  "crm-capability-runtime",
  "crm-consents",
  "crm-consents-capability-adapter",
- "crm-consents-capability-composition",
  "crm-consents-query-adapter",
  "crm-contact-points-capability-adapter",
  "crm-contact-points-capability-composition",
@@ -330,7 +329,6 @@ dependencies = [
  "crm-customer-360-composition",
  "crm-customer-360-query-adapter",
  "crm-customer-accounts-capability-adapter",
- "crm-customer-accounts-capability-composition",
  "crm-customer-accounts-query-adapter",
  "crm-customer-data-operations-capability-adapter",
  "crm-customer-data-operations-execution-composition",
@@ -362,6 +360,7 @@ dependencies = [
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",
+ "crm-first-party-modules",
  "crm-global-search-composition",
  "crm-identity-resolution-capability-adapter",
  "crm-identity-resolution-capability-composition",
@@ -1244,6 +1243,19 @@ dependencies = [
  "crm-proto-contracts",
  "crm-query-runtime",
  "prost",
+]
+
+[[package]]
+name = "crm-first-party-modules"
+version = "0.1.0"
+dependencies = [
+ "crm-application-composition",
+ "crm-consents-capability-composition",
+ "crm-core-data",
+ "crm-customer-accounts-capability-composition",
+ "crm-module-sdk",
+ "crm-party-reference-composition",
+ "crm-query-runtime",
 ]
 
 [[package]]
