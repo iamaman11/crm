@@ -43,6 +43,10 @@ No new crate is introduced. The transitional composition package is used as the 
 
 `check_native_module_composition.py` rejects reintroduction of concrete Customer Accounts planner, validator or query-adapter construction in `crm-application-runtime/src/native_composition.rs`.
 
+## Acceptance boundary
+
+The one-time construction job ran focused composition tests and `cargo check --workspace` before producing the source commit. That staging proof is not final acceptance and is not reusable after any commit. The pilot is accepted only when all applicable permanent workflows pass on one unchanged user-authored candidate SHA after the one-time workflow and patch script are absent from the branch.
+
 ## Next comparison
 
 After this pilot is accepted, migrate a second contrasting owner through the same generic merge seam. Only then stabilize a reusable first-party aggregate and decide whether naming/package consolidation is warranted.
