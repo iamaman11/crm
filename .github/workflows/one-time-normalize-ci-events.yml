@@ -17,7 +17,7 @@ jobs:
   normalize:
     runs-on: ubuntu-latest
     steps:
-      - name: Normalize and push permanent workflows
+      - name: Normalize and stage permanent workflow commit
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -110,12 +110,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Normalize CI events and PR concurrency"
+          echo "NORMALIZED_COMMIT_SHA=$(git rev-parse HEAD)"
           git push origin HEAD:ci/normalize-events-and-concurrency
-      - name: Upload normalization push diagnostics
+      - name: Upload normalization commit diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: normalize-ci-push-log
+          name: normalize-ci-commit-log
           path: normalize.log
           if-no-files-found: error
           retention-days: 7
