@@ -10,11 +10,11 @@ import sys
 
 CACHE_ACTION_SHA = "cdf6c1fa76f9f475f3d7449005a359c84ca0f306"
 CACHE_KEY = (
-    "rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-"
+    "rust-deps-v2-${{ runner.os }}-${{ runner.arch }}-"
     "${{ steps.rust-cache-identity.outputs.toolchain }}-${{ hashFiles('Cargo.lock') }}"
 )
 RESTORE_PREFIX = (
-    "rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-"
+    "rust-deps-v2-${{ runner.os }}-${{ runner.arch }}-"
     "${{ steps.rust-cache-identity.outputs.toolchain }}-"
 )
 SAVE_CONDITION = (
@@ -25,13 +25,64 @@ CACHE_PATHS = (
     "~/.cargo/registry/index/",
     "~/.cargo/registry/cache/",
     "~/.cargo/git/db/",
+)
+FORBIDDEN_CACHE_PATHS = (
     "target/",
+    "~/.cargo/credentials",
+    ".cargo/credentials",
+    "~/.ssh",
+    ".env",
 )
 
 
 @dataclass(frozen=True)
 class CachePolicyFailure:
     message: str
+
+
+def indentation(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def cache_path_blocks(text: str) -> tuple[tuple[str, ...], ...]:
+    """Return path entries from each split cache action, excluding unrelated YAML/code."""
+
+    lines = text.splitlines()
+    blocks: list[tuple[str, ...]] = []
+    for uses_index, line in enumerate(lines):
+        if "uses: actions/cache/restore@" not in line and "uses: actions/cache/save@" not in line:
+            continue
+
+        uses_indent = indentation(line)
+        step_indent = max(0, uses_indent - 2)
+        step_end = uses_index + 1
+        while step_end < len(lines):
+            candidate = lines[step_end]
+            if candidate.strip() and indentation(candidate) == step_indent and candidate.lstrip().startswith("- "):
+                break
+            step_end += 1
+
+        path_index = None
+        for index in range(uses_index + 1, step_end):
+            if lines[index].strip() == "path: |":
+                path_index = index
+                break
+        if path_index is None:
+            blocks.append(())
+            continue
+
+        path_indent = indentation(lines[path_index])
+        entries: list[str] = []
+        for index in range(path_index + 1, step_end):
+            candidate = lines[index]
+            if candidate.strip() and indentation(candidate) <= path_indent:
+                break
+            value = candidate.strip().strip('"').strip("'")
+            if value:
+                entries.append(value)
+        blocks.append(tuple(entries))
+
+    return tuple(blocks)
 
 
 def check_rust_cache_policy(path: Path) -> tuple[CachePolicyFailure, ...]:
@@ -51,30 +102,26 @@ def check_rust_cache_policy(path: Path) -> tuple[CachePolicyFailure, ...]:
         "save key derived from restore": (
             "key: ${{ steps.rust-cache-restore.outputs.cache-primary-key }}"
         ),
-        "cache hit telemetry": (
-            "steps.rust-cache-restore.outputs.cache-hit"
-        ),
-        "matched key telemetry": (
-            "steps.rust-cache-restore.outputs.cache-matched-key"
-        ),
+        "cache hit telemetry": "steps.rust-cache-restore.outputs.cache-hit",
+        "matched key telemetry": "steps.rust-cache-restore.outputs.cache-matched-key",
     }
     for description, snippet in required.items():
         if snippet not in text:
             failures.append(CachePolicyFailure(f"missing {description}"))
 
-    for cache_path in CACHE_PATHS:
-        if cache_path not in text:
-            failures.append(CachePolicyFailure(f"missing cache path {cache_path}"))
-
-    forbidden_paths = (
-        "~/.cargo/credentials",
-        ".cargo/credentials",
-        "~/.ssh",
-        ".env",
-    )
-    for forbidden in forbidden_paths:
-        if forbidden in text:
-            failures.append(CachePolicyFailure(f"forbidden cache path {forbidden}"))
+    path_blocks = cache_path_blocks(text)
+    if len(path_blocks) != 2:
+        failures.append(CachePolicyFailure("Rust CI must define exactly two cache path blocks"))
+    for index, entries in enumerate(path_blocks, start=1):
+        if entries != CACHE_PATHS:
+            failures.append(
+                CachePolicyFailure(
+                    f"cache path block {index} must exactly match the approved dependency-only path set"
+                )
+            )
+        for entry in entries:
+            if any(forbidden in entry for forbidden in FORBIDDEN_CACHE_PATHS):
+                failures.append(CachePolicyFailure(f"forbidden cache path {entry}"))
 
     ordered_markers = (
         "- name: Resolve Rust cache identity",
@@ -113,7 +160,7 @@ def main() -> int:
             print(f"{path.relative_to(args.root)}: {failure.message}", file=sys.stderr)
         return 1
 
-    print("Rust CI cache policy is trusted, immutable and main-write-only.")
+    print("Rust CI cache policy is dependency-only, trusted, immutable and main-write-only.")
     return 0
 
 
