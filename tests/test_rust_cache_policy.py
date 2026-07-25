@@ -24,10 +24,9 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
-          key: rust-quality-v1-${{{{ runner.os }}}}-${{{{ runner.arch }}}}-${{{{ steps.rust-cache-identity.outputs.toolchain }}}}-${{{{ hashFiles('Cargo.lock') }}}}
+          key: rust-deps-v2-${{{{ runner.os }}}}-${{{{ runner.arch }}}}-${{{{ steps.rust-cache-identity.outputs.toolchain }}}}-${{{{ hashFiles('Cargo.lock') }}}}
           restore-keys: |
-            rust-quality-v1-${{{{ runner.os }}}}-${{{{ runner.arch }}}}-${{{{ steps.rust-cache-identity.outputs.toolchain }}}}-
+            rust-deps-v2-${{{{ runner.os }}}}-${{{{ runner.arch }}}}-${{{{ steps.rust-cache-identity.outputs.toolchain }}}}-
       - name: Report Rust cache restore
         run: |
           echo "${{{{ steps.rust-cache-restore.outputs.cache-hit }}}}"
@@ -44,7 +43,6 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
           key: ${{{{ steps.rust-cache-restore.outputs.cache-primary-key }}}}
 """
 
@@ -56,7 +54,7 @@ class RustCachePolicyTests(unittest.TestCase):
             path.write_text(text, encoding="utf-8")
             return check_rust_cache_policy(path)
 
-    def test_accepts_main_write_only_lockfile_bound_cache(self) -> None:
+    def test_accepts_main_write_only_lockfile_bound_dependency_cache(self) -> None:
         self.assertEqual(self.check(VALID_WORKFLOW), ())
 
     def test_ignores_unrelated_environment_access(self) -> None:
@@ -79,7 +77,21 @@ class RustCachePolicyTests(unittest.TestCase):
 
     def test_rejects_credentials_in_cache_paths(self) -> None:
         failures = self.check(
-            VALID_WORKFLOW.replace("            target/\n", "            target/\n            ~/.cargo/credentials\n", 1)
+            VALID_WORKFLOW.replace(
+                "            ~/.cargo/git/db/\n",
+                "            ~/.cargo/git/db/\n            ~/.cargo/credentials\n",
+                1,
+            )
+        )
+        self.assertTrue(any("forbidden cache path" in failure.message for failure in failures))
+
+    def test_rejects_target_build_outputs(self) -> None:
+        failures = self.check(
+            VALID_WORKFLOW.replace(
+                "            ~/.cargo/git/db/\n",
+                "            ~/.cargo/git/db/\n            target/\n",
+                1,
+            )
         )
         self.assertTrue(any("forbidden cache path" in failure.message for failure in failures))
 
