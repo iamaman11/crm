@@ -146,48 +146,68 @@ def command_affected(args: argparse.Namespace) -> None:
         print(markdown_report(report), end="")
 
 
+def affected_clippy_command(report: dict) -> list[str] | None:
+    packages = report["affected_packages"]
+    if not packages:
+        return None
+    if report["broadened"]:
+        return [
+            "cargo",
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings",
+        ]
+    command = ["cargo", "clippy"]
+    for package in packages:
+        command.extend(["-p", package])
+    command.extend(["--all-targets", "--all-features", "--", "-D", "warnings"])
+    return command
+
+
+def affected_test_command(report: dict) -> list[str] | None:
+    packages = report["affected_packages"]
+    if not packages:
+        return None
+    if report["broadened"]:
+        return ["cargo", "test", "--workspace", "--all-features"]
+    command = ["cargo", "test"]
+    for package in packages:
+        command.extend(["-p", package])
+    command.append("--all-features")
+    return command
+
+
 def command_check_affected(args: argparse.Namespace) -> None:
     from affected_scope import markdown_report
 
     report = affected_report(args.base)
     print(markdown_report(report), end="", flush=True)
 
-    command_conformance(argparse.Namespace())
-    command_format(argparse.Namespace(check=True))
-
-    packages = report["affected_packages"]
-    if not packages:
-        print(
-            "No Rust packages are affected; package Clippy/tests are skipped.",
-            flush=True,
-        )
+    if args.phase in {"all", "structural"}:
+        command_conformance(argparse.Namespace())
+        command_format(argparse.Namespace(check=True))
+    if args.phase == "structural":
         return
 
-    if report["broadened"]:
-        run(
-            [
-                "cargo",
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--all-features",
-                "--",
-                "-D",
-                "warnings",
-            ]
-        )
-        command_test_all(argparse.Namespace())
+    if args.phase in {"all", "clippy"}:
+        clippy = affected_clippy_command(report)
+        if clippy is None:
+            print("No Rust packages are affected; package Clippy is skipped.", flush=True)
+        else:
+            run(clippy)
+    if args.phase == "clippy":
         return
 
-    clippy = ["cargo", "clippy"]
-    tests = ["cargo", "test"]
-    for package in packages:
-        clippy.extend(["-p", package])
-        tests.extend(["-p", package])
-    clippy.extend(["--all-targets", "--all-features", "--", "-D", "warnings"])
-    tests.append("--all-features")
-    run(clippy)
-    run(tests)
+    if args.phase in {"all", "test"}:
+        tests = affected_test_command(report)
+        if tests is None:
+            print("No Rust packages are affected; package tests are skipped.", flush=True)
+        else:
+            run(tests)
 
 
 def command_quality(_: argparse.Namespace) -> None:
@@ -275,6 +295,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="run structural preflight plus affected Rust package checks",
     )
     check_affected.add_argument("--base", default="origin/main")
+    check_affected.add_argument(
+        "--phase",
+        choices=("all", "structural", "clippy", "test"),
+        default="all",
+        help="run the complete affected check or one diagnostic phase",
+    )
     check_affected.set_defaults(handler=command_check_affected)
 
     quality = subparsers.add_parser(
