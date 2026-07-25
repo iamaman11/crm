@@ -124,6 +124,45 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
     assert_eq!(cross_tenant.code, "PARTIES_PRIVACY_SCOPE_LINEAGE_INVALID");
     assert_eq!(write_surface_counts(&admin).await, cross_tenant_before);
 
+    corrupt_party_metadata(&admin).await;
+
+    let malformed_before = write_surface_counts(&admin).await;
+    let malformed = adapter
+        .execute(
+            &definition,
+            scope_request(TENANT_A, "party-malformed", 1, "malformed"),
+        )
+        .await
+        .expect_err("malformed Party state must fail closed");
+    assert_eq!(malformed.code, "PARTIES_PRIVACY_SCOPE_STORED_STATE_INVALID");
+    assert_eq!(write_surface_counts(&admin).await, malformed_before);
+}
+
+async fn corrupt_party_metadata(admin: &PgPool) {
+    let mut transaction = admin
+        .begin()
+        .await
+        .expect("begin isolated Party metadata corruption transaction");
+    sqlx::query(
+        r#"
+        SELECT
+          set_config('app.tenant_id', $1, true),
+          set_config('app.actor_id', $2, true),
+          set_config('app.request_id', $3, true),
+          set_config('app.capability_id', $4, true),
+          set_config('app.capability_version', $5, true),
+          set_config('app.business_transaction_id', $6, true)
+        "#,
+    )
+    .bind(TENANT_A)
+    .bind("actor-a")
+    .bind("request-corrupt-party-malformed")
+    .bind(CREATE_PARTY_CAPABILITY)
+    .bind("1.0.0")
+    .bind("party-party-malformed-tx")
+    .execute(&mut *transaction)
+    .await
+    .expect("bind isolated Party metadata corruption context");
     sqlx::query(
         r#"
         UPDATE crm.records
@@ -138,20 +177,13 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
     .bind(crm_parties::MODULE_ID)
     .bind(crm_parties_capability_adapter::RECORD_TYPE)
     .bind("party-malformed")
-    .execute(&admin)
+    .execute(&mut *transaction)
     .await
     .expect("corrupt isolated Party metadata fixture");
-
-    let malformed_before = write_surface_counts(&admin).await;
-    let malformed = adapter
-        .execute(
-            &definition,
-            scope_request(TENANT_A, "party-malformed", 1, "malformed"),
-        )
+    transaction
+        .commit()
         .await
-        .expect_err("malformed Party state must fail closed");
-    assert_eq!(malformed.code, "PARTIES_PRIVACY_SCOPE_STORED_STATE_INVALID");
-    assert_eq!(write_surface_counts(&admin).await, malformed_before);
+        .expect("commit isolated Party metadata corruption fixture");
 }
 
 async fn create_party(
