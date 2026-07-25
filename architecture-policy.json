@@ -59,5 +59,10 @@
     "BatchMutationRuntime",
     "TransactionalCapabilityExecutor",
     "execute_batch("
-  ]
+  ],
+  "restricted_source_markers": {
+    ".begin_bound_read_transaction(": [
+      "crates/crm-parties-privacy-scope-adapter/src/postgres.rs"
+    ]
+  }
 }
