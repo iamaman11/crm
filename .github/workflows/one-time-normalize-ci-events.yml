@@ -1,0 +1,109 @@
+name: One-time normalize CI events
+
+on:
+  push:
+    branches:
+      - ci/normalize-events-and-concurrency
+    paths:
+      - ".github/workflows/one-time-normalize-ci-events.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Normalize permanent PR workflows
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          auth_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git init --quiet .
+          git remote add origin "${auth_remote}"
+          git fetch --quiet --no-tags --depth=1 origin ci/normalize-events-and-concurrency
+          git checkout --quiet -B ci/normalize-events-and-concurrency FETCH_HEAD
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow_dir = Path('.github/workflows')
+          temporary = workflow_dir / 'one-time-normalize-ci-events.yml'
+          expected_concurrency = [
+              'concurrency:\n',
+              '  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}\n',
+              "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n",
+              '\n',
+          ]
+
+          def block(lines, key):
+              marker = f'{key}:'
+              for index, line in enumerate(lines):
+                  if line.rstrip('\n') == marker:
+                      end = index + 1
+                      while end < len(lines):
+                          candidate = lines[end]
+                          if candidate.strip() and not candidate.startswith((' ', '\t', '#')):
+                              break
+                          end += 1
+                      return index, end
+              return None
+
+          def has_event(lines, start, end, event):
+              return any(line.rstrip('\n') == f'  {event}:' for line in lines[start + 1:end])
+
+          changed = []
+          for path in sorted(workflow_dir.iterdir()):
+              if path == temporary or path.suffix not in {'.yml', '.yaml'}:
+                  continue
+              lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
+              events = block(lines, 'on')
+              if events is None or not has_event(lines, *events, 'push') or not has_event(lines, *events, 'pull_request'):
+                  continue
+
+              event_start, event_end = events
+              push_index = next(
+                  index
+                  for index in range(event_start + 1, event_end)
+                  if lines[index].rstrip('\n') == '  push:'
+              )
+              push_end = push_index + 1
+              while push_end < event_end:
+                  candidate = lines[push_end]
+                  if candidate.strip() and not candidate.startswith(('    ', '\t', '#')):
+                      break
+                  push_end += 1
+              push_section = lines[push_index:push_end]
+              if not any(line.rstrip('\n') == '    branches:' for line in push_section):
+                  lines[push_index + 1:push_index + 1] = ['    branches:\n', '      - main\n']
+              elif not any(line.rstrip('\n') == '      - main' for line in push_section):
+                  raise SystemExit(f'{path}: existing push branches do not include main')
+
+              concurrency = block(lines, 'concurrency')
+              if concurrency is not None:
+                  lines[concurrency[0]:concurrency[1]] = expected_concurrency
+              else:
+                  events = block(lines, 'on')
+                  assert events is not None
+                  insertion = events[1]
+                  if insertion > 0 and lines[insertion - 1].strip():
+                      expected = ['\n', *expected_concurrency]
+                  else:
+                      expected = expected_concurrency
+                  lines[insertion:insertion] = expected
+
+              path.write_text(''.join(lines), encoding='utf-8')
+              changed.append(str(path))
+
+          if not changed:
+              raise SystemExit('no permanent push + pull_request workflows were normalized')
+          print('\n'.join(changed))
+          PY
+          python scripts/check_ci_event_policy.py
+          git rm .github/workflows/one-time-normalize-ci-events.yml
+          git add .github/workflows scripts/check_ci_event_policy.py tests/test_ci_event_policy.py docs/PROJECT_STATUS.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Normalize CI events and PR concurrency"
+          git push origin HEAD:ci/normalize-events-and-concurrency
