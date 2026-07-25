@@ -1,0 +1,42 @@
+name: One-time Action reference inventory
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Inventory external Action references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p action-inventory
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          pattern = re.compile(r"^\s*-?\s*uses:\s*([^#\s]+)")
+          rows = []
+          for path in sorted(Path('.github/workflows').glob('*.y*ml')):
+              for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), start=1):
+                  match = pattern.match(line)
+                  if match:
+                      rows.append(f"{path}:{number}:{match.group(1)}")
+          Path('action-inventory/references.txt').write_text('\n'.join(rows) + '\n', encoding='utf-8')
+          print('\n'.join(rows))
+          PY
+      - name: Upload Action reference inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: action-reference-inventory
+          path: action-inventory/references.txt
+          if-no-files-found: error
+          retention-days: 7
