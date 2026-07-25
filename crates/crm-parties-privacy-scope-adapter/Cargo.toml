@@ -1,0 +1,24 @@
+[package]
+name = "crm-parties-privacy-scope-adapter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-core-data = { path = "../crm-core-data" }
+crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
+crm-identity-resolution = { path = "../../modules/crm-identity-resolution" }
+crm-identity-resolution-topology-composition = { path = "../crm-identity-resolution-topology-composition" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-parties = { path = "../../modules/crm-parties" }
+crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-query-runtime = { path = "../crm-query-runtime" }
+prost = "0.14"
+sha2 = "0.10"
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio-rustls"] }
+
+[dev-dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
