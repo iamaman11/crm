@@ -10,11 +10,11 @@ import sys
 
 CACHE_ACTION_SHA = "cdf6c1fa76f9f475f3d7449005a359c84ca0f306"
 CACHE_KEY = (
-    "rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-"
+    "rust-deps-v2-${{ runner.os }}-${{ runner.arch }}-"
     "${{ steps.rust-cache-identity.outputs.toolchain }}-${{ hashFiles('Cargo.lock') }}"
 )
 RESTORE_PREFIX = (
-    "rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-"
+    "rust-deps-v2-${{ runner.os }}-${{ runner.arch }}-"
     "${{ steps.rust-cache-identity.outputs.toolchain }}-"
 )
 SAVE_CONDITION = (
@@ -25,9 +25,9 @@ CACHE_PATHS = (
     "~/.cargo/registry/index/",
     "~/.cargo/registry/cache/",
     "~/.cargo/git/db/",
-    "target/",
 )
 FORBIDDEN_CACHE_PATHS = (
+    "target/",
     "~/.cargo/credentials",
     ".cargo/credentials",
     "~/.ssh",
@@ -116,7 +116,7 @@ def check_rust_cache_policy(path: Path) -> tuple[CachePolicyFailure, ...]:
         if entries != CACHE_PATHS:
             failures.append(
                 CachePolicyFailure(
-                    f"cache path block {index} must exactly match the approved path set"
+                    f"cache path block {index} must exactly match the approved dependency-only path set"
                 )
             )
         for entry in entries:
@@ -160,7 +160,7 @@ def main() -> int:
             print(f"{path.relative_to(args.root)}: {failure.message}", file=sys.stderr)
         return 1
 
-    print("Rust CI cache policy is trusted, immutable and main-write-only.")
+    print("Rust CI cache policy is dependency-only, trusted, immutable and main-write-only.")
     return 0
 
 
