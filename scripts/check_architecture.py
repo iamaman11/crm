@@ -84,6 +84,21 @@ for relative_path, allowed_dependencies in policy.get("governed_transport_crates
                     f"{source.relative_to(root)} contains forbidden gateway-bypass marker: {marker}"
                 )
 
+rust_sources = sorted(
+    source
+    for root_path in ("crates", "modules", "services")
+    for source in (root / root_path).rglob("*.rs")
+)
+for marker, allowed_paths in policy.get("restricted_source_markers", {}).items():
+    allowed = set(allowed_paths)
+    for source in rust_sources:
+        relative = source.relative_to(root).as_posix()
+        if marker in source.read_text(encoding="utf-8") and relative not in allowed:
+            errors.append(
+                f"{relative} uses restricted source marker {marker!r}; "
+                f"allowed paths: {sorted(allowed)}"
+            )
+
 if errors:
     print("Architecture boundary check FAILED:")
     for error in errors:
