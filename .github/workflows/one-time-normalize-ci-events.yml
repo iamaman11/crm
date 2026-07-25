@@ -33,10 +33,12 @@ jobs:
 
           workflow_dir = Path('.github/workflows')
           temporary = workflow_dir / 'one-time-normalize-ci-events.yml'
+          expression_open = '$' + '{{'
+          expression_close = '}}'
           expected_concurrency = [
               'concurrency:\n',
-              '  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}\n',
-              "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n",
+              f'  group: {expression_open} github.workflow {expression_close}-{expression_open} github.event.pull_request.number || github.ref {expression_close}\n',
+              f"  cancel-in-progress: {expression_open} github.event_name == 'pull_request' {expression_close}\n",
               '\n',
           ]
 
