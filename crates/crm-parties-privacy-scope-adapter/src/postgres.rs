@@ -6,7 +6,7 @@ use crate::errors::{
 use crate::request::{validate_request_contract, validate_wire_request};
 use crate::response::{build_response, typed_output};
 use crm_capability_runtime::CapabilityDefinition;
-use crm_core_data::{BoundReadTransaction, PostgresDataStore};
+use crm_core_data::PostgresDataStore;
 use crm_identity_resolution_capability_adapter::{
     CANONICAL_REDIRECT_PARTY_RECORD_TYPE, CANONICAL_REDIRECT_RELATIONSHIP_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID,
@@ -23,7 +23,7 @@ use crm_parties::{
 use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, party_from_snapshot};
 use crm_query_runtime::{QueryExecutionResult, QueryExecutor, QueryRequest};
 use prost::Message;
-use sqlx::Row;
+use sqlx::{Postgres, Row, Transaction};
 
 #[derive(Clone)]
 pub struct PartiesPrivacyScopeQueryAdapter {
@@ -123,7 +123,7 @@ impl QueryExecutor for PartiesPrivacyScopeQueryAdapter {
 }
 
 async fn prove_canonical_claim(
-    transaction: &mut BoundReadTransaction<'_>,
+    transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
     canonical_party_id: &RecordId,
     claimed_generation: u64,
