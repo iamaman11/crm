@@ -41,9 +41,23 @@ jobs:
           key: rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             rust-quality-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-identity.outputs.toolchain }}-
-      - name: Report Rust cache restore
+      - name: Record Rust cache restore telemetry
         shell: bash
         run: |
+          mkdir -p artifacts
+          cat > artifacts/rust-cache-telemetry.json <<EOF
+          {
+            "schema_version": "crm.rust-cache-telemetry/v1",
+            "event_name": "${{ github.event_name }}",
+            "ref": "${{ github.ref }}",
+            "candidate_sha": "${{ github.event.pull_request.head.sha || github.sha }}",
+            "toolchain_identity": "${{ steps.rust-cache-identity.outputs.toolchain }}",
+            "exact_hit": "${{ steps.rust-cache-restore.outputs.cache-hit || 'false' }}",
+            "primary_key": "${{ steps.rust-cache-restore.outputs.cache-primary-key }}",
+            "matched_key": "${{ steps.rust-cache-restore.outputs.cache-matched-key || 'none' }}",
+            "main_write_eligible": "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
+          }
+          EOF
           {
             echo "### Trusted Rust cache pilot"
             echo "- Exact hit: \`${{ steps.rust-cache-restore.outputs.cache-hit || 'false' }}\`"
@@ -51,6 +65,14 @@ jobs:
             echo "- Matched key: \`${{ steps.rust-cache-restore.outputs.cache-matched-key || 'none' }}\`"
             echo "- Main write eligible: \`${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload Rust cache telemetry
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rust-cache-telemetry
+          path: artifacts/rust-cache-telemetry.json
+          if-no-files-found: error
+          retention-days: 30
       - run: python scripts/check_architecture.py
       - name: Generate resolved Cargo lockfile
         run: cargo generate-lockfile
