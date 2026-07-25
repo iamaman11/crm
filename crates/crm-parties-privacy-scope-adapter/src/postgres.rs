@@ -13,8 +13,8 @@ use crm_module_sdk::{
     RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
 };
 use crm_parties::{
-    MODULE_ID, PARTY_STATE_MAXIMUM_BYTES, PARTY_STATE_RETENTION_POLICY_ID,
-    PARTY_STATE_SCHEMA_ID, PARTY_STATE_SCHEMA_VERSION, party_state_descriptor_hash,
+    MODULE_ID, PARTY_STATE_MAXIMUM_BYTES, PARTY_STATE_RETENTION_POLICY_ID, PARTY_STATE_SCHEMA_ID,
+    PARTY_STATE_SCHEMA_VERSION, party_state_descriptor_hash,
 };
 use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, party_from_snapshot};
 use crm_query_runtime::{QueryExecutionResult, QueryExecutor, QueryRequest};
