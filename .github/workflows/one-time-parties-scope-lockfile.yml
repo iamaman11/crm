@@ -1,0 +1,36 @@
+name: One-time Parties scope lockfile sync
+
+on:
+  push:
+    branches:
+      - agent/phase8a11-parties-privacy-scope
+    paths:
+      - ".github/workflows/one-time-parties-scope-lockfile.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch and commit generated lockfile
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          auth_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git init .
+          git remote add origin "${auth_remote}"
+          git fetch --no-tags --depth=1 origin agent/phase8a11-parties-privacy-scope
+          git checkout -B agent/phase8a11-parties-privacy-scope FETCH_HEAD
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo generate-lockfile
+          git rm .github/workflows/one-time-parties-scope-lockfile.yml
+          git add Cargo.lock
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Synchronize Parties privacy scope lockfile"
+          git push origin HEAD:agent/phase8a11-parties-privacy-scope
