@@ -4,7 +4,6 @@ use crate::contract::{
 };
 use crate::errors::{invalid_contract, invalid_contract_with_reference};
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
-use crm_identity_resolution::PartyReference;
 use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
 use crm_parties::MODULE_ID;
 use crm_proto_contracts::crm::customer_privacy::v1 as privacy;
@@ -18,7 +17,6 @@ const MAXIMUM_PURPOSE_CODE_BYTES: usize = 96;
 pub(crate) struct ValidatedRequest {
     pub lineage: privacy::PrivacyScopeContributionLineage,
     pub canonical_party_id: RecordId,
-    pub canonical_party: PartyReference,
     pub identity_resolution_generation: u64,
     pub page_size: u32,
 }
@@ -111,14 +109,6 @@ pub(crate) fn validate_wire_request(
                 )
             })
         })?;
-    let canonical_party =
-        PartyReference::try_new(canonical_party_id.as_str()).map_err(|error| {
-            invalid_contract_with_reference(
-                "PARTIES_PRIVACY_SCOPE_PARTY_INVALID",
-                "The Parties privacy scope lineage is invalid.",
-                error.to_string(),
-            )
-        })?;
 
     if lineage.identity_resolution_generation == 0 {
         return Err(invalid_contract(
@@ -185,7 +175,6 @@ pub(crate) fn validate_wire_request(
     Ok(ValidatedRequest {
         lineage,
         canonical_party_id,
-        canonical_party,
         identity_resolution_generation,
         page_size,
     })
