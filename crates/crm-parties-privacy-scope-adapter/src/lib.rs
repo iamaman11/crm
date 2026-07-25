@@ -2,7 +2,7 @@
 
 //! Authoritative non-runtime Parties privacy-scope contribution adapter.
 //!
-//! The adapter validates the exact owner contract, proves canonical Party lineage,
+//! The adapter validates the exact current owner contract, proves canonical Party lineage,
 //! reads one strict Party snapshot inside a mechanically restricted tenant-bound
 //! PostgreSQL READ ONLY transaction and returns only resource/evidence references.
 
