@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-25
+Status date: 2026-07-26
 
 This is the concise human-readable status page. Normative delivery order remains in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`.
 
@@ -11,16 +11,18 @@ Authoritative references:
 3. `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` — code/package/dependency scalability plan.
 4. `ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md` — CI, PostgreSQL isolation and real-device execution plan.
 5. `WORKSPACE_COMPLEXITY_BASELINE.md` — reviewed static workspace and workflow measurement snapshot.
-6. `CI_TELEMETRY_BASELINE.md` — reviewed initial GitHub Actions runtime telemetry snapshot.
-7. `DELIVERY_GOVERNANCE.md` — packet-state and synchronization policy.
-8. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
-9. `PHASE8_DELIVERY_PLAN.md` — detailed Phase 8 packet sequence.
-10. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
-11. `MODULE_CATALOG.md` — merged business-module readiness accounting.
+6. `CI_TELEMETRY_BASELINE.md` — reviewed GitHub Actions run/job/step runtime telemetry snapshots.
+7. `RUST_CI_CACHE_PILOT.md` — concluded cache experiment and evidence for retaining no Rust cache.
+8. `GOLDEN_MODULE_CONTRIBUTION.md` — first accepted owner-built production contribution pilot.
+9. `DELIVERY_GOVERNANCE.md` — packet-state and synchronization policy.
+10. `IMPLEMENTATION_ROADMAP.md` — normative phase sequence.
+11. `PHASE8_DELIVERY_PLAN.md` — detailed Phase 8 packet sequence.
+12. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
+13. `MODULE_CATALOG.md` — merged business-module readiness accounting.
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; six Customer Privacy runtime coordinates, the immutable owner-scope protocol foundation, nine contract-only owner contribution coordinates and the first authoritative non-runtime Parties owner implementation are merged through PR #156. Architecture scalability Phase A is accepted, immediate CI controls are merged through PR #160 and Phase B measurement baselines are merged through PR #162.**
+**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; six Customer Privacy runtime coordinates, the immutable owner-scope protocol foundation, nine contract-only owner contribution coordinates and the first authoritative non-runtime Parties owner implementation are merged through PR #156. Architecture scalability Phase A is accepted. Phase B static/runtime/step telemetry and the controlled Rust cache decision are accepted through PR #167. The first golden module-owned production contribution is accepted through PR #168.**
 
 Current Phase 8A baseline:
 
@@ -33,7 +35,7 @@ Current Phase 8A baseline:
 
 The active dependency lane is:
 
-`Complete Phase B with controlled cache and step-level timing pilots -> golden package -> module-owned contribution aggregation -> affected-scope CI and PostgreSQL isolation pilot -> second contrasting owner -> shared privacy contribution protocol -> remaining privacy lifecycle -> Phase 8A closure -> 8B`
+`second contrasting module-owned production contribution -> stabilize first-party contribution aggregation -> affected-scope CI and PostgreSQL isolation pilot -> second contrasting privacy owner -> shared privacy contribution protocol -> remaining privacy lifecycle -> Phase 8A closure -> 8B`
 
 ## Phase 8A.10 accepted result
 
@@ -107,8 +109,18 @@ PR #158 adds the normative CI scalability, PostgreSQL E2E isolation, immutable A
 - PR #160 was accepted on unchanged source SHA `7bcc0b37cd323010f03e4f5abfb61660bad4dd52`, passed all 18 applicable workflows and merged as `f89b3238a05e8825e48f418bc86457769604ba9c`. It pins every external GitHub Action reference to a reviewed full commit SHA and enforces immutable pinning through Governance CI.
 - PR #161 was accepted on unchanged source SHA `755f91b25c36fe14b4dd418599b5e4c992fae037`, passed all 3 applicable workflows and merged as `466ded7185fadbfc0d5ceeb2574e34d40ef457b6`. It adds exact-head static workspace and workflow complexity reporting plus the reviewed initial snapshot.
 - PR #162 was accepted on unchanged source SHA `fa510b87066723295d0f64781c4c87b7e55bf44e`, passed all 4 applicable workflows and merged as `62d3d2622331a11b6b27c88c3501a385b1aa2d80`. It adds read-only CI runtime telemetry, daily artifacts and the reviewed initial burst snapshot.
+- PR #164 was accepted on unchanged source SHA `3d5c35cca46e092b0f161932599daee093c1efeb`, passed all 3 applicable workflows and merged as `7d919fa86c1069737fea075ddda21e97bb8f5082`. It extends runtime telemetry to non-internal workflow steps and records Rust workspace-test, Clippy and Governance conformance timing distributions.
+- PR #165–#167 executed and concluded the controlled Rust cache experiment. Full `target/` caching restored approximately 20.15 GiB and was slower than the relevant baseline. The dependency-only variant restored approximately 71.41 MiB but two exact-hit samples averaged only about `+0.07%` versus the exact cold run. PR #167 restored the permanent cache-free workflow and merged as `a7b4281d7a6822486ed8113edbf8b4e667bd64eb` after all applicable exact-head checks passed.
 
-The reviewed static snapshot records 100 workspace packages, 638 declared internal dependency edges, 28 one-consumer packages, 11 duplicate external dependency families and 847 manually maintained workflow path-filter entries. The initial runtime burst snapshot records execution p50/p95 of 85/232 seconds across 100 recent completed runs and confirms active cancellation of superseded pull-request work. Both snapshots remain non-blocking and require repeated evidence before budgets, cache or runner-size decisions.
+The reviewed static snapshot records 100 workspace packages, 638 declared internal dependency edges, 28 one-consumer packages, 11 duplicate external dependency families and 847 manually maintained workflow path-filter entries. The initial runtime burst snapshot records execution p50/p95 of 85/232 seconds across 100 recent completed runs and confirms active cancellation of superseded pull-request work. Step telemetry identifies Rust Clippy/workspace tests and Governance conformance as major contributors. Current evidence does not justify a permanent Rust cache or an absolute performance budget.
+
+## First golden module-owned production contribution
+
+PR #168 was accepted on unchanged user-authored SHA `20d08c15071a251441954db0f6c7421765fa9f88`, passed all 19 applicable permanent workflows and was squash-merged as `c82a690acd161be6ecea2728ee53177308782132`.
+
+The existing Customer Accounts composition package now builds its complete mutation/query `ModuleContributionSet` internally, including the Account planner, Party-reference semantic validator, permission-aware query adapter and activation gates. The generic application runtime supplies production context and merges the owner-built contribution. Public coordinates, contracts and process behavior are unchanged; the real Account crm-api lifecycle passed against an isolated fresh PostgreSQL database. No new crate, route, worker, contract or migration was introduced.
+
+This is one golden pilot, not yet a universal production-contribution framework. A second contrasting stable owner must use the same generic merge seam before a first-party aggregate package or broader naming/package generalization is stabilized.
 
 ## Current merged Customer Privacy production inventory
 
@@ -130,7 +142,7 @@ Phase 8A.11 is not complete. Remaining work includes a contrasting second owner 
 
 ## Merged platform and customer-master baseline
 
-Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and six accepted Customer Privacy runtime coordinates. It also contains the first proven non-runtime Parties privacy scope owner implementation, governed CI event/cancellation policy, immutable Action pins and permanent static/runtime complexity telemetry.
+Merged `main` contains executable architecture governance, typed module/runtime foundations, PostgreSQL tenant/RLS/records/idempotency/outbox/audit, authenticated mutation and permission-aware query gateways, native module-owned exact-coordinate composition, durable workers/projections/search, and production slices for Party, Account, Contact Point, Party Relationship, Customer 360, Consent, reversible Identity Resolution, import, export, Data Quality, Customer Enrichment and six accepted Customer Privacy runtime coordinates. It also contains the first proven non-runtime Parties privacy scope owner implementation, governed CI event/cancellation policy, immutable Action pins, permanent static/runtime/step complexity telemetry, the concluded cache-free Rust CI decision and the first golden Customer Accounts module-owned production contribution.
 
 ## Product completeness reality
 
@@ -138,8 +150,8 @@ The project is **not yet a complete universal CRM**. Major required families sti
 
 ## Immediate next actions
 
-1. Complete Phase B with a controlled Rust cache pilot and step-level Rust/PostgreSQL timing; do not introduce budgets until repeated telemetry exists.
-2. Establish the golden domain package and module-owned contribution aggregation, then implement affected-scope CI with a PostgreSQL isolation pilot while preserving full exact-head acceptance.
-3. Implement a contrasting second privacy owner, compare it with Parties and extract only proven common protocol behavior.
-4. Continue the remaining privacy lifecycle without promoting contract-only coordinates before their own production proof.
-5. Close Phase 8A only after the full privacy/customer-master interaction baseline is merged and reconciled; begin Phase 8B / #29 only afterward.
+1. Migrate one contrasting stable owner, preferably Consents, through the same module-owned production-contribution seam; compare it with Customer Accounts before generalizing the pattern.
+2. Stabilize a mechanically verified first-party contribution aggregate only after the second production owner proof; do not introduce a separately edited module catalog.
+3. Implement affected-scope iteration commands and a PostgreSQL isolation pilot while preserving full unchanged exact-head final acceptance.
+4. Implement a contrasting second privacy scope owner, compare it with Parties and extract only behavior proven common by both implementations.
+5. Continue the remaining privacy lifecycle without promoting contract-only coordinates before their own production proof; close Phase 8A only after the full privacy/customer-master interaction baseline is merged and reconciled, then begin Phase 8B / #29.
