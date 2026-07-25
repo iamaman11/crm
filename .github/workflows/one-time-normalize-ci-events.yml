@@ -6,6 +6,9 @@ on:
       - ci/normalize-events-and-concurrency
     paths:
       - ".github/workflows/one-time-normalize-ci-events.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/one-time-normalize-ci-events.yml"
 
 permissions:
   contents: write
@@ -87,10 +90,9 @@ jobs:
                   events = block(lines, 'on')
                   assert events is not None
                   insertion = events[1]
+                  expected = expected_concurrency
                   if insertion > 0 and lines[insertion - 1].strip():
-                      expected = ['\n', *expected_concurrency]
-                  else:
-                      expected = expected_concurrency
+                      expected = ['\n', *expected]
                   lines[insertion:insertion] = expected
 
               path.write_text(''.join(lines), encoding='utf-8')
