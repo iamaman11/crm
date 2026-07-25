@@ -85,8 +85,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git rm .github/workflows/one-time-consents-contribution.yml
-          git rm scripts/one_time_consents_contribution.py
           git add \
             Cargo.lock \
             crates/crm-application-runtime/src/native_composition.rs \
