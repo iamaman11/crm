@@ -82,8 +82,8 @@ jobs:
       DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_projection_test
       ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_projection_test
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
