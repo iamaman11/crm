@@ -1,0 +1,71 @@
+name: Complexity Baseline CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "modules/**/Cargo.toml"
+      - "crates/crm-application-composition/src/**"
+      - "crates/crm-application-runtime/src/**"
+      - ".github/workflows/**"
+      - "scripts/analyze_workspace.py"
+      - "tests/test_workspace_analysis.py"
+      - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "modules/**/Cargo.toml"
+      - "crates/crm-application-composition/src/**"
+      - "crates/crm-application-runtime/src/**"
+      - ".github/workflows/**"
+      - "scripts/analyze_workspace.py"
+      - "tests/test_workspace_analysis.py"
+      - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact candidate SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+      - name: Test workspace analyzer
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          python -m unittest -v tests.test_workspace_analysis \
+            2>&1 | tee artifacts/workspace-analyzer-tests.log
+      - name: Generate measurement-only workspace and CI baseline
+        run: |
+          set -euo pipefail
+          python scripts/analyze_workspace.py \
+            --json-output artifacts/workspace-complexity-baseline.json \
+            --markdown-output artifacts/workspace-complexity-baseline.md
+          cat artifacts/workspace-complexity-baseline.md >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload complexity baseline and diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: workspace-complexity-baseline
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
