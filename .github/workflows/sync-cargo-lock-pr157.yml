@@ -1,0 +1,32 @@
+name: Sync Cargo lockfile for PR 157
+
+on:
+  push:
+    branches:
+      - docs/architecture-complexity-scalability-plan
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: docs/architecture-complexity-scalability-plan
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate current Cargo lockfile
+        run: cargo generate-lockfile
+      - name: Commit lockfile and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/sync-cargo-lock-pr157.yml
+          git add Cargo.lock
+          git commit -m "Synchronize Cargo lockfile"
+          git push origin HEAD:docs/architecture-complexity-scalability-plan
