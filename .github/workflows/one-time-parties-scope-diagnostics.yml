@@ -6,6 +6,9 @@ on:
       - agent/phase8a11-parties-privacy-scope
     paths:
       - ".github/workflows/one-time-parties-scope-diagnostics.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/one-time-parties-scope-diagnostics.yml"
 
 permissions:
   contents: read
