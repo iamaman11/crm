@@ -1,8 +1,8 @@
 use crate::contract::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, DEFAULT_PAGE_SIZE,
     INPUT_MAXIMUM_BYTES, INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, OUTPUT_MAXIMUM_BYTES,
-    OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID, input_descriptor_hash, module_id,
-    output_descriptor_hash, parties_privacy_scope_definition, schema_id, schema_version,
+    OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID, module_id, output_descriptor_hash,
+    parties_privacy_scope_definition, schema_id, schema_version,
 };
 use crate::errors::configured;
 use crate::request::{validate_request_contract, validate_wire_request};
@@ -12,7 +12,10 @@ use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, PayloadEncoding, RequestId,
     RetentionPolicyId, TraceId, TypedPayload,
 };
-use crm_proto_contracts::crm::{customer::v1 as customer, customer_privacy::v1 as privacy};
+use crm_proto_contracts::{
+    crm::{customer::v1 as customer, customer_privacy::v1 as privacy},
+    message_descriptor_hash,
+};
 use crm_query_runtime::{QueryExecutionContext, QueryRequest};
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -63,7 +66,7 @@ fn query_request(message: &privacy::PartiesPrivacyScopeContributionRequest) -> Q
             owner: module_id().unwrap(),
             schema_id: schema_id(INPUT_SCHEMA_ID).unwrap(),
             schema_version: schema_version(CONTRACT_SCHEMA_VERSION).unwrap(),
-            descriptor_hash: input_descriptor_hash(),
+            descriptor_hash: message_descriptor_hash(INPUT_SCHEMA_ID),
             data_class: DataClass::Confidential,
             encoding: PayloadEncoding::Protobuf,
             maximum_size_bytes: INPUT_MAXIMUM_BYTES,
