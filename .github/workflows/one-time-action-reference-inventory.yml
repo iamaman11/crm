@@ -1,42 +1,79 @@
-name: One-time Action reference inventory
+name: One-time immutable Action pinning
 
 on:
   pull_request:
     paths:
-      - ".github/workflows/**"
+      - ".github/workflows/one-time-action-reference-inventory.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inventory:
+  pin:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out exact PR head
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Inventory external Action references
+      - name: Stage immutable Action pin commit
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          exec > >(tee action-pinning.log) 2>&1
           set -euo pipefail
-          mkdir -p action-inventory
+          auth_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git init --quiet .
+          git remote add origin "${auth_remote}"
+          git fetch --quiet --no-tags --depth=1 origin ci/pin-third-party-actions
+          git checkout --quiet -B ci/pin-third-party-actions FETCH_HEAD
           python - <<'PY'
           from pathlib import Path
-          import re
 
-          pattern = re.compile(r"^\s*-?\s*uses:\s*([^#\s]+)")
-          rows = []
+          replacements = {
+              'actions/checkout@v7': 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7',
+              'actions/setup-python@v6': 'actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6',
+              'actions/setup-node@v4': 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4',
+              'actions/upload-artifact@v4': 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2',
+              'bufbuild/buf-action@v1.4.0': 'bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0',
+              'dtolnay/rust-toolchain@stable': 'dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25',
+              'pnpm/action-setup@v4': 'pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4',
+          }
+
+          changed = []
+          counts = {reference: 0 for reference in replacements}
+          temporary = Path('.github/workflows/one-time-action-reference-inventory.yml')
           for path in sorted(Path('.github/workflows').glob('*.y*ml')):
-              for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), start=1):
-                  match = pattern.match(line)
-                  if match:
-                      rows.append(f"{path}:{number}:{match.group(1)}")
-          Path('action-inventory/references.txt').write_text('\n'.join(rows) + '\n', encoding='utf-8')
-          print('\n'.join(rows))
+              if path == temporary:
+                  continue
+              text = path.read_text(encoding='utf-8')
+              updated = text
+              for mutable, pinned in replacements.items():
+                  occurrences = updated.count(mutable)
+                  if occurrences:
+                      counts[mutable] += occurrences
+                      updated = updated.replace(mutable, pinned)
+              if updated != text:
+                  path.write_text(updated, encoding='utf-8')
+                  changed.append(str(path))
+
+          missing = [reference for reference, count in counts.items() if count == 0]
+          if missing:
+              raise SystemExit(f'expected mutable Action references were not found: {missing}')
+          print('\n'.join(f'{reference}: {count}' for reference, count in counts.items()))
+          print('\n'.join(changed))
           PY
-      - name: Upload Action reference inventory
+          git rm .github/workflows/one-time-action-reference-inventory.yml
+          python scripts/check_action_pinning.py
+          python -m unittest tests.test_action_pinning
+          git add .github/workflows scripts/check_action_pinning.py tests/test_action_pinning.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Pin third-party GitHub Actions to immutable SHAs"
+          echo "PINNED_ACTIONS_COMMIT_SHA=$(git rev-parse HEAD)"
+          git push origin HEAD:ci/pin-third-party-actions
+      - name: Upload Action pinning diagnostics
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: action-reference-inventory
-          path: action-inventory/references.txt
+          name: action-pinning-commit-log
+          path: action-pinning.log
           if-no-files-found: error
           retention-days: 7
