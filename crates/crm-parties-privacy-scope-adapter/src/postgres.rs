@@ -54,7 +54,7 @@ impl PartiesPrivacyScopeQueryAdapter {
             .begin_bound_read_transaction(&request.context.tenant_id)
             .await?;
         prove_canonical_party_in_transaction(
-            &mut *transaction,
+            &mut transaction,
             &request.context.tenant_id,
             &validated.canonical_party,
             &validated.canonical_party,
