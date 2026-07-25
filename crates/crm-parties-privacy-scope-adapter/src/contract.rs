@@ -1,16 +1,15 @@
 use crate::errors::configured;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk, PayloadContract};
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, SchemaId,
-    SchemaVersion, SdkError,
+    CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, SchemaId, SchemaVersion,
+    SdkError,
 };
 use crm_parties::MODULE_ID;
 use crm_proto_contracts::message_descriptor_hash;
 
 pub const CAPABILITY_ID: &str = "parties.privacy.scope.contribute";
 pub const CAPABILITY_VERSION: &str = "1.0.0";
-pub const INPUT_SCHEMA_ID: &str =
-    "crm.customer_privacy.v1.PartiesPrivacyScopeContributionRequest";
+pub const INPUT_SCHEMA_ID: &str = "crm.customer_privacy.v1.PartiesPrivacyScopeContributionRequest";
 pub const OUTPUT_SCHEMA_ID: &str =
     "crm.customer_privacy.v1.PartiesPrivacyScopeContributionResponse";
 pub const CONTRACT_SCHEMA_VERSION: &str = "1.0.0";
@@ -26,11 +25,7 @@ pub fn parties_privacy_scope_definition() -> Result<CapabilityDefinition, SdkErr
         capability_id: capability_id()?,
         capability_version: capability_version()?,
         owner_module_id: module_id()?,
-        input_contract: payload_contract(
-            INPUT_SCHEMA_ID,
-            INPUT_SCHEMA_ID,
-            INPUT_MAXIMUM_BYTES,
-        )?,
+        input_contract: payload_contract(INPUT_SCHEMA_ID, INPUT_SCHEMA_ID, INPUT_MAXIMUM_BYTES)?,
         output_contract: Some(payload_contract(
             OUTPUT_SCHEMA_ID,
             OUTPUT_SCHEMA_ID,
@@ -45,9 +40,7 @@ pub fn parties_privacy_scope_definition() -> Result<CapabilityDefinition, SdkErr
     })
 }
 
-pub(crate) fn validate_definition(
-    definition: &CapabilityDefinition,
-) -> Result<(), SdkError> {
+pub(crate) fn validate_definition(definition: &CapabilityDefinition) -> Result<(), SdkError> {
     let expected = parties_privacy_scope_definition()?;
     if definition != &expected {
         return Err(crate::errors::invalid_contract(

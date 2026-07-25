@@ -60,10 +60,7 @@ pub(crate) fn database_unavailable(error: sqlx::Error) -> SdkError {
     .with_internal_reference(error.to_string())
 }
 
-pub(crate) fn invalid_contract(
-    code: &'static str,
-    safe_message: &'static str,
-) -> SdkError {
+pub(crate) fn invalid_contract(code: &'static str, safe_message: &'static str) -> SdkError {
     SdkError::new(code, ErrorCategory::InvalidArgument, false, safe_message)
 }
 

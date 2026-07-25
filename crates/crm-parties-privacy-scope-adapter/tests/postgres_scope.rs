@@ -19,9 +19,7 @@ use crm_parties_privacy_scope_adapter::{
     parties_privacy_scope_definition,
 };
 use crm_proto_contracts::{
-    crm::{
-        customer::v1 as customer, customer_privacy::v1 as privacy, parties::v1 as parties,
-    },
+    crm::{customer::v1 as customer, customer_privacy::v1 as privacy, parties::v1 as parties},
     message_descriptor_hash,
 };
 use crm_query_runtime::{QueryExecutionContext, QueryExecutor, QueryRequest};
@@ -87,10 +85,9 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
         .expect("read authoritative Parties scope");
     assert_eq!(crm_row_counts(&admin).await, before_success);
 
-    let response = privacy::PartiesPrivacyScopeContributionResponse::decode(
-        result.output.bytes.as_slice(),
-    )
-    .expect("decode Parties scope response");
+    let response =
+        privacy::PartiesPrivacyScopeContributionResponse::decode(result.output.bytes.as_slice())
+            .expect("decode Parties scope response");
     let contribution = response.contribution.expect("scope contribution envelope");
     assert_eq!(contribution.owner_module_id, crm_parties::MODULE_ID);
     assert_eq!(contribution.capability_id, CAPABILITY_ID);
@@ -154,10 +151,7 @@ async fn parties_scope_is_tenant_bound_strict_and_side_effect_free() {
         )
         .await
         .expect_err("malformed Party state must fail closed");
-    assert_eq!(
-        malformed.code,
-        "PARTIES_PRIVACY_SCOPE_STORED_STATE_INVALID"
-    );
+    assert_eq!(malformed.code, "PARTIES_PRIVACY_SCOPE_STORED_STATE_INVALID");
     assert_eq!(crm_row_counts(&admin).await, malformed_before);
 }
 
@@ -227,12 +221,7 @@ fn capability_request<M: Message>(
     }
 }
 
-fn scope_request(
-    tenant: &str,
-    party_id: &str,
-    generation: u64,
-    identity: &str,
-) -> QueryRequest {
+fn scope_request(tenant: &str, party_id: &str, generation: u64, identity: &str) -> QueryRequest {
     let registry = canonical_scope_registry().unwrap();
     let wire = privacy::PartiesPrivacyScopeContributionRequest {
         contribution: Some(privacy::PrivacyScopeContributionRequestEnvelope {

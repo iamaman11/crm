@@ -19,7 +19,10 @@ pub(crate) fn build_response(
         &[
             request.lineage.tenant_id.as_bytes(),
             request.canonical_party_id.as_str().as_bytes(),
-            request.identity_resolution_generation.to_string().as_bytes(),
+            request
+                .identity_resolution_generation
+                .to_string()
+                .as_bytes(),
             request.lineage.registry_digest_sha256.as_slice(),
             request.page_size.to_string().as_bytes(),
             b"terminal",
@@ -74,9 +77,7 @@ pub(crate) fn typed_output(bytes: Vec<u8>) -> Result<TypedPayload, SdkError> {
         data_class: DataClass::Confidential,
         encoding: PayloadEncoding::Protobuf,
         maximum_size_bytes: OUTPUT_MAXIMUM_BYTES,
-        retention_policy_id: configured(RetentionPolicyId::try_new(
-            OUTPUT_RETENTION_POLICY_ID,
-        ))?,
+        retention_policy_id: configured(RetentionPolicyId::try_new(OUTPUT_RETENTION_POLICY_ID))?,
         bytes,
     };
     output.validate()?;

@@ -67,10 +67,8 @@ fn query_request(message: &privacy::PartiesPrivacyScopeContributionRequest) -> Q
             data_class: DataClass::Confidential,
             encoding: PayloadEncoding::Protobuf,
             maximum_size_bytes: INPUT_MAXIMUM_BYTES,
-            retention_policy_id: configured(RetentionPolicyId::try_new(
-                INPUT_RETENTION_POLICY_ID,
-            ))
-            .unwrap(),
+            retention_policy_id: configured(RetentionPolicyId::try_new(INPUT_RETENTION_POLICY_ID))
+                .unwrap(),
             bytes,
         },
         input_hash,

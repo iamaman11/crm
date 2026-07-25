@@ -58,15 +58,14 @@ pub(crate) fn validate_wire_request(
     context: &QueryExecutionContext,
     bytes: &[u8],
 ) -> Result<ValidatedRequest, SdkError> {
-    let request = privacy::PartiesPrivacyScopeContributionRequest::decode(bytes).map_err(
-        |error| {
+    let request =
+        privacy::PartiesPrivacyScopeContributionRequest::decode(bytes).map_err(|error| {
             invalid_contract_with_reference(
                 "PARTIES_PRIVACY_SCOPE_REQUEST_INVALID",
                 "The Parties privacy scope request is invalid.",
                 error.to_string(),
             )
-        },
-    )?;
+        })?;
     let contribution = request.contribution.ok_or_else(|| {
         invalid_contract(
             "PARTIES_PRIVACY_SCOPE_REQUEST_INVALID",
@@ -112,13 +111,14 @@ pub(crate) fn validate_wire_request(
                 )
             })
         })?;
-    let canonical_party = PartyReference::try_new(canonical_party_id.as_str()).map_err(|error| {
-        invalid_contract_with_reference(
-            "PARTIES_PRIVACY_SCOPE_PARTY_INVALID",
-            "The Parties privacy scope lineage is invalid.",
-            error.to_string(),
-        )
-    })?;
+    let canonical_party =
+        PartyReference::try_new(canonical_party_id.as_str()).map_err(|error| {
+            invalid_contract_with_reference(
+                "PARTIES_PRIVACY_SCOPE_PARTY_INVALID",
+                "The Parties privacy scope lineage is invalid.",
+                error.to_string(),
+            )
+        })?;
 
     if lineage.identity_resolution_generation == 0 {
         return Err(invalid_contract(

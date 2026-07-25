@@ -128,8 +128,7 @@ fn strict_party_snapshot(
     let version: i64 = row.try_get("version").map_err(row_decode_error)?;
     let owner_module_id: String = row.try_get("owner_module_id").map_err(row_decode_error)?;
     let stored_schema_id: String = row.try_get("schema_id").map_err(row_decode_error)?;
-    let stored_schema_version: String =
-        row.try_get("schema_version").map_err(row_decode_error)?;
+    let stored_schema_version: String = row.try_get("schema_version").map_err(row_decode_error)?;
     let stored_descriptor_hash: Vec<u8> =
         row.try_get("descriptor_hash").map_err(row_decode_error)?;
     let stored_data_class: String = row.try_get("data_class").map_err(row_decode_error)?;
@@ -180,8 +179,6 @@ fn strict_party_snapshot(
     })
 }
 
-fn configured<T>(
-    value: Result<T, crm_module_sdk::IdentifierError>,
-) -> Result<T, SdkError> {
+fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T, SdkError> {
     crate::errors::configured(value)
 }
