@@ -172,6 +172,21 @@ impl ModuleContributionSet {
         Ok(self)
     }
 
+    /// Merges independently built module-owned contribution fragments.
+    /// Duplicate routes and owner mismatches remain fail-closed at final assembly.
+    pub fn merge(&mut self, other: Self) -> &mut Self {
+        for contribution in other.modules.into_values() {
+            let key = contribution.module_id.as_str().to_owned();
+            let target = self
+                .modules
+                .entry(key)
+                .or_insert_with(|| ModuleRuntimeContribution::new(contribution.module_id.clone()));
+            target.mutations.extend(contribution.mutations);
+            target.queries.extend(contribution.queries);
+        }
+        self
+    }
+
     pub fn build(self) -> Result<ApplicationComposition, CompositionError> {
         let mut builder = ApplicationCompositionBuilder::new();
         for contribution in self.modules.into_values() {
@@ -1220,6 +1235,38 @@ mod tests {
         )
         .unwrap();
         let composition = set.build().unwrap();
+        assert_eq!(
+            composition.module_ids(),
+            &BTreeSet::from(["crm.alpha".to_owned()])
+        );
+        assert_eq!(composition.mutation_definitions().len(), 2);
+    }
+
+    #[test]
+    fn independently_built_contribution_sets_merge_by_owner() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let handler = Arc::new(MutationHandler {
+            calls: Arc::clone(&calls),
+        });
+        let mut first = ModuleContributionSet::new();
+        first
+            .add_mutations(
+                [definition("crm.alpha", "alpha.record.create", true)],
+                handler.clone(),
+                handler.clone(),
+            )
+            .unwrap();
+        let mut second = ModuleContributionSet::new();
+        second
+            .add_mutations(
+                [definition("crm.alpha", "alpha.record.update", true)],
+                handler.clone(),
+                handler,
+            )
+            .unwrap();
+
+        first.merge(second);
+        let composition = first.build().unwrap();
         assert_eq!(
             composition.module_ids(),
             &BTreeSet::from(["crm.alpha".to_owned()])
