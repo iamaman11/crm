@@ -94,6 +94,26 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
         "AccountQueryAdapter::new",
         "Customer Accounts query construction returned to the generic process host",
     ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "ConsentCapabilityPlanner",
+        "Consents mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "ConsentCapabilitySemanticValidator",
+        "Consents semantic validation returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "PostgresConsentReferenceReader",
+        "Consents reference-reader construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "let consent_queries = Arc::new(ConsentQueryAdapter::new(",
+        "Consents route registration returned to the generic process host",
+    ),
 )
 
 

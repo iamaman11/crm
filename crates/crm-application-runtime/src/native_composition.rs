@@ -10,11 +10,9 @@ use crm_capability_runtime::{
     CapabilityAuthorizer, CapabilityDefinition, CapabilitySemanticValidator,
     TransactionalCapabilityExecutor,
 };
-use crm_consents_capability_adapter::{
-    ConsentCapabilityPlanner, capability_definitions as consent_capability_definitions,
-};
+use crm_consents_capability_adapter::capability_definitions as consent_capability_definitions;
 use crm_consents_capability_composition::{
-    ConsentCapabilityExecutor, ConsentCapabilitySemanticValidator, PostgresConsentReferenceReader,
+    ConsentsProductionDependencies, build_contribution as build_consents_contribution,
 };
 use crm_consents_query_adapter::{
     ConsentQueryAdapter, query_capability_definitions as consent_query_capability_definitions,
@@ -291,16 +289,14 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let consent_aggregate = aggregate_executor(store.clone(), ConsentCapabilityPlanner);
-    add_activated_mutations(
-        &mut contributions,
-        consent_capability_definitions()?,
-        Arc::new(ConsentCapabilitySemanticValidator::new(Arc::new(
-            PostgresConsentReferenceReader::new(store.clone()),
-        ))),
-        Arc::new(ConsentCapabilityExecutor::new(consent_aggregate)),
-        activation.clone(),
-    )?;
+    contributions.merge(build_consents_contribution(
+        ConsentsProductionDependencies {
+            store: store.clone(),
+            activation: activation.clone(),
+            visibility_authorizer: visibility_authorizer.clone(),
+            cursor_key,
+        },
+    )?);
 
     let identity_aggregate = aggregate_executor(store.clone(), IdentityResolutionCapabilityPlanner);
     let identity_definitions = identity_resolution_capability_definitions()?;
@@ -484,18 +480,6 @@ pub fn build_production_composition(
         &mut contributions,
         customer_360_query_capability_definitions()?,
         customer_360_queries,
-        activation.clone(),
-    )?;
-
-    let consent_queries = Arc::new(ConsentQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        consent_query_capability_definitions()?,
-        consent_queries,
         activation.clone(),
     )?;
 
