@@ -28,35 +28,44 @@ jobs:
           from pathlib import Path
 
           path = Path('scripts/analyze_workspace.py')
-          text = path.read_text(encoding='utf-8')
+          lines = path.read_text(encoding='utf-8').splitlines()
 
-          old_run = 'run_step_count=sum(1 for line in lines if re.match(r"^\\s*run:\\s*", line)),'
-          new_run = 'run_step_count=sum(1 for line in lines if re.match(r"^\\s*-?\\s*run:\\s*", line)),'
-          if text.count(old_run) != 1:
-              raise SystemExit('run-step scanner anchor is not exact')
-          text = text.replace(old_run, new_run)
+          run_anchor = 'run_step_count=sum(1 for line in lines if re.match(r"^\\s*run:\\s*", line)),'
+          run_replacement = 'run_step_count=sum(1 for line in lines if re.match(r"^\\s*-?\\s*run:\\s*", line)),'
+          run_matches = [index for index, line in enumerate(lines) if run_anchor in line]
+          if len(run_matches) != 1:
+              raise SystemExit(f'run-step scanner matches: {run_matches}')
+          index = run_matches[0]
+          lines[index] = lines[index].replace(run_anchor, run_replacement)
 
-          old_paths = '''    path_filter_count = sum(
-              1
-              for line in event_lines
-              if re.match(r"^\\s{6}-\\s+", line)
+          path_start = next(
+              (index for index, line in enumerate(lines) if line == '    path_filter_count = sum('),
+              None,
           )
-          '''
-          new_paths = '''    path_filter_count = 0
-              inside_paths = False
-              for line in event_lines:
-                  if line.rstrip() == "    paths:":
-                      inside_paths = True
-                      continue
-                  if inside_paths and re.match(r"^\\s{6}-\\s+", line):
-                      path_filter_count += 1
-                      continue
-                  if inside_paths and line.strip() and not line.startswith(("      ", "\\t", "#")):
-                      inside_paths = False
-          '''
-          if text.count(old_paths) != 1:
-              raise SystemExit('path-filter scanner anchor is not exact')
-          path.write_text(text.replace(old_paths, new_paths), encoding='utf-8')
+          timeout_start = next(
+              (index for index, line in enumerate(lines) if line.startswith('    timeouts = ')),
+              None,
+          )
+          if path_start is None or timeout_start is None or path_start >= timeout_start:
+              raise SystemExit(
+                  f'path-filter block boundaries are invalid: {path_start}, {timeout_start}'
+              )
+          path_block = [
+              '    path_filter_count = 0',
+              '    inside_paths = False',
+              '    for line in event_lines:',
+              '        if line.rstrip() == "    paths:":',
+              '            inside_paths = True',
+              '            continue',
+              '        if inside_paths and re.match(r"^\\s{6}-\\s+", line):',
+              '            path_filter_count += 1',
+              '            continue',
+              '        if inside_paths and line.strip() and not line.startswith(("      ", "\\t", "#")):',
+              '            inside_paths = False',
+              '',
+          ]
+          lines[path_start:timeout_start] = path_block
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
           python -m unittest -v tests.test_workspace_analysis
           git rm .github/workflows/one-time-fix-workspace-analyzer.yml
