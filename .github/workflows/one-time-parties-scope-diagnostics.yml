@@ -1,0 +1,46 @@
+name: One-time Parties scope compiler diagnostics
+
+on:
+  push:
+    branches:
+      - agent/phase8a11-parties-privacy-scope
+    paths:
+      - ".github/workflows/one-time-parties-scope-diagnostics.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact branch SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init --quiet .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --quiet --no-tags --depth=1 origin "${GITHUB_SHA}"
+          git checkout --quiet --detach FETCH_HEAD
+      - name: Capture compiler diagnostics
+        shell: bash
+        run: |
+          set +e
+          rustup toolchain install stable --profile minimal --quiet
+          rustup default stable >/dev/null
+          cargo check --quiet -p crm-parties-privacy-scope-adapter --all-targets --all-features \
+            > compiler.stdout 2> compiler.stderr
+          status=$?
+          cat compiler.stderr
+          exit "${status}"
+      - name: Upload compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: parties-scope-compiler-diagnostics
+          path: |
+            compiler.stdout
+            compiler.stderr
+          if-no-files-found: error
+          retention-days: 7
