@@ -5,6 +5,7 @@ Accepted implementation: issue #134 / PR #135
 Merged baseline: `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`
 Exact verification head: `c73a3eb830893477a4d535acc9383e006d74367d`
 Architecture scalability evolution: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`
+Adoption rule: the scalability plan becomes normative only after its review PR merges; every implementation phase defined there remains a separately gated delivery packet.
 
 This document records the accepted non-regression baseline for continued CRM development. It does not claim that the universal CRM product is complete; it confirms that the production architecture is prepared for further owner-domain and link-module delivery without returning to central business routing or hidden lifecycle bypasses.
 
