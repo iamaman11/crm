@@ -204,11 +204,18 @@ def workflow_metric(path: Path, root: Path) -> WorkflowMetric:
         push_section = event_lines[push_index:push_end]
         pushes_main_only = "    branches:" in push_section and "      - main" in push_section
 
-    path_filter_count = sum(
-        1
-        for line in event_lines
-        if re.match(r"^\s{6}-\s+", line)
-    )
+    path_filter_count = 0
+    inside_paths = False
+    for line in event_lines:
+        if line.rstrip() == "    paths:":
+            inside_paths = True
+            continue
+        if inside_paths and re.match(r"^\s{6}-\s+", line):
+            path_filter_count += 1
+            continue
+        if inside_paths and line.strip() and not line.startswith(("      ", "\t", "#")):
+            inside_paths = False
+
     timeouts = [int(match.group(1)) for line in lines if (match := TIMEOUT_PATTERN.match(line))]
 
     return WorkflowMetric(
@@ -216,7 +223,7 @@ def workflow_metric(path: Path, root: Path) -> WorkflowMetric:
         path=str(path.relative_to(root)),
         job_count=job_count,
         action_reference_count=sum(1 for line in lines if USES_PATTERN.match(line)),
-        run_step_count=sum(1 for line in lines if re.match(r"^\s*run:\s*", line)),
+        run_step_count=sum(1 for line in lines if re.match(r"^\s*-?\s*run:\s*", line)),
         path_filter_count=path_filter_count,
         maximum_timeout_minutes=max(timeouts) if timeouts else None,
         has_postgres_service=any("postgres:" in line or "postgres:" in line.lower() for line in lines),
