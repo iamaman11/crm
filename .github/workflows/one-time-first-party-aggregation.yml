@@ -61,11 +61,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git restore \
+            .github/workflows/application-runtime.yml \
+            .github/workflows/governance.yml
           git add \
             Cargo.toml \
             Cargo.lock \
-            .github/workflows/application-runtime.yml \
-            .github/workflows/governance.yml \
             crates/crm-application-runtime/Cargo.toml \
             crates/crm-application-runtime/src/native_composition.rs \
             crates/crm-first-party-modules/Cargo.toml \
