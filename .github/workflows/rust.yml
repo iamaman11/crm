@@ -45,10 +45,24 @@ jobs:
       - name: Record Rust cache restore telemetry
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts
+          restore_started_ns="${{ steps.rust-cache-identity.outputs.restore_started_ns }}"
           restore_finished_ns="$(date +%s%N)"
-          restore_duration_ms=$(( (restore_finished_ns - ${{ steps.rust-cache-identity.outputs.restore_started_ns }}) / 1000000 ))
-          cache_paths_bytes="$(du -sb ~/.cargo/registry/index/ ~/.cargo/registry/cache/ ~/.cargo/git/db/ target/ 2>/dev/null | awk '{ total += $1 } END { print total + 0 }')"
+          restore_duration_ms=$(( (restore_finished_ns - restore_started_ns) / 1000000 ))
+          cache_paths_bytes="$(
+            {
+              for cache_path in \
+                "${HOME}/.cargo/registry/index" \
+                "${HOME}/.cargo/registry/cache" \
+                "${HOME}/.cargo/git/db" \
+                "target"; do
+                if [ -e "${cache_path}" ]; then
+                  du -sb "${cache_path}"
+                fi
+              done
+            } | awk '{ total += $1 } END { print total + 0 }'
+          )"
           cat > artifacts/rust-cache-telemetry.json <<EOF
           {
             "schema_version": "crm.rust-cache-telemetry/v2",
@@ -123,7 +137,7 @@ jobs:
           echo "duration_ms=$(( (finished_ns - started_ns) / 1000000 ))" >> "${GITHUB_OUTPUT}"
           exit "${status}"
       - name: Upload Clippy diagnostics
-        if: always()
+        if: steps.clippy.outcome == 'success' || steps.clippy.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: clippy-diagnostics
@@ -144,7 +158,7 @@ jobs:
           echo "duration_ms=$(( (finished_ns - started_ns) / 1000000 ))" >> "${GITHUB_OUTPUT}"
           exit "${status}"
       - name: Upload test diagnostics
-        if: always()
+        if: steps.tests.outcome == 'success' || steps.tests.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-diagnostics
@@ -185,7 +199,14 @@ jobs:
           import time
 
           path = Path("artifacts/rust-cache-telemetry.json")
-          report = json.loads(path.read_text(encoding="utf-8"))
+          if path.exists():
+              report = json.loads(path.read_text(encoding="utf-8"))
+          else:
+              path.parent.mkdir(parents=True, exist_ok=True)
+              report = {
+                  "schema_version": "crm.rust-cache-telemetry/v2",
+                  "telemetry_initialization_failed": True,
+              }
 
           def optional_integer(name: str):
               value = os.environ.get(name, "").strip()
