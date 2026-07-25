@@ -1,0 +1,82 @@
+name: One-time Consents production contribution
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Build and validate Consents contribution commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          auth_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git init --quiet .
+          git remote add origin "${auth_remote}"
+          git fetch --quiet --no-tags --depth=1 origin architecture/consents-production-contribution
+          git checkout --quiet -B architecture/consents-production-contribution FETCH_HEAD
+
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/one_time_consents_contribution.py")
+          content = path.read_text(encoding="utf-8")
+          marker = 'comparison = ROOT / "docs/CONSENTS_MODULE_CONTRIBUTION.md"\n'
+          prefix, found, _ = content.partition(marker)
+          if not found:
+              raise SystemExit("comparison marker missing")
+          tail = '''comparison = ROOT / "docs/CONSENTS_MODULE_CONTRIBUTION.md"
+          comparison.write_text(
+              """# Second Module-Owned Production Contribution — Consents
+
+          Status: bounded comparison candidate
+
+          Consents is the second stable owner moved from concrete construction in the generic application runtime to an owner-built `ModuleContributionSet`.
+
+          ## Why this owner contrasts with Customer Accounts
+
+          Customer Accounts validates Party references through one shared reader. Consents validates a richer scope across Party and optional Contact Point records, checks ownership and communication-channel compatibility, wraps the aggregate executor with owner-specific capability validation, and exposes permission-aware queries.
+
+          ## Boundary
+
+          The existing `crm-consents-capability-composition` package owns mutation planner/executor construction, PostgreSQL reference reading, semantic validation, query adapter construction and activation gates. The generic application runtime supplies only production context and merges the contribution.
+
+          Customer Enrichment may still construct a `ConsentQueryAdapter` as an explicit cross-owner query dependency. The mechanical guard therefore forbids only central Consents route registration and owner mutation/reference construction, not every use of the query-adapter type.
+
+          ## Decision boundary
+
+          This packet introduces no new crate and does not yet add a first-party aggregate package. After exact-head acceptance, Customer Accounts and Consents provide two contrasting examples from which the common production-contribution shape can be stabilized without inventing a framework from one owner.
+          """,
+              encoding="utf-8",
+          )
+          '''
+          path.write_text(prefix + tail, encoding="utf-8")
+          PY
+
+          python scripts/one_time_consents_contribution.py
+          cargo fmt --all
+          cargo generate-lockfile
+          python -m unittest -v tests.test_native_module_composition
+          python scripts/check_native_module_composition.py
+          cargo test -p crm-application-composition -p crm-consents-capability-composition -p crm-application-runtime --lib
+          cargo check --workspace
+
+          git rm .github/workflows/one-time-consents-contribution.yml
+          git rm scripts/one_time_consents_contribution.py
+          git add \
+            Cargo.lock \
+            crates/crm-application-runtime/src/native_composition.rs \
+            crates/crm-consents-capability-composition/Cargo.toml \
+            crates/crm-consents-capability-composition/src/lib.rs \
+            docs/CONSENTS_MODULE_CONTRIBUTION.md \
+            scripts/check_native_module_composition.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add Consents module-owned production contribution"
+          git push origin HEAD:architecture/consents-production-contribution
