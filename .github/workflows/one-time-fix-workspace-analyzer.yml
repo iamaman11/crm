@@ -29,18 +29,41 @@ jobs:
 
           path = Path('scripts/analyze_workspace.py')
           text = path.read_text(encoding='utf-8')
-          old = 'run_step_count=sum(1 for line in lines if re.match(r"^\\s*run:\\s*", line)),'
-          new = 'run_step_count=sum(1 for line in lines if re.match(r"^\\s*-?\\s*run:\\s*", line)),'
-          if text.count(old) != 1:
+
+          old_run = 'run_step_count=sum(1 for line in lines if re.match(r"^\\s*run:\\s*", line)),'
+          new_run = 'run_step_count=sum(1 for line in lines if re.match(r"^\\s*-?\\s*run:\\s*", line)),'
+          if text.count(old_run) != 1:
               raise SystemExit('run-step scanner anchor is not exact')
-          path.write_text(text.replace(old, new), encoding='utf-8')
+          text = text.replace(old_run, new_run)
+
+          old_paths = '''    path_filter_count = sum(
+              1
+              for line in event_lines
+              if re.match(r"^\\s{6}-\\s+", line)
+          )
+          '''
+          new_paths = '''    path_filter_count = 0
+              inside_paths = False
+              for line in event_lines:
+                  if line.rstrip() == "    paths:":
+                      inside_paths = True
+                      continue
+                  if inside_paths and re.match(r"^\\s{6}-\\s+", line):
+                      path_filter_count += 1
+                      continue
+                  if inside_paths and line.strip() and not line.startswith(("      ", "\\t", "#")):
+                      inside_paths = False
+          '''
+          if text.count(old_paths) != 1:
+              raise SystemExit('path-filter scanner anchor is not exact')
+          path.write_text(text.replace(old_paths, new_paths), encoding='utf-8')
           PY
           python -m unittest -v tests.test_workspace_analysis
           git rm .github/workflows/one-time-fix-workspace-analyzer.yml
           git add scripts/analyze_workspace.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Count all workflow run-step forms"
+          git commit -m "Measure workflow paths and run steps precisely"
           echo "ANALYZER_FIX_COMMIT_SHA=$(git rev-parse HEAD)"
           git push origin HEAD:architecture/complexity-baseline
       - name: Upload analyzer fix diagnostics
