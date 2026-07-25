@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -22,6 +23,15 @@ def run(command: list[str]) -> None:
         raise CommandError(
             f"command failed with exit code {completed.returncode}: {' '.join(command)}"
         )
+
+
+def affected_report(base_ref: str) -> dict:
+    from affected_scope import build_report
+
+    try:
+        return build_report(ROOT, base_ref)
+    except RuntimeError as error:
+        raise CommandError(str(error)) from error
 
 
 def command_architecture(_: argparse.Namespace) -> None:
@@ -126,6 +136,60 @@ def command_test_all(_: argparse.Namespace) -> None:
     run(["cargo", "test", "--workspace", "--all-features"])
 
 
+def command_affected(args: argparse.Namespace) -> None:
+    from affected_scope import markdown_report
+
+    report = affected_report(args.base)
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(markdown_report(report), end="")
+
+
+def command_check_affected(args: argparse.Namespace) -> None:
+    from affected_scope import markdown_report
+
+    report = affected_report(args.base)
+    print(markdown_report(report), end="", flush=True)
+
+    command_conformance(argparse.Namespace())
+    command_format(argparse.Namespace(check=True))
+
+    packages = report["affected_packages"]
+    if not packages:
+        print(
+            "No Rust packages are affected; package Clippy/tests are skipped.",
+            flush=True,
+        )
+        return
+
+    if report["broadened"]:
+        run(
+            [
+                "cargo",
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--all-features",
+                "--",
+                "-D",
+                "warnings",
+            ]
+        )
+        command_test_all(argparse.Namespace())
+        return
+
+    clippy = ["cargo", "clippy"]
+    tests = ["cargo", "test"]
+    for package in packages:
+        clippy.extend(["-p", package])
+        tests.extend(["-p", package])
+    clippy.extend(["--all-targets", "--all-features", "--", "-D", "warnings"])
+    tests.append("--all-features")
+    run(clippy)
+    run(tests)
+
+
 def command_quality(_: argparse.Namespace) -> None:
     command_conformance(argparse.Namespace())
     command_format(argparse.Namespace(check=True))
@@ -197,6 +261,21 @@ def build_parser() -> argparse.ArgumentParser:
         "test-all", help="run the full Rust workspace test suite"
     )
     test_all.set_defaults(handler=command_test_all)
+
+    affected = subparsers.add_parser(
+        "affected",
+        help="explain changed paths, reverse package impact and workflow selection",
+    )
+    affected.add_argument("--base", default="origin/main")
+    affected.add_argument("--json", action="store_true")
+    affected.set_defaults(handler=command_affected)
+
+    check_affected = subparsers.add_parser(
+        "check-affected",
+        help="run structural preflight plus affected Rust package checks",
+    )
+    check_affected.add_argument("--base", default="origin/main")
+    check_affected.set_defaults(handler=command_check_affected)
 
     quality = subparsers.add_parser(
         "quality", help="run conformance, formatting, Clippy and all tests"
