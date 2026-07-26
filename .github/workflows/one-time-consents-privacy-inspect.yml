@@ -1,53 +1,99 @@
-name: One-time Consents privacy owner inspection
+name: One-time Consents privacy owner validator
 
 on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inspect:
+  validate:
     if: github.head_ref == 'feature/consents-privacy-scope-adapter'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_consents_privacy_scope_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5438:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_consents_privacy_scope_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5438
+      PGDATABASE: crm_consents_privacy_scope_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5438/crm_consents_privacy_scope_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5438/crm_consents_privacy_scope_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Collect exact owner contract and persistence inputs
+        with:
+          ref: feature/consents-privacy-scope-adapter
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+        with:
+          components: clippy, rustfmt
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Normalize source and lockfile
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p inspection
-          proto_file="$(grep -R -l 'message ConsentsPrivacyScopeContributionRequest' proto | head -n 1)"
-          test -n "${proto_file}"
-          cp "${proto_file}" inspection/contributions.proto
-          cp modules/crm-customer-privacy/src/scope.rs inspection/customer-privacy-scope.rs
-          cp crates/crm-parties-privacy-scope-adapter/src/request.rs inspection/parties-request.rs
-          cp crates/crm-parties-privacy-scope-adapter/src/response.rs inspection/parties-response.rs
-          cp crates/crm-parties-privacy-scope-adapter/src/postgres.rs inspection/parties-postgres.rs
-          cp crates/crm-parties-privacy-scope-adapter/tests/postgres_scope.rs inspection/parties-postgres-test.rs
-          cp .github/workflows/parties-privacy-scope.yml inspection/parties-workflow.yml
-          cp crates/crm-consents-capability-adapter/src/lib.rs inspection/consents-capability-adapter.rs
-          cp modules/crm-consents/src/domain.rs inspection/consents-domain.rs
-          cp modules/crm-consents/src/persistence.rs inspection/consents-persistence.rs
-          cp crates/crm-consents-query-adapter/src/base_adapter.rs inspection/consents-base-query-adapter.rs
-          cp crates/crm-consents-query-adapter/src/lib.rs inspection/consents-query-adapter.rs
-          cp services/crm-api/tests/consent_process_e2e.rs inspection/consent-process-e2e.rs
-          cp crates/crm-core-data/src/postgres_bound_read.rs inspection/postgres-bound-read.rs
-          grep -R -l 'CREATE TABLE.*relationships\|CREATE TABLE IF NOT EXISTS crm.relationships' database/migrations \
-            | while IFS= read -r file; do cp "${file}" "inspection/$(basename "${file}")"; done
-          grep -R -n -B 30 -A 120 'consents.authorization.party\|PARTY_AUTHORIZATION_RELATIONSHIP_TYPE' crates modules services database \
-            > inspection/consents-relationship-usage.txt || true
-          grep -R -n -B 30 -A 120 'list_related_records_for_query\|RelatedRecordListQuery' crates/crm-core-data \
-            > inspection/related-record-query.txt || true
-          grep -R -n -B 20 -A 80 'ALTER TABLE crm.relationships\|owner_module_id.*relationships\|relationship_owner' database/migrations \
-            > inspection/relationship-schema-evolution.txt || true
-          grep -R -n -B 40 -A 140 'CANONICAL_REDIRECT_RELATIONSHIP_TYPE' crates services \
-            > inspection/identity-redirect-usage.txt || true
-      - name: Upload inspection evidence
+          cargo fmt --all
+          cargo generate-lockfile
+          git diff --check -- Cargo.toml Cargo.lock architecture-policy.json crates/crm-consents-privacy-scope-adapter database/tests/0025_consents_privacy_scope_fixture.sql
+      - name: Enforce architecture boundary
+        run: python scripts/check_architecture.py
+      - name: Prepare authoritative PostgreSQL fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0024_parties_privacy_scope_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0025_consents_privacy_scope_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify Consents privacy scope adapter
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-consents-privacy-scope-adapter --all-features -- --nocapture \
+            2>&1 | tee database/consents-privacy-scope-validator.log
+      - name: Verify workspace dependency graph
+        run: cargo check --workspace --all-features
+      - name: Publish normalized validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock architecture-policy.json \
+            crates/crm-consents-privacy-scope-adapter \
+            database/tests/0025_consents_privacy_scope_fixture.sql
+          if git diff --cached --quiet; then
+            echo "Validated source was already canonical."
+            exit 0
+          fi
+          git commit -m "Normalize validated Consents privacy scope source"
+          git push origin HEAD:feature/consents-privacy-scope-adapter
+      - name: Upload validation diagnostics
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: consents-privacy-owner-inspection
-          path: inspection/
-          if-no-files-found: error
+          name: consents-privacy-scope-validator-diagnostics
+          path: database/consents-privacy-scope-validator.log
+          if-no-files-found: warn
           retention-days: 7
