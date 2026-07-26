@@ -51,10 +51,10 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          path = Path("crates/crm-consents-privacy-scope-adapter/tests/postgres_scope/support.rs")
-          text = path.read_text(encoding="utf-8")
+          support_path = Path("crates/crm-consents-privacy-scope-adapter/tests/postgres_scope/support.rs")
+          support = support_path.read_text(encoding="utf-8")
 
-          replacements = [
+          support_replacements = [
               (
                   "unix_nanos: 100_000_000,",
                   "unix_nanos: 700_000_000 + i64::from(seed),",
@@ -81,11 +81,36 @@ jobs:
                   "canonical redirect commit",
               ),
           ]
-          for old, new, label in replacements:
-              if text.count(old) != 1:
-                  raise SystemExit(f"expected one {label}, found {text.count(old)}")
-              text = text.replace(old, new, 1)
-          path.write_text(text, encoding="utf-8")
+          for old, new, label in support_replacements:
+              if support.count(old) != 1:
+                  raise SystemExit(f"expected one {label}, found {support.count(old)}")
+              support = support.replace(old, new, 1)
+          support_path.write_text(support, encoding="utf-8")
+
+          scenario_path = Path("crates/crm-consents-privacy-scope-adapter/tests/postgres_scope.rs")
+          scenario = scenario_path.read_text(encoding="utf-8")
+          scenario_replacements = [
+              (
+                  "    insert_canonical_redirect(&admin, \"party-redirected\", \"party-survivor\").await;\n\n    let adapter",
+                  "    let adapter",
+                  "early canonical redirect fixture",
+              ),
+              (
+                  "    let redirected_before = write_surface_counts(&admin).await;",
+                  "    insert_canonical_redirect(&admin, \"party-redirected\", \"party-survivor\").await;\n    let redirected_before = write_surface_counts(&admin).await;",
+                  "late canonical redirect fixture",
+              ),
+              (
+                  "scope_request(TENANT_A, \"party-redirected\", 1, 2, \"\", \"redirected-party\")",
+                  "scope_request(TENANT_A, \"party-redirected\", 2, 2, \"\", \"redirected-party\")",
+                  "redirected Party current generation",
+              ),
+          ]
+          for old, new, label in scenario_replacements:
+              if scenario.count(old) != 1:
+                  raise SystemExit(f"expected one {label}, found {scenario.count(old)}")
+              scenario = scenario.replace(old, new, 1)
+          scenario_path.write_text(scenario, encoding="utf-8")
           PY
           cargo fmt --all
           cargo generate-lockfile
