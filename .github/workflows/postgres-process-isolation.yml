@@ -1,0 +1,245 @@
+name: PostgreSQL Process Isolation Pilot
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "database/migrations/**"
+      - "database/tests/**"
+      - "proto/crm/gateway/**"
+      - "proto/crm/parties/**"
+      - "proto/crm/accounts/**"
+      - "crates/crm-application-composition/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-first-party-modules/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
+      - "crates/crm-customer-accounts-capability-adapter/**"
+      - "crates/crm-customer-accounts-capability-composition/**"
+      - "crates/crm-customer-accounts-query-adapter/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
+      - "crates/crm-party-reference-composition/**"
+      - "modules/crm-customer-accounts/**"
+      - "modules/crm-parties/**"
+      - "services/crm-api/**"
+      - "scripts/prepare_isolated_process_database.sh"
+      - ".github/workflows/postgres-process-isolation.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "database/migrations/**"
+      - "database/tests/**"
+      - "proto/crm/gateway/**"
+      - "proto/crm/parties/**"
+      - "proto/crm/accounts/**"
+      - "crates/crm-application-composition/**"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-first-party-modules/**"
+      - "crates/crm-capability-adapters/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-events/**"
+      - "crates/crm-customer-accounts-capability-adapter/**"
+      - "crates/crm-customer-accounts-capability-composition/**"
+      - "crates/crm-customer-accounts-query-adapter/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "crates/crm-parties-query-adapter/**"
+      - "crates/crm-party-reference-composition/**"
+      - "modules/crm-customer-accounts/**"
+      - "modules/crm-parties/**"
+      - "services/crm-api/**"
+      - "scripts/prepare_isolated_process_database.sh"
+      - ".github/workflows/postgres-process-isolation.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-process:
+    name: isolated-${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: party
+            database: crm_process_party_test
+            test_target: party_process_e2e
+          - suite: account
+            database: crm_process_account_test
+            test_target: account_process_e2e
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: ${{ matrix.database }}
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5436:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ${{ matrix.database }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5436
+      PGDATABASE: ${{ matrix.database }}
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5436/${{ matrix.database }}
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5436/${{ matrix.database }}
+      PROCESS_SUITE: ${{ matrix.suite }}
+      TEST_TARGET: ${{ matrix.test_target }}
+      ARTIFACT_DIR: artifacts/postgres-isolation/${{ matrix.suite }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Measure PostgreSQL readiness probe
+        id: service
+        shell: bash
+        run: |
+          set -euo pipefail
+          started_ns="$(date +%s%N)"
+          pg_isready --host "${PGHOST}" --port "${PGPORT}" --username "${PGUSER}" --dbname "${PGDATABASE}"
+          finished_ns="$(date +%s%N)"
+          echo "duration_ms=$(( (finished_ns - started_ns) / 1000000 ))" >> "${GITHUB_OUTPUT}"
+      - name: Prepare isolated migrated database
+        id: database
+        shell: bash
+        run: |
+          set +e
+          started_ns="$(date +%s%N)"
+          bash scripts/prepare_isolated_process_database.sh
+          status=$?
+          finished_ns="$(date +%s%N)"
+          echo "duration_ms=$(( (finished_ns - started_ns) / 1000000 ))" >> "${GITHUB_OUTPUT}"
+          echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
+          exit "${status}"
+      - name: Compile isolated process target
+        id: compile
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "${ARTIFACT_DIR}"
+          started_ns="$(date +%s%N)"
+          set +e
+          cargo test -p crm-api --test "${TEST_TARGET}" --no-run \
+            2>&1 | tee "${ARTIFACT_DIR}/compile.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          finished_ns="$(date +%s%N)"
+          echo "duration_ms=$(( (finished_ns - started_ns) / 1000000 ))" >> "${GITHUB_OUTPUT}"
+          echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
+          exit "${status}"
+      - name: Execute isolated real-process suite
+        id: process
+        shell: bash
+        run: |
+          set -o pipefail
+          started_ns="$(date +%s%N)"
+          set +e
+          cargo test -p crm-api --test "${TEST_TARGET}" -- --nocapture \
+            2>&1 | tee "${ARTIFACT_DIR}/process.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          finished_ns="$(date +%s%N)"
+          echo "duration_ms=$(( (finished_ns - started_ns) / 1000000 ))" >> "${GITHUB_OUTPUT}"
+          echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
+          exit "${status}"
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "${ARTIFACT_DIR}"
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > "${ARTIFACT_DIR}/postgres.log" 2>&1
+          else
+            echo "PostgreSQL service container was not found." > "${ARTIFACT_DIR}/postgres.log"
+            docker ps -a >> "${ARTIFACT_DIR}/postgres.log" 2>&1
+          fi
+      - name: Finalize isolation telemetry
+        if: always()
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SERVICE_DURATION_MS: ${{ steps.service.outputs.duration_ms }}
+          SERVICE_OUTCOME: ${{ steps.service.outcome }}
+          DATABASE_DURATION_MS: ${{ steps.database.outputs.duration_ms }}
+          DATABASE_OUTCOME: ${{ steps.database.outcome }}
+          COMPILE_DURATION_MS: ${{ steps.compile.outputs.duration_ms }}
+          COMPILE_OUTCOME: ${{ steps.compile.outcome }}
+          PROCESS_DURATION_MS: ${{ steps.process.outputs.duration_ms }}
+          PROCESS_OUTCOME: ${{ steps.process.outcome }}
+        run: |
+          mkdir -p "${ARTIFACT_DIR}"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          def optional_integer(name: str):
+              value = os.environ.get(name, "").strip()
+              return int(value) if value else None
+
+          durations = {
+              "service_ready_probe_ms": optional_integer("SERVICE_DURATION_MS"),
+              "database_setup_ms": optional_integer("DATABASE_DURATION_MS"),
+              "compile_ms": optional_integer("COMPILE_DURATION_MS"),
+              "process_execution_ms": optional_integer("PROCESS_DURATION_MS"),
+          }
+          known = [value for value in durations.values() if value is not None]
+          report = {
+              "schema_version": "crm.postgres-process-isolation/v1",
+              "candidate_sha": os.environ["CANDIDATE_SHA"],
+              "event_name": os.environ.get("GITHUB_EVENT_NAME", "unknown"),
+              "suite": os.environ["PROCESS_SUITE"],
+              "test_target": os.environ["TEST_TARGET"],
+              "database": os.environ["PGDATABASE"],
+              "database_port": int(os.environ["PGPORT"]),
+              "isolation_model": "independent-github-job-and-postgres-service",
+              "durations": durations,
+              "measured_total_ms": sum(known) if known else None,
+              "outcomes": {
+                  "service": os.environ.get("SERVICE_OUTCOME") or "skipped",
+                  "database": os.environ.get("DATABASE_OUTCOME") or "skipped",
+                  "compile": os.environ.get("COMPILE_OUTCOME") or "skipped",
+                  "process": os.environ.get("PROCESS_OUTCOME") or "skipped",
+              },
+              "service_startup_measurement_limit": (
+                  "GitHub service-container provisioning occurs before job steps; "
+                  "the workflow records the explicit readiness probe and overall job telemetry separately."
+              ),
+          }
+          path = Path(os.environ["ARTIFACT_DIR"]) / "telemetry.json"
+          path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+      - name: Upload isolated process evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: postgres-isolation-${{ matrix.suite }}
+          path: artifacts/postgres-isolation/${{ matrix.suite }}/
+          if-no-files-found: error
+          retention-days: 30
