@@ -18,27 +18,28 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p inspection
-          find proto -type f -print0 | xargs -0 grep -l 'ConsentsPrivacyScopeContributionRequest' > inspection/proto-files.txt
-          while IFS= read -r file; do
-            echo "===== ${file} =====" >> inspection/privacy-proto.txt
-            grep -n -B 20 -A 140 'ConsentsPrivacyScopeContributionRequest' "${file}" >> inspection/privacy-proto.txt
-          done < inspection/proto-files.txt
-          grep -R -n -B 20 -A 100 'CANONICAL_SCOPE_REGISTRY_VERSION\|OwnerScopeRegistry\|crm.consents' modules/crm-customer-privacy crates 2>/dev/null > inspection/registry-and-consents.txt || true
+          proto_file="$(grep -R -l 'message ConsentsPrivacyScopeContributionRequest' proto | head -n 1)"
+          test -n "${proto_file}"
+          cp "${proto_file}" inspection/contributions.proto
+          cp modules/crm-customer-privacy/src/scope.rs inspection/customer-privacy-scope.rs
           cp crates/crm-parties-privacy-scope-adapter/src/request.rs inspection/parties-request.rs
           cp crates/crm-parties-privacy-scope-adapter/src/response.rs inspection/parties-response.rs
           cp crates/crm-parties-privacy-scope-adapter/src/postgres.rs inspection/parties-postgres.rs
           cp crates/crm-parties-privacy-scope-adapter/tests/postgres_scope.rs inspection/parties-postgres-test.rs
           cp .github/workflows/parties-privacy-scope.yml inspection/parties-workflow.yml
           cp crates/crm-consents-capability-adapter/src/lib.rs inspection/consents-capability-adapter.rs
+          cp modules/crm-consents/src/domain.rs inspection/consents-domain.rs
           cp modules/crm-consents/src/persistence.rs inspection/consents-persistence.rs
+          cp crates/crm-consents-query-adapter/src/base_adapter.rs inspection/consents-base-query-adapter.rs
           cp crates/crm-consents-query-adapter/src/lib.rs inspection/consents-query-adapter.rs
-          find database/migrations modules/crm-consents/migrations -type f -print0 \
-            | xargs -0 grep -l 'consents.authorization.party\|consents.authorization' \
-            > inspection/consents-database-files.txt || true
-          while IFS= read -r file; do
-            echo "===== ${file} =====" >> inspection/consents-database.txt
-            grep -n -B 20 -A 80 'consents.authorization.party\|consents.authorization' "${file}" >> inspection/consents-database.txt || true
-          done < inspection/consents-database-files.txt
+          cp services/crm-api/tests/consent_process_e2e.rs inspection/consent-process-e2e.rs
+          cp crates/crm-core-data/src/postgres_bound_read.rs inspection/postgres-bound-read.rs
+          grep -R -l 'CREATE TABLE.*relationships\|CREATE TABLE IF NOT EXISTS crm.relationships' database/migrations \
+            | while IFS= read -r file; do cp "${file}" "inspection/$(basename "${file}")"; done
+          grep -R -n -B 30 -A 120 'consents.authorization.party\|PARTY_AUTHORIZATION_RELATIONSHIP_TYPE' crates modules services database \
+            > inspection/consents-relationship-usage.txt || true
+          grep -R -n -B 30 -A 120 'list_related_records_for_query\|RelatedRecordListQuery' crates/crm-core-data \
+            > inspection/related-record-query.txt || true
       - name: Upload inspection evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
