@@ -4,11 +4,13 @@
 //!
 //! The adapter contributes subject-level import-row and export selection/execution evidence while
 //! excluding multi-subject jobs, progress records and complete artifacts. No runtime route,
-//! application registration or worker is introduced by this package.
+//! application registration or worker is introduced by this package, and query execution remains
+//! read-only.
 
 mod contract;
 mod digest;
 mod errors;
+mod postgres;
 mod request;
 mod response;
 
@@ -24,3 +26,4 @@ pub use contract::{
     OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID,
     customer_data_privacy_scope_definition,
 };
+pub use postgres::CustomerDataOperationsPrivacyScopeQueryAdapter;
