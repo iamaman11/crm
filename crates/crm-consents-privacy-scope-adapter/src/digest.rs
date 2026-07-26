@@ -26,7 +26,7 @@ pub(crate) fn encode_hex(bytes: &[u8]) -> String {
 }
 
 pub(crate) fn decode_hex(value: &str) -> Result<Vec<u8>, crm_module_sdk::SdkError> {
-    if value.is_empty() || value.len() % 2 != 0 {
+    if value.is_empty() || !value.len().is_multiple_of(2) {
         return Err(cursor_invalid());
     }
     value
