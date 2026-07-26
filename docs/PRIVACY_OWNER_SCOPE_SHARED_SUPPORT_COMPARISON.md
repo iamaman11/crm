@@ -93,6 +93,8 @@ For the same accepted fixture inputs, migration to shared support must preserve:
 
 The Parties and Consents permanent workflows remain authoritative. The shared crate is added to both path-filter graphs so a change to common behavior re-runs both owner acceptance suites.
 
+The compatibility proof is explicit rather than merely self-consistent. Shared conformance tests exercise every common request and lineage error kind; both owner suites assert exact owner-prefixed codes, categories and retryability after mapping; and `tests/digest_compatibility.rs` freezes the accepted Parties and Consents cursor/page digest bytes from the pre-extraction implementations. A future framing or field-order change therefore requires an intentional versioned protocol decision rather than silently changing evidence under the existing domains.
+
 ## 6. New crate justification
 
 - **Protected boundary:** common privacy owner-scope protocol mechanics and canonical Party proof.
@@ -135,12 +137,12 @@ The packet may enter Gate review only when:
 1. this comparison and all current status/roadmap documents are synchronized;
 2. the support crate contains only the accepted shared boundary;
 3. Parties and Consents retain exact owner-specific error mapping;
-4. both adapter unit suites pass unchanged behavior assertions;
+4. the shared conformance suite, digest compatibility proof and both adapter unit suites pass;
 5. both clean/reapplied PostgreSQL acceptance suites pass;
 6. architecture policy still permits bound-read transaction creation only in the two owner adapters;
 7. both permanent workflow path filters include the shared crate;
 8. full workspace formatting, Clippy, tests, dependency checks and applicable governance checks pass on one unchanged SHA;
-9. the temporary validator workflow is removed before authoritative acceptance;
+9. every temporary validator or normalizer workflow is absent from the authoritative candidate;
 10. no runtime inventory, migration, public contract or owner implementation beyond Parties/Consents is added;
 11. the PR is based on the accepted PR #175 merge and has no unresolved review thread.
 
