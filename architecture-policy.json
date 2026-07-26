@@ -62,6 +62,7 @@
   ],
   "restricted_source_markers": {
     ".begin_bound_read_transaction(": [
+      "crates/crm-consents-privacy-scope-adapter/src/postgres.rs",
       "crates/crm-parties-privacy-scope-adapter/src/postgres.rs"
     ]
   }
