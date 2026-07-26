@@ -2,6 +2,16 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
 };
+use crm_party_relationships_capability_adapter::{
+    CREATE_CAPABILITY as CREATE_PARTY_RELATIONSHIP_CAPABILITY,
+    CREATE_REQUEST_SCHEMA as CREATE_PARTY_RELATIONSHIP_SCHEMA,
+    UPDATE_CAPABILITY as UPDATE_PARTY_RELATIONSHIP_CAPABILITY,
+    UPDATE_REQUEST_SCHEMA as UPDATE_PARTY_RELATIONSHIP_SCHEMA,
+};
+use crm_party_relationships_privacy_scope_adapter::{
+    CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
+    INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID,
+};
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_identity_resolution_capability_adapter::{
     CANONICAL_REDIRECT_PARTY_RECORD_TYPE, CANONICAL_REDIRECT_RELATIONSHIP_TYPE,
@@ -15,22 +25,10 @@ use crm_module_sdk::{
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as CREATE_PARTY_CAPABILITY, CREATE_REQUEST_SCHEMA as CREATE_PARTY_SCHEMA,
 };
-use crm_party_relationships_capability_adapter::{
-    CREATE_CAPABILITY as CREATE_PARTY_RELATIONSHIP_CAPABILITY,
-    CREATE_REQUEST_SCHEMA as CREATE_PARTY_RELATIONSHIP_SCHEMA,
-    UPDATE_CAPABILITY as UPDATE_PARTY_RELATIONSHIP_CAPABILITY,
-    UPDATE_REQUEST_SCHEMA as UPDATE_PARTY_RELATIONSHIP_SCHEMA,
-    VERIFY_CAPABILITY as VERIFY_PARTY_RELATIONSHIP_CAPABILITY,
-    VERIFY_REQUEST_SCHEMA as VERIFY_PARTY_RELATIONSHIP_SCHEMA,
-};
-use crm_party_relationships_privacy_scope_adapter::{
-    CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
-    INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID,
-};
 use crm_proto_contracts::{
     crm::{
-        customer::v1 as customer, customer_privacy::v1 as privacy, parties::v1 as parties,
-        party_relationships::v1 as party_relationships,
+        core::v1 as core, customer::v1 as customer, customer_privacy::v1 as privacy,
+        parties::v1 as parties, party_relationships::v1 as party_relationships,
     },
     message_descriptor_hash,
 };
@@ -81,10 +79,14 @@ pub(crate) async fn create_party_relationship(
     definition: &CapabilityDefinition,
     tenant: &str,
     party_relationship_id: &str,
-    party_id: &str,
-    kind: party_relationships::PartyRelationshipKind,
-    value: &str,
-    preferred: bool,
+    from_party_id: &str,
+    to_party_id: &str,
+    relationship_type_code: &str,
+    directionality: party_relationships::PartyRelationshipDirectionality,
+    from_role: &str,
+    to_role: &str,
+    valid_from_unix_nanos: Option<i64>,
+    valid_until_unix_nanos: Option<i64>,
     seed: u8,
 ) {
     executor
@@ -102,14 +104,20 @@ pub(crate) async fn create_party_relationship(
                     party_relationship_ref: Some(customer::PartyRelationshipRef {
                         party_relationship_id: party_relationship_id.to_owned(),
                     }),
-                    party_ref: Some(customer::PartyRef {
-                        party_id: party_id.to_owned(),
+                    from_party_ref: Some(customer::PartyRef {
+                        party_id: from_party_id.to_owned(),
                     }),
-                    kind: kind as i32,
-                    value: value.to_owned(),
-                    preferred,
-                    valid_from: None,
-                    valid_until: None,
+                    to_party_ref: Some(customer::PartyRef {
+                        party_id: to_party_id.to_owned(),
+                    }),
+                    relationship_type: Some(party_relationships::PartyRelationshipType {
+                        code: relationship_type_code.to_owned(),
+                        directionality: directionality as i32,
+                        from_role: from_role.to_owned(),
+                        to_role: to_role.to_owned(),
+                    }),
+                    valid_from: valid_from_unix_nanos.map(|unix_nanos| core::UnixTime { unix_nanos }),
+                    valid_until: valid_until_unix_nanos.map(|unix_nanos| core::UnixTime { unix_nanos }),
                 },
             ),
         )
@@ -117,49 +125,16 @@ pub(crate) async fn create_party_relationship(
         .expect("create authoritative Party Relationship fixture");
 }
 
-pub(crate) async fn verify_party_relationship(
-    executor: &Arc<dyn TransactionalCapabilityExecutor>,
-    definition: &CapabilityDefinition,
-    tenant: &str,
-    party_relationship_id: &str,
-    expected_version: i64,
-    evidence_ref: &str,
-    seed: u8,
-) {
-    executor
-        .execute(
-            definition,
-            capability_request(
-                crm_party_relationships::MODULE_ID,
-                VERIFY_PARTY_RELATIONSHIP_CAPABILITY,
-                VERIFY_PARTY_RELATIONSHIP_SCHEMA,
-                tenant,
-                &format!("verify-party-relationship-{party_relationship_id}"),
-                700_000_000 + i64::from(seed),
-                seed,
-                &party_relationships::VerifyPartyRelationshipRequest {
-                    party_relationship_ref: Some(customer::PartyRelationshipRef {
-                        party_relationship_id: party_relationship_id.to_owned(),
-                    }),
-                    expected_version,
-                    evidence_ref: evidence_ref.to_owned(),
-                },
-            ),
-        )
-        .await
-        .expect("verify authoritative Party Relationship fixture");
-}
-
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn update_party_relationship_status(
+pub(crate) async fn update_party_relationship(
     executor: &Arc<dyn TransactionalCapabilityExecutor>,
     definition: &CapabilityDefinition,
     tenant: &str,
     party_relationship_id: &str,
     expected_version: i64,
-    value: &str,
     status: party_relationships::PartyRelationshipStatus,
-    preferred: bool,
+    valid_from_unix_nanos: Option<i64>,
+    valid_until_unix_nanos: Option<i64>,
     seed: u8,
 ) {
     executor
@@ -171,18 +146,16 @@ pub(crate) async fn update_party_relationship_status(
                 UPDATE_PARTY_RELATIONSHIP_SCHEMA,
                 tenant,
                 &format!("update-party-relationship-{party_relationship_id}"),
-                800_000_000 + i64::from(seed),
+                700_000_000 + i64::from(seed),
                 seed,
                 &party_relationships::UpdatePartyRelationshipRequest {
                     party_relationship_ref: Some(customer::PartyRelationshipRef {
                         party_relationship_id: party_relationship_id.to_owned(),
                     }),
                     expected_version,
-                    value: value.to_owned(),
                     status: status as i32,
-                    preferred,
-                    valid_from: None,
-                    valid_until: None,
+                    valid_from: valid_from_unix_nanos.map(|unix_nanos| core::UnixTime { unix_nanos }),
+                    valid_until: valid_until_unix_nanos.map(|unix_nanos| core::UnixTime { unix_nanos }),
                 },
             ),
         )
@@ -378,10 +351,7 @@ pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, targ
         .expect("commit authoritative canonical redirect fixture");
 }
 
-pub(crate) async fn corrupt_party_relationship_metadata(
-    admin: &PgPool,
-    party_relationship_id: &str,
-) {
+pub(crate) async fn corrupt_party_relationship_metadata(admin: &PgPool, party_relationship_id: &str) {
     let mut transaction = admin
         .begin()
         .await
