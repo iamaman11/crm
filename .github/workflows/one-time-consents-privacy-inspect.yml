@@ -105,6 +105,11 @@ jobs:
                   "scope_request(TENANT_A, \"party-redirected\", 2, 2, \"\", \"redirected-party\")",
                   "redirected Party current generation",
               ),
+              (
+                  "scope_request(TENANT_A, \"party-scope\", 1, 128, \"\", \"malformed\")",
+                  "scope_request(TENANT_A, \"party-scope\", 2, 128, \"\", \"malformed\")",
+                  "corrupt Consent current generation",
+              ),
           ]
           for old, new, label in scenario_replacements:
               if scenario.count(old) != 1:
