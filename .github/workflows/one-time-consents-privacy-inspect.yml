@@ -40,6 +40,10 @@ jobs:
             > inspection/consents-relationship-usage.txt || true
           grep -R -n -B 30 -A 120 'list_related_records_for_query\|RelatedRecordListQuery' crates/crm-core-data \
             > inspection/related-record-query.txt || true
+          grep -R -n -B 20 -A 80 'ALTER TABLE crm.relationships\|owner_module_id.*relationships\|relationship_owner' database/migrations \
+            > inspection/relationship-schema-evolution.txt || true
+          grep -R -n -B 40 -A 140 'CANONICAL_REDIRECT_RELATIONSHIP_TYPE' crates services \
+            > inspection/identity-redirect-usage.txt || true
       - name: Upload inspection evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
