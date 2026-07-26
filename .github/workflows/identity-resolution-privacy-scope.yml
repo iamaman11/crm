@@ -26,7 +26,6 @@ on:
       - "database/tests/0004_search_runtime_role_grants.sql"
       - "database/tests/0005_party_adapter.sql"
       - "database/tests/0010_identity_resolution_adapter.sql"
-      - "database/tests/0024_parties_privacy_scope_fixture.sql"
       - ".github/workflows/identity-resolution-privacy-scope.yml"
   pull_request:
     paths:
@@ -51,7 +50,6 @@ on:
       - "database/tests/0004_search_runtime_role_grants.sql"
       - "database/tests/0005_party_adapter.sql"
       - "database/tests/0010_identity_resolution_adapter.sql"
-      - "database/tests/0024_parties_privacy_scope_fixture.sql"
       - ".github/workflows/identity-resolution-privacy-scope.yml"
 
 concurrency:
@@ -132,7 +130,6 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0010_identity_resolution_adapter.sql
-          psql --set ON_ERROR_STOP=1 --file database/tests/0024_parties_privacy_scope_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify clean Identity Resolution privacy scope adapter
         shell: bash
@@ -160,7 +157,6 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0010_identity_resolution_adapter.sql
-          psql --set ON_ERROR_STOP=1 --file database/tests/0024_parties_privacy_scope_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify reapplied Identity Resolution privacy scope adapter
         shell: bash
