@@ -83,8 +83,6 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
         24,
     )
     .await;
-    insert_canonical_redirect(&admin, "party-redirected", "party-survivor").await;
-
     let adapter = ConsentsPrivacyScopeQueryAdapter::new(store);
     let definition = consents_privacy_scope_definition().unwrap();
 
@@ -213,11 +211,12 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
     assert_eq!(cross_tenant.code, "CONSENTS_PRIVACY_SCOPE_LINEAGE_INVALID");
     assert_eq!(write_surface_counts(&admin).await, cross_tenant_before);
 
+    insert_canonical_redirect(&admin, "party-redirected", "party-survivor").await;
     let redirected_before = write_surface_counts(&admin).await;
     let redirected = adapter
         .execute(
             &definition,
-            scope_request(TENANT_A, "party-redirected", 1, 2, "", "redirected-party"),
+            scope_request(TENANT_A, "party-redirected", 2, 2, "", "redirected-party"),
         )
         .await
         .expect_err("noncanonical Party scope must fail closed");
@@ -247,7 +246,7 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
     let malformed = adapter
         .execute(
             &definition,
-            scope_request(TENANT_A, "party-scope", 1, 128, "", "malformed"),
+            scope_request(TENANT_A, "party-scope", 2, 128, "", "malformed"),
         )
         .await
         .expect_err("malformed Consent state must fail closed");

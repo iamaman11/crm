@@ -40,6 +40,10 @@ pub(crate) const TENANT_B: &str = "tenant-b";
 const ACTOR: &str = "privacy-worker";
 
 pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, target: &str) {
+    let mut transaction = admin
+        .begin()
+        .await
+        .expect("begin canonical redirect fixture transaction");
     let transaction_id: String = sqlx::query_scalar(
         r#"
         SELECT last_business_transaction_id
@@ -52,9 +56,29 @@ pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, targ
     .bind(TENANT_A)
     .bind(CANONICAL_REDIRECT_PARTY_RECORD_TYPE)
     .bind(source)
-    .fetch_one(admin)
+    .fetch_one(&mut *transaction)
     .await
     .expect("read redirect source transaction");
+    sqlx::query(
+        r#"
+        SELECT
+          set_config('app.tenant_id', $1, true),
+          set_config('app.actor_id', $2, true),
+          set_config('app.request_id', $3, true),
+          set_config('app.capability_id', $4, true),
+          set_config('app.capability_version', $5, true),
+          set_config('app.business_transaction_id', $6, true)
+        "#,
+    )
+    .bind(TENANT_A)
+    .bind("actor-a")
+    .bind("request-canonical-redirect")
+    .bind("identity-resolution.candidate.merge")
+    .bind("1.0.0")
+    .bind(&transaction_id)
+    .execute(&mut *transaction)
+    .await
+    .expect("bind complete canonical redirect fixture context");
     sqlx::query(
         r#"
         INSERT INTO crm.relationships (
@@ -87,7 +111,7 @@ pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, targ
           1024,
           'crm.identity-resolution.merge-operation',
           '{}'::text::bytea,
-          NULL,
+          '{}'::jsonb,
           $7
         )
         "#,
@@ -99,9 +123,13 @@ pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, targ
     .bind(source)
     .bind(target)
     .bind(transaction_id)
-    .execute(admin)
+    .execute(&mut *transaction)
     .await
     .expect("insert authoritative canonical redirect fixture");
+    transaction
+        .commit()
+        .await
+        .expect("commit authoritative canonical redirect fixture");
 }
 
 pub(crate) async fn corrupt_consent_metadata(admin: &PgPool, authorization_id: &str) {
@@ -212,7 +240,7 @@ pub(crate) async fn create_consent(
                     source: "privacy.acceptance".to_owned(),
                     evidence_ref: format!("evidence://consent/{authorization_id}"),
                     effective_from: Some(core::UnixTime {
-                        unix_nanos: 100_000_000,
+                        unix_nanos: 700_000_000 + i64::from(seed),
                     }),
                     expires_at: None,
                 },
