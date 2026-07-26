@@ -68,10 +68,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sed -i 's/, core::v1 as core//' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs
-          sed -i 's/scope-member@example.net/chat:scope-member@example.net/g' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope.rs
-          sed -i '/^pub(crate) async fn create_contact_point(/i #[allow(clippy::too_many_arguments)]' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs
-          sed -i '/^pub(crate) async fn update_contact_point_status(/i #[allow(clippy::too_many_arguments)]' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs
+          python - <<'PY'
+          from pathlib import Path
+
+          support = Path("crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs")
+          text = support.read_text()
+          text = text.replace(", core::v1 as core", "")
+          for signature in (
+              "pub(crate) async fn create_contact_point(",
+              "pub(crate) async fn update_contact_point_status(",
+          ):
+              marker = "#[allow(clippy::too_many_arguments)]\n" + signature
+              if marker not in text:
+                  text = text.replace(signature, marker, 1)
+          text = text.replace("account_id", "contact_point_id")
+          text = text.replace("request-corrupt-account", "request-corrupt-contact-point")
+          text = text.replace(
+              'format!("account-{contact_point_id}-tx")',
+              'format!("contact-point-{contact_point_id}-tx")',
+          )
+          text = text.replace(
+              "crm.customer-accounts.account.state.invalid",
+              "crm.contact-points.contact-point.state.invalid",
+          )
+          support.write_text(text)
+
+          acceptance = Path("crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope.rs")
+          text = acceptance.read_text().replace(
+              '"scope-member@example.net"',
+              '"chat:scope-member@example.net"',
+          )
+          acceptance.write_text(text)
+          PY
           cargo fmt --all
           cargo generate-lockfile
       - name: Publish staging implementation
