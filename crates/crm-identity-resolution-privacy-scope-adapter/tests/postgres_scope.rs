@@ -212,7 +212,8 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
         candidate_id("party-alias-two", "party-candidate-other-one"),
         candidate_id("party-alias-three", "party-candidate-other-two"),
     ];
-    let unrelated_candidate_id = candidate_id("party-unrelated-source", "party-unrelated-survivor");
+    let unrelated_candidate_id =
+        candidate_id("party-unrelated-source", "party-unrelated-survivor");
     let adapter = IdentityResolutionPrivacyScopeQueryAdapter::new(store);
     let definition = identity_resolution_privacy_scope_definition().unwrap();
 
@@ -241,9 +242,10 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
             .iter()
             .all(|resource| resource.resource_type == "identity_resolution.candidate_case")
     );
-    let first_evidence = first.page_evidence.expect("first page evidence");
+    let first_evidence = first.page_evidence.as_ref().expect("first page evidence");
     assert!(!first_evidence.terminal_complete);
     assert!(!first_evidence.next_cursor.is_empty());
+    let first_cursor = first_evidence.next_cursor.clone();
 
     let second = execute_page(
         &adapter,
@@ -253,15 +255,16 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
             "party-canonical",
             generation,
             2,
-            &first_evidence.next_cursor,
+            &first_cursor,
             "paged-identity-scope",
         ),
         &admin,
     )
     .await;
     assert_eq!(second.resources.len(), 2);
-    let second_evidence = second.page_evidence.expect("second page evidence");
+    let second_evidence = second.page_evidence.as_ref().expect("second page evidence");
     assert!(!second_evidence.terminal_complete);
+    let second_cursor = second_evidence.next_cursor.clone();
 
     let third = execute_page(
         &adapter,
@@ -271,15 +274,16 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
             "party-canonical",
             generation,
             2,
-            &second_evidence.next_cursor,
+            &second_cursor,
             "paged-identity-scope",
         ),
         &admin,
     )
     .await;
     assert_eq!(third.resources.len(), 2);
-    let third_evidence = third.page_evidence.expect("third page evidence");
+    let third_evidence = third.page_evidence.as_ref().expect("third page evidence");
     assert!(!third_evidence.terminal_complete);
+    let third_cursor = third_evidence.next_cursor.clone();
 
     let fourth = execute_page(
         &adapter,
@@ -289,14 +293,17 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
             "party-canonical",
             generation,
             2,
-            &third_evidence.next_cursor,
+            &third_cursor,
             "paged-identity-scope",
         ),
         &admin,
     )
     .await;
     assert_eq!(fourth.resources.len(), 1);
-    let fourth_evidence = fourth.page_evidence.expect("terminal page evidence");
+    let fourth_evidence = fourth
+        .page_evidence
+        .as_ref()
+        .expect("terminal page evidence");
     assert!(fourth_evidence.terminal_complete);
     assert!(fourth_evidence.next_cursor.is_empty());
 
@@ -312,8 +319,10 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
     assert_eq!(collected.len(), 7);
     for candidate_id in &relevant_candidate_ids {
         assert_eq!(
-            collected.get(candidate_id),
-            Some(&("identity_resolution.candidate_case".to_owned(), 1))
+            collected
+                .get(candidate_id)
+                .map(|value| (value.0.as_str(), value.1)),
+            Some(("identity_resolution.candidate_case", 1))
         );
     }
     assert!(!collected.contains_key(&unrelated_candidate_id));
@@ -341,7 +350,14 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
     let empty = adapter
         .execute(
             &definition,
-            scope_request(TENANT_B, "party-canonical", 1, 0, "", "cross-tenant-empty"),
+            scope_request(
+                TENANT_B,
+                "party-canonical",
+                1,
+                0,
+                "",
+                "cross-tenant-empty",
+            ),
         )
         .await
         .expect("cross-tenant owner scope must be empty and concealed");
@@ -381,7 +397,7 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
                 "party-canonical",
                 generation,
                 3,
-                &first_evidence.next_cursor,
+                &first_cursor,
                 "paged-identity-scope",
             ),
         )
