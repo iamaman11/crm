@@ -188,7 +188,7 @@ impl CanonicalResolutionCache {
                 ))
             })?;
         let relevant = match prove_canonical_party_in_transaction(
-            &mut **transaction,
+            transaction,
             tenant_id,
             &requested,
             &canonical,
