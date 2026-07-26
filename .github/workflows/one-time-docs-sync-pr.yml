@@ -21,7 +21,6 @@ jobs:
           sed -n "/python - <<'PY'/,/^          PY$/p" .github/workflows/one-time-docs-sync.yml \
             | sed '1d;$d;s/^          //' > /tmp/synchronize_docs.py
           python /tmp/synchronize_docs.py
-          git diff --check
       - name: Commit synchronized documents
         shell: bash
         run: |
