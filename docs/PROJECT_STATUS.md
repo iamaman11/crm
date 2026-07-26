@@ -23,10 +23,11 @@ Authoritative references:
 15. `CRM_CAPABILITY_COVERAGE.md` — functional completeness guardrail.
 16. `MODULE_CATALOG.md` — merged business-module readiness accounting.
 17. `PRIVACY_OWNER_SCOPE_SHARED_SUPPORT_COMPARISON.md` — accepted shared-support boundary, compatibility baseline and current five-consumer proof.
+18. `IDENTITY_RESOLUTION_PRIVACY_SCOPE_PACKET.md` — frozen entry packet for the next bounded authoritative owner contribution.
 
 ## Current position
 
-**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; six Customer Privacy runtime coordinates and nine contract-only owner contribution coordinates are published. Parties, Consents, Customer Accounts, Contact Points and Party Relationships now have accepted authoritative contract-only owner implementations, while shared support remains behavior-neutral and mechanically restricted to those five consumers. PR #181 accepted unchanged source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c` with 24/24 applicable permanent workflows and merged as `96cd0cf548310592a0718c97242a724a29717a72`. The next bounded owner is Identity Resolution through `identity_resolution.privacy.scope.contribute@1.0.0`; it must remain contract-only/non-runtime.**
+**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is Complete. Phase 8A.11 is In progress; six Customer Privacy runtime coordinates and nine contract-only owner contribution coordinates are published. Parties, Consents, Customer Accounts, Contact Points and Party Relationships now have accepted authoritative contract-only owner implementations, while shared support remains behavior-neutral and mechanically restricted to those five consumers. PR #183 accepted unchanged source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57` with 25/25 applicable permanent workflows and merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`. The next bounded owner is Identity Resolution through `identity_resolution.privacy.scope.contribute@1.0.0`; it must remain contract-only/non-runtime.**
 
 Current Phase 8A baseline:
 
@@ -35,7 +36,7 @@ Current Phase 8A baseline:
 - **8A.8 — Complete:** governed customer export, artifacts and reconciliation (#123 / PR #130).
 - **8A.9 — Complete:** Customer Data Quality Rules, Completeness and Stewardship (#124 / PR #132).
 - **8A.10 — Complete:** Governed Customer Enrichment and Provenance (#125 / PR #137).
-- **8A.11 — In progress:** architecture, owner foundation, deterministic domain, canonical persistence, immutable public contracts, FORCE RLS persistence, four public mutations, two permission-aware queries, immutable owner-scope envelopes and nine owner-specific contract-only contribution coordinates are merged; authoritative Parties, Consents, Customer Accounts, Contact Points and Party Relationships owner implementations are accepted through PR #181, and Party Relationships is selected as the next bounded owner implementation.
+- **8A.11 — In progress:** architecture, owner foundation, deterministic domain, canonical persistence, immutable public contracts, FORCE RLS persistence, four public mutations, two permission-aware queries, immutable owner-scope envelopes and nine owner-specific contract-only contribution coordinates are merged; authoritative Parties, Consents, Customer Accounts, Contact Points and Party Relationships owner implementations are accepted through PR #183, and Identity Resolution is selected as the next bounded owner implementation.
 
 The active dependency lane is:
 
@@ -104,7 +105,7 @@ PR #179 was accepted on unchanged user-authored source SHA `7d3e44e6dede36f76dfe
 
 PR #181 was accepted on unchanged user-authored source SHA `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c`, passed all 24 applicable permanent workflows and was squash-merged as `96cd0cf548310592a0718c97242a724a29717a72`. It implements Contact Points through strict persistence-envelope and full-domain rehydration, exact direct Party binding, bounded owner-specific keyset pagination and cursor/digest domains, deterministic reference-only evidence, endpoint-value byte exclusion, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and leaves shared support behavior unchanged.
 
-Identity Resolution is selected as the next bounded contract-only owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`. Its packet must preserve authoritative two-endpoint temporal relationship semantics, strict rehydration, reference-only evidence, owner-specific matching/pagination/retention/errors and the accepted shared-support boundary without runtime promotion or Customer Privacy orchestration.
+Identity Resolution is selected as the next bounded contract-only owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`. Its packet freezes authoritative duplicate-candidate and merge-operation families, bounded alias-aware lineage resolution, heterogeneous pagination, strict rehydration, reference-only evidence and owner-specific retention/errors without runtime promotion or Customer Privacy orchestration.
 
 
 PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, passed all 25 applicable permanent workflows and was squash-merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`. Party Relationships proves the fifth authoritative owner shape through strict two-endpoint matching, directional/reciprocal and temporal domain rehydration, bounded owner-specific pagination/cursors, reference-only evidence, response-byte non-disclosure, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and changes no shared-support behavior.
