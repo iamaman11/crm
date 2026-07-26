@@ -60,13 +60,14 @@ pub(crate) fn validate_wire_request(
     context: &QueryExecutionContext,
     bytes: &[u8],
 ) -> Result<ValidatedRequest, SdkError> {
-    let request = privacy::ConsentsPrivacyScopeContributionRequest::decode(bytes).map_err(|error| {
-        invalid_contract_with_reference(
-            "CONSENTS_PRIVACY_SCOPE_REQUEST_INVALID",
-            "The Consents privacy scope request is invalid.",
-            error.to_string(),
-        )
-    })?;
+    let request =
+        privacy::ConsentsPrivacyScopeContributionRequest::decode(bytes).map_err(|error| {
+            invalid_contract_with_reference(
+                "CONSENTS_PRIVACY_SCOPE_REQUEST_INVALID",
+                "The Consents privacy scope request is invalid.",
+                error.to_string(),
+            )
+        })?;
     let contribution = request.contribution.ok_or_else(|| {
         invalid_contract(
             "CONSENTS_PRIVACY_SCOPE_REQUEST_INVALID",
@@ -171,7 +172,12 @@ pub(crate) fn validate_wire_request(
     let (page_number, after_record_id) = if contribution.cursor.is_empty() {
         (1, None)
     } else {
-        decode_cursor(&lineage, &canonical_party_id, page_size, &contribution.cursor)?
+        decode_cursor(
+            &lineage,
+            &canonical_party_id,
+            page_size,
+            &contribution.cursor,
+        )?
     };
     let identity_resolution_generation = lineage.identity_resolution_generation;
 
@@ -255,7 +261,10 @@ fn cursor_digest(
             lineage.tenant_id.as_bytes(),
             lineage.privacy_case_id.as_bytes(),
             canonical_party_id.as_str().as_bytes(),
-            lineage.identity_resolution_generation.to_string().as_bytes(),
+            lineage
+                .identity_resolution_generation
+                .to_string()
+                .as_bytes(),
             lineage.registry_digest_sha256.as_slice(),
             lineage.purpose_code.as_bytes(),
             lineage.effective_request_at_unix_ms.to_string().as_bytes(),

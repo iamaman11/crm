@@ -1,5 +1,7 @@
 use crate::contract::validate_definition;
-use crate::errors::{database_unavailable, lineage_invalid, row_decode_error, stored_state_invalid};
+use crate::errors::{
+    database_unavailable, lineage_invalid, row_decode_error, stored_state_invalid,
+};
 use crate::request::{ValidatedRequest, validate_request_contract, validate_wire_request};
 use crate::response::{VerifiedConsentResource, build_response, typed_output};
 use crm_capability_runtime::CapabilityDefinition;

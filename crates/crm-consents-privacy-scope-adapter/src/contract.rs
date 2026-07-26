@@ -9,8 +9,7 @@ use crm_proto_contracts::message_descriptor_hash;
 
 pub const CAPABILITY_ID: &str = "consents.privacy.scope.contribute";
 pub const CAPABILITY_VERSION: &str = "1.0.0";
-pub const INPUT_SCHEMA_ID: &str =
-    "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionRequest";
+pub const INPUT_SCHEMA_ID: &str = "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionRequest";
 pub const OUTPUT_SCHEMA_ID: &str =
     "crm.customer_privacy.v1.ConsentsPrivacyScopeContributionResponse";
 pub const CONTRACT_SCHEMA_VERSION: &str = "1.0.0";

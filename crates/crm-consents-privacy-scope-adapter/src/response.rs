@@ -8,7 +8,9 @@ use crate::errors::{configured, stored_state_invalid};
 use crate::request::{ValidatedRequest, encode_cursor};
 use crm_consents::{CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID, MODULE_ID};
 use crm_consents_capability_adapter::RECORD_TYPE;
-use crm_module_sdk::{DataClass, PayloadEncoding, RecordId, RetentionPolicyId, SdkError, TypedPayload};
+use crm_module_sdk::{
+    DataClass, PayloadEncoding, RecordId, RetentionPolicyId, SdkError, TypedPayload,
+};
 use crm_proto_contracts::crm::customer_privacy::v1 as privacy;
 use sha2::{Digest, Sha256};
 
@@ -26,13 +28,16 @@ pub(crate) fn build_response(
 ) -> Result<privacy::ConsentsPrivacyScopeContributionResponse, SdkError> {
     let next_cursor = if has_more {
         let last = resources.last().ok_or_else(|| {
-            stored_state_invalid("a non-terminal Consent scope page must emit at least one resource")
+            stored_state_invalid(
+                "a non-terminal Consent scope page must emit at least one resource",
+            )
         })?;
         encode_cursor(
             request,
-            request.page_number.checked_add(1).ok_or_else(|| {
-                stored_state_invalid("Consent scope page number overflowed")
-            })?,
+            request
+                .page_number
+                .checked_add(1)
+                .ok_or_else(|| stored_state_invalid("Consent scope page number overflowed"))?,
             &last.record_id,
         )?
     } else {
@@ -69,8 +74,8 @@ pub(crate) fn build_response(
                     resource_id: resource.record_id.as_str().to_owned(),
                     resource_version: resource.resource_version,
                     data_class: privacy::CustomerDataClass::Personal as i32,
-                    evidence_class:
-                        privacy::PrivacyScopeEvidenceClass::ImmutableRequiredEvidence as i32,
+                    evidence_class: privacy::PrivacyScopeEvidenceClass::ImmutableRequiredEvidence
+                        as i32,
                     retention_policy_id: CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID.to_owned(),
                 })
                 .collect(),
@@ -120,7 +125,10 @@ fn page_digest(
     for resource in resources {
         append_frame(&mut hasher, RECORD_TYPE.as_bytes());
         append_frame(&mut hasher, resource.record_id.as_str().as_bytes());
-        append_frame(&mut hasher, resource.resource_version.to_string().as_bytes());
+        append_frame(
+            &mut hasher,
+            resource.resource_version.to_string().as_bytes(),
+        );
         append_frame(&mut hasher, b"personal");
         append_frame(&mut hasher, b"immutable_required_evidence");
         append_frame(

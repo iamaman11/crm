@@ -1,8 +1,9 @@
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor};
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
+};
 use crm_consents_capability_adapter::{
-    CREATE_CAPABILITY as CREATE_CONSENT_CAPABILITY,
-    CREATE_REQUEST_SCHEMA as CREATE_CONSENT_SCHEMA,
+    CREATE_CAPABILITY as CREATE_CONSENT_CAPABILITY, CREATE_REQUEST_SCHEMA as CREATE_CONSENT_SCHEMA,
 };
 use crm_consents_privacy_scope_adapter::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,

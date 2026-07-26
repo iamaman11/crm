@@ -5,7 +5,10 @@ use crate::contract::{
 use crate::request::{ValidatedRequest, encode_cursor, validate_wire_request};
 use crate::response::{VerifiedConsentResource, build_response};
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
-use crm_module_sdk::{ActorId, CapabilityId, CapabilityVersion, CorrelationId, RecordId, RequestId, SchemaVersion, TenantId, TraceId};
+use crm_module_sdk::{
+    ActorId, CapabilityId, CapabilityVersion, CorrelationId, RecordId, RequestId, SchemaVersion,
+    TenantId, TraceId,
+};
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_privacy::v1 as privacy};
 use crm_query_runtime::QueryExecutionContext;
 use prost::Message;
@@ -47,8 +50,11 @@ fn request(page_size: u32, cursor: String) -> privacy::ConsentsPrivacyScopeContr
 }
 
 fn validated() -> ValidatedRequest {
-    validate_wire_request(&context(), &request(DEFAULT_PAGE_SIZE, String::new()).encode_to_vec())
-        .unwrap()
+    validate_wire_request(
+        &context(),
+        &request(DEFAULT_PAGE_SIZE, String::new()).encode_to_vec(),
+    )
+    .unwrap()
 }
 
 #[test]

@@ -496,6 +496,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-consents-privacy-scope-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-plan-support",
+ "crm-capability-runtime",
+ "crm-consents",
+ "crm-consents-capability-adapter",
+ "crm-core-data",
+ "crm-customer-privacy",
+ "crm-identity-resolution-capability-adapter",
+ "crm-module-sdk",
+ "crm-parties",
+ "crm-parties-capability-adapter",
+ "crm-proto-contracts",
+ "crm-query-runtime",
+ "prost",
+ "sha2 0.10.9",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "crm-consents-query-adapter"
 version = "0.1.0"
 dependencies = [

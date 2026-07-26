@@ -55,14 +55,7 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
         ("party-redirected", 13),
         ("party-survivor", 14),
     ] {
-        create_party(
-            &party_executor,
-            &party_definition,
-            TENANT_A,
-            party_id,
-            seed,
-        )
-        .await;
+        create_party(&party_executor, &party_definition, TENANT_A, party_id, seed).await;
     }
 
     for (authorization_id, seed) in [
@@ -106,7 +99,9 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
     let first_wire =
         privacy::ConsentsPrivacyScopeContributionResponse::decode(first.output.bytes.as_slice())
             .expect("decode first Consents scope response");
-    let first_contribution = first_wire.contribution.expect("first contribution envelope");
+    let first_contribution = first_wire
+        .contribution
+        .expect("first contribution envelope");
     assert_eq!(first_contribution.owner_module_id, crm_consents::MODULE_ID);
     assert_eq!(first_contribution.capability_id, CAPABILITY_ID);
     assert_eq!(
@@ -130,12 +125,20 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
     assert_eq!(first_evidence.emitted_resource_count, 2);
     assert!(!first_evidence.terminal_complete);
     assert!(!first_evidence.next_cursor.is_empty());
-    assert!(!first.output.bytes.windows(b"privacy.marketing".len()).any(|value| {
-        value == b"privacy.marketing"
-    }));
-    assert!(!first.output.bytes.windows(b"evidence://consent".len()).any(|value| {
-        value == b"evidence://consent"
-    }));
+    assert!(
+        !first
+            .output
+            .bytes
+            .windows(b"privacy.marketing".len())
+            .any(|value| { value == b"privacy.marketing" })
+    );
+    assert!(
+        !first
+            .output
+            .bytes
+            .windows(b"evidence://consent".len())
+            .any(|value| { value == b"evidence://consent" })
+    );
 
     let before_second = write_surface_counts(&admin).await;
     let second = adapter
@@ -156,7 +159,9 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
     let second_wire =
         privacy::ConsentsPrivacyScopeContributionResponse::decode(second.output.bytes.as_slice())
             .expect("decode second Consents scope response");
-    let second_contribution = second_wire.contribution.expect("second contribution envelope");
+    let second_contribution = second_wire
+        .contribution
+        .expect("second contribution envelope");
     assert_eq!(second_contribution.resources.len(), 1);
     assert_eq!(second_contribution.resources[0].resource_id, "consent-003");
     let second_evidence = second_contribution
@@ -178,7 +183,9 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
     let empty_wire =
         privacy::ConsentsPrivacyScopeContributionResponse::decode(empty.output.bytes.as_slice())
             .expect("decode empty Consents scope response");
-    let empty_contribution = empty_wire.contribution.expect("empty contribution envelope");
+    let empty_contribution = empty_wire
+        .contribution
+        .expect("empty contribution envelope");
     assert!(empty_contribution.resources.is_empty());
     assert!(empty_contribution.page_evidence.unwrap().terminal_complete);
 
@@ -209,14 +216,7 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
     let redirected = adapter
         .execute(
             &definition,
-            scope_request(
-                TENANT_A,
-                "party-redirected",
-                1,
-                2,
-                "",
-                "redirected-party",
-            ),
+            scope_request(TENANT_A, "party-redirected", 1, 2, "", "redirected-party"),
         )
         .await
         .expect_err("noncanonical Party scope must fail closed");
@@ -250,6 +250,9 @@ async fn consents_scope_is_paginated_tenant_bound_strict_and_side_effect_free() 
         )
         .await
         .expect_err("malformed Consent state must fail closed");
-    assert_eq!(malformed.code, "CONSENTS_PRIVACY_SCOPE_STORED_STATE_INVALID");
+    assert_eq!(
+        malformed.code,
+        "CONSENTS_PRIVACY_SCOPE_STORED_STATE_INVALID"
+    );
     assert_eq!(write_surface_counts(&admin).await, malformed_before);
 }
