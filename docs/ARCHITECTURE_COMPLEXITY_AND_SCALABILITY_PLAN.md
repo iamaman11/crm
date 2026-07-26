@@ -1,7 +1,8 @@
 # Ultimate CRM — Architecture Complexity and Scalability Plan
 
-Status: **Proposed normative architecture evolution plan**  
+Status: **Normative architecture evolution plan**  
 Audit baseline: **2026-07-25**  
+Execution status: **Scalability runway accepted through PR #173; two privacy owners accepted through PR #175; shared-support extraction active in draft PR #176.**  
 Applies to: repository structure, Rust workspace packaging, production composition, dependency governance, test selection, delivery tooling and agent-oriented development ergonomics.  
 Governing documents: `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `ARCHITECTURE_READINESS.md`, `DELIVERY_GOVERNANCE.md`, `IMPLEMENTATION_ROADMAP.md`, `MODULE_DEVELOPMENT.md`.
 
