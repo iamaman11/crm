@@ -9,6 +9,7 @@ on:
       - "Cargo.lock"
       - "database/migrations/**"
       - "database/tests/**"
+      - "docs/POSTGRESQL_PROCESS_ISOLATION_PILOT.md"
       - "proto/crm/gateway/**"
       - "proto/crm/parties/**"
       - "proto/crm/accounts/**"
@@ -30,6 +31,7 @@ on:
       - "modules/crm-parties/**"
       - "services/crm-api/**"
       - "scripts/prepare_isolated_process_database.sh"
+      - "tests/test_postgres_process_isolation.py"
       - ".github/workflows/postgres-process-isolation.yml"
   pull_request:
     paths:
@@ -37,6 +39,7 @@ on:
       - "Cargo.lock"
       - "database/migrations/**"
       - "database/tests/**"
+      - "docs/POSTGRESQL_PROCESS_ISOLATION_PILOT.md"
       - "proto/crm/gateway/**"
       - "proto/crm/parties/**"
       - "proto/crm/accounts/**"
@@ -58,6 +61,7 @@ on:
       - "modules/crm-parties/**"
       - "services/crm-api/**"
       - "scripts/prepare_isolated_process_database.sh"
+      - "tests/test_postgres_process_isolation.py"
       - ".github/workflows/postgres-process-isolation.yml"
 
 concurrency:
