@@ -1,19 +1,4 @@
 use crate::errors::invalid_contract;
-use sha2::{Digest, Sha256};
-
-pub(crate) fn framed_digest(domain: &[u8], fields: &[&[u8]]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    append_frame(&mut hasher, domain);
-    for field in fields {
-        append_frame(&mut hasher, field);
-    }
-    hasher.finalize().into()
-}
-
-pub(crate) fn append_frame(hasher: &mut Sha256, value: &[u8]) {
-    hasher.update((value.len() as u64).to_be_bytes());
-    hasher.update(value);
-}
 
 pub(crate) fn encode_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
