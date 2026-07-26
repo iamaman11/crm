@@ -5,11 +5,11 @@ use crate::contract::{
 };
 use crate::errors::configured;
 use crate::request::ValidatedRequest;
+use crm_customer_privacy_owner_scope_support::framed_digest;
 use crm_module_sdk::{DataClass, PayloadEncoding, RetentionPolicyId, SdkError, TypedPayload};
 use crm_parties::{MODULE_ID, PARTY_STATE_RETENTION_POLICY_ID};
 use crm_parties_capability_adapter::RECORD_TYPE as PARTY_RECORD_TYPE;
 use crm_proto_contracts::crm::customer_privacy::v1 as privacy;
-use sha2::{Digest, Sha256};
 
 pub(crate) fn build_response(
     request: &ValidatedRequest,
@@ -83,18 +83,4 @@ pub(crate) fn typed_output(bytes: Vec<u8>) -> Result<TypedPayload, SdkError> {
     };
     output.validate()?;
     Ok(output)
-}
-
-fn framed_digest(domain: &[u8], fields: &[&[u8]]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    append_frame(&mut hasher, domain);
-    for field in fields {
-        append_frame(&mut hasher, field);
-    }
-    hasher.finalize().into()
-}
-
-fn append_frame(hasher: &mut Sha256, value: &[u8]) {
-    hasher.update((value.len() as u64).to_be_bytes());
-    hasher.update(value);
 }

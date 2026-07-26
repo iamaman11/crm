@@ -1,16 +1,16 @@
 use crate::contract::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, DEFAULT_PAGE_SIZE,
-    INPUT_MAXIMUM_BYTES, INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, OUTPUT_MAXIMUM_BYTES,
-    OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID, module_id, output_descriptor_hash,
-    parties_privacy_scope_definition, schema_id, schema_version,
+    INPUT_MAXIMUM_BYTES, INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, MAXIMUM_PAGE_SIZE,
+    OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID, module_id,
+    output_descriptor_hash, parties_privacy_scope_definition, schema_id, schema_version,
 };
 use crate::errors::configured;
 use crate::request::{validate_request_contract, validate_wire_request};
 use crate::response::build_response;
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, PayloadEncoding, RequestId,
-    RetentionPolicyId, TraceId, TypedPayload,
+    ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ErrorCategory, ModuleId,
+    PayloadEncoding, RequestId, RetentionPolicyId, SdkError, TraceId, TypedPayload,
 };
 use crm_proto_contracts::{
     crm::{customer::v1 as customer, customer_privacy::v1 as privacy},
@@ -78,6 +78,12 @@ fn query_request(message: &privacy::PartiesPrivacyScopeContributionRequest) -> Q
     }
 }
 
+fn assert_invalid_argument(error: SdkError, code: &str) {
+    assert_eq!(error.code, code);
+    assert_eq!(error.category, ErrorCategory::InvalidArgument);
+    assert!(!error.retryable);
+}
+
 #[test]
 fn definition_is_internal_read_only_and_exactly_bound() {
     let definition = parties_privacy_scope_definition().unwrap();
@@ -103,16 +109,23 @@ fn definition_is_internal_read_only_and_exactly_bound() {
 }
 
 #[test]
-fn request_contract_requires_exact_payload_hash() {
+fn request_contract_preserves_parties_specific_integrity_errors() {
     let wire = valid_wire_request();
     let request = query_request(&wire);
     validate_request_contract(&request).unwrap();
 
+    let mut wrong_owner = request.clone();
+    wrong_owner.owner_module_id = ModuleId::try_new("crm.other-owner").unwrap();
+    assert_invalid_argument(
+        validate_request_contract(&wrong_owner).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_REQUEST_BINDING_MISMATCH",
+    );
+
     let mut wrong_hash = request.clone();
     wrong_hash.input_hash = [9; 32];
-    assert_eq!(
-        validate_request_contract(&wrong_hash).unwrap_err().code,
-        "PARTIES_PRIVACY_SCOPE_INPUT_HASH_MISMATCH"
+    assert_invalid_argument(
+        validate_request_contract(&wrong_hash).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_INPUT_HASH_MISMATCH",
     );
 
     let mut wrong_schema = request;
@@ -121,19 +134,19 @@ fn request_contract_requires_exact_payload_hash() {
     wrong_schema.input.maximum_size_bytes = OUTPUT_MAXIMUM_BYTES;
     wrong_schema.input.retention_policy_id =
         configured(RetentionPolicyId::try_new(OUTPUT_RETENTION_POLICY_ID)).unwrap();
-    assert_eq!(
-        validate_request_contract(&wrong_schema).unwrap_err().code,
-        "PARTIES_PRIVACY_SCOPE_INPUT_CONTRACT_MISMATCH"
+    assert_invalid_argument(
+        validate_request_contract(&wrong_schema).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_INPUT_CONTRACT_MISMATCH",
     );
 }
 
 #[test]
-fn wire_validation_defaults_page_size_and_rejects_registry_substitution() {
+fn wire_validation_defaults_page_size_and_preserves_parties_error_mapping() {
     let request = valid_wire_request();
     let validated = validate_wire_request(&context(), &request.encode_to_vec()).unwrap();
     assert_eq!(validated.page_size, DEFAULT_PAGE_SIZE);
 
-    let mut invalid = request;
+    let mut invalid = request.clone();
     invalid
         .contribution
         .as_mut()
@@ -142,11 +155,44 @@ fn wire_validation_defaults_page_size_and_rejects_registry_substitution() {
         .as_mut()
         .unwrap()
         .registry_digest_sha256 = vec![9; 32];
-    assert_eq!(
-        validate_wire_request(&context(), &invalid.encode_to_vec())
-            .unwrap_err()
-            .code,
-        "PARTIES_PRIVACY_SCOPE_REGISTRY_MISMATCH"
+    assert_invalid_argument(
+        validate_wire_request(&context(), &invalid.encode_to_vec()).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_REGISTRY_MISMATCH",
+    );
+
+    let mut tenant = request.clone();
+    tenant
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .tenant_id = "tenant-b".to_owned();
+    assert_invalid_argument(
+        validate_wire_request(&context(), &tenant.encode_to_vec()).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_TENANT_MISMATCH",
+    );
+
+    let mut generation = request.clone();
+    generation
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .identity_resolution_generation = 0;
+    assert_invalid_argument(
+        validate_wire_request(&context(), &generation.encode_to_vec()).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_GENERATION_INVALID",
+    );
+
+    let mut page_size = request;
+    page_size.contribution.as_mut().unwrap().page_size = MAXIMUM_PAGE_SIZE + 1;
+    assert_invalid_argument(
+        validate_wire_request(&context(), &page_size.encode_to_vec()).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_PAGE_SIZE_INVALID",
     );
 }
 
@@ -177,11 +223,9 @@ fn response_is_reference_only_terminal_and_deterministic() {
 fn non_empty_cursor_future_time_and_invalid_purpose_fail_closed() {
     let mut cursor = valid_wire_request();
     cursor.contribution.as_mut().unwrap().cursor = "unexpected".to_owned();
-    assert_eq!(
-        validate_wire_request(&context(), &cursor.encode_to_vec())
-            .unwrap_err()
-            .code,
-        "PARTIES_PRIVACY_SCOPE_CURSOR_INVALID"
+    assert_invalid_argument(
+        validate_wire_request(&context(), &cursor.encode_to_vec()).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_CURSOR_INVALID",
     );
 
     let mut future = valid_wire_request();
@@ -193,11 +237,9 @@ fn non_empty_cursor_future_time_and_invalid_purpose_fail_closed() {
         .as_mut()
         .unwrap()
         .effective_request_at_unix_ms = 3_000;
-    assert_eq!(
-        validate_wire_request(&context(), &future.encode_to_vec())
-            .unwrap_err()
-            .code,
-        "PARTIES_PRIVACY_SCOPE_REQUEST_TIME_INVALID"
+    assert_invalid_argument(
+        validate_wire_request(&context(), &future.encode_to_vec()).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_REQUEST_TIME_INVALID",
     );
 
     let mut purpose = valid_wire_request();
@@ -209,10 +251,8 @@ fn non_empty_cursor_future_time_and_invalid_purpose_fail_closed() {
         .as_mut()
         .unwrap()
         .purpose_code = "not-normalized".to_owned();
-    assert_eq!(
-        validate_wire_request(&context(), &purpose.encode_to_vec())
-            .unwrap_err()
-            .code,
-        "PARTIES_PRIVACY_SCOPE_PURPOSE_INVALID"
+    assert_invalid_argument(
+        validate_wire_request(&context(), &purpose.encode_to_vec()).unwrap_err(),
+        "PARTIES_PRIVACY_SCOPE_PURPOSE_INVALID",
     );
 }

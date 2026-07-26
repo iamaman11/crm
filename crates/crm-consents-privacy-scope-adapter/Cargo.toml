@@ -10,6 +10,7 @@ crm-consents = { path = "../../modules/crm-consents" }
 crm-consents-capability-adapter = { path = "../crm-consents-capability-adapter" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
+crm-customer-privacy-owner-scope-support = { path = "../crm-customer-privacy-owner-scope-support" }
 crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties = { path = "../../modules/crm-parties" }

@@ -60,6 +60,12 @@
     "TransactionalCapabilityExecutor",
     "execute_batch("
   ],
+  "restricted_dependency_consumers": {
+    "crm-customer-privacy-owner-scope-support": [
+      "crates/crm-consents-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-parties-privacy-scope-adapter/Cargo.toml"
+    ]
+  },
   "restricted_source_markers": {
     ".begin_bound_read_transaction(": [
       "crates/crm-consents-privacy-scope-adapter/src/postgres.rs",

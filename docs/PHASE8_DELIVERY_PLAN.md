@@ -72,14 +72,15 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
 Accepted production coordinates: PRs #146–#150 and #152  
-Owner-scope foundation and first implementation: PRs #154–#156  
+Owner-scope foundation and contrasting accepted implementations: PRs #154–#156 and #175  
 Accepted architecture runway: PRs #157–#173  
+Active behavior-neutral architecture packet: draft PR #176  
 Merged production inventory: 4 mutations + 2 permission-aware queries + 10 public non-runtime coordinates + 0 Customer Privacy workers  
-Next bounded production slice: a contrasting second privacy scope owner, preferably Consents, followed by two-implementation comparison before shared protocol extraction
+Next production promotion: intentionally not selected until shared support and the required remaining owner contributions are proven
 
 #### Accepted architecture runway
 
-The active program has completed the prerequisites for the second privacy owner packet:
+The active program completed the architecture scalability prerequisites through PR #173:
 
 - PR #168 — Customer Accounts golden module-owned production contribution;
 - PR #170 — contrasting Consents module-owned production contribution;
@@ -87,7 +88,9 @@ The active program has completed the prerequisites for the second privacy owner 
 - PR #172 — explainable affected-scope iteration with fail-broad shared/unknown impact;
 - PR #173 — two repeated independent Party/Account PostgreSQL process-isolation samples while retaining the sequential control lane.
 
-These packets improve production composition and delivery scalability. They do not implement a second privacy scope owner and do not authorize shared privacy protocol extraction before that contrasting implementation exists.
+PR #175 then completed the required second privacy-scope implementation on accepted source `b492d5302b421942903be4eb0662522323b05106` and merge `039d6461803208f6cb70ce0fbcfcaffaf59d7125`. Consents is materially contrasting: it traverses authoritative Party-to-Consent relationships, strictly rehydrates multiple Consent records, emits immutable-required-evidence references and uses bounded keyset pagination. All 22 applicable permanent workflows passed on the unchanged accepted source.
+
+Draft PR #176 is now the only active packet in this dependency lane. It is behavior-neutral and extracts only mechanics proven identical in Parties and Consents. Its exact comparison, exclusions, deferred runtime decisions and gate are defined in `PRIVACY_OWNER_SCOPE_SHARED_SUPPORT_COMPARISON.md`. It does not select or promote a Customer Privacy production coordinate.
 
 #### Objective
 

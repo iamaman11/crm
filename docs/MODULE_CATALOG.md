@@ -70,7 +70,7 @@ Frozen production inventory:
 
 ## 7. Customer Privacy boundary
 
-Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof.
+Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PRs #154–#155 published the owner-scope protocol and nine exact contract-only owner coordinates; PRs #156 and #175 accepted the contrasting Parties and Consents owner implementations. Draft PR #176 is extracting only their proven common support without changing module readiness or runtime inventory.
 
 Accepted production vertical slices:
 
@@ -80,6 +80,13 @@ Accepted production vertical slices:
 - PR #149 / `customer_privacy.case.get@1.0.0` — accepted post-sync source `5a47318b24007cd534434ff6bac33fbd59215d38`, merge `5d580a7c253bcfa6c2dd981100612b222fd26825`;
 - PR #150 / `customer_privacy.case.cancel@1.0.0` — accepted post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, merge `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`;
 - PR #152 / `customer_privacy.case.list@1.0.0` — accepted source `9de6048f951c0797a94871457d2bdd73357aee59`, merge `26f5b4644c935001806343b2feaf802a78c90eae`.
+
+Accepted contract-only owner-scope evidence:
+
+- PR #156 — authoritative single-record Parties contribution in one tenant-bound repeatable read-only snapshot;
+- PR #175 — authoritative multi-record Consents contribution through owner relationships and bounded keyset pagination;
+- both remain non-runtime and add no Customer Privacy worker or public ingress;
+- PR #176 is a behavior-neutral shared-support extraction and does not change this module readiness classification.
 
 The merged production boundary proves:
 
@@ -128,7 +135,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Four production mutations and two permission-aware queries are merged independently; the remaining lifecycle stays incomplete and the next bounded packet is not yet selected.
+- 8A.11 / #126 — Customer Privacy. Four production mutations and two permission-aware queries are merged independently; owner-scope contracts plus Parties and Consents implementations are accepted; draft PR #176 is the active behavior-neutral shared-support packet. Remaining owners, discovery/planning, approval, restrictions, legal holds, execution, export/deletion and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 

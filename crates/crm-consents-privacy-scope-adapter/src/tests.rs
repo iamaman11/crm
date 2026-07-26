@@ -1,17 +1,28 @@
 use crate::contract::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, DEFAULT_PAGE_SIZE,
-    consents_privacy_scope_definition,
+    INPUT_MAXIMUM_BYTES, INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, MAXIMUM_PAGE_SIZE,
+    OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID,
+    consents_privacy_scope_definition, module_id, output_descriptor_hash, schema_id,
+    schema_version,
 };
-use crate::request::{ValidatedRequest, encode_cursor, validate_wire_request};
+use crate::errors::configured;
+use crate::request::{
+    ValidatedRequest, encode_cursor, validate_request_contract, validate_wire_request,
+};
 use crate::response::{VerifiedConsentResource, build_response};
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, CorrelationId, RecordId, RequestId, SchemaVersion,
-    TenantId, TraceId,
+    ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ErrorCategory, ModuleId,
+    PayloadEncoding, RecordId, RequestId, RetentionPolicyId, SchemaVersion, SdkError, TenantId,
+    TraceId, TypedPayload,
 };
-use crm_proto_contracts::crm::{customer::v1 as customer, customer_privacy::v1 as privacy};
-use crm_query_runtime::QueryExecutionContext;
+use crm_proto_contracts::{
+    crm::{customer::v1 as customer, customer_privacy::v1 as privacy},
+    message_descriptor_hash,
+};
+use crm_query_runtime::{QueryExecutionContext, QueryRequest};
 use prost::Message;
+use sha2::{Digest, Sha256};
 
 fn context() -> QueryExecutionContext {
     QueryExecutionContext {
@@ -49,12 +60,40 @@ fn request(page_size: u32, cursor: String) -> privacy::ConsentsPrivacyScopeContr
     }
 }
 
+fn query_request(message: &privacy::ConsentsPrivacyScopeContributionRequest) -> QueryRequest {
+    let bytes = message.encode_to_vec();
+    let input_hash: [u8; 32] = Sha256::digest(&bytes).into();
+    QueryRequest {
+        owner_module_id: module_id().unwrap(),
+        context: context(),
+        input: TypedPayload {
+            owner: module_id().unwrap(),
+            schema_id: schema_id(INPUT_SCHEMA_ID).unwrap(),
+            schema_version: schema_version(CONTRACT_SCHEMA_VERSION).unwrap(),
+            descriptor_hash: message_descriptor_hash(INPUT_SCHEMA_ID),
+            data_class: DataClass::Confidential,
+            encoding: PayloadEncoding::Protobuf,
+            maximum_size_bytes: INPUT_MAXIMUM_BYTES,
+            retention_policy_id: configured(RetentionPolicyId::try_new(INPUT_RETENTION_POLICY_ID))
+                .unwrap(),
+            bytes,
+        },
+        input_hash,
+    }
+}
+
 fn validated() -> ValidatedRequest {
     validate_wire_request(
         &context(),
         &request(DEFAULT_PAGE_SIZE, String::new()).encode_to_vec(),
     )
     .unwrap()
+}
+
+fn assert_invalid_argument(error: SdkError, code: &str) {
+    assert_eq!(error.code, code);
+    assert_eq!(error.category, ErrorCategory::InvalidArgument);
+    assert!(!error.retryable);
 }
 
 #[test]
@@ -66,6 +105,162 @@ fn publishes_exact_contract_only_coordinate() {
     assert!(!definition.mutation);
     assert!(!definition.requires_idempotency);
     assert!(!definition.requires_approval);
+}
+
+#[test]
+fn request_contract_preserves_consents_specific_integrity_errors() {
+    let wire = request(DEFAULT_PAGE_SIZE, String::new());
+    let valid = query_request(&wire);
+    validate_request_contract(&valid).unwrap();
+
+    let mut wrong_owner = valid.clone();
+    wrong_owner.owner_module_id = ModuleId::try_new("crm.other-owner").unwrap();
+    assert_invalid_argument(
+        validate_request_contract(&wrong_owner).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_REQUEST_BINDING_MISMATCH",
+    );
+
+    let mut wrong_hash = valid.clone();
+    wrong_hash.input_hash = [9; 32];
+    assert_invalid_argument(
+        validate_request_contract(&wrong_hash).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_INPUT_HASH_MISMATCH",
+    );
+
+    let mut wrong_schema = valid;
+    wrong_schema.input.schema_id = schema_id(OUTPUT_SCHEMA_ID).unwrap();
+    wrong_schema.input.descriptor_hash = output_descriptor_hash();
+    wrong_schema.input.maximum_size_bytes = OUTPUT_MAXIMUM_BYTES;
+    wrong_schema.input.retention_policy_id =
+        configured(RetentionPolicyId::try_new(OUTPUT_RETENTION_POLICY_ID)).unwrap();
+    assert_invalid_argument(
+        validate_request_contract(&wrong_schema).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_INPUT_CONTRACT_MISMATCH",
+    );
+}
+
+#[test]
+fn common_lineage_failures_keep_exact_consents_error_contracts() {
+    let mut tenant = request(DEFAULT_PAGE_SIZE, String::new());
+    tenant
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .tenant_id = "tenant-b".to_owned();
+    assert_invalid_argument(
+        validate_wire_request(&context(), &tenant.encode_to_vec()).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_TENANT_MISMATCH",
+    );
+
+    let mut case = request(DEFAULT_PAGE_SIZE, String::new());
+    case.contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .privacy_case_id
+        .clear();
+    assert_invalid_argument(
+        validate_wire_request(&context(), &case.encode_to_vec()).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_CASE_ID_INVALID",
+    );
+
+    let mut party = request(DEFAULT_PAGE_SIZE, String::new());
+    party
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .canonical_party_ref = None;
+    assert_invalid_argument(
+        validate_wire_request(&context(), &party.encode_to_vec()).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_PARTY_INVALID",
+    );
+
+    let mut generation = request(DEFAULT_PAGE_SIZE, String::new());
+    generation
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .identity_resolution_generation = 0;
+    assert_invalid_argument(
+        validate_wire_request(&context(), &generation.encode_to_vec()).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_GENERATION_INVALID",
+    );
+
+    let mut registry_shape = request(DEFAULT_PAGE_SIZE, String::new());
+    registry_shape
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .registry_digest_sha256 = vec![0; 32];
+    assert_invalid_argument(
+        validate_wire_request(&context(), &registry_shape.encode_to_vec()).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_REGISTRY_INVALID",
+    );
+
+    let mut registry_mismatch = request(DEFAULT_PAGE_SIZE, String::new());
+    registry_mismatch
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .registry_digest_sha256 = vec![9; 32];
+    assert_invalid_argument(
+        validate_wire_request(&context(), &registry_mismatch.encode_to_vec()).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_REGISTRY_MISMATCH",
+    );
+
+    let mut purpose = request(DEFAULT_PAGE_SIZE, String::new());
+    purpose
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .purpose_code = "not-normalized".to_owned();
+    assert_invalid_argument(
+        validate_wire_request(&context(), &purpose.encode_to_vec()).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_PURPOSE_INVALID",
+    );
+
+    let mut future = request(DEFAULT_PAGE_SIZE, String::new());
+    future
+        .contribution
+        .as_mut()
+        .unwrap()
+        .lineage
+        .as_mut()
+        .unwrap()
+        .effective_request_at_unix_ms = 3_000;
+    assert_invalid_argument(
+        validate_wire_request(&context(), &future.encode_to_vec()).unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_REQUEST_TIME_INVALID",
+    );
+
+    assert_invalid_argument(
+        validate_wire_request(
+            &context(),
+            &request(MAXIMUM_PAGE_SIZE + 1, String::new()).encode_to_vec(),
+        )
+        .unwrap_err(),
+        "CONSENTS_PRIVACY_SCOPE_PAGE_SIZE_INVALID",
+    );
 }
 
 #[test]

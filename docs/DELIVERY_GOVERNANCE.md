@@ -47,10 +47,12 @@ Current customer-master lane:
 3. **8A.9 / #124 / PR #132** — Customer Data Quality — **Complete**.
 4. **Architecture integrity / #134 / PR #135** — native composition/lifecycle gating — **Complete**.
 5. **8A.10 / #125 / PR #137** — Governed Customer Enrichment and Provenance — **Complete**.
-6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **In progress**; foundation plus `case.create`, `case.submit`, `case.subject.verify`, `case.get`, `case.cancel` and `case.list` are merged through PR #152.
-7. **Next bounded 8A.11 slice** — not selected until approval, restriction placement, legal-hold precedence, plan/outcome reads and worker dependencies are compared.
-8. **Phase 8A closure** — after merged privacy interaction proof.
-9. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
+6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **In progress**; six runtime coordinates are merged through PR #152, owner-scope contracts through PR #155 and the contrasting Parties/Consents owner implementations through PR #175.
+7. **Active bounded architecture packet / PR #176** — behavior-neutral extraction of only support proven common by Parties and Consents; no runtime coordinate, worker, migration, contract or third owner.
+8. **Remaining owner-scope packets** — one authoritative owner at a time on the accepted shared-support boundary.
+9. **Remaining 8A.11 lifecycle packets** — sufficient owner set, scope discovery/planning, approval, restrictions, legal-hold/retention precedence, plan/outcome reads, resumable execution, export/deletion and convergence.
+10. **Phase 8A closure** — after merged privacy interaction proof.
+11. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
 
 Parallel work is allowed only when ownership boundaries and dependencies are explicit and the work cannot invalidate another packet's exact candidate.
 
@@ -149,7 +151,7 @@ The following claims are distinct:
 
 ## 11. Current control baseline
 
-As of 2026-07-22:
+As of 2026-07-26:
 
 - Phases 0.1–7 are complete and Phase 8A is active.
 - Phase 8A.7 is complete through PR #121 / merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
@@ -158,8 +160,9 @@ As of 2026-07-22:
 - Native module composition/lifecycle integrity is complete through PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`.
 - Phase 8A.10 is complete through PR #137; accepted source `f92d101206886e3ceaf94d0e56e52580cec21093`; merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 - Customer Enrichment runtime inventory is exactly 6 public mutations, 6 permission-aware queries and 5 activation-gated worker-only coordinates.
-- Phase 8A.11 / #126 is **In progress**. PR #152 accepted source `9de6048f951c0797a94871457d2bdd73357aee59` and merge `26f5b4644c935001806343b2feaf802a78c90eae` established four runtime Customer Privacy mutations, two permission-aware queries, ten public non-runtime coordinates and zero Customer Privacy workers.
-- The next Customer Privacy production coordinate is not selected until this post-merge synchronization is complete and the remaining trust boundaries are compared.
+- Phase 8A.11 / #126 is **In progress**. PR #152 established four runtime Customer Privacy mutations, two permission-aware queries, ten public non-runtime coordinates and zero Customer Privacy workers. PR #175 accepted the second contrasting privacy-scope owner on source `b492d5302b421942903be4eb0662522323b05106` and merge `039d6461803208f6cb70ce0fbcfcaffaf59d7125`; Parties and Consents remain contract-only/non-runtime.
+- Draft PR #176 is the active dependency-lane packet. It must synchronize documentation, preserve exact owner behavior and errors, remove its temporary validator and pass all applicable checks on one unchanged SHA before merge.
+- The next Customer Privacy production coordinate remains intentionally unselected until shared support and the required remaining owner implementations establish a sufficient discovery/planning boundary.
 - Phase 8B / #29 remains planned after Phase 8A closure.
 
 This baseline must be updated whenever the active packet or merged completion state changes.
