@@ -18,5 +18,9 @@ mod response;
 #[cfg(test)]
 mod tests;
 
-pub use contract::{CAPABILITY_ID, CAPABILITY_VERSION, customer_accounts_privacy_scope_definition};
+pub use contract::{
+    CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
+    INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID,
+    OUTPUT_SCHEMA_ID, customer_accounts_privacy_scope_definition,
+};
 pub use postgres::CustomerAccountsPrivacyScopeQueryAdapter;
