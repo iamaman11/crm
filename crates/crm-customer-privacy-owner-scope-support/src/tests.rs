@@ -6,7 +6,8 @@ use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk, PayloadContra
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ModuleId, PayloadEncoding,
-    RecordId, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
+    RecordId, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId,
+    TypedPayload,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_privacy::v1 as privacy};
 use crm_query_runtime::{QueryExecutionContext, QueryRequest};
@@ -195,7 +196,12 @@ fn common_lineage_rejects_identity_and_registry_substitution() {
     );
 
     let mut invalid_party = lineage();
-    invalid_party.canonical_party_ref.as_mut().unwrap().party_id.clear();
+    invalid_party
+        .canonical_party_ref
+        .as_mut()
+        .unwrap()
+        .party_id
+        .clear();
     assert!(matches!(
         validate_common_lineage(&context(), invalid_party, 64, 64, 128).unwrap_err(),
         CommonLineageError::PartyInvalid(_)
