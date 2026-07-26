@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-data-operations = { path = "../../modules/crm-customer-data-operations" }
@@ -20,7 +21,6 @@ sha2 = "0.10"
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio"] }
 
 [dev-dependencies]
-crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
 crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
 crm-parties = { path = "../../modules/crm-parties" }
