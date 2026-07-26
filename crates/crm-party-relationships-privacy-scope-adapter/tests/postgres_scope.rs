@@ -12,7 +12,6 @@ use crm_parties_capability_adapter::{
 use crm_party_relationships_capability_adapter::{
     CREATE_CAPABILITY as CREATE_PARTY_RELATIONSHIP_CAPABILITY, PartyRelationshipCapabilityPlanner,
     UPDATE_CAPABILITY as UPDATE_PARTY_RELATIONSHIP_CAPABILITY,
-    VERIFY_CAPABILITY as VERIFY_PARTY_RELATIONSHIP_CAPABILITY,
     capability_definition as party_relationship_definition,
 };
 use crm_party_relationships_privacy_scope_adapter::{
@@ -53,103 +52,132 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
             Arc::new(PartyRelationshipCapabilityPlanner),
         ));
     let party_definition = party_definition(CREATE_PARTY_CAPABILITY).unwrap();
-    let create_party_relationship_definition =
+    let create_relationship_definition =
         party_relationship_definition(CREATE_PARTY_RELATIONSHIP_CAPABILITY).unwrap();
-    let update_party_relationship_definition =
+    let update_relationship_definition =
         party_relationship_definition(UPDATE_PARTY_RELATIONSHIP_CAPABILITY).unwrap();
-    let verify_party_relationship_definition =
-        party_relationship_definition(VERIFY_PARTY_RELATIONSHIP_CAPABILITY).unwrap();
 
     for (party_id, seed) in [
         ("party-scope", 11),
-        ("party-other", 12),
-        ("party-empty", 13),
-        ("party-redirected", 14),
-        ("party-survivor", 15),
+        ("party-employer", 12),
+        ("party-other", 13),
+        ("party-unrelated", 14),
+        ("party-advisor", 15),
+        ("party-household", 16),
+        ("party-guaranteed", 17),
+        ("party-empty", 18),
+        ("party-redirected", 19),
+        ("party-survivor", 20),
     ] {
         create_party(&party_executor, &party_definition, TENANT_A, party_id, seed).await;
     }
 
     create_party_relationship(
         &party_relationship_executor,
-        &create_party_relationship_definition,
+        &create_relationship_definition,
         TENANT_A,
         "party-relationship-001",
         "party-scope",
-        party_relationships::PartyRelationshipKind::Email,
-        "Scope.Primary@EXAMPLE.COM",
-        true,
-        21,
+        "party-employer",
+        "employment",
+        party_relationships::PartyRelationshipDirectionality::Directional,
+        "employer",
+        "employee",
+        Some(100_000_000),
+        Some(900_000_000),
+        31,
     )
     .await;
     create_party_relationship(
         &party_relationship_executor,
-        &create_party_relationship_definition,
+        &create_relationship_definition,
         TENANT_A,
         "party-relationship-002",
         "party-other",
-        party_relationships::PartyRelationshipKind::Phone,
-        "+12025550102",
-        false,
-        22,
+        "party-unrelated",
+        "partner",
+        party_relationships::PartyRelationshipDirectionality::Reciprocal,
+        "partner",
+        "partner",
+        None,
+        None,
+        32,
     )
     .await;
     create_party_relationship(
         &party_relationship_executor,
-        &create_party_relationship_definition,
+        &create_relationship_definition,
         TENANT_A,
         "party-relationship-003",
+        "party-advisor",
         "party-scope",
-        party_relationships::PartyRelationshipKind::Messaging,
-        "chat:chat:scope-member@example.net",
-        false,
-        23,
+        "advisor",
+        party_relationships::PartyRelationshipDirectionality::Directional,
+        "advisor",
+        "advisee",
+        None,
+        None,
+        33,
     )
     .await;
-    verify_party_relationship(
+    update_party_relationship(
         &party_relationship_executor,
-        &verify_party_relationship_definition,
+        &update_relationship_definition,
         TENANT_A,
         "party-relationship-003",
         1,
-        "private-verification-evidence-003",
-        24,
-    )
-    .await;
-    update_party_relationship_status(
-        &party_relationship_executor,
-        &update_party_relationship_definition,
-        TENANT_A,
-        "party-relationship-003",
-        2,
-        "chat:chat:scope-member@example.net",
         party_relationships::PartyRelationshipStatus::Inactive,
-        false,
-        25,
+        None,
+        Some(950_000_000),
+        34,
     )
     .await;
     create_party_relationship(
         &party_relationship_executor,
-        &create_party_relationship_definition,
+        &create_relationship_definition,
+        TENANT_A,
+        "party-relationship-004",
+        "party-scope",
+        "party-household",
+        "household",
+        party_relationships::PartyRelationshipDirectionality::Reciprocal,
+        "household_member",
+        "household_member",
+        None,
+        None,
+        35,
+    )
+    .await;
+    create_party_relationship(
+        &party_relationship_executor,
+        &create_relationship_definition,
         TENANT_A,
         "party-relationship-malformed",
         "party-scope",
-        party_relationships::PartyRelationshipKind::Web,
-        "https://private.example.test/profile",
-        false,
-        26,
+        "party-guaranteed",
+        "guarantor",
+        party_relationships::PartyRelationshipDirectionality::Directional,
+        "guarantor",
+        "guaranteed_party",
+        None,
+        None,
+        36,
     )
     .await;
     create_party_relationship(
         &party_relationship_executor,
-        &create_party_relationship_definition,
+        &create_relationship_definition,
         TENANT_A,
         "party-relationship-redirected",
         "party-redirected",
-        party_relationships::PartyRelationshipKind::Postal,
-        "Private Postal Address",
-        false,
-        27,
+        "party-survivor",
+        "guarantor",
+        party_relationships::PartyRelationshipDirectionality::Directional,
+        "guarantor",
+        "guaranteed_party",
+        None,
+        None,
+        37,
     )
     .await;
 
@@ -165,21 +193,15 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         .await
         .expect("read first authoritative Party Relationship scope page");
     assert_eq!(write_surface_counts(&admin).await, before_first);
-    assert_response_omits_party_relationship_state(
+    assert_response_omits_relationship_state(
         &first.output.bytes,
-        &[
-            "Scope.Primary@EXAMPLE.COM",
-            "\"status\"",
-            "\"party_associations\"",
-        ],
+        &["party-employer", "employment", "employer", "employee"],
     );
     let first_wire = privacy::PartyRelationshipsPrivacyScopeContributionResponse::decode(
         first.output.bytes.as_slice(),
     )
     .expect("decode first Party Relationships scope response");
-    let first_contribution = first_wire
-        .contribution
-        .expect("first contribution envelope");
+    let first_contribution = first_wire.contribution.expect("first contribution envelope");
     assert_eq!(
         first_contribution.owner_module_id,
         crm_party_relationships::MODULE_ID
@@ -194,9 +216,7 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         first_contribution.resources[0].evidence_class,
         privacy::PrivacyScopeEvidenceClass::RetainMinimizedEvidence as i32
     );
-    let first_evidence = first_contribution
-        .page_evidence
-        .expect("first page evidence");
+    let first_evidence = first_contribution.page_evidence.expect("first page evidence");
     assert_eq!(first_evidence.page_number, 1);
     assert_eq!(first_evidence.scanned_resource_count, 1);
     assert_eq!(first_evidence.emitted_resource_count, 1);
@@ -219,34 +239,57 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         .await
         .expect("read sparse second Party Relationship scope page");
     assert_eq!(write_surface_counts(&admin).await, before_second);
-    assert_response_omits_party_relationship_state(
+    assert_response_omits_relationship_state(
         &second.output.bytes,
-        &[
-            "chat:chat:scope-member@example.net",
-            "party-other",
-            "\"status\"",
-            "\"party_associations\"",
-        ],
+        &["party-advisor", "advisor", "advisee", "inactive"],
     );
     let second_wire = privacy::PartyRelationshipsPrivacyScopeContributionResponse::decode(
         second.output.bytes.as_slice(),
     )
     .expect("decode second Party Relationships scope response");
-    let second_contribution = second_wire
-        .contribution
-        .expect("second contribution envelope");
+    let second_contribution = second_wire.contribution.expect("second contribution envelope");
     assert_eq!(second_contribution.resources.len(), 1);
     assert_eq!(
         second_contribution.resources[0].resource_id,
         "party-relationship-003"
     );
-    let second_evidence = second_contribution
-        .page_evidence
-        .expect("second page evidence");
+    assert_eq!(second_contribution.resources[0].resource_version, 2);
+    let second_evidence = second_contribution.page_evidence.expect("second page evidence");
     assert_eq!(second_evidence.page_number, 2);
     assert_eq!(second_evidence.scanned_resource_count, 2);
     assert_eq!(second_evidence.emitted_resource_count, 1);
     assert!(!second_evidence.terminal_complete);
+
+    let before_third = write_surface_counts(&admin).await;
+    let third = adapter
+        .execute(
+            &definition,
+            scope_request(
+                TENANT_A,
+                "party-scope",
+                1,
+                1,
+                &second_evidence.next_cursor,
+                "paged-scope",
+            ),
+        )
+        .await
+        .expect("read reciprocal third Party Relationship scope page");
+    assert_eq!(write_surface_counts(&admin).await, before_third);
+    assert_response_omits_relationship_state(
+        &third.output.bytes,
+        &["party-household", "household", "household_member"],
+    );
+    let third_wire = privacy::PartyRelationshipsPrivacyScopeContributionResponse::decode(
+        third.output.bytes.as_slice(),
+    )
+    .expect("decode third Party Relationships scope response");
+    let third_contribution = third_wire.contribution.expect("third contribution envelope");
+    assert_eq!(third_contribution.resources.len(), 1);
+    assert_eq!(
+        third_contribution.resources[0].resource_id,
+        "party-relationship-004"
+    );
 
     let terminal_before = write_surface_counts(&admin).await;
     let terminal = adapter
@@ -258,19 +301,15 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
                 1,
                 1,
                 "",
-                "terminal-primary-page",
+                "terminal-relationship-page",
             ),
         )
         .await
         .expect("read terminal non-empty Party Relationship scope page");
     assert_eq!(write_surface_counts(&admin).await, terminal_before);
-    assert_response_omits_party_relationship_state(
+    assert_response_omits_relationship_state(
         &terminal.output.bytes,
-        &[
-            "Private Postal Address",
-            "\"status\"",
-            "\"party_associations\"",
-        ],
+        &["party-survivor", "guarantor", "guaranteed_party"],
     );
     let terminal_wire = privacy::PartyRelationshipsPrivacyScopeContributionResponse::decode(
         terminal.output.bytes.as_slice(),
@@ -305,9 +344,7 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         empty.output.bytes.as_slice(),
     )
     .expect("decode empty Party Relationships scope response");
-    let empty_contribution = empty_wire
-        .contribution
-        .expect("empty contribution envelope");
+    let empty_contribution = empty_wire.contribution.expect("empty contribution envelope");
     assert!(empty_contribution.resources.is_empty());
     assert!(empty_contribution.page_evidence.unwrap().terminal_complete);
 
@@ -333,11 +370,7 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
     assert_eq!(write_surface_counts(&admin).await, rebound_before);
 
     let mut corrupted_cursor = first_evidence.next_cursor.clone().into_bytes();
-    corrupted_cursor[0] = if corrupted_cursor[0] == b'A' {
-        b'B'
-    } else {
-        b'A'
-    };
+    corrupted_cursor[0] = if corrupted_cursor[0] == b'A' { b'B' } else { b'A' };
     let corrupted_cursor = String::from_utf8(corrupted_cursor).expect("cursor remains UTF-8");
     let corrupt_cursor_before = write_surface_counts(&admin).await;
     let corrupt_cursor = adapter
@@ -394,7 +427,14 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
     let redirected = adapter
         .execute(
             &definition,
-            scope_request(TENANT_A, "party-redirected", 2, 1, "", "redirected-party"),
+            scope_request(
+                TENANT_A,
+                "party-redirected",
+                2,
+                1,
+                "",
+                "redirected-party",
+            ),
         )
         .await
         .expect_err("noncanonical Party scope must fail closed");
@@ -428,7 +468,7 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
     .await;
 }
 
-fn assert_response_omits_party_relationship_state(bytes: &[u8], forbidden_values: &[&str]) {
+fn assert_response_omits_relationship_state(bytes: &[u8], forbidden_values: &[&str]) {
     for forbidden in forbidden_values {
         assert!(
             !bytes
