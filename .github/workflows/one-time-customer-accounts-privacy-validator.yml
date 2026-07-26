@@ -10,7 +10,29 @@ jobs:
   validate:
     if: github.head_ref == 'feature/customer-accounts-privacy-scope-adapter'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_accounts_privacy_scope_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5440:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_accounts_privacy_scope_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5440
+      PGDATABASE: crm_customer_accounts_privacy_scope_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5440/crm_customer_accounts_privacy_scope_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5440/crm_customer_accounts_privacy_scope_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -19,6 +41,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: clippy, rustfmt
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
       - name: Normalize source and lockfile
         shell: bash
         run: |
@@ -26,24 +52,83 @@ jobs:
           cargo fmt --all
           cargo generate-lockfile
           git diff --check -- Cargo.toml Cargo.lock architecture-policy.json \
-            crates/crm-customer-accounts-privacy-scope-adapter
+            crates/crm-customer-accounts-privacy-scope-adapter \
+            database/tests/0026_customer_accounts_privacy_scope_fixture.sql
       - name: Enforce architecture boundary
         run: python scripts/check_architecture.py
-      - name: Verify Customer Accounts privacy scope unit contract
-        run: cargo test -p crm-customer-accounts-privacy-scope-adapter --lib --all-features
+      - name: Apply clean migrations and owner fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0024_parties_privacy_scope_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0026_customer_accounts_privacy_scope_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify clean Customer Accounts privacy scope
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-accounts-privacy-scope-adapter --all-features -- --nocapture \
+            2>&1 | tee database/customer-accounts-privacy-scope-clean.log
+      - name: Roll back authoritative schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply migrations and owner fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0024_parties_privacy_scope_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0026_customer_accounts_privacy_scope_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify reapplied Customer Accounts privacy scope
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-accounts-privacy-scope-adapter --all-features -- --nocapture \
+            2>&1 | tee database/customer-accounts-privacy-scope-reapplied.log
       - name: Verify workspace dependency graph
         run: cargo check --workspace --all-features
-      - name: Publish normalized validated source
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/customer-accounts-privacy-scope-postgres.log 2>&1
+          fi
+      - name: Upload validation diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: customer-accounts-privacy-scope-validator-diagnostics
+          path: database/customer-accounts-privacy-scope-*.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Publish normalized validated source and remove validator
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock architecture-policy.json \
-            crates/crm-customer-accounts-privacy-scope-adapter
-          if git diff --cached --quiet; then
-            echo "Validated source was already canonical."
-            exit 0
-          fi
-          git commit -m "Normalize Customer Accounts privacy scope source"
+            crates/crm-customer-accounts-privacy-scope-adapter \
+            database/tests/0026_customer_accounts_privacy_scope_fixture.sql
+          git rm .github/workflows/one-time-customer-accounts-privacy-validator.yml
+          git commit -m "Validate Customer Accounts privacy scope owner implementation"
           git push origin HEAD:feature/customer-accounts-privacy-scope-adapter
