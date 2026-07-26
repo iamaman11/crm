@@ -29,7 +29,7 @@ use crm_parties_capability_adapter::{
 };
 use crm_proto_contracts::{
     crm::{
-        contact_points::v1 as contact_points, core::v1 as core, customer::v1 as customer,
+        contact_points::v1 as contact_points, customer::v1 as customer,
         customer_privacy::v1 as privacy, parties::v1 as parties,
     },
     message_descriptor_hash,
