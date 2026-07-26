@@ -115,8 +115,7 @@ const ACTIVE_OPERATION_ROWS_SNAPSHOT_SQL: &str = r#"
     LIMIT $7
 "#;
 
-/// Exact authoritative proof captured while the tenant Identity Resolution topology
-/// lock is held inside the caller's business transaction.
+/// Exact authoritative proof captured from one caller-owned PostgreSQL transaction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanonicalPartyTopologyProof {
     pub requested_party: PartyReference,
@@ -132,11 +131,11 @@ enum ProofMode {
     RepeatableReadSnapshot,
 }
 
-/// Proves that `requested_party` currently resolves to `claimed_canonical_party` at
-/// exactly `claimed_generation`. The proof is race-safe because it acquires the same
-/// tenant topology advisory lock used by merge/unmerge before reading generation,
-/// Party records, redirect edges and active merge-operation lineage. All reads occur
-/// through the caller's already-bound PostgreSQL transaction and FORCE RLS context.
+/// Proves that `requested_party` resolves to `claimed_canonical_party` at exactly
+/// `claimed_generation` inside the caller's already-bound FORCE-RLS transaction.
+/// Read-write transactions acquire the same advisory and row locks used by
+/// merge/unmerge. Read-only transactions use their immutable PostgreSQL snapshot and
+/// deliberately avoid lock clauses that PostgreSQL forbids in `READ ONLY` mode.
 pub async fn prove_canonical_party_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
@@ -144,22 +143,20 @@ pub async fn prove_canonical_party_in_transaction(
     claimed_canonical_party: &PartyReference,
     claimed_generation: u64,
 ) -> Result<CanonicalPartyTopologyProof, SdkError> {
+    let mode = transaction_proof_mode(transaction).await?;
     prove_canonical_party(
         transaction,
         tenant_id,
         requested_party,
         claimed_canonical_party,
         claimed_generation,
-        ProofMode::Locked,
+        mode,
     )
     .await
 }
 
-/// Proves canonical resolution inside a caller-owned `REPEATABLE READ, READ ONLY`
-/// transaction. The caller's immutable PostgreSQL snapshot provides consistency, so
-/// this variant deliberately acquires neither advisory locks nor row locks. It still
-/// validates the exact topology generation, visible Party records, redirect edges and
-/// strictly rehydrated Active merge-operation lineage.
+/// Explicit snapshot-only entrypoint for callers that have already established a
+/// `REPEATABLE READ, READ ONLY` transaction. It acquires neither advisory nor row locks.
 pub async fn prove_canonical_party_in_snapshot_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
@@ -176,6 +173,22 @@ pub async fn prove_canonical_party_in_snapshot_transaction(
         ProofMode::RepeatableReadSnapshot,
     )
     .await
+}
+
+async fn transaction_proof_mode(
+    transaction: &mut Transaction<'_, Postgres>,
+) -> Result<ProofMode, SdkError> {
+    let read_only: String = sqlx::query_scalar("SHOW transaction_read_only")
+        .fetch_one(&mut **transaction)
+        .await
+        .map_err(topology_store_unavailable)?;
+    match read_only.as_str() {
+        "on" => Ok(ProofMode::RepeatableReadSnapshot),
+        "off" => Ok(ProofMode::Locked),
+        other => Err(canonical_redirect_invalid(format!(
+            "PostgreSQL returned unsupported transaction_read_only value {other}"
+        ))),
+    }
 }
 
 async fn prove_canonical_party(
