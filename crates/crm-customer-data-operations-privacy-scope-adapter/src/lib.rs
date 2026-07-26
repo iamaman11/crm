@@ -7,7 +7,10 @@
 //! application registration or worker is introduced by this package.
 
 mod contract;
+mod digest;
 mod errors;
+mod request;
+mod response;
 
 #[cfg(test)]
 mod tests;
