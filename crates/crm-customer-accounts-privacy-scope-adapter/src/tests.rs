@@ -144,12 +144,7 @@ fn cursor_round_trip_is_bound_to_lineage_and_page_size() {
         &wire_request(DEFAULT_PAGE_SIZE, String::new()).encode_to_vec(),
     )
     .unwrap();
-    let cursor = encode_cursor(
-        &validated,
-        2,
-        &RecordId::try_new("account-001").unwrap(),
-    )
-    .unwrap();
+    let cursor = encode_cursor(&validated, 2, &RecordId::try_new("account-001").unwrap()).unwrap();
     let decoded = validate_wire_request(
         &context(),
         &wire_request(DEFAULT_PAGE_SIZE, cursor.clone()).encode_to_vec(),
@@ -163,10 +158,7 @@ fn cursor_round_trip_is_bound_to_lineage_and_page_size() {
         &wire_request(DEFAULT_PAGE_SIZE - 1, cursor).encode_to_vec(),
     )
     .unwrap_err();
-    assert_invalid_argument(
-        rebound,
-        "CUSTOMER_ACCOUNTS_PRIVACY_SCOPE_CURSOR_INVALID",
-    );
+    assert_invalid_argument(rebound, "CUSTOMER_ACCOUNTS_PRIVACY_SCOPE_CURSOR_INVALID");
 }
 
 #[test]
@@ -235,8 +227,5 @@ fn response_is_reference_only_deterministic_and_supports_sparse_progress() {
 #[test]
 fn malformed_wire_request_is_rejected_before_owner_reads() {
     let error = validate_wire_request(&context(), b"not-protobuf").unwrap_err();
-    assert_invalid_argument(
-        error,
-        "CUSTOMER_ACCOUNTS_PRIVACY_SCOPE_REQUEST_INVALID",
-    );
+    assert_invalid_argument(error, "CUSTOMER_ACCOUNTS_PRIVACY_SCOPE_REQUEST_INVALID");
 }

@@ -112,17 +112,11 @@ fn page_digest(
     cursor_digest: &[u8; 32],
 ) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    append_frame(
-        &mut hasher,
-        b"crm.customer-accounts.privacy.scope.page/v1",
-    );
+    append_frame(&mut hasher, b"crm.customer-accounts.privacy.scope.page/v1");
     append_frame(&mut hasher, request.lineage.privacy_case_id.as_bytes());
     append_frame(&mut hasher, request.canonical_party_id.as_str().as_bytes());
     append_frame(&mut hasher, request.page_number.to_string().as_bytes());
-    append_frame(
-        &mut hasher,
-        scanned_resource_count.to_string().as_bytes(),
-    );
+    append_frame(&mut hasher, scanned_resource_count.to_string().as_bytes());
     for resource in resources {
         append_frame(&mut hasher, RECORD_TYPE.as_bytes());
         append_frame(&mut hasher, resource.record_id.as_str().as_bytes());
