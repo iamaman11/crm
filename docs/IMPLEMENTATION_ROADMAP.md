@@ -97,11 +97,12 @@ Active sequence:
 
 1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `case.create`, `case.submit`, `case.subject.verify`, `case.get`, `case.cancel` and `case.list` are merged through PR #152; owner-scope contracts and the contrasting Parties and Consents implementations are merged through PR #175.
 2. **Architecture scalability runway — Complete:** measured complexity/cache decisions, module-owned contribution proofs, first-party aggregation, explainable affected-scope iteration and the bounded PostgreSQL isolation pilot are accepted through PR #173.
-3. **Active bounded slice — PR #176:** compare Parties and Consents and extract only proven common query integrity, lineage/registry/time/page-size validation, canonical Party generation proof and digest framing. Preserve owner SQL, rehydration, pagination, evidence classification, response contracts and stable errors; add no runtime route, worker, migration, contract or third owner.
-4. **Remaining owner slices:** implement the other privacy owner contributions one bounded owner at a time on the validated support boundary before runtime promotion.
-5. **Scope discovery and lifecycle:** assemble a sufficient owner set, then separately prove discovery/planning, approval, restrictions, legal-hold/retention precedence, plan/outcome reads, resumable orchestration, export/deletion/convergence and workers.
-6. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
-7. **8B / #29:** starts only from the completed Phase 8A baseline.
+3. **Shared owner-scope support — Complete through PR #176:** accepted source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`, merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`; only proven common mechanics were extracted and owner behavior remained unchanged.
+4. **Next bounded owner slice — Customer Accounts:** implement its existing contract-only contribution through authoritative Account/Party association reads, strict rehydration, deterministic reference-only evidence, tenant/RLS/no-write proof and the accepted shared support. Add no runtime route, worker, migration unless independently required, or speculative shared abstraction.
+5. **Remaining owner slices:** implement the other privacy owner contributions one bounded owner at a time on the validated support boundary before runtime promotion.
+6. **Scope discovery and lifecycle:** assemble a sufficient owner set, then separately prove discovery/planning, approval, restrictions, legal-hold/retention precedence, plan/outcome reads, resumable orchestration, export/deletion/convergence and workers.
+7. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
+8. **8B / #29:** starts only from the completed Phase 8A baseline.
 
 ### Phase 8A.10 accepted boundary
 
