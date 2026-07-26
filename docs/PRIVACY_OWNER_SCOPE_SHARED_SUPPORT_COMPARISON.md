@@ -1,10 +1,11 @@
-# Privacy Owner Scope Shared Support — Two-Implementation Comparison
+# Privacy Owner Scope Shared Support — Accepted Boundary and Consumer Comparison
 
-Status: **Accepted through PR #176**  
+Status: **Shared boundary accepted through PR #176; third consumer accepted through PR #179**  
 Accepted source: `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`  
 Merge: `80411d54a3ca45a783d982152c5cd8317f1fd9bd`  
 Permanent workflows: **21/21 successful on the unchanged accepted source**  
 Accepted comparison baseline: **Parties PR #156 + Consents PR #175**  
+Current proven consumers: **Parties + Consents + Customer Accounts PR #179**  
 Base `main`: `039d6461803208f6cb70ce0fbcfcaffaf59d7125`
 
 ## 1. Purpose
@@ -53,9 +54,9 @@ The packet does not promote any privacy-scope coordinate to runtime and does not
 9. deterministic length-framed SHA-256 primitives;
 10. internal support error kinds that owners map to their existing stable `SdkError` contracts.
 
-The support crate must not begin, commit or otherwise own the database transaction. The exact allowlist for `begin_bound_read_transaction` remains the Parties and Consents PostgreSQL adapters.
+The support crate must not begin, commit or otherwise own the database transaction. The exact allowlist for `begin_bound_read_transaction` is restricted to the Parties, Consents and Customer Accounts PostgreSQL adapters.
 
-The dependency boundary is also mechanical. `architecture-policy.json` names the Parties and Consents adapter manifests as the only required consumers, and `scripts/check_architecture.py` rejects missing allowed manifests, missing required consumers and every unexpected consumer. A future owner may use this crate only through an explicit policy change reviewed together with that independently proven owner implementation.
+The dependency boundary is also mechanical. `architecture-policy.json` names the Parties, Consents and Customer Accounts adapter manifests as the only required consumers, and `scripts/check_architecture.py` rejects missing allowed manifests, missing required consumers and every unexpected consumer. A future owner may use this crate only through an explicit policy change reviewed together with that independently proven owner implementation.
 
 ## 4. Owner responsibilities retained
 
@@ -94,7 +95,7 @@ For the same accepted fixture inputs, migration to shared support must preserve:
 - absence or presence of internal references where already observable to tests;
 - zero writes to records, relationships, transactions, idempotency, outbox and audit surfaces.
 
-The Parties and Consents permanent workflows remain authoritative. The shared crate is added to both path-filter graphs so a change to common behavior re-runs both owner acceptance suites.
+The Parties, Consents and Customer Accounts permanent workflows remain authoritative. The shared crate is present in all three path-filter graphs so a change to common behavior re-runs every proven owner acceptance suite.
 
 The compatibility proof is explicit rather than merely self-consistent. Shared conformance tests exercise every common request and lineage error kind; both owner suites assert exact owner-prefixed codes, categories and retryability after mapping; and `tests/digest_compatibility.rs` freezes the accepted Parties and Consents cursor/page digest bytes from the pre-extraction implementations. A future framing or field-order change therefore requires an intentional versioned protocol decision rather than silently changing evidence under the existing domains.
 
@@ -102,7 +103,7 @@ The compatibility proof is explicit rather than merely self-consistent. Shared c
 
 - **Protected boundary:** common privacy owner-scope protocol mechanics and canonical Party proof.
 - **Isolated dependencies:** read-only PostgreSQL proof support, privacy contracts and Identity Resolution/Party identifiers.
-- **Expected consumers:** Parties and Consents immediately; any additional consumer requires an explicit architecture-policy change with its independently accepted owner packet.
+- **Expected consumers:** Parties, Consents and Customer Accounts are proven; any additional consumer requires an explicit architecture-policy change with its independently accepted owner packet.
 - **Why an internal module is insufficient:** the behavior is consumed by independent owner adapter crates and must not make either owner package authoritative for shared protocol semantics.
 - **Lifecycle/extraction seam:** stable first-party privacy owner contribution support; not a runtime service or business owner.
 - **Expected fan-out effect:** one additional shared dependency for owner adapters, offset by removal of duplicated validation, topology SQL and digest implementation.
@@ -163,3 +164,20 @@ After PR #176 is accepted and merged:
 8. add resumable owner execution, crash-window recovery, export/deletion convergence and erased-Party/no-orphan proof;
 9. close Phase 8A only after complete privacy/customer-master interaction and real-process acceptance;
 10. begin Phase 8B Catalog/Pricing/CPQ only from the completed Phase 8A baseline.
+
+
+## 11. Third proven consumer — Customer Accounts PR #179
+
+PR #179 accepted unchanged user-authored source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, passed all 23 applicable permanent workflows and was squash-merged as `5b5252a437c6bebbd7afdead0162063af4c0b7e4`.
+
+Customer Accounts independently proves the accepted shared boundary against a third authoritative resource shape:
+
+- authoritative Account records rather than Party records or relationship-owned Consent records;
+- embedded Account-owned Party associations, including both `Primary` and indirect `Member` matches;
+- strict Account metadata and full domain-state rehydration before evidence emission;
+- owner-specific bounded keyset scan, continuation cursor, page/cursor digest domains, evidence classification, retention and stable error prefixes;
+- deterministic reference-only response bytes with Account names, status and association contents excluded;
+- one caller-opened tenant-bound `REPEATABLE READ, READ ONLY` PostgreSQL transaction;
+- clean migration, full rollback/schema removal, reapply and repeated acceptance with zero writes across record, relationship, transaction, idempotency, outbox and audit surfaces.
+
+PR #179 changed no shared-support behavior. It only extended the mechanical consumer and bound-read allowlists to the independently proven Customer Accounts adapter. The next candidate consumer is Contact Points, but it must earn the same explicit policy change in its own bounded packet; shared support must not be expanded speculatively.
