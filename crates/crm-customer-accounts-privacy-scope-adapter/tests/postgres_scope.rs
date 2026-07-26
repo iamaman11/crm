@@ -124,7 +124,11 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
     assert_eq!(write_surface_counts(&admin).await, before_first);
     assert_response_omits_account_state(
         &first.output.bytes,
-        &["Private Account account-001", "\"status\"", "\"party_associations\""],
+        &[
+            "Private Account account-001",
+            "\"status\"",
+            "\"party_associations\"",
+        ],
     );
     let first_wire = privacy::CustomerAccountsPrivacyScopeContributionResponse::decode(
         first.output.bytes.as_slice(),
@@ -280,7 +284,11 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
     assert_eq!(write_surface_counts(&admin).await, rebound_before);
 
     let mut corrupted_cursor = first_evidence.next_cursor.clone().into_bytes();
-    corrupted_cursor[0] = if corrupted_cursor[0] == b'A' { b'B' } else { b'A' };
+    corrupted_cursor[0] = if corrupted_cursor[0] == b'A' {
+        b'B'
+    } else {
+        b'A'
+    };
     let corrupted_cursor = String::from_utf8(corrupted_cursor).expect("cursor remains UTF-8");
     let corrupt_cursor_before = write_surface_counts(&admin).await;
     let corrupt_cursor = adapter
@@ -301,10 +309,7 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
         corrupt_cursor.code,
         "CUSTOMER_ACCOUNTS_PRIVACY_SCOPE_CURSOR_INVALID"
     );
-    assert_eq!(
-        write_surface_counts(&admin).await,
-        corrupt_cursor_before
-    );
+    assert_eq!(write_surface_counts(&admin).await, corrupt_cursor_before);
 
     let stale_before = write_surface_counts(&admin).await;
     let stale = adapter
