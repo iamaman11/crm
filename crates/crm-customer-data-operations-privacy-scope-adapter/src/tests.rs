@@ -36,10 +36,7 @@ fn freezes_owner_scan_and_rehydration_bounds() {
     assert_eq!(MAXIMUM_CURSOR_BYTES, 2_048);
     assert_eq!(MAX_PRIVACY_IMPORT_ROWS_SCANNED, 16_384);
     assert_eq!(MAX_PRIVACY_EXPORT_SELECTION_ITEMS_SCANNED, 16_384);
-    assert_eq!(
-        MAX_PRIVACY_ASSOCIATED_EXPORT_RECORDS_REHYDRATED,
-        32_768
-    );
+    assert_eq!(MAX_PRIVACY_ASSOCIATED_EXPORT_RECORDS_REHYDRATED, 32_768);
     assert_eq!(MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS, 32_768);
     assert_eq!(MAX_PRIVACY_OWNER_RECORDS_SCANNED, 65_536);
 }
@@ -49,7 +46,10 @@ fn definition_validation_rejects_any_mutated_contract() {
     let mut definition = customer_data_privacy_scope_definition().unwrap();
     definition.mutation = true;
     let error = contract::validate_definition(&definition).unwrap_err();
-    assert_eq!(error.code, "CUSTOMER_DATA_PRIVACY_SCOPE_DEFINITION_MISMATCH");
+    assert_eq!(
+        error.code,
+        "CUSTOMER_DATA_PRIVACY_SCOPE_DEFINITION_MISMATCH"
+    );
 }
 
 #[test]
