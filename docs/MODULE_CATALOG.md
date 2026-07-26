@@ -6,7 +6,7 @@ Delivery governance: `DELIVERY_GOVERNANCE.md`
 Roadmap: `IMPLEMENTATION_ROADMAP.md`  
 Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`
 
-This document tracks business-domain ownership and readiness without confusing technical crates, services, projections or contracts with product modules.
+This document tracks business-domain ownership and readiness without confusing technical crates, services, projections or contracts with product modules. Current delivery sequence belongs in the roadmap and project status, not in this catalog.
 
 ## 1. Counting rules
 
@@ -39,7 +39,7 @@ Technical crates, process shells, Protobuf packages, SQL migrations and generic 
 | `crm.customer-data-operations` | Governed import/export jobs and evidence | **Expert expansion** | Resumable import, deterministic export/artifacts/reconciliation and crash recovery | More resource profiles and privacy access/deletion integration |
 | `crm.data-quality` | Customer-data quality governance coordinator | **Vertical slice** | Exact-version Party evaluation, findings/completeness, stewardship and governed remediation | Additional owner-resource profiles and privacy coordination |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Exact provider transport/secret boundary, immutable provenance, review, deterministic Party owner-capability application and recovery | Additional providers, target fields, product UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Case create/submit/subject verification/cancel plus permission-aware case get and subject-scoped case list, authoritative Party/topology guards, shared subject locks, FORCE RLS and permanent real-process acceptance | Approval, plan/outcome reads, restriction/legal-hold precedence, owner orchestration, export/deletion/convergence and workers |
+| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Case create/submit/subject verification/cancel plus permission-aware get/list, Party/topology guards, subject locks, FORCE RLS and real-process acceptance | Approval, plans/outcomes, restriction/legal-hold precedence, owner orchestration, export/deletion/convergence and workers |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -57,87 +57,57 @@ Current merged business-module total: **13** — twelve authoritative/coordinati
 
 ## 6. Customer Enrichment boundary
 
-Phase 8A.10 / issue #125 / PR #137 is Complete. Accepted source `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged and was squash-merged as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
-
-Ownership includes provider-neutral requests and immutable provider-profile, mapping, response/conflict, suggestion/provenance, review, usage and owner-application evidence. Mutable customer values remain with authoritative modules; provider HTTP, secrets, quotas/circuits and PostgreSQL reference guards remain host-owned infrastructure.
+Phase 8A.10 / issue #125 / PR #137 is complete. Accepted source `f92d101206886e3ceaf94d0e56e52580cec21093` passed all 17 permanent workflows unchanged and was squash-merged as `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 
 Frozen production inventory:
 
-- **6 public mutations**;
-- **6 permission-aware queries**;
-- **5 activation-gated worker-only coordinates**;
-- **0 completed non-runtime coordinates**.
+- six public mutations;
+- six permission-aware queries;
+- five activation-gated worker-only coordinates;
+- zero completed non-runtime coordinates.
+
+Mutable customer values remain with authoritative modules. Customer Enrichment owns coordination and immutable provenance, not Party values.
 
 ## 7. Customer Privacy boundary
 
-Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PRs #154–#155 published the owner-scope protocol and nine exact contract-only owner coordinates; PRs #156, #175, #179, #181 and #183 accepted authoritative Parties, Consents, Customer Accounts, Contact Points and Party Relationships owner implementations. PR #176 accepted their behavior-neutral common support; PRs #179, #181 and #183 added the third, fourth and fifth mechanically permitted consumers without changing module readiness or runtime inventory. Identity Resolution is selected as the next contract-only owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`.
+Phase 8A.11 / issue #126 remains **In progress**.
 
-Accepted production vertical slices:
+Merged production inventory:
 
-- PR #146 / `customer_privacy.case.create@1.0.0` — accepted source `9b53c3ebd81b58518dc445b02b33b35403ffa7c3`, merge `2d28937a123e4ba31ab0d835c4c30e3dfed0f187`;
-- PR #147 / `customer_privacy.case.submit@1.0.0` — accepted source `8b41e8420b1a897777596c68cb615e2b8bf80c34`, merge `0eba56084405301eb667f2173b3aef6565b95f87`;
-- PR #148 / `customer_privacy.case.subject.verify@1.0.0` — accepted source `118327e09a6e31ba87b02bdab99289035b572ed9`, merge `8ee5538bf97031dd48ab3726a605b9f3ad4bfd1e`;
-- PR #149 / `customer_privacy.case.get@1.0.0` — accepted post-sync source `5a47318b24007cd534434ff6bac33fbd59215d38`, merge `5d580a7c253bcfa6c2dd981100612b222fd26825`;
-- PR #150 / `customer_privacy.case.cancel@1.0.0` — accepted post-sync source `be05e874b21ab33cb8b6a84fbcefc3c025aa88cb`, merge `2a4c34727e9d7bf8ed51b6411b7ab9c76c109671`;
-- PR #152 / `customer_privacy.case.list@1.0.0` — accepted source `9de6048f951c0797a94871457d2bdd73357aee59`, merge `26f5b4644c935001806343b2feaf802a78c90eae`.
+- four public mutations;
+- two permission-aware public queries;
+- ten public non-runtime Customer Privacy coordinates;
+- zero Customer Privacy workers.
 
-Accepted contract-only owner-scope evidence:
+Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. Five authoritative implementations are accepted:
 
-- PR #156 — authoritative single-record Parties contribution in one tenant-bound repeatable read-only snapshot;
-- PR #175 — authoritative multi-record Consents contribution through owner relationships and bounded keyset pagination;
-- PR #179 — authoritative Customer Accounts contribution through strict Account rehydration, embedded `Primary`/`Member` Party associations and bounded owner-specific keyset pagination; accepted source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, merge `5b5252a437c6bebbd7afdead0162063af4c0b7e4`, 23/23 applicable workflows;
-- PR #181 — authoritative Contact Points contribution through strict endpoint-state rehydration, exact direct Party binding and bounded owner-specific keyset pagination; accepted source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c`, merge `96cd0cf548310592a0718c97242a724a29717a72`, 24/24 applicable workflows;
-- all four remain non-runtime and add no Customer Privacy worker or public ingress;
-- PR #176 / source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8` / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd` accepted the behavior-neutral shared-support extraction; PRs #179 and #181 changed only its mechanical consumer allowlists, not this module readiness classification.
+- PR #156 — Parties, one authoritative Party record;
+- PR #175 — Consents, multiple authoritative Consent records through owner relationships and bounded pagination;
+- PR #179 — Customer Accounts, strict Account rehydration and embedded `Primary`/`Member` Party associations;
+- PR #181 — Contact Points, strict endpoint rehydration and direct Party binding;
+- PR #183 — Party Relationships, strict two-endpoint temporal relationship rehydration.
 
-The merged production boundary proves:
+All five remain non-runtime and add no Customer Privacy worker or public ingress.
 
-- deterministic tenant/idempotency case identity and confidential Draft/version-1 state;
-- exact optimistic `Draft -> Submitted -> SubjectVerified` transitions with replay-safe atomic evidence;
-- authoritative Party existence/tenant visibility, canonical redirect and active merge lineage;
-- monotonic Identity Resolution topology generation and shared fail-fast topology/canonical-subject locks;
-- permission-aware `case.get` with strict FORCE-RLS rehydration, live case/canonical-Party visibility, field redaction and uniform concealment;
-- race-free terminal cancellation preserving immutable lineage, with subject locks before a retained final case-row `FOR UPDATE` and direct row serialization for unbound cases;
-- subject-scoped `case.list` with signed filter-bound pagination, bounded FORCE-RLS keyset scan, strict verified-subject matching, live Party/case visibility, field redaction and empty concealment;
-- common live authorization and activation through generic HTTP/gRPC application ingress;
-- fresh PostgreSQL, non-privileged FORCE RLS, rollback/schema removal/reapply and permanent real-process acceptance;
-- exactly four runtime Customer Privacy mutations, two permission-aware runtime queries, ten public non-runtime coordinates and zero Customer Privacy workers on merged `main`.
+Shared support was accepted in PR #176 / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. PRs #179, #181 and #183 extended only its mechanical consumer and bound-read allowlists to the third, fourth and fifth independently proven adapters; owner-specific SQL, rehydration, pagination, evidence, response and errors remain outside shared support.
 
-Ownership:
+Identity Resolution is the next bounded contract-only owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`. Customer Data Operations, Data Quality and Customer Enrichment owner contributions follow one at a time before production scope discovery/planning.
 
-- privacy cases and verified-subject orchestration;
-- immutable scope snapshots;
-- processing/communication restrictions;
-- customer-data legal holds and retention decisions;
-- deterministic owner plans, attempts/outcomes and checkpoints;
-- governed export references and convergence evidence.
-
-Non-ownership:
-
-- Party, Account, Contact Point, Relationship, Consent, Identity Resolution, import/export, Data Quality and Enrichment authoritative state remains with those modules;
-- PostgreSQL composition guards remain infrastructure adapters outside the pure business core;
-- derived projections, search and caches remain non-authoritative.
-
-These vertical slices do not make the Customer Privacy module product-complete or complete Phase 8A.11.
+The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. It does not yet prove approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization, convergence or workers.
 
 ## 8. Phase 8A packet accounting
 
 Completed:
 
-- 8A.1 — customer references and owner foundations.
-- 8A.2 — Party lifecycle and discovery.
-- 8A.3 — Account, Contact Point, Party Relationship and Customer 360.
-- 8A.4 — Consent and Communication Authorization.
-- 8A.5 — Identity Resolution duplicate candidates.
-- 8A.6 — reversible merge/unmerge and survivorship.
-- 8A.7 — Customer Import.
-- 8A.8 — Customer Export.
-- 8A.9 — Customer Data Quality.
+- 8A.1–8A.6 — customer references, Party, Account, Contact Point, Party Relationship, Customer 360, Consent and reversible Identity Resolution;
+- 8A.7 — Customer Import;
+- 8A.8 — Customer Export;
+- 8A.9 — Customer Data Quality;
 - 8A.10 — Governed Customer Enrichment and Provenance.
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Four production mutations and two permission-aware queries are merged independently; owner-scope contracts, Parties/Consents/Customer Accounts/Contact Points implementations and shared support are accepted through PR #181. Party Relationships is the next bounded contract-only owner packet. Remaining owners, discovery/planning, approval, restrictions, legal holds, execution, export/deletion and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. Five of nine owner contributions are accepted through PR #183. Identity Resolution is next; the remaining owners, discovery/planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 
@@ -170,7 +140,7 @@ These domains must not be absorbed into Sales.
 
 ## 11. Other expert CRM domains still required
 
-The remaining Phase 8A.11 privacy runtime, Sales/Activities expansion, omnichannel, Service/Knowledge/Field Service, Marketing, Customer Success, optional PRM, projects/configurable work, documents/e-signature, analytics/performance management, workflow/approvals/collaboration, AI governance, marketplace and enterprise operational proof remain incomplete or planned.
+The remaining privacy lifecycle, Sales/Activities expansion, omnichannel, Service/Knowledge/Field Service, Marketing, Customer Success, optional PRM, projects/configurable work, documents/e-signature, analytics/performance management, workflow/approvals/collaboration, AI governance, marketplace and enterprise operational proof remain incomplete or planned.
 
 ## 12. Module creation checklist
 

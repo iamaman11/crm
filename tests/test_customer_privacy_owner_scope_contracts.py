@@ -155,6 +155,54 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("bytes cursor_digest_sha256", contributions)
         self.assertIn("CUSTOMER_DATA_CLASS_RESTRICTED = 9;", types)
 
+    def test_status_sources_freeze_five_accepted_owners_and_identity_next(self) -> None:
+        project_status = (ROOT / "docs/PROJECT_STATUS.md").read_text(encoding="utf-8")
+        module_catalog = (ROOT / "docs/MODULE_CATALOG.md").read_text(encoding="utf-8")
+        roadmap = (ROOT / "docs/IMPLEMENTATION_ROADMAP.md").read_text(
+            encoding="utf-8"
+        )
+        phase_plan = (ROOT / "docs/PHASE8_DELIVERY_PLAN.md").read_text(
+            encoding="utf-8"
+        )
+        identity_packet = (
+            ROOT / "docs/IDENTITY_RESOLUTION_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
+
+        for document in (project_status, module_catalog, roadmap, phase_plan):
+            self.assertIn("Party Relationships", document)
+            self.assertIn("Identity Resolution", document)
+
+        self.assertIn("Five authoritative owner implementations are accepted", project_status)
+        self.assertIn("Five authoritative implementations are accepted", module_catalog)
+        self.assertIn("Identity Resolution is the next bounded contract-only owner", module_catalog)
+        self.assertIn("Next bounded owner slice — Identity Resolution", roadmap)
+        self.assertIn("Next bounded owner packet: Identity Resolution", phase_plan)
+
+        stale_claims = (
+            "all four remain non-runtime",
+            "Party Relationships is the next bounded contract-only owner packet",
+            "Party Relationships privacy owner contribution -> remaining owner",
+            "accepted through PR #181. Party Relationships is the next",
+        )
+        for stale in stale_claims:
+            self.assertNotIn(stale, project_status)
+            self.assertNotIn(stale, module_catalog)
+
+        required_identity_controls = (
+            "MAX_PRIVACY_ALIAS_HOPS = 64",
+            "MAX_PRIVACY_ALIAS_NODES = 4_096",
+            "MAX_PRIVACY_ACTIVE_REDIRECT_EDGES = 4_095",
+            "MAX_PRIVACY_RELATIONSHIP_CANDIDATES = 16_384",
+            "MAX_PRIVACY_CANDIDATE_RECORDS_REHYDRATED = 8_192",
+            "MAX_PRIVACY_MERGE_RECORDS_REHYDRATED = 8_192",
+            "MAX_PRIVACY_OWNER_RECORDS_SCANNED = 16_384",
+            "Provenance-only fallback discovery",
+            "page_size + 1",
+            "terminal completeness",
+        )
+        for control in required_identity_controls:
+            self.assertIn(control, identity_packet)
+
 
 if __name__ == "__main__":
     unittest.main()
