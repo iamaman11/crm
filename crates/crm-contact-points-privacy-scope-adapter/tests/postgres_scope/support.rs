@@ -378,7 +378,7 @@ pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, targ
         .expect("commit authoritative canonical redirect fixture");
 }
 
-pub(crate) async fn corrupt_contact_point_metadata(admin: &PgPool, account_id: &str) {
+pub(crate) async fn corrupt_contact_point_metadata(admin: &PgPool, contact_point_id: &str) {
     let mut transaction = admin
         .begin()
         .await
@@ -396,17 +396,17 @@ pub(crate) async fn corrupt_contact_point_metadata(admin: &PgPool, account_id: &
     )
     .bind(TENANT_A)
     .bind("actor-a")
-    .bind("request-corrupt-account")
+    .bind("request-corrupt-contact-point")
     .bind(CREATE_CONTACT_POINT_CAPABILITY)
     .bind("1.0.0")
-    .bind(format!("account-{account_id}-tx"))
+    .bind(format!("contact-point-{contact_point_id}-tx"))
     .execute(&mut *transaction)
     .await
     .expect("bind isolated Contact Point metadata corruption context");
     sqlx::query(
         r#"
         UPDATE crm.records
-        SET schema_id = 'crm.customer-accounts.account.state.invalid'
+        SET schema_id = 'crm.contact-points.contact-point.state.invalid'
         WHERE tenant_id = $1
           AND owner_module_id = $2
           AND record_type = $3
@@ -416,7 +416,7 @@ pub(crate) async fn corrupt_contact_point_metadata(admin: &PgPool, account_id: &
     .bind(TENANT_A)
     .bind(crm_contact_points::MODULE_ID)
     .bind(crm_contact_points_capability_adapter::RECORD_TYPE)
-    .bind(account_id)
+    .bind(contact_point_id)
     .execute(&mut *transaction)
     .await
     .expect("corrupt isolated Contact Point metadata fixture");
