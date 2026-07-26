@@ -155,7 +155,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("bytes cursor_digest_sha256", contributions)
         self.assertIn("CUSTOMER_DATA_CLASS_RESTRICTED = 9;", types)
 
-    def test_status_sources_freeze_five_accepted_owners_and_identity_next(self) -> None:
+    def test_status_sources_freeze_six_accepted_owners_and_customer_data_next(self) -> None:
         project_status = (ROOT / "docs/PROJECT_STATUS.md").read_text(encoding="utf-8")
         module_catalog = (ROOT / "docs/MODULE_CATALOG.md").read_text(encoding="utf-8")
         roadmap = (ROOT / "docs/IMPLEMENTATION_ROADMAP.md").read_text(
@@ -167,26 +167,44 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         identity_packet = (
             ROOT / "docs/IDENTITY_RESOLUTION_PRIVACY_SCOPE_PACKET.md"
         ).read_text(encoding="utf-8")
+        customer_data_packet = (
+            ROOT / "docs/CUSTOMER_DATA_OPERATIONS_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
 
         for document in (project_status, module_catalog, roadmap, phase_plan):
-            self.assertIn("Party Relationships", document)
             self.assertIn("Identity Resolution", document)
+            self.assertIn("Customer Data Operations", document)
 
-        self.assertIn("Five authoritative owner implementations are accepted", project_status)
-        self.assertIn("Five authoritative implementations are accepted", module_catalog)
-        self.assertIn("Identity Resolution is the next bounded contract-only owner", module_catalog)
-        self.assertIn("Next bounded owner slice — Identity Resolution", roadmap)
-        self.assertIn("Next bounded owner packet: Identity Resolution", phase_plan)
+        self.assertIn("Six authoritative owner implementations are accepted", project_status)
+        self.assertIn("Six authoritative implementations are accepted", module_catalog)
+        self.assertIn(
+            "Customer Data Operations is the next bounded contract-only owner",
+            module_catalog,
+        )
+        self.assertIn(
+            "Next bounded owner slice — Customer Data Operations",
+            roadmap,
+        )
+        self.assertIn(
+            "Next bounded owner packet: Customer Data Operations",
+            phase_plan,
+        )
+        self.assertIn("PR #186", project_status)
+        self.assertIn("509eb304a76055c9f49b0beed3b007963a91cb22", project_status)
 
         stale_claims = (
-            "all four remain non-runtime",
-            "Party Relationships is the next bounded contract-only owner packet",
-            "Party Relationships privacy owner contribution -> remaining owner",
-            "accepted through PR #181. Party Relationships is the next",
+            "Five authoritative owner implementations are accepted",
+            "Five authoritative implementations are accepted",
+            "Identity Resolution is the next bounded contract-only owner",
+            "Next bounded owner slice — Identity Resolution",
+            "Next bounded owner packet: Identity Resolution",
+            "implementation code has not started",
         )
         for stale in stale_claims:
             self.assertNotIn(stale, project_status)
             self.assertNotIn(stale, module_catalog)
+            self.assertNotIn(stale, roadmap)
+            self.assertNotIn(stale, phase_plan)
 
         required_identity_controls = (
             "MAX_PRIVACY_ALIAS_HOPS = 64",
@@ -202,6 +220,23 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         )
         for control in required_identity_controls:
             self.assertIn(control, identity_packet)
+
+        required_customer_data_controls = (
+            "MAX_PRIVACY_IMPORT_ROWS_SCANNED = 16_384",
+            "MAX_PRIVACY_EXPORT_SELECTION_ITEMS_SCANNED = 16_384",
+            "MAX_PRIVACY_ASSOCIATED_EXPORT_RECORDS_REHYDRATED = 32_768",
+            "MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS = 32_768",
+            "MAX_PRIVACY_OWNER_RECORDS_SCANNED = 65_536",
+            "customer_data.import_row",
+            "customer_data.export_selection_item",
+            "customer_data.export_execution_stage",
+            "customer_data.export_execution_outcome",
+            "multi-subject container",
+            "page_size + 1",
+            "terminal completeness",
+        )
+        for control in required_customer_data_controls:
+            self.assertIn(control, customer_data_packet)
 
 
 if __name__ == "__main__":
