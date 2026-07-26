@@ -2,16 +2,6 @@ use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
 };
-use crm_party_relationships_capability_adapter::{
-    CREATE_CAPABILITY as CREATE_PARTY_RELATIONSHIP_CAPABILITY,
-    CREATE_REQUEST_SCHEMA as CREATE_PARTY_RELATIONSHIP_SCHEMA,
-    UPDATE_CAPABILITY as UPDATE_PARTY_RELATIONSHIP_CAPABILITY,
-    UPDATE_REQUEST_SCHEMA as UPDATE_PARTY_RELATIONSHIP_SCHEMA,
-};
-use crm_party_relationships_privacy_scope_adapter::{
-    CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
-    INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID,
-};
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_identity_resolution_capability_adapter::{
     CANONICAL_REDIRECT_PARTY_RECORD_TYPE, CANONICAL_REDIRECT_RELATIONSHIP_TYPE,
@@ -24,6 +14,16 @@ use crm_module_sdk::{
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as CREATE_PARTY_CAPABILITY, CREATE_REQUEST_SCHEMA as CREATE_PARTY_SCHEMA,
+};
+use crm_party_relationships_capability_adapter::{
+    CREATE_CAPABILITY as CREATE_PARTY_RELATIONSHIP_CAPABILITY,
+    CREATE_REQUEST_SCHEMA as CREATE_PARTY_RELATIONSHIP_SCHEMA,
+    UPDATE_CAPABILITY as UPDATE_PARTY_RELATIONSHIP_CAPABILITY,
+    UPDATE_REQUEST_SCHEMA as UPDATE_PARTY_RELATIONSHIP_SCHEMA,
+};
+use crm_party_relationships_privacy_scope_adapter::{
+    CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
+    INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID,
 };
 use crm_proto_contracts::{
     crm::{
@@ -116,8 +116,10 @@ pub(crate) async fn create_party_relationship(
                         from_role: from_role.to_owned(),
                         to_role: to_role.to_owned(),
                     }),
-                    valid_from: valid_from_unix_nanos.map(|unix_nanos| core::UnixTime { unix_nanos }),
-                    valid_until: valid_until_unix_nanos.map(|unix_nanos| core::UnixTime { unix_nanos }),
+                    valid_from: valid_from_unix_nanos
+                        .map(|unix_nanos| core::UnixTime { unix_nanos }),
+                    valid_until: valid_until_unix_nanos
+                        .map(|unix_nanos| core::UnixTime { unix_nanos }),
                 },
             ),
         )
@@ -154,8 +156,10 @@ pub(crate) async fn update_party_relationship(
                     }),
                     expected_version,
                     status: status as i32,
-                    valid_from: valid_from_unix_nanos.map(|unix_nanos| core::UnixTime { unix_nanos }),
-                    valid_until: valid_until_unix_nanos.map(|unix_nanos| core::UnixTime { unix_nanos }),
+                    valid_from: valid_from_unix_nanos
+                        .map(|unix_nanos| core::UnixTime { unix_nanos }),
+                    valid_until: valid_until_unix_nanos
+                        .map(|unix_nanos| core::UnixTime { unix_nanos }),
                 },
             ),
         )
@@ -351,7 +355,10 @@ pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, targ
         .expect("commit authoritative canonical redirect fixture");
 }
 
-pub(crate) async fn corrupt_party_relationship_metadata(admin: &PgPool, party_relationship_id: &str) {
+pub(crate) async fn corrupt_party_relationship_metadata(
+    admin: &PgPool,
+    party_relationship_id: &str,
+) {
     let mut transaction = admin
         .begin()
         .await
