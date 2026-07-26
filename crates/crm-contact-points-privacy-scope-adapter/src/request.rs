@@ -152,7 +152,7 @@ fn cursor_digest(
     after_record_id: &RecordId,
 ) -> [u8; 32] {
     framed_digest(
-        b"crm.customer-accounts.privacy.scope.request-cursor/v1",
+        b"crm.contact-points.privacy.scope.request-cursor/v1",
         &[
             lineage.tenant_id.as_bytes(),
             lineage.privacy_case_id.as_bytes(),
