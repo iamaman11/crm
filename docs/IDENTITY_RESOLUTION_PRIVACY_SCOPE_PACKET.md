@@ -3,7 +3,8 @@
 Status: **Ready after Party Relationships PR #183 and post-merge synchronization**  
 Parent program: #126  
 Prerequisites: Parties PR #156, Consents PR #175, shared support PR #176, Customer Accounts PR #179, Contact Points PR #181, Party Relationships PR #183  
-Coordinate: `identity_resolution.privacy.scope.contribute@1.0.0`
+Coordinate: `identity_resolution.privacy.scope.contribute@1.0.0`  
+Implementation state: **Not started; this packet freezes the entry boundary only.**
 
 ## 1. Objective
 
