@@ -1,0 +1,49 @@
+name: One-time Customer Accounts privacy validator
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.head_ref == 'feature/customer-accounts-privacy-scope-adapter'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: feature/customer-accounts-privacy-scope-adapter
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+        with:
+          components: clippy, rustfmt
+      - name: Normalize source and lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo generate-lockfile
+          git diff --check -- Cargo.toml Cargo.lock architecture-policy.json \
+            crates/crm-customer-accounts-privacy-scope-adapter
+      - name: Enforce architecture boundary
+        run: python scripts/check_architecture.py
+      - name: Verify Customer Accounts privacy scope unit contract
+        run: cargo test -p crm-customer-accounts-privacy-scope-adapter --lib --all-features
+      - name: Verify workspace dependency graph
+        run: cargo check --workspace --all-features
+      - name: Publish normalized validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock architecture-policy.json \
+            crates/crm-customer-accounts-privacy-scope-adapter
+          if git diff --cached --quiet; then
+            echo "Validated source was already canonical."
+            exit 0
+          fi
+          git commit -m "Normalize Customer Accounts privacy scope source"
+          git push origin HEAD:feature/customer-accounts-privacy-scope-adapter
