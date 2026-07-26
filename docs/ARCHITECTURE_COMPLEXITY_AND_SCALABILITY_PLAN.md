@@ -2,7 +2,7 @@
 
 Status: **Normative architecture evolution plan**  
 Audit baseline: **2026-07-25**  
-Execution status: **Scalability runway accepted through PR #173; three privacy owners accepted through PR #179; behavior-neutral shared support accepted through PR #176 and mechanically proven with Customer Accounts as its third consumer.**  
+Execution status: **Scalability runway accepted through PR #173; four privacy owners accepted through PR #181; behavior-neutral shared support accepted through PR #176 and mechanically proven with Customer Accounts and Contact Points as its third and fourth consumers.**  
 Applies to: repository structure, Rust workspace packaging, production composition, dependency governance, test selection, delivery tooling and agent-oriented development ergonomics.  
 Governing documents: `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `ARCHITECTURE_READINESS.md`, `DELIVERY_GOVERNANCE.md`, `IMPLEMENTATION_ROADMAP.md`, `MODULE_DEVELOPMENT.md`.
 
