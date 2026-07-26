@@ -2,10 +2,10 @@
 
 //! Contract-only authoritative Customer Data Operations privacy-scope contribution.
 //!
-//! The adapter contributes subject-level import-row and export selection/execution evidence while
-//! excluding multi-subject jobs, progress records and complete artifacts. No runtime route,
-//! application registration or worker is introduced by this package, and query execution remains
-//! read-only.
+//! The adapter contributes subject-level import-row, export-selection, execution-stage and
+//! execution-outcome evidence while excluding multi-subject jobs, progress records and complete
+//! artifacts. No runtime route, application registration or worker is introduced by this package,
+//! and query execution remains read-only.
 
 mod contract;
 mod digest;
