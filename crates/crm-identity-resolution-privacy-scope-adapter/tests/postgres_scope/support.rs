@@ -445,11 +445,12 @@ pub(crate) fn scope_request(
 }
 
 pub(crate) async fn current_generation(admin: &PgPool, tenant: &str) -> u64 {
-    let generation: i64 = sqlx::query_scalar("SELECT crm.current_identity_resolution_generation($1)")
-        .bind(tenant)
-        .fetch_one(admin)
-        .await
-        .expect("read current Identity Resolution generation");
+    let generation: i64 =
+        sqlx::query_scalar("SELECT crm.current_identity_resolution_generation($1)")
+            .bind(tenant)
+            .fetch_one(admin)
+            .await
+            .expect("read current Identity Resolution generation");
     u64::try_from(generation).expect("Identity Resolution generation is positive")
 }
 

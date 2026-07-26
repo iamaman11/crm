@@ -212,8 +212,7 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
         candidate_id("party-alias-two", "party-candidate-other-one"),
         candidate_id("party-alias-three", "party-candidate-other-two"),
     ];
-    let unrelated_candidate_id =
-        candidate_id("party-unrelated-source", "party-unrelated-survivor");
+    let unrelated_candidate_id = candidate_id("party-unrelated-source", "party-unrelated-survivor");
     let adapter = IdentityResolutionPrivacyScopeQueryAdapter::new(store);
     let definition = identity_resolution_privacy_scope_definition().unwrap();
 
@@ -236,10 +235,12 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
     assert_response_omits_private_identity_state(&first.output.bytes);
     let first = decode(first.output.bytes.as_slice());
     assert_eq!(first.resources.len(), 2);
-    assert!(first
-        .resources
-        .iter()
-        .all(|resource| resource.resource_type == "identity_resolution.candidate_case"));
+    assert!(
+        first
+            .resources
+            .iter()
+            .all(|resource| resource.resource_type == "identity_resolution.candidate_case")
+    );
     let first_evidence = first.page_evidence.expect("first page evidence");
     assert!(!first_evidence.terminal_complete);
     assert!(!first_evidence.next_cursor.is_empty());
@@ -302,7 +303,10 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
     let mut collected = BTreeMap::new();
     for contribution in [first, second, third, fourth] {
         for resource in contribution.resources {
-            collected.insert(resource.resource_id, (resource.resource_type, resource.resource_version));
+            collected.insert(
+                resource.resource_id,
+                (resource.resource_type, resource.resource_version),
+            );
         }
     }
     assert_eq!(collected.len(), 7);
@@ -361,7 +365,10 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
         )
         .await
         .expect_err("stale topology generation must fail closed");
-    assert_eq!(stale.code, "IDENTITY_RESOLUTION_PRIVACY_SCOPE_LINEAGE_INVALID");
+    assert_eq!(
+        stale.code,
+        "IDENTITY_RESOLUTION_PRIVACY_SCOPE_LINEAGE_INVALID"
+    );
     assert!(stale.retryable);
     assert_eq!(write_surface_counts(&admin).await, stale_before);
 
@@ -380,7 +387,10 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
         )
         .await
         .expect_err("cursor rebound to another page size must fail");
-    assert_eq!(rebound.code, "IDENTITY_RESOLUTION_PRIVACY_SCOPE_CURSOR_INVALID");
+    assert_eq!(
+        rebound.code,
+        "IDENTITY_RESOLUTION_PRIVACY_SCOPE_CURSOR_INVALID"
+    );
     assert_eq!(write_surface_counts(&admin).await, rebound_before);
 
     corrupt_candidate_metadata(&admin, &relevant_candidate_ids[0]).await;
