@@ -20,10 +20,11 @@ use crm_customer_data_operations::{
     PartyExportSelectionItem, decode_export_selection_item_state, decode_import_row_state,
 };
 use crm_customer_data_operations_capability_adapter::{
-    EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE, IMPORT_ROW_RECORD_TYPE,
-    MODULE_ID, export_execution_outcome_from_snapshot, export_execution_outcome_persisted_contract,
-    export_execution_stage_from_snapshot, export_execution_stage_persisted_contract,
-    export_selection_item_persisted_contract, import_row_persisted_contract,
+    EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE,
+    IMPORT_ROW_RECORD_TYPE, MODULE_ID, export_execution_outcome_from_snapshot,
+    export_execution_outcome_persisted_contract, export_execution_stage_from_snapshot,
+    export_execution_stage_persisted_contract, export_selection_item_persisted_contract,
+    import_row_persisted_contract,
 };
 use crm_customer_privacy_owner_scope_support::prove_canonical_party_claim;
 use crm_identity_resolution::PartyReference;
@@ -81,12 +82,9 @@ impl CustomerDataOperationsPrivacyScopeQueryAdapter {
         .await
         .map_err(map_canonical_party_claim_error)?;
 
-        let page = read_customer_data_page(
-            &mut transaction,
-            &request.context.tenant_id,
-            &validated,
-        )
-        .await?;
+        let page =
+            read_customer_data_page(&mut transaction, &request.context.tenant_id, &validated)
+                .await?;
         let response = build_response(
             &validated,
             &page.resources,
@@ -168,9 +166,10 @@ impl CanonicalResolutionCache {
         if let Some(relevant) = self.values.get(party_id) {
             return Ok(*relevant);
         }
-        self.examined = self.examined.checked_add(1).ok_or_else(|| {
-            scan_limit_exceeded("canonical Party resolution counter overflowed")
-        })?;
+        self.examined = self
+            .examined
+            .checked_add(1)
+            .ok_or_else(|| scan_limit_exceeded("canonical Party resolution counter overflowed"))?;
         if self.examined > MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS {
             return Err(scan_limit_exceeded(
                 "canonical Party resolution count exceeded the frozen privacy bound",
@@ -182,13 +181,12 @@ impl CanonicalResolutionCache {
                 "persisted Customer Data Party reference is invalid: {error}"
             ))
         })?;
-        let canonical = PartyReference::try_new(request.canonical_party_id.as_str()).map_err(
-            |error| {
+        let canonical =
+            PartyReference::try_new(request.canonical_party_id.as_str()).map_err(|error| {
                 canonical_resolution_unavailable(format!(
                     "accepted canonical Party reference is invalid: {error}"
                 ))
-            },
-        )?;
+            })?;
         let relevant = match prove_canonical_party_in_transaction(
             &mut **transaction,
             tenant_id,
@@ -398,10 +396,7 @@ async fn read_customer_data_page(
     })
 }
 
-fn resource_after_cursor(
-    resource: &VerifiedCustomerDataResource,
-    cursor: &CursorState,
-) -> bool {
+fn resource_after_cursor(resource: &VerifiedCustomerDataResource, cursor: &CursorState) -> bool {
     match resource.family.cmp(&cursor.family) {
         std::cmp::Ordering::Less => false,
         std::cmp::Ordering::Greater => true,
@@ -546,8 +541,7 @@ fn strict_import_record(row: StoredRecordRow) -> Result<ImportRecord, SdkError> 
     let import_row = decode_import_row_state(&snapshot.payload.bytes).map_err(|error| {
         import_row_state_invalid(format!("{}: {}", error.code, error.safe_message))
     })?;
-    if import_row.row_id().as_str() != row.record_id.as_str()
-        || import_row.version() != row.version
+    if import_row.row_id().as_str() != row.record_id.as_str() || import_row.version() != row.version
     {
         return Err(import_row_state_invalid(
             "import-row identity/version disagrees with its authoritative payload",
@@ -666,9 +660,6 @@ fn strict_snapshot(
     Ok(snapshot)
 }
 
-fn positive_version(
-    version: i64,
-    invalid: fn(String) -> SdkError,
-) -> Result<u64, SdkError> {
+fn positive_version(version: i64, invalid: fn(String) -> SdkError) -> Result<u64, SdkError> {
     u64::try_from(version).map_err(|_| invalid("resource version must be positive".to_owned()))
 }
