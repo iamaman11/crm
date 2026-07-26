@@ -214,8 +214,7 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
         candidate_id("party-alias-two", "party-candidate-other-one"),
         candidate_id("party-alias-three", "party-candidate-other-two"),
     ];
-    let unrelated_candidate_id =
-        candidate_id("party-unrelated-source", "party-unrelated-survivor");
+    let unrelated_candidate_id = candidate_id("party-unrelated-source", "party-unrelated-survivor");
     let adapter = IdentityResolutionPrivacyScopeQueryAdapter::new(store);
     let definition = identity_resolution_privacy_scope_definition().unwrap();
 
@@ -352,14 +351,7 @@ async fn identity_resolution_scope_is_alias_aware_complete_reference_only_and_si
     let empty = adapter
         .execute(
             &definition,
-            scope_request(
-                TENANT_B,
-                "party-canonical",
-                1,
-                0,
-                "",
-                "cross-tenant-empty",
-            ),
+            scope_request(TENANT_B, "party-canonical", 1, 0, "", "cross-tenant-empty"),
         )
         .await
         .expect("cross-tenant owner scope must be empty and concealed");
