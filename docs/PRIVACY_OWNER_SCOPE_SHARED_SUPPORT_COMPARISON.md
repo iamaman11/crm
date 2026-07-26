@@ -52,6 +52,8 @@ The packet does not promote any privacy-scope coordinate to runtime and does not
 
 The support crate must not begin, commit or otherwise own the database transaction. The exact allowlist for `begin_bound_read_transaction` remains the Parties and Consents PostgreSQL adapters.
 
+The dependency boundary is also mechanical. `architecture-policy.json` names the Parties and Consents adapter manifests as the only required consumers, and `scripts/check_architecture.py` rejects missing allowed manifests, missing required consumers and every unexpected consumer. A future owner may use this crate only through an explicit policy change reviewed together with that independently proven owner implementation.
+
 ## 4. Owner responsibilities retained
 
 Each owner adapter remains solely responsible for:
@@ -95,7 +97,7 @@ The Parties and Consents permanent workflows remain authoritative. The shared cr
 
 - **Protected boundary:** common privacy owner-scope protocol mechanics and canonical Party proof.
 - **Isolated dependencies:** read-only PostgreSQL proof support, privacy contracts and Identity Resolution/Party identifiers.
-- **Expected consumers:** Parties and Consents immediately; remaining privacy owners only after their owner-specific implementation is defined.
+- **Expected consumers:** Parties and Consents immediately; any additional consumer requires an explicit architecture-policy change with its independently accepted owner packet.
 - **Why an internal module is insufficient:** the behavior is consumed by independent owner adapter crates and must not make either owner package authoritative for shared protocol semantics.
 - **Lifecycle/extraction seam:** stable first-party privacy owner contribution support; not a runtime service or business owner.
 - **Expected fan-out effect:** one additional shared dependency for owner adapters, offset by removal of duplicated validation, topology SQL and digest implementation.
