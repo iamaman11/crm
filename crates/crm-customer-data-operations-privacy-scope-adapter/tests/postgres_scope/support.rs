@@ -4,17 +4,16 @@ use crm_capability_runtime::{
 };
 use crm_customer_data_operations::{
     CreateImportRow, ExportJobId, ImportJobId, ImportRow, MarkImportRowSucceeded,
-    PartyExportExclusionReason, PartyExportExecutionOutcome, PartyExportExecutionStage,
-    PartyExportSelectionItem, PartyImportKind, PreparedPartyRow, SelectedPartyId, TargetPartyId,
-    ValidateImportRowSuccess, encode_export_execution_outcome_state,
-    encode_export_execution_stage_state, encode_export_selection_item_state,
-    encode_import_row_state,
+    PartyExportExecutionOutcome, PartyExportExecutionStage, PartyExportSelectionItem,
+    PartyImportKind, PreparedPartyRow, SelectedPartyId, TargetPartyId, ValidateImportRowSuccess,
+    encode_export_execution_outcome_state, encode_export_execution_stage_state,
+    encode_export_selection_item_state, encode_import_row_state,
 };
 use crm_customer_data_operations_capability_adapter::{
     EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE,
-    IMPORT_ROW_RECORD_TYPE, MERGE_CAPABILITY as _, MODULE_ID,
-    export_execution_outcome_persisted_contract, export_execution_stage_persisted_contract,
-    export_selection_item_persisted_contract, import_row_persisted_contract,
+    IMPORT_ROW_RECORD_TYPE, MODULE_ID, export_execution_outcome_persisted_contract,
+    export_execution_stage_persisted_contract, export_selection_item_persisted_contract,
+    import_row_persisted_contract,
 };
 use crm_customer_data_operations_privacy_scope_adapter::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
@@ -23,9 +22,10 @@ use crm_customer_data_operations_privacy_scope_adapter::{
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_identity_resolution_capability_adapter::{MERGE_CAPABILITY, MERGE_REQUEST_SCHEMA};
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
-    DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
-    RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
+    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,
+    CorrelationId, DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext,
+    ModuleId, PayloadEncoding, RequestId, RetentionPolicyId, SchemaId, SchemaVersion,
+    TenantId, TraceId, TypedPayload,
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as CREATE_PARTY_CAPABILITY, CREATE_REQUEST_SCHEMA as CREATE_PARTY_SCHEMA,
@@ -479,22 +479,43 @@ pub(crate) struct WriteSurfaceCounts {
 
 pub(crate) async fn write_surface_counts(pool: &PgPool) -> WriteSurfaceCounts {
     WriteSurfaceCounts {
-        records: count(pool, "crm.records").await,
-        relationships: count(pool, "crm.relationships").await,
-        business_transactions: count(pool, "crm.business_transactions").await,
-        idempotency_records: count(pool, "crm.idempotency_records").await,
-        outbox_events: count(pool, "crm.outbox_events").await,
-        outbox_delivery: count(pool, "crm.outbox_delivery").await,
-        audit_heads: count(pool, "crm.audit_heads").await,
-        audit_records: count(pool, "crm.audit_records").await,
-    }
-}
-
-async fn count(pool: &PgPool, table: &str) -> i64 {
-    sqlx::query_scalar::<_, i64>(&format!("SELECT count(*)::bigint FROM {table}"))
+        records: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.records")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM records"),
+        relationships: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.relationships")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM relationships"),
+        business_transactions: sqlx::query_scalar(
+            "SELECT count(*)::bigint FROM crm.business_transactions",
+        )
         .fetch_one(pool)
         .await
-        .unwrap_or_else(|error| panic!("count {table}: {error}"))
+        .expect("count CRM business transactions"),
+        idempotency_records: sqlx::query_scalar(
+            "SELECT count(*)::bigint FROM crm.idempotency_records",
+        )
+        .fetch_one(pool)
+        .await
+        .expect("count CRM idempotency records"),
+        outbox_events: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.outbox_events")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM outbox events"),
+        outbox_delivery: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.outbox_delivery")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM outbox delivery rows"),
+        audit_heads: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.audit_heads")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM audit heads"),
+        audit_records: sqlx::query_scalar("SELECT count(*)::bigint FROM crm.audit_records")
+            .fetch_one(pool)
+            .await
+            .expect("count CRM audit records"),
+    }
 }
 
 pub(crate) async fn corrupt_selection_metadata(admin: &PgPool, selection_id: &str) {
