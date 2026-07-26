@@ -392,7 +392,7 @@ pub(crate) async fn corrupt_candidate_metadata(admin: &PgPool, candidate_id: &st
         .expect("begin isolated candidate corruption transaction");
     let business_transaction_id: String = sqlx::query_scalar(
         r#"
-        SELECT business_transaction_id
+        SELECT last_business_transaction_id
         FROM crm.records
         WHERE tenant_id = $1
           AND owner_module_id = $2
@@ -423,6 +423,10 @@ pub(crate) async fn corrupt_candidate_metadata(admin: &PgPool, candidate_id: &st
     .execute(&mut *transaction)
     .await
     .expect("bind authoritative write context for isolated candidate corruption");
+    sqlx::query("SET LOCAL session_replication_role = 'replica'")
+        .execute(&mut *transaction)
+        .await
+        .expect("disable production triggers for isolated corruption fixture");
     sqlx::query(
         r#"
         UPDATE crm.records
@@ -440,6 +444,10 @@ pub(crate) async fn corrupt_candidate_metadata(admin: &PgPool, candidate_id: &st
     .execute(&mut *transaction)
     .await
     .expect("corrupt isolated candidate metadata fixture");
+    sqlx::query("SET LOCAL session_replication_role = 'origin'")
+        .execute(&mut *transaction)
+        .await
+        .expect("restore production trigger mode after corruption fixture");
     transaction
         .commit()
         .await
