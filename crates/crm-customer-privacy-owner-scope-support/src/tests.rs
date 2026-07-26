@@ -72,7 +72,6 @@ fn query_request() -> QueryRequest {
             maximum_size_bytes: INPUT_MAXIMUM_BYTES,
             retention_policy_id: RetentionPolicyId::try_new("crm.test_privacy_owner.scope.request")
                 .unwrap(),
-            input_hash_placeholder: (),
             bytes,
         },
         input_hash: [0; 32],
