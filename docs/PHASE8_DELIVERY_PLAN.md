@@ -72,11 +72,11 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
 Accepted production coordinates: PRs #146–#150 and #152  
-Owner-scope foundation and accepted implementations: PRs #154–#156, #175, #179 and #181  
+Owner-scope foundation and accepted implementations: PRs #154–#156, #175, #179, #181 and #183  
 Accepted architecture runway: PRs #157–#173  
 Shared owner-scope support: **Complete through PR #176**  
 Merged production inventory: 4 mutations + 2 permission-aware queries + 10 public non-runtime coordinates + 0 Customer Privacy workers  
-Next bounded owner packet: Party Relationships privacy-scope contribution, still contract-only/non-runtime
+Next bounded owner packet: Identity Resolution privacy-scope contribution, still contract-only/non-runtime
 
 #### Accepted architecture runway
 
@@ -96,7 +96,9 @@ PR #179 accepted unchanged user-authored source `7d3e44e6dede36f76dfe92145dea612
 
 PR #181 accepted unchanged user-authored source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c` with all 24 applicable permanent workflows and squash-merged as `96cd0cf548310592a0718c97242a724a29717a72`. Contact Points now proves a fourth authoritative owner shape through exact persisted Party binding, strict endpoint lifecycle/verification rehydration, bounded owner-specific keyset pagination/cursors, deterministic reference-only evidence, response-byte exclusion of endpoint values and verification references, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and did not extend shared-support behavior.
 
-The next bounded packet is the Party Relationships privacy-scope owner implementation through `party_relationships.privacy.scope.contribute@1.0.0`. It must remain contract-only/non-runtime, use only authoritative relationship state and owner-defined two-endpoint Party semantics, strictly rehydrate temporal/directional persisted state, preserve reference-only evidence, prove tenant/RLS/no-write behavior on clean and reapplied PostgreSQL, and consume accepted shared support without speculative expansion.
+PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57` with all 25 applicable permanent workflows and squash-merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`. Party Relationships now proves a fifth authoritative owner shape through strict two-endpoint directional/reciprocal and temporal rehydration, bounded owner-specific keyset pagination/cursors, deterministic reference-only evidence, response-byte exclusion of counterpart Party and relationship semantics, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and did not extend shared-support behavior.
+
+The next bounded packet is the Identity Resolution privacy-scope owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`. It must remain contract-only/non-runtime, strictly rehydrate authoritative duplicate-candidate cases and merge operations, derive bounded alias-aware lineage from active merge state, paginate deterministically across both resource families, preserve reference-only evidence, prove tenant/RLS/no-write behavior on clean and reapplied PostgreSQL, and consume accepted shared support without speculative expansion.
 
 #### Objective
 

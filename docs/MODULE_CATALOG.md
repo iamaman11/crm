@@ -70,7 +70,7 @@ Frozen production inventory:
 
 ## 7. Customer Privacy boundary
 
-Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PRs #154–#155 published the owner-scope protocol and nine exact contract-only owner coordinates; PRs #156, #175, #179 and #181 accepted authoritative Parties, Consents, Customer Accounts and Contact Points owner implementations. PR #176 accepted their behavior-neutral common support; PRs #179 and #181 added the third and fourth mechanically permitted consumers without changing module readiness or runtime inventory. Party Relationships is selected as the next contract-only owner implementation.
+Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PRs #154–#155 published the owner-scope protocol and nine exact contract-only owner coordinates; PRs #156, #175, #179, #181 and #183 accepted authoritative Parties, Consents, Customer Accounts, Contact Points and Party Relationships owner implementations. PR #176 accepted their behavior-neutral common support; PRs #179, #181 and #183 added the third, fourth and fifth mechanically permitted consumers without changing module readiness or runtime inventory. Identity Resolution is selected as the next contract-only owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`.
 
 Accepted production vertical slices:
 
