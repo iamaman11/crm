@@ -39,6 +39,28 @@ Each shard publishes `telemetry.json` with:
 
 GitHub provisions service containers before normal job steps. The pilot therefore cannot directly measure the hidden container-provisioning interval from shell code; overall workflow/job telemetry remains the source for that outer duration, while the artifact records the explicit readiness probe.
 
+## First measured sample
+
+The first successful matrix run used candidate SHA `c5682f3b397e3fd9a75c5649a1153225d01b7f98`.
+
+Party shard:
+
+- readiness probe: `84 ms`;
+- database setup/migrations/fixtures: `1,570 ms`;
+- isolated process-target compilation: `81,730 ms`;
+- process execution after compilation: `3,390 ms`;
+- measured total: `86,774 ms`.
+
+Account shard:
+
+- readiness probe: `63 ms`;
+- database setup/migrations/fixtures: `1,472 ms`;
+- isolated process-target compilation: `78,924 ms`;
+- process execution after compilation: `2,460 ms`;
+- measured total: `82,919 ms`.
+
+Both shards completed independently and uploaded separate evidence. Within the matrix, the measured parallel critical path is the slower shard rather than the sum of both shard totals. This is not yet a valid speed comparison with the sequential Application Runtime control lane because the control lane may reuse one compilation across multiple process scenarios.
+
 ## Safety and acceptance
 
 - The existing sequential Application Runtime CI remains unchanged and continues to prove the complete ordered scenario set.
