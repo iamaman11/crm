@@ -1,5 +1,6 @@
 use crate::errors::configured;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk, PayloadContract};
+use crm_customer_data_operations_capability_adapter::MODULE_ID;
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, SchemaId, SchemaVersion,
     SdkError,
@@ -54,7 +55,7 @@ pub(crate) fn validate_definition(definition: &CapabilityDefinition) -> Result<(
 }
 
 pub(crate) fn module_id() -> Result<ModuleId, SdkError> {
-    configured(ModuleId::try_new(crm_customer_data_operations::MODULE_ID))
+    configured(ModuleId::try_new(MODULE_ID))
 }
 
 pub(crate) fn capability_id() -> Result<CapabilityId, SdkError> {
