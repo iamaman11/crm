@@ -348,7 +348,7 @@ fn raw_capability_request(
     tenant: &str,
     identity: &str,
     started_at: i64,
-    hash: u8,
+    _hash: u8,
     bytes: Vec<u8>,
 ) -> CapabilityRequest {
     let input = TypedPayload {
