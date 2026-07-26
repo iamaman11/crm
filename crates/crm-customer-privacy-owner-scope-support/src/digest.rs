@@ -14,7 +14,11 @@ pub fn framed_digest(domain: &[u8], fields: &[&[u8]]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-fn append_frame(hasher: &mut Sha256, value: &[u8]) {
+/// Appends one length-framed value to an existing SHA-256 digest.
+///
+/// This supports owner-specific variable-length evidence streams while keeping
+/// the framing rule shared and identical.
+pub fn append_frame(hasher: &mut Sha256, value: &[u8]) {
     hasher.update((value.len() as u64).to_be_bytes());
     hasher.update(value);
 }
