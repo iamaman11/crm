@@ -68,6 +68,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sed -i 's/, core::v1 as core//' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs
           cargo fmt --all
           cargo generate-lockfile
       - name: Publish staging implementation
@@ -87,12 +88,11 @@ jobs:
       - name: Verify source formatting
         run: cargo fmt --all -- --check
       - name: Run focused Clippy
-        run: >-
-          cargo clippy
-          -p crm-contact-points-privacy-scope-adapter
-          --all-targets
-          --all-features
-          -- -D warnings
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy -p crm-contact-points-privacy-scope-adapter --all-targets --all-features -- -D warnings \
+            2>&1 | tee database/contact-points-privacy-scope-clippy.log
       - name: Run focused unit tests
         run: >-
           cargo test
