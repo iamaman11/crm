@@ -49,6 +49,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("crates/crm-consents-privacy-scope-adapter/tests/postgres_scope/support.rs")
+          text = path.read_text(encoding="utf-8")
+          old = "unix_nanos: 100_000_000,"
+          new = "unix_nanos: 700_000_000 + i64::from(seed),"
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one Consent effective-time fixture, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           cargo fmt --all
           cargo generate-lockfile
           git diff --check -- Cargo.toml Cargo.lock architecture-policy.json crates/crm-consents-privacy-scope-adapter database/tests/0025_consents_privacy_scope_fixture.sql
