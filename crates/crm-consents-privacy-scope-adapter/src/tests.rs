@@ -2,7 +2,8 @@ use crate::contract::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, DEFAULT_PAGE_SIZE,
     INPUT_MAXIMUM_BYTES, INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, MAXIMUM_PAGE_SIZE,
     OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID,
-    consents_privacy_scope_definition, module_id, output_descriptor_hash, schema_id, schema_version,
+    consents_privacy_scope_definition, module_id, output_descriptor_hash, schema_id,
+    schema_version,
 };
 use crate::errors::configured;
 use crate::request::{
