@@ -37,7 +37,7 @@ pub(crate) fn build_response(
         None => String::new(),
     };
     let cursor_digest = framed_digest(
-        b"crm.customer-accounts.privacy.scope.cursor-evidence/v1",
+        b"crm.contact-points.privacy.scope.cursor-evidence/v1",
         &[
             request.lineage.tenant_id.as_bytes(),
             request.lineage.privacy_case_id.as_bytes(),
@@ -110,7 +110,7 @@ fn page_digest(
     cursor_digest: &[u8; 32],
 ) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    append_frame(&mut hasher, b"crm.customer-accounts.privacy.scope.page/v1");
+    append_frame(&mut hasher, b"crm.contact-points.privacy.scope.page/v1");
     append_frame(&mut hasher, request.lineage.privacy_case_id.as_bytes());
     append_frame(&mut hasher, request.canonical_party_id.as_str().as_bytes());
     append_frame(&mut hasher, request.page_number.to_string().as_bytes());
