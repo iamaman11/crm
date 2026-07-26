@@ -207,14 +207,11 @@ async fn customer_data_scope_is_alias_aware_complete_reference_only_and_side_eff
                 "customer_data.export_selection_item".to_owned(),
                 vec![relevant_export.selection.clone()],
             ),
-            (
-                "customer_data.import_row".to_owned(),
-                {
-                    let mut ids = vec![relevant_import_alias.clone(), relevant_import_canonical];
-                    ids.sort();
-                    ids
-                },
-            ),
+            ("customer_data.import_row".to_owned(), {
+                let mut ids = vec![relevant_import_alias.clone(), relevant_import_canonical];
+                ids.sort();
+                ids
+            },),
         ])
     );
     assert!(!by_type.contains_key("customer_data.import_job"));
