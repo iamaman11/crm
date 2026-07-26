@@ -3,8 +3,7 @@ use crm_capability_runtime::{
     CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
 };
 use crm_customer_accounts_capability_adapter::{
-    CREATE_CAPABILITY as CREATE_ACCOUNT_CAPABILITY,
-    CREATE_REQUEST_SCHEMA as CREATE_ACCOUNT_SCHEMA,
+    CREATE_CAPABILITY as CREATE_ACCOUNT_CAPABILITY, CREATE_REQUEST_SCHEMA as CREATE_ACCOUNT_SCHEMA,
 };
 use crm_customer_accounts_privacy_scope_adapter::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
