@@ -58,14 +58,7 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
         ("party-redirected", 14),
         ("party-survivor", 15),
     ] {
-        create_party(
-            &party_executor,
-            &party_definition,
-            TENANT_A,
-            party_id,
-            seed,
-        )
-        .await;
+        create_party(&party_executor, &party_definition, TENANT_A, party_id, seed).await;
     }
 
     create_account(
@@ -133,7 +126,9 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
         first.output.bytes.as_slice(),
     )
     .expect("decode first Customer Accounts scope response");
-    let first_contribution = first_wire.contribution.expect("first contribution envelope");
+    let first_contribution = first_wire
+        .contribution
+        .expect("first contribution envelope");
     assert_eq!(
         first_contribution.owner_module_id,
         crm_customer_accounts::MODULE_ID
@@ -268,14 +263,7 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
     let redirected = adapter
         .execute(
             &definition,
-            scope_request(
-                TENANT_A,
-                "party-redirected",
-                2,
-                1,
-                "",
-                "redirected-party",
-            ),
+            scope_request(TENANT_A, "party-redirected", 2, 1, "", "redirected-party"),
         )
         .await
         .expect_err("noncanonical Party scope must fail closed");
