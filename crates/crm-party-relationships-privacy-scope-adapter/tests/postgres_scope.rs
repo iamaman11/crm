@@ -201,7 +201,9 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         first.output.bytes.as_slice(),
     )
     .expect("decode first Party Relationships scope response");
-    let first_contribution = first_wire.contribution.expect("first contribution envelope");
+    let first_contribution = first_wire
+        .contribution
+        .expect("first contribution envelope");
     assert_eq!(
         first_contribution.owner_module_id,
         crm_party_relationships::MODULE_ID
@@ -216,7 +218,9 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         first_contribution.resources[0].evidence_class,
         privacy::PrivacyScopeEvidenceClass::RetainMinimizedEvidence as i32
     );
-    let first_evidence = first_contribution.page_evidence.expect("first page evidence");
+    let first_evidence = first_contribution
+        .page_evidence
+        .expect("first page evidence");
     assert_eq!(first_evidence.page_number, 1);
     assert_eq!(first_evidence.scanned_resource_count, 1);
     assert_eq!(first_evidence.emitted_resource_count, 1);
@@ -247,14 +251,18 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         second.output.bytes.as_slice(),
     )
     .expect("decode second Party Relationships scope response");
-    let second_contribution = second_wire.contribution.expect("second contribution envelope");
+    let second_contribution = second_wire
+        .contribution
+        .expect("second contribution envelope");
     assert_eq!(second_contribution.resources.len(), 1);
     assert_eq!(
         second_contribution.resources[0].resource_id,
         "party-relationship-003"
     );
     assert_eq!(second_contribution.resources[0].resource_version, 2);
-    let second_evidence = second_contribution.page_evidence.expect("second page evidence");
+    let second_evidence = second_contribution
+        .page_evidence
+        .expect("second page evidence");
     assert_eq!(second_evidence.page_number, 2);
     assert_eq!(second_evidence.scanned_resource_count, 2);
     assert_eq!(second_evidence.emitted_resource_count, 1);
@@ -284,7 +292,9 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         third.output.bytes.as_slice(),
     )
     .expect("decode third Party Relationships scope response");
-    let third_contribution = third_wire.contribution.expect("third contribution envelope");
+    let third_contribution = third_wire
+        .contribution
+        .expect("third contribution envelope");
     assert_eq!(third_contribution.resources.len(), 1);
     assert_eq!(
         third_contribution.resources[0].resource_id,
@@ -344,7 +354,9 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
         empty.output.bytes.as_slice(),
     )
     .expect("decode empty Party Relationships scope response");
-    let empty_contribution = empty_wire.contribution.expect("empty contribution envelope");
+    let empty_contribution = empty_wire
+        .contribution
+        .expect("empty contribution envelope");
     assert!(empty_contribution.resources.is_empty());
     assert!(empty_contribution.page_evidence.unwrap().terminal_complete);
 
@@ -370,7 +382,11 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
     assert_eq!(write_surface_counts(&admin).await, rebound_before);
 
     let mut corrupted_cursor = first_evidence.next_cursor.clone().into_bytes();
-    corrupted_cursor[0] = if corrupted_cursor[0] == b'A' { b'B' } else { b'A' };
+    corrupted_cursor[0] = if corrupted_cursor[0] == b'A' {
+        b'B'
+    } else {
+        b'A'
+    };
     let corrupted_cursor = String::from_utf8(corrupted_cursor).expect("cursor remains UTF-8");
     let corrupt_cursor_before = write_surface_counts(&admin).await;
     let corrupt_cursor = adapter
@@ -427,14 +443,7 @@ async fn party_relationships_scope_is_bounded_strict_tenant_bound_and_side_effec
     let redirected = adapter
         .execute(
             &definition,
-            scope_request(
-                TENANT_A,
-                "party-redirected",
-                2,
-                1,
-                "",
-                "redirected-party",
-            ),
+            scope_request(TENANT_A, "party-redirected", 2, 1, "", "redirected-party"),
         )
         .await
         .expect_err("noncanonical Party scope must fail closed");
