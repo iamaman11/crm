@@ -100,7 +100,7 @@ async fn contact_points_scope_is_bounded_strict_tenant_bound_and_side_effect_fre
         "contact-point-003",
         "party-scope",
         contact_points::ContactPointKind::Messaging,
-        "chat:scope-member@example.net",
+        "chat:chat:scope-member@example.net",
         false,
         23,
     )
@@ -121,7 +121,7 @@ async fn contact_points_scope_is_bounded_strict_tenant_bound_and_side_effect_fre
         TENANT_A,
         "contact-point-003",
         2,
-        "chat:scope-member@example.net",
+        "chat:chat:scope-member@example.net",
         contact_points::ContactPointStatus::Inactive,
         false,
         25,
@@ -221,7 +221,7 @@ async fn contact_points_scope_is_bounded_strict_tenant_bound_and_side_effect_fre
     assert_response_omits_contact_point_state(
         &second.output.bytes,
         &[
-            "chat:scope-member@example.net",
+            "chat:chat:scope-member@example.net",
             "party-other",
             "\"status\"",
             "\"party_associations\"",

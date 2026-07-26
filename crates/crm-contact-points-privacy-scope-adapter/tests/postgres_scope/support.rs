@@ -75,6 +75,7 @@ pub(crate) async fn create_party(
         .expect("create authoritative Party fixture");
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_contact_point(
     executor: &Arc<dyn TransactionalCapabilityExecutor>,
     definition: &CapabilityDefinition,
@@ -149,6 +150,7 @@ pub(crate) async fn verify_contact_point(
         .expect("verify authoritative Contact Point fixture");
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn update_contact_point_status(
     executor: &Arc<dyn TransactionalCapabilityExecutor>,
     definition: &CapabilityDefinition,
