@@ -1,0 +1,7 @@
+/tmp/customer-accounts-doc-sync.sh: line 156: warning: here-document at line 2 delimited by end-of-file (wanted `PY')
+  File "<stdin>", line 153
+    file.write("""
+               ^
+SyntaxError: unterminated triple-quoted string literal (detected at line 154)
+
+exit_status=1
