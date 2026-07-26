@@ -105,10 +105,9 @@ PR #179 was accepted on unchanged user-authored source SHA `7d3e44e6dede36f76dfe
 
 PR #181 was accepted on unchanged user-authored source SHA `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c`, passed all 24 applicable permanent workflows and was squash-merged as `96cd0cf548310592a0718c97242a724a29717a72`. It implements Contact Points through strict persistence-envelope and full-domain rehydration, exact direct Party binding, bounded owner-specific keyset pagination and cursor/digest domains, deterministic reference-only evidence, endpoint-value byte exclusion, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and leaves shared support behavior unchanged.
 
-Identity Resolution is selected as the next bounded contract-only owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`. Its packet freezes authoritative duplicate-candidate and merge-operation families, bounded alias-aware lineage resolution, heterogeneous pagination, strict rehydration, reference-only evidence and owner-specific retention/errors without runtime promotion or Customer Privacy orchestration.
-
-
 PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, passed all 25 applicable permanent workflows and was squash-merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`. Party Relationships proves the fifth authoritative owner shape through strict two-endpoint matching, directional/reciprocal and temporal domain rehydration, bounded owner-specific pagination/cursors, reference-only evidence, response-byte non-disclosure, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and changes no shared-support behavior.
+
+Identity Resolution is selected as the next bounded contract-only owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`. Its packet freezes authoritative duplicate-candidate and merge-operation families, bounded alias-aware lineage resolution, heterogeneous pagination, strict rehydration, reference-only evidence and owner-specific retention/errors without runtime promotion or Customer Privacy orchestration.
 
 ## Architecture scalability governance
 

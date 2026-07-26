@@ -105,7 +105,7 @@ Active sequence:
 8. **Remaining owner slices:** implement the other privacy owner contributions one bounded owner at a time on the validated support boundary before runtime promotion.
 9. **Scope discovery and lifecycle:** assemble a sufficient owner set, then separately prove discovery/planning, approval, restrictions, legal-hold/retention precedence, plan/outcome reads, resumable orchestration, export/deletion/convergence and workers.
 10. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
-10. **8B / #29:** starts only from the completed Phase 8A baseline.
+11. **8B / #29:** starts only from the completed Phase 8A baseline.
 
 ### Phase 8A.10 accepted boundary
 
