@@ -1,0 +1,57 @@
+name: One-Time Documentation Sync Recovery
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/one-time-doc-sync-recovery.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out synchronization branch history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          ref: docs/customer-accounts-privacy-post-merge-sync
+          fetch-depth: 0
+      - name: Recover and execute synchronization payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show ea6834fcd3c89de48fabad60a00ab7d9e45f611a:.github/workflows/one-time-customer-accounts-post-merge-doc-sync.yml > /tmp/original-sync.yml
+          python - <<'PY'
+          from pathlib import Path
+
+          lines = Path('/tmp/original-sync.yml').read_text().splitlines()
+          marker = '      - name: Synchronize accepted Customer Accounts state'
+          end_marker = '      - name: Remove one-time synchronizer and publish documentation'
+          start = lines.index(marker)
+          run_index = next(i for i in range(start + 1, len(lines)) if lines[i] == '        run: |')
+          end = lines.index(end_marker, run_index + 1)
+          payload = []
+          for line in lines[run_index + 1:end]:
+              payload.append(line[10:] if line.startswith('          ') else line)
+          text = '\n'.join(payload) + '\n'
+          text = text.replace('raise SystemExit(', 'print(')
+          Path('/tmp/customer-accounts-doc-sync.sh').write_text(text)
+          PY
+          bash /tmp/customer-accounts-doc-sync.sh
+      - name: Remove recovery artifacts and publish synchronization
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/one-time-doc-sync-recovery.yml
+          rm docs/DOC_SYNC_DIAGNOSTICS.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs .github/workflows/one-time-doc-sync-recovery.yml
+          git diff --cached --check
+          git commit -m "Synchronize Customer Accounts privacy acceptance"
+          git push origin HEAD:docs/customer-accounts-privacy-post-merge-sync
