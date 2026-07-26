@@ -72,11 +72,11 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
 Accepted production coordinates: PRs #146–#150 and #152  
-Owner-scope foundation and accepted implementations: PRs #154–#156, #175 and #179  
+Owner-scope foundation and accepted implementations: PRs #154–#156, #175, #179 and #181  
 Accepted architecture runway: PRs #157–#173  
 Shared owner-scope support: **Complete through PR #176**  
 Merged production inventory: 4 mutations + 2 permission-aware queries + 10 public non-runtime coordinates + 0 Customer Privacy workers  
-Next bounded owner packet: Contact Points privacy-scope contribution, still contract-only/non-runtime
+Next bounded owner packet: Party Relationships privacy-scope contribution, still contract-only/non-runtime
 
 #### Accepted architecture runway
 
@@ -94,7 +94,9 @@ PR #176 accepted unchanged source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8` wit
 
 PR #179 accepted unchanged user-authored source `7d3e44e6dede36f76dfe92145dea6129a2b4639e` with all 23 applicable permanent workflows and squash-merged as `5b5252a437c6bebbd7afdead0162063af4c0b7e4`. Customer Accounts now proves a third authoritative owner shape through embedded Account-owned `Primary` and `Member` Party associations, strict Account rehydration, bounded owner-specific keyset pagination/cursors, deterministic reference-only evidence, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and did not extend shared-support behavior.
 
-The next bounded packet is the Contact Points privacy-scope owner implementation through `contact_points.privacy.scope.contribute@1.0.0`. It must remain contract-only/non-runtime, use only authoritative Contact Point state and owner-defined Party association semantics, strictly rehydrate persisted state, preserve reference-only evidence, prove tenant/RLS/no-write behavior on clean and reapplied PostgreSQL, and consume accepted shared support without speculative expansion.
+PR #181 accepted unchanged user-authored source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c` with all 24 applicable permanent workflows and squash-merged as `96cd0cf548310592a0718c97242a724a29717a72`. Contact Points now proves a fourth authoritative owner shape through exact persisted Party binding, strict endpoint lifecycle/verification rehydration, bounded owner-specific keyset pagination/cursors, deterministic reference-only evidence, response-byte exclusion of endpoint values and verification references, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and did not extend shared-support behavior.
+
+The next bounded packet is the Party Relationships privacy-scope owner implementation through `party_relationships.privacy.scope.contribute@1.0.0`. It must remain contract-only/non-runtime, use only authoritative relationship state and owner-defined two-endpoint Party semantics, strictly rehydrate temporal/directional persisted state, preserve reference-only evidence, prove tenant/RLS/no-write behavior on clean and reapplied PostgreSQL, and consume accepted shared support without speculative expansion.
 
 #### Objective
 

@@ -1,8 +1,11 @@
 # Contact Points Privacy Scope Owner Packet
 
-Status: **Ready after Customer Accounts PR #179 and post-merge synchronization**  
+Status: **Complete through PR #181**  
 Parent program: #126  
 Prerequisites: Parties PR #156, Consents PR #175, shared support PR #176, Customer Accounts PR #179  
+Accepted source: `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c`  
+Merge: `96cd0cf548310592a0718c97242a724a29717a72`  
+Permanent workflows: **24/24 successful on the unchanged accepted source**  
 Coordinate: `contact_points.privacy.scope.contribute@1.0.0`
 
 ## 1. Objective
@@ -175,6 +178,6 @@ On a clean database and again after full rollback/schema removal/reapply, prove:
 
 ## 11. Completion rule
 
-The packet is complete only after its implementation PR is merged to `main`, exact-head source and merge SHAs are recorded in issue #126, permanent owner CI is authoritative, and post-merge documentation selects the following bounded owner.
+The packet is complete through PR #181 on accepted source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c` and merge `96cd0cf548310592a0718c97242a724a29717a72`. `Contact Points Privacy Scope CI` is authoritative, all 24 applicable permanent workflows passed on the unchanged source, and the coordinate remains contract-only/non-runtime.
 
-Completion does not authorize Customer Privacy discovery, planning, approval, restriction, legal-hold, action execution or worker runtime. Those remain separate packets after a sufficient owner set is explicitly reviewed and accepted.
+Completion does not authorize Customer Privacy discovery, planning, approval, restriction, legal-hold, action execution or worker runtime. Party Relationships is the next bounded contract-only owner packet, and those lifecycle capabilities remain separate until a sufficient owner set is explicitly reviewed and accepted.
