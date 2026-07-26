@@ -22,10 +22,9 @@ use crm_customer_data_operations_privacy_scope_adapter::{
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_identity_resolution_capability_adapter::{MERGE_CAPABILITY, MERGE_REQUEST_SCHEMA};
 use crm_module_sdk::{
-    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId,
-    CorrelationId, DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext,
-    ModuleId, PayloadEncoding, RequestId, RetentionPolicyId, SchemaId, SchemaVersion,
-    TenantId, TraceId, TypedPayload,
+    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
+    DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as CREATE_PARTY_CAPABILITY, CREATE_REQUEST_SCHEMA as CREATE_PARTY_SCHEMA,
