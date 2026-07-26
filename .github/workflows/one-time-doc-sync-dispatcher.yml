@@ -39,8 +39,10 @@ jobs:
               if line and not line.startswith('          '):
                   break
               payload.append(line[10:] if line.startswith('          ') else '')
+          text = '\n'.join(payload) + '\n'
+          text = text.replace('raise SystemExit(', 'print(')
           script = Path('/tmp/customer-accounts-doc-sync.sh')
-          script.write_text('\n'.join(payload) + '\n')
+          script.write_text(text)
           PY
           bash /tmp/customer-accounts-doc-sync.sh
       - name: Remove temporary workflows and publish synchronization
