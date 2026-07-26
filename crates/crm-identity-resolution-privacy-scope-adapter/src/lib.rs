@@ -6,7 +6,8 @@
 //! relevant to one accepted canonical Party. Reverse alias discovery, merge topology,
 //! persistence rehydration, heterogeneous pagination, classification, retention and
 //! errors remain Identity Resolution-owned. No runtime route, application registration
-//! or worker is introduced by this package, and query execution remains read-only.
+//! or worker is introduced by this package; query execution remains tenant-bound and
+//! read-only.
 
 mod contract;
 mod digest;
