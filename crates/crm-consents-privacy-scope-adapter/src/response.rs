@@ -3,11 +3,11 @@ use crate::contract::{
     OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID, module_id, output_descriptor_hash, schema_id,
     schema_version,
 };
-use crate::digest::{append_frame, framed_digest};
 use crate::errors::{configured, stored_state_invalid};
 use crate::request::{ValidatedRequest, encode_cursor};
 use crm_consents::{CONSENT_AUTHORIZATION_STATE_RETENTION_POLICY_ID, MODULE_ID};
 use crm_consents_capability_adapter::RECORD_TYPE;
+use crm_customer_privacy_owner_scope_support::{append_frame, framed_digest};
 use crm_module_sdk::{
     DataClass, PayloadEncoding, RecordId, RetentionPolicyId, SdkError, TypedPayload,
 };
