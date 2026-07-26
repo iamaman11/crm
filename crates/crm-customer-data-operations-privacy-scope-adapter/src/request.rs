@@ -72,15 +72,14 @@ pub(crate) fn validate_wire_request(
     context: &QueryExecutionContext,
     bytes: &[u8],
 ) -> Result<ValidatedRequest, SdkError> {
-    let request = privacy::CustomerDataPrivacyScopeContributionRequest::decode(bytes).map_err(
-        |error| {
+    let request =
+        privacy::CustomerDataPrivacyScopeContributionRequest::decode(bytes).map_err(|error| {
             invalid_contract_with_reference(
                 "CUSTOMER_DATA_PRIVACY_SCOPE_REQUEST_INVALID",
                 "The Customer Data Operations privacy scope request is invalid.",
                 error.to_string(),
             )
-        },
-    )?;
+        })?;
     let contribution = request.contribution.ok_or_else(|| {
         invalid_contract(
             "CUSTOMER_DATA_PRIVACY_SCOPE_REQUEST_INVALID",

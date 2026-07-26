@@ -4,8 +4,8 @@ use crate::contract::{
     MAX_PRIVACY_ASSOCIATED_EXPORT_RECORDS_REHYDRATED, MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS,
     MAX_PRIVACY_EXPORT_SELECTION_ITEMS_SCANNED, MAX_PRIVACY_IMPORT_ROWS_SCANNED,
     MAX_PRIVACY_OWNER_RECORDS_SCANNED, MAXIMUM_PAGE_SIZE, OUTPUT_MAXIMUM_BYTES,
-    OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID, customer_data_privacy_scope_definition, module_id,
-    output_descriptor_hash, schema_id, schema_version,
+    OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID, customer_data_privacy_scope_definition,
+    module_id, output_descriptor_hash, schema_id, schema_version,
 };
 use crate::errors::configured;
 use crate::request::{
@@ -184,7 +184,10 @@ fn four_family_cursor_round_trip_is_bound_to_lineage_and_page_size() {
         &wire_request(DEFAULT_PAGE_SIZE, stage_cursor).encode_to_vec(),
     )
     .unwrap();
-    assert_eq!(stage.cursor_state.family, ResourceFamily::ExportExecutionStage);
+    assert_eq!(
+        stage.cursor_state.family,
+        ResourceFamily::ExportExecutionStage
+    );
     assert!(stage.cursor_state.after_record_id.is_none());
 
     assert_invalid_argument(
@@ -238,7 +241,10 @@ fn response_is_four_family_reference_only_and_deterministic() {
 
     let envelope = first.contribution.unwrap();
     assert_eq!(envelope.resources.len(), 4);
-    assert_eq!(envelope.resources[0].resource_type, "customer_data.import_row");
+    assert_eq!(
+        envelope.resources[0].resource_type,
+        "customer_data.import_row"
+    );
     assert_eq!(
         envelope.resources[1].resource_type,
         "customer_data.export_selection_item"

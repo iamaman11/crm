@@ -11,8 +11,8 @@ use crm_customer_data_operations::{
     EXPORT_SELECTION_ITEM_STATE_RETENTION_POLICY_ID, IMPORT_ROW_STATE_RETENTION_POLICY_ID,
 };
 use crm_customer_data_operations_capability_adapter::{
-    EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE, IMPORT_ROW_RECORD_TYPE,
-    MODULE_ID,
+    EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE,
+    IMPORT_ROW_RECORD_TYPE, MODULE_ID,
 };
 use crm_customer_privacy_owner_scope_support::{append_frame, framed_digest};
 use crm_module_sdk::{
