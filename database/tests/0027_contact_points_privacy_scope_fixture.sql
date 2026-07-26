@@ -1,8 +1,8 @@
 \set ON_ERROR_STOP on
 
--- Minimal durable registry fixture required only to create authoritative
--- Contact Point records for the non-runtime owner privacy-scope PostgreSQL
--- acceptance suite. Party creation remains supplied by fixture 0024.
+-- Minimal durable registry fixture required only to create, verify and update
+-- authoritative Contact Point records for the non-runtime owner privacy-scope
+-- PostgreSQL acceptance suite. Party creation remains supplied by fixture 0024.
 INSERT INTO crm.module_versions (
   module_id,
   version,
@@ -42,25 +42,64 @@ INSERT INTO crm.capability_registry (
   export_allowed,
   data_classes_touched
 )
-VALUES (
-  'contact-points.contact-point.create',
-  '1.0.0',
-  'crm.contact-points',
-  '0.3.0',
-  'crm.contact_points.v1.ContactPointService',
-  'CreateContactPoint',
-  decode(repeat('95', 32), 'hex'),
-  decode(repeat('96', 32), 'hex'),
-  'medium',
-  true,
-  true,
-  false,
-  false,
-  false,
-  false,
-  false,
-  ARRAY['personal']::text[]
-)
+VALUES
+  (
+    'contact-points.contact-point.create',
+    '1.0.0',
+    'crm.contact-points',
+    '0.3.0',
+    'crm.contact_points.v1.ContactPointService',
+    'CreateContactPoint',
+    decode(repeat('95', 32), 'hex'),
+    decode(repeat('96', 32), 'hex'),
+    'medium',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    ARRAY['personal']::text[]
+  ),
+  (
+    'contact-points.contact-point.verify',
+    '1.0.0',
+    'crm.contact-points',
+    '0.3.0',
+    'crm.contact_points.v1.ContactPointService',
+    'VerifyContactPoint',
+    decode(repeat('97', 32), 'hex'),
+    decode(repeat('98', 32), 'hex'),
+    'medium',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    ARRAY['personal']::text[]
+  ),
+  (
+    'contact-points.contact-point.update',
+    '1.0.0',
+    'crm.contact-points',
+    '0.3.0',
+    'crm.contact_points.v1.ContactPointService',
+    'UpdateContactPoint',
+    decode(repeat('99', 32), 'hex'),
+    decode(repeat('9a', 32), 'hex'),
+    'medium',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    ARRAY['personal']::text[]
+  )
 ON CONFLICT (capability_id, capability_version) DO UPDATE
 SET owner_module_id = EXCLUDED.owner_module_id,
     owner_module_version = EXCLUDED.owner_module_version,
