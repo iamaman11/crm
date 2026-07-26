@@ -372,7 +372,7 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
 
     assert_no_query_side_writes(
         &admin,
-        scope_request(TENANT_A, "party-empty", 2, 1, "", "final"),
+        scope_request(TENANT_A, "party-scope", 2, 1, "", "final"),
         &adapter,
         &definition,
     )
