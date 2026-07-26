@@ -1,0 +1,63 @@
+use crm_module_sdk::{ErrorCategory, IdentifierError, SdkError};
+
+pub(crate) fn configured<T>(value: Result<T, IdentifierError>) -> Result<T, SdkError> {
+    value.map_err(|error| {
+        SdkError::new(
+            "CONSENTS_PRIVACY_SCOPE_CONFIGURATION_INVALID",
+            ErrorCategory::Internal,
+            false,
+            "The Consents privacy scope configuration is invalid.",
+        )
+        .with_internal_reference(error.to_string())
+    })
+}
+
+pub(crate) fn lineage_invalid(
+    category: ErrorCategory,
+    retryable: bool,
+    reference: impl Into<String>,
+) -> SdkError {
+    SdkError::new(
+        "CONSENTS_PRIVACY_SCOPE_LINEAGE_INVALID",
+        category,
+        retryable,
+        "The requested Consents privacy scope is not available.",
+    )
+    .with_internal_reference(reference.into())
+}
+
+pub(crate) fn stored_state_invalid(reference: impl Into<String>) -> SdkError {
+    SdkError::new(
+        "CONSENTS_PRIVACY_SCOPE_STORED_STATE_INVALID",
+        ErrorCategory::Unavailable,
+        true,
+        "The Consents privacy scope is temporarily unavailable.",
+    )
+    .with_internal_reference(reference.into())
+}
+
+pub(crate) fn row_decode_error(error: sqlx::Error) -> SdkError {
+    stored_state_invalid(error.to_string())
+}
+
+pub(crate) fn database_unavailable(error: sqlx::Error) -> SdkError {
+    SdkError::new(
+        "CONSENTS_PRIVACY_SCOPE_UNAVAILABLE",
+        ErrorCategory::Unavailable,
+        true,
+        "The Consents privacy scope is temporarily unavailable.",
+    )
+    .with_internal_reference(error.to_string())
+}
+
+pub(crate) fn invalid_contract(code: &'static str, safe_message: &'static str) -> SdkError {
+    SdkError::new(code, ErrorCategory::InvalidArgument, false, safe_message)
+}
+
+pub(crate) fn invalid_contract_with_reference(
+    code: &'static str,
+    safe_message: &'static str,
+    reference: impl Into<String>,
+) -> SdkError {
+    invalid_contract(code, safe_message).with_internal_reference(reference.into())
+}
