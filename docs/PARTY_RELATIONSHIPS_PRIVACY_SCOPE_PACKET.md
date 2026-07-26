@@ -1,9 +1,12 @@
 # Party Relationships Privacy Scope Owner Packet
 
-Status: **Ready after Contact Points PR #181 and post-merge synchronization**  
+Status: **Complete through Party Relationships PR #183**  
 Parent program: #126  
 Prerequisites: Parties PR #156, Consents PR #175, shared support PR #176, Customer Accounts PR #179, Contact Points PR #181  
 Coordinate: `party_relationships.privacy.scope.contribute@1.0.0`
+Accepted source: `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`
+Merge: `9ad2aa91321e9edb54cab98218f93143923ef33f`
+Permanent workflows: **25/25 successful on the unchanged accepted source**
 
 ## 1. Objective
 
@@ -104,7 +107,7 @@ The Party Relationships adapter may become an approved consumer of `crm-customer
 
 No shared-support change is allowed merely to reduce Party Relationships code. A shared extension is permitted only when the implementation proves behavior that is:
 
-- semantically identical across Parties, Consents, Customer Accounts and Contact Points;
+- semantically identical across Parties, Consents, Customer Accounts, Contact Points and Party Relationships;
 - independent of relationship SQL, endpoint matching, directionality, roles, validity, classification and pagination;
 - covered by compatibility and regression tests for every accepted consumer;
 - behavior-neutral for existing response bytes, digests and owner-prefixed errors.
@@ -184,3 +187,12 @@ On a clean database and again after full rollback/schema removal/reapply, prove:
 The packet is complete only after its implementation PR is merged to `main`, exact-head source and merge SHAs are recorded in issue #126, permanent owner CI is authoritative, and post-merge documentation selects the following bounded owner.
 
 Completion does not authorize Customer Privacy discovery, planning, approval, restriction, legal-hold, action execution or worker runtime. Those remain separate packets after a sufficient owner set is explicitly reviewed and accepted.
+
+
+## 12. Accepted result
+
+PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, passed all 25 applicable permanent workflows and was squash-merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`.
+
+The accepted implementation strictly rehydrates authoritative two-endpoint Party Relationship state, matches the canonical Party through either endpoint, preserves directional/reciprocal, role, Active/Inactive, validity, timestamp and version semantics as owner evidence, emits bounded reference-only resources, excludes counterpart Party identifiers and relationship semantics from encoded response bytes, and proves clean rollback/schema-removal/reapply acceptance with zero query-side writes.
+
+It remains contract-only/non-runtime. Shared support behavior, public contracts, production schema, workers, Customer Privacy orchestration and runtime inventory are unchanged.

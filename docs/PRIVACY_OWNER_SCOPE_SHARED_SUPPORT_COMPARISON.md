@@ -1,11 +1,11 @@
 # Privacy Owner Scope Shared Support — Accepted Boundary and Consumer Comparison
 
-Status: **Shared boundary accepted through PR #176; fourth consumer accepted through PR #181**  
+Status: **Shared boundary accepted through PR #176; fifth consumer accepted through PR #183**  
 Accepted source: `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`  
 Merge: `80411d54a3ca45a783d982152c5cd8317f1fd9bd`  
 Permanent workflows: **21/21 successful on the unchanged accepted source**  
 Accepted comparison baseline: **Parties PR #156 + Consents PR #175**  
-Current proven consumers: **Parties + Consents + Customer Accounts PR #179 + Contact Points PR #181**  
+Current proven consumers: **Parties + Consents + Customer Accounts PR #179 + Contact Points PR #181 + Party Relationships PR #183**  
 Base `main`: `039d6461803208f6cb70ce0fbcfcaffaf59d7125`
 
 ## 1. Purpose
@@ -54,9 +54,9 @@ The packet does not promote any privacy-scope coordinate to runtime and does not
 9. deterministic length-framed SHA-256 primitives;
 10. internal support error kinds that owners map to their existing stable `SdkError` contracts.
 
-The support crate must not begin, commit or otherwise own the database transaction. The exact allowlist for `begin_bound_read_transaction` is restricted to the Parties, Consents, Customer Accounts and Contact Points PostgreSQL adapters.
+The support crate must not begin, commit or otherwise own the database transaction. The exact allowlist for `begin_bound_read_transaction` is restricted to the Parties, Consents, Customer Accounts, Contact Points and Party Relationships PostgreSQL adapters.
 
-The dependency boundary is also mechanical. `architecture-policy.json` names the Parties, Consents, Customer Accounts and Contact Points adapter manifests as the only required consumers, and `scripts/check_architecture.py` rejects missing allowed manifests, missing required consumers and every unexpected consumer. A future owner may use this crate only through an explicit policy change reviewed together with that independently proven owner implementation.
+The dependency boundary is also mechanical. `architecture-policy.json` names the Parties, Consents, Customer Accounts, Contact Points and Party Relationships adapter manifests as the only required consumers, and `scripts/check_architecture.py` rejects missing allowed manifests, missing required consumers and every unexpected consumer. A future owner may use this crate only through an explicit policy change reviewed together with that independently proven owner implementation.
 
 ## 4. Owner responsibilities retained
 
@@ -95,7 +95,7 @@ For the same accepted fixture inputs, migration to shared support must preserve:
 - absence or presence of internal references where already observable to tests;
 - zero writes to records, relationships, transactions, idempotency, outbox and audit surfaces.
 
-The Parties, Consents, Customer Accounts and Contact Points permanent workflows remain authoritative. The shared crate is present in all four path-filter graphs so a change to common behavior re-runs every proven owner acceptance suite.
+The Parties, Consents, Customer Accounts, Contact Points and Party Relationships permanent workflows remain authoritative. The shared crate is present in all five path-filter graphs so a change to common behavior re-runs every proven owner acceptance suite.
 
 The compatibility proof is explicit rather than merely self-consistent. Shared conformance tests exercise every common request and lineage error kind; both owner suites assert exact owner-prefixed codes, categories and retryability after mapping; and `tests/digest_compatibility.rs` freezes the accepted Parties and Consents cursor/page digest bytes from the pre-extraction implementations. A future framing or field-order change therefore requires an intentional versioned protocol decision rather than silently changing evidence under the existing domains.
 
@@ -103,7 +103,7 @@ The compatibility proof is explicit rather than merely self-consistent. Shared c
 
 - **Protected boundary:** common privacy owner-scope protocol mechanics and canonical Party proof.
 - **Isolated dependencies:** read-only PostgreSQL proof support, privacy contracts and Identity Resolution/Party identifiers.
-- **Expected consumers:** Parties, Consents, Customer Accounts and Contact Points are proven; any additional consumer requires an explicit architecture-policy change with its independently accepted owner packet.
+- **Expected consumers:** Parties, Consents, Customer Accounts, Contact Points and Party Relationships are proven; any additional consumer requires an explicit architecture-policy change with its independently accepted owner packet.
 - **Why an internal module is insufficient:** the behavior is consumed by independent owner adapter crates and must not make either owner package authoritative for shared protocol semantics.
 - **Lifecycle/extraction seam:** stable first-party privacy owner contribution support; not a runtime service or business owner.
 - **Expected fan-out effect:** one additional shared dependency for owner adapters, offset by removal of duplicated validation, topology SQL and digest implementation.
@@ -196,3 +196,19 @@ Contact Points independently proves the accepted shared boundary against a fourt
 - clean migration, full rollback/schema removal, reapply and repeated acceptance with zero writes across record, relationship, transaction, idempotency, outbox and audit surfaces.
 
 PR #181 changed no shared-support behavior. It only extended the mechanical consumer and bound-read allowlists to the independently proven Contact Points adapter. Party Relationships is the next candidate consumer and must earn the same bounded policy change without moving two-endpoint temporal relationship semantics into shared code.
+
+
+## 13. Fifth proven consumer — Party Relationships PR #183
+
+PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, passed all 25 applicable permanent workflows and was squash-merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`.
+
+Party Relationships independently proves the accepted shared boundary against a fifth authoritative shape:
+
+- one relationship resource owns two authoritative Party endpoints;
+- the canonical Party may match either fully rehydrated endpoint;
+- directional and reciprocal type/role semantics, Active/Inactive state, validity, timestamps and version remain owner-specific;
+- bounded record-ID keyset scanning and owner cursor/digest/retention/error domains remain local;
+- encoded response bytes exclude the counterpart Party, endpoint position, relationship type, roles, status and validity;
+- clean rollback/schema-removal/reapply acceptance proves zero query-side writes.
+
+PR #183 changed no shared-support behavior. It only extended the mechanical consumer and bound-read allowlists to the independently proven Party Relationships adapter. Identity Resolution is the next candidate consumer and must earn the same bounded policy change without moving candidate/merge lineage semantics into shared code.

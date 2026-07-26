@@ -76,7 +76,7 @@ Owner-scope foundation and accepted implementations: PRs #154–#156, #175, #179
 Accepted architecture runway: PRs #157–#173  
 Shared owner-scope support: **Complete through PR #176**  
 Merged production inventory: 4 mutations + 2 permission-aware queries + 10 public non-runtime coordinates + 0 Customer Privacy workers  
-Next bounded owner packet: Party Relationships privacy-scope contribution, still contract-only/non-runtime
+Next bounded owner packet: Identity Resolution privacy-scope contribution, still contract-only/non-runtime
 
 #### Accepted architecture runway
 
@@ -240,3 +240,6 @@ Untrusted extensions remain signed, permissioned and sandboxed with explicit cap
 ### Phase 11 — enterprise security, resilience and production proof
 
 Enterprise hardening remains continuous and culminates in identity federation/provisioning, authorization, encryption, WORM audit export, privacy/legal hold, backup/restore, residency, supply-chain/security testing, load/chaos proof, SLOs, alerting, incident response and runbooks.
+
+
+PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, passed all 25 applicable permanent workflows and was squash-merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`. Party Relationships proves the fifth authoritative owner shape through strict two-endpoint matching, directional/reciprocal and temporal domain rehydration, bounded owner-specific pagination/cursors, reference-only evidence, response-byte non-disclosure, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and changes no shared-support behavior.

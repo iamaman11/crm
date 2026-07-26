@@ -70,7 +70,7 @@ Frozen production inventory:
 
 ## 7. Customer Privacy boundary
 
-Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PRs #154–#155 published the owner-scope protocol and nine exact contract-only owner coordinates; PRs #156, #175, #179 and #181 accepted authoritative Parties, Consents, Customer Accounts and Contact Points owner implementations. PR #176 accepted their behavior-neutral common support; PRs #179 and #181 added the third and fourth mechanically permitted consumers without changing module readiness or runtime inventory. Party Relationships is selected as the next contract-only owner implementation.
+Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PRs #154–#155 published the owner-scope protocol and nine exact contract-only owner coordinates; PRs #156, #175, #179 and #181 accepted authoritative Parties, Consents, Customer Accounts, Contact Points and Party Relationships owner implementations. PR #176 accepted their behavior-neutral common support; PRs #179 and #181 added the third and fourth mechanically permitted consumers without changing module readiness or runtime inventory. Party Relationships is selected as the next contract-only owner implementation.
 
 Accepted production vertical slices:
 
@@ -189,3 +189,6 @@ Before introducing a module:
 Current product-complete expert modules: **0**.
 
 A module is not product-complete merely because a crate, schema, manifest or one backend path exists. Product-complete status requires required domain breadth, governed APIs, persistence, authorization, audit, product UX and production/operational evidence.
+
+
+PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, passed all 25 applicable permanent workflows and was squash-merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`. Party Relationships proves the fifth authoritative owner shape through strict two-endpoint matching, directional/reciprocal and temporal domain rehydration, bounded owner-specific pagination/cursors, reference-only evidence, response-byte non-disclosure, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and changes no shared-support behavior.

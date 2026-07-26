@@ -47,11 +47,11 @@ Current customer-master lane:
 3. **8A.9 / #124 / PR #132** — Customer Data Quality — **Complete**.
 4. **Architecture integrity / #134 / PR #135** — native composition/lifecycle gating — **Complete**.
 5. **8A.10 / #125 / PR #137** — Governed Customer Enrichment and Provenance — **Complete**.
-6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **In progress**; six runtime coordinates are merged through PR #152, owner-scope contracts through PR #155 and authoritative Parties, Consents, Customer Accounts and Contact Points owner implementations through PR #181.
+6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **In progress**; six runtime coordinates are merged through PR #152, owner-scope contracts through PR #155 and authoritative Parties, Consents, Customer Accounts, Contact Points and Party Relationships owner implementations through PR #181.
 7. **Shared owner-scope support / PR #176** — **Complete**; accepted source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`, merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`; PRs #179 and #181 add only the third and fourth mechanically proven consumers.
 8. **Customer Accounts owner-scope packet / PR #179** — **Complete**; accepted source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, merge `5b5252a437c6bebbd7afdead0162063af4c0b7e4`, 23/23 applicable permanent workflows.
 9. **Contact Points owner-scope packet / PR #181** — **Complete**; accepted source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c`, merge `96cd0cf548310592a0718c97242a724a29717a72`, 24/24 applicable permanent workflows.
-10. **Next bounded owner-scope packet — Party Relationships** — contract-only/non-runtime authoritative two-endpoint temporal relationship contribution using accepted shared support.
+10. **Next bounded owner-scope packet — Identity Resolution** — contract-only/non-runtime authoritative two-endpoint temporal relationship contribution using accepted shared support.
 11. **Remaining owner-scope packets** — one authoritative owner at a time on the accepted shared-support boundary.
 12. **Remaining 8A.11 lifecycle packets** — sufficient owner set, scope discovery/planning, approval, restrictions, legal-hold/retention precedence, plan/outcome reads, resumable execution, export/deletion and convergence.
 13. **Phase 8A closure** — after merged privacy interaction proof.
@@ -163,7 +163,7 @@ As of 2026-07-26:
 - Native module composition/lifecycle integrity is complete through PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`.
 - Phase 8A.10 is complete through PR #137; accepted source `f92d101206886e3ceaf94d0e56e52580cec21093`; merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 - Customer Enrichment runtime inventory is exactly 6 public mutations, 6 permission-aware queries and 5 activation-gated worker-only coordinates.
-- Phase 8A.11 / #126 is **In progress**. PR #152 established four runtime Customer Privacy mutations, two permission-aware queries, ten public non-runtime coordinates and zero Customer Privacy workers. PRs #156, #175, #179 and #181 accepted Parties, Consents, Customer Accounts and Contact Points privacy-scope owners; all remain contract-only/non-runtime.
+- Phase 8A.11 / #126 is **In progress**. PR #152 established four runtime Customer Privacy mutations, two permission-aware queries, ten public non-runtime coordinates and zero Customer Privacy workers. PRs #156, #175, #179 and #181 accepted Parties, Consents, Customer Accounts, Contact Points and Party Relationships privacy-scope owners; all remain contract-only/non-runtime.
 - PR #176 accepted shared owner-scope support on unchanged source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`, passed 21/21 applicable permanent workflows and merged as `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. PRs #179 and #181 added Customer Accounts and Contact Points as the third and fourth mechanically restricted consumers without changing shared semantics.
 - PR #179 accepted unchanged user-authored source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, passed 23/23 applicable permanent workflows and merged as `5b5252a437c6bebbd7afdead0162063af4c0b7e4`.
 - PR #181 accepted unchanged user-authored source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c`, passed 24/24 applicable permanent workflows and merged as `96cd0cf548310592a0718c97242a724a29717a72`.
@@ -171,3 +171,6 @@ As of 2026-07-26:
 - Phase 8B / #29 remains planned after Phase 8A closure.
 
 This baseline must be updated whenever the active packet or merged completion state changes.
+
+
+PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, passed all 25 applicable permanent workflows and was squash-merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`. Party Relationships proves the fifth authoritative owner shape through strict two-endpoint matching, directional/reciprocal and temporal domain rehydration, bounded owner-specific pagination/cursors, reference-only evidence, response-byte non-disclosure, clean rollback/schema-removal/reapply acceptance and zero query-side writes. It remains contract-only/non-runtime and changes no shared-support behavior.
