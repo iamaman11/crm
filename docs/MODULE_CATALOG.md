@@ -35,7 +35,7 @@ Technical crates, process shells, Protobuf packages, SQL migrations and generic 
 | `crm.contact-points` | Canonical communication endpoints | **Vertical slice** | Create/update/verify/get/list | Broader channel UX and downstream omnichannel use |
 | `crm.party-relationships` | Typed temporal Party relationships | **Vertical slice** | Create/update/get/list and hierarchy foundation | Additional governed relationship semantics |
 | `crm.consents` | Purpose/channel Consent and Communication Authorization | **Vertical slice** | Immutable assertions, withdrawal and exact authorization decisions | Privacy orchestration and wider downstream enforcement |
-| `crm.identity-resolution` | Duplicate cases, merge lineage and canonical resolution | **Expert expansion** | Candidate/review plus reversible merge/unmerge | Privacy lifecycle integration and broader survivorship |
+| `crm.identity-resolution` | Duplicate cases, merge lineage and canonical resolution | **Expert expansion** | Candidate/review plus reversible merge/unmerge | Broader survivorship and production privacy orchestration |
 | `crm.customer-data-operations` | Governed import/export jobs and evidence | **Expert expansion** | Resumable import, deterministic export/artifacts/reconciliation and crash recovery | More resource profiles and privacy access/deletion integration |
 | `crm.data-quality` | Customer-data quality governance coordinator | **Vertical slice** | Exact-version Party evaluation, findings/completeness, stewardship and governed remediation | Additional owner-resource profiles and privacy coordination |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Exact provider transport/secret boundary, immutable provenance, review, deterministic Party owner-capability application and recovery | Additional providers, target fields, product UX and privacy interaction |
@@ -79,19 +79,22 @@ Merged production inventory:
 - ten public non-runtime Customer Privacy coordinates;
 - zero Customer Privacy workers.
 
-Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. Five authoritative implementations are accepted:
+Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. Six authoritative implementations are accepted:
 
 - PR #156 — Parties, one authoritative Party record;
 - PR #175 — Consents, multiple authoritative Consent records through owner relationships and bounded pagination;
 - PR #179 — Customer Accounts, strict Account rehydration and embedded `Primary`/`Member` Party associations;
 - PR #181 — Contact Points, strict endpoint rehydration and direct Party binding;
-- PR #183 — Party Relationships, strict two-endpoint temporal relationship rehydration.
+- PR #183 — Party Relationships, strict two-endpoint temporal relationship rehydration;
+- PR #186 — Identity Resolution, bounded active alias graph, candidate/merge persistence, provenance-only discovery and heterogeneous pagination.
 
-All five remain non-runtime and add no Customer Privacy worker or public ingress.
+All six remain non-runtime and add no Customer Privacy worker or public ingress.
 
-Shared support was accepted in PR #176 / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. PRs #179, #181 and #183 extended only its mechanical consumer and bound-read allowlists to the third, fourth and fifth independently proven adapters; owner-specific SQL, rehydration, pagination, evidence, response and errors remain outside shared support.
+Shared support was accepted in PR #176 / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. Later owner PRs extend only mechanical consumer and bound-read allowlists where independently proven; owner-specific SQL, rehydration, pagination, evidence, response and errors remain outside shared support.
 
-Identity Resolution is the next bounded contract-only owner implementation through `identity_resolution.privacy.scope.contribute@1.0.0`. Customer Data Operations, Data Quality and Customer Enrichment owner contributions follow one at a time before production scope discovery/planning.
+Customer Data Operations is the next bounded contract-only owner implementation through `customer_data.privacy.scope.contribute@1.0.0`. Data Quality and Customer Enrichment owner contributions follow one at a time before production scope discovery/planning.
+
+The Customer Data Operations packet distinguishes subject-level import-row/export-selection/execution evidence from multi-subject job, progress and artifact containers. It requires bounded alias-safe scans, strict owner rehydration and reference-only output without introducing container-level deletion semantics.
 
 The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. It does not yet prove approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization, convergence or workers.
 
@@ -107,7 +110,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Five of nine owner contributions are accepted through PR #183. Identity Resolution is next; the remaining owners, discovery/planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. Six of nine owner contributions are accepted through PR #186. Customer Data Operations is next; Data Quality, Customer Enrichment, discovery/planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 
