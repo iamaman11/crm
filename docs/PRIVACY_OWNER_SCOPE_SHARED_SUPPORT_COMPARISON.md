@@ -165,6 +165,21 @@ After PR #176 is accepted and merged:
 9. close Phase 8A only after complete privacy/customer-master interaction and real-process acceptance;
 10. begin Phase 8B Catalog/Pricing/CPQ only from the completed Phase 8A baseline.
 
+## 11. Third proven consumer — Customer Accounts PR #179
+
+PR #179 accepted unchanged user-authored source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, passed all 23 applicable permanent workflows and was squash-merged as `5b5252a437c6bebbd7afdead0162063af4c0b7e4`.
+
+Customer Accounts independently proves the accepted shared boundary against a third authoritative resource shape:
+
+- authoritative Account records rather than Party records or relationship-owned Consent records;
+- embedded Account-owned Party associations, including both `Primary` and indirect `Member` matches;
+- strict Account metadata and full domain-state rehydration before evidence emission;
+- owner-specific bounded keyset scan, continuation cursor, page/cursor digest domains, evidence classification, retention and stable error prefixes;
+- deterministic reference-only response bytes with Account names, status and association contents excluded;
+- one caller-opened tenant-bound `REPEATABLE READ, READ ONLY` PostgreSQL transaction;
+- clean migration, full rollback/schema removal, reapply and repeated acceptance with zero writes across record, relationship, transaction, idempotency, outbox and audit surfaces.
+
+PR #179 changed no shared-support behavior. It only extended the mechanical consumer and bound-read allowlists to the independently proven Customer Accounts adapter. PR #181 later earned the same explicit policy change for Contact Points without extending shared behavior. The next candidate consumer is Party Relationships, but it must be proven independently in its own bounded packet; shared support must not be expanded speculatively.
 
 ## 12. Fourth proven consumer — Contact Points PR #181
 
@@ -181,19 +196,3 @@ Contact Points independently proves the accepted shared boundary against a fourt
 - clean migration, full rollback/schema removal, reapply and repeated acceptance with zero writes across record, relationship, transaction, idempotency, outbox and audit surfaces.
 
 PR #181 changed no shared-support behavior. It only extended the mechanical consumer and bound-read allowlists to the independently proven Contact Points adapter. Party Relationships is the next candidate consumer and must earn the same bounded policy change without moving two-endpoint temporal relationship semantics into shared code.
-
-## 11. Third proven consumer — Customer Accounts PR #179
-
-PR #179 accepted unchanged user-authored source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, passed all 23 applicable permanent workflows and was squash-merged as `5b5252a437c6bebbd7afdead0162063af4c0b7e4`.
-
-Customer Accounts independently proves the accepted shared boundary against a third authoritative resource shape:
-
-- authoritative Account records rather than Party records or relationship-owned Consent records;
-- embedded Account-owned Party associations, including both `Primary` and indirect `Member` matches;
-- strict Account metadata and full domain-state rehydration before evidence emission;
-- owner-specific bounded keyset scan, continuation cursor, page/cursor digest domains, evidence classification, retention and stable error prefixes;
-- deterministic reference-only response bytes with Account names, status and association contents excluded;
-- one caller-opened tenant-bound `REPEATABLE READ, READ ONLY` PostgreSQL transaction;
-- clean migration, full rollback/schema removal, reapply and repeated acceptance with zero writes across record, relationship, transaction, idempotency, outbox and audit surfaces.
-
-PR #179 changed no shared-support behavior. It only extended the mechanical consumer and bound-read allowlists to the independently proven Customer Accounts adapter. PR #181 later earned the same explicit policy change for Contact Points without extending shared behavior. The next candidate consumer is Party Relationships, but it must be proven independently in its own bounded packet; shared support must not be expanded speculatively.
