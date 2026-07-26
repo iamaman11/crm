@@ -4,25 +4,24 @@ use crm_capability_runtime::{
 };
 use crm_customer_data_operations::{
     CreateImportRow, ExportJobId, ImportJobId, ImportRow, MarkImportRowSucceeded,
-    PartyExportExecutionOutcome, PartyExportExecutionStage, PartyExportExclusionReason,
+    PartyExportExclusionReason, PartyExportExecutionOutcome, PartyExportExecutionStage,
     PartyExportSelectionItem, PartyImportKind, PreparedPartyRow, SelectedPartyId, TargetPartyId,
     ValidateImportRowSuccess, encode_export_execution_outcome_state,
-    encode_export_execution_stage_state, encode_export_selection_item_state, encode_import_row_state,
+    encode_export_execution_stage_state, encode_export_selection_item_state,
+    encode_import_row_state,
 };
 use crm_customer_data_operations_capability_adapter::{
-    EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE, IMPORT_ROW_RECORD_TYPE,
-    MERGE_CAPABILITY as _, MODULE_ID, export_execution_outcome_persisted_contract,
-    export_execution_stage_persisted_contract, export_selection_item_persisted_contract,
-    import_row_persisted_contract,
+    EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE,
+    IMPORT_ROW_RECORD_TYPE, MERGE_CAPABILITY as _, MODULE_ID,
+    export_execution_outcome_persisted_contract, export_execution_stage_persisted_contract,
+    export_selection_item_persisted_contract, import_row_persisted_contract,
 };
 use crm_customer_data_operations_privacy_scope_adapter::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
     INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID,
 };
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
-use crm_identity_resolution_capability_adapter::{
-    MERGE_CAPABILITY, MERGE_REQUEST_SCHEMA,
-};
+use crm_identity_resolution_capability_adapter::{MERGE_CAPABILITY, MERGE_REQUEST_SCHEMA};
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
     DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,

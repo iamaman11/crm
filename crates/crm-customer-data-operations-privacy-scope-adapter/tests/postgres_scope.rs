@@ -164,7 +164,10 @@ async fn customer_data_scope_is_alias_aware_complete_reference_only_and_side_eff
         let contribution = response.contribution.unwrap();
         let evidence = contribution.page_evidence.unwrap();
         assert_eq!(evidence.page_number, page);
-        assert_eq!(evidence.emitted_resource_count as usize, contribution.resources.len());
+        assert_eq!(
+            evidence.emitted_resource_count as usize,
+            contribution.resources.len()
+        );
         assert!(evidence.scanned_resource_count >= 9);
         resources.extend(contribution.resources);
         if evidence.terminal_complete {
@@ -204,14 +207,11 @@ async fn customer_data_scope_is_alias_aware_complete_reference_only_and_side_eff
                 "customer_data.export_selection_item".to_owned(),
                 vec![relevant_export.selection.clone()],
             ),
-            (
-                "customer_data.import_row".to_owned(),
-                {
-                    let mut ids = vec![relevant_import_alias.clone(), relevant_import_canonical];
-                    ids.sort();
-                    ids
-                },
-            ),
+            ("customer_data.import_row".to_owned(), {
+                let mut ids = vec![relevant_import_alias.clone(), relevant_import_canonical];
+                ids.sort();
+                ids
+            },),
         ])
     );
     assert!(!by_type.contains_key("customer_data.import_job"));
@@ -229,9 +229,9 @@ async fn customer_data_scope_is_alias_aware_complete_reference_only_and_side_eff
         tenant_b_export.outcome,
     ] {
         assert!(
-            encoded_pages
-                .iter()
-                .all(|bytes| !bytes.windows(forbidden_id.len()).any(|value| value == forbidden_id.as_bytes())),
+            encoded_pages.iter().all(|bytes| !bytes
+                .windows(forbidden_id.len())
+                .any(|value| value == forbidden_id.as_bytes())),
             "unrelated or cross-tenant resource leaked: {forbidden_id}"
         );
     }
