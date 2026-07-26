@@ -1,3 +1,4 @@
+#[path = "postgres_scope/support.rs"]
 mod support;
 
 use support::*;
