@@ -89,6 +89,7 @@ members = [
   "crates/crm-customer-data-operations-query-adapter",
   "crates/crm-customer-data-operations-execution-composition",
   "crates/crm-customer-data-operations-source-composition",
+  "crates/crm-customer-data-operations-privacy-scope-adapter",
   "crates/crm-data-quality-capability-adapter",
   "crates/crm-data-quality-query-adapter",
   "crates/crm-data-quality-source-composition",
