@@ -72,8 +72,22 @@ Accepted behavior includes immutable provider/mapping/request/response/conflict/
 Issue: #126  
 Architecture and foundation PRs: #140–#145  
 Accepted production coordinates: PRs #146–#150 and #152  
+Owner-scope foundation and first implementation: PRs #154–#156  
+Accepted architecture runway: PRs #157–#173  
 Merged production inventory: 4 mutations + 2 permission-aware queries + 10 public non-runtime coordinates + 0 Customer Privacy workers  
-Next bounded production slice: not selected until remaining dependencies are compared
+Next bounded production slice: a contrasting second privacy scope owner, preferably Consents, followed by two-implementation comparison before shared protocol extraction
+
+#### Accepted architecture runway
+
+The active program has completed the prerequisites for the second privacy owner packet:
+
+- PR #168 — Customer Accounts golden module-owned production contribution;
+- PR #170 — contrasting Consents module-owned production contribution;
+- PR #171 — mechanically narrow first-party aggregation with no duplicated owner catalog;
+- PR #172 — explainable affected-scope iteration with fail-broad shared/unknown impact;
+- PR #173 — two repeated independent Party/Account PostgreSQL process-isolation samples while retaining the sequential control lane.
+
+These packets improve production composition and delivery scalability. They do not implement a second privacy scope owner and do not authorize shared privacy protocol extraction before that contrasting implementation exists.
 
 #### Objective
 

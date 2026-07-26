@@ -95,11 +95,13 @@ Completed packets:
 
 Active sequence:
 
-1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `case.create`, `case.submit`, `case.subject.verify`, `case.get`, `case.cancel` and `case.list` are merged through PR #152.
-2. **Next bounded slice:** compare approval, restriction placement, legal-hold precedence, plan/outcome reads and worker dependencies; select exactly one production boundary after this post-merge synchronization.
-3. **Remaining 8A.11 slices:** owner orchestration, export/deletion/convergence and workers remain separate packets.
-4. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
-5. **8B / #29:** starts only from the completed Phase 8A baseline.
+1. **8A.11 / #126 — In progress:** architecture/domain/contracts/FORCE-RLS foundation is merged through PR #145; `case.create`, `case.submit`, `case.subject.verify`, `case.get`, `case.cancel` and `case.list` are merged through PR #152; the owner-scope protocol foundation and first Parties implementation are merged through PR #156.
+2. **Architecture scalability runway — Complete for the next owner packet:** measured complexity/cache decision, Customer Accounts and Consents production-owner proofs, first-party aggregation, explainable affected-scope iteration and the bounded PostgreSQL isolation pilot are accepted through PR #173.
+3. **Next bounded slice:** implement a contrasting second privacy scope owner, preferably Consents, compare it with Parties and extract only behavior proven common by both implementations.
+4. **Remaining owner slices:** migrate the other privacy owner contributions one bounded owner at a time before runtime promotion.
+5. **Remaining 8A.11 lifecycle:** approval, restrictions, legal-hold/retention precedence, plan/outcome reads, orchestration, export/deletion/convergence and workers remain separate production packets.
+6. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged and reconciled.
+7. **8B / #29:** starts only from the completed Phase 8A baseline.
 
 ### Phase 8A.10 accepted boundary
 
