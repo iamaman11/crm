@@ -61,6 +61,11 @@ jobs:
                   "Consent effective-time fixture",
               ),
               (
+                  "          NULL,\n          $7",
+                  "          '{}'::jsonb,\n          $7",
+                  "canonical redirect typed projection",
+              ),
+              (
                   """pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, target: &str) {\n    let transaction_id: String = sqlx::query_scalar(""",
                   """pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, target: &str) {\n    let mut transaction = admin\n        .begin()\n        .await\n        .expect(\"begin canonical redirect fixture transaction\");\n    let transaction_id: String = sqlx::query_scalar(""",
                   "canonical redirect transaction binding",
