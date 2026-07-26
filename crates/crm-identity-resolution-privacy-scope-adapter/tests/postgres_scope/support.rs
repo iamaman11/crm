@@ -521,6 +521,25 @@ pub(crate) async fn write_surface_counts(pool: &PgPool) -> WriteSurfaceCounts {
 }
 
 pub(crate) async fn corrupt_candidate_metadata(admin: &PgPool, candidate_id: &str) {
+    let mut transaction = admin
+        .begin()
+        .await
+        .expect("begin isolated candidate corruption transaction");
+    sqlx::query(
+        r#"
+        SELECT
+          set_config('app.tenant_id', $1, true),
+          set_config('app.actor_id', 'privacy-corruption-fixture', true),
+          set_config('app.request_id', 'request-corrupt-identity-candidate', true),
+          set_config('app.capability_id', 'identity_resolution.privacy.fixture.corrupt', true),
+          set_config('app.capability_version', '1.0.0', true),
+          set_config('app.business_transaction_id', 'identity-privacy-corruption-tx', true)
+        "#,
+    )
+    .bind(TENANT_A)
+    .execute(&mut *transaction)
+    .await
+    .expect("bind complete write context for isolated candidate corruption");
     sqlx::query(
         r#"
         UPDATE crm.records
@@ -535,7 +554,11 @@ pub(crate) async fn corrupt_candidate_metadata(admin: &PgPool, candidate_id: &st
     .bind(crm_identity_resolution::MODULE_ID)
     .bind(crm_identity_resolution::CANDIDATE_CASE_RECORD_TYPE)
     .bind(candidate_id)
-    .execute(admin)
+    .execute(&mut *transaction)
     .await
     .expect("corrupt isolated candidate metadata fixture");
+    transaction
+        .commit()
+        .await
+        .expect("commit isolated candidate corruption fixture");
 }
