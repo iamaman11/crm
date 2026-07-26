@@ -1,6 +1,9 @@
 # Privacy Owner Scope Shared Support — Two-Implementation Comparison
 
-Status: **Gate candidate — exact-head permanent validation pending for PR #176**  
+Status: **Accepted through PR #176**  
+Accepted source: `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`  
+Merge: `80411d54a3ca45a783d982152c5cd8317f1fd9bd`  
+Permanent workflows: **21/21 successful on the unchanged accepted source**  
 Accepted comparison baseline: **Parties PR #156 + Consents PR #175**  
 Base `main`: `039d6461803208f6cb70ce0fbcfcaffaf59d7125`
 

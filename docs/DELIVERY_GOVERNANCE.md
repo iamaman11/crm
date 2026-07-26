@@ -48,11 +48,12 @@ Current customer-master lane:
 4. **Architecture integrity / #134 / PR #135** — native composition/lifecycle gating — **Complete**.
 5. **8A.10 / #125 / PR #137** — Governed Customer Enrichment and Provenance — **Complete**.
 6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **In progress**; six runtime coordinates are merged through PR #152, owner-scope contracts through PR #155 and the contrasting Parties/Consents owner implementations through PR #175.
-7. **Active bounded architecture packet / PR #176** — behavior-neutral extraction of only support proven common by Parties and Consents; no runtime coordinate, worker, migration, contract or third owner.
-8. **Remaining owner-scope packets** — one authoritative owner at a time on the accepted shared-support boundary.
-9. **Remaining 8A.11 lifecycle packets** — sufficient owner set, scope discovery/planning, approval, restrictions, legal-hold/retention precedence, plan/outcome reads, resumable execution, export/deletion and convergence.
-10. **Phase 8A closure** — after merged privacy interaction proof.
-11. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
+7. **Shared owner-scope support / PR #176** — **Complete**; accepted source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`, merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`.
+8. **Next bounded owner-scope packet — Customer Accounts** — contract-only/non-runtime authoritative Account/Party association contribution using accepted shared support.
+9. **Remaining owner-scope packets** — one authoritative owner at a time on the accepted shared-support boundary.
+10. **Remaining 8A.11 lifecycle packets** — sufficient owner set, scope discovery/planning, approval, restrictions, legal-hold/retention precedence, plan/outcome reads, resumable execution, export/deletion and convergence.
+11. **Phase 8A closure** — after merged privacy interaction proof.
+12. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
 
 Parallel work is allowed only when ownership boundaries and dependencies are explicit and the work cannot invalidate another packet's exact candidate.
 
@@ -161,8 +162,8 @@ As of 2026-07-26:
 - Phase 8A.10 is complete through PR #137; accepted source `f92d101206886e3ceaf94d0e56e52580cec21093`; merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
 - Customer Enrichment runtime inventory is exactly 6 public mutations, 6 permission-aware queries and 5 activation-gated worker-only coordinates.
 - Phase 8A.11 / #126 is **In progress**. PR #152 established four runtime Customer Privacy mutations, two permission-aware queries, ten public non-runtime coordinates and zero Customer Privacy workers. PR #175 accepted the second contrasting privacy-scope owner on source `b492d5302b421942903be4eb0662522323b05106` and merge `039d6461803208f6cb70ce0fbcfcaffaf59d7125`; Parties and Consents remain contract-only/non-runtime.
-- Draft PR #176 is the active dependency-lane packet. It must synchronize documentation, preserve exact owner behavior and errors, remove its temporary validator and pass all applicable checks on one unchanged SHA before merge.
-- The next Customer Privacy production coordinate remains intentionally unselected until shared support and the required remaining owner implementations establish a sufficient discovery/planning boundary.
+- PR #176 accepted shared owner-scope support on unchanged source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`, passed 21/21 applicable permanent workflows and merged as `80411d54a3ca45a783d982152c5cd8317f1fd9bd`.
+- Customer Accounts is the next bounded owner-scope implementation; no Customer Privacy production coordinate is selected until the required owner set establishes a sufficient discovery/planning boundary.
 - Phase 8B / #29 remains planned after Phase 8A closure.
 
 This baseline must be updated whenever the active packet or merged completion state changes.
