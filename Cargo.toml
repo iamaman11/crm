@@ -73,6 +73,7 @@ members = [
   "crates/crm-party-relationships-capability-adapter",
   "crates/crm-party-relationships-capability-composition",
   "crates/crm-party-relationships-query-adapter",
+  "crates/crm-party-relationships-privacy-scope-adapter",
   "crates/crm-party-relationships-projection",
   "crates/crm-consents-capability-adapter",
   "crates/crm-consents-capability-composition",
