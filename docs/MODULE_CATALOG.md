@@ -70,7 +70,7 @@ Frozen production inventory:
 
 ## 7. Customer Privacy boundary
 
-Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PRs #154–#155 published the owner-scope protocol and nine exact contract-only owner coordinates; PRs #156 and #175 accepted the contrasting Parties and Consents owner implementations. PR #176 accepted and merged their proven common support without changing module readiness or runtime inventory. Customer Accounts is selected as the next contract-only owner implementation.
+Phase 8A.11 / issue #126 remains **In progress**. PRs #140–#145 merged the architecture freeze, owner foundation, deterministic domain, canonical persistence, immutable public contracts and FORCE RLS proof. PRs #154–#155 published the owner-scope protocol and nine exact contract-only owner coordinates; PRs #156, #175 and #179 accepted authoritative Parties, Consents and Customer Accounts owner implementations. PR #176 accepted their behavior-neutral common support; PR #179 added Customer Accounts as the third mechanically permitted consumer without changing module readiness or runtime inventory. Contact Points is selected as the next contract-only owner implementation.
 
 Accepted production vertical slices:
 
@@ -85,8 +85,9 @@ Accepted contract-only owner-scope evidence:
 
 - PR #156 — authoritative single-record Parties contribution in one tenant-bound repeatable read-only snapshot;
 - PR #175 — authoritative multi-record Consents contribution through owner relationships and bounded keyset pagination;
-- both remain non-runtime and add no Customer Privacy worker or public ingress;
-- PR #176 / source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8` / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd` accepted the behavior-neutral shared-support extraction and did not change this module readiness classification.
+- PR #179 — authoritative Customer Accounts contribution through strict Account rehydration, embedded `Primary`/`Member` Party associations and bounded owner-specific keyset pagination; accepted source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, merge `5b5252a437c6bebbd7afdead0162063af4c0b7e4`, 23/23 applicable workflows;
+- all three remain non-runtime and add no Customer Privacy worker or public ingress;
+- PR #176 / source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8` / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd` accepted the behavior-neutral shared-support extraction; PR #179 changed only its mechanical consumer allowlist, not this module readiness classification.
 
 The merged production boundary proves:
 
@@ -135,7 +136,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Four production mutations and two permission-aware queries are merged independently; owner-scope contracts, Parties/Consents implementations and shared support are accepted through PR #176. Customer Accounts is the next bounded contract-only owner packet. Remaining owners, discovery/planning, approval, restrictions, legal holds, execution, export/deletion and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. Four production mutations and two permission-aware queries are merged independently; owner-scope contracts, Parties/Consents/Customer Accounts implementations and shared support are accepted through PR #179. Contact Points is the next bounded contract-only owner packet. Remaining owners, discovery/planning, approval, restrictions, legal holds, execution, export/deletion and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 
