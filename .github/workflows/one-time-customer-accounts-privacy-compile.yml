@@ -26,10 +26,22 @@ jobs:
       - name: Enforce architecture
         run: python scripts/check_architecture.py
       - name: Check and test focused adapter
+        shell: bash
         run: |
-          cargo check -p crm-customer-accounts-privacy-scope-adapter --all-features
-          cargo clippy -p crm-customer-accounts-privacy-scope-adapter --all-targets --all-features -- -D warnings
-          cargo test -p crm-customer-accounts-privacy-scope-adapter --all-features -- --nocapture
+          set -o pipefail
+          {
+            cargo check -p crm-customer-accounts-privacy-scope-adapter --all-features
+            cargo clippy -p crm-customer-accounts-privacy-scope-adapter --all-targets --all-features -- -D warnings
+            cargo test -p crm-customer-accounts-privacy-scope-adapter --all-features -- --nocapture
+          } 2>&1 | tee customer-accounts-privacy-compile.log
+      - name: Upload compile diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: customer-accounts-privacy-compile-diagnostics
+          path: customer-accounts-privacy-compile.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Publish normalized source and remove this workflow
         shell: bash
         run: |
