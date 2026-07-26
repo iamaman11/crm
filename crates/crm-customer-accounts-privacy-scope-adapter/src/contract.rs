@@ -16,7 +16,6 @@ pub const OUTPUT_SCHEMA_ID: &str =
 pub const CONTRACT_SCHEMA_VERSION: &str = "1.0.0";
 pub const INPUT_MAXIMUM_BYTES: u64 = 16 * 1024;
 pub const OUTPUT_MAXIMUM_BYTES: u64 = 256 * 1024;
-#[cfg(test)]
 pub const INPUT_RETENTION_POLICY_ID: &str = "crm.customer-accounts.privacy.scope.request";
 pub const OUTPUT_RETENTION_POLICY_ID: &str = "crm.customer-accounts.privacy.scope.response";
 pub const DEFAULT_PAGE_SIZE: u32 = 64;
