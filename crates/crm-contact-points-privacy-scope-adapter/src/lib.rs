@@ -2,11 +2,11 @@
 
 //! Contract-only authoritative Contact Points privacy-scope contribution.
 //!
-//! The adapter enumerates Account-owned records associated with one canonical
-//! Party inside a tenant-bound repeatable read-only PostgreSQL snapshot. It
-//! reuses only the proven common owner-scope protocol support; Account scans,
-//! embedded association semantics, pagination, classification and errors remain
-//! owner-specific.
+//! The adapter enumerates Contact Point records whose authoritative persisted
+//! Party reference matches one canonical Party inside a tenant-bound repeatable
+//! read-only PostgreSQL snapshot. It reuses only the proven common owner-scope
+//! protocol support; Contact Point scans, Party matching, pagination,
+//! classification, retention and errors remain owner-specific.
 
 mod contract;
 mod digest;
