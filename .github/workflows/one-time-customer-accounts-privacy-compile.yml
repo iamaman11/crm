@@ -1,0 +1,43 @@
+name: One-time Customer Accounts privacy scope compile gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  compile:
+    if: github.head_ref == 'feature/customer-accounts-privacy-scope-adapter'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: feature/customer-accounts-privacy-scope-adapter
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+        with:
+          components: clippy, rustfmt
+      - name: Normalize source and lockfile
+        run: |
+          cargo fmt --all
+          cargo generate-lockfile
+      - name: Enforce architecture
+        run: python scripts/check_architecture.py
+      - name: Check and test focused adapter
+        run: |
+          cargo check -p crm-customer-accounts-privacy-scope-adapter --all-features
+          cargo clippy -p crm-customer-accounts-privacy-scope-adapter --all-targets --all-features -- -D warnings
+          cargo test -p crm-customer-accounts-privacy-scope-adapter --all-features -- --nocapture
+      - name: Publish normalized source and remove this workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock architecture-policy.json \
+            crates/crm-customer-accounts-privacy-scope-adapter
+          git rm .github/workflows/one-time-customer-accounts-privacy-compile.yml
+          git commit -m "Validate Customer Accounts privacy scope adapter skeleton"
+          git push origin HEAD:feature/customer-accounts-privacy-scope-adapter
