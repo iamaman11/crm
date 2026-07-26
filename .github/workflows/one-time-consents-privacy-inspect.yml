@@ -1,0 +1,48 @@
+name: One-time Consents privacy owner inspection
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.head_ref == 'feature/consents-privacy-scope-adapter'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Collect exact owner contract and persistence inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p inspection
+          find proto -type f -print0 | xargs -0 grep -l 'ConsentsPrivacyScopeContributionRequest' > inspection/proto-files.txt
+          while IFS= read -r file; do
+            echo "===== ${file} =====" >> inspection/privacy-proto.txt
+            grep -n -B 20 -A 140 'ConsentsPrivacyScopeContributionRequest' "${file}" >> inspection/privacy-proto.txt
+          done < inspection/proto-files.txt
+          grep -R -n -B 20 -A 100 'CANONICAL_SCOPE_REGISTRY_VERSION\|OwnerScopeRegistry\|crm.consents' modules/crm-customer-privacy crates 2>/dev/null > inspection/registry-and-consents.txt || true
+          cp crates/crm-parties-privacy-scope-adapter/src/request.rs inspection/parties-request.rs
+          cp crates/crm-parties-privacy-scope-adapter/src/response.rs inspection/parties-response.rs
+          cp crates/crm-parties-privacy-scope-adapter/src/postgres.rs inspection/parties-postgres.rs
+          cp crates/crm-parties-privacy-scope-adapter/tests/postgres_scope.rs inspection/parties-postgres-test.rs
+          cp .github/workflows/parties-privacy-scope.yml inspection/parties-workflow.yml
+          cp crates/crm-consents-capability-adapter/src/lib.rs inspection/consents-capability-adapter.rs
+          cp modules/crm-consents/src/persistence.rs inspection/consents-persistence.rs
+          cp crates/crm-consents-query-adapter/src/lib.rs inspection/consents-query-adapter.rs
+          find database/migrations modules/crm-consents/migrations -type f -print0 \
+            | xargs -0 grep -l 'consents.authorization.party\|consents.authorization' \
+            > inspection/consents-database-files.txt || true
+          while IFS= read -r file; do
+            echo "===== ${file} =====" >> inspection/consents-database.txt
+            grep -n -B 20 -A 80 'consents.authorization.party\|consents.authorization' "${file}" >> inspection/consents-database.txt || true
+          done < inspection/consents-database-files.txt
+      - name: Upload inspection evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: consents-privacy-owner-inspection
+          path: inspection/
+          if-no-files-found: error
+          retention-days: 7
