@@ -2,11 +2,12 @@
 
 //! Contract-only authoritative Party Relationships privacy-scope contribution.
 //!
-//! The adapter enumerates Party Relationship records whose authoritative persisted
-//! Party reference matches one canonical Party inside a tenant-bound repeatable
-//! read-only PostgreSQL snapshot. It reuses only the proven common owner-scope
-//! protocol support; Party Relationship scans, Party matching, pagination,
-//! classification, retention and errors remain owner-specific.
+//! The adapter enumerates authoritative Party Relationship records when either
+//! rehydrated `from_party_ref` or `to_party_ref` matches one canonical Party inside
+//! a tenant-bound repeatable read-only PostgreSQL snapshot. It reuses only the
+//! proven common owner-scope protocol support; two-endpoint matching, relationship
+//! semantics, scans, pagination, classification, retention and errors remain
+//! owner-specific.
 
 mod contract;
 mod digest;

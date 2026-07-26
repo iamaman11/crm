@@ -276,7 +276,10 @@ fn strict_party_relationship_resource(
     };
     let party_relationship = party_relationship_from_snapshot(&snapshot)
         .map_err(|error| stored_state_invalid(format!("{}: {}", error.code, error.safe_message)))?;
-    if party_relationship.party_ref().as_str() != canonical_party_id.as_str() {
+    let matches_canonical_party = party_relationship.from_party_ref().as_str()
+        == canonical_party_id.as_str()
+        || party_relationship.to_party_ref().as_str() == canonical_party_id.as_str();
+    if !matches_canonical_party {
         return Ok(None);
     }
     let resource_version = u64::try_from(party_relationship.version()).map_err(|_| {

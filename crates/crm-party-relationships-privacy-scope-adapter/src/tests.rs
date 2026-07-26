@@ -26,9 +26,9 @@ fn context() -> QueryExecutionContext {
     QueryExecutionContext {
         tenant_id: TenantId::try_new("tenant-a").unwrap(),
         actor_id: ActorId::try_new("privacy-worker").unwrap(),
-        request_id: RequestId::try_new("request-account-scope").unwrap(),
-        correlation_id: CorrelationId::try_new("correlation-account-scope").unwrap(),
-        trace_id: TraceId::try_new("trace-account-scope").unwrap(),
+        request_id: RequestId::try_new("request-party-relationship-scope").unwrap(),
+        correlation_id: CorrelationId::try_new("correlation-party-relationship-scope").unwrap(),
+        trace_id: TraceId::try_new("trace-party-relationship-scope").unwrap(),
         capability_id: CapabilityId::try_new(CAPABILITY_ID).unwrap(),
         capability_version: CapabilityVersion::try_new(CAPABILITY_VERSION).unwrap(),
         schema_version: schema_version(CONTRACT_SCHEMA_VERSION).unwrap(),
@@ -44,7 +44,7 @@ fn wire_request(
     privacy::PartyRelationshipsPrivacyScopeContributionRequest {
         contribution: Some(privacy::PrivacyScopeContributionRequestEnvelope {
             lineage: Some(privacy::PrivacyScopeContributionLineage {
-                privacy_case_id: "privacy-case-accounts".to_owned(),
+                privacy_case_id: "privacy-case-party-relationships".to_owned(),
                 tenant_id: "tenant-a".to_owned(),
                 canonical_party_ref: Some(customer::PartyRef {
                     party_id: "party-a".to_owned(),
