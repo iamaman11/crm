@@ -1,6 +1,4 @@
-use crate::contract::{
-    DEFAULT_PAGE_SIZE, MAXIMUM_PAGE_SIZE, parties_privacy_scope_definition,
-};
+use crate::contract::{DEFAULT_PAGE_SIZE, MAXIMUM_PAGE_SIZE, parties_privacy_scope_definition};
 use crate::errors::{invalid_contract, invalid_contract_with_reference};
 use crm_customer_privacy_owner_scope_support::{
     CommonLineageError, QueryRequestContractError, validate_common_lineage,
