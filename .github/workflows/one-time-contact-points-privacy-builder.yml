@@ -70,6 +70,8 @@ jobs:
           set -euo pipefail
           sed -i 's/, core::v1 as core//' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs
           sed -i 's/scope-member@example.net/chat:scope-member@example.net/g' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope.rs
+          sed -i '/^pub(crate) async fn create_contact_point(/i #[allow(clippy::too_many_arguments)]' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs
+          sed -i '/^pub(crate) async fn update_contact_point_status(/i #[allow(clippy::too_many_arguments)]' crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs
           cargo fmt --all
           cargo generate-lockfile
       - name: Publish staging implementation
