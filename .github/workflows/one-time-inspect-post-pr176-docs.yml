@@ -1,0 +1,28 @@
+name: One-time post-PR176 documentation inspection
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.head_ref == 'docs/sync-after-shared-privacy-support'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Collect stale PR176 references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p inspection
+          grep -R -n -B 2 -A 3 -E 'PR #176|draft PR #176|Draft PR #176' docs > inspection/pr176-references.txt || true
+          test -s inspection/pr176-references.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: post-pr176-documentation-inspection
+          path: inspection/pr176-references.txt
+          if-no-files-found: error
+          retention-days: 7
