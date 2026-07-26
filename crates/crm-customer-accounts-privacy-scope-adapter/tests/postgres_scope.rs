@@ -117,7 +117,7 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
     let first = adapter
         .execute(
             &definition,
-            scope_request(TENANT_A, "party-scope", 1, 1, "", "first-page"),
+            scope_request(TENANT_A, "party-scope", 1, 1, "", "paged-scope"),
         )
         .await
         .expect("read first authoritative Account scope page");
@@ -167,7 +167,7 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
                 1,
                 1,
                 &first_evidence.next_cursor,
-                "second-page",
+                "paged-scope",
             ),
         )
         .await
@@ -272,7 +272,7 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
                 1,
                 2,
                 &first_evidence.next_cursor,
-                "cursor-rebound",
+                "paged-scope",
             ),
         )
         .await
@@ -300,7 +300,7 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
                 1,
                 1,
                 &corrupted_cursor,
-                "cursor-corrupt",
+                "paged-scope",
             ),
         )
         .await
