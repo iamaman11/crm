@@ -1,0 +1,41 @@
+name: One-Time Contact Points Post-Merge Documentation Sync
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/one_time_sync_contact_points_privacy_docs.py"
+      - ".github/workflows/one-time-contact-points-post-merge-doc-sync.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-time-contact-points-doc-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  synchronize:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out documentation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          ref: docs/contact-points-privacy-post-merge-sync
+          fetch-depth: 0
+      - name: Synchronize accepted Contact Points state
+        run: python scripts/one_time_sync_contact_points_privacy_docs.py
+      - name: Remove temporary synchronizer and publish documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm scripts/one_time_sync_contact_points_privacy_docs.py
+          rm .github/workflows/one-time-contact-points-post-merge-doc-sync.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs scripts/one_time_sync_contact_points_privacy_docs.py .github/workflows/one-time-contact-points-post-merge-doc-sync.yml
+          git commit -m "Synchronize Contact Points privacy acceptance"
+          git push origin HEAD:docs/contact-points-privacy-post-merge-sync
