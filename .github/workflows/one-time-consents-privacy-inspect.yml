@@ -62,13 +62,13 @@ jobs:
               ),
               (
                   """pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, target: &str) {\n    let transaction_id: String = sqlx::query_scalar(""",
-                  """pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, target: &str) {\n    let mut transaction = admin\n        .begin()\n        .await\n        .expect(\"begin canonical redirect fixture transaction\");\n    sqlx::query(\"SELECT set_config('app.tenant_id', $1, true)\")\n        .bind(TENANT_A)\n        .execute(&mut *transaction)\n        .await\n        .expect(\"bind canonical redirect fixture tenant\");\n    let transaction_id: String = sqlx::query_scalar(""",
+                  """pub(crate) async fn insert_canonical_redirect(admin: &PgPool, source: &str, target: &str) {\n    let mut transaction = admin\n        .begin()\n        .await\n        .expect(\"begin canonical redirect fixture transaction\");\n    let transaction_id: String = sqlx::query_scalar(""",
                   "canonical redirect transaction binding",
               ),
               (
                   ".fetch_one(admin)\n    .await\n    .expect(\"read redirect source transaction\");",
-                  ".fetch_one(&mut *transaction)\n    .await\n    .expect(\"read redirect source transaction\");",
-                  "canonical redirect source read",
+                  """.fetch_one(&mut *transaction)\n    .await\n    .expect(\"read redirect source transaction\");\n    sqlx::query(\n        r#\"\n        SELECT\n          set_config('app.tenant_id', $1, true),\n          set_config('app.actor_id', $2, true),\n          set_config('app.request_id', $3, true),\n          set_config('app.capability_id', $4, true),\n          set_config('app.capability_version', $5, true),\n          set_config('app.business_transaction_id', $6, true)\n        \"#,\n    )\n    .bind(TENANT_A)\n    .bind(\"actor-a\")\n    .bind(\"request-canonical-redirect\")\n    .bind(\"identity-resolution.candidate.merge\")\n    .bind(\"1.0.0\")\n    .bind(&transaction_id)\n    .execute(&mut *transaction)\n    .await\n    .expect(\"bind complete canonical redirect fixture context\");""",
+                  "canonical redirect complete context",
               ),
               (
                   ".execute(admin)\n    .await\n    .expect(\"insert authoritative canonical redirect fixture\");\n}",
