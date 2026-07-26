@@ -84,6 +84,46 @@ for relative_path, allowed_dependencies in policy.get("governed_transport_crates
                     f"{source.relative_to(root)} contains forbidden gateway-bypass marker: {marker}"
                 )
 
+cargo_files = sorted(
+    cargo
+    for root_path in ("crates", "modules", "services")
+    for cargo in (root / root_path).rglob("Cargo.toml")
+)
+known_cargo_paths = {cargo.relative_to(root).as_posix() for cargo in cargo_files}
+for dependency, allowed_paths in policy.get("restricted_dependency_consumers", {}).items():
+    allowed = set(allowed_paths)
+    missing_paths = allowed - known_cargo_paths
+    if missing_paths:
+        errors.append(
+            f"restricted dependency {dependency} has missing allowed Cargo paths: "
+            f"{sorted(missing_paths)}"
+        )
+
+    actual: set[str] = set()
+    for cargo in cargo_files:
+        data = tomllib.loads(cargo.read_text(encoding="utf-8"))
+        dependencies = (
+            set(data.get("dependencies", {}))
+            | set(data.get("dev-dependencies", {}))
+            | set(data.get("build-dependencies", {}))
+        )
+        if dependency in dependencies:
+            actual.add(cargo.relative_to(root).as_posix())
+
+    unexpected = actual - allowed
+    if unexpected:
+        errors.append(
+            f"restricted dependency {dependency} is used by unexpected consumers: "
+            f"{sorted(unexpected)}; allowed paths: {sorted(allowed)}"
+        )
+
+    missing_consumers = allowed - actual
+    if missing_consumers:
+        errors.append(
+            f"restricted dependency {dependency} is missing required consumers: "
+            f"{sorted(missing_consumers)}"
+        )
+
 rust_sources = sorted(
     source
     for root_path in ("crates", "modules", "services")
