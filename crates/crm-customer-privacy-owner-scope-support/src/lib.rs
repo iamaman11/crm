@@ -16,9 +16,9 @@ mod request;
 #[cfg(test)]
 mod tests;
 
-pub use digest::framed_digest;
+pub use digest::{append_frame, framed_digest};
 pub use postgres::{CanonicalPartyClaimError, prove_canonical_party_claim};
 pub use request::{
-    CommonLineageError, QueryRequestContractError, ValidatedCommonLineage, validate_common_lineage,
-    validate_query_request_contract,
+    CommonLineageError, QueryRequestContractError, ValidatedCommonLineage,
+    validate_common_lineage, validate_query_request_contract,
 };
