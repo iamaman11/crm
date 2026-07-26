@@ -348,7 +348,7 @@ fn raw_capability_request(
     tenant: &str,
     identity: &str,
     started_at: i64,
-    _hash: u8,
+    hash: u8,
     bytes: Vec<u8>,
 ) -> CapabilityRequest {
     let input = TypedPayload {
@@ -445,12 +445,25 @@ pub(crate) fn scope_request(
 }
 
 pub(crate) async fn current_generation(admin: &PgPool, tenant: &str) -> u64 {
+    let mut transaction = admin
+        .begin()
+        .await
+        .expect("begin Identity Resolution generation evidence transaction");
+    sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
+        .bind(tenant)
+        .execute(&mut *transaction)
+        .await
+        .expect("bind tenant for Identity Resolution generation evidence");
     let generation: i64 =
         sqlx::query_scalar("SELECT crm.current_identity_resolution_generation($1)")
             .bind(tenant)
-            .fetch_one(admin)
+            .fetch_one(&mut *transaction)
             .await
             .expect("read current Identity Resolution generation");
+    transaction
+        .commit()
+        .await
+        .expect("commit Identity Resolution generation evidence transaction");
     u64::try_from(generation).expect("Identity Resolution generation is positive")
 }
 
