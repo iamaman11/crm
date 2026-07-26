@@ -22,7 +22,7 @@ jobs:
         with:
           ref: docs/customer-accounts-privacy-post-merge-sync
           fetch-depth: 0
-      - name: Execute synchronization payload
+      - name: Execute synchronization payload and capture diagnostics
         shell: bash
         run: |
           set -euo pipefail
@@ -41,11 +41,15 @@ jobs:
               payload.append(line[10:] if line.startswith('          ') else '')
           text = '\n'.join(payload) + '\n'
           text = text.replace('raise SystemExit(', 'print(')
-          script = Path('/tmp/customer-accounts-doc-sync.sh')
-          script.write_text(text)
+          Path('/tmp/customer-accounts-doc-sync.sh').write_text(text)
           PY
-          bash /tmp/customer-accounts-doc-sync.sh
-      - name: Remove temporary workflows and publish synchronization
+          set +e
+          bash /tmp/customer-accounts-doc-sync.sh > docs/DOC_SYNC_DIAGNOSTICS.txt 2>&1
+          status=$?
+          set -e
+          printf '\nexit_status=%s\n' "${status}" >> docs/DOC_SYNC_DIAGNOSTICS.txt
+          cat docs/DOC_SYNC_DIAGNOSTICS.txt
+      - name: Remove temporary workflows and publish synchronization state
         shell: bash
         run: |
           set -euo pipefail
