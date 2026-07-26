@@ -4,9 +4,8 @@ use crm_capability_runtime::{
 };
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_identity_resolution_capability_adapter::{
-    CONFIRM_CAPABILITY, CONFIRM_REQUEST_SCHEMA, DISMISS_CAPABILITY, DISMISS_REQUEST_SCHEMA,
-    MERGE_CAPABILITY, MERGE_REQUEST_SCHEMA, REFRESH_CAPABILITY, REFRESH_REQUEST_SCHEMA,
-    REGISTER_CAPABILITY, REGISTER_REQUEST_SCHEMA, UNMERGE_CAPABILITY, UNMERGE_REQUEST_SCHEMA,
+    MERGE_CAPABILITY, MERGE_REQUEST_SCHEMA, REGISTER_CAPABILITY, REGISTER_REQUEST_SCHEMA,
+    UNMERGE_CAPABILITY, UNMERGE_REQUEST_SCHEMA,
 };
 use crm_identity_resolution_privacy_scope_adapter::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
@@ -54,7 +53,6 @@ pub(crate) async fn create_party(
                 tenant,
                 &format!("party-{party_id}"),
                 100_000_000 + i64::from(seed),
-                seed,
                 &parties::CreatePartyRequest {
                     party_ref: Some(customer::PartyRef {
                         party_id: party_id.to_owned(),
@@ -68,6 +66,7 @@ pub(crate) async fn create_party(
         .expect("create authoritative Party fixture");
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn register_candidate(
     executor: &Arc<dyn TransactionalCapabilityExecutor>,
     definition: &CapabilityDefinition,
@@ -89,7 +88,6 @@ pub(crate) async fn register_candidate(
                 tenant,
                 &format!("candidate-{seed}"),
                 200_000_000 + i64::from(seed),
-                seed,
                 &identity::RegisterDuplicateCandidateRequest {
                     evidence: Some(identity::MatchEvidenceSnapshot {
                         first_party_ref: Some(customer::PartyRef {
@@ -142,7 +140,6 @@ pub(crate) async fn merge_party(
                 tenant,
                 &format!("merge-{operation_id}"),
                 300_000_000 + i64::from(seed),
-                seed,
                 &identity::MergePartyRequest {
                     merge_operation_ref: Some(identity::MergeOperationRef {
                         merge_operation_id: operation_id.to_owned(),
@@ -192,7 +189,6 @@ pub(crate) async fn unmerge_party(
                 tenant,
                 &format!("unmerge-{operation_id}"),
                 400_000_000 + i64::from(seed),
-                seed,
                 &identity::UnmergePartyRequest {
                     merge_operation_ref: Some(identity::MergeOperationRef {
                         merge_operation_id: operation_id.to_owned(),
@@ -209,114 +205,6 @@ pub(crate) async fn unmerge_party(
         .expect("unmerge authoritative operation fixture");
 }
 
-#[allow(dead_code)]
-pub(crate) async fn refresh_candidate(
-    executor: &Arc<dyn TransactionalCapabilityExecutor>,
-    definition: &CapabilityDefinition,
-    tenant: &str,
-    case_id: &str,
-    first_party_id: &str,
-    second_party_id: &str,
-    seed: u8,
-) {
-    executor
-        .execute(
-            definition,
-            capability_request(
-                crm_identity_resolution::MODULE_ID,
-                REFRESH_CAPABILITY,
-                REFRESH_REQUEST_SCHEMA,
-                tenant,
-                &format!("refresh-{case_id}"),
-                250_000_000 + i64::from(seed),
-                seed,
-                &identity::RefreshDuplicateCandidateEvidenceRequest {
-                    case_ref: Some(identity::DuplicateCandidateCaseRef {
-                        case_id: case_id.to_owned(),
-                    }),
-                    expected_version: 1,
-                    evidence: Some(identity::MatchEvidenceSnapshot {
-                        first_party_ref: Some(customer::PartyRef {
-                            party_id: first_party_id.to_owned(),
-                        }),
-                        first_party_version: 2,
-                        second_party_ref: Some(customer::PartyRef {
-                            party_id: second_party_id.to_owned(),
-                        }),
-                        second_party_version: 1,
-                        matcher_profile: "deterministic.v2".to_owned(),
-                        score_basis_points: 8_700,
-                        signals: vec![identity::MatchSignal {
-                            kind: "name.exact".to_owned(),
-                            source: "party.normalized".to_owned(),
-                            evidence_ref: "evidence://candidate/refresh".to_owned(),
-                            contribution_basis_points: 8_700,
-                        }],
-                        generated_at: Some(core::UnixTime {
-                            unix_nanos: 240_000_000 + i64::from(seed),
-                        }),
-                    }),
-                },
-            ),
-        )
-        .await
-        .expect("refresh authoritative duplicate candidate fixture");
-}
-
-#[allow(dead_code)]
-pub(crate) async fn decide_candidate(
-    executor: &Arc<dyn TransactionalCapabilityExecutor>,
-    definition: &CapabilityDefinition,
-    tenant: &str,
-    case_id: &str,
-    confirm: bool,
-    seed: u8,
-) {
-    let (capability, schema, payload) = if confirm {
-        (
-            CONFIRM_CAPABILITY,
-            CONFIRM_REQUEST_SCHEMA,
-            identity::ConfirmDuplicateCandidateRequest {
-                case_ref: Some(identity::DuplicateCandidateCaseRef {
-                    case_id: case_id.to_owned(),
-                }),
-                expected_version: 1,
-                reason: "review.confirmed".to_owned(),
-            }
-            .encode_to_vec(),
-        )
-    } else {
-        (
-            DISMISS_CAPABILITY,
-            DISMISS_REQUEST_SCHEMA,
-            identity::DismissDuplicateCandidateRequest {
-                case_ref: Some(identity::DuplicateCandidateCaseRef {
-                    case_id: case_id.to_owned(),
-                }),
-                expected_version: 1,
-                reason: "review.dismissed".to_owned(),
-            }
-            .encode_to_vec(),
-        )
-    };
-    executor
-        .execute(
-            definition,
-            raw_capability_request(
-                crm_identity_resolution::MODULE_ID,
-                capability,
-                schema,
-                tenant,
-                &format!("decision-{case_id}"),
-                260_000_000 + i64::from(seed),
-                seed,
-                payload,
-            ),
-        )
-        .await
-        .expect("decide authoritative duplicate candidate fixture");
-}
-
 #[allow(clippy::too_many_arguments)]
 fn capability_request<M: Message>(
     module_id: &str,
@@ -325,32 +213,9 @@ fn capability_request<M: Message>(
     tenant: &str,
     identity: &str,
     started_at: i64,
-    hash: u8,
     command: &M,
 ) -> CapabilityRequest {
-    raw_capability_request(
-        module_id,
-        capability_id,
-        input_schema,
-        tenant,
-        identity,
-        started_at,
-        hash,
-        command.encode_to_vec(),
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn raw_capability_request(
-    module_id: &str,
-    capability_id: &str,
-    input_schema: &str,
-    tenant: &str,
-    identity: &str,
-    started_at: i64,
-    _hash: u8,
-    bytes: Vec<u8>,
-) -> CapabilityRequest {
+    let bytes = command.encode_to_vec();
     let input = TypedPayload {
         owner: ModuleId::try_new(module_id).unwrap(),
         schema_id: SchemaId::try_new(input_schema).unwrap(),
@@ -525,6 +390,23 @@ pub(crate) async fn corrupt_candidate_metadata(admin: &PgPool, candidate_id: &st
         .begin()
         .await
         .expect("begin isolated candidate corruption transaction");
+    let business_transaction_id: String = sqlx::query_scalar(
+        r#"
+        SELECT business_transaction_id
+        FROM crm.records
+        WHERE tenant_id = $1
+          AND owner_module_id = $2
+          AND record_type = $3
+          AND record_id = $4
+        "#,
+    )
+    .bind(TENANT_A)
+    .bind(crm_identity_resolution::MODULE_ID)
+    .bind(crm_identity_resolution::CANDIDATE_CASE_RECORD_TYPE)
+    .bind(candidate_id)
+    .fetch_one(&mut *transaction)
+    .await
+    .expect("read authoritative candidate transaction lineage");
     sqlx::query(
         r#"
         SELECT
@@ -533,13 +415,14 @@ pub(crate) async fn corrupt_candidate_metadata(admin: &PgPool, candidate_id: &st
           set_config('app.request_id', 'request-corrupt-identity-candidate', true),
           set_config('app.capability_id', 'identity_resolution.privacy.fixture.corrupt', true),
           set_config('app.capability_version', '1.0.0', true),
-          set_config('app.business_transaction_id', 'identity-privacy-corruption-tx', true)
+          set_config('app.business_transaction_id', $2, true)
         "#,
     )
     .bind(TENANT_A)
+    .bind(business_transaction_id)
     .execute(&mut *transaction)
     .await
-    .expect("bind complete write context for isolated candidate corruption");
+    .expect("bind authoritative write context for isolated candidate corruption");
     sqlx::query(
         r#"
         UPDATE crm.records
