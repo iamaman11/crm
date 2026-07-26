@@ -122,6 +122,10 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
         .await
         .expect("read first authoritative Account scope page");
     assert_eq!(write_surface_counts(&admin).await, before_first);
+    assert_response_omits_account_state(
+        &first.output.bytes,
+        &["Private Account account-001", "\"status\"", "\"party_associations\""],
+    );
     let first_wire = privacy::CustomerAccountsPrivacyScopeContributionResponse::decode(
         first.output.bytes.as_slice(),
     )
@@ -139,13 +143,6 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
     assert_eq!(
         first_contribution.resources[0].evidence_class,
         privacy::PrivacyScopeEvidenceClass::RetainMinimizedEvidence as i32
-    );
-    assert!(
-        !first
-            .output
-            .bytes
-            .windows(b"Private Account account-001".len())
-            .any(|value| value == b"Private Account account-001")
     );
     let first_evidence = first_contribution
         .page_evidence
@@ -172,6 +169,15 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
         .await
         .expect("read sparse second Account scope page");
     assert_eq!(write_surface_counts(&admin).await, before_second);
+    assert_response_omits_account_state(
+        &second.output.bytes,
+        &[
+            "Private Account account-003",
+            "party-other",
+            "\"status\"",
+            "\"party_associations\"",
+        ],
+    );
     let second_wire = privacy::CustomerAccountsPrivacyScopeContributionResponse::decode(
         second.output.bytes.as_slice(),
     )
@@ -188,6 +194,50 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
     assert_eq!(second_evidence.scanned_resource_count, 2);
     assert_eq!(second_evidence.emitted_resource_count, 1);
     assert!(!second_evidence.terminal_complete);
+
+    let terminal_before = write_surface_counts(&admin).await;
+    let terminal = adapter
+        .execute(
+            &definition,
+            scope_request(
+                TENANT_A,
+                "party-redirected",
+                1,
+                1,
+                "",
+                "terminal-primary-page",
+            ),
+        )
+        .await
+        .expect("read terminal non-empty Account scope page");
+    assert_eq!(write_surface_counts(&admin).await, terminal_before);
+    assert_response_omits_account_state(
+        &terminal.output.bytes,
+        &[
+            "Private Account account-redirected",
+            "\"status\"",
+            "\"party_associations\"",
+        ],
+    );
+    let terminal_wire = privacy::CustomerAccountsPrivacyScopeContributionResponse::decode(
+        terminal.output.bytes.as_slice(),
+    )
+    .expect("decode terminal Customer Accounts scope response");
+    let terminal_contribution = terminal_wire
+        .contribution
+        .expect("terminal contribution envelope");
+    assert_eq!(terminal_contribution.resources.len(), 1);
+    assert_eq!(
+        terminal_contribution.resources[0].resource_id,
+        "account-redirected"
+    );
+    let terminal_evidence = terminal_contribution
+        .page_evidence
+        .expect("terminal page evidence");
+    assert_eq!(terminal_evidence.page_number, 1);
+    assert_eq!(terminal_evidence.emitted_resource_count, 1);
+    assert!(terminal_evidence.terminal_complete);
+    assert!(terminal_evidence.next_cursor.is_empty());
 
     let empty_before = write_surface_counts(&admin).await;
     let empty = adapter
@@ -228,6 +278,33 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
         "CUSTOMER_ACCOUNTS_PRIVACY_SCOPE_CURSOR_INVALID"
     );
     assert_eq!(write_surface_counts(&admin).await, rebound_before);
+
+    let mut corrupted_cursor = first_evidence.next_cursor.clone().into_bytes();
+    corrupted_cursor[0] = if corrupted_cursor[0] == b'A' { b'B' } else { b'A' };
+    let corrupted_cursor = String::from_utf8(corrupted_cursor).expect("cursor remains UTF-8");
+    let corrupt_cursor_before = write_surface_counts(&admin).await;
+    let corrupt_cursor = adapter
+        .execute(
+            &definition,
+            scope_request(
+                TENANT_A,
+                "party-scope",
+                1,
+                1,
+                &corrupted_cursor,
+                "cursor-corrupt",
+            ),
+        )
+        .await
+        .expect_err("corrupted cursor must fail closed");
+    assert_eq!(
+        corrupt_cursor.code,
+        "CUSTOMER_ACCOUNTS_PRIVACY_SCOPE_CURSOR_INVALID"
+    );
+    assert_eq!(
+        write_surface_counts(&admin).await,
+        corrupt_cursor_before
+    );
 
     let stale_before = write_surface_counts(&admin).await;
     let stale = adapter
@@ -295,6 +372,17 @@ async fn customer_accounts_scope_is_bounded_strict_tenant_bound_and_side_effect_
         &definition,
     )
     .await;
+}
+
+fn assert_response_omits_account_state(bytes: &[u8], forbidden_values: &[&str]) {
+    for forbidden in forbidden_values {
+        assert!(
+            !bytes
+                .windows(forbidden.len())
+                .any(|candidate| candidate == forbidden.as_bytes()),
+            "response leaked forbidden Account state value: {forbidden}"
+        );
+    }
 }
 
 async fn assert_no_query_side_writes(
