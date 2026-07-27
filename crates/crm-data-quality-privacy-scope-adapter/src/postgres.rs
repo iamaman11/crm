@@ -2,7 +2,7 @@ use crate::contract::{
     MAX_PRIVACY_ASSOCIATION_RECORDS_REHYDRATED, MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS,
     MAX_PRIVACY_COMPLETENESS_RESULTS_SCANNED, MAX_PRIVACY_DEFINITION_RECORDS_REHYDRATED,
     MAX_PRIVACY_EVALUATION_INPUTS_SCANNED, MAX_PRIVACY_EVALUATION_JOBS_SCANNED,
-    MAX_PRIVACY_FINDINGS_SCANNED, MAX_PRIVACY_FINDING_OBSERVATIONS_SCANNED,
+    MAX_PRIVACY_FINDING_OBSERVATIONS_SCANNED, MAX_PRIVACY_FINDINGS_SCANNED,
     MAX_PRIVACY_OWNER_RECORDS_SCANNED, MAX_PRIVACY_REMEDIATION_ATTEMPTS_SCANNED,
     MAX_PRIVACY_RULE_OUTCOMES_SCANNED, PRIVACY_OWNER_SCAN_BATCH_SIZE, validate_definition,
 };
@@ -19,24 +19,26 @@ use crm_capability_runtime::CapabilityDefinition;
 use crm_core_data::{BoundReadTransaction, PostgresDataStore};
 use crm_customer_privacy_owner_scope_support::prove_canonical_party_claim;
 use crm_data_quality::{
-    FINDING_OBSERVATION_RECORD_TYPE, FINDING_RECORD_TYPE, PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE,
-    PARTY_COMPLETENESS_RESULT_RECORD_TYPE, PARTY_EVALUATION_INPUT_RECORD_TYPE,
-    PARTY_EVALUATION_JOB_RECORD_TYPE, PARTY_RULE_SET_VERSION_RECORD_TYPE, REMEDIATION_ATTEMPT_RECORD_TYPE,
-    RULE_OUTCOME_RECORD_TYPE, PartyCompletenessProfileVersion, PartyCompletenessResult,
+    FINDING_OBSERVATION_RECORD_TYPE, FINDING_RECORD_TYPE,
+    PARTY_COMPLETENESS_PROFILE_VERSION_RECORD_TYPE, PARTY_COMPLETENESS_RESULT_RECORD_TYPE,
+    PARTY_EVALUATION_INPUT_RECORD_TYPE, PARTY_EVALUATION_JOB_RECORD_TYPE,
+    PARTY_RULE_SET_VERSION_RECORD_TYPE, PartyCompletenessProfileVersion, PartyCompletenessResult,
     PartyDisplayNameRemediationAttempt, PartyEvaluationInputSnapshot, PartyEvaluationJob,
     PartyEvaluationJobStatus, PartyFinding, PartyFindingObservation, PartyRuleOutcome,
-    PartyRuleSetVersion, decode_finding_observation_state, decode_finding_state,
-    decode_party_completeness_result_state, decode_party_evaluation_input_state,
-    decode_remediation_attempt_state, decode_rule_outcome_state,
+    PartyRuleSetVersion, REMEDIATION_ATTEMPT_RECORD_TYPE, RULE_OUTCOME_RECORD_TYPE,
+    decode_finding_observation_state, decode_finding_state, decode_party_completeness_result_state,
+    decode_party_evaluation_input_state, decode_remediation_attempt_state,
+    decode_rule_outcome_state,
 };
 use crm_data_quality_capability_adapter::{
     MODULE_ID, completeness_profile_rule_set_version_id_from_snapshot,
-    party_completeness_profile_from_immutable_snapshot, party_completeness_profile_persisted_contract,
-    party_completeness_result_persisted_contract, party_evaluation_input_persisted_contract,
-    party_evaluation_job_from_snapshot, party_evaluation_job_persisted_contract,
-    party_finding_observation_persisted_contract, party_finding_persisted_contract,
-    party_rule_outcome_persisted_contract, party_rule_set_from_snapshot,
-    party_rule_set_persisted_contract, remediation_attempt_persisted_contract,
+    party_completeness_profile_from_immutable_snapshot,
+    party_completeness_profile_persisted_contract, party_completeness_result_persisted_contract,
+    party_evaluation_input_persisted_contract, party_evaluation_job_from_snapshot,
+    party_evaluation_job_persisted_contract, party_finding_observation_persisted_contract,
+    party_finding_persisted_contract, party_rule_outcome_persisted_contract,
+    party_rule_set_from_snapshot, party_rule_set_persisted_contract,
+    remediation_attempt_persisted_contract,
 };
 use crm_identity_resolution::PartyReference;
 use crm_identity_resolution_topology_composition::prove_canonical_party_in_transaction;
@@ -91,12 +93,8 @@ impl DataQualityPrivacyScopeQueryAdapter {
         .await
         .map_err(map_canonical_party_claim_error)?;
 
-        let page = read_data_quality_page(
-            &mut transaction,
-            &request.context.tenant_id,
-            &validated,
-        )
-        .await?;
+        let page = read_data_quality_page(&mut transaction, &request.context.tenant_id, &validated)
+            .await?;
         let response = build_response(
             &validated,
             &page.resources,
@@ -583,13 +581,17 @@ fn validate_associations(
         let rule_set = definitions
             .rule_sets
             .get(job.rule_set_version_id())
-            .ok_or_else(|| association_state_invalid("evaluation job references a missing rule set"))?;
+            .ok_or_else(|| {
+                association_state_invalid("evaluation job references a missing rule set")
+            })?;
         counter.charge("evaluation job completeness profile")?;
         let profile = definitions
             .profiles
             .get(job.profile_version_id())
             .ok_or_else(|| {
-                association_state_invalid("evaluation job references a missing completeness profile")
+                association_state_invalid(
+                    "evaluation job references a missing completeness profile",
+                )
             })?;
         if profile.rule_set_version_id().as_str() != rule_set.version_id().as_str() {
             return Err(association_state_invalid(
@@ -619,7 +621,10 @@ fn validate_associations(
         .map_err(|_| association_state_invalid("failed outcome count does not fit in u32"))?;
         match job.status() {
             PartyEvaluationJobStatus::Created => {
-                if input.is_some() || !job_outcomes.is_empty() || job.party_resource_version().is_some() {
+                if input.is_some()
+                    || !job_outcomes.is_empty()
+                    || job.party_resource_version().is_some()
+                {
                     return Err(association_state_invalid(
                         "created evaluation job has staged or materialized evidence",
                     ));
@@ -675,13 +680,16 @@ fn validate_associations(
         let rule_set = definitions
             .rule_sets
             .get(outcome.rule_set_version_id())
-            .ok_or_else(|| association_state_invalid("rule outcome references a missing rule set"))?;
+            .ok_or_else(|| {
+                association_state_invalid("rule outcome references a missing rule set")
+            })?;
         counter.charge("rule outcome staged input")?;
         let input = inputs.get(outcome.job_id().as_str()).ok_or_else(|| {
             association_state_invalid("rule outcome references a job without staged input")
         })?;
         if outcome.party_id() != job.value.party_id()
-            || outcome.party_resource_version() != job.value.party_resource_version().unwrap_or_default()
+            || outcome.party_resource_version()
+                != job.value.party_resource_version().unwrap_or_default()
             || outcome.rule_set_version_id() != job.value.rule_set_version_id()
             || rule_set.rule(outcome.rule_key()).is_none()
             || outcome.evaluated_at() < input.value.captured_at()
@@ -783,7 +791,8 @@ fn validate_associations(
                 association_state_invalid("completeness result profile rule set is missing")
             })?;
         if result.party_id() != job.value.party_id()
-            || result.party_resource_version() != job.value.party_resource_version().unwrap_or_default()
+            || result.party_resource_version()
+                != job.value.party_resource_version().unwrap_or_default()
             || result.profile_version_id() != job.value.profile_version_id()
             || profile.rule_set_version_id().as_str() != job.value.rule_set_version_id()
             || job.value.status() != PartyEvaluationJobStatus::Completed
@@ -936,7 +945,8 @@ fn strict_input(row: StoredRecordRow) -> Result<Versioned<PartyEvaluationInputSn
         party_evaluation_input_persisted_contract(),
         DataClass::Personal,
     )?;
-    let value = decode_party_evaluation_input_state(&snapshot.payload.bytes).map_err(map_owner_error)?;
+    let value =
+        decode_party_evaluation_input_state(&snapshot.payload.bytes).map_err(map_owner_error)?;
     if value.job_id().as_str() != row.record_id.as_str() || row.version != 1 {
         return Err(stored_state_invalid(
             "evaluation input identity/version disagrees with its authoritative record",
@@ -977,14 +987,17 @@ fn strict_finding(row: StoredRecordRow) -> Result<Versioned<PartyFinding>, SdkEr
     Ok(versioned(row, value)?)
 }
 
-fn strict_observation(row: StoredRecordRow) -> Result<Versioned<PartyFindingObservation>, SdkError> {
+fn strict_observation(
+    row: StoredRecordRow,
+) -> Result<Versioned<PartyFindingObservation>, SdkError> {
     let snapshot = strict_snapshot(
         &row,
         FINDING_OBSERVATION_RECORD_TYPE,
         party_finding_observation_persisted_contract(),
         DataClass::Personal,
     )?;
-    let value = decode_finding_observation_state(&snapshot.payload.bytes).map_err(map_owner_error)?;
+    let value =
+        decode_finding_observation_state(&snapshot.payload.bytes).map_err(map_owner_error)?;
     if value.observation_id() != row.record_id.as_str() || row.version != 1 {
         return Err(stored_state_invalid(
             "finding observation identity/version disagrees with its authoritative record",
@@ -1002,8 +1015,8 @@ fn strict_completeness_result(
         party_completeness_result_persisted_contract(),
         DataClass::Personal,
     )?;
-    let value = decode_party_completeness_result_state(&snapshot.payload.bytes)
-        .map_err(map_owner_error)?;
+    let value =
+        decode_party_completeness_result_state(&snapshot.payload.bytes).map_err(map_owner_error)?;
     if value.result_id() != row.record_id.as_str() || row.version != 1 {
         return Err(stored_state_invalid(
             "completeness result identity/version disagrees with its authoritative record",
@@ -1021,7 +1034,8 @@ fn strict_remediation_attempt(
         remediation_attempt_persisted_contract(),
         DataClass::Personal,
     )?;
-    let value = decode_remediation_attempt_state(&snapshot.payload.bytes).map_err(map_owner_error)?;
+    let value =
+        decode_remediation_attempt_state(&snapshot.payload.bytes).map_err(map_owner_error)?;
     if value.attempt_id() != row.record_id.as_str() || row.version != 1 {
         return Err(stored_state_invalid(
             "remediation attempt identity/version disagrees with its authoritative record",
@@ -1230,6 +1244,5 @@ fn strict_snapshot(
 }
 
 fn positive_version(version: i64) -> Result<u64, SdkError> {
-    u64::try_from(version)
-        .map_err(|_| stored_state_invalid("resource version must be positive"))
+    u64::try_from(version).map_err(|_| stored_state_invalid("resource version must be positive"))
 }

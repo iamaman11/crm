@@ -81,15 +81,14 @@ pub(crate) fn validate_wire_request(
     context: &QueryExecutionContext,
     bytes: &[u8],
 ) -> Result<ValidatedRequest, SdkError> {
-    let request = privacy::DataQualityPrivacyScopeContributionRequest::decode(bytes).map_err(
-        |error| {
+    let request =
+        privacy::DataQualityPrivacyScopeContributionRequest::decode(bytes).map_err(|error| {
             invalid_contract_with_reference(
                 "DATA_QUALITY_PRIVACY_SCOPE_REQUEST_INVALID",
                 "The Data Quality privacy scope request is invalid.",
                 error.to_string(),
             )
-        },
-    )?;
+        })?;
     let contribution = request.contribution.ok_or_else(|| {
         invalid_contract(
             "DATA_QUALITY_PRIVACY_SCOPE_REQUEST_INVALID",
