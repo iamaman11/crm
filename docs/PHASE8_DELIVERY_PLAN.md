@@ -143,6 +143,11 @@ State: **Implemented in PR #206; exact-head gate review pending**.
 
 PR #206 implements the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages and records later evidence without rewriting the historical freeze.
 
+Preserved architecture guardrails:
+
+- Do not implement discovery/snapshot as one new crate per command, query, worker, reader or composition fragment.
+- If consolidation is required, perform consolidation only in a separate behavior-neutral PR.
+
 Implemented boundary:
 
 - trusted-internal activation-gated exact-nine invocation;
