@@ -359,7 +359,10 @@ mod tests {
         let queries = query_capability_definitions().unwrap();
         assert_eq!(mutations.len(), 4);
         assert_eq!(queries.len(), 2);
-        for forbidden in ["customer_privacy.scope.discover", "customer_privacy.plan.build"] {
+        for forbidden in [
+            "customer_privacy.scope.discover",
+            "customer_privacy.plan.build",
+        ] {
             assert!(
                 mutations
                     .iter()
