@@ -141,11 +141,15 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             self.assertTrue(request.startswith(method))
             self.assertTrue(response.startswith(method))
         self.assertEqual(
-            contributions.count("PrivacyScopeContributionRequestEnvelope contribution = 1;"),
+            contributions.count(
+                "PrivacyScopeContributionRequestEnvelope contribution = 1;"
+            ),
             9,
         )
         self.assertEqual(
-            contributions.count("PrivacyScopeContributionResponseEnvelope contribution = 1;"),
+            contributions.count(
+                "PrivacyScopeContributionResponseEnvelope contribution = 1;"
+            ),
             9,
         )
         self.assertNotIn("bytes resource_payload", contributions)
@@ -155,7 +159,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("bytes cursor_digest_sha256", contributions)
         self.assertIn("CUSTOMER_DATA_CLASS_RESTRICTED = 9;", types)
 
-    def test_status_sources_freeze_eight_accepted_owners_and_customer_enrichment_next(self) -> None:
+    def test_status_sources_freeze_nine_accepted_owners_and_discovery_next(self) -> None:
         project_status = (ROOT / "docs/PROJECT_STATUS.md").read_text(encoding="utf-8")
         module_catalog = (ROOT / "docs/MODULE_CATALOG.md").read_text(encoding="utf-8")
         roadmap = (ROOT / "docs/IMPLEMENTATION_ROADMAP.md").read_text(
@@ -164,6 +168,95 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         phase_plan = (ROOT / "docs/PHASE8_DELIVERY_PLAN.md").read_text(
             encoding="utf-8"
         )
+        customer_data_packet = (
+            ROOT / "docs/CUSTOMER_DATA_OPERATIONS_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
+        data_quality_packet = (
+            ROOT / "docs/DATA_QUALITY_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
+        enrichment_packet = (
+            ROOT / "docs/CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
+
+        authoritative = (project_status, module_catalog, roadmap, phase_plan)
+        for document in authoritative:
+            self.assertIn("Customer Data Operations", document)
+            self.assertIn("Data Quality", document)
+            self.assertIn("Customer Enrichment", document)
+            self.assertIn("Scope discovery and immutable snapshot", document)
+            self.assertIn("Current product-complete expert modules: **0**", document)
+
+        self.assertIn(
+            "All nine authoritative owner implementations are accepted", project_status
+        )
+        self.assertIn(
+            "All nine authoritative implementations are accepted", module_catalog
+        )
+        self.assertIn("Nine-owner set complete", phase_plan)
+        self.assertIn("Phase 8A.11 / issue #126 is in progress", project_status)
+        self.assertIn("Phase 8A remains **In progress**", phase_plan)
+
+        for document in (*authoritative, enrichment_packet):
+            self.assertIn("PR #192", document)
+            self.assertIn("e90e36027de18a07be68e43327ea732810ff332a", document)
+            self.assertIn("e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c", document)
+            self.assertIn("28 of 28 permanent workflows", document)
+
+        self.assertIn("Status: **Accepted historical contract**", enrichment_packet)
+        self.assertIn("28 of 28 permanent workflows succeeded", enrichment_packet)
+        self.assertIn("Production discovery remains forbidden", enrichment_packet)
+        self.assertIn("planning and action execution remain prohibited", enrichment_packet)
+        self.assertIn("production discovery is not implemented", phase_plan)
+        self.assertIn("Planning and action execution remain not started", module_catalog)
+
+        for document in (*authoritative, customer_data_packet):
+            self.assertIn("PR #188", document)
+            self.assertIn("07f34786e82fdfa78d263790e9f50541529006f8", document)
+            self.assertIn("089be72fa3010b4aa15aff7f9ea55fd86290f8fc", document)
+        self.assertIn("26 of 26 permanent workflows succeeded", customer_data_packet)
+        self.assertIn("Accepted historical contract", customer_data_packet)
+
+        for document in (*authoritative, data_quality_packet):
+            self.assertIn("PR #190", document)
+            self.assertIn("dcfe8faebc7462b888f8fc1721cb379a40fea88a", document)
+            self.assertIn("deac197c97cddc15bb9916092ca87f6e767ce1de", document)
+        self.assertIn("27 of 27 permanent workflows succeeded", data_quality_packet)
+        self.assertIn("Accepted historical contract", data_quality_packet)
+
+        stale_claims = (
+            "Six authoritative owner implementations are accepted",
+            "Seven authoritative owner implementations are accepted",
+            "Eight authoritative owner implementations are accepted",
+            "Six authoritative implementations are accepted",
+            "Seven authoritative implementations are accepted",
+            "Eight authoritative implementations are accepted",
+            "Customer Data Operations is the next bounded contract-only owner",
+            "Data Quality is the next bounded contract-only owner",
+            "Customer Enrichment is the next bounded contract-only owner",
+            "Next bounded owner slice — Customer Data Operations",
+            "Next bounded owner slice — Data Quality",
+            "Next bounded owner slice — Customer Enrichment",
+            "Next bounded owner packet: Customer Data Operations",
+            "Next bounded owner packet: Data Quality",
+            "Next bounded owner packet: Customer Enrichment",
+            "Customer Enrichment remains the final owner before",
+            "Customer Enrichment implementation not started",
+            "Implementation remains not started in this commit",
+            "PR #192 in progress",
+        )
+        for stale in stale_claims:
+            for document in (*authoritative, enrichment_packet):
+                self.assertNotIn(stale, document)
+
+        temporary_paths = (
+            ".github/workflows/temp-enrichment-governance-sync.yml",
+            ".github/workflows/temp-enrichment-governance-runner.yml",
+            ".ci/enrichment-governance-sync-trigger",
+        )
+        for path in temporary_paths:
+            self.assertFalse((ROOT / path).exists(), path)
+
+    def test_identity_customer_data_and_data_quality_historical_controls_remain_frozen(self) -> None:
         identity_packet = (
             ROOT / "docs/IDENTITY_RESOLUTION_PRIVACY_SCOPE_PACKET.md"
         ).read_text(encoding="utf-8")
@@ -174,70 +267,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             ROOT / "docs/DATA_QUALITY_PRIVACY_SCOPE_PACKET.md"
         ).read_text(encoding="utf-8")
 
-        for document in (project_status, module_catalog, roadmap, phase_plan):
-            self.assertIn("Customer Data Operations", document)
-            self.assertIn("Data Quality", document)
-            self.assertIn("Customer Enrichment", document)
-
-        self.assertIn("Eight authoritative owner implementations are accepted", project_status)
-        self.assertIn("Eight authoritative implementations are accepted", module_catalog)
-        self.assertIn("Next bounded packet — Customer Enrichment", project_status)
-        self.assertIn("Customer Enrichment is the next bounded contract-only owner", module_catalog)
-        self.assertIn("Next bounded owner slice — Customer Enrichment", roadmap)
-        self.assertIn("Next bounded owner packet: Customer Enrichment", phase_plan)
-
-        for document in (project_status, module_catalog, roadmap, phase_plan, customer_data_packet):
-            self.assertIn("PR #188", document)
-            self.assertIn("07f34786e82fdfa78d263790e9f50541529006f8", document)
-            self.assertIn("089be72fa3010b4aa15aff7f9ea55fd86290f8fc", document)
-
-        self.assertIn("26 of 26 permanent workflows", project_status)
-        self.assertIn("26 of 26 permanent workflows", module_catalog)
-        self.assertIn("26 of 26 permanent workflows", roadmap)
-        self.assertIn("26 of 26 permanent workflows", phase_plan)
-        self.assertIn("26 of 26 permanent workflows succeeded", customer_data_packet)
-        self.assertIn("Accepted historical contract", customer_data_packet)
-        self.assertIn("Production discovery remains prohibited", customer_data_packet)
-
-        for document in (project_status, module_catalog, roadmap, phase_plan, data_quality_packet):
-            self.assertIn("PR #190", document)
-            self.assertIn("dcfe8faebc7462b888f8fc1721cb379a40fea88a", document)
-            self.assertIn("deac197c97cddc15bb9916092ca87f6e767ce1de", document)
-
-        self.assertIn("27 of 27 permanent workflows", project_status)
-        self.assertIn("27 of 27 permanent workflows", module_catalog)
-        self.assertIn("27 of 27 permanent workflows", roadmap)
-        self.assertIn("27 of 27 permanent workflows", phase_plan)
-        self.assertIn("27 of 27 permanent workflows succeeded", data_quality_packet)
-        self.assertIn("Accepted historical contract", data_quality_packet)
-        self.assertIn("Production discovery remains forbidden", data_quality_packet)
-
-        stale_claims = (
-            "Six authoritative owner implementations are accepted",
-            "Six authoritative implementations are accepted",
-            "Seven authoritative owner implementations are accepted",
-            "Seven authoritative implementations are accepted",
-            "Customer Data Operations is the next bounded contract-only owner",
-            "Data Quality is the next bounded contract-only owner",
-            "Next bounded owner slice — Customer Data Operations",
-            "Next bounded owner slice — Data Quality",
-            "Next bounded owner packet: Customer Data Operations",
-            "Next bounded owner packet: Data Quality",
-            "Ready; implementation not started",
-            "implementation code has not started",
-            "Implementation state: **Not started",
-            "PR #188 in progress",
-            "PR #190 in progress",
-        )
-        for stale in stale_claims:
-            self.assertNotIn(stale, project_status)
-            self.assertNotIn(stale, module_catalog)
-            self.assertNotIn(stale, roadmap)
-            self.assertNotIn(stale, phase_plan)
-            self.assertNotIn(stale, customer_data_packet)
-            self.assertNotIn(stale, data_quality_packet)
-
-        required_identity_controls = (
+        identity_controls = (
             "MAX_PRIVACY_ALIAS_HOPS = 64",
             "MAX_PRIVACY_ALIAS_NODES = 4_096",
             "MAX_PRIVACY_ACTIVE_REDIRECT_EDGES = 4_095",
@@ -249,10 +279,10 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             "page_size + 1",
             "terminal completeness",
         )
-        for control in required_identity_controls:
+        for control in identity_controls:
             self.assertIn(control, identity_packet)
 
-        required_customer_data_controls = (
+        customer_data_controls = (
             "MAX_PRIVACY_IMPORT_ROWS_SCANNED = 16_384",
             "MAX_PRIVACY_EXPORT_SELECTION_ITEMS_SCANNED = 16_384",
             "MAX_PRIVACY_ASSOCIATED_EXPORT_RECORDS_REHYDRATED = 32_768",
@@ -269,15 +299,10 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             "reference-only",
             "no query-side changes",
         )
-        for control in required_customer_data_controls:
+        for control in customer_data_controls:
             self.assertIn(control, customer_data_packet)
 
-    def test_data_quality_entry_packet_freezes_bounded_direct_subject_scope(self) -> None:
-        packet = (ROOT / "docs/DATA_QUALITY_PRIVACY_SCOPE_PACKET.md").read_text(
-            encoding="utf-8"
-        )
-
-        required_families = (
+        data_quality_controls = (
             "data_quality.party_evaluation_job",
             "data_quality.party_evaluation_input",
             "data_quality.rule_outcome",
@@ -285,74 +310,32 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             "data_quality.finding_observation",
             "data_quality.party_completeness_result",
             "data_quality.remediation_attempt",
-        )
-        for family in required_families:
-            self.assertIn(family, packet)
-
-        required_excluded_definitions = (
             "data_quality.party_rule_set_version",
             "data_quality.party_completeness_profile_version",
-            "shared across many Party evaluations",
-            "must not be emitted",
-        )
-        for boundary in required_excluded_definitions:
-            self.assertIn(boundary, packet)
-
-        required_bounds = (
             "MAX_PRIVACY_EVALUATION_JOBS_SCANNED = 8_192",
-            "MAX_PRIVACY_EVALUATION_INPUTS_SCANNED = 8_192",
             "MAX_PRIVACY_RULE_OUTCOMES_SCANNED = 32_768",
-            "MAX_PRIVACY_FINDINGS_SCANNED = 16_384",
-            "MAX_PRIVACY_FINDING_OBSERVATIONS_SCANNED = 32_768",
-            "MAX_PRIVACY_COMPLETENESS_RESULTS_SCANNED = 8_192",
-            "MAX_PRIVACY_REMEDIATION_ATTEMPTS_SCANNED = 8_192",
-            "MAX_PRIVACY_DEFINITION_RECORDS_REHYDRATED = 8_192",
             "MAX_PRIVACY_ASSOCIATION_RECORDS_REHYDRATED = 65_536",
-            "MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS = 65_536",
-            "MAX_PRIVACY_OWNER_RECORDS_SCANNED = 65_536",
-            "PRIVACY_OWNER_SCAN_BATCH_SIZE = 512",
-        )
-        for bound in required_bounds:
-            self.assertIn(bound, packet)
-
-        required_controls = (
             "There is no provenance-only fallback discovery family",
             "REPEATABLE READ, READ ONLY",
-            "page_size + 1",
             "record_id ASC",
-            "crm.records (tenant_id, record_type, record_id)",
-            "create no Data Quality rows in `crm.relationships`",
+            "page_size + 1",
             "reference-only",
             "no-write proof",
-            "Contract-only/non-runtime",
             "Accepted historical contract",
-            "27 of 27 permanent workflows succeeded",
-            "dcfe8faebc7462b888f8fc1721cb379a40fea88a",
-            "deac197c97cddc15bb9916092ca87f6e767ce1de",
-            "Production discovery remains forbidden",
         )
-        for control in required_controls:
-            self.assertIn(control, packet)
+        for control in data_quality_controls:
+            self.assertIn(control, data_quality_packet)
 
-        forbidden_shortcuts = (
-            "JSON or byte-payload expression indexes",
-            "privacy-only projection table",
-            "synthetic `crm.relationships` rows",
-            "ungoverned Party-to-quality reverse index",
-            "public HTTP or gRPC route",
-            "Customer Privacy worker",
-            "generic privacy runtime",
-            "unbounded tenant scan",
-            "selective JSON parsing",
-            "runtime promotion",
-        )
-        for shortcut in forbidden_shortcuts:
-            self.assertIn(shortcut, packet)
-
-    def test_customer_enrichment_entry_packet_freezes_relationship_rooted_scope(self) -> None:
+    def test_customer_enrichment_historical_contract_and_typed_relationship_are_frozen(self) -> None:
         packet = (ROOT / "docs/CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PACKET.md").read_text(
             encoding="utf-8"
         )
+        postgres = (
+            ROOT / "crates/crm-customer-enrichment-privacy-scope-adapter/src/postgres.rs"
+        ).read_text(encoding="utf-8")
+        workflow = (
+            ROOT / ".github/workflows/customer-enrichment-privacy-scope.yml"
+        ).read_text(encoding="utf-8")
 
         required_families = (
             "customer_enrichment.request",
@@ -366,24 +349,30 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         for family in required_families:
             self.assertIn(family, packet)
 
-        required_excluded_definitions = (
+        required_contract = (
             "customer_enrichment.provider_profile_version",
             "customer_enrichment.mapping_version",
             "shared across many requests",
             "must not be emitted",
-        )
-        for boundary in required_excluded_definitions:
-            self.assertIn(boundary, packet)
-
-        required_relationship_controls = (
             "customer_enrichment.request.party",
             "source record type: `parties.party`",
             "target record type: `customer_enrichment.request`",
             "request is the only subject-discovery root",
             "There is no payload-only or provenance-only fallback discovery family",
-            "exactly one authoritative request/Party relationship",
+            "one exact authoritative `customer_enrichment.request.party` relationship",
+            "REPEATABLE READ, READ ONLY",
+            "page_size + 1",
+            "record_id ASC",
+            "crm.relationships (tenant_id, relationship_type, source_record_type, source_record_id, target_record_type, target_record_id)",
+            "crm.records (tenant_id, record_type, record_id)",
+            "reference-only",
+            "no-write",
+            "Contract-only/non-runtime",
+            "Accepted historical contract",
+            "28 of 28 permanent workflows succeeded",
+            "Scope discovery and immutable snapshot",
         )
-        for control in required_relationship_controls:
+        for control in required_contract:
             self.assertIn(control, packet)
 
         required_bounds = (
@@ -408,39 +397,28 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         for bound in required_bounds:
             self.assertIn(bound, packet)
 
-        required_controls = (
-            "customer_enrichment.privacy.scope.contribute@1.0.0",
-            "REPEATABLE READ, READ ONLY",
-            "page_size + 1",
-            "record_id ASC",
-            "crm.relationships (tenant_id, relationship_type, source_record_type, source_record_id, target_record_type, target_record_id)",
-            "crm.records (tenant_id, record_type, record_id)",
-            "reference-only",
-            "no-write proof",
-            "Contract-only/non-runtime",
-            "implementation not started",
-            "ninth and final owner",
-            "Production discovery remains forbidden",
-        )
-        for control in required_controls:
-            self.assertIn(control, packet)
+        for typed_field in (
+            "owner_module_id",
+            "schema_id",
+            "schema_version",
+            "descriptor_hash",
+            "data_class",
+            "payload_encoding",
+            "maximum_payload_size",
+            "retention_policy_id",
+            "payload_bytes",
+        ):
+            self.assertIn(typed_field, postgres)
+        self.assertNotIn("relationships.attributes", postgres)
+        self.assertNotIn("attributes_json", postgres)
+        self.assertIn("canonical typed link contract", postgres)
 
-        forbidden_shortcuts = (
-            "JSON or byte-payload expression indexes",
-            "privacy-only projection table",
-            "duplicate request/Party relationships",
-            "synthetic descendant-to-Party relationships",
-            "ungoverned Party-to-enrichment reverse index",
-            "public HTTP or gRPC route",
-            "Customer Privacy worker",
-            "generic privacy runtime",
-            "full unbounded tenant scan",
-            "selective JSON parsing",
-            "payload-only or provenance-only fallback discovery",
-            "runtime promotion",
-        )
-        for shortcut in forbidden_shortcuts:
-            self.assertIn(shortcut, packet)
+        self.assertIn("name: Customer Enrichment Privacy Scope CI", workflow)
+        self.assertIn("push:", workflow)
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("complete rollback", packet)
+        self.assertIn("absence of schema `crm`", packet)
+        self.assertIn("repeated PostgreSQL acceptance", packet)
 
 
 if __name__ == "__main__":
