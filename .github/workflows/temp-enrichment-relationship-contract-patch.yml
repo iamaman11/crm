@@ -1,0 +1,163 @@
+name: Temporary Enrichment Relationship Contract Patch
+
+on:
+  push:
+    branches:
+      - feature/customer-enrichment-privacy-scope
+    paths:
+      - ".github/workflows/temp-enrichment-relationship-contract-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feature/customer-enrichment-privacy-scope
+          fetch-depth: 0
+      - name: Validate typed request Party relationship and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-customer-enrichment-privacy-scope-adapter/src/postgres.rs")
+          text = path.read_text(encoding="utf-8")
+
+          marker = 'use std::collections::{BTreeMap, BTreeSet};\n'
+          constants = '''use std::collections::{BTreeMap, BTreeSet};
+
+const REQUEST_PARTY_LINK_SCHEMA_ID: &str = "crm.customer-enrichment.request.party-link";
+const REQUEST_PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
+const REQUEST_PARTY_LINK_MAXIMUM_BYTES: i64 = 1_024;
+const REQUEST_PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
+    234, 78, 62, 183, 114, 97, 170, 255, 30, 94, 169, 60, 144, 234, 17, 235, 225, 88, 121,
+    223, 86, 225, 45, 149, 201, 194, 155, 186, 10, 226, 131, 230,
+];
+'''
+          if text.count(marker) != 1:
+              raise SystemExit("import marker not found exactly once")
+          text = text.replace(marker, constants, 1)
+
+          old = '''        if row.version != 1 || row.attributes_json != "{}" {
+            return Err(relationship_state_invalid(
+                "request/Party relationship metadata is not the canonical empty v1 link",
+            ));
+        }
+'''
+          new = '''        if row.version != 1
+            || row.owner_module_id != MODULE_ID
+            || row.schema_id != REQUEST_PARTY_LINK_SCHEMA_ID
+            || row.schema_version != REQUEST_PARTY_LINK_SCHEMA_VERSION
+            || row.descriptor_hash.as_slice() != REQUEST_PARTY_LINK_DESCRIPTOR_HASH
+            || row.data_class != "personal"
+            || row.payload_encoding != "json"
+            || row.maximum_payload_size != REQUEST_PARTY_LINK_MAXIMUM_BYTES
+            || row.retention_policy_id != LIFECYCLE_STATE_RETENTION_POLICY_ID
+            || row.payload_bytes.as_slice() != b"{}"
+        {
+            return Err(relationship_state_invalid(
+                "request/Party relationship metadata does not match the canonical typed link contract",
+            ));
+        }
+'''
+          if text.count(old) != 1:
+              raise SystemExit("relationship validation block not found exactly once")
+          text = text.replace(old, new, 1)
+
+          old = '''struct RequestRelationshipRow {
+    source_record_id: String,
+    target_record_id: String,
+    version: i64,
+    attributes_json: String,
+}
+'''
+          new = '''struct RequestRelationshipRow {
+    source_record_id: String,
+    target_record_id: String,
+    version: i64,
+    owner_module_id: String,
+    schema_id: String,
+    schema_version: String,
+    descriptor_hash: Vec<u8>,
+    data_class: String,
+    payload_encoding: String,
+    maximum_payload_size: i64,
+    retention_policy_id: String,
+    payload_bytes: Vec<u8>,
+}
+'''
+          if text.count(old) != 1:
+              raise SystemExit("relationship row struct not found exactly once")
+          text = text.replace(old, new, 1)
+
+          old = '''            SELECT source_record_id, target_record_id, version, attributes::text AS attributes_json
+            FROM crm.relationships
+'''
+          new = '''            SELECT
+              source_record_id,
+              target_record_id,
+              version,
+              owner_module_id,
+              schema_id,
+              schema_version,
+              descriptor_hash,
+              data_class,
+              payload_encoding,
+              maximum_payload_size,
+              retention_policy_id,
+              payload_bytes
+            FROM crm.relationships
+'''
+          if text.count(old) != 1:
+              raise SystemExit("relationship SELECT not found exactly once")
+          text = text.replace(old, new, 1)
+
+          old = '''                attributes_json: row
+                    .try_get("attributes_json")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+'''
+          new = '''                owner_module_id: row
+                    .try_get("owner_module_id")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                schema_id: row
+                    .try_get("schema_id")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                schema_version: row
+                    .try_get("schema_version")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                descriptor_hash: row
+                    .try_get("descriptor_hash")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                data_class: row
+                    .try_get("data_class")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                payload_encoding: row
+                    .try_get("payload_encoding")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                maximum_payload_size: row
+                    .try_get("maximum_payload_size")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                retention_policy_id: row
+                    .try_get("retention_policy_id")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                payload_bytes: row
+                    .try_get("payload_bytes")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+'''
+          if text.count(old) != 1:
+              raise SystemExit("relationship decoder tail not found exactly once")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          Path(".github/workflows/temp-enrichment-relationship-contract-patch.yml").unlink()
+          PY
+          cargo fmt --all
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(privacy): validate typed Enrichment request links"
+          git push origin HEAD:feature/customer-enrichment-privacy-scope
