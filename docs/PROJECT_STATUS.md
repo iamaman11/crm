@@ -28,7 +28,7 @@ Merged Customer Privacy runtime inventory:
 - ten public non-runtime Customer Privacy coordinates;
 - zero Customer Privacy workers.
 
-Nine owner-scope coordinates are published and remain contract-only/non-runtime. All nine authoritative implementations are accepted:
+Nine owner-scope coordinates are published and remain contract-only/non-runtime. All nine authoritative owner implementations are accepted:
 
 1. Parties — PR #156 / merge `4368b8c3710e05137b71ba999bf7f3497c0801c8`;
 2. Consents — PR #175 / merge `039d6461803208f6cb70ce0fbcfcaffaf59d7125`;
@@ -58,7 +58,7 @@ Customer Privacy scope discovery and immutable snapshot
 -> Phase 8B Product Catalog, Pricing, CPQ and Quote-to-Revenue
 ```
 
-### Next bounded packet
+## Next bounded packet — Scope discovery and immutable snapshot
 
 State: **Ready for bounded implementation; not started**.
 
