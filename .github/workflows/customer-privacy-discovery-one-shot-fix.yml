@@ -1,0 +1,50 @@
+name: Customer Privacy Discovery One-Shot Fix
+
+on:
+  push:
+    branches:
+      - feature/customer-privacy-production-discovery-snapshot
+    paths:
+      - ".github/workflows/customer-privacy-discovery-one-shot-fix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: feature/customer-privacy-production-discovery-snapshot
+          fetch-depth: 0
+      - name: Apply exact source fixes and remove this workflow
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("crates/crm-customer-privacy-application/src/discovery.rs")
+          text = path.read_text()
+          replacements = {
+              "    SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE, ScopeDiscoveryLineage, ScopeResource,\n": "    ScopeDiscoveryLineage, ScopeResource,\n",
+              "    PayloadEncoding, PortFuture, RecordId, RequestId, RetentionPolicyId, SchemaVersion, SdkError,\n": "    PortFuture, RecordId, RequestId, RetentionPolicyId, SdkError,\n",
+              "use std::collections::{BTreeMap, BTreeSet};\n": "use std::collections::BTreeMap;\n",
+              '''        let validated = validate_response_page(\n            &lineage,\n            &contract,\n            page.receipt.page_number,\n            if index == 0 {\n                \"\"\n            } else {\n                let previous = decode_owner_response(\n                    contract.capability_id().as_str(),\n                    &pages[index - 1].response_bytes,\n                )?;\n                previous\n                    .page_evidence\n                    .as_ref()\n                    .map(|evidence| evidence.next_cursor.as_str())\n                    .ok_or_else(|| corrupt_evidence(\"previous owner page evidence is missing\"))?\n            },\n            &page.response_bytes,\n        )?;\n''': '''        let request_cursor = if index == 0 {\n            String::new()\n        } else {\n            decode_owner_response(\n                contract.capability_id().as_str(),\n                &pages[index - 1].response_bytes,\n            )?\n            .page_evidence\n            .map(|evidence| evidence.next_cursor)\n            .ok_or_else(|| corrupt_evidence(\"previous owner page evidence is missing\"))?\n        };\n        let validated = validate_response_page(\n            &lineage,\n            &contract,\n            page.receipt.page_number,\n            &request_cursor,\n            &page.response_bytes,\n        )?;\n''',
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one match, found {count}: {old[:80]!r}")
+              text = text.replace(old, new)
+          path.write_text(text)
+          Path(".github/workflows/customer-privacy-discovery-one-shot-fix.yml").unlink()
+      - name: Commit fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Fix Customer Privacy discovery compilation"
+          git push origin HEAD:feature/customer-privacy-production-discovery-snapshot
