@@ -25,8 +25,97 @@ use std::collections::BTreeSet;
 const MAXIMUM_CANONICAL_REDIRECT_HOPS: usize = 64;
 const MAXIMUM_MERGE_OPERATIONS_PER_PARTY: i64 = 1_000;
 
-/// Exact authoritative proof captured while the tenant Identity Resolution topology
-/// lock is held inside the caller's business transaction.
+const REDIRECT_ROWS_LOCKED_SQL: &str = r#"
+    SELECT target_record_id
+    FROM crm.relationships
+    WHERE tenant_id = $1
+      AND owner_module_id = $2
+      AND relationship_type = $3
+      AND source_record_type = $4
+      AND source_record_id = $5
+      AND target_record_type = $4
+    ORDER BY target_record_id ASC
+    LIMIT 2
+    FOR SHARE
+"#;
+
+const REDIRECT_ROWS_SNAPSHOT_SQL: &str = r#"
+    SELECT target_record_id
+    FROM crm.relationships
+    WHERE tenant_id = $1
+      AND owner_module_id = $2
+      AND relationship_type = $3
+      AND source_record_type = $4
+      AND source_record_id = $5
+      AND target_record_type = $4
+    ORDER BY target_record_id ASC
+    LIMIT 2
+"#;
+
+const ACTIVE_OPERATION_ROWS_LOCKED_SQL: &str = r#"
+    SELECT
+      operation.record_id,
+      operation.version,
+      operation.owner_module_id,
+      operation.schema_id,
+      operation.schema_version,
+      operation.descriptor_hash,
+      operation.data_class,
+      operation.payload_encoding,
+      operation.maximum_payload_size,
+      operation.retention_policy_id,
+      operation.payload_bytes
+    FROM crm.relationships AS relation
+    JOIN crm.records AS operation
+      ON operation.tenant_id = relation.tenant_id
+     AND operation.record_type = relation.target_record_type
+     AND operation.record_id = relation.target_record_id
+    WHERE relation.tenant_id = $1
+      AND relation.owner_module_id = $2
+      AND relation.relationship_type = $3
+      AND relation.source_record_type = $4
+      AND relation.source_record_id = $5
+      AND relation.target_record_type = $6
+      AND operation.owner_module_id = $2
+      AND operation.record_type = $6
+      AND operation.deleted_at IS NULL
+    ORDER BY operation.record_id ASC
+    LIMIT $7
+    FOR SHARE OF relation, operation
+"#;
+
+const ACTIVE_OPERATION_ROWS_SNAPSHOT_SQL: &str = r#"
+    SELECT
+      operation.record_id,
+      operation.version,
+      operation.owner_module_id,
+      operation.schema_id,
+      operation.schema_version,
+      operation.descriptor_hash,
+      operation.data_class,
+      operation.payload_encoding,
+      operation.maximum_payload_size,
+      operation.retention_policy_id,
+      operation.payload_bytes
+    FROM crm.relationships AS relation
+    JOIN crm.records AS operation
+      ON operation.tenant_id = relation.tenant_id
+     AND operation.record_type = relation.target_record_type
+     AND operation.record_id = relation.target_record_id
+    WHERE relation.tenant_id = $1
+      AND relation.owner_module_id = $2
+      AND relation.relationship_type = $3
+      AND relation.source_record_type = $4
+      AND relation.source_record_id = $5
+      AND relation.target_record_type = $6
+      AND operation.owner_module_id = $2
+      AND operation.record_type = $6
+      AND operation.deleted_at IS NULL
+    ORDER BY operation.record_id ASC
+    LIMIT $7
+"#;
+
+/// Exact authoritative proof captured from one caller-owned PostgreSQL transaction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanonicalPartyTopologyProof {
     pub requested_party: PartyReference,
@@ -36,17 +125,79 @@ pub struct CanonicalPartyTopologyProof {
     pub merge_operation_path: Vec<MergeOperationId>,
 }
 
-/// Proves that `requested_party` currently resolves to `claimed_canonical_party` at
-/// exactly `claimed_generation`. The proof is race-safe because it acquires the same
-/// tenant topology advisory lock used by merge/unmerge before reading generation,
-/// Party records, redirect edges and active merge-operation lineage. All reads occur
-/// through the caller's already-bound PostgreSQL transaction and FORCE RLS context.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProofMode {
+    Locked,
+    RepeatableReadSnapshot,
+}
+
+/// Proves that `requested_party` resolves to `claimed_canonical_party` at exactly
+/// `claimed_generation` inside the caller's already-bound FORCE-RLS transaction.
+/// Read-write transactions acquire the same advisory and row locks used by
+/// merge/unmerge. Read-only transactions use their immutable PostgreSQL snapshot and
+/// deliberately avoid lock clauses that PostgreSQL forbids in `READ ONLY` mode.
 pub async fn prove_canonical_party_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
     requested_party: &PartyReference,
     claimed_canonical_party: &PartyReference,
     claimed_generation: u64,
+) -> Result<CanonicalPartyTopologyProof, SdkError> {
+    let mode = transaction_proof_mode(transaction).await?;
+    prove_canonical_party(
+        transaction,
+        tenant_id,
+        requested_party,
+        claimed_canonical_party,
+        claimed_generation,
+        mode,
+    )
+    .await
+}
+
+/// Explicit snapshot-only entrypoint for callers that have already established a
+/// `REPEATABLE READ, READ ONLY` transaction. It acquires neither advisory nor row locks.
+pub async fn prove_canonical_party_in_snapshot_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    tenant_id: &TenantId,
+    requested_party: &PartyReference,
+    claimed_canonical_party: &PartyReference,
+    claimed_generation: u64,
+) -> Result<CanonicalPartyTopologyProof, SdkError> {
+    prove_canonical_party(
+        transaction,
+        tenant_id,
+        requested_party,
+        claimed_canonical_party,
+        claimed_generation,
+        ProofMode::RepeatableReadSnapshot,
+    )
+    .await
+}
+
+async fn transaction_proof_mode(
+    transaction: &mut Transaction<'_, Postgres>,
+) -> Result<ProofMode, SdkError> {
+    let read_only: String = sqlx::query_scalar("SHOW transaction_read_only")
+        .fetch_one(&mut **transaction)
+        .await
+        .map_err(topology_store_unavailable)?;
+    match read_only.as_str() {
+        "on" => Ok(ProofMode::RepeatableReadSnapshot),
+        "off" => Ok(ProofMode::Locked),
+        other => Err(canonical_redirect_invalid(format!(
+            "PostgreSQL returned unsupported transaction_read_only value {other}"
+        ))),
+    }
+}
+
+async fn prove_canonical_party(
+    transaction: &mut Transaction<'_, Postgres>,
+    tenant_id: &TenantId,
+    requested_party: &PartyReference,
+    claimed_canonical_party: &PartyReference,
+    claimed_generation: u64,
+    mode: ProofMode,
 ) -> Result<CanonicalPartyTopologyProof, SdkError> {
     if claimed_generation == 0 {
         return Err(SdkError::invalid_argument(
@@ -55,14 +206,16 @@ pub async fn prove_canonical_party_in_transaction(
         ));
     }
 
-    acquire_topology_lock(transaction, tenant_id).await?;
+    if mode == ProofMode::Locked {
+        acquire_topology_lock(transaction, tenant_id).await?;
+    }
     let actual_generation = current_generation(transaction, tenant_id).await?;
     if actual_generation != claimed_generation {
         return Err(stale_generation());
     }
 
-    require_party(transaction, tenant_id, requested_party).await?;
-    require_party(transaction, tenant_id, claimed_canonical_party).await?;
+    require_party(transaction, tenant_id, requested_party, mode).await?;
+    require_party(transaction, tenant_id, claimed_canonical_party, mode).await?;
 
     let mut current = requested_party.clone();
     let mut party_path = vec![current.clone()];
@@ -70,7 +223,8 @@ pub async fn prove_canonical_party_in_transaction(
     let mut visited = BTreeSet::from([current.clone()]);
 
     for _ in 0..MAXIMUM_CANONICAL_REDIRECT_HOPS {
-        let Some(next) = immediate_redirect_target(transaction, tenant_id, &current).await? else {
+        let Some(next) = immediate_redirect_target(transaction, tenant_id, &current, mode).await?
+        else {
             if current != *claimed_canonical_party {
                 return Err(canonical_party_mismatch());
             }
@@ -88,8 +242,9 @@ pub async fn prove_canonical_party_in_transaction(
                 "canonical redirect topology contains a cycle",
             ));
         }
-        require_party(transaction, tenant_id, &next).await?;
-        let operation = active_operation_for_edge(transaction, tenant_id, &current, &next).await?;
+        require_party(transaction, tenant_id, &next, mode).await?;
+        let operation =
+            active_operation_for_edge(transaction, tenant_id, &current, &next, mode).await?;
         merge_operation_path.push(operation.operation_id().clone());
         current = next;
         party_path.push(current.clone());
@@ -131,9 +286,46 @@ async fn require_party(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
     party: &PartyReference,
+    mode: ProofMode,
 ) -> Result<(), SdkError> {
     let party_id = RecordId::try_new(party.as_str()).map_err(configuration_error)?;
-    require_party_reference_in_transaction(transaction, tenant_id, &party_id).await?;
+    match mode {
+        ProofMode::Locked => {
+            require_party_reference_in_transaction(transaction, tenant_id, &party_id).await?;
+        }
+        ProofMode::RepeatableReadSnapshot => {
+            let row = sqlx::query(
+                r#"
+                SELECT record_id, version
+                FROM crm.records
+                WHERE tenant_id = $1
+                  AND owner_module_id = $2
+                  AND record_type = $3
+                  AND record_id = $4
+                  AND deleted_at IS NULL
+                "#,
+            )
+            .bind(tenant_id.as_str())
+            .bind(crm_parties_capability_adapter::MODULE_ID)
+            .bind(PARTY_RECORD_TYPE)
+            .bind(party_id.as_str())
+            .fetch_optional(&mut **transaction)
+            .await
+            .map_err(topology_store_unavailable)?
+            .ok_or_else(party_reference_unavailable)?;
+            let stored_id: String = row
+                .try_get("record_id")
+                .map_err(party_reference_state_invalid)?;
+            let version: i64 = row
+                .try_get("version")
+                .map_err(party_reference_state_invalid)?;
+            if stored_id != party_id.as_str() || version <= 0 {
+                return Err(party_reference_state_invalid(
+                    "snapshot Party identity or version is invalid",
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -141,30 +333,21 @@ async fn immediate_redirect_target(
     transaction: &mut Transaction<'_, Postgres>,
     tenant_id: &TenantId,
     source: &PartyReference,
+    mode: ProofMode,
 ) -> Result<Option<PartyReference>, SdkError> {
-    let rows = sqlx::query(
-        r#"
-        SELECT target_record_id
-        FROM crm.relationships
-        WHERE tenant_id = $1
-          AND owner_module_id = $2
-          AND relationship_type = $3
-          AND source_record_type = $4
-          AND source_record_id = $5
-          AND target_record_type = $4
-        ORDER BY target_record_id ASC
-        LIMIT 2
-        FOR SHARE
-        "#,
-    )
-    .bind(tenant_id.as_str())
-    .bind(MODULE_ID)
-    .bind(CANONICAL_REDIRECT_RELATIONSHIP_TYPE)
-    .bind(CANONICAL_REDIRECT_PARTY_RECORD_TYPE)
-    .bind(source.as_str())
-    .fetch_all(&mut **transaction)
-    .await
-    .map_err(topology_store_unavailable)?;
+    let query = match mode {
+        ProofMode::Locked => REDIRECT_ROWS_LOCKED_SQL,
+        ProofMode::RepeatableReadSnapshot => REDIRECT_ROWS_SNAPSHOT_SQL,
+    };
+    let rows = sqlx::query(query)
+        .bind(tenant_id.as_str())
+        .bind(MODULE_ID)
+        .bind(CANONICAL_REDIRECT_RELATIONSHIP_TYPE)
+        .bind(CANONICAL_REDIRECT_PARTY_RECORD_TYPE)
+        .bind(source.as_str())
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(topology_store_unavailable)?;
 
     if rows.len() > 1 {
         return Err(canonical_redirect_invalid(
@@ -185,50 +368,23 @@ async fn active_operation_for_edge(
     tenant_id: &TenantId,
     source: &PartyReference,
     target: &PartyReference,
+    mode: ProofMode,
 ) -> Result<MergeOperation, SdkError> {
-    let rows = sqlx::query(
-        r#"
-        SELECT
-          operation.record_id,
-          operation.version,
-          operation.owner_module_id,
-          operation.schema_id,
-          operation.schema_version,
-          operation.descriptor_hash,
-          operation.data_class,
-          operation.payload_encoding,
-          operation.maximum_payload_size,
-          operation.retention_policy_id,
-          operation.payload_bytes
-        FROM crm.relationships AS relation
-        JOIN crm.records AS operation
-          ON operation.tenant_id = relation.tenant_id
-         AND operation.record_type = relation.target_record_type
-         AND operation.record_id = relation.target_record_id
-        WHERE relation.tenant_id = $1
-          AND relation.owner_module_id = $2
-          AND relation.relationship_type = $3
-          AND relation.source_record_type = $4
-          AND relation.source_record_id = $5
-          AND relation.target_record_type = $6
-          AND operation.owner_module_id = $2
-          AND operation.record_type = $6
-          AND operation.deleted_at IS NULL
-        ORDER BY operation.record_id ASC
-        LIMIT $7
-        FOR SHARE OF relation, operation
-        "#,
-    )
-    .bind(tenant_id.as_str())
-    .bind(MODULE_ID)
-    .bind(PARTY_MERGE_RELATIONSHIP_TYPE)
-    .bind(PARTY_RECORD_TYPE)
-    .bind(source.as_str())
-    .bind(MERGE_OPERATION_RECORD_TYPE)
-    .bind(MAXIMUM_MERGE_OPERATIONS_PER_PARTY + 1)
-    .fetch_all(&mut **transaction)
-    .await
-    .map_err(topology_store_unavailable)?;
+    let query = match mode {
+        ProofMode::Locked => ACTIVE_OPERATION_ROWS_LOCKED_SQL,
+        ProofMode::RepeatableReadSnapshot => ACTIVE_OPERATION_ROWS_SNAPSHOT_SQL,
+    };
+    let rows = sqlx::query(query)
+        .bind(tenant_id.as_str())
+        .bind(MODULE_ID)
+        .bind(PARTY_MERGE_RELATIONSHIP_TYPE)
+        .bind(PARTY_RECORD_TYPE)
+        .bind(source.as_str())
+        .bind(MERGE_OPERATION_RECORD_TYPE)
+        .bind(MAXIMUM_MERGE_OPERATIONS_PER_PARTY + 1)
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(topology_store_unavailable)?;
 
     if i64::try_from(rows.len()).unwrap_or(i64::MAX) > MAXIMUM_MERGE_OPERATIONS_PER_PARTY {
         return Err(canonical_redirect_invalid(
@@ -353,6 +509,25 @@ fn topology_store_unavailable(reference: impl std::fmt::Display) -> SdkError {
         ErrorCategory::Unavailable,
         true,
         "The canonical Party topology could not be verified atomically.",
+    )
+    .with_internal_reference(reference.to_string())
+}
+
+fn party_reference_unavailable() -> SdkError {
+    SdkError::new(
+        "PARTY_REFERENCE_UNAVAILABLE",
+        ErrorCategory::NotFound,
+        false,
+        "The referenced Party is unavailable.",
+    )
+}
+
+fn party_reference_state_invalid(reference: impl std::fmt::Display) -> SdkError {
+    SdkError::new(
+        "PARTY_REFERENCE_STATE_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The referenced Party state is invalid.",
     )
     .with_internal_reference(reference.to_string())
 }

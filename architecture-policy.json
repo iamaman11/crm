@@ -65,6 +65,7 @@
       "crates/crm-consents-privacy-scope-adapter/Cargo.toml",
       "crates/crm-contact-points-privacy-scope-adapter/Cargo.toml",
       "crates/crm-customer-accounts-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-customer-data-operations-privacy-scope-adapter/Cargo.toml",
       "crates/crm-identity-resolution-privacy-scope-adapter/Cargo.toml",
       "crates/crm-parties-privacy-scope-adapter/Cargo.toml",
       "crates/crm-party-relationships-privacy-scope-adapter/Cargo.toml"
@@ -75,6 +76,7 @@
       "crates/crm-consents-privacy-scope-adapter/src/postgres.rs",
       "crates/crm-contact-points-privacy-scope-adapter/src/postgres.rs",
       "crates/crm-customer-accounts-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-customer-data-operations-privacy-scope-adapter/src/postgres.rs",
       "crates/crm-identity-resolution-privacy-scope-adapter/src/postgres.rs",
       "crates/crm-parties-privacy-scope-adapter/src/postgres.rs",
       "crates/crm-party-relationships-privacy-scope-adapter/src/postgres.rs"
