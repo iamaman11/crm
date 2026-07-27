@@ -1,0 +1,19 @@
+{
+  "schema_version": "crm.workspace-dependency-policy/v1",
+  "policies": [
+    {
+      "id": "owner-module-common-serialization-and-hashing",
+      "owner": "architecture-governance",
+      "scope_glob": "modules/*/Cargo.toml",
+      "dependencies": [
+        "serde",
+        "serde_json",
+        "sha2"
+      ],
+      "enforcement": "blocking",
+      "allow_local_features": false,
+      "reason": "All current pure owner and link modules use the same existing serde, serde_json and sha2 requirements. Root inheritance prevents silent version or feature drift without forcing an unused dependency into a future module.",
+      "tracking_issue": "#194"
+    }
+  ]
+}

@@ -4,6 +4,8 @@ import json
 import sys
 import tomllib
 
+from check_workspace_dependency_policy import validate_policy_document
+
 root = Path(__file__).resolve().parents[1]
 policy = json.loads((root / "architecture-policy.json").read_text(encoding="utf-8"))
 errors: list[str] = []
@@ -138,6 +140,14 @@ for marker, allowed_paths in policy.get("restricted_source_markers", {}).items()
                 f"{relative} uses restricted source marker {marker!r}; "
                 f"allowed paths: {sorted(allowed)}"
             )
+
+dependency_policy = validate_policy_document(root)
+errors.extend(
+    f"workspace dependency policy: {error}"
+    for error in dependency_policy["blocking_errors"]
+)
+for warning in dependency_policy["warnings"]:
+    print(f"Architecture dependency policy warning: {warning}")
 
 if errors:
     print("Architecture boundary check FAILED:")
