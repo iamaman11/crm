@@ -77,8 +77,8 @@ const REQUEST_PARTY_LINK_SCHEMA_ID: &str = "crm.customer-enrichment.request.part
 const REQUEST_PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
 const REQUEST_PARTY_LINK_MAXIMUM_BYTES: u64 = 1_024;
 const REQUEST_PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
-    234, 78, 62, 183, 114, 97, 170, 255, 30, 94, 169, 60, 144, 234, 17, 235, 225, 88, 121,
-    223, 86, 225, 45, 149, 201, 194, 155, 186, 10, 226, 131, 230,
+    234, 78, 62, 183, 114, 97, 170, 255, 30, 94, 169, 60, 144, 234, 17, 235, 225, 88, 121, 223, 86,
+    225, 45, 149, 201, 194, 155, 186, 10, 226, 131, 230,
 ];
 
 #[derive(Debug, Clone)]
@@ -269,13 +269,17 @@ async fn enrichment_scope_is_relationship_rooted_strict_minimized_and_side_effec
 
     for forbidden_id in graph_values(&unrelated) {
         assert!(
-            encoded_pages.iter().all(|bytes| !contains(bytes, forbidden_id)),
+            encoded_pages
+                .iter()
+                .all(|bytes| !contains(bytes, forbidden_id)),
             "unrelated resource leaked: {forbidden_id}"
         );
     }
     for forbidden_id in graph_values(&tenant_b) {
         assert!(
-            encoded_pages.iter().all(|bytes| !contains(bytes, forbidden_id)),
+            encoded_pages
+                .iter()
+                .all(|bytes| !contains(bytes, forbidden_id)),
             "cross-tenant resource leaked: {forbidden_id}"
         );
     }
@@ -1137,7 +1141,11 @@ fn decode(bytes: &[u8]) -> privacy::CustomerEnrichmentPrivacyScopeContributionRe
 fn expected_two_graphs(left: &GraphIds, right: &GraphIds) -> BTreeMap<String, Vec<String>> {
     let mut map = BTreeMap::new();
     for (record_type, left_id, right_id) in [
-        (ENRICHMENT_REQUEST_RECORD_TYPE, &left.request, &right.request),
+        (
+            ENRICHMENT_REQUEST_RECORD_TYPE,
+            &left.request,
+            &right.request,
+        ),
         (
             PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE,
             &left.receipt,
