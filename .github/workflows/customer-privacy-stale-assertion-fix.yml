@@ -30,13 +30,15 @@ jobs:
 
           freeze_test = Path("tests/test_customer_privacy_discovery_snapshot_freeze.py")
           text = freeze_test.read_text()
-          old = '''        self.assertIn("scope discovery and immutable snapshot", self.status.lower())
-          self.assertIn("production implementation not started", self.status.lower())
-          '''
-          new = '''        self.assertIn("scope discovery and immutable snapshot", self.status.lower())
-          self.assertIn("implemented in pr #206", self.status.lower())
-          self.assertIn("exact-head gate review pending", self.status.lower())
-          '''
+          old = (
+              '        self.assertIn("scope discovery and immutable snapshot", self.status.lower())\n'
+              '        self.assertIn("production implementation not started", self.status.lower())\n'
+          )
+          new = (
+              '        self.assertIn("scope discovery and immutable snapshot", self.status.lower())\n'
+              '        self.assertIn("implemented in pr #206", self.status.lower())\n'
+              '        self.assertIn("exact-head gate review pending", self.status.lower())\n'
+          )
           if old in text:
               text = text.replace(old, new, 1)
           elif new not in text:
@@ -55,15 +57,17 @@ jobs:
               '            self.assertIn("scope discovery and immutable snapshot", document.lower())\n',
               1,
           )
-          old = '''        self.assertIn("production discovery is not implemented", phase_plan)
-          self.assertIn("planning and action execution remain not started", module_catalog)
-          '''
-          new = '''        self.assertIn(
-              "Implemented in PR #206; exact-head gate review pending", phase_plan
+          old = (
+              '        self.assertIn("production discovery is not implemented", phase_plan)\n'
+              '        self.assertIn("planning and action execution remain not started", module_catalog)\n'
           )
-          self.assertIn("PR #206", module_catalog)
-          self.assertIn("planning and action execution remain not started", module_catalog)
-          '''
+          new = (
+              '        self.assertIn(\n'
+              '            "Implemented in PR #206; exact-head gate review pending", phase_plan\n'
+              '        )\n'
+              '        self.assertIn("PR #206", module_catalog)\n'
+              '        self.assertIn("planning and action execution remain not started", module_catalog)\n'
+          )
           if old in text:
               text = text.replace(old, new, 1)
           elif new not in text:
