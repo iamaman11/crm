@@ -74,7 +74,7 @@ INSERT INTO crm.customer_privacy_action_plans (
   plan_id,
   plan_digest,
   approval_required,
-  planned_at_unix_nanos
+  planned_at
 ) VALUES (
   'tenant-a',
   'privacy-case-plan-1',
@@ -84,7 +84,7 @@ INSERT INTO crm.customer_privacy_action_plans (
   'privacy-action-plan-test',
   decode(repeat('11', 32), 'hex'),
   true,
-  1000000001
+  TIMESTAMPTZ 'epoch' + 1000000 * INTERVAL '1 microsecond'
 );
 
 INSERT INTO crm.customer_privacy_planning_audit (
@@ -97,7 +97,7 @@ INSERT INTO crm.customer_privacy_planning_audit (
   resulting_case_version,
   actor_id,
   request_id,
-  occurred_at_unix_nanos
+  occurred_at
 ) VALUES (
   'tenant-a',
   decode(repeat('22', 32), 'hex'),
@@ -108,7 +108,7 @@ INSERT INTO crm.customer_privacy_planning_audit (
   5,
   'privacy-worker',
   'request-plan-1',
-  1000000001
+  TIMESTAMPTZ 'epoch' + 1000000 * INTERVAL '1 microsecond'
 );
 
 DO $$
@@ -118,6 +118,13 @@ BEGIN
   END IF;
   IF (SELECT count(*) FROM crm.customer_privacy_planning_audit) <> 1 THEN
     RAISE EXCEPTION 'same-tenant planning-audit visibility failed';
+  END IF;
+  IF (
+    SELECT (extract(epoch FROM planned_at) * 1000000000)::bigint
+    FROM crm.customer_privacy_action_plans
+    WHERE privacy_case_id = 'privacy-case-plan-1'
+  ) <> 1000000000 THEN
+    RAISE EXCEPTION 'microsecond-aligned planning timestamp did not round trip exactly';
   END IF;
 
   BEGIN
@@ -169,7 +176,7 @@ BEGIN
       plan_id,
       plan_digest,
       approval_required,
-      planned_at_unix_nanos
+      planned_at
     ) VALUES (
       'tenant-a',
       'privacy-case-cross-tenant',
@@ -179,7 +186,7 @@ BEGIN
       'privacy-action-plan-cross-tenant',
       decode(repeat('33', 32), 'hex'),
       false,
-      2000000001
+      TIMESTAMPTZ 'epoch' + 2000000 * INTERVAL '1 microsecond'
     );
     RAISE EXCEPTION 'cross-tenant planning insert unexpectedly succeeded';
   EXCEPTION WHEN insufficient_privilege THEN
