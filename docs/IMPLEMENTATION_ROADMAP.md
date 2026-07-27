@@ -131,6 +131,18 @@ Merged runtime inventory:
 
 All nine privacy owner-scope implementations are accepted. The coordinates remain contract-only/non-runtime and add no Customer Privacy discovery, planning or execution runtime.
 
+Accepted owner evidence:
+
+1. Parties — PR #156 / merge `4368b8c3710e05137b71ba999bf7f3497c0801c8`;
+2. Consents — PR #175 / merge `039d6461803208f6cb70ce0fbcfcaffaf59d7125`;
+3. Customer Accounts — PR #179 / merge `5b5252a437c6bebbd7afdead0162063af4c0b7e4`;
+4. Contact Points — PR #181 / merge `96cd0cf548310592a0718c97242a724a29717a72`;
+5. Party Relationships — PR #183 / merge `9ad2aa91321e9edb54cab98218f93143923ef33f`;
+6. Identity Resolution — PR #186 / accepted source `24456b86379a1ef23ed5a60804cdcae5075d407c` / merge `509eb304a76055c9f49b0beed3b007963a91cb22` / 25 of 25 permanent workflows;
+7. Customer Data Operations — PR #188 / accepted source `07f34786e82fdfa78d263790e9f50541529006f8` / merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc` / 26 of 26 permanent workflows;
+8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows;
+9. Customer Enrichment — PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
+
 ### 7.2 Active sequence
 
 1. **Scope discovery and immutable snapshot.**
