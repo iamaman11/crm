@@ -83,6 +83,7 @@ def command_conformance(_: argparse.Namespace) -> None:
             sys.executable,
             "-m",
             "unittest",
+            "tests/test_architecture_documentation_consistency.py",
             "tests/test_contract_bindings.py",
             "tests/test_customer_privacy_architecture_freeze.py",
             "tests/test_customer_privacy_contract_inventory.py",
