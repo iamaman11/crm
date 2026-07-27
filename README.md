@@ -4,20 +4,15 @@ Implementation repository for a universal modular, metadata-driven, production-g
 
 ## Start here
 
-For a new contributor or coding agent, read in this order:
+For a new contributor or coding agent:
 
 1. [`AGENTS.md`](AGENTS.md) — repository operating model and change workflow.
-2. [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_INVARIANTS.md) — absolute architecture rules.
-3. [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) — concise current merged state and next packet.
-4. [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) — normative product delivery order.
-5. [`docs/PHASE8_DELIVERY_PLAN.md`](docs/PHASE8_DELIVERY_PLAN.md) — active Phase 8 sequence.
-6. [`docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`](docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md) — tracked 10/10 architecture and developer-experience program.
-7. [`docs/APPLICATION_ARCHITECTURE.md`](docs/APPLICATION_ARCHITECTURE.md) — layer and composition model.
-8. [`docs/MODULE_CATALOG.md`](docs/MODULE_CATALOG.md) — business ownership and product-completeness accounting.
-9. [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — coherent packet and exact-head acceptance workflow.
-10. [`docs/MULTI_AGENT_DEVELOPMENT.md`](docs/MULTI_AGENT_DEVELOPMENT.md) — exact-SHA implementation and verification protocol.
+2. [`docs/README.md`](docs/README.md) — task-oriented documentation map and source-of-truth hierarchy.
+3. [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_INVARIANTS.md) — absolute architecture rules.
+4. [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) — concise current merged state and next packet.
+5. The active GitHub issue for the bounded work packet.
 
-Accepted ADRs and published contracts take precedence over descriptive prose unless they violate an absolute system invariant.
+Use the documentation index instead of reading every document linearly. Accepted ADRs and published contracts take precedence over descriptive prose unless they violate an absolute system invariant.
 
 ## Current state
 
@@ -25,7 +20,7 @@ Accepted ADRs and published contracts take precedence over descriptive prose unl
 
 The current bounded product packet is **Customer Privacy scope discovery and immutable snapshot**. All nine authoritative privacy owner-scope implementations are accepted, but production discovery, planning and owner execution are not yet implemented.
 
-The cross-cutting architecture and developer-experience program is tracked by **issue #194**. It preserves the existing modular architecture while reducing accidental crate proliferation, central manual composition, dependency drift, CI fan-out and repository navigation cost.
+The cross-cutting architecture and developer-experience program is tracked by **issue #194** and [`docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`](docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md). It preserves the modular architecture while reducing accidental crate proliferation, central manual composition, dependency drift, CI fan-out, local-environment friction and repository navigation cost.
 
 Current product-complete expert modules: **0**.
 
@@ -58,8 +53,6 @@ A new business module is justified only by a new authoritative mutable domain. S
 
 Generic router and worker algorithms must not change merely to register one owner capability.
 
-See [`docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`](docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md).
-
 ## Repository layout
 
 - `proto/` — authoritative RPC, command and event contract sources.
@@ -68,7 +61,7 @@ See [`docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`](docs/ARCHITECTURE_C
 - `services/` — deployable composition roots; `services/crm-api` is the production process.
 - `database/` — authoritative migrations and PostgreSQL acceptance assets.
 - `schemas/` — strict authoring schemas compiled into typed runtime IR.
-- `docs/adr/` — accepted architecture decisions.
+- `docs/` — normative architecture, status, execution plans, navigation and historical acceptance evidence.
 - `scripts/` — architecture, contract, manifest, affected-scope and repository tooling.
 - `.github/workflows/` — permanent conformance and acceptance gates.
 
@@ -89,7 +82,7 @@ python scripts/repo.py format --check
 python scripts/repo.py quality
 ```
 
-Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected.
+Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Planned local-environment and navigation commands are listed in [`docs/README.md`](docs/README.md) and must not be treated as implemented until permanent tests prove them.
 
 ## Status synchronization rule
 
