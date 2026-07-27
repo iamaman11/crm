@@ -1,10 +1,11 @@
 name: Temporary Enrichment Relationship Contract Patch
 
-# Activated after branch workflow registration.
 on:
   push:
-    branches: [feature/customer-enrichment-privacy-scope]
-    paths: [".github/workflows/temp-enrichment-relationship-contract-patch.yml"]
+    branches:
+      - feature/customer-enrichment-privacy-scope
+    paths:
+      - ".github/workflows/temp-enrichment-relationship-contract-patch.yml"
 
 permissions:
   contents: write
@@ -17,7 +18,7 @@ jobs:
         with:
           ref: feature/customer-enrichment-privacy-scope
           fetch-depth: 0
-      - name: Validate typed request Party relationship and remove temporary workflow
+      - name: Patch typed request Party relationship
         shell: bash
         run: |
           set -euo pipefail
@@ -27,9 +28,8 @@ jobs:
           path = Path("crates/crm-customer-enrichment-privacy-scope-adapter/src/postgres.rs")
           text = path.read_text(encoding="utf-8")
 
-          text = text.replace(
-              'use std::collections::{BTreeMap, BTreeSet};\n',
-              '''use std::collections::{BTreeMap, BTreeSet};
+          anchor = "use std::collections::{BTreeMap, BTreeSet};\n\n#[derive(Clone)]"
+          replacement = '''use std::collections::{BTreeMap, BTreeSet};
 
           const REQUEST_PARTY_LINK_SCHEMA_ID: &str = "crm.customer-enrichment.request.party-link";
           const REQUEST_PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
@@ -38,43 +38,36 @@ jobs:
               234, 78, 62, 183, 114, 97, 170, 255, 30, 94, 169, 60, 144, 234, 17, 235, 225, 88, 121,
               223, 86, 225, 45, 149, 201, 194, 155, 186, 10, 226, 131, 230,
           ];
-          ''',
-              1,
-          )
-          text = text.replace(
-              '''        if row.version != 1 || row.attributes_json != "{}" {
-              return Err(relationship_state_invalid(
-                  "request/Party relationship metadata is not the canonical empty v1 link",
-              ));
-          }
-          ''',
-              '''        if row.version != 1
-              || row.owner_module_id != MODULE_ID
-              || row.schema_id != REQUEST_PARTY_LINK_SCHEMA_ID
-              || row.schema_version != REQUEST_PARTY_LINK_SCHEMA_VERSION
-              || row.descriptor_hash.as_slice() != REQUEST_PARTY_LINK_DESCRIPTOR_HASH
-              || row.data_class != "personal"
-              || row.payload_encoding != "json"
-              || row.maximum_payload_size != REQUEST_PARTY_LINK_MAXIMUM_BYTES
-              || row.retention_policy_id != LIFECYCLE_STATE_RETENTION_POLICY_ID
-              || row.payload_bytes.as_slice() != b"{}"
-          {
-              return Err(relationship_state_invalid(
-                  "request/Party relationship metadata does not match the canonical typed link contract",
-              ));
-          }
-          ''',
-              1,
-          )
-          text = text.replace(
-              '''struct RequestRelationshipRow {
-              source_record_id: String,
-              target_record_id: String,
-              version: i64,
-              attributes_json: String,
-          }
-          ''',
-              '''struct RequestRelationshipRow {
+
+          #[derive(Clone)]'''
+          if anchor not in text:
+              raise SystemExit("constant insertion anchor missing")
+          text = text.replace(anchor, replacement, 1)
+
+          start = text.index("    for row in rows {\n        if row.version != 1 || row.attributes_json != \"{}\" {")
+          end = text.index("        let source_party_id", start)
+          strict = '''    for row in rows {
+              if row.version != 1
+                  || row.owner_module_id != MODULE_ID
+                  || row.schema_id != REQUEST_PARTY_LINK_SCHEMA_ID
+                  || row.schema_version != REQUEST_PARTY_LINK_SCHEMA_VERSION
+                  || row.descriptor_hash.as_slice() != REQUEST_PARTY_LINK_DESCRIPTOR_HASH
+                  || row.data_class != "personal"
+                  || row.payload_encoding != "json"
+                  || row.maximum_payload_size != REQUEST_PARTY_LINK_MAXIMUM_BYTES
+                  || row.retention_policy_id != LIFECYCLE_STATE_RETENTION_POLICY_ID
+                  || row.payload_bytes.as_slice() != b"{}"
+              {
+                  return Err(relationship_state_invalid(
+                      "request/Party relationship metadata does not match the canonical typed link contract",
+                  ));
+              }
+          '''
+          text = text[:start] + strict + text[end:]
+
+          start = text.index("struct RequestRelationshipRow {")
+          end = text.index("\n\nasync fn load_request_relationship_rows", start)
+          row_struct = '''struct RequestRelationshipRow {
               source_record_id: String,
               target_record_id: String,
               version: i64,
@@ -87,39 +80,30 @@ jobs:
               maximum_payload_size: i64,
               retention_policy_id: String,
               payload_bytes: Vec<u8>,
-          }
-          ''',
-              1,
-          )
+          }'''
+          text = text[:start] + row_struct + text[end:]
+
           text = text.replace(
-              '            SELECT source_record_id, target_record_id, version, attributes::text AS attributes_json\n            FROM crm.relationships\n',
-              '''            SELECT
-              source_record_id, target_record_id, version, owner_module_id,
-              schema_id, schema_version, descriptor_hash, data_class, payload_encoding,
-              maximum_payload_size, retention_policy_id, payload_bytes
-            FROM crm.relationships
-          ''',
+              "            SELECT source_record_id, target_record_id, version, attributes::text AS attributes_json\n",
+              "            SELECT source_record_id, target_record_id, version, owner_module_id,\n              schema_id, schema_version, descriptor_hash, data_class, payload_encoding,\n              maximum_payload_size, retention_policy_id, payload_bytes\n",
               1,
           )
-          text = text.replace(
-              '''                attributes_json: row
-                  .try_get("attributes_json")
-                  .map_err(|error| relationship_state_invalid(error.to_string()))?,
-          ''',
-              '''                owner_module_id: row.try_get("owner_module_id").map_err(|error| relationship_state_invalid(error.to_string()))?,
-              schema_id: row.try_get("schema_id").map_err(|error| relationship_state_invalid(error.to_string()))?,
-              schema_version: row.try_get("schema_version").map_err(|error| relationship_state_invalid(error.to_string()))?,
-              descriptor_hash: row.try_get("descriptor_hash").map_err(|error| relationship_state_invalid(error.to_string()))?,
-              data_class: row.try_get("data_class").map_err(|error| relationship_state_invalid(error.to_string()))?,
-              payload_encoding: row.try_get("payload_encoding").map_err(|error| relationship_state_invalid(error.to_string()))?,
-              maximum_payload_size: row.try_get("maximum_payload_size").map_err(|error| relationship_state_invalid(error.to_string()))?,
-              retention_policy_id: row.try_get("retention_policy_id").map_err(|error| relationship_state_invalid(error.to_string()))?,
-              payload_bytes: row.try_get("payload_bytes").map_err(|error| relationship_state_invalid(error.to_string()))?,
-          ''',
-              1,
-          )
+
+          start = text.index("                attributes_json: row")
+          end = text.index("            };", start)
+          fields = '''                owner_module_id: row.try_get("owner_module_id").map_err(|error| relationship_state_invalid(error.to_string()))?,
+                  schema_id: row.try_get("schema_id").map_err(|error| relationship_state_invalid(error.to_string()))?,
+                  schema_version: row.try_get("schema_version").map_err(|error| relationship_state_invalid(error.to_string()))?,
+                  descriptor_hash: row.try_get("descriptor_hash").map_err(|error| relationship_state_invalid(error.to_string()))?,
+                  data_class: row.try_get("data_class").map_err(|error| relationship_state_invalid(error.to_string()))?,
+                  payload_encoding: row.try_get("payload_encoding").map_err(|error| relationship_state_invalid(error.to_string()))?,
+                  maximum_payload_size: row.try_get("maximum_payload_size").map_err(|error| relationship_state_invalid(error.to_string()))?,
+                  retention_policy_id: row.try_get("retention_policy_id").map_err(|error| relationship_state_invalid(error.to_string()))?,
+                  payload_bytes: row.try_get("payload_bytes").map_err(|error| relationship_state_invalid(error.to_string()))?,
+          '''
+          text = text[:start] + fields + text[end:]
           if "attributes_json" in text or "attributes::text" in text:
-              raise SystemExit("legacy relationship shape remains after patch")
+              raise SystemExit("legacy relationship shape remains")
           path.write_text(text, encoding="utf-8")
           Path(".github/workflows/temp-enrichment-relationship-contract-patch.yml").unlink()
           PY
