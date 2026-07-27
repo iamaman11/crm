@@ -1,0 +1,270 @@
+{
+  "schema_version": "crm.customer-privacy-discovery-snapshot-freeze/v1",
+  "packet": {
+    "phase": "8A.11",
+    "issue": 126,
+    "state": "contract_acceptance_frozen_runtime_not_started",
+    "module_id": "crm.customer-privacy",
+    "parent_freeze": "contracts/customer-privacy-architecture-freeze.json",
+    "parent_schema_version": "crm.customer-privacy-architecture-freeze/v1",
+    "baseline": "6a445cd4cb9f423561f834fd7f291635f82eb464"
+  },
+  "discovery_coordinate": {
+    "coordinate": "customer_privacy.scope.discover@1.0.0",
+    "phase": 260,
+    "public_ingress": false,
+    "execution_kind": "worker_internal",
+    "runtime_state": "not_implemented"
+  },
+  "registry": {
+    "version": "crm.customer-privacy.scope-registry/1.0.0",
+    "ordering": "owner_module_id_then_capability_id_then_capability_version",
+    "owners": [
+      {
+        "module_id": "crm.consents",
+        "coordinate": "consents.privacy.scope.contribute@1.0.0"
+      },
+      {
+        "module_id": "crm.contact-points",
+        "coordinate": "contact_points.privacy.scope.contribute@1.0.0"
+      },
+      {
+        "module_id": "crm.customer-accounts",
+        "coordinate": "customer_accounts.privacy.scope.contribute@1.0.0"
+      },
+      {
+        "module_id": "crm.customer-data-operations",
+        "coordinate": "customer_data.privacy.scope.contribute@1.0.0"
+      },
+      {
+        "module_id": "crm.customer-enrichment",
+        "coordinate": "customer_enrichment.privacy.scope.contribute@1.0.0"
+      },
+      {
+        "module_id": "crm.data-quality",
+        "coordinate": "data_quality.privacy.scope.contribute@1.0.0"
+      },
+      {
+        "module_id": "crm.identity-resolution",
+        "coordinate": "identity_resolution.privacy.scope.contribute@1.0.0"
+      },
+      {
+        "module_id": "crm.parties",
+        "coordinate": "parties.privacy.scope.contribute@1.0.0"
+      },
+      {
+        "module_id": "crm.party-relationships",
+        "coordinate": "party_relationships.privacy.scope.contribute@1.0.0"
+      }
+    ]
+  },
+  "lineage": {
+    "fields": [
+      "privacy_case_id",
+      "tenant_id",
+      "canonical_party_id",
+      "identity_resolution_generation",
+      "registry_version",
+      "registry_digest_sha256",
+      "purpose_code",
+      "effective_request_at_unix_ms"
+    ],
+    "immutable": true,
+    "must_match_every_owner_page": true,
+    "topology_drift_result": "rescope_required_fail_closed",
+    "registry_drift_result": "restart_discovery_from_new_explicit_lineage"
+  },
+  "pagination": {
+    "default_page_size": 64,
+    "maximum_page_size": 128,
+    "cursor_maximum_bytes": 2048,
+    "owner_page_sequence_starts_at": 1,
+    "cursor_is_owner_specific": true,
+    "terminal_page_requires_empty_next_cursor": true,
+    "terminal_completeness_required_for_every_owner": true,
+    "page_receipt_identity_fields": [
+      "owner_module_id",
+      "capability_coordinate",
+      "lineage_digest_sha256",
+      "page_number",
+      "request_cursor_digest_sha256",
+      "response_cursor_digest_sha256",
+      "page_digest_sha256",
+      "scanned_resource_count",
+      "emitted_resource_count",
+      "terminal_complete"
+    ]
+  },
+  "resource_projection": {
+    "fields": [
+      "owner_module_id",
+      "resource_type",
+      "resource_id",
+      "resource_version",
+      "data_class",
+      "evidence_class",
+      "retention_policy_id"
+    ],
+    "ordering": [
+      "owner_module_id",
+      "resource_type",
+      "resource_id",
+      "resource_version",
+      "data_class",
+      "evidence_class",
+      "retention_policy_id"
+    ],
+    "exact_duplicate_policy": "deduplicate",
+    "conflicting_duplicate_policy": "fail_closed",
+    "resource_payloads_allowed": false,
+    "owner_private_metadata_allowed": false
+  },
+  "digest_profiles": {
+    "registry": "crm.customer-privacy.scope-registry/v1",
+    "owner_page": "owner_specific_versioned_page_profile",
+    "owner_cursor": "owner_specific_versioned_cursor_profile",
+    "aggregation_contribution": "crm.customer-privacy.scope-contribution/v1",
+    "bound_owner_contribution": "crm.customer-privacy.discovery-owner-contribution/v1",
+    "completeness": "crm.customer-privacy.scope-completeness/v1",
+    "aggregation_snapshot": "crm.customer-privacy.scope-snapshot/v1",
+    "discovery_lineage": "crm.customer-privacy.discovery-lineage/v1",
+    "authoritative_snapshot_binding": "crm.customer-privacy.discovery-snapshot/v1"
+  },
+  "snapshot_identity": {
+    "fields": [
+      "privacy_case_id",
+      "tenant_id",
+      "canonical_party_id",
+      "identity_resolution_generation",
+      "registry_version",
+      "registry_digest_sha256",
+      "purpose_code",
+      "effective_request_at_unix_ms",
+      "captured_at_unix_nanos",
+      "aggregation_snapshot_id",
+      "completeness_digest_sha256",
+      "ordered_bound_owner_contribution_digests"
+    ],
+    "id_prefix": "privacy-discovery-scope-",
+    "immutable": true,
+    "one_current_snapshot_per_exact_lineage": true,
+    "silent_rebase_allowed": false
+  },
+  "persistence_contract": {
+    "record_type": "customer-privacy.scope-snapshot",
+    "schema_id": "crm.customer-privacy.discovery_scope_snapshot.state",
+    "schema_version": "1.0.0",
+    "maximum_bytes": 524288,
+    "retention_policy_id": "crm.customer_privacy.discovery_scope_snapshot",
+    "encoding": "canonical_json_crm.cjson/v1",
+    "strict_rehydration": true,
+    "append_only_after_finalize": true
+  },
+  "failure_semantics": {
+    "fail_closed_conditions": [
+      "owner_unavailable",
+      "owner_disabled",
+      "owner_stale",
+      "owner_incompatible",
+      "owner_contract_descriptor_mismatch",
+      "registry_version_or_digest_mismatch",
+      "identity_topology_generation_drift",
+      "missing_owner_contribution",
+      "nonterminal_owner_contribution",
+      "page_or_cursor_digest_mismatch",
+      "page_replay_conflict",
+      "resource_classification_conflict",
+      "snapshot_rehydration_mismatch"
+    ],
+    "retryable_conditions": [
+      "owner_temporarily_unavailable",
+      "transient_storage_failure",
+      "crash_after_durable_page_before_checkpoint"
+    ],
+    "terminal_conditions": [
+      "incompatible_owner_contract",
+      "conflicting_resource_identity",
+      "invalid_lineage",
+      "corrupt_persisted_evidence"
+    ]
+  },
+  "idempotency_and_recovery": {
+    "discovery_attempt_key_fields": [
+      "tenant_id",
+      "privacy_case_id",
+      "canonical_party_id",
+      "identity_resolution_generation",
+      "registry_digest_sha256",
+      "purpose_code",
+      "effective_request_at_unix_ms"
+    ],
+    "owner_page_key_fields": [
+      "discovery_attempt_digest_sha256",
+      "owner_module_id",
+      "page_number",
+      "request_cursor_digest_sha256"
+    ],
+    "crash_windows": [
+      "owner_page_persisted_before_checkpoint",
+      "all_owner_pages_persisted_before_snapshot_finalize",
+      "snapshot_finalized_before_case_state_transition"
+    ],
+    "replay_result": "same_logical_page_and_snapshot_or_fail_closed_conflict",
+    "checkpoint_rule": "advance_only_across_contiguous_durable_owner_page_prefix"
+  },
+  "authorization_and_audit": {
+    "discovery_invocation": "trusted_internal_activation_gated",
+    "snapshot_read": "permission_aware_internal_query_boundary",
+    "possession_is_authority": false,
+    "audit_events": [
+      "discovery_started",
+      "owner_page_accepted",
+      "owner_terminal_complete",
+      "discovery_failed",
+      "snapshot_finalized",
+      "snapshot_read_allowed",
+      "snapshot_read_denied"
+    ],
+    "audit_payload_rule": "identifiers_digests_counts_and_policy_only_no_owner_resource_payload"
+  },
+  "non_effects": [
+    "no_public_http_or_grpc_route",
+    "no_customer_privacy_worker_registration",
+    "no_owner_mutation",
+    "no_provider_call",
+    "no_processing_restriction_change",
+    "no_legal_hold_decision",
+    "no_retention_decision",
+    "no_action_plan",
+    "no_owner_action_execution",
+    "no_destructive_action",
+    "no_resource_payload_disclosure",
+    "no_generic_runtime_business_switch"
+  ],
+  "acceptance_required": [
+    "focused_lineage_and_snapshot_digest_tests",
+    "exact_nine_owner_registry_parity",
+    "page_cursor_terminal_completeness_contract_tests",
+    "owner_unavailable_disabled_stale_incompatible_fail_closed",
+    "registry_and_topology_drift_recovery",
+    "permission_aware_snapshot_read_and_audit",
+    "clean_postgresql_force_rls_cross_tenant_negatives",
+    "complete_schema_removal_and_reapply",
+    "repeated_postgresql_acceptance",
+    "crash_window_and_idempotent_replay",
+    "real_process_discovery_without_planning_or_actions",
+    "exact_route_worker_nonruntime_classification_parity",
+    "unchanged_exact_head_ci"
+  ],
+  "next_packet": {
+    "name": "Stage C Customer Privacy golden-package pilot",
+    "behavior_neutral": true,
+    "runtime_discovery_allowed": false,
+    "target_packages": [
+      "modules/crm-customer-privacy",
+      "crates/crm-customer-privacy-application",
+      "crates/crm-customer-privacy-postgres",
+      "crates/crm-customer-privacy-production"
+    ]
+  }
+}
