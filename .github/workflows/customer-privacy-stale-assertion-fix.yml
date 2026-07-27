@@ -1,17 +1,20 @@
 name: Customer Privacy Stale Assertion Fix
 
 on:
-  push:
-    branches:
-      - feature/customer-privacy-production-discovery-snapshot
+  pull_request:
     paths:
       - ".github/workflows/customer-privacy-stale-assertion-fix.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
   fix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -24,35 +27,6 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-
-          roadmap = Path("docs/IMPLEMENTATION_ROADMAP.md")
-          text = roadmap.read_text()
-          anchor = "The workspace remains at 113 packages. No public route or Customer Privacy worker is added. The historical freeze remains unchanged and later implementation evidence is separate.\n"
-          sentence = "The accepted guardrail remains: do not modify generic router or worker algorithms merely to register Customer Privacy discovery behavior.\n"
-          if "do not modify generic router or worker algorithms" not in text:
-              if text.count(anchor) != 1:
-                  raise SystemExit("roadmap guardrail anchor mismatch")
-              text = text.replace(anchor, anchor + "\n" + sentence, 1)
-          roadmap.write_text(text)
-
-          catalog = Path("docs/MODULE_CATALOG.md")
-          text = catalog.read_text()
-          replacements = {
-              "All nine remain non-runtime and add no Customer Privacy worker or public ingress.":
-                  "All nine owner coordinates remain non-public and add no Customer Privacy worker or public ingress. PR #206 composes their accepted executors into trusted-internal production discovery without changing owner mutation boundaries.",
-              "All nine owner contributions are accepted. Production scope discovery and immutable snapshot are the next bounded Customer Privacy packet; planning and action execution remain not started.":
-                  "All nine owner contributions are accepted. PR #206 implements production scope discovery and immutable snapshot and is in exact-head gate review; planning and action execution remain not started and become the next bounded packet only after merge.",
-              "The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. It does not yet prove discovery/snapshot, planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization, convergence or workers.":
-                  "The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. The PR #206 candidate additionally proves discovery/snapshot without public routes or workers; planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization and convergence remain unimplemented.",
-              "- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. Scope discovery and immutable snapshot are next. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.":
-                  "- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. PR #206 implements scope discovery and immutable snapshot and awaits exact-head acceptance. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.",
-          }
-          for old, new in replacements.items():
-              if old in text:
-                  text = text.replace(old, new, 1)
-              elif new not in text:
-                  raise SystemExit(f"catalog replacement mismatch: {old[:70]}")
-          catalog.write_text(text)
 
           freeze_test = Path("tests/test_customer_privacy_discovery_snapshot_freeze.py")
           text = freeze_test.read_text()
