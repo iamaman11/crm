@@ -16,10 +16,13 @@ crm-customer-enrichment-review-adapter = { path = "../crm-customer-enrichment-re
 crm-customer-privacy-owner-scope-support = { path = "../crm-customer-privacy-owner-scope-support" }
 crm-identity-resolution = { path = "../../modules/crm-identity-resolution" }
 crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
+crm-identity-resolution-topology-composition = { path = "../crm-identity-resolution-topology-composition" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-query-runtime = { path = "../crm-query-runtime" }
 prost = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 sha2 = "0.10"
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio"] }
 
