@@ -1,6 +1,6 @@
 # Workspace Dependency, Packaging and CI Complexity Baseline
 
-Snapshot source head: `17c937db7e8de187bd3a13b80fb83d95ab2a574c`
+Snapshot source head: `6d1d6119aa3b759031206c02cd3befe8a65f80d0`
 
 Tracking issue: #194  
 Product boundary preserved: #126
@@ -34,7 +34,7 @@ python scripts/check_workspace_dependency_policy.py \
 |---|---|
 | Cargo resolver | `2` |
 | Effective workspace packages | 110 |
-| Root-declared member paths | 110 after making the already-effective `crm-identity-resolution-merge-query-adapter` member explicit |
+| Root-declared member paths | 110 |
 | Technical crates | 96 |
 | Business modules | 13 |
 | Deployable services | 1 |
@@ -46,7 +46,7 @@ python scripts/check_workspace_dependency_policy.py \
 | `[workspace.lints]` | not defined; warning |
 | Package metadata inheritance | no package currently inherits edition, license, rust-version or lints |
 
-The explicit member-list correction is behavior-neutral. Cargo metadata already included `crates/crm-identity-resolution-merge-query-adapter` through an internal path dependency before Stage B. The existing transitional boundary and removal condition remain recorded in `architecture-governance.json`; no package, route, worker or runtime behavior was added.
+The explicit member-list correction accepted in the first Stage B packet was behavior-neutral. Cargo metadata already included `crates/crm-identity-resolution-merge-query-adapter` through an internal path dependency; its existing transitional boundary and removal condition remain recorded in `architecture-governance.json`.
 
 ## 2. Dependency and packaging measurements
 
@@ -72,16 +72,20 @@ The public-surface value is a deterministic source-text count of public Rust ite
 
 The accepted root entries preserve the requirements that already existed before centralization:
 
-| Dependency | Normative existing requirement | Inherited consumers after wave 2 | Remaining direct consumers not yet inheriting |
+| Dependency | Normative existing requirement | Inherited consumers after wave 3 | Remaining direct consumers not yet inheriting |
 |---|---|---|---:|
-| `serde` | `1`, features `derive` | `crm-module-manifest`, `crm-module-sdk`, `crm-core-data`, all 13 business modules | 16 |
-| `serde_json` | `1` | `crm-module-manifest`, `crm-core-data`, all 13 business modules | 24 |
-| `sha2` | `0.10` | `crm-module-manifest`, `crm-core-data`, all 13 business modules | 25 |
-| `prost` | `0.14` | `crm-core-data` dev-dependencies | 62 |
+| `serde` | `1`, features `derive` | foundation wave, all 13 business modules, Customer Enrichment privacy-scope adapter | 15 |
+| `serde_json` | `1` | foundation wave, all 13 business modules, Customer Enrichment privacy-scope adapter | 23 |
+| `sha2` | `0.10` | foundation wave, all 13 business modules, all nine privacy-scope adapters | 16 |
+| `prost` | `0.14` | `crm-core-data` dev-dependencies and all nine privacy-scope adapters | 53 |
 
-Wave 2 covers the complete pure owner/link module cohort. The exact report found 13 matched manifests, 39 governed declarations and zero policy violations. `workspace-dependency-policy.json` blocks a scoped module from reintroducing a direct version, default-feature override or local feature addition for these three dependencies. A future module is not forced to declare an unused dependency.
+Wave 1 established the root entries and migrated `crm-module-manifest`, `crm-module-sdk` and `crm-core-data` where applicable.
 
-The accepted waves intentionally exclude `sqlx`, `tokio`, `tonic`, HTTP dependencies and complex test libraries. Their feature sets are not uniform and require separate consumer analysis. `Cargo.lock` remains unchanged; `cargo metadata --locked`, Rust CI and the PR file inventory prove that no hidden resolution update is included.
+Wave 2 covered the complete pure owner/link module cohort. Exact evidence: 13 matched manifests, 39 governed declarations and zero policy violations.
+
+Wave 3 covers the nine already accepted owner privacy-scope adapter implementations. Exact evidence: nine matched manifests, 20 governed declarations and zero policy violations. All nine inherit `prost` and `sha2`; the Customer Enrichment adapter also inherits its existing `serde` and `serde_json` requirements.
+
+The waves intentionally exclude `sqlx`, `tokio`, `tonic`, HTTP dependencies and complex test libraries. Their feature sets are not uniform and require separate consumer analysis. The wave 3 source diff does not change `Cargo.lock`; exact Rust CI regenerates and compares the committed lockfile before acceptance.
 
 ## 4. Most repeated direct dependencies
 
@@ -112,7 +116,7 @@ Repetition is a prioritization signal, not proof that a dependency should immedi
 |---|---|
 | `sqlx` | `0.9`, `0.9.0` |
 
-These two requirements currently resolve compatibly, but the textual divergence remains visible. It is not changed in this packet because SQLx feature and PostgreSQL acceptance boundaries require a dedicated wave.
+These requirements currently resolve compatibly, but the textual divergence remains visible. SQLx is not changed by the accepted inheritance waves because its feature and PostgreSQL acceptance boundaries require a dedicated packet.
 
 ### Feature divergence
 
@@ -170,15 +174,7 @@ Highest reverse-impact packages:
 | `crm-projection-runtime` | 5 | 75 |
 | `crm-core-data` | 67 | 73 |
 
-Highest measured dependency depth begins with:
-
-| Package | Depth |
-|---|---:|
-| `crm-api` | 15 |
-| `crm-application-runtime` | 14 |
-| several owner privacy-scope/application composition packages | 13 |
-
-These values establish critical-path review surfaces. They do not authorize merging core packages or weakening their boundaries.
+Highest measured dependency depth begins with `crm-api` at 15, `crm-application-runtime` at 14 and several owner privacy-scope/application composition packages at 13. These values identify critical review surfaces; they do not authorize merging core packages or weakening their boundaries.
 
 ## 8. Representative affected closures
 
@@ -212,41 +208,16 @@ Stage B uses this only as a structural before/after signal. New public-symbol co
 
 ## 10. Crate, exception and dependency inheritance governance
 
-`architecture-governance.json` remains the single machine-readable exception and new-crate registry.
+`architecture-governance.json` remains the single machine-readable exception and new-crate registry. Temporary exceptions require owner, bypassed rule, reason/risk, exact scope, created/expiry dates, removal condition, compensating checks and tracking issue. Newly added effective workspace packages require a complete review-visible boundary and lifecycle justification. Expired, ownerless, malformed or undocumented records fail governance. Current registry exceptions: 0.
 
-Every temporary exception requires:
+`workspace-dependency-policy.json` contains two calibrated blocking inheritance rules:
 
-- id and owner;
-- bypassed rule;
-- reason and risk;
-- exact scope;
-- created and expiry dates;
-- removal condition;
-- non-empty compensating checks;
-- tracking issue.
+| Policy | Scope | Governed dependencies when present | Exact evidence |
+|---|---|---|---|
+| `owner-module-common-serialization-and-hashing` | `modules/*/Cargo.toml` | `serde`, `serde_json`, `sha2` | 13 manifests, 39 declarations, 0 violations |
+| `privacy-scope-adapter-contract-and-hashing` | `crates/*-privacy-scope-adapter/Cargo.toml` | `prost`, `serde`, `serde_json`, `sha2` | 9 manifests, 20 declarations, 0 violations |
 
-Expired, ownerless, malformed or undocumented exceptions fail the permanent governance check.
-
-Every newly added effective workspace package requires a complete registry entry and review-visible PR justification covering:
-
-- protected boundary;
-- isolated dependencies;
-- expected consumers;
-- why an internal module is insufficient;
-- lifecycle or extraction seam;
-- expected build/test fan-out;
-- removal or consolidation condition;
-- tracking issue.
-
-The PR template exposes the same fields. Current registry exceptions: 0.
-
-`workspace-dependency-policy.json` contains calibrated inheritance rules. The first blocking policy is intentionally narrow:
-
-- scope: `modules/*/Cargo.toml`;
-- governed dependencies: `serde`, `serde_json`, `sha2` when present;
-- required form: `workspace = true`;
-- forbidden local overrides: version, default features, extra features, path, git, package or registry source;
-- exact accepted evidence: 13 manifests, 39 declarations, zero violations.
+For a governed dependency the required form is `workspace = true`. Local version, default-feature, feature, path, git, package or registry overrides are rejected. A scoped package is not forced to declare an unused dependency.
 
 The checker is part of `scripts/check_architecture.py`, Governance CI and Complexity Baseline CI. Broader dependency observations remain warnings until separately calibrated.
 
@@ -264,7 +235,7 @@ The checker is part of `scripts/check_architecture.py`, Governance CI and Comple
 | Application composition non-comment LOC | 1,239 |
 | Application runtime non-comment LOC | 8,326 |
 
-This package deliberately does not change CI selection semantics. The broad exact-head matrix remains mandatory while later Stage E work improves proportionality.
+The dependency waves do not change CI selection semantics. Broad exact-head proof remains mandatory while later Stage E work improves proportionality.
 
 ## 12. Customer Privacy boundary
 
@@ -279,13 +250,13 @@ crates/crm-customer-privacy-postgres/
 crates/crm-customer-privacy-production/
 ```
 
-No new command-, query-, worker- or composition-fragment crate is authorized. Any necessary consolidation remains a separate behavior-neutral PR with before/after package, fan-out, build/test and files-per-capability evidence.
+The privacy-scope adapter inheritance wave changes only dependency declaration ownership for already accepted contract-only owner contributions. It adds no discovery, planner, owner action, route, worker, migration or capability-specific crate. Any necessary package consolidation remains a separate behavior-neutral PR with before/after package, fan-out, build/test and files-per-capability evidence.
 
 ## 13. Next Stage B calibration
 
-The next dependency-governance wave should:
+The next dependency-governance packet should:
 
-1. migrate additional identical technical-crate consumers of `serde`, `serde_json`, `sha2` or `prost` only in bounded dependency-role cohorts;
+1. migrate another identical technical-crate dependency-role cohort only when its complete feature semantics are verified;
 2. classify `sqlx`, `tokio`, `tonic` and HTTP feature variants by real consumer role before centralization;
 3. decide and pin a repository `rust-version` based on supported toolchain policy;
 4. introduce a workspace lint policy only after current warning debt is measured;
