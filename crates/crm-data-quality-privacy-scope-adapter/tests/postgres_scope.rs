@@ -899,10 +899,26 @@ async fn write_surface_counts(pool: &PgPool) -> WriteSurfaceCounts {
 }
 
 async fn count(pool: &PgPool, table: &str) -> i64 {
-    sqlx::query_scalar::<_, i64>(&format!("SELECT count(*)::bigint FROM {table}"))
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    match table {
+        "crm.records" => sqlx::query_scalar("SELECT count(*)::bigint FROM crm.records"),
+        "crm.relationships" => sqlx::query_scalar("SELECT count(*)::bigint FROM crm.relationships"),
+        "crm.business_transactions" => {
+            sqlx::query_scalar("SELECT count(*)::bigint FROM crm.business_transactions")
+        }
+        "crm.idempotency_records" => {
+            sqlx::query_scalar("SELECT count(*)::bigint FROM crm.idempotency_records")
+        }
+        "crm.outbox_events" => sqlx::query_scalar("SELECT count(*)::bigint FROM crm.outbox_events"),
+        "crm.outbox_delivery" => {
+            sqlx::query_scalar("SELECT count(*)::bigint FROM crm.outbox_delivery")
+        }
+        "crm.audit_heads" => sqlx::query_scalar("SELECT count(*)::bigint FROM crm.audit_heads"),
+        "crm.audit_records" => sqlx::query_scalar("SELECT count(*)::bigint FROM crm.audit_records"),
+        _ => panic!("unsupported write-surface table"),
+    }
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 async fn prove_records_primary_key_scan(admin: &PgPool, tenant: &str) {
