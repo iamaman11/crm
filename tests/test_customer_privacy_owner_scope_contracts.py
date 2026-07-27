@@ -349,6 +349,99 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         for shortcut in forbidden_shortcuts:
             self.assertIn(shortcut, packet)
 
+    def test_customer_enrichment_entry_packet_freezes_relationship_rooted_scope(self) -> None:
+        packet = (ROOT / "docs/CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PACKET.md").read_text(
+            encoding="utf-8"
+        )
+
+        required_families = (
+            "customer_enrichment.request",
+            "customer_enrichment.provider_response_receipt",
+            "customer_enrichment.provider_response_conflict",
+            "customer_enrichment.suggestion",
+            "customer_enrichment.review_decision",
+            "customer_enrichment.application_attempt",
+            "customer_enrichment.provider_usage_entry",
+        )
+        for family in required_families:
+            self.assertIn(family, packet)
+
+        required_excluded_definitions = (
+            "customer_enrichment.provider_profile_version",
+            "customer_enrichment.mapping_version",
+            "shared across many requests",
+            "must not be emitted",
+        )
+        for boundary in required_excluded_definitions:
+            self.assertIn(boundary, packet)
+
+        required_relationship_controls = (
+            "customer_enrichment.request.party",
+            "source record type: `parties.party`",
+            "target record type: `customer_enrichment.request`",
+            "request is the only subject-discovery root",
+            "There is no payload-only or provenance-only fallback discovery family",
+            "exactly one authoritative request/Party relationship",
+        )
+        for control in required_relationship_controls:
+            self.assertIn(control, packet)
+
+        required_bounds = (
+            "MAX_PRIVACY_ALIAS_HOPS = 64",
+            "MAX_PRIVACY_ALIAS_NODES = 4_096",
+            "MAX_PRIVACY_ACTIVE_REDIRECT_EDGES = 4_095",
+            "MAX_PRIVACY_REQUEST_RELATIONSHIPS_SCANNED = 16_384",
+            "MAX_PRIVACY_REQUEST_RECORDS_REHYDRATED = 16_384",
+            "MAX_PRIVACY_RESPONSE_RECEIPTS_SCANNED = 32_768",
+            "MAX_PRIVACY_RESPONSE_CONFLICTS_SCANNED = 16_384",
+            "MAX_PRIVACY_SUGGESTIONS_SCANNED = 65_536",
+            "MAX_PRIVACY_REVIEW_DECISIONS_SCANNED = 65_536",
+            "MAX_PRIVACY_APPLICATION_ATTEMPTS_SCANNED = 65_536",
+            "MAX_PRIVACY_PROVIDER_USAGE_ENTRIES_SCANNED = 65_536",
+            "MAX_PRIVACY_DEFINITION_RECORDS_REHYDRATED = 8_192",
+            "MAX_PRIVACY_ASSOCIATION_RECORDS_REHYDRATED = 131_072",
+            "MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS = 16_384",
+            "MAX_PRIVACY_OWNER_RECORDS_SCANNED = 131_072",
+            "PRIVACY_RELATIONSHIP_SCAN_BATCH_SIZE = 512",
+            "PRIVACY_OWNER_SCAN_BATCH_SIZE = 512",
+        )
+        for bound in required_bounds:
+            self.assertIn(bound, packet)
+
+        required_controls = (
+            "customer_enrichment.privacy.scope.contribute@1.0.0",
+            "REPEATABLE READ, READ ONLY",
+            "page_size + 1",
+            "record_id ASC",
+            "crm.relationships (tenant_id, relationship_type, source_record_type, source_record_id, target_record_type, target_record_id)",
+            "crm.records (tenant_id, record_type, record_id)",
+            "reference-only",
+            "no-write proof",
+            "Contract-only/non-runtime",
+            "implementation not started",
+            "ninth and final owner",
+            "Production discovery remains forbidden",
+        )
+        for control in required_controls:
+            self.assertIn(control, packet)
+
+        forbidden_shortcuts = (
+            "JSON or byte-payload expression indexes",
+            "privacy-only projection table",
+            "duplicate request/Party relationships",
+            "synthetic descendant-to-Party relationships",
+            "ungoverned Party-to-enrichment reverse index",
+            "public HTTP or gRPC route",
+            "Customer Privacy worker",
+            "generic privacy runtime",
+            "full unbounded tenant scan",
+            "selective JSON parsing",
+            "payload-only or provenance-only fallback discovery",
+            "runtime promotion",
+        )
+        for shortcut in forbidden_shortcuts:
+            self.assertIn(shortcut, packet)
+
 
 if __name__ == "__main__":
     unittest.main()
