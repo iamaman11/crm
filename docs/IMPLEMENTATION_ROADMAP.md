@@ -8,6 +8,7 @@ Delivery-control policy: `DELIVERY_GOVERNANCE.md`
 Current concise state: `PROJECT_STATUS.md`  
 Detailed Phase 8 sequence: `PHASE8_DELIVERY_PLAN.md`  
 Architecture/developer-experience program: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` / issue #194  
+Measured architecture baseline: `WORKSPACE_COMPLEXITY_BASELINE.md`  
 Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`  
 Business-module accounting: `MODULE_CATALOG.md`
 
@@ -35,6 +36,7 @@ Cross-cutting architecture work must preserve product delivery and cannot use a 
 12. Feature behavior and physical crate consolidation are separate delivery packets.
 13. Shared abstractions are extracted only after contrasting real implementations prove common behavior.
 14. Iterative affected-scope CI may reduce feedback cost but never weakens final exact-head acceptance.
+15. Cross-cutting stages advance in dependency order, but product contract/design work may proceed alongside a bounded architecture packet when no runtime claim is made.
 
 ## 3. Work states
 
@@ -73,19 +75,38 @@ Issue #194 is **Open** and runs alongside product delivery.
 
 It is complete only when the measurable criteria in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` are implemented.
 
-Required order:
+### 5.1 Stage state
 
-1. documentation and complexity baseline;
-2. workspace dependency and new-crate governance;
-3. golden owner domain/application/PostgreSQL/production package model;
-4. module-owned contribution aggregation;
-5. affected-scope CI;
-6. generic conformance suites;
-7. measured transitional crate consolidation;
-8. repository navigation tooling;
-9. frontend and operational parity.
+| Stage | State | Current result / next dependency |
+|---|---|---|
+| A — documentation and policy baseline | **Complete** | Stable documentation hierarchy, navigation index and permanent consistency checks are accepted. |
+| B — dependency, crate and exception governance | **In progress — foundation accepted** | Reproducible baseline, new-crate/exception governance and two calibrated inheritance policies are accepted. Complete the no-growth boundary before Stage C. |
+| C — golden owner package and persistence model | **Ready after Stage B no-growth closure and feature freeze** | Use Customer Privacy as the first real pilot; keep consolidation behavior-neutral. |
+| D — contribution aggregation | **Planned** | Depends on accepted golden owner packaging. |
+| E — affected-scope CI | **Partial foundation accepted / planned expansion** | Existing affected-scope proof is active; broader product-plane proportionality remains. |
+| F — generic conformance and contract lifecycle | **Planned** | Depends on stable owner package/contribution boundaries. |
+| G — transitional consolidation | **Planned** | Begin with one measured domain cluster only after Stage C model is accepted. |
+| H — reproducible environment and generated navigation | **Planned** | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain`, `packet-check`, active packet and repository map remain unavailable. |
+| I — frontend and operations parity | **Planned** | Follows stable backend/product delivery paths. |
 
-The program must not block active product delivery with a repository-wide rewrite. Improvements are applied at natural packet boundaries and structural changes remain behavior-neutral.
+### 5.2 Accepted Stage B evidence
+
+1. PR #197 / merge `dbd7f6646f255b5f654060a045e26f99fc12c1f9` — 110-package reproducible workspace/dependency/public-surface/CI baseline; new-crate justification; machine-readable expiring exception registry.
+2. PR #199 / accepted source `2335ea00bb73d875c291b4a7668921beaec87adc` / merge `cbcce5f18f3b08851ad781d13bc3fe01c2eeb62c` — 13 business-module manifests, 39 inherited `serde`/`serde_json`/`sha2` declarations, zero policy violations, 26 of 26 applicable workflows.
+3. PR #200 / accepted source `31b3ab09caa4eccaba76a34c7d2211622830115f` / merge `aec7130bd48302d20bf821a617c339b2a9d755cf` — nine privacy-scope adapter manifests, 20 inherited declarations, zero policy violations, 15 of 15 applicable workflows.
+
+Current root dependency families are `prost`, `serde`, `serde_json` and `sha2`. Remaining non-inheriting consumers are `prost` 53, `serde` 15, `serde_json` 23 and `sha2` 16. These are migration inventory, not authorization for a big-bang manifest rewrite.
+
+### 5.3 Required continuation order
+
+1. **Stage B no-growth closure:** freeze the remaining direct-consumer inventory for root dependency families and block new direct declarations outside an explicit owned exception. Preserve bounded role-based migrations for existing consumers.
+2. **Customer Privacy discovery/snapshot freeze:** define exact contract, snapshot identity, registry/topology binding, ordering, digests, failure, replay, authorization and acceptance semantics without adding runtime behavior.
+3. **Stage C Customer Privacy pilot:** replace the current capability-fragment packaging with accepted domain/application/PostgreSQL/production ownership only through a separate behavior-neutral PR. Consolidate only where dependency boundaries permit it.
+4. **Discovery/snapshot implementation:** implement in the accepted target packages with zero command/query/worker/composition-fragment crates and no generic business switches.
+5. **Subsequent privacy lifecycle packets:** planning, restrictions, legal hold/retention, execution, access/export, deletion/anonymization, tombstone and convergence.
+6. **Residual architecture calibration:** exact supported Rust/toolchain policy, workspace lints, additional dependency cohorts, public-surface/fan-out budgets and later stages proceed at natural product boundaries unless they block correctness.
+
+This order completes the Stage B dependency before starting Stage C, while allowing product contract freeze to prepare the active packet without delaying Phase 8A for an unbounded repository cleanup.
 
 ## 6. Completed foundation
 
@@ -145,20 +166,22 @@ Accepted owner evidence:
 
 ### 7.2 Active sequence
 
-1. **Scope discovery and immutable snapshot.**
-2. **Deterministic planning and permission-aware plan/outcome reads.**
-3. **Approval and immediate deny-only restrictions.**
-4. **Legal hold and mandatory-retention precedence.**
-5. **Replay-safe resumable owner execution and crash recovery.**
-6. **Governed access/export and owner-specific deletion/anonymization.**
-7. **Party tombstone, no-orphan proof and projection/search/cache convergence.**
-8. **Worker and complete end-to-end lifecycle acceptance.**
-9. **Phase 8A closure.**
-10. **Phase 8B only from the completed Phase 8A baseline.**
+1. **Scope discovery and immutable snapshot contract/acceptance freeze.**
+2. **Stage C behavior-neutral Customer Privacy package pilot.**
+3. **Scope discovery and immutable snapshot runtime implementation.**
+4. **Deterministic planning and permission-aware plan/outcome reads.**
+5. **Approval and immediate deny-only restrictions.**
+6. **Legal hold and mandatory-retention precedence.**
+7. **Replay-safe resumable owner execution and crash recovery.**
+8. **Governed access/export and owner-specific deletion/anonymization.**
+9. **Party tombstone, no-orphan proof and projection/search/cache convergence.**
+10. **Worker and complete end-to-end lifecycle acceptance.**
+11. **Phase 8A closure.**
+12. **Phase 8B only from the completed Phase 8A baseline.**
 
-### 7.3 Next bounded packet — scope discovery and immutable snapshot
+### 7.3 Next bounded packet — scope discovery and immutable snapshot freeze
 
-State: **Ready; implementation not started**.
+State: **Ready; runtime implementation not started**.
 
 Before runtime implementation:
 
@@ -166,14 +189,15 @@ Before runtime implementation:
 - freeze snapshot identity, registry binding, ordering, digests, replay and failure semantics;
 - prohibit planning, owner mutation, provider calls, restrictions, legal-hold decisions, retention decisions and destructive actions;
 - define permission-aware snapshot reads and exact audit evidence;
-- define clean PostgreSQL, rollback/reapply, crash/retry and real-process acceptance.
+- define clean PostgreSQL, rollback/reapply, crash/retry and real-process acceptance;
+- inventory the current Customer Privacy capability-specific crates and identify real dependency seams for the separate Stage C pilot.
 
 Architecture guardrail:
 
 - do not add one crate per command, query, worker or composition fragment;
 - target Customer Privacy domain/application/PostgreSQL/production packaging;
-- keep any consolidation behavior-neutral and separate from feature implementation;
-- do not modify generic router or worker algorithms to register the packet.
+- keep consolidation behavior-neutral and separate from feature implementation;
+- do not modify generic router or worker algorithms merely to register the packet.
 
 ## 8. Phase 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
 
