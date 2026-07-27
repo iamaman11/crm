@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-27
+Status date: 2026-07-28
 
 This document is the concise human-readable snapshot. Normative delivery order remains in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; business-module readiness remains in `MODULE_CATALOG.md`; the cross-cutting architecture/developer-experience program remains in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`.
 
@@ -17,9 +17,10 @@ This document is the concise human-readable snapshot. Normative delivery order r
 9. `STAGE_B_DEPENDENCY_NO_GROWTH.md` — machine-enforced root dependency debt closure and continuation boundary.
 10. `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_FREEZE.md` — exact discovery lineage, immutable snapshot and later runtime acceptance boundary.
 11. `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md` — production discovery, persistence and non-effects evidence.
-12. `CRM_CAPABILITY_COVERAGE.md` — product-completeness guardrail.
-13. `MODULE_CATALOG.md` — business ownership and readiness accounting.
-14. accepted owner packet documents — historical owner-scope acceptance boundaries.
+12. `CUSTOMER_PRIVACY_PLANNING_FREEZE.md` — deterministic action-plan identity, classification, persistence and read-boundary freeze.
+13. `CRM_CAPABILITY_COVERAGE.md` — product-completeness guardrail.
+14. `MODULE_CATALOG.md` — business ownership and readiness accounting.
+15. accepted owner packet documents — historical owner-scope acceptance boundaries.
 
 ## Current position
 
@@ -53,8 +54,8 @@ PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95
 ## Active product dependency lane
 
 ```text
-Deterministic Customer Privacy planning and permission-aware plan/outcome reads
--> deterministic planning and permission-aware plan/outcome reads
+Customer Privacy planning contract and acceptance freeze
+-> deterministic planning and permission-aware plan/outcome runtime reads
 -> approval, immediate deny-only restrictions and legal-hold/retention precedence
 -> replay-safe resumable owner execution and crash-window recovery
 -> governed access/export and deletion/anonymization
@@ -83,13 +84,22 @@ It provides:
 
 Public routes remain unchanged, Customer Privacy workers remain zero, mutations remain four, queries remain two and workspace packages remain 113.
 
-Planning, retention decisions, restrictions, legal holds and owner action execution remain prohibited and unimplemented.
+## Active contract packet — Deterministic planning and permission-aware plan/outcome reads
 
-## Next bounded product packet — Deterministic planning and permission-aware plan/outcome reads
+State: **Contract and acceptance freeze in progress; runtime implementation not started**.
 
-State: **Ready; implementation not started**.
+The source of truth is `CUSTOMER_PRIVACY_PLANNING_FREEZE.md` and `contracts/customer-privacy-planning-freeze.json`.
 
-The next packet may consume the immutable discovery snapshot but must not silently rediscover, rebase lineage, weaken authorization or begin restrictions, holds, retention decisions or owner execution.
+The freeze defines:
+
+- exact immutable binding to the accepted discovery snapshot, case version, request kind, policy version and jurisdiction;
+- exact actions `Retain`, `RestrictOnly`, `Anonymize`, `Delete`, `CryptoShred` and reserved `NoOpAlreadyCompliant`;
+- deterministic owner/resource ordering, contiguous sequence and lineage/item/plan digests;
+- strict canonical action-plan persistence and replay conflict behavior;
+- permission-aware plan reads and an empty future-safe owner-outcome read boundary;
+- unsupported crypto-shred fail-closed behavior without destructive fallback.
+
+Runtime planning, approval, retention/hold adjudication, restriction placement, owner dispatch and destructive execution remain prohibited and unimplemented.
 
 ## Cross-cutting architecture and developer-experience lane
 
@@ -110,21 +120,19 @@ Current measured architecture boundary:
 - root `[workspace.dependencies]`: `prost`, `serde`, `serde_json`, `sha2`;
 - accepted direct/non-inheriting debt inventory remains monotonic no-growth;
 - zero registered temporary architecture exceptions;
-- PR #206 added no package, no external dependency family/version/feature/source drift and no unjustified lockfile growth.
-
-The closure prevents new dependency debt without forcing a mass manifest migration. Rust/toolchain policy, workspace lints, broader public-surface/fan-out calibration and later issue #194 stages remain natural-boundary work.
+- the planning freeze adds no package, external dependency family/version/feature/source drift or lockfile growth.
 
 ## Correct continuation order
 
-1. preserve the accepted freeze and Stage C golden packages;
-2. preserve accepted PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`;
-3. continue deterministic planning and permission-aware plan/outcome reads;
-4. continue restrictions, holds/retention, execution and convergence only through later bounded packets;
+1. preserve accepted discovery and immutable snapshot evidence;
+2. accept the planning contract and acceptance freeze on one unchanged exact head;
+3. implement deterministic planning and permission-aware plan/outcome reads inside the accepted Customer Privacy packages;
+4. continue approval, restrictions, holds/retention, execution and convergence only through later bounded packets;
 5. apply residual architecture calibration only at natural packet boundaries unless it blocks correctness.
 
 ## Guardrail for the active Customer Privacy packet
 
-Do not add one new crate for each discovery command, query, worker or composition fragment. Generic router/worker algorithms must not grow Customer Privacy branches, and frozen discovery evidence must not be weakened to simplify implementation.
+Do not add one new crate for planning, plan reads or outcome reads. Generic router/worker algorithms must not grow Customer Privacy branches, and frozen discovery evidence must not be weakened or silently rebased to simplify planning.
 
 ## Remaining product work
 
