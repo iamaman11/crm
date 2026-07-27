@@ -64,6 +64,14 @@ use serde::Deserialize;
 use sqlx::Row;
 use std::collections::{BTreeMap, BTreeSet};
 
+const REQUEST_PARTY_LINK_SCHEMA_ID: &str = "crm.customer-enrichment.request.party-link";
+const REQUEST_PARTY_LINK_SCHEMA_VERSION: &str = "1.0.0";
+const REQUEST_PARTY_LINK_MAXIMUM_BYTES: i64 = 1_024;
+const REQUEST_PARTY_LINK_DESCRIPTOR_HASH: [u8; 32] = [
+    234, 78, 62, 183, 114, 97, 170, 255, 30, 94, 169, 60, 144, 234, 17, 235, 225, 88, 121, 223, 86,
+    225, 45, 149, 201, 194, 155, 186, 10, 226, 131, 230,
+];
+
 #[derive(Clone)]
 pub struct CustomerEnrichmentPrivacyScopeQueryAdapter {
     store: PostgresDataStore,
@@ -505,9 +513,19 @@ async fn validate_relationships(
     let mut by_request = BTreeMap::new();
     let mut relevant_requests = BTreeSet::new();
     for row in rows {
-        if row.version != 1 || row.attributes_json != "{}" {
+        if row.version != 1
+            || row.owner_module_id != MODULE_ID
+            || row.schema_id != REQUEST_PARTY_LINK_SCHEMA_ID
+            || row.schema_version != REQUEST_PARTY_LINK_SCHEMA_VERSION
+            || row.descriptor_hash.as_slice() != REQUEST_PARTY_LINK_DESCRIPTOR_HASH
+            || row.data_class != "personal"
+            || row.payload_encoding != "json"
+            || row.maximum_payload_size != REQUEST_PARTY_LINK_MAXIMUM_BYTES
+            || row.retention_policy_id != LIFECYCLE_STATE_RETENTION_POLICY_ID
+            || row.payload_bytes.as_slice() != b"{}"
+        {
             return Err(relationship_state_invalid(
-                "request/Party relationship metadata is not the canonical empty v1 link",
+                "request/Party relationship metadata does not match the canonical typed link contract",
             ));
         }
         let source_party_id = RecordId::try_new(row.source_record_id)
@@ -1267,7 +1285,15 @@ struct RequestRelationshipRow {
     source_record_id: String,
     target_record_id: String,
     version: i64,
-    attributes_json: String,
+    owner_module_id: String,
+    schema_id: String,
+    schema_version: String,
+    descriptor_hash: Vec<u8>,
+    data_class: String,
+    payload_encoding: String,
+    maximum_payload_size: i64,
+    retention_policy_id: String,
+    payload_bytes: Vec<u8>,
 }
 
 async fn load_request_relationship_rows(
@@ -1280,7 +1306,9 @@ async fn load_request_relationship_rows(
     loop {
         let rows = sqlx::query(
             r#"
-            SELECT source_record_id, target_record_id, version, attributes::text AS attributes_json
+            SELECT source_record_id, target_record_id, version, owner_module_id,
+              schema_id, schema_version, descriptor_hash, data_class, payload_encoding,
+              maximum_payload_size, retention_policy_id, payload_bytes
             FROM crm.relationships
             WHERE tenant_id = $1
               AND relationship_type = $2
@@ -1316,8 +1344,32 @@ async fn load_request_relationship_rows(
                 version: row
                     .try_get("version")
                     .map_err(|error| relationship_state_invalid(error.to_string()))?,
-                attributes_json: row
-                    .try_get("attributes_json")
+                owner_module_id: row
+                    .try_get("owner_module_id")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                schema_id: row
+                    .try_get("schema_id")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                schema_version: row
+                    .try_get("schema_version")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                descriptor_hash: row
+                    .try_get("descriptor_hash")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                data_class: row
+                    .try_get("data_class")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                payload_encoding: row
+                    .try_get("payload_encoding")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                maximum_payload_size: row
+                    .try_get("maximum_payload_size")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                retention_policy_id: row
+                    .try_get("retention_policy_id")
+                    .map_err(|error| relationship_state_invalid(error.to_string()))?,
+                payload_bytes: row
+                    .try_get("payload_bytes")
                     .map_err(|error| relationship_state_invalid(error.to_string()))?,
             };
             after_source = decoded.source_record_id.clone();
