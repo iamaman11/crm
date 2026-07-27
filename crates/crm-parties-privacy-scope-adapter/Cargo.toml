@@ -15,8 +15,8 @@ crm-parties = { path = "../../modules/crm-parties" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-query-runtime = { path = "../crm-query-runtime" }
-prost = "0.14"
-sha2 = "0.10"
+prost = { workspace = true }
+sha2 = { workspace = true }
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio"] }
 
 [dev-dependencies]
