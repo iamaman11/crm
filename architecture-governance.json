@@ -1,5 +1,24 @@
 {
   "schema_version": "crm.architecture-governance/v1",
   "exceptions": [],
-  "new_crate_justifications": []
+  "new_crate_justifications": [
+    {
+      "package": "crm-identity-resolution-merge-query-adapter",
+      "path": "crates/crm-identity-resolution-merge-query-adapter",
+      "protected_boundary": "Existing permission-aware Identity Resolution merge-query adapter boundary; this entry only makes the already effective Cargo workspace member explicit.",
+      "isolated_dependencies": [
+        "crm-query-runtime",
+        "crm-proto-contracts",
+        "prost"
+      ],
+      "expected_consumers": [
+        "crm-application-runtime"
+      ],
+      "why_internal_module_insufficient": "The package predates Stage B and is already an effective workspace member through a path dependency; explicit listing removes hidden workspace membership without moving or changing behavior.",
+      "lifecycle_or_extraction_seam": "Transitional Identity Resolution query-adapter package retained until the domain converges on the target application/postgres/production package model.",
+      "expected_build_test_fan_out": "No effective fan-out change: Cargo metadata already included this package before explicit listing; baseline reverse impact is measured by the Stage B analyzer.",
+      "removal_or_consolidation_condition": "Consolidate into the accepted Identity Resolution application/production packages in a separate behavior-neutral Stage G packet after public coordinates, consumers and process acceptance are inventoried.",
+      "tracking_issue": "#194"
+    }
+  ]
 }
