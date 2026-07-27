@@ -3,13 +3,11 @@ use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy::{
     ContributionCompletenessProof, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
     EvidenceClass, OwnerScopeContract, OwnerScopeContribution, OwnerScopeRegistry,
-    ScopeDiscoveryLineage, ScopeResource,
-    discovery_lineage_digest, discovery_sha256,
+    ScopeDiscoveryLineage, ScopeResource, discovery_lineage_digest, discovery_sha256,
 };
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ErrorCategory, ModuleId,
-    PortFuture, RecordId, RequestId, RetentionPolicyId, SdkError,
-    TenantId, TraceId, TypedPayload,
+    PortFuture, RecordId, RequestId, RetentionPolicyId, SdkError, TenantId, TraceId, TypedPayload,
 };
 use crm_proto_contracts::crm::{customer::v1::PartyRef, customer_privacy::v1 as privacy};
 use crm_query_runtime::{QueryExecutionContext, QueryExecutor, QueryRequest};
