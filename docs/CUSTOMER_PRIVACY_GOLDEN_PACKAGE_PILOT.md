@@ -24,7 +24,7 @@ The packet moves no feature behavior. Existing capability-specific command, quer
 - `crm-customer-privacy-application` owns the exact application inventory: four mutations and two queries.
 - `crm-customer-privacy-postgres` owns the stable persistence and transaction-guard boundary.
 - `crm-customer-privacy-production` owns the single `build_contribution` process-composition entry point.
-- `crm-application-runtime` imports only the production package, not Customer Privacy command/query/PostgreSQL implementation crates.
+- `crm-application-runtime` imports the production package for all Customer Privacy execution/composition and retains one narrow query-adapter dependency only for existing bootstrap visibility metadata.
 
 Production discovery remains unregistered. The accepted discovery coordinate is still non-runtime and no worker is added.
 
@@ -48,8 +48,9 @@ The pilot must preserve:
 |---|---:|---:|
 | Effective workspace packages | 110 | 113 |
 | Customer Privacy stable target technical packages | 0 | 3 |
-| Generic runtime direct Customer Privacy implementation dependencies | 6 | 0 |
-| Generic runtime Customer Privacy owner dependencies | 0 | 1 |
+| Generic runtime direct Customer Privacy execution/composition dependencies | 5 | 0 |
+| Generic runtime Customer Privacy visibility-metadata dependencies | 1 | 1 |
+| Generic runtime Customer Privacy owner-production dependencies | 0 | 1 |
 | Public Customer Privacy mutations | 4 | 4 |
 | Public Customer Privacy queries | 2 | 2 |
 | Customer Privacy workers | 0 | 0 |
@@ -68,7 +69,7 @@ crm-customer-privacy
     <- crm-application-runtime
 ```
 
-The transitional command/query implementations are application-private dependencies. The transitional persistence and SQL transaction-guard implementations are PostgreSQL-private dependencies. The generic runtime no longer knows them.
+The transitional command/query implementations are application-private dependencies. The transitional persistence and SQL transaction-guard implementations are PostgreSQL-private dependencies. The generic runtime no longer imports Customer Privacy planners, executors or PostgreSQL composition directly. Its remaining query-adapter edge supplies only the pre-existing bootstrap visibility metadata and is a later Stage D calibration target.
 
 ## Acceptance boundary
 
