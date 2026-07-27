@@ -1,11 +1,11 @@
 # Workspace Dependency, Packaging and CI Complexity Baseline
 
-Snapshot source head: `edd184cb892ac1e5347faa22870a74ca989ba5ce`
+Snapshot source head: `17c937db7e8de187bd3a13b80fb83d95ab2a574c`
 
 Tracking issue: #194  
 Product boundary preserved: #126
 
-> Stage B measurement baseline. Dependency/version/feature/fan-out/public-surface observations are reports and warnings, not calibrated blocking budgets. Invalid or expired architecture exceptions, missing exception ownership/documentation, broken core workspace invariants and unjustified newly added workspace members are blocking.
+> Stage B measurement baseline. Dependency/version/feature/fan-out/public-surface observations are reports and warnings, not calibrated blocking budgets. Invalid or expired architecture exceptions, missing exception ownership/documentation, broken core workspace invariants, unjustified newly added workspace members and violations of explicit calibrated workspace dependency policies are blocking.
 
 The snapshot is reproducible through:
 
@@ -19,9 +19,14 @@ python scripts/analyze_workspace_governance.py \
   --check \
   --json-output artifacts/workspace-governance-baseline.json \
   --markdown-output artifacts/workspace-governance-baseline.md
+
+python scripts/check_workspace_dependency_policy.py \
+  --check \
+  --json-output artifacts/workspace-dependency-policy.json \
+  --markdown-output artifacts/workspace-dependency-policy.md
 ```
 
-`Complexity Baseline CI` runs the same analyzers on the exact pull-request head and publishes both machine-readable reports as workflow artifacts.
+`Complexity Baseline CI` runs the same analyzers and calibrated policy checker on the exact pull-request head and publishes all machine-readable reports as workflow artifacts.
 
 ## 1. Workspace configuration
 
@@ -41,7 +46,7 @@ python scripts/analyze_workspace_governance.py \
 | `[workspace.lints]` | not defined; warning |
 | Package metadata inheritance | no package currently inherits edition, license, rust-version or lints |
 
-The explicit member-list correction is behavior-neutral. Cargo metadata already included `crates/crm-identity-resolution-merge-query-adapter` through an internal path dependency before this packet. Stage B records its existing transitional boundary and removal condition in `architecture-governance.json`; no package, route, worker or runtime behavior was added.
+The explicit member-list correction is behavior-neutral. Cargo metadata already included `crates/crm-identity-resolution-merge-query-adapter` through an internal path dependency before Stage B. The existing transitional boundary and removal condition remain recorded in `architecture-governance.json`; no package, route, worker or runtime behavior was added.
 
 ## 2. Dependency and packaging measurements
 
@@ -63,18 +68,20 @@ The explicit member-list correction is behavior-neutral. Cargo metadata already 
 
 The public-surface value is a deterministic source-text count of public Rust items. It is useful for before/after structural comparisons but is not a semantic rustdoc compatibility model.
 
-## 3. First `[workspace.dependencies]` wave
+## 3. Accepted `[workspace.dependencies]` waves
 
-The first wave centralizes exact existing requirements without upgrading libraries:
+The accepted root entries preserve the requirements that already existed before centralization:
 
-| Dependency | Normative existing requirement | Initial migrated consumers | Remaining direct consumers not yet inheriting |
+| Dependency | Normative existing requirement | Inherited consumers after wave 2 | Remaining direct consumers not yet inheriting |
 |---|---|---|---:|
-| `serde` | `1`, features `derive` | `crm-module-manifest`, `crm-module-sdk`, `crm-core-data` | 29 |
-| `serde_json` | `1` | `crm-module-manifest`, `crm-core-data` | 37 |
-| `sha2` | `0.10` | `crm-module-manifest`, `crm-core-data` | 38 |
+| `serde` | `1`, features `derive` | `crm-module-manifest`, `crm-module-sdk`, `crm-core-data`, all 13 business modules | 16 |
+| `serde_json` | `1` | `crm-module-manifest`, `crm-core-data`, all 13 business modules | 24 |
+| `sha2` | `0.10` | `crm-module-manifest`, `crm-core-data`, all 13 business modules | 25 |
 | `prost` | `0.14` | `crm-core-data` dev-dependencies | 62 |
 
-The migration intentionally excludes `sqlx`, `tokio`, `tonic`, HTTP dependencies and complex test libraries. Their feature sets are not uniform and require separate consumer analysis. `Cargo.lock` is unchanged by this packet; `cargo metadata --locked`, Rust CI and the PR file inventory prove that no hidden resolution update is included.
+Wave 2 covers the complete pure owner/link module cohort. The exact report found 13 matched manifests, 39 governed declarations and zero policy violations. `workspace-dependency-policy.json` blocks a scoped module from reintroducing a direct version, default-feature override or local feature addition for these three dependencies. A future module is not forced to declare an unused dependency.
+
+The accepted waves intentionally exclude `sqlx`, `tokio`, `tonic`, HTTP dependencies and complex test libraries. Their feature sets are not uniform and require separate consumer analysis. `Cargo.lock` remains unchanged; `cargo metadata --locked`, Rust CI and the PR file inventory prove that no hidden resolution update is included.
 
 ## 4. Most repeated direct dependencies
 
@@ -203,9 +210,9 @@ The baseline reports 4,283 conservative public Rust items. The largest measured 
 
 Stage B uses this only as a structural before/after signal. New public-symbol compatibility policy remains a later calibrated gate.
 
-## 10. Crate and exception governance
+## 10. Crate, exception and dependency inheritance governance
 
-`architecture-governance.json` is the single machine-readable registry.
+`architecture-governance.json` remains the single machine-readable exception and new-crate registry.
 
 Every temporary exception requires:
 
@@ -233,13 +240,23 @@ Every newly added effective workspace package requires a complete registry entry
 
 The PR template exposes the same fields. Current registry exceptions: 0.
 
+`workspace-dependency-policy.json` contains calibrated inheritance rules. The first blocking policy is intentionally narrow:
+
+- scope: `modules/*/Cargo.toml`;
+- governed dependencies: `serde`, `serde_json`, `sha2` when present;
+- required form: `workspace = true`;
+- forbidden local overrides: version, default features, extra features, path, git, package or registry source;
+- exact accepted evidence: 13 manifests, 39 declarations, zero violations.
+
+The checker is part of `scripts/check_architecture.py`, Governance CI and Complexity Baseline CI. Broader dependency observations remain warnings until separately calibrated.
+
 ## 11. CI scale baseline
 
 | Metric | Value |
 |---|---:|
 | Permanent workflows | 32 |
 | Workflow jobs | 33 |
-| Workflow path-filter entries | 1,355 |
+| Workflow path-filter entries | 1,367 |
 | PostgreSQL-service workflows | 23 |
 | Pull-request workflows | 31 |
 | Workflows with concurrency control | 31 |
@@ -268,7 +285,7 @@ No new command-, query-, worker- or composition-fragment crate is authorized. An
 
 The next dependency-governance wave should:
 
-1. migrate additional identical consumers of the four accepted root dependencies in bounded groups;
+1. migrate additional identical technical-crate consumers of `serde`, `serde_json`, `sha2` or `prost` only in bounded dependency-role cohorts;
 2. classify `sqlx`, `tokio`, `tonic` and HTTP feature variants by real consumer role before centralization;
 3. decide and pin a repository `rust-version` based on supported toolchain policy;
 4. introduce a workspace lint policy only after current warning debt is measured;
