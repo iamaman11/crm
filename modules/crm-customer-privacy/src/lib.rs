@@ -16,6 +16,7 @@ pub mod domain {
 
     pub mod scope {
         include!("scope.rs");
+        include!("scope_discovery.rs");
     }
     pub use scope::*;
 
