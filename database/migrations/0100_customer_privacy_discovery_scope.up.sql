@@ -121,27 +121,27 @@ ALTER TABLE crm.customer_privacy_discovery_snapshots FORCE ROW LEVEL SECURITY;
 ALTER TABLE crm.customer_privacy_discovery_audit ENABLE ROW LEVEL SECURITY;
 ALTER TABLE crm.customer_privacy_discovery_audit FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY customer_privacy_discovery_attempts_tenant_policy
+CREATE POLICY tenant_isolation
   ON crm.customer_privacy_discovery_attempts
-  USING (tenant_id = current_setting('app.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+  USING (tenant_id = crm.current_tenant_id())
+  WITH CHECK (tenant_id = crm.current_tenant_id());
 
-CREATE POLICY customer_privacy_discovery_owner_pages_tenant_policy
+CREATE POLICY tenant_isolation
   ON crm.customer_privacy_discovery_owner_pages
-  USING (tenant_id = current_setting('app.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+  USING (tenant_id = crm.current_tenant_id())
+  WITH CHECK (tenant_id = crm.current_tenant_id());
 
-CREATE POLICY customer_privacy_discovery_checkpoints_tenant_policy
+CREATE POLICY tenant_isolation
   ON crm.customer_privacy_discovery_checkpoints
-  USING (tenant_id = current_setting('app.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+  USING (tenant_id = crm.current_tenant_id())
+  WITH CHECK (tenant_id = crm.current_tenant_id());
 
-CREATE POLICY customer_privacy_discovery_snapshots_tenant_policy
+CREATE POLICY tenant_isolation
   ON crm.customer_privacy_discovery_snapshots
-  USING (tenant_id = current_setting('app.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+  USING (tenant_id = crm.current_tenant_id())
+  WITH CHECK (tenant_id = crm.current_tenant_id());
 
-CREATE POLICY customer_privacy_discovery_audit_tenant_policy
+CREATE POLICY tenant_isolation
   ON crm.customer_privacy_discovery_audit
-  USING (tenant_id = current_setting('app.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+  USING (tenant_id = crm.current_tenant_id())
+  WITH CHECK (tenant_id = crm.current_tenant_id());
