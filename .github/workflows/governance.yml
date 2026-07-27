@@ -8,6 +8,7 @@ on:
       - "AGENTS.md"
       - "Cargo.toml"
       - "architecture-governance.json"
+      - "workspace-dependency-policy.json"
       - "contracts/**"
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
@@ -44,6 +45,7 @@ on:
       - "scripts/check_native_module_composition.py"
       - "scripts/check_ci_event_policy.py"
       - "scripts/check_action_pinning.py"
+      - "scripts/check_workspace_dependency_policy.py"
       - "scripts/affected_scope.py"
       - "scripts/analyze_workspace.py"
       - "scripts/analyze_workspace_governance.py"
@@ -65,6 +67,7 @@ on:
       - "tests/test_postgres_process_isolation.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_workspace_governance.py"
+      - "tests/test_workspace_dependency_policy.py"
       - "tests/test_ci_telemetry.py"
       - "tests/test_module_compatibility.py"
       - "tests/test_module_manifest_validation.py"
@@ -80,6 +83,7 @@ on:
       - "AGENTS.md"
       - "Cargo.toml"
       - "architecture-governance.json"
+      - "workspace-dependency-policy.json"
       - "contracts/**"
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
@@ -116,6 +120,7 @@ on:
       - "scripts/check_native_module_composition.py"
       - "scripts/check_ci_event_policy.py"
       - "scripts/check_action_pinning.py"
+      - "scripts/check_workspace_dependency_policy.py"
       - "scripts/affected_scope.py"
       - "scripts/analyze_workspace.py"
       - "scripts/analyze_workspace_governance.py"
@@ -137,6 +142,7 @@ on:
       - "tests/test_postgres_process_isolation.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_workspace_governance.py"
+      - "tests/test_workspace_dependency_policy.py"
       - "tests/test_ci_telemetry.py"
       - "tests/test_module_compatibility.py"
       - "tests/test_module_manifest_validation.py"
@@ -200,6 +206,10 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: python scripts/analyze_workspace_governance.py --base-ref "origin/${BASE_REF}" --check
+      - name: Test calibrated workspace dependency policies
+        run: python -m unittest tests.test_workspace_dependency_policy
+      - name: Enforce calibrated workspace dependency policies
+        run: python scripts/check_workspace_dependency_policy.py --check
       - name: Test CI runtime telemetry analyzer
         run: python -m unittest tests.test_ci_telemetry
       - name: Run permanent native architecture conformance preflight
