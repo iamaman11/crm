@@ -106,7 +106,11 @@ The owner implementation lane is complete. No accepted owner may be described as
 
 All nine coordinates remain contract-only/non-runtime. They add no public ingress, Customer Privacy worker, production discovery, planning or owner action execution.
 
-## 5. Next bounded packet — Scope discovery and immutable snapshot
+## 5. Nine-owner set complete
+
+The owner implementation lane is complete. All nine authoritative owner implementations are accepted. No accepted owner may be described as unstarted, and no additional owner contribution is the next packet.
+
+## 6. Next bounded packet — Scope discovery and immutable snapshot
 
 State: **Ready for packet freeze and implementation; production discovery is not implemented**.
 
@@ -138,7 +142,7 @@ Freeze and prove:
 
 Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
-## 6. Customer Privacy packaging constraint
+## 7. Customer Privacy packaging constraint
 
 Do not implement discovery/snapshot as one new crate per command, query, worker, reader or composition fragment.
 
@@ -162,7 +166,7 @@ Rules:
 - contribute routes/queries/workers through one Customer Privacy production entry point;
 - do not add business-ID switches to generic runtime or worker algorithms.
 
-## 7. Sequence after discovery acceptance
+## 8. Sequence after discovery acceptance
 
 1. deterministic planning and permission-aware plan/outcome reads;
 2. approval and immediate deny-only restrictions using final subject locks;
@@ -175,7 +179,7 @@ Rules:
 9. disable/uninstall fail-closed worker behavior;
 10. complete process and end-to-end lifecycle acceptance.
 
-## 8. Frozen Customer Privacy ownership
+## 9. Frozen Customer Privacy ownership
 
 `crm.customer-privacy` owns:
 
@@ -200,7 +204,7 @@ legal hold > mandatory retention > approved privacy action > ordinary retention
 
 Restriction is deny-only and never grants processing. Destructive actions are exact, owner-owned, replay-safe and resumable.
 
-## 9. Phase 8A closure
+## 10. Phase 8A closure
 
 Phase 8A remains **In progress**.
 
@@ -213,7 +217,7 @@ Closure also requires:
 - dependency and affected-scope reports are available for the final packet;
 - documentation and issue #126 match exact merged behavior.
 
-## 10. Wave 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
+## 11. Wave 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
 
 State: **Planned; blocked on completed Phase 8A baseline**.
 
@@ -236,7 +240,7 @@ Phase 8B must use the golden owner package model from issue #194 and demonstrate
 - affected-scope iteration remains bounded;
 - frontend and backend are delivered as complete vertical workflows.
 
-## 11. Completion rule
+## 12. Completion rule
 
 Current product-complete expert modules: **0**.
 
