@@ -328,17 +328,31 @@ async fn select_record_row(
     record_id: &RecordId,
     lock: RowLock,
 ) -> Result<Option<postgres_sqlx::postgres::PgRow>, SdkError> {
-    let suffix = match lock {
-        RowLock::Share => " FOR SHARE",
-        RowLock::Update => " FOR UPDATE",
+    let query = match lock {
+        RowLock::Share => postgres_sqlx::query(
+            r#"
+            SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
+                   data_class, payload_encoding, maximum_payload_size, retention_policy_id,
+                   payload_bytes
+            FROM crm.records
+            WHERE tenant_id = $1 AND owner_module_id = $2
+              AND record_type = $3 AND record_id = $4 AND deleted_at IS NULL
+            FOR SHARE
+            "#,
+        ),
+        RowLock::Update => postgres_sqlx::query(
+            r#"
+            SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash,
+                   data_class, payload_encoding, maximum_payload_size, retention_policy_id,
+                   payload_bytes
+            FROM crm.records
+            WHERE tenant_id = $1 AND owner_module_id = $2
+              AND record_type = $3 AND record_id = $4 AND deleted_at IS NULL
+            FOR UPDATE
+            "#,
+        ),
     };
-    let sql = format!(
-        "SELECT version, owner_module_id, schema_id, schema_version, descriptor_hash, \
-         data_class, payload_encoding, maximum_payload_size, retention_policy_id, payload_bytes \
-         FROM crm.records WHERE tenant_id = $1 AND owner_module_id = $2 \
-         AND record_type = $3 AND record_id = $4 AND deleted_at IS NULL{suffix}"
-    );
-    postgres_sqlx::query(&sql)
+    query
         .bind(tenant_id.as_str())
         .bind(MODULE_ID)
         .bind(record_type)
@@ -509,11 +523,9 @@ async fn insert_plan_record_in_transaction(
     .bind(ACTION_PLAN_STATE_SCHEMA_ID)
     .bind(ACTION_PLAN_STATE_SCHEMA_VERSION)
     .bind(action_plan_state_descriptor_hash().as_slice())
-    .bind(
-        i64::try_from(ACTION_PLAN_STATE_MAXIMUM_BYTES).map_err(|_| {
-            planning_state_invalid("action plan maximum size exceeds PostgreSQL range")
-        })?,
-    )
+    .bind(i64::try_from(ACTION_PLAN_STATE_MAXIMUM_BYTES).map_err(|_| {
+        planning_state_invalid("action plan maximum size exceeds PostgreSQL range")
+    })?)
     .bind(ACTION_PLAN_STATE_RETENTION_POLICY_ID)
     .bind(bytes)
     .bind(format!("privacy-plan-{}", hex(&plan.digest()[..12])))
@@ -637,7 +649,9 @@ async fn verify_link_in_transaction(
     .fetch_one(&mut **transaction)
     .await
     .map_err(database_error)?;
-    let source_case_version: i64 = row.try_get("source_case_version").map_err(database_error)?;
+    let source_case_version: i64 = row
+        .try_get("source_case_version")
+        .map_err(database_error)?;
     let resulting_case_version: i64 = row
         .try_get("resulting_case_version")
         .map_err(database_error)?;
@@ -747,6 +761,7 @@ fn planning_audit_digest(
     event_type: &str,
     resulting_case_version: i64,
 ) -> [u8; 32] {
+    let resulting_case_version = resulting_case_version.to_string();
     let mut bytes = Vec::new();
     for value in [
         b"crm.customer-privacy.planning-audit/v1".as_slice(),
@@ -755,7 +770,7 @@ fn planning_audit_digest(
         event_type.as_bytes(),
         plan.plan_id().as_str().as_bytes(),
         plan.digest().as_slice(),
-        resulting_case_version.to_string().as_bytes(),
+        resulting_case_version.as_bytes(),
         invocation.actor_id.as_str().as_bytes(),
         invocation.request_id.as_str().as_bytes(),
     ] {
@@ -765,7 +780,10 @@ fn planning_audit_digest(
     discovery_sha256(&bytes)
 }
 
-fn digest_column(row: &postgres_sqlx::postgres::PgRow, column: &str) -> Result<[u8; 32], SdkError> {
+fn digest_column(
+    row: &postgres_sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<[u8; 32], SdkError> {
     let value: Vec<u8> = row.try_get(column).map_err(database_error)?;
     value
         .try_into()
@@ -842,8 +860,8 @@ mod tests {
             request_id: crm_module_sdk::RequestId::try_new("request-a").unwrap(),
             correlation_id: crm_module_sdk::CorrelationId::try_new("correlation-a").unwrap(),
             trace_id: crm_module_sdk::TraceId::try_new("trace-a").unwrap(),
-            request_started_at_unix_nanos: 10,
-            proposed_planned_at_unix_nanos: 20,
+            request_started_at_unix_nanos: 1_000,
+            proposed_planned_at_unix_nanos: 2_000,
             policy: crm_customer_privacy::ActionPlanningPolicy::new(
                 SchemaVersion::try_new("privacy-policy/1").unwrap(),
                 "EU",
