@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - feature/customer-privacy-planning-runtime
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -36,6 +40,23 @@ jobs:
 
           postgres = Path("crates/crm-customer-privacy-postgres/src/planning.rs")
           text = postgres.read_text(encoding="utf-8")
+          replacements = {
+              "scope_snapshot_id, plan_id, plan_digest, approval_required, planned_at\n":
+                  "scope_snapshot_id, plan_id, plan_digest, approval_required, planned_at_unix_nanos\n",
+              "$1,$2,$3,$4,$5,$6,$7,$8,\n          TIMESTAMPTZ 'epoch' + ($9::bigint / 1000) * INTERVAL '1 microsecond'\n":
+                  "$1,$2,$3,$4,$5,$6,$7,$8,$9\n",
+              "plan_id, plan_digest, approval_required,\n               (extract(epoch FROM planned_at) * 1000000000)::bigint AS planned_at_unix_nanos\n":
+                  "plan_id, plan_digest, approval_required, planned_at_unix_nanos\n",
+              "plan_digest, resulting_case_version, actor_id, request_id, occurred_at\n":
+                  "plan_digest, resulting_case_version, actor_id, request_id, occurred_at_unix_nanos\n",
+              "$1,$2,$3,$4,$5,$6,$7,$8,$9,\n          TIMESTAMPTZ 'epoch' + ($10::bigint / 1000) * INTERVAL '1 microsecond'\n":
+                  "$1,$2,$3,$4,$5,$6,$7,$8,$9,$10\n",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"planning PostgreSQL source mismatch: {old!r}")
+              text = text.replace(old, new)
+
           old = '''    let mut bytes = Vec::new();
     for value in [
         b"crm.customer-privacy.planning-audit/v1".as_slice(),
@@ -82,5 +103,8 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add crates/crm-customer-privacy-application/src/planning.rs crates/crm-customer-privacy-postgres/src/planning.rs .github/workflows/_planning-runtime-fix.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
           git commit -m "Fix planning runtime source diagnostics"
           git push origin HEAD:feature/customer-privacy-planning-runtime
