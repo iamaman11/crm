@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Stable application boundary for Customer Privacy commands, queries and internal discovery.
+//! Stable application boundary for Customer Privacy commands, queries, internal discovery and planning.
 //!
 //! Existing capability-specific crates remain behavior-owning transitional
 //! implementation details. New Customer Privacy behavior enters through this
@@ -8,8 +8,10 @@
 //! dependency.
 
 mod discovery;
+mod planning;
 
 pub use discovery::*;
+pub use planning::*;
 
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_cancel_capability_adapter::capability_definitions as cancel_definitions;
