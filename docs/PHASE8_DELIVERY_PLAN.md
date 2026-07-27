@@ -4,15 +4,20 @@ Status: **Active execution — Phase 8A customer master**
 
 Parent program: #11  
 Customer-master program: #28  
+Customer Privacy packet: #126  
 Commercial follow-on: #29  
+Architecture/developer-experience program: #194  
 Delivery governance: `DELIVERY_GOVERNANCE.md`  
-Functional scope guardrail: `CRM_CAPABILITY_COVERAGE.md`
+Functional scope guardrail: `CRM_CAPABILITY_COVERAGE.md`  
+Architecture scalability guardrail: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`
 
 ## 1. Goal
 
-Build the expert CRM domain layer on the completed governed platform without collapsing ownership into Sales or weakening compatibility, tenant isolation, authorization, audit, rollback and exact-SHA evidence.
+Build the expert CRM domain layer on the completed governed platform without collapsing ownership into Sales or weakening compatibility, tenant isolation, authorization, audit, rollback, operations and exact-SHA evidence.
 
-Every packet ends at a natural owner boundary with explicit contracts, persistence, activation, authorization, recovery and real-process acceptance where runtime behavior is introduced.
+Every packet ends at a natural owner boundary with explicit contracts, persistence, activation, authorization, recovery, product experience and real-process acceptance where runtime behavior is introduced.
+
+Phase 8 must also prove that product breadth can grow without proportional growth in crates, central manual composition and unrelated CI cost.
 
 ## 2. Packet contract
 
@@ -23,11 +28,27 @@ Every Phase 8 packet defines:
 - persistence, tenant and authorization boundaries;
 - audit, idempotency, approval and retention implications;
 - projection/search/cache and compatibility consequences;
-- exact acceptance gates and rollback evidence.
+- exact production contribution and activation path;
+- exact acceptance gates and rollback evidence;
+- architecture complexity impact;
+- frontend/product and operational impact where applicable.
 
 A packet is **Complete** only after merge to `main`. Every later source or documentation change invalidates earlier exact-head evidence until applicable checks rerun.
 
-## 3. Wave 8A — canonical customer master, identity, consent and customer-data lifecycle
+## 3. Architecture rules for Phase 8
+
+1. A normal capability added to an existing owner creates zero new crates.
+2. A new owner domain targets three to five technical packages.
+3. New crates require a real dependency, trust, reuse, process, lifecycle or extraction boundary.
+4. Generic router and worker algorithms do not change merely to register one owner capability.
+5. Every owner converges on one module-owned production contribution entry point.
+6. Feature implementation and physical crate consolidation use separate PRs.
+7. Shared behavior is extracted only after contrasting implementations prove it.
+8. Iterative affected-scope checks may be focused; final exact-head acceptance remains complete.
+9. Each packet reports files/packages touched, new crates, contribution/runtime impact and required workflows.
+10. Phase 8B and later waves must demonstrate that architecture cost remains bounded as module count grows.
+
+## 4. Wave 8A — canonical customer master, identity, consent and customer-data lifecycle
 
 ### 8A.1–8A.6 — Complete
 
@@ -54,23 +75,20 @@ Frozen production inventory:
 - six public mutations;
 - six permission-aware queries;
 - five activation-gated worker-only coordinates;
-- zero completed non-runtime coordinates outside the accepted privacy owner contribution.
+- accepted contract-only Customer Privacy owner contribution.
 
 ### 8A.11 — Customer Privacy Lifecycle — In progress
 
-Issue: #126  
-Merged runtime inventory: four mutations + two permission-aware queries + ten public non-runtime Customer Privacy coordinates + zero Customer Privacy workers.
+Issue: #126
 
-Accepted production coordinates:
+Merged runtime inventory:
 
-- `case.create`;
-- `case.submit`;
-- `case.subject.verify`;
-- `case.cancel`;
-- permission-aware `case.get`;
-- subject-scoped permission-aware `case.list`.
+- four public mutations: `case.create`, `case.submit`, `case.subject.verify`, `case.cancel`;
+- two permission-aware queries: `case.get`, `case.list`;
+- ten public non-runtime Customer Privacy coordinates;
+- zero Customer Privacy workers.
 
-Nine owner-scope coordinates are published and remain contract-only/non-runtime. All nine authoritative owner implementations are accepted:
+All nine owner-scope implementations are accepted:
 
 1. Parties — PR #156;
 2. Consents — PR #175;
@@ -82,73 +100,69 @@ Nine owner-scope coordinates are published and remain contract-only/non-runtime.
 8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows;
 9. Customer Enrichment — PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
 
-Customer Data Operations remains non-runtime. Its accepted gate proves bounded four-family owner discovery, strict persisted-contract rehydration, alias-aware canonical Party relevance, exact selection-to-stage/outcome association, deterministic pagination, reference-only output, no writes, clean PostgreSQL, complete rollback/schema removal, reapply and repeated acceptance.
+Post-merge documentation synchronization was accepted through PR #193 / merge `e09d3152c886386c2168f0b49e46d47cc44ed041`.
 
-Data Quality remains non-runtime. Its accepted gate proves strict nine-type rehydration, exclusion of shared definitions, seven-family Party evidence, exact association integrity, alias-aware relevance, deterministic pagination, minimized output, no writes, primary-key access-path proof and repeated clean PostgreSQL acceptance.
+The owner implementation lane is complete. No accepted owner may be described as unstarted.
 
-Customer Enrichment remains non-runtime. PR #192 proves typed request/Party relationship-rooted discovery, strict nine-type rehydration, exclusion of shared provider-profile/mapping definitions, exact seven-family descendant lineage, alias-aware relevance, deterministic pagination, minimized output, relationship/record primary-key access paths, zero writes and repeated clean PostgreSQL acceptance.
-
-## 4. Nine-owner set complete
-
-The owner implementation lane is complete. No owner contribution is next and no accepted owner may be described as unstarted.
-
-The nine accepted coordinates remain contract-only/non-runtime. They add no Customer Privacy worker, public ingress, application registration, production discovery, planning or owner action execution.
-
-### Accepted historical packet: Customer Data Operations
-
-`CUSTOMER_DATA_OPERATIONS_PRIVACY_SCOPE_PACKET.md` is an accepted historical contract for PR #188. It contributed only:
-
-- `customer_data.import_row`;
-- `customer_data.export_selection_item`;
-- `customer_data.export_execution_stage`;
-- `customer_data.export_execution_outcome`.
-
-Import/export jobs, selection boundaries/progress, complete artifacts and other multi-subject containers remain excluded from automatic Party scope.
-
-### Accepted historical packet: Data Quality
-
-`DATA_QUALITY_PRIVACY_SCOPE_PACKET.md` is an accepted historical contract for PR #190. It contributes only seven direct Party-bearing families while shared rule-set/profile definitions remain strict owner validation dependencies and are excluded from subject evidence.
-
-### Accepted historical packet: Customer Enrichment
-
-`CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PACKET.md` is an accepted historical contract for PR #192. It contributes only:
-
-- `customer_enrichment.request`;
-- `customer_enrichment.provider_response_receipt`;
-- `customer_enrichment.provider_response_conflict`;
-- `customer_enrichment.suggestion`;
-- `customer_enrichment.review_decision`;
-- `customer_enrichment.application_attempt`;
-- `customer_enrichment.provider_usage_entry`.
-
-The request is the sole relationship-proven subject-discovery root. Shared provider-profile and mapping definitions remain strict validation dependencies and are excluded from Party evidence.
+All nine coordinates remain contract-only/non-runtime. They add no public ingress, Customer Privacy worker, production discovery, planning or owner action execution.
 
 ## 5. Next bounded packet — Scope discovery and immutable snapshot
 
-State: **Ready for bounded packet definition and implementation; production discovery is not implemented**.
+State: **Ready for packet freeze and implementation; production discovery is not implemented**.
 
-Do not begin runtime discovery, planning or owner execution until this packet's schemas, contracts, case lifecycle, persistence and authoritative governance have been inspected and its acceptance boundary is frozen.
+Before runtime work, inspect:
 
-The packet must define and prove:
+- existing Customer Privacy schema and migrations;
+- case aggregate and lifecycle;
+- Protobuf contracts and route classifications;
+- persistence adapter and transaction semantics;
+- identity topology and canonical Party binding;
+- module registry/version/digest authority;
+- authorization, visibility, audit and RLS boundaries;
+- all nine accepted owner contribution contracts.
+
+Freeze and prove:
 
 1. deterministic invocation of all nine exact owner coordinates;
 2. exact registry version/digest and owner-coordinate compatibility binding;
 3. fail-closed behavior when an owner is unavailable, disabled, stale or incompatible;
-4. immutable scope snapshot identity bound to tenant, privacy case, canonical Party, topology generation, registry digest, purpose and effective request time;
+4. immutable snapshot identity bound to tenant, privacy case, canonical Party, topology generation, registry digest, purpose and effective request time;
 5. bounded deterministic aggregation with exact owner/resource/data-class ordering;
 6. snapshot, page and cursor digest contracts and terminal-completeness proof;
 7. no resource payload disclosure;
-8. no owner mutation, provider call, restriction, legal-hold, retention decision or destructive action during discovery;
+8. no owner mutation, provider call, restriction, legal-hold decision, retention decision or destructive action;
 9. permission-aware snapshot reads and exact audit evidence;
 10. idempotency, replay, retry, registry/topology drift and crash-window semantics;
 11. clean PostgreSQL, complete rollback/schema removal, reapply and repeated acceptance;
 12. real-process acceptance before deterministic planning begins.
 
-Planning, approval, restrictions, legal holds, owner execution, access/export, deletion/anonymization and convergence remain incomplete and prohibited from being represented as implemented.
+Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
-## 6. Lifecycle sequence after discovery acceptance
+## 6. Customer Privacy packaging constraint
 
-After scope discovery and immutable snapshot are accepted, deliver in order:
+Do not implement discovery/snapshot as one new crate per command, query, worker, reader or composition fragment.
+
+Target convergence:
+
+```text
+modules/crm-customer-privacy/
+crates/crm-customer-privacy-application/
+crates/crm-customer-privacy-postgres/
+crates/crm-customer-privacy-production/
+```
+
+Rules:
+
+- freeze the feature contract first;
+- identify existing transitional crates and real dependency boundaries;
+- perform consolidation only in a separate behavior-neutral PR;
+- keep pure domain free of SQLx, transport and other owners' internals;
+- keep owner-specific SQL and classifications owner-specific;
+- use shared owner-scope support only for proven common protocol behavior;
+- contribute routes/queries/workers through one Customer Privacy production entry point;
+- do not add business-ID switches to generic runtime or worker algorithms.
+
+## 7. Sequence after discovery acceptance
 
 1. deterministic planning and permission-aware plan/outcome reads;
 2. approval and immediate deny-only restrictions using final subject locks;
@@ -161,7 +175,7 @@ After scope discovery and immutable snapshot are accepted, deliver in order:
 9. disable/uninstall fail-closed worker behavior;
 10. complete process and end-to-end lifecycle acceptance.
 
-## 7. Frozen Customer Privacy ownership
+## 8. Frozen Customer Privacy ownership
 
 `crm.customer-privacy` owns:
 
@@ -176,23 +190,34 @@ After scope discovery and immutable snapshot are accepted, deliver in order:
 - governed export references;
 - convergence evidence.
 
-It does not directly mutate Party, Account, Contact Point, Relationship, Consent, Identity Resolution, Customer Data Operations, Data Quality or Enrichment storage. Those owners participate only through exact module-owned privacy capabilities.
+It does not directly mutate Party, Account, Contact Point, Relationship, Consent, Identity Resolution, Customer Data Operations, Data Quality or Enrichment storage.
 
 Critical precedence:
 
-`legal hold > mandatory retention > approved privacy action > ordinary retention`.
+```text
+legal hold > mandatory retention > approved privacy action > ordinary retention
+```
 
-Restriction is deny-only and never grants processing. Destructive actions must be exact, owner-owned, replay-safe and resumable.
+Restriction is deny-only and never grants processing. Destructive actions are exact, owner-owned, replay-safe and resumable.
 
-## 8. Phase 8A closure
+## 9. Phase 8A closure
 
-Phase 8A remains **In progress**. It closes only when the full privacy/customer-master interaction baseline is merged, including discovery, immutable snapshots, planning, restrictions, legal holds, execution, access/export, deletion/anonymization, tombstone/no-orphan behavior, convergence and worker-process acceptance.
+Phase 8A remains **In progress**.
 
-## 9. Wave 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
+It closes only after discovery, immutable snapshots, planning, restrictions, legal holds, execution, access/export, deletion/anonymization, tombstone/no-orphan behavior, convergence and complete worker/process acceptance are merged.
+
+Closure also requires:
+
+- Customer Privacy contribution aggregation no longer grows generic runtime;
+- no unjustified capability-specific crates introduced by Phase 8A.11;
+- dependency and affected-scope reports are available for the final packet;
+- documentation and issue #126 match exact merged behavior.
+
+## 10. Wave 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
 
 State: **Planned; blocked on completed Phase 8A baseline**.
 
-Required domains:
+Required independent owner domains:
 
 - Product Catalog;
 - Price Books and Pricing;
@@ -202,10 +227,17 @@ Required domains:
 - Subscriptions, entitlements and usage;
 - governed billing/ERP/payment/tax/fulfillment boundaries.
 
-These domains remain independent owner domains and must not be absorbed into Sales.
+These domains must not be absorbed into Sales.
 
-## 10. Completion rule
+Phase 8B must use the golden owner package model from issue #194 and demonstrate that:
+
+- normal capabilities add zero crates;
+- owner contributions do not grow generic runtime;
+- affected-scope iteration remains bounded;
+- frontend and backend are delivered as complete vertical workflows.
+
+## 11. Completion rule
 
 Current product-complete expert modules: **0**.
 
-A backend slice, crate, contract or migration is not product-complete without required domain breadth, governed APIs, persistence, authorization, audit, product workflow and production/operational proof.
+A backend slice, crate, contract or migration is not product-complete without required domain breadth, governed APIs, persistence, authorization, audit, product workflow, frontend experience and production/operational proof.
