@@ -93,7 +93,7 @@ Required result:
 
 This closes the dependency prerequisite for Stage C.
 
-### Packet B — Discovery and immutable snapshot freeze
+### Packet B — Scope discovery and immutable snapshot freeze
 
 State: **Ready after documentation synchronization; no runtime behavior**.
 
@@ -135,15 +135,18 @@ crates/crm-customer-privacy-production/
 
 The pilot is behavior-neutral. It preserves coordinates, routes, activation, authorization, RLS, audit, idempotency and process behavior; consolidates only across valid dependency seams; adds no discovery behavior; reports before/after package count, edges, fan-out, public surface and build/test effect; and exposes one Customer Privacy production contribution entry point without generic-runtime business switches.
 
-### Packet D — Discovery and immutable snapshot implementation
+If consolidation is required, perform consolidation only in a separate behavior-neutral PR.
+
+### Packet D — Scope discovery and immutable snapshot implementation
 
 State: **Blocked on accepted Packet C packaging**.
 
 Implement the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages.
 
+Do not implement discovery/snapshot as one new crate per command, query, worker, reader or composition fragment.
+
 Forbidden:
 
-- one crate per command, query, worker, reader or composition fragment;
 - direct owner storage access;
 - generic runtime or worker branching on Customer Privacy IDs;
 - planning, restrictions, legal-hold/retention decisions or owner action execution in this packet.
