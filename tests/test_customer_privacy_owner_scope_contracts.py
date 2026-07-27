@@ -249,6 +249,80 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         for control in required_customer_data_controls:
             self.assertIn(control, customer_data_packet)
 
+    def test_data_quality_entry_packet_freezes_bounded_direct_subject_scope(self) -> None:
+        packet = (ROOT / "docs/DATA_QUALITY_PRIVACY_SCOPE_PACKET.md").read_text(
+            encoding="utf-8"
+        )
+
+        required_families = (
+            "data_quality.party_evaluation_job",
+            "data_quality.party_evaluation_input",
+            "data_quality.rule_outcome",
+            "data_quality.finding",
+            "data_quality.finding_observation",
+            "data_quality.party_completeness_result",
+            "data_quality.remediation_attempt",
+        )
+        for family in required_families:
+            self.assertIn(family, packet)
+
+        required_excluded_definitions = (
+            "data_quality.party_rule_set_version",
+            "data_quality.party_completeness_profile_version",
+            "shared across many Party evaluations",
+            "must not be emitted",
+        )
+        for boundary in required_excluded_definitions:
+            self.assertIn(boundary, packet)
+
+        required_bounds = (
+            "MAX_PRIVACY_EVALUATION_JOBS_SCANNED = 8_192",
+            "MAX_PRIVACY_EVALUATION_INPUTS_SCANNED = 8_192",
+            "MAX_PRIVACY_RULE_OUTCOMES_SCANNED = 32_768",
+            "MAX_PRIVACY_FINDINGS_SCANNED = 16_384",
+            "MAX_PRIVACY_FINDING_OBSERVATIONS_SCANNED = 32_768",
+            "MAX_PRIVACY_COMPLETENESS_RESULTS_SCANNED = 8_192",
+            "MAX_PRIVACY_REMEDIATION_ATTEMPTS_SCANNED = 8_192",
+            "MAX_PRIVACY_DEFINITION_RECORDS_REHYDRATED = 8_192",
+            "MAX_PRIVACY_ASSOCIATION_RECORDS_REHYDRATED = 65_536",
+            "MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS = 65_536",
+            "MAX_PRIVACY_OWNER_RECORDS_SCANNED = 65_536",
+            "PRIVACY_OWNER_SCAN_BATCH_SIZE = 512",
+        )
+        for bound in required_bounds:
+            self.assertIn(bound, packet)
+
+        required_controls = (
+            "There is no provenance-only fallback discovery family",
+            "REPEATABLE READ, READ ONLY",
+            "page_size + 1",
+            "record_id ASC",
+            "crm.records (tenant_id, record_type, record_id)",
+            "relationships: Vec::new()",
+            "reference-only",
+            "no-write proof",
+            "Contract-only/non-runtime",
+            "implementation not started",
+            "Production discovery remains forbidden",
+        )
+        for control in required_controls:
+            self.assertIn(control, packet)
+
+        forbidden_shortcuts = (
+            "JSON or byte-payload expression indexes",
+            "privacy-only projection table",
+            "synthetic `crm.relationships` rows",
+            "unguarded Party-to-quality reverse index",
+            "public HTTP or gRPC route",
+            "Customer Privacy worker",
+            "generic privacy runtime",
+            "unbounded tenant scan",
+            "selective JSON parsing",
+            "runtime promotion",
+        )
+        for shortcut in forbidden_shortcuts:
+            self.assertIn(shortcut, packet)
+
 
 if __name__ == "__main__":
     unittest.main()
