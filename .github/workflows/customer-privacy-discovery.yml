@@ -1,0 +1,165 @@
+name: Customer Privacy Discovery CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "architecture-policy.json"
+      - "scripts/check_architecture.py"
+      - "proto/crm/customer_privacy/**"
+      - "modules/crm-customer-privacy/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-privacy-application/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "crates/*-privacy-scope-adapter/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0043_customer_privacy_discovery_scope.sql"
+      - "contracts/customer-privacy-discovery-snapshot-implementation.json"
+      - "docs/CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md"
+      - ".github/workflows/customer-privacy-discovery.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "architecture-policy.json"
+      - "scripts/check_architecture.py"
+      - "proto/crm/customer_privacy/**"
+      - "modules/crm-customer-privacy/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-privacy-application/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "crates/*-privacy-scope-adapter/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0043_customer_privacy_discovery_scope.sql"
+      - "contracts/customer-privacy-discovery-snapshot-implementation.json"
+      - "docs/CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md"
+      - ".github/workflows/customer-privacy-discovery.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_privacy_discovery_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5448:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_privacy_discovery_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5448
+      PGDATABASE: crm_customer_privacy_discovery_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5448/crm_customer_privacy_discovery_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5448/crm_customer_privacy_discovery_test
+    steps:
+      - name: Check out exact candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+      - name: Prepare Rust and PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply clean database
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --command "CREATE ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0043_customer_privacy_discovery_scope.sql
+      - name: Verify discovery packages and production inventory
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-customer-privacy-application \
+            -p crm-customer-privacy-postgres \
+            -p crm-customer-privacy-production \
+            --all-features -- --nocapture \
+            2>&1 | tee database/customer-privacy-discovery-clean.log
+      - name: Verify frozen non-effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -R --include='*.rs' -l 'customer_privacy.scope.discover' services crates/crm-capability-ingress 2>/dev/null | wc -l)" = "0"
+          test "$(grep -R --include='*.rs' -l 'CustomerPrivacy.*Worker\|customer_privacy.*worker' crates/crm-application-runtime crates/crm-application-composition 2>/dev/null | wc -l)" = "0"
+          grep -q 'assert_eq!(mutations.len(), 4)' crates/crm-customer-privacy-production/src/lib.rs
+          grep -q 'assert_eq!(queries.len(), 2)' crates/crm-customer-privacy-production/src/lib.rs
+          test "$(grep -R --include='Cargo.toml' '^name = ' modules crates services | wc -l)" = "113"
+      - name: Roll back authoritative schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply and repeat acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0043_customer_privacy_discovery_scope.sql
+          cargo test \
+            -p crm-customer-privacy-application \
+            -p crm-customer-privacy-postgres \
+            -p crm-customer-privacy-production \
+            --all-features -- --nocapture \
+            2>&1 | tee database/customer-privacy-discovery-reapplied.log
+      - name: Capture diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/customer-privacy-discovery-postgres.log 2>&1
+          fi
+      - name: Upload discovery diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: customer-privacy-discovery-diagnostics
+          path: |
+            database/customer-privacy-discovery-*.log
+          if-no-files-found: warn
+          retention-days: 7
