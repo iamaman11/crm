@@ -91,11 +91,11 @@ Nine owner-scope contribution coordinates are published and remain contract-only
 - PR #190 — Data Quality, strict nine-type rehydration, shared-definition exclusion, exact seven-family Party evidence and cross-record lineage validation; accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a`, merge `deac197c97cddc15bb9916092ca87f6e767ce1de`, 27 of 27 permanent workflows;
 - PR #192 — Customer Enrichment, typed request/Party relationship-rooted discovery, strict nine-type rehydration, shared-definition exclusion and exact seven-family descendant lineage; accepted source `e90e36027de18a07be68e43327ea732810ff332a`, merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c`, 28 of 28 permanent workflows.
 
-All nine remain non-runtime and add no Customer Privacy worker or public ingress.
+All nine owner coordinates remain non-public and add no Customer Privacy worker or public ingress. PR #206 composes their accepted executors into trusted-internal production discovery without changing owner mutation boundaries.
 
 Shared support was accepted in PR #176 / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. Later owner PRs extended only mechanical consumer and bound-read allowlists where independently proven; owner-specific SQL, rehydration, pagination, evidence, response and errors remain outside shared support.
 
-All nine owner contributions are accepted. Production scope discovery and immutable snapshot are the next bounded Customer Privacy packet; planning and action execution remain not started.
+All nine owner contributions are accepted. PR #206 implements production scope discovery and immutable snapshot and is in exact-head gate review; planning and action execution remain not started and become the next bounded packet only after merge.
 
 The accepted Customer Data Operations packet distinguishes subject-level import-row/export-selection/execution evidence from multi-subject job, progress and artifact containers. It is now an historical contract and introduces no container-level deletion semantics.
 
@@ -103,7 +103,7 @@ The accepted Data Quality packet contributes only evaluation job/input, rule out
 
 The accepted Customer Enrichment packet contributes request, response receipt/conflict, suggestion, review, application-attempt and provider-usage references rooted in the typed request/Party relationship. Shared provider-profile/mapping definitions remain validation dependencies and are excluded from Party evidence. The packet introduces no provider call, owner mutation, query-side write or runtime promotion.
 
-The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. It does not yet prove discovery/snapshot, planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization, convergence or workers.
+The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. The PR #206 candidate additionally proves discovery/snapshot without public routes or workers; planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization and convergence remain unimplemented.
 
 ## 8. Phase 8A packet accounting
 
@@ -117,7 +117,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. Scope discovery and immutable snapshot are next. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. PR #206 implements scope discovery and immutable snapshot and awaits exact-head acceptance. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 
