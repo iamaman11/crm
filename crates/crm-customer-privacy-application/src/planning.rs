@@ -4,8 +4,8 @@ use crm_customer_privacy::{
     PrivacyCaseStatus,
 };
 use crm_module_sdk::{
-    ActorId, CorrelationId, ErrorCategory, PortFuture, RecordId, RequestId, SchemaVersion, SdkError,
-    TenantId, TraceId,
+    ActorId, CorrelationId, ErrorCategory, PortFuture, RecordId, RequestId, SchemaVersion,
+    SdkError, TenantId, TraceId,
 };
 use std::sync::Arc;
 
@@ -79,10 +79,7 @@ impl PrivacyPlanningService {
         }
     }
 
-    pub async fn build(
-        &self,
-        invocation: PlanningInvocation,
-    ) -> Result<PlanningCommit, SdkError> {
+    pub async fn build(&self, invocation: PlanningInvocation) -> Result<PlanningCommit, SdkError> {
         validate_invocation(&invocation)?;
         let module_id = crm_module_sdk::ModuleId::try_new(MODULE_ID)
             .map_err(|error| configuration_error(error.to_string()))?;
@@ -223,17 +220,18 @@ fn validate_existing_plan(
     plan: &PrivacyActionPlan,
 ) -> Result<(), SdkError> {
     let lineage = plan.lineage();
-    let expected_resulting_version = lineage
-        .source_case_version()
-        .checked_add(1)
-        .ok_or_else(|| {
-            planning_error(
-                "CUSTOMER_PRIVACY_PLANNING_EVIDENCE_INVALID",
-                ErrorCategory::Internal,
-                false,
-                "planning case version overflowed",
-            )
-        })?;
+    let expected_resulting_version =
+        lineage
+            .source_case_version()
+            .checked_add(1)
+            .ok_or_else(|| {
+                planning_error(
+                    "CUSTOMER_PRIVACY_PLANNING_EVIDENCE_INVALID",
+                    ErrorCategory::Internal,
+                    false,
+                    "planning case version overflowed",
+                )
+            })?;
     if privacy_case.action_plan_id() != Some(plan.plan_id())
         || !matches!(
             privacy_case.status(),
