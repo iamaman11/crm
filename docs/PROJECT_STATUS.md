@@ -22,7 +22,7 @@ This document is the concise human-readable snapshot. Normative delivery order r
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is in progress.**
 
-Current `main` baseline: `aec7130bd48302d20bf821a617c339b2a9d755cf`.
+Latest behavior-affecting architecture baseline: `aec7130bd48302d20bf821a617c339b2a9d755cf`. Later documentation-only merges do not change the runtime, packaging or dependency baseline.
 
 Merged Customer Privacy runtime inventory:
 
