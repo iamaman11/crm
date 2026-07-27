@@ -952,13 +952,19 @@ async fn prove_records_primary_key_scan(admin: &PgPool, tenant: &str) {
 }
 
 async fn set_record_data_class(admin: &PgPool, tenant: &str, record_id: &str, value: &str) {
+    let mut transaction = admin.begin().await.unwrap();
+    sqlx::query("SET LOCAL session_replication_role = 'replica'")
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
     sqlx::query("UPDATE crm.records SET data_class = $3 WHERE tenant_id = $1 AND record_id = $2")
         .bind(tenant)
         .bind(record_id)
         .bind(value)
-        .execute(admin)
+        .execute(&mut *transaction)
         .await
         .unwrap();
+    transaction.commit().await.unwrap();
 }
 
 async fn delete_record(admin: &PgPool, tenant: &str, record_type: &str, record_id: &str) {
