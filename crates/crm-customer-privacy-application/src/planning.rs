@@ -4,8 +4,8 @@ use crm_customer_privacy::{
     PrivacyCaseStatus,
 };
 use crm_module_sdk::{
-    ActorId, CorrelationId, ErrorCategory, PortFuture, RecordId, RequestId, SdkError, TenantId,
-    TraceId,
+    ActorId, CorrelationId, ErrorCategory, PortFuture, RecordId, RequestId, SchemaVersion, SdkError,
+    TenantId, TraceId,
 };
 use std::sync::Arc;
 
@@ -79,7 +79,10 @@ impl PrivacyPlanningService {
         }
     }
 
-    pub async fn build(&self, invocation: PlanningInvocation) -> Result<PlanningCommit, SdkError> {
+    pub async fn build(
+        &self,
+        invocation: PlanningInvocation,
+    ) -> Result<PlanningCommit, SdkError> {
         validate_invocation(&invocation)?;
         let module_id = crm_module_sdk::ModuleId::try_new(MODULE_ID)
             .map_err(|error| configuration_error(error.to_string()))?;
@@ -143,12 +146,13 @@ fn validate_invocation(invocation: &PlanningInvocation) -> Result<(), SdkError> 
     }
     if invocation.request_started_at_unix_nanos <= 0
         || invocation.proposed_planned_at_unix_nanos < invocation.request_started_at_unix_nanos
+        || invocation.proposed_planned_at_unix_nanos % 1_000 != 0
     {
         return Err(planning_error(
             "CUSTOMER_PRIVACY_PLANNING_TIME_INVALID",
             ErrorCategory::InvalidArgument,
             false,
-            "planning timestamps are invalid",
+            "planning time must be positive, monotonic and exactly microsecond aligned",
         ));
     }
     Ok(())
@@ -219,18 +223,17 @@ fn validate_existing_plan(
     plan: &PrivacyActionPlan,
 ) -> Result<(), SdkError> {
     let lineage = plan.lineage();
-    let expected_resulting_version =
-        lineage
-            .source_case_version()
-            .checked_add(1)
-            .ok_or_else(|| {
-                planning_error(
-                    "CUSTOMER_PRIVACY_PLANNING_EVIDENCE_INVALID",
-                    ErrorCategory::Internal,
-                    false,
-                    "planning case version overflowed",
-                )
-            })?;
+    let expected_resulting_version = lineage
+        .source_case_version()
+        .checked_add(1)
+        .ok_or_else(|| {
+            planning_error(
+                "CUSTOMER_PRIVACY_PLANNING_EVIDENCE_INVALID",
+                ErrorCategory::Internal,
+                false,
+                "planning case version overflowed",
+            )
+        })?;
     if privacy_case.action_plan_id() != Some(plan.plan_id())
         || !matches!(
             privacy_case.status(),
@@ -292,20 +295,17 @@ fn planning_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crm_customer_privacy::{PrivacyCaseKind, SchemaVersion};
 
-    #[test]
-    fn planning_phase_and_trust_boundary_are_exact() {
-        assert_eq!(PLANNING_PHASE, 270);
-        let invocation = PlanningInvocation {
+    fn invocation(planned_at: i64, trusted_internal: bool) -> PlanningInvocation {
+        PlanningInvocation {
             tenant_id: TenantId::try_new("tenant-a").unwrap(),
             privacy_case_id: RecordId::try_new("case-a").unwrap(),
             actor_id: ActorId::try_new("privacy-worker").unwrap(),
             request_id: RequestId::try_new("request-a").unwrap(),
             correlation_id: CorrelationId::try_new("correlation-a").unwrap(),
             trace_id: TraceId::try_new("trace-a").unwrap(),
-            request_started_at_unix_nanos: 10,
-            proposed_planned_at_unix_nanos: 20,
+            request_started_at_unix_nanos: 1_000,
+            proposed_planned_at_unix_nanos: planned_at,
             policy: ActionPlanningPolicy::new(
                 SchemaVersion::try_new("privacy-policy/1").unwrap(),
                 "EU",
@@ -313,15 +313,29 @@ mod tests {
                 false,
             )
             .unwrap(),
-            trusted_internal: false,
-        };
+            trusted_internal,
+        }
+    }
+
+    #[test]
+    fn planning_phase_and_trust_boundary_are_exact() {
+        assert_eq!(PLANNING_PHASE, 270);
         assert_eq!(
-            validate_invocation(&invocation).unwrap_err().code,
+            validate_invocation(&invocation(2_000, false))
+                .unwrap_err()
+                .code,
             "CUSTOMER_PRIVACY_PLANNING_TRUST_REQUIRED"
         );
+    }
+
+    #[test]
+    fn planned_time_must_round_trip_through_postgresql_exactly() {
+        assert!(validate_invocation(&invocation(2_000, true)).is_ok());
         assert_eq!(
-            PrivacyCaseKind::Erasure as u8,
-            PrivacyCaseKind::Erasure as u8
+            validate_invocation(&invocation(2_001, true))
+                .unwrap_err()
+                .code,
+            "CUSTOMER_PRIVACY_PLANNING_TIME_INVALID"
         );
     }
 }
