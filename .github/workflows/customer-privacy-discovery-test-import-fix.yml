@@ -17,63 +17,43 @@ jobs:
           ref: feature/customer-privacy-production-discovery-snapshot
           fetch-depth: 0
       - name: Apply compile and Clippy fixes
-        shell: python
+        shell: bash
         run: |
+          set -euo pipefail
+          python - <<'PY'
           from pathlib import Path
+          import re
 
           app = Path("crates/crm-customer-privacy-application/src/discovery.rs")
           text = app.read_text()
 
-          len_block = '''    pub fn len(&self) -> usize {
-              self.by_owner.len()
-          }
-          '''
-          replacement = '''    pub fn len(&self) -> usize {
-              self.by_owner.len()
-          }
-
-              pub fn is_empty(&self) -> bool {
-                  self.by_owner.is_empty()
-              }
-          '''
           if "pub fn is_empty(&self) -> bool" not in text:
-              if text.count(len_block) != 1:
+              pattern = r"(    pub fn len\(&self\) -> usize \{\n        self\.by_owner\.len\(\)\n    \}\n)"
+              replacement = r"\1\n    pub fn is_empty(&self) -> bool {\n        self.by_owner.is_empty()\n    }\n"
+              text, count = re.subn(pattern, replacement, text, count=1)
+              if count != 1:
                   raise SystemExit("endpoint len block mismatch")
-              text = text.replace(len_block, replacement)
 
-          test_marker = '''#[cfg(test)]
-          mod tests {
-              use super::*;
-          '''
-          test_replacement = '''#[cfg(test)]
-          mod tests {
-              use super::*;
-              use crm_customer_privacy::{SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE};
-          '''
-          if "use crm_customer_privacy::{SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE};" not in text:
-              if text.count(test_marker) != 1:
+          import_line = "    use crm_customer_privacy::{SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE};\n"
+          if import_line not in text:
+              marker = "#[cfg(test)]\nmod tests {\n    use super::*;\n"
+              if text.count(marker) != 1:
                   raise SystemExit("application test module marker mismatch")
-              text = text.replace(test_marker, test_replacement)
+              text = text.replace(marker, marker + import_line, 1)
           app.write_text(text)
 
           production = Path("crates/crm-customer-privacy-production/src/lib.rs")
           text = production.read_text()
-          production_marker = '''#[cfg(test)]
-          mod tests {
-              use super::*;
-          '''
-          production_replacement = '''#[cfg(test)]
-          mod tests {
-              use super::*;
-              use std::collections::BTreeSet;
-          '''
-          if "use std::collections::BTreeSet;" not in text:
-              if text.count(production_marker) != 1:
+          import_line = "    use std::collections::BTreeSet;\n"
+          if import_line not in text:
+              marker = "#[cfg(test)]\nmod tests {\n    use super::*;\n"
+              if text.count(marker) != 1:
                   raise SystemExit("production test module marker mismatch")
-              text = text.replace(production_marker, production_replacement)
+              text = text.replace(marker, marker + import_line, 1)
           production.write_text(text)
 
           Path(".github/workflows/customer-privacy-discovery-test-import-fix.yml").unlink()
+          PY
       - name: Commit fixes and remove one-shot workflow
         shell: bash
         run: |
