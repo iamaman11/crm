@@ -205,9 +205,9 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("Status: **Accepted historical contract**", enrichment_packet)
         self.assertIn("28 of 28 permanent workflows succeeded", enrichment_packet)
         self.assertIn("Production discovery remains forbidden", enrichment_packet)
-        self.assertIn("planning and action execution remain prohibited", enrichment_packet)
+        self.assertIn("Planning and action execution remain prohibited", enrichment_packet)
         self.assertIn("production discovery is not implemented", phase_plan)
-        self.assertIn("Planning and action execution remain not started", module_catalog)
+        self.assertIn("planning and action execution remain not started", module_catalog)
 
         for document in (*authoritative, customer_data_packet):
             self.assertIn("PR #188", document)
