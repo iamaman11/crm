@@ -273,10 +273,7 @@ impl DiscoverySnapshotVisibilityPort for ProductionSnapshotVisibility {
                 record_type: id::<RecordType>(SCOPE_SNAPSHOT_RECORD_TYPE)?,
                 record_id: snapshot_id.clone(),
             };
-            let decision = self
-                .inner
-                .authorize_visibility(&request, &resource)
-                .await?;
+            let decision = self.inner.authorize_visibility(&request, &resource).await?;
             Ok(SnapshotVisibilityDecision {
                 allowed: decision.resource_visible && decision.allows_field(required_field),
                 decision_id: decision.decision_id,
@@ -346,8 +343,12 @@ mod tests {
         let queries = query_capability_definitions().unwrap();
         assert_eq!(mutations.len(), 4);
         assert_eq!(queries.len(), 2);
-        assert!(mutations.iter().all(|definition| definition.capability_id.as_str() != "customer_privacy.scope.discover"));
-        assert!(queries.iter().all(|definition| definition.capability_id.as_str() != "customer_privacy.scope.discover"));
+        assert!(mutations.iter().all(
+            |definition| definition.capability_id.as_str() != "customer_privacy.scope.discover"
+        ));
+        assert!(queries.iter().all(
+            |definition| definition.capability_id.as_str() != "customer_privacy.scope.discover"
+        ));
     }
 
     #[test]

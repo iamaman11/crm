@@ -1,8 +1,10 @@
-use crm_core_data::{PostgresDataStore, postgres_sqlx::{self, Postgres, Row, Transaction}};
+use crm_core_data::{
+    PostgresDataStore,
+    postgres_sqlx::{self, Postgres, Row, Transaction},
+};
 use crm_customer_privacy::{
     DISCOVERY_SCOPE_SNAPSHOT_STATE_MAXIMUM_BYTES,
-    DISCOVERY_SCOPE_SNAPSHOT_STATE_RETENTION_POLICY_ID,
-    DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_ID,
+    DISCOVERY_SCOPE_SNAPSHOT_STATE_RETENTION_POLICY_ID, DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_ID,
     DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_VERSION, DiscoveryScopeSnapshot, MODULE_ID,
     SCOPE_SNAPSHOT_RECORD_TYPE, decode_discovery_scope_snapshot_state,
     discovery_attempt_digest as _, discovery_scope_snapshot_state_descriptor_hash,
@@ -43,7 +45,9 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
     ) -> PortFuture<'a, Result<DiscoveryAttempt, SdkError>> {
         Box::pin(async move {
             if discovery_attempt_digest(&invocation.lineage) != expected_attempt_digest {
-                return Err(evidence_conflict("application attempt digest is inconsistent"));
+                return Err(evidence_conflict(
+                    "application attempt digest is inconsistent",
+                ));
             }
             let generation = i64::try_from(invocation.lineage.identity_resolution_generation())
                 .map_err(|_| evidence_conflict("identity generation exceeds PostgreSQL range"))?;
@@ -89,23 +93,39 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
             .await
             .map_err(database_error)?;
             let registry_digest = digest_column(&row, "registry_digest")?;
-            let persisted_generation: i64 = row.try_get("identity_resolution_generation").map_err(database_error)?;
-            let persisted_capture: i64 = row.try_get("captured_at_unix_nanos").map_err(database_error)?;
-            if row.try_get::<String, _>("privacy_case_id").map_err(database_error)?
+            let persisted_generation: i64 = row
+                .try_get("identity_resolution_generation")
+                .map_err(database_error)?;
+            let persisted_capture: i64 = row
+                .try_get("captured_at_unix_nanos")
+                .map_err(database_error)?;
+            if row
+                .try_get::<String, _>("privacy_case_id")
+                .map_err(database_error)?
                 != invocation.lineage.privacy_case_id().as_str()
-                || row.try_get::<String, _>("canonical_party_id").map_err(database_error)?
+                || row
+                    .try_get::<String, _>("canonical_party_id")
+                    .map_err(database_error)?
                     != invocation.lineage.canonical_party_id().as_str()
                 || persisted_generation != generation
-                || row.try_get::<String, _>("registry_version").map_err(database_error)?
+                || row
+                    .try_get::<String, _>("registry_version")
+                    .map_err(database_error)?
                     != invocation.lineage.registry_version().as_str()
                 || registry_digest != *invocation.lineage.registry_digest()
-                || row.try_get::<String, _>("purpose_code").map_err(database_error)?
+                || row
+                    .try_get::<String, _>("purpose_code")
+                    .map_err(database_error)?
                     != invocation.lineage.purpose_code()
-                || row.try_get::<i64, _>("effective_request_at_unix_ms").map_err(database_error)?
+                || row
+                    .try_get::<i64, _>("effective_request_at_unix_ms")
+                    .map_err(database_error)?
                     != invocation.lineage.effective_request_at_unix_ms()
                 || persisted_capture <= 0
             {
-                return Err(evidence_conflict("persisted discovery attempt lineage conflicts"));
+                return Err(evidence_conflict(
+                    "persisted discovery attempt lineage conflicts",
+                ));
             }
             transaction.commit().await.map_err(database_error)?;
             Ok(DiscoveryAttempt {
@@ -154,7 +174,9 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
             if page.response_bytes.len() as u64 > DISCOVERY_SCOPE_SNAPSHOT_STATE_MAXIMUM_BYTES {
-                return Err(evidence_conflict("owner response exceeds governed payload maximum"));
+                return Err(evidence_conflict(
+                    "owner response exceeds governed payload maximum",
+                ));
             }
             let response_digest = discovery_sha256(&page.response_bytes);
             let scanned = i64::try_from(page.receipt.scanned_resource_count)
@@ -217,7 +239,9 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
             .map_err(database_error)?;
             let persisted = decode_page(row)?;
             if persisted != *page {
-                return Err(evidence_conflict("owner page replay conflicts with durable evidence"));
+                return Err(evidence_conflict(
+                    "owner page replay conflicts with durable evidence",
+                ));
             }
             transaction.commit().await.map_err(database_error)?;
             Ok(())
@@ -254,7 +278,8 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
             .await
             .map_err(database_error)?;
             let count: i64 = row.try_get("page_count").map_err(database_error)?;
-            let target_terminal: Option<bool> = row.try_get("target_terminal").map_err(database_error)?;
+            let target_terminal: Option<bool> =
+                row.try_get("target_terminal").map_err(database_error)?;
             if count != i64::from(page_number)
                 || (terminal_complete && target_terminal != Some(true))
                 || (!terminal_complete && target_terminal == Some(true))
@@ -298,10 +323,14 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
             .fetch_one(&mut *transaction)
             .await
             .map_err(database_error)?;
-            let stored_page: i32 = row.try_get("contiguous_page_number").map_err(database_error)?;
+            let stored_page: i32 = row
+                .try_get("contiguous_page_number")
+                .map_err(database_error)?;
             let stored_terminal: bool = row.try_get("terminal_complete").map_err(database_error)?;
             if stored_page < page_number || (terminal_complete && !stored_terminal) {
-                return Err(evidence_conflict("checkpoint replay conflicts with durable state"));
+                return Err(evidence_conflict(
+                    "checkpoint replay conflicts with durable state",
+                ));
             }
             transaction.commit().await.map_err(database_error)?;
             Ok(())
@@ -317,7 +346,9 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
             if discovery_attempt_digest(snapshot.lineage()) != attempt.attempt_digest
                 || snapshot.captured_at_unix_nanos() != attempt.captured_at_unix_nanos
             {
-                return Err(evidence_conflict("snapshot does not belong to discovery attempt"));
+                return Err(evidence_conflict(
+                    "snapshot does not belong to discovery attempt",
+                ));
             }
             let payload = encode_discovery_scope_snapshot_state(snapshot)?;
             let tenant_id = snapshot.lineage().tenant_id();
@@ -343,7 +374,8 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
                     "snapshot finalization requires nine terminal owner checkpoints",
                 ));
             }
-            let transaction_id = format!("privacy-discovery-{}", hex(&attempt.attempt_digest[..12]));
+            let transaction_id =
+                format!("privacy-discovery-{}", hex(&attempt.attempt_digest[..12]));
             postgres_sqlx::query(
                 r#"
                 INSERT INTO crm.records (
@@ -370,13 +402,10 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
             .execute(&mut *transaction)
             .await
             .map_err(database_error)?;
-            let rehydrated = load_snapshot_in_transaction(
-                &mut transaction,
-                tenant_id,
-                snapshot.snapshot_id(),
-            )
-            .await?
-            .ok_or_else(|| evidence_conflict("finalized snapshot record is missing"))?;
+            let rehydrated =
+                load_snapshot_in_transaction(&mut transaction, tenant_id, snapshot.snapshot_id())
+                    .await?
+                    .ok_or_else(|| evidence_conflict("finalized snapshot record is missing"))?;
             if &rehydrated != snapshot {
                 return Err(evidence_conflict(
                     "existing finalized snapshot conflicts with deterministic content",
@@ -409,7 +438,9 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
             .fetch_one(&mut *transaction)
             .await
             .map_err(database_error)?;
-            if row.try_get::<String, _>("snapshot_id").map_err(database_error)?
+            if row
+                .try_get::<String, _>("snapshot_id")
+                .map_err(database_error)?
                 != snapshot.snapshot_id().as_str()
                 || digest_column(&row, "snapshot_binding_digest")? != *snapshot.binding_digest()
             {
@@ -428,7 +459,8 @@ impl DiscoveryPersistencePort for PostgresDiscoveryPersistence {
         Box::pin(async move {
             let mut transaction = self.store.pool().begin().await.map_err(database_error)?;
             bind_tenant(&mut transaction, tenant_id).await?;
-            let snapshot = load_snapshot_in_transaction(&mut transaction, tenant_id, snapshot_id).await?;
+            let snapshot =
+                load_snapshot_in_transaction(&mut transaction, tenant_id, snapshot_id).await?;
             transaction.commit().await.map_err(database_error)?;
             Ok(snapshot)
         })
@@ -547,18 +579,35 @@ async fn load_snapshot_in_transaction(
     .map_err(database_error)?;
     row.map(|row| {
         let descriptor = digest_column(&row, "descriptor_hash")?;
-        let maximum: i64 = row.try_get("maximum_payload_size").map_err(database_error)?;
+        let maximum: i64 = row
+            .try_get("maximum_payload_size")
+            .map_err(database_error)?;
         if row.try_get::<i64, _>("version").map_err(database_error)? != 1
-            || row.try_get::<String, _>("owner_module_id").map_err(database_error)? != MODULE_ID
-            || row.try_get::<String, _>("schema_id").map_err(database_error)?
+            || row
+                .try_get::<String, _>("owner_module_id")
+                .map_err(database_error)?
+                != MODULE_ID
+            || row
+                .try_get::<String, _>("schema_id")
+                .map_err(database_error)?
                 != DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_ID
-            || row.try_get::<String, _>("schema_version").map_err(database_error)?
+            || row
+                .try_get::<String, _>("schema_version")
+                .map_err(database_error)?
                 != DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_VERSION
             || descriptor != discovery_scope_snapshot_state_descriptor_hash()
-            || row.try_get::<String, _>("data_class").map_err(database_error)? != "confidential"
-            || row.try_get::<String, _>("payload_encoding").map_err(database_error)? != "json"
+            || row
+                .try_get::<String, _>("data_class")
+                .map_err(database_error)?
+                != "confidential"
+            || row
+                .try_get::<String, _>("payload_encoding")
+                .map_err(database_error)?
+                != "json"
             || maximum != i64::try_from(DISCOVERY_SCOPE_SNAPSHOT_STATE_MAXIMUM_BYTES).unwrap()
-            || row.try_get::<String, _>("retention_policy_id").map_err(database_error)?
+            || row
+                .try_get::<String, _>("retention_policy_id")
+                .map_err(database_error)?
                 != DISCOVERY_SCOPE_SNAPSHOT_STATE_RETENTION_POLICY_ID
         {
             return Err(evidence_conflict("snapshot record envelope drifted"));
@@ -566,7 +615,9 @@ async fn load_snapshot_in_transaction(
         let bytes: Vec<u8> = row.try_get("payload_bytes").map_err(database_error)?;
         let snapshot = decode_discovery_scope_snapshot_state(&bytes)?;
         if snapshot.snapshot_id() != snapshot_id || snapshot.lineage().tenant_id() != tenant_id {
-            return Err(evidence_conflict("snapshot payload identity differs from envelope"));
+            return Err(evidence_conflict(
+                "snapshot payload identity differs from envelope",
+            ));
         }
         Ok(snapshot)
     })
@@ -579,20 +630,27 @@ fn decode_page(row: postgres_sqlx::postgres::PgRow) -> Result<PersistedDiscovery
         return Err(evidence_conflict("owner response digest mismatch"));
     }
     let page_number: i32 = row.try_get("page_number").map_err(database_error)?;
-    let scanned: i64 = row.try_get("scanned_resource_count").map_err(database_error)?;
-    let emitted: i64 = row.try_get("emitted_resource_count").map_err(database_error)?;
+    let scanned: i64 = row
+        .try_get("scanned_resource_count")
+        .map_err(database_error)?;
+    let emitted: i64 = row
+        .try_get("emitted_resource_count")
+        .map_err(database_error)?;
     Ok(PersistedDiscoveryPage {
         receipt: DiscoveryPageReceipt {
             owner_module_id: ModuleId::try_new(
-                row.try_get::<String, _>("owner_module_id").map_err(database_error)?,
+                row.try_get::<String, _>("owner_module_id")
+                    .map_err(database_error)?,
             )
             .map_err(identifier_error)?,
             capability_id: CapabilityId::try_new(
-                row.try_get::<String, _>("capability_id").map_err(database_error)?,
+                row.try_get::<String, _>("capability_id")
+                    .map_err(database_error)?,
             )
             .map_err(identifier_error)?,
             capability_version: CapabilityVersion::try_new(
-                row.try_get::<String, _>("capability_version").map_err(database_error)?,
+                row.try_get::<String, _>("capability_version")
+                    .map_err(database_error)?,
             )
             .map_err(identifier_error)?,
             lineage_digest: digest_column(&row, "lineage_digest")?,
@@ -635,10 +693,7 @@ fn audit_digest(record: &DiscoveryAuditRecord) -> [u8; 32] {
             .unwrap_or("")
             .as_bytes(),
     );
-    frame(
-        &mut bytes,
-        &record.page_number.unwrap_or(0).to_be_bytes(),
-    );
+    frame(&mut bytes, &record.page_number.unwrap_or(0).to_be_bytes());
     frame(
         &mut bytes,
         record
@@ -733,6 +788,9 @@ mod tests {
             1,
         )
         .unwrap();
-        assert_eq!(discovery_attempt_digest(&lineage), discovery_attempt_digest(&lineage));
+        assert_eq!(
+            discovery_attempt_digest(&lineage),
+            discovery_attempt_digest(&lineage)
+        );
     }
 }

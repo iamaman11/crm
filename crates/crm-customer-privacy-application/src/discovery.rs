@@ -2,14 +2,14 @@ use crm_application_composition::ModuleActivationPort;
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy::{
     ContributionCompletenessProof, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
-    EvidenceClass, OwnerScopeContribution, OwnerScopeContract, OwnerScopeRegistry, ScopeDiscoveryLineage,
-    ScopeResource, SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE, discovery_lineage_digest,
-    discovery_sha256,
+    EvidenceClass, OwnerScopeContract, OwnerScopeContribution, OwnerScopeRegistry,
+    SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE, ScopeDiscoveryLineage, ScopeResource,
+    discovery_lineage_digest, discovery_sha256,
 };
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ErrorCategory, ModuleId,
-    PayloadEncoding, PortFuture, RecordId, RetentionPolicyId, SchemaVersion, SdkError, TenantId,
-    TraceId, TypedPayload, RequestId,
+    PayloadEncoding, PortFuture, RecordId, RequestId, RetentionPolicyId, SchemaVersion, SdkError,
+    TenantId, TraceId, TypedPayload,
 };
 use crm_proto_contracts::crm::{customer::v1::PartyRef, customer_privacy::v1 as privacy};
 use crm_query_runtime::{QueryExecutionContext, QueryExecutor, QueryRequest};
@@ -300,7 +300,9 @@ impl ScopeDiscoveryService {
         if attempt.attempt_digest != expected_attempt_digest
             || attempt.captured_at_unix_nanos < invocation.request_started_at_unix_nanos
         {
-            return Err(corrupt_evidence("persisted discovery attempt identity is invalid"));
+            return Err(corrupt_evidence(
+                "persisted discovery attempt identity is invalid",
+            ));
         }
         self.audit(
             &invocation,
@@ -418,7 +420,9 @@ impl ScopeDiscoveryService {
                 &page.response_bytes,
             )?;
             if validated.receipt != page.receipt {
-                return Err(replay_conflict("persisted owner page receipt does not match response"));
+                return Err(replay_conflict(
+                    "persisted owner page receipt does not match response",
+                ));
             }
             cursor = validated.next_cursor;
             let terminal = validated.receipt.terminal_complete;
@@ -436,7 +440,9 @@ impl ScopeDiscoveryService {
                 if cursor.is_empty() {
                     return Ok(accepted);
                 }
-                return Err(corrupt_evidence("terminal persisted page retained a cursor"));
+                return Err(corrupt_evidence(
+                    "terminal persisted page retained a cursor",
+                ));
             }
             expected_page = expected_page
                 .checked_add(1)
@@ -463,7 +469,9 @@ impl ScopeDiscoveryService {
                 .ok_or_else(|| incompatible_owner("owner output contract is missing"))?;
             result.output.validate()?;
             if !output_contract.matches(&result.output) {
-                return Err(incompatible_owner("owner output descriptor is incompatible"));
+                return Err(incompatible_owner(
+                    "owner output descriptor is incompatible",
+                ));
             }
             let validated = validate_response_page(
                 &invocation.lineage,
@@ -658,7 +666,9 @@ impl DiscoverySnapshotReader {
         if snapshot.lineage().tenant_id() != &context.tenant_id
             || snapshot.snapshot_id() != &snapshot_id
         {
-            return Err(corrupt_evidence("snapshot read returned mismatched identity"));
+            return Err(corrupt_evidence(
+                "snapshot read returned mismatched identity",
+            ));
         }
         Ok(snapshot)
     }
@@ -682,7 +692,11 @@ fn validate_endpoint(
         || definition.requires_idempotency
         || definition.requires_approval
         || definition.output_contract.is_none()
-        || definition.input_contract.descriptor_hash.iter().all(|byte| *byte == 0)
+        || definition
+            .input_contract
+            .descriptor_hash
+            .iter()
+            .all(|byte| *byte == 0)
         || definition
             .output_contract
             .as_ref()
@@ -789,7 +803,9 @@ fn validate_response_page(
         return Err(replay_conflict("owner page sequence is not contiguous"));
     }
     if evidence.next_cursor.len() > MAXIMUM_DISCOVERY_CURSOR_BYTES {
-        return Err(incompatible_owner("owner response cursor exceeds frozen maximum"));
+        return Err(incompatible_owner(
+            "owner response cursor exceeds frozen maximum",
+        ));
     }
     if evidence.terminal_complete != evidence.next_cursor.is_empty() {
         return Err(incompatible_owner(
@@ -797,10 +813,14 @@ fn validate_response_page(
         ));
     }
     if !evidence.terminal_complete && envelope.resources.is_empty() {
-        return Err(incompatible_owner("nonterminal owner page emitted no resources"));
+        return Err(incompatible_owner(
+            "nonterminal owner page emitted no resources",
+        ));
     }
     if evidence.emitted_resource_count != envelope.resources.len() as u64 {
-        return Err(incompatible_owner("owner emitted count does not match resources"));
+        return Err(incompatible_owner(
+            "owner emitted count does not match resources",
+        ));
     }
     let owner_cursor_digest = exact_digest(&evidence.cursor_digest_sha256, "owner cursor digest")?;
     let page_digest = exact_digest(&evidence.page_digest_sha256, "owner page digest")?;
@@ -834,7 +854,11 @@ fn build_owner_contribution(
     contract: OwnerScopeContract,
     pages: Vec<PersistedDiscoveryPage>,
 ) -> Result<DiscoveryOwnerScopeContribution, SdkError> {
-    if pages.is_empty() || !pages.last().is_some_and(|page| page.receipt.terminal_complete) {
+    if pages.is_empty()
+        || !pages
+            .last()
+            .is_some_and(|page| page.receipt.terminal_complete)
+    {
         return Err(discovery_error(
             "CUSTOMER_PRIVACY_DISCOVERY_OWNER_INCOMPLETE",
             ErrorCategory::Conflict,
@@ -849,7 +873,9 @@ fn build_owner_contribution(
         if page.receipt.page_number != index as u32 + 1
             || page.receipt.owner_module_id != *contract.owner_module_id()
         {
-            return Err(replay_conflict("owner durable page prefix is not contiguous"));
+            return Err(replay_conflict(
+                "owner durable page prefix is not contiguous",
+            ));
         }
         scanned = scanned
             .checked_add(page.receipt.scanned_resource_count)
@@ -874,7 +900,9 @@ fn build_owner_contribution(
             &page.response_bytes,
         )?;
         if validated.receipt != page.receipt {
-            return Err(replay_conflict("owner page changed after durable acceptance"));
+            return Err(replay_conflict(
+                "owner page changed after durable acceptance",
+            ));
         }
         for resource in validated.resources {
             let key = (
@@ -939,15 +967,56 @@ fn encode_owner_request(
     envelope: privacy::PrivacyScopeContributionRequestEnvelope,
 ) -> Result<Vec<u8>, SdkError> {
     let bytes = match capability_id {
-        "consents.privacy.scope.contribute" => privacy::ConsentsPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
-        "contact_points.privacy.scope.contribute" => privacy::ContactPointsPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
-        "customer_accounts.privacy.scope.contribute" => privacy::CustomerAccountsPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
-        "customer_data.privacy.scope.contribute" => privacy::CustomerDataPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
-        "customer_enrichment.privacy.scope.contribute" => privacy::CustomerEnrichmentPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
-        "data_quality.privacy.scope.contribute" => privacy::DataQualityPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
-        "identity_resolution.privacy.scope.contribute" => privacy::IdentityResolutionPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
-        "parties.privacy.scope.contribute" => privacy::PartiesPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
-        "party_relationships.privacy.scope.contribute" => privacy::PartyRelationshipsPrivacyScopeContributionRequest { contribution: Some(envelope) }.encode_to_vec(),
+        "consents.privacy.scope.contribute" => privacy::ConsentsPrivacyScopeContributionRequest {
+            contribution: Some(envelope),
+        }
+        .encode_to_vec(),
+        "contact_points.privacy.scope.contribute" => {
+            privacy::ContactPointsPrivacyScopeContributionRequest {
+                contribution: Some(envelope),
+            }
+            .encode_to_vec()
+        }
+        "customer_accounts.privacy.scope.contribute" => {
+            privacy::CustomerAccountsPrivacyScopeContributionRequest {
+                contribution: Some(envelope),
+            }
+            .encode_to_vec()
+        }
+        "customer_data.privacy.scope.contribute" => {
+            privacy::CustomerDataPrivacyScopeContributionRequest {
+                contribution: Some(envelope),
+            }
+            .encode_to_vec()
+        }
+        "customer_enrichment.privacy.scope.contribute" => {
+            privacy::CustomerEnrichmentPrivacyScopeContributionRequest {
+                contribution: Some(envelope),
+            }
+            .encode_to_vec()
+        }
+        "data_quality.privacy.scope.contribute" => {
+            privacy::DataQualityPrivacyScopeContributionRequest {
+                contribution: Some(envelope),
+            }
+            .encode_to_vec()
+        }
+        "identity_resolution.privacy.scope.contribute" => {
+            privacy::IdentityResolutionPrivacyScopeContributionRequest {
+                contribution: Some(envelope),
+            }
+            .encode_to_vec()
+        }
+        "parties.privacy.scope.contribute" => privacy::PartiesPrivacyScopeContributionRequest {
+            contribution: Some(envelope),
+        }
+        .encode_to_vec(),
+        "party_relationships.privacy.scope.contribute" => {
+            privacy::PartyRelationshipsPrivacyScopeContributionRequest {
+                contribution: Some(envelope),
+            }
+            .encode_to_vec()
+        }
         _ => return Err(incompatible_owner("unknown owner contribution coordinate")),
     };
     Ok(bytes)
@@ -958,21 +1027,59 @@ fn decode_owner_response(
     bytes: &[u8],
 ) -> Result<privacy::PrivacyScopeContributionResponseEnvelope, SdkError> {
     let envelope = match capability_id {
-        "consents.privacy.scope.contribute" => privacy::ConsentsPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
-        "contact_points.privacy.scope.contribute" => privacy::ContactPointsPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
-        "customer_accounts.privacy.scope.contribute" => privacy::CustomerAccountsPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
-        "customer_data.privacy.scope.contribute" => privacy::CustomerDataPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
-        "customer_enrichment.privacy.scope.contribute" => privacy::CustomerEnrichmentPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
-        "data_quality.privacy.scope.contribute" => privacy::DataQualityPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
-        "identity_resolution.privacy.scope.contribute" => privacy::IdentityResolutionPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
-        "parties.privacy.scope.contribute" => privacy::PartiesPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
-        "party_relationships.privacy.scope.contribute" => privacy::PartyRelationshipsPrivacyScopeContributionResponse::decode(bytes).map_err(decode_error)?.contribution,
+        "consents.privacy.scope.contribute" => {
+            privacy::ConsentsPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
+        "contact_points.privacy.scope.contribute" => {
+            privacy::ContactPointsPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
+        "customer_accounts.privacy.scope.contribute" => {
+            privacy::CustomerAccountsPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
+        "customer_data.privacy.scope.contribute" => {
+            privacy::CustomerDataPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
+        "customer_enrichment.privacy.scope.contribute" => {
+            privacy::CustomerEnrichmentPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
+        "data_quality.privacy.scope.contribute" => {
+            privacy::DataQualityPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
+        "identity_resolution.privacy.scope.contribute" => {
+            privacy::IdentityResolutionPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
+        "parties.privacy.scope.contribute" => {
+            privacy::PartiesPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
+        "party_relationships.privacy.scope.contribute" => {
+            privacy::PartyRelationshipsPrivacyScopeContributionResponse::decode(bytes)
+                .map_err(decode_error)?
+                .contribution
+        }
         _ => return Err(incompatible_owner("unknown owner contribution coordinate")),
     };
     envelope.ok_or_else(|| incompatible_owner("owner response envelope is missing"))
 }
 
-fn scope_resource(resource: privacy::PrivacyScopeResourceReference) -> Result<ScopeResource, SdkError> {
+fn scope_resource(
+    resource: privacy::PrivacyScopeResourceReference,
+) -> Result<ScopeResource, SdkError> {
     let data_class = match resource.data_class {
         1 => DataClass::Public,
         2 => DataClass::Internal,
@@ -991,7 +1098,11 @@ fn scope_resource(resource: privacy::PrivacyScopeResourceReference) -> Result<Sc
         3 => EvidenceClass::ImmutableRequiredEvidence,
         4 => EvidenceClass::DerivedRebuildableState,
         5 => EvidenceClass::CryptoShreddableData,
-        _ => return Err(incompatible_owner("owner resource evidence class is invalid")),
+        _ => {
+            return Err(incompatible_owner(
+                "owner resource evidence class is invalid",
+            ));
+        }
     };
     ScopeResource::new(
         resource.resource_type,
@@ -1012,7 +1123,10 @@ pub fn discovery_attempt_digest(lineage: &ScopeDiscoveryLineage) -> [u8; 32] {
     append_frame(&mut bytes, lineage.canonical_party_id().as_str().as_bytes());
     append_frame(
         &mut bytes,
-        lineage.identity_resolution_generation().to_string().as_bytes(),
+        lineage
+            .identity_resolution_generation()
+            .to_string()
+            .as_bytes(),
     );
     append_frame(&mut bytes, lineage.registry_digest());
     append_frame(&mut bytes, lineage.purpose_code().as_bytes());
@@ -1076,7 +1190,12 @@ fn decode_error(error: prost::DecodeError) -> SdkError {
 }
 
 fn map_owner_error(error: SdkError) -> SdkError {
-    if error.retryable || matches!(error.category, ErrorCategory::Unavailable | ErrorCategory::Dependency) {
+    if error.retryable
+        || matches!(
+            error.category,
+            ErrorCategory::Unavailable | ErrorCategory::Dependency
+        )
+    {
         discovery_error(
             "CUSTOMER_PRIVACY_DISCOVERY_OWNER_UNAVAILABLE",
             ErrorCategory::Unavailable,
@@ -1187,14 +1306,26 @@ mod tests {
         assert_eq!(MAXIMUM_DISCOVERY_PAGE_SIZE, 128);
         assert_eq!(MAXIMUM_DISCOVERY_CURSOR_BYTES, 2_048);
         assert_eq!(DISCOVERY_PHASE, 260);
-        assert_eq!(SCOPE_DISCOVERY_COORDINATE, "customer_privacy.scope.discover@1.0.0");
-        assert_eq!(SCOPE_SNAPSHOT_RECORD_TYPE, "customer-privacy.scope-snapshot");
+        assert_eq!(
+            SCOPE_DISCOVERY_COORDINATE,
+            "customer_privacy.scope.discover@1.0.0"
+        );
+        assert_eq!(
+            SCOPE_SNAPSHOT_RECORD_TYPE,
+            "customer-privacy.scope-snapshot"
+        );
     }
 
     #[test]
     fn attempt_identity_is_deterministic_and_purpose_sensitive() {
-        assert_eq!(discovery_attempt_digest(&lineage("ERASURE")), discovery_attempt_digest(&lineage("ERASURE")));
-        assert_ne!(discovery_attempt_digest(&lineage("ERASURE")), discovery_attempt_digest(&lineage("ACCESS")));
+        assert_eq!(
+            discovery_attempt_digest(&lineage("ERASURE")),
+            discovery_attempt_digest(&lineage("ERASURE"))
+        );
+        assert_ne!(
+            discovery_attempt_digest(&lineage("ERASURE")),
+            discovery_attempt_digest(&lineage("ACCESS"))
+        );
     }
 
     #[test]
@@ -1255,7 +1386,8 @@ mod tests {
             }),
         }
         .encode_to_vec();
-        let page = validate_response_page(&lineage("ERASURE"), &contract, 1, "", &response).unwrap();
+        let page =
+            validate_response_page(&lineage("ERASURE"), &contract, 1, "", &response).unwrap();
         assert!(page.receipt.terminal_complete);
         assert_eq!(page.resources.len(), 1);
     }
