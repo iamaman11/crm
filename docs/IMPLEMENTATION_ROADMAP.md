@@ -192,6 +192,8 @@ crates/crm-customer-privacy-production/
 
 The workspace remains at 113 packages. No public route or Customer Privacy worker is added. The historical freeze remains unchanged and later implementation evidence is separate.
 
+The accepted guardrail remains: do not modify generic router or worker algorithms merely to register Customer Privacy discovery behavior.
+
 Planning, restrictions, holds, retention decisions, owner execution and Phase 8B remain unimplemented. After merge, the next bounded packet is deterministic planning and permission-aware plan/outcome reads.
 
 ## 8. Phase 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
