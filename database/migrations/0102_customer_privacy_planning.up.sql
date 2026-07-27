@@ -62,3 +62,27 @@ CREATE POLICY tenant_isolation
   ON crm.customer_privacy_planning_audit
   USING (tenant_id = crm.current_tenant_id())
   WITH CHECK (tenant_id = crm.current_tenant_id());
+
+CREATE FUNCTION crm.reject_customer_privacy_planning_evidence_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'customer privacy planning evidence is immutable'
+    USING ERRCODE = '55000';
+END;
+$$;
+
+CREATE TRIGGER customer_privacy_action_plans_immutable
+BEFORE UPDATE OR DELETE ON crm.customer_privacy_action_plans
+FOR EACH ROW EXECUTE FUNCTION crm.reject_customer_privacy_planning_evidence_mutation();
+
+CREATE TRIGGER customer_privacy_planning_audit_immutable
+BEFORE UPDATE OR DELETE ON crm.customer_privacy_planning_audit
+FOR EACH ROW EXECUTE FUNCTION crm.reject_customer_privacy_planning_evidence_mutation();
+
+CREATE TRIGGER customer_privacy_action_plan_records_immutable
+BEFORE UPDATE OR DELETE ON crm.records
+FOR EACH ROW
+WHEN (OLD.record_type = 'customer-privacy.action-plan')
+EXECUTE FUNCTION crm.reject_customer_privacy_planning_evidence_mutation();
