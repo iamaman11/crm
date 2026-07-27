@@ -109,26 +109,26 @@ Accepted owner-scope implementations:
 4. Contact Points — PR #181;
 5. Party Relationships — PR #183;
 6. Identity Resolution — PR #186 / accepted source `24456b86379a1ef23ed5a60804cdcae5075d407c` / merge `509eb304a76055c9f49b0beed3b007963a91cb22` / 25 of 25 permanent workflows;
-7. Customer Data Operations — PR #188 / accepted source `07f34786e82fdfa78d263790e9f50541529006f8` / merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc` / 26 of 26 permanent workflows.
+7. Customer Data Operations — PR #188 / accepted source `07f34786e82fdfa78d263790e9f50541529006f8` / merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc` / 26 of 26 permanent workflows;
+8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows.
 
 All nine owner coordinates remain contract-only/non-runtime. Accepted owner implementations add no public ingress, application registration or Customer Privacy worker.
 
 ### 6.2 Active sequence
 
-1. **Data Quality owner slice — inspection/entry freeze next:** define authoritative record families, Party relevance, shared-container exclusions, retention/evidence semantics, pagination and frozen bounds before implementation.
-2. **Data Quality owner implementation:** implement only after the bounded entry packet removes record-family ambiguity.
-3. **Customer Enrichment owner slice:** freeze and implement provider/provenance/review/application evidence scope.
-4. **Complete nine-owner set:** require all owner gates before production discovery.
-5. **Scope discovery and immutable snapshot:** prove owner availability/staleness, deterministic completeness and immutable scope evidence.
-6. **Deterministic planning and reads:** prove owner/data-class actions and permission-aware plan/outcome disclosure.
-7. **Approval and immediate restrictions:** preserve deny-only enforcement and final subject locking.
-8. **Legal hold and retention:** prove legal-hold > mandatory-retention > approved-action precedence.
-9. **Resumable execution and recovery:** prove exact owner capabilities, idempotency, checkpoints and crash-window reconciliation.
-10. **Access/export and deletion/anonymization:** use governed artifacts and owner-specific actions without cross-owner storage bypass.
-11. **Tombstone and convergence:** prove Party tombstone/no-orphan behavior and projection/search/cache convergence.
-12. **Worker and end-to-end acceptance:** prove disable/uninstall fail-closed behavior and complete lifecycle processing.
-13. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged.
-14. **Phase 8B / #29:** start only from the completed Phase 8A baseline.
+1. **Customer Enrichment owner slice — inspection/entry freeze next:** define authoritative record families, Party relevance, shared-definition/container exclusions, provider/provenance/review/application evidence, pagination and frozen bounds before implementation.
+2. **Customer Enrichment owner implementation:** complete the ninth and final owner without runtime promotion.
+3. **Complete nine-owner set:** require all owner gates before production discovery.
+4. **Scope discovery and immutable snapshot:** prove owner availability/staleness, deterministic completeness and immutable scope evidence.
+5. **Deterministic planning and reads:** prove owner/data-class actions and permission-aware plan/outcome disclosure.
+6. **Approval and immediate restrictions:** preserve deny-only enforcement and final subject locking.
+7. **Legal hold and retention:** prove legal-hold > mandatory-retention > approved-action precedence.
+8. **Resumable execution and recovery:** prove exact owner capabilities, idempotency, checkpoints and crash-window reconciliation.
+9. **Access/export and deletion/anonymization:** use governed artifacts and owner-specific actions without cross-owner storage bypass.
+10. **Tombstone and convergence:** prove Party tombstone/no-orphan behavior and projection/search/cache convergence.
+11. **Worker and end-to-end acceptance:** prove disable/uninstall fail-closed behavior and complete lifecycle processing.
+12. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged.
+13. **Phase 8B / #29:** start only from the completed Phase 8A baseline.
 
 ### 6.3 Accepted historical owner slice — Customer Data Operations
 
@@ -141,20 +141,34 @@ PR #188 accepted the subject-level families:
 
 The accepted packet proves strict existing-owner rehydration, bounded same-tenant keyset scans, historical alias resolution to the canonical Party, exact stage/outcome relevance through authoritative selection `(job_id, manifest_position)`, deterministic four-family pagination, reference-only evidence, clean/rollback/schema-removal/reapply PostgreSQL acceptance and zero writes. Multi-subject jobs, boundaries, progress and complete artifacts remain excluded. The coordinate remains non-runtime.
 
-### 6.4 Next bounded owner slice — Data Quality
+### 6.4 Accepted historical owner slice — Data Quality
+
+PR #190 accepted seven direct-subject families:
+
+- `data_quality.party_evaluation_job`;
+- `data_quality.party_evaluation_input`;
+- `data_quality.rule_outcome`;
+- `data_quality.finding`;
+- `data_quality.finding_observation`;
+- `data_quality.party_completeness_result`;
+- `data_quality.remediation_attempt`.
+
+The accepted packet proves strict existing-owner rehydration for all nine persisted types, exclusion of shared rule-set/profile definitions, alias-aware Party relevance, exact cross-record lineage, bounded keyset scans, deterministic pagination, minimized reference-only evidence, primary-key access-path proof, zero writes and clean/rollback/schema-removal/reapply PostgreSQL acceptance. The coordinate remains non-runtime.
+
+### 6.5 Next bounded owner slice — Customer Enrichment
 
 Before adapter implementation, freeze:
 
-- the authoritative issue/rule/run/finding/observation/remediation/evidence record families;
-- direct Party references and indirect provenance references that constitute subject relevance;
-- shared or multi-subject containers that remain owner-controlled but are not emitted for one Party;
+- the authoritative provider-profile, mapping, request, provider-response/conflict, suggestion, review, application-attempt and usage record families;
+- direct Party references and bounded parent/provenance associations that constitute subject relevance;
+- shared definitions and multi-subject/provider containers excluded from one Party scope;
 - exact owner decoders and malformed-state fail-closed behavior;
 - alias-aware relevance under the accepted topology generation;
-- deterministic cross-family ordering, keyset scans, raw-row counters and terminal `page_size + 1` proof;
-- owner-wide scan, rehydration, relationship and canonical-resolution bounds;
-- retention-policy and minimized reference-only evidence mapping;
+- deterministic cross-family order, keyset scans, raw-row counters and terminal `page_size + 1` proof;
+- owner-wide scan, rehydration, association and canonical-resolution bounds;
+- provider payload, suggestion/review/application/usage privacy and minimized reference-only evidence;
 - required PostgreSQL indexes and clean rollback/reapply acceptance;
-- contract-only implementation with no public route, worker, application registration or runtime promotion.
+- contract-only implementation with no public route, application registration, new worker or runtime promotion.
 
 ## 7. Phase 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
 
