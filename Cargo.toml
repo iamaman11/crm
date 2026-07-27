@@ -118,3 +118,10 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "Proprietary"
+
+# Stage B wave 1: exact existing requirements only; no library upgrade is intended.
+[workspace.dependencies]
+prost = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
