@@ -1,7 +1,7 @@
 {
   "schema_id": "crm.governance.customer-privacy-discovery-snapshot-implementation",
   "schema_version": "1.0.0",
-  "status": "implemented_pending_exact_head_acceptance",
+  "status": "accepted_merged",
   "historical_freeze_preserved": "contracts/customer-privacy-discovery-snapshot-freeze.json",
   "coordinate": {
     "capability_id": "customer_privacy.scope.discover",
@@ -121,9 +121,10 @@
     "requires_complete_schema_removal": true,
     "requires_reapply": true,
     "requires_repeated_acceptance": true,
-    "accepted_source_sha": null,
-    "permanent_workflow_count": null,
-    "merge_sha": null
+    "accepted_source_sha": "086b17a95058eee285fcb67a903bd21d9263d357",
+    "permanent_workflow_count": 31,
+    "merge_sha": "95818fd3aeb54a9593a45642583f0b7224d5ecfe",
+    "pull_request": 206
   },
   "next_packet": "deterministic planning and permission-aware plan/outcome reads",
   "phase_8a_complete": false,

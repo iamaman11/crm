@@ -139,9 +139,9 @@ The pilot preserved routes, workers and behavior while establishing the package 
 
 ### Packet D — Scope discovery and immutable snapshot implementation
 
-State: **Implemented in PR #206; exact-head gate review pending**.
+State: **Accepted through PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` / 31 of 31 permanent workflows**.
 
-PR #206 implements the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages and records later evidence without rewriting the historical freeze.
+PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` implements the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages and records later evidence without rewriting the historical freeze.
 
 Preserved architecture guardrails:
 
@@ -181,7 +181,7 @@ Forbidden and still unimplemented:
 - Party tombstone and convergence;
 - Phase 8B.
 
-Acceptance requires every applicable permanent workflow to pass on one unchanged exact source SHA, followed by squash merge with expected-head protection.
+Acceptance completed on source `086b17a95058eee285fcb67a903bd21d9263d357` with 31 of 31 permanent workflows, followed by expected-head squash merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`.
 
 ## 8. Sequence after discovery acceptance
 

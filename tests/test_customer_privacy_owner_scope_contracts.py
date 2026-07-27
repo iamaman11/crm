@@ -159,7 +159,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("bytes cursor_digest_sha256", contributions)
         self.assertIn("CUSTOMER_DATA_CLASS_RESTRICTED = 9;", types)
 
-    def test_status_sources_track_nine_accepted_owners_and_discovery_gate(self) -> None:
+    def test_status_sources_track_nine_accepted_owners_and_discovery_acceptance(self) -> None:
         project_status = (ROOT / "docs/PROJECT_STATUS.md").read_text(encoding="utf-8")
         module_catalog = (ROOT / "docs/MODULE_CATALOG.md").read_text(encoding="utf-8")
         roadmap = (ROOT / "docs/IMPLEMENTATION_ROADMAP.md").read_text(
@@ -206,9 +206,9 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("28 of 28 permanent workflows succeeded", enrichment_packet)
         self.assertIn("Production discovery remains forbidden", enrichment_packet)
         self.assertIn("Planning and action execution remain prohibited", enrichment_packet)
-        self.assertIn(
-            "Implemented in PR #206; exact-head gate review pending", phase_plan
-        )
+        self.assertIn("Accepted through PR #206", phase_plan)
+        self.assertIn("086b17a95058eee285fcb67a903bd21d9263d357", phase_plan)
+        self.assertIn("95818fd3aeb54a9593a45642583f0b7224d5ecfe", phase_plan)
         self.assertIn("PR #206", module_catalog)
         self.assertIn("planning and action execution remain not started", module_catalog)
 
