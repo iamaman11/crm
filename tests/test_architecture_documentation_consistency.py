@@ -15,10 +15,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.readme = read("README.md")
+        cls.agents = read("AGENTS.md")
+        cls.docs_index = read("docs/README.md")
         cls.status = read("docs/PROJECT_STATUS.md")
         cls.roadmap = read("docs/IMPLEMENTATION_ROADMAP.md")
         cls.phase8 = read("docs/PHASE8_DELIVERY_PLAN.md")
         cls.plan = read("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
+        cls.workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
+        cls.module_development = read("docs/MODULE_DEVELOPMENT.md")
         cls.repo_runner = read("scripts/repo.py")
 
     def test_current_phase_and_next_packet_are_consistent(self) -> None:
@@ -44,9 +48,22 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         self.assertIn("Tracking issue: #194", self.plan)
 
+    def test_navigation_has_one_stable_human_index(self) -> None:
+        self.assertIn("docs/README.md", self.readme)
+        self.assertIn("docs/README.md", self.agents)
+        self.assertIn("Stable navigation index", self.docs_index)
+        self.assertIn("Source-of-truth hierarchy", self.docs_index)
+        self.assertIn("Choose by task", self.docs_index)
+        self.assertIn("Generated navigation target", self.docs_index)
+        self.assertIn("not a source of runtime or delivery truth", self.docs_index)
+
+        self.assertIn("README is stable orientation", self.readme)
+        self.assertIn("orientation only", self.plan)
+        self.assertIn("navigation outputs, not sources of truth", self.workflow)
+
     def test_plan_contains_all_expert_gap_closures(self) -> None:
         required = (
-            "normal capability added to an existing owner creates **zero new crates**",
+            "normal capability added to an existing owner creates zero new crates",
             "three to five technical packages",
             "module-owned production contribution",
             "root `[workspace.dependencies]`",
@@ -59,13 +76,48 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Transitional crate consolidation",
             "Frontend and operations",
             "restore, SLO, performance, security and supply-chain",
-            "feature behavior and crate consolidation must be separate PRs",
+            "Feature behavior and crate consolidation must be separate PRs",
             "109 members",
+            "Reproducible local development",
+            "Rust public API surface",
+            "Contract lifecycle",
+            "Persistence and migration ownership",
+            "Temporary exceptions",
+            "change locality",
+            "python scripts/repo.py doctor",
+            "python scripts/repo.py bootstrap",
+            "python scripts/repo.py dev-up",
+            "python scripts/repo.py smoke",
         )
         plan_lower = self.plan.lower()
         for statement in required:
             with self.subTest(statement=statement):
                 self.assertIn(statement.lower(), plan_lower)
+
+    def test_module_and_workflow_guides_match_target_cost_model(self) -> None:
+        for document in (self.agents, self.workflow, self.module_development):
+            self.assertIn("zero new crates", document.lower())
+            self.assertIn("module-owned production contribution", document.lower())
+
+        self.assertIn("Current scaffold versus 10/10 target", self.module_development)
+        self.assertIn("crates/crm-<domain>-application/", self.module_development)
+        self.assertIn("crates/crm-<domain>-postgres/", self.module_development)
+        self.assertIn("crates/crm-<domain>-production/", self.module_development)
+
+        self.assertIn(
+            "python scripts/repo.py test --package crm-sales",
+            self.module_development,
+        )
+        self.assertNotIn(
+            "python scripts/repo.py test crm-sales",
+            self.module_development,
+        )
+
+    def test_planned_navigation_and_local_commands_are_not_claimed_as_implemented(self) -> None:
+        self.assertIn("Planned and required for the 10/10 target", self.docs_index)
+        self.assertIn("must not be represented as implemented", self.docs_index)
+        self.assertIn("are planned under issue #194", self.agents)
+        self.assertIn("are not available until implemented", self.module_development)
 
     def test_phase8_prevents_new_privacy_crate_proliferation(self) -> None:
         self.assertIn(
@@ -91,6 +143,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for statement in stale:
             for document in (
                 self.readme,
+                self.agents,
+                self.docs_index,
                 self.status,
                 self.roadmap,
                 self.phase8,
