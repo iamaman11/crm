@@ -19,14 +19,14 @@ crm-metadata-runtime = { path = "../crm-metadata-runtime" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-search-runtime = { path = "../crm-search-runtime" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "json"] }
 
 [dev-dependencies]
 crm-metadata-schema = { path = "../crm-metadata-schema" }
-prost = "0.14"
+prost = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 [[test]]
