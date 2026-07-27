@@ -12,7 +12,7 @@ use crm_application_composition::{
 };
 use crm_capability_runtime::CapabilitySemanticValidator;
 use crm_core_data::PostgresDataStore;
-use crm_customer_privacy_application::{
+pub use crm_customer_privacy_application::{
     mutation_capability_definitions, query_capability_definitions,
 };
 use crm_customer_privacy_postgres::{
@@ -21,7 +21,9 @@ use crm_customer_privacy_postgres::{
 };
 use crm_customer_privacy_query_adapter::CustomerPrivacyQueryAdapter;
 use crm_module_sdk::{ErrorCategory, SdkError};
-use crm_query_runtime::{CursorCodec, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer};
+use crm_query_runtime::{
+    CursorCodec, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer,
+};
 use std::sync::Arc;
 
 #[derive(Clone)]
