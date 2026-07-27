@@ -293,6 +293,7 @@ fn planning_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_module_sdk::SchemaVersion;
 
     fn invocation(planned_at: i64, trusted_internal: bool) -> PlanningInvocation {
         PlanningInvocation {
