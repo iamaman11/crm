@@ -20,6 +20,9 @@ use crm_customer_privacy_postgres::{
     postgres_case_subject_verify_executor, postgres_case_submit_executor,
 };
 use crm_customer_privacy_query_adapter::CustomerPrivacyQueryAdapter;
+pub use crm_customer_privacy_query_adapter::{
+    GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY, query_visibility_resources,
+};
 use crm_module_sdk::{ErrorCategory, SdkError};
 use crm_query_runtime::{
     CursorCodec, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer,
