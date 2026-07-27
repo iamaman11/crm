@@ -46,7 +46,7 @@ Only merged `main` work may be represented as **Complete**.
 |---|---:|---|---|---|
 | 0.1 | #3 | Repository hardening and executable roadmap | **Complete** | Governance v1 |
 | 1 | #4 | Typed Module Manifest IR and deterministic identity | **Complete** | #3 |
-| 2 | #5 | Governed Module SDK and test harness | **Complete** | #4, #5 |
+| 2 | #5 | Governed Module SDK and test harness | **Complete** | #4 |
 | 3 | #6 | Module lifecycle and registry runtime | **Complete** | #4, #5 |
 | 4 | #7 | PostgreSQL tenant, record, artifact, outbox and audit foundation | **Complete** | #6 |
 | 5 | #8 | Capability execution gateway | **Complete** | #5, #7 |
@@ -169,14 +169,15 @@ The accepted packet proves strict typed request/Party links, strict owner rehydr
 
 ### 6.6 Next bounded packet — Scope discovery and immutable snapshot
 
-Implement only after freezing:
+Implementation has not started. Freeze the bounded packet before adding runtime discovery, planning or owner execution. It must define and prove:
 
 - deterministic all-nine-owner invocation and complete terminal evidence;
 - unavailable, disabled, stale and incompatible owner fail-closed semantics;
-- immutable snapshot identity, lineage, retention and digest contracts;
+- immutable snapshot identity bound to tenant, privacy case, canonical Party, topology generation, exact registry version/digest, purpose and effective request time;
 - deterministic owner/resource/data-class ordering and bounded aggregation;
+- snapshot, page and cursor digest contracts;
 - permission-aware snapshot reads without resource-payload disclosure;
-- replay, retry, registry/topology drift and crash-window behavior;
+- idempotency, replay, retry, registry/topology drift and crash-window behavior;
 - no owner mutation or destructive action during discovery;
 - clean PostgreSQL, rollback/reapply and real-process acceptance.
 
