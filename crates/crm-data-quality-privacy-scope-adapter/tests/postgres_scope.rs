@@ -7,23 +7,23 @@ use crm_capability_runtime::{
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
 use crm_customer_privacy::{CANONICAL_SCOPE_REGISTRY_VERSION, OwnerScopeRegistry};
 use crm_data_quality::{
-    ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent,
-    PartyCompletenessProfileVersion, PartyCompletenessResult,
-    PartyDisplayNameRemediationAttempt, PartyDisplayNameRemediationIdentity,
-    PartyEvaluationInputSnapshot, PartyEvaluationJob, PartyFinding, PartyFindingObservation,
-    PartyQualityEvaluator, PartyQualityInput, PartyQualityRule, PartyRuleOutcome,
-    PartyRuleSetVersion, QualitySeverity, RuleKey, encode_finding_observation_state,
-    encode_finding_state, encode_party_completeness_profile_version_state,
-    encode_party_completeness_result_state, encode_party_evaluation_input_state,
-    encode_party_evaluation_job_state, encode_party_rule_set_version_state,
-    encode_remediation_attempt_state, encode_rule_outcome_state,
+    ComponentKey, EvaluatedPartyKind, PartyCompletenessComponent, PartyCompletenessProfileVersion,
+    PartyCompletenessResult, PartyDisplayNameRemediationAttempt,
+    PartyDisplayNameRemediationIdentity, PartyEvaluationInputSnapshot, PartyEvaluationJob,
+    PartyFinding, PartyFindingObservation, PartyQualityEvaluator, PartyQualityInput,
+    PartyQualityRule, PartyRuleOutcome, PartyRuleSetVersion, QualitySeverity, RuleKey,
+    encode_finding_observation_state, encode_finding_state,
+    encode_party_completeness_profile_version_state, encode_party_completeness_result_state,
+    encode_party_evaluation_input_state, encode_party_evaluation_job_state,
+    encode_party_rule_set_version_state, encode_remediation_attempt_state,
+    encode_rule_outcome_state,
 };
 use crm_data_quality_capability_adapter::{
-    party_completeness_profile_persisted_contract,
-    party_completeness_result_persisted_contract, party_evaluation_input_persisted_contract,
-    party_evaluation_job_persisted_contract, party_finding_observation_persisted_contract,
-    party_finding_persisted_contract, party_rule_outcome_persisted_contract,
-    party_rule_set_persisted_contract, remediation_attempt_persisted_contract,
+    party_completeness_profile_persisted_contract, party_completeness_result_persisted_contract,
+    party_evaluation_input_persisted_contract, party_evaluation_job_persisted_contract,
+    party_finding_observation_persisted_contract, party_finding_persisted_contract,
+    party_rule_outcome_persisted_contract, party_rule_set_persisted_contract,
+    remediation_attempt_persisted_contract,
 };
 use crm_data_quality_privacy_scope_adapter::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION,
@@ -262,13 +262,17 @@ async fn data_quality_scope_is_alias_aware_strict_complete_minimized_and_side_ef
 
     for forbidden_id in graph_values(&unrelated) {
         assert!(
-            encoded_pages.iter().all(|bytes| !contains(bytes, forbidden_id)),
+            encoded_pages
+                .iter()
+                .all(|bytes| !contains(bytes, forbidden_id)),
             "unrelated resource leaked: {forbidden_id}"
         );
     }
     for forbidden_id in graph_values(&tenant_b) {
         assert!(
-            encoded_pages.iter().all(|bytes| !contains(bytes, forbidden_id)),
+            encoded_pages
+                .iter()
+                .all(|bytes| !contains(bytes, forbidden_id)),
             "cross-tenant resource leaked: {forbidden_id}"
         );
     }
@@ -353,11 +357,20 @@ async fn data_quality_scope_is_alias_aware_strict_complete_minimized_and_side_ef
         )
         .await
         .expect_err("malformed unrelated owner persistence must fail closed");
-    assert_eq!(malformed.code, "DATA_QUALITY_PRIVACY_SCOPE_STORED_STATE_INVALID");
+    assert_eq!(
+        malformed.code,
+        "DATA_QUALITY_PRIVACY_SCOPE_STORED_STATE_INVALID"
+    );
     assert_eq!(write_surface_counts(&admin).await, malformed_baseline);
     set_record_data_class(&admin, TENANT_A, &unrelated.remediation, "personal").await;
 
-    delete_record(&admin, TENANT_A, "data_quality.finding_observation", &alias.observation).await;
+    delete_record(
+        &admin,
+        TENANT_A,
+        "data_quality.finding_observation",
+        &alias.observation,
+    )
+    .await;
     let association_baseline = write_surface_counts(&admin).await;
     let orphaned = adapter
         .execute(
@@ -480,9 +493,7 @@ async fn insert_complete_graph(
     assert!(!outcomes[0].passed());
     let completeness =
         PartyCompletenessResult::compute(&staged, profile, &outcomes, seed + 2).unwrap();
-    let materialized = staged
-        .record_materialized_outcomes(1, 1, seed + 2)
-        .unwrap();
+    let materialized = staged.record_materialized_outcomes(1, 1, seed + 2).unwrap();
     let completed = materialized.complete(1, 1, seed + 3).unwrap();
     let rule = rule_set.rule(outcomes[0].rule_key()).unwrap();
     let observation = PartyFindingObservation::observe_failure(
@@ -925,15 +936,13 @@ async fn prove_records_primary_key_scan(admin: &PgPool, tenant: &str) {
 }
 
 async fn set_record_data_class(admin: &PgPool, tenant: &str, record_id: &str, value: &str) {
-    sqlx::query(
-        "UPDATE crm.records SET data_class = $3 WHERE tenant_id = $1 AND record_id = $2",
-    )
-    .bind(tenant)
-    .bind(record_id)
-    .bind(value)
-    .execute(admin)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE crm.records SET data_class = $3 WHERE tenant_id = $1 AND record_id = $2")
+        .bind(tenant)
+        .bind(record_id)
+        .bind(value)
+        .execute(admin)
+        .await
+        .unwrap();
 }
 
 async fn delete_record(admin: &PgPool, tenant: &str, record_type: &str, record_id: &str) {
@@ -963,7 +972,11 @@ fn expected_two_graphs(left: &GraphIds, right: &GraphIds) -> BTreeMap<String, Ve
     let mut map = BTreeMap::new();
     for (record_type, left_id, right_id) in [
         ("data_quality.party_evaluation_job", &left.job, &right.job),
-        ("data_quality.party_evaluation_input", &left.input, &right.input),
+        (
+            "data_quality.party_evaluation_input",
+            &left.input,
+            &right.input,
+        ),
         ("data_quality.rule_outcome", &left.outcome, &right.outcome),
         ("data_quality.finding", &left.finding, &right.finding),
         (
