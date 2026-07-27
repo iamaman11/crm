@@ -48,8 +48,8 @@ use crm_identity_resolution_capability_adapter::{
 };
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
-    DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId,
-    TypedPayload,
+    DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as CREATE_PARTY_CAPABILITY, PartyCapabilityPlanner,
