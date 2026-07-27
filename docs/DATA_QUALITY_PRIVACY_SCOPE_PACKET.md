@@ -1,16 +1,18 @@
 # Data Quality Privacy Scope Owner Packet
 
-Status: **Bounded entry contract frozen; implementation not started**  
+Status: **Accepted historical contract**  
 Parent program: #126  
 Coordinate: `data_quality.privacy.scope.contribute@1.0.0`  
-Baseline: `3a7648824670b6f2d7c7d99b857245e9cc332733`  
-Runtime state: **Contract-only/non-runtime; no route, worker or application registration is permitted in this packet**
+Accepted source: `dcfe8faebc7462b888f8fc1721cb379a40fea88a`  
+Merge: `deac197c97cddc15bb9916092ca87f6e767ce1de`  
+Exact-head gate: **27 of 27 permanent workflows succeeded**  
+Runtime state: **Contract-only/non-runtime; no route, worker or application registration was added**
 
 ## 1. Objective
 
 Implement `crm.data-quality` as the eighth authoritative Customer Privacy owner contribution without turning shared quality definitions into Party-owned resources, without constructing a second quality lineage model and without promoting the published owner coordinate into runtime reachability.
 
-This entry packet freezes the persisted record families, Party relevance, association validation, strict rehydration, scan and rehydration bounds, pagination order, response minimization, PostgreSQL access path and acceptance boundary before adapter code is written.
+The accepted implementation preserves the frozen persisted record families, Party relevance, association validation, strict rehydration, scan and rehydration bounds, pagination order, response minimization, PostgreSQL access path and acceptance boundary.
 
 ## 2. Existing authoritative owner baseline
 
@@ -351,7 +353,7 @@ The implementation PR must prove on clean PostgreSQL:
 
 ## 14. Permanent workflow requirement
 
-Add a permanent `Data Quality Privacy Scope CI` only with implementation code. It must prove:
+The permanent `Data Quality Privacy Scope CI` was added with implementation code and proves:
 
 1. architecture boundary;
 2. formatting;
@@ -366,7 +368,7 @@ Add a permanent `Data Quality Privacy Scope CI` only with implementation code. I
 11. repeated PostgreSQL acceptance;
 12. workspace dependency graph.
 
-The workflow must remain permanent after merge.
+The workflow remains permanent after merge.
 
 ## 15. Explicit implementation exclusions
 
@@ -387,6 +389,6 @@ The implementation packet must add no:
 
 ## 16. Entry conclusion
 
-The persisted record-family and subject-relevance semantics are sufficiently unambiguous to begin a contract-only adapter after this packet's governance checks pass.
+The persisted record-family and subject-relevance semantics were implemented without weakening the frozen contract. PR #190 accepted the dedicated Data Quality privacy adapter and permanent workflow on source `dcfe8faebc7462b888f8fc1721cb379a40fea88a`, with 27 of 27 permanent workflows successful before squash merge `deac197c97cddc15bb9916092ca87f6e767ce1de`.
 
-Implementation remains not started in this commit. The next source change may add the dedicated Data Quality privacy adapter and its permanent workflow only while preserving every frozen boundary above. Customer Enrichment remains the final owner after Data Quality. Production discovery remains forbidden until all nine owner contributions are accepted.
+This packet is now an accepted historical contract. Customer Enrichment is the ninth and final owner. Production discovery remains forbidden until that final owner contribution is accepted.

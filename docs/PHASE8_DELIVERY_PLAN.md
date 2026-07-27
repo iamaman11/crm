@@ -80,38 +80,39 @@ Accepted owner implementations:
 4. Contact Points — PR #181;
 5. Party Relationships — PR #183;
 6. Identity Resolution — PR #186 / source `24456b86379a1ef23ed5a60804cdcae5075d407c` / merge `509eb304a76055c9f49b0beed3b007963a91cb22` / 25 of 25 permanent workflows;
-7. Customer Data Operations — PR #188 / source `07f34786e82fdfa78d263790e9f50541529006f8` / merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc` / 26 of 26 permanent workflows.
+7. Customer Data Operations — PR #188 / source `07f34786e82fdfa78d263790e9f50541529006f8` / merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc` / 26 of 26 permanent workflows;
+8. Data Quality — PR #190 / source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows.
 
 Customer Data Operations remains non-runtime. Its accepted gate proves bounded four-family owner discovery, strict persisted-contract rehydration, alias-aware canonical Party relevance, exact selection-to-stage/outcome association, deterministic pagination, reference-only output, no writes, clean PostgreSQL, complete rollback/schema removal, reapply and repeated acceptance. The shared Identity Resolution read-only snapshot topology path also passed its permanent workflow on the same exact head.
 
+Data Quality remains non-runtime. Its accepted gate proves strict nine-type rehydration, exclusion of shared definitions, seven-family Party evidence, exact association integrity, alias-aware relevance, deterministic pagination, minimized output, no writes, primary-key access-path proof and repeated clean PostgreSQL acceptance.
+
 ## 4. Current owner sequence
 
-### Next bounded owner packet: Data Quality
+### Next bounded owner packet: Customer Enrichment
 
-Coordinate: `data_quality.privacy.scope.contribute@1.0.0`  
+Coordinate: `customer_enrichment.privacy.scope.contribute@1.0.0`  
 State: **Inspection and bounded-entry freeze next; adapter implementation is not yet accepted**
 
 The packet must inspect and freeze:
 
-- authoritative Data Quality record families;
-- Party-level relevance through direct Party references and indirect provenance references;
-- rule, evaluation run, finding, observation, completeness, stewardship, remediation and evidence relationships;
-- shared or multi-subject containers that must not be emitted for one subject;
-- strict owner decoders and malformed-state fail-closed semantics;
+- authoritative Enrichment record families and strict persisted contracts;
+- Party relevance across requests, responses/conflicts, suggestions, reviews, application attempts and provider usage;
+- shared provider-profile/mapping definitions and other containers excluded from one subject;
+- direct Party references and bounded parent/provenance associations;
+- provider payload, suggestion values, review reasons, application details, usage details and provider/secret identifiers excluded from response bytes;
 - alias-aware relevance under the accepted topology generation;
 - deterministic family order, same-tenant keyset pagination and terminal `page_size + 1` proof;
-- raw scanned-row accounting and owner-wide scan/rehydration/relationship/canonical-resolution bounds;
-- retention and minimized reference-only evidence boundaries;
-- PostgreSQL indexes needed for bounded proof, including rollback and reapply behavior;
-- contract-only implementation with no route, worker, application composition or runtime promotion.
+- raw scanned-row accounting and owner-wide scan/rehydration/association/canonical-resolution bounds;
+- PostgreSQL access-path/index requirements, no-write proof, rollback and reapply;
+- contract-only implementation with no route, application composition, new worker or runtime promotion.
 
 Implementation must not start until ambiguous record-family or subject-relevance semantics are resolved in the entry packet.
 
 ### Following owner packets
 
-1. Data Quality privacy-scope implementation after entry freeze;
-2. Customer Enrichment privacy-scope contribution;
-3. complete nine-owner set.
+1. Customer Enrichment privacy-scope implementation after entry freeze;
+2. complete nine-owner set.
 
 Only one owner packet is active at a time.
 
@@ -125,6 +126,12 @@ Only one owner packet is active at a time.
 - `customer_data.export_execution_outcome`.
 
 Import/export jobs, selection boundaries/progress, complete artifacts and other multi-subject containers remain excluded from automatic Party scope.
+
+### Accepted historical packet: Data Quality
+
+`DATA_QUALITY_PRIVACY_SCOPE_PACKET.md` is an accepted historical contract for PR #190. It contributes only seven direct Party-bearing families while shared rule-set/profile definitions remain strict owner validation dependencies and are excluded from subject evidence.
+
+The implementation remains contract-only/non-runtime and introduces no query-side writes, public route, application composition or Customer Privacy worker.
 
 ## 5. Discovery and lifecycle sequence after all owners
 
