@@ -58,11 +58,29 @@ Merged runtime inventory:
 - ten public non-runtime Customer Privacy coordinates;
 - zero Customer Privacy workers.
 
-All nine owner-scope implementations are accepted: Parties, Consents, Customer Accounts, Contact Points, Party Relationships, Identity Resolution, Customer Data Operations, Data Quality and Customer Enrichment. Their coordinates remain contract-only/non-runtime and add no production discovery, planning or owner action execution.
+All nine authoritative owner implementations are accepted:
+
+1. Parties — PR #156;
+2. Consents — PR #175;
+3. Customer Accounts — PR #179;
+4. Contact Points — PR #181;
+5. Party Relationships — PR #183;
+6. Identity Resolution — PR #186 / accepted source `24456b86379a1ef23ed5a60804cdcae5075d407c` / merge `509eb304a76055c9f49b0beed3b007963a91cb22` / 25 of 25 permanent workflows;
+7. Customer Data Operations — PR #188 / accepted source `07f34786e82fdfa78d263790e9f50541529006f8` / merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc` / 26 of 26 permanent workflows;
+8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows;
+9. Customer Enrichment — PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
+
+Post-merge owner documentation synchronization was accepted through PR #193 / merge `e09d3152c886386c2168f0b49e46d47cc44ed041`.
+
+All nine coordinates remain contract-only/non-runtime. They add no public ingress, Customer Privacy worker, production discovery, planning or owner action execution.
+
+## 5. Nine-owner set complete
+
+The owner implementation lane is complete. No accepted owner may be described as unstarted, and no additional owner contribution is the next packet.
 
 Current exact owner evidence remains recorded in `PROJECT_STATUS.md`, `IMPLEMENTATION_ROADMAP.md`, `MODULE_CATALOG.md` and issue #126.
 
-## 5. Accepted architecture prerequisites
+## 6. Accepted architecture prerequisites
 
 Issue #194 runs alongside Phase 8A.
 
@@ -76,7 +94,7 @@ Root workspace dependency families are `prost`, `serde`, `serde_json` and `sha2`
 
 Stage B remains in progress until new direct declarations are blocked outside an explicit owned exception. Existing consumers migrate only through bounded role-based cohorts.
 
-## 6. Ordered continuation
+## 7. Ordered continuation
 
 ### Packet A — Stage B no-growth closure
 
@@ -95,7 +113,7 @@ This closes the dependency prerequisite for Stage C.
 
 ### Packet B — Scope discovery and immutable snapshot freeze
 
-State: **Ready after documentation synchronization; no runtime behavior**.
+State: **Ready after documentation synchronization; production discovery is not implemented**.
 
 Inspect the existing Customer Privacy aggregate, schema, migrations, Protobuf contracts, persistence/transaction semantics, topology and canonical Party binding, registry/version/digest authority, authorization/RLS/audit boundaries, all nine owner contracts and current crate boundaries.
 
@@ -153,7 +171,7 @@ Forbidden:
 
 Acceptance requires focused tests, applicable generic conformance, FORCE RLS and cross-tenant negatives, complete schema removal/reapply, retry/replay/drift proof, permission-aware query/audit proof and real HTTP/gRPC process evidence on one unchanged exact head.
 
-## 7. Sequence after discovery acceptance
+## 8. Sequence after discovery acceptance
 
 1. deterministic planning and permission-aware plan/outcome reads;
 2. approval and immediate deny-only restrictions using final subject locks;
@@ -166,7 +184,7 @@ Acceptance requires focused tests, applicable generic conformance, FORCE RLS and
 9. disable/uninstall fail-closed worker behavior;
 10. complete worker-process and end-to-end lifecycle acceptance.
 
-## 8. Frozen Customer Privacy ownership
+## 9. Frozen Customer Privacy ownership
 
 `crm.customer-privacy` owns privacy cases, verified subject binding, immutable scope snapshots, restrictions, customer-data legal holds, retention decisions, deterministic plans, per-owner attempts/outcomes, checkpoints, governed export references and convergence evidence.
 
@@ -178,7 +196,7 @@ legal hold > mandatory retention > approved privacy action > ordinary retention
 
 Restriction is deny-only and never grants processing. Owner actions remain exact, owner-owned, replay-safe and resumable.
 
-## 9. Phase 8A closure
+## 10. Phase 8A closure
 
 Phase 8A remains **In progress**.
 
@@ -191,13 +209,13 @@ Closure also requires:
 - dependency and affected-scope reports for the final packet;
 - synchronized documentation and issue #126 evidence.
 
-## 10. Phase 8B
+## 11. Phase 8B
 
 Product Catalog, Pricing, CPQ, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment boundaries remain **Planned and blocked on completed Phase 8A**. They remain independent owner domains and must not be absorbed into Sales.
 
 Phase 8B must prove that normal capabilities add zero crates, owner contributions do not grow generic runtime, affected iteration stays bounded and frontend/backend ship as complete vertical workflows.
 
-## 11. Completion rule
+## 12. Completion rule
 
 Current product-complete expert modules: **0**.
 
