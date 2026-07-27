@@ -1,0 +1,55 @@
+name: Customer Privacy Conformance Log
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/customer-privacy-conformance-log.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install Buf
+        uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0
+        with:
+          version: 1.50.1
+          setup_only: true
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+        with:
+          components: rustfmt
+      - name: Install validation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - name: Capture exact permanent conformance
+        shell: bash
+        run: |
+          set +e
+          python scripts/repo.py conformance > conformance.log 2>&1
+          status="$?"
+          printf '%s\n' "${status}" > conformance.exit
+          cat conformance.log
+          exit 0
+      - name: Upload conformance diagnostics
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: customer-privacy-conformance-log
+          path: |
+            conformance.log
+            conformance.exit
+          if-no-files-found: error
+          retention-days: 7
