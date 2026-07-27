@@ -1,0 +1,65 @@
+name: Customer Privacy Discovery Test Import Fix
+
+on:
+  push:
+    branches:
+      - feature/customer-privacy-production-discovery-snapshot
+    paths:
+      - ".github/workflows/customer-privacy-discovery-test-import-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: feature/customer-privacy-production-discovery-snapshot
+          fetch-depth: 0
+      - name: Add test-only imports
+        shell: python
+        run: |
+          from pathlib import Path
+
+          app = Path("crates/crm-customer-privacy-application/src/discovery.rs")
+          text = app.read_text()
+          old = '''#[cfg(test)]
+mod tests {
+    use super::*;
+'''
+          new = '''#[cfg(test)]
+mod tests {
+    use super::*;
+    use crm_customer_privacy::{SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE};
+'''
+          if text.count(old) != 1:
+              raise SystemExit("application test module marker mismatch")
+          app.write_text(text.replace(old, new))
+
+          production = Path("crates/crm-customer-privacy-production/src/lib.rs")
+          text = production.read_text()
+          old = '''#[cfg(test)]
+mod tests {
+    use super::*;
+'''
+          new = '''#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+'''
+          if text.count(old) != 1:
+              raise SystemExit("production test module marker mismatch")
+          production.write_text(text.replace(old, new))
+
+          Path(".github/workflows/customer-privacy-discovery-test-import-fix.yml").unlink()
+      - name: Commit test import fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Fix Customer Privacy discovery test imports"
+          git push origin HEAD:feature/customer-privacy-production-discovery-snapshot
