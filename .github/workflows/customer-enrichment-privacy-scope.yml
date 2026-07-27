@@ -1,0 +1,215 @@
+name: Customer Enrichment Privacy Scope CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "architecture-policy.json"
+      - "scripts/check_architecture.py"
+      - "proto/crm/customer/**"
+      - "proto/crm/customer_enrichment/**"
+      - "proto/crm/customer_privacy/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-proto-contracts/**"
+      - "crates/crm-customer-privacy-owner-scope-support/**"
+      - "crates/crm-customer-enrichment-capability-adapter/**"
+      - "crates/crm-customer-enrichment-provider-process-composition/**"
+      - "crates/crm-customer-enrichment-review-adapter/**"
+      - "crates/crm-customer-enrichment-application-adapter/**"
+      - "crates/crm-customer-enrichment-privacy-scope-adapter/**"
+      - "crates/crm-identity-resolution-capability-adapter/**"
+      - "crates/crm-identity-resolution-topology-composition/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "modules/crm-customer-enrichment/**"
+      - "modules/crm-identity-resolution/**"
+      - "modules/crm-parties/**"
+      - "modules/crm-customer-privacy/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0005_party_adapter.sql"
+      - "database/tests/0010_identity_resolution_adapter.sql"
+      - "database/tests/0016_customer_enrichment_worker.sql"
+      - "database/tests/0017_customer_enrichment_review.sql"
+      - "database/tests/0018_customer_enrichment_force_rls.sql"
+      - "database/tests/0019_customer_enrichment_consent_policy.sql"
+      - ".github/workflows/customer-enrichment-privacy-scope.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "architecture-policy.json"
+      - "scripts/check_architecture.py"
+      - "proto/crm/customer/**"
+      - "proto/crm/customer_enrichment/**"
+      - "proto/crm/customer_privacy/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-proto-contracts/**"
+      - "crates/crm-customer-privacy-owner-scope-support/**"
+      - "crates/crm-customer-enrichment-capability-adapter/**"
+      - "crates/crm-customer-enrichment-provider-process-composition/**"
+      - "crates/crm-customer-enrichment-review-adapter/**"
+      - "crates/crm-customer-enrichment-application-adapter/**"
+      - "crates/crm-customer-enrichment-privacy-scope-adapter/**"
+      - "crates/crm-identity-resolution-capability-adapter/**"
+      - "crates/crm-identity-resolution-topology-composition/**"
+      - "crates/crm-parties-capability-adapter/**"
+      - "modules/crm-customer-enrichment/**"
+      - "modules/crm-identity-resolution/**"
+      - "modules/crm-parties/**"
+      - "modules/crm-customer-privacy/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0005_party_adapter.sql"
+      - "database/tests/0010_identity_resolution_adapter.sql"
+      - "database/tests/0016_customer_enrichment_worker.sql"
+      - "database/tests/0017_customer_enrichment_review.sql"
+      - "database/tests/0018_customer_enrichment_force_rls.sql"
+      - "database/tests/0019_customer_enrichment_consent_policy.sql"
+      - ".github/workflows/customer-enrichment-privacy-scope.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_enrichment_privacy_scope_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5445:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_enrichment_privacy_scope_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5445
+      PGDATABASE: crm_customer_enrichment_privacy_scope_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5445/crm_customer_enrichment_privacy_scope_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5445/crm_customer_enrichment_privacy_scope_test
+    steps:
+      - name: Check out exact candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+      - name: Prepare Rust and PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --component clippy --component rustfmt
+          rustup default stable
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Enforce architecture boundary
+        run: python scripts/check_architecture.py
+      - name: Check Customer Enrichment privacy source formatting
+        run: cargo fmt --all -- --check
+      - name: Run focused Customer Enrichment privacy Clippy
+        run: >-
+          cargo clippy
+          -p crm-customer-enrichment-privacy-scope-adapter
+          --all-targets
+          --all-features
+          -- -D warnings
+      - name: Run focused Customer Enrichment privacy unit tests
+        run: >-
+          cargo test
+          -p crm-customer-enrichment-privacy-scope-adapter
+          --all-features
+          --lib
+      - name: Apply clean migrations and owner fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0010_identity_resolution_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0016_customer_enrichment_worker.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0017_customer_enrichment_review.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0018_customer_enrichment_force_rls.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0019_customer_enrichment_consent_policy.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify clean Customer Enrichment privacy scope adapter
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-enrichment-privacy-scope-adapter --all-features -- --nocapture \
+            2>&1 | tee database/customer-enrichment-privacy-scope-clean.log
+      - name: Roll back authoritative schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply migrations and owner fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0010_identity_resolution_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0016_customer_enrichment_worker.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0017_customer_enrichment_review.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0018_customer_enrichment_force_rls.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0019_customer_enrichment_consent_policy.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify reapplied Customer Enrichment privacy scope adapter
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-customer-enrichment-privacy-scope-adapter --all-features -- --nocapture \
+            2>&1 | tee database/customer-enrichment-privacy-scope-reapplied.log
+      - name: Verify workspace dependency graph
+        run: cargo check --workspace --all-features
+      - name: Capture PostgreSQL diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/customer-enrichment-privacy-scope-postgres.log 2>&1
+          fi
+          find crates/crm-customer-enrichment-privacy-scope-adapter -maxdepth 4 -type f -print
+          find database -maxdepth 1 -name 'customer-enrichment-privacy-scope-*.log' -print
+      - name: Upload Customer Enrichment privacy scope diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: customer-enrichment-privacy-scope-diagnostics
+          path: database/customer-enrichment-privacy-scope-*.log
+          if-no-files-found: warn
+          retention-days: 7
