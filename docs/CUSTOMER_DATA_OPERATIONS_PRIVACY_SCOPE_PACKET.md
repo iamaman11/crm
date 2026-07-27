@@ -1,31 +1,21 @@
 # Customer Data Operations Privacy Scope Owner Packet
 
-Status: **Ready after Identity Resolution PR #186 and post-merge synchronization**  
+Status: **Accepted historical contract**  
 Parent program: #126  
-Prerequisites: accepted Parties, Consents, Customer Accounts, Contact Points, Party Relationships and Identity Resolution owner contributions  
+Implementation PR: #188  
+Accepted source: `07f34786e82fdfa78d263790e9f50541529006f8`  
+Merge: `089be72fa3010b4aa15aff7f9ea55fd86290f8fc`  
+Exact-head gate: **26 of 26 permanent workflows succeeded**  
 Coordinate: `customer_data.privacy.scope.contribute@1.0.0`  
-Implementation state: **Not started; this packet freezes the entry boundary only.**
+Runtime state: **Contract-only/non-runtime; no route, worker or application registration**
 
-## 1. Objective
+## 1. Accepted objective
 
-Implement `crm.customer-data-operations` as the seventh authoritative privacy-scope owner contribution without promoting the coordinate to runtime and without treating multi-subject import/export containers as subject-owned records.
+PR #188 implemented `crm.customer-data-operations` as the seventh authoritative privacy-scope owner contribution without treating multi-subject import/export containers as subject-owned records.
 
-The packet proves subject discovery across import-row evidence and export-selection/execution evidence while preserving strict owner persistence, bounded canonical resolution, deterministic heterogeneous pagination and reference-only output.
+The accepted packet proves subject discovery across import-row evidence and export-selection/execution evidence while preserving strict owner persistence, bounded canonical resolution, deterministic heterogeneous pagination, reference-only output and zero writes.
 
-## 2. Why Customer Data Operations is next
-
-Customer Data Operations is selected because:
-
-- the exact coordinate is already published as contract-only/non-runtime;
-- the module owns eight authoritative record types, but only a subset carries subject-level Party relevance;
-- import rows can retain prepared or successfully targeted Party identifiers plus source-derived diagnostics;
-- export selection items retain exact Party identifiers and resource versions;
-- export execution stages and outcomes retain subject-derived row/chunk evidence by the same job and manifest position;
-- import/export jobs, boundaries, progress records and artifacts can be shared by many subjects and must not be reclassified as wholly owned by one subject;
-- no current owner-maintained canonical-subject relationship index covers historical Party aliases, so the non-runtime proof requires bounded same-tenant scans and accepted canonical Party resolution;
-- response bytes must expose only resource references, never imported values, exported rows, artifact digests, diagnostics or other subjects.
-
-## 3. Frozen authoritative owner boundary
+## 2. Accepted authoritative owner boundary
 
 `crm.customer-data-operations` owns these persisted record types:
 
@@ -45,59 +35,58 @@ The privacy contribution emits only the four subject-level resource families:
 3. `customer_data.export_execution_stage`;
 4. `customer_data.export_execution_outcome`.
 
-The following are deliberately not emitted merely because one child record is relevant:
+The following remain excluded merely because one child record is relevant:
 
 - import jobs and source artifacts;
 - export jobs, selection boundaries and selection progress;
 - complete export artifacts or shared artifact chunks;
-- any other multi-subject container.
+- every other multi-subject container.
 
-Those records remain owner-controlled shared evidence. A later destructive-action packet must define container-level minimization, rewriting or retention semantics separately and must never delete another subject's data as a side effect.
+Those records remain owner-controlled shared evidence. Later destructive-action packets must define container-level minimization, rewriting or retention separately and must never delete another subject's data as a side effect.
 
-## 4. Subject relevance semantics
+## 3. Accepted subject relevance semantics
 
-The request first passes the accepted shared request, lineage, registry, tenant, time, page-size and canonical-Party validation inside the caller-opened read transaction.
+The request passes shared request, lineage, registry, tenant, time, page-size and canonical-Party validation inside one tenant-bound read transaction.
 
-For each Party identifier carried by Customer Data Operations state, the adapter uses the accepted canonical Party resolution primitive. It must not reconstruct, reinterpret or directly mutate Identity Resolution state.
+For each Party identifier carried by Customer Data Operations state, the adapter uses the accepted authoritative Identity Resolution topology proof. It does not reconstruct, reinterpret or mutate a second topology model.
 
-### 4.1 Import-row relevance
+### 3.1 Import-row relevance
 
-An authoritative `customer_data.import_row` is relevant when either of these fully rehydrated identifiers resolves to the accepted canonical Party:
+An authoritative `customer_data.import_row` is relevant when either fully rehydrated identifier resolves to the accepted canonical Party:
 
 - `prepared_party.party_id` for a validated/prepared row;
 - `target_party_id` for a row whose execution targeted an authoritative Party.
 
-A source external identifier digest, row position, source name, diagnostic or import-job membership alone is not subject proof.
+Source external-identifier digests, row positions, source names, diagnostics or import-job membership alone are not subject proof. Impossible or malformed lifecycle state fails closed.
 
-If both Party fields are present they must satisfy the persisted lifecycle invariants. Conflicting impossible state fails closed rather than choosing one field.
+### 3.2 Export-selection relevance
 
-### 4.2 Export-selection relevance
+An authoritative `customer_data.export_selection_item` is relevant when its fully rehydrated `party_id` resolves to the accepted canonical Party. Historical relevance survives later Party version drift.
 
-An authoritative `customer_data.export_selection_item` is relevant when its fully rehydrated `party_id` resolves to the accepted canonical Party.
+### 3.3 Export stage and outcome relevance
 
-The item preserves the exact Party resource version selected for the export manifest. Version drift does not remove historical relevance.
+An execution stage or outcome is relevant only when:
 
-### 4.3 Export stage and outcome relevance
-
-An authoritative execution stage or outcome is relevant only when:
-
-1. a fully rehydrated relevant selection item exists with the same `export_job_id` and `manifest_position`;
+1. a fully rehydrated relevant selection item exists with the same `(job_id, manifest_position)`;
 2. the stage/outcome deterministic identity matches that pair;
-3. its owner, record type, persistence envelope and lifecycle state are valid.
+3. owner, record type, persistence envelope and lifecycle state are valid.
 
-The adapter must not infer relevance from an export job, artifact, chunk index or manifest digest without the matching authoritative selection item.
+A shared job ID, artifact, chunk index or manifest digest alone is insufficient. Orphan stage/outcome records are excluded.
 
-A stage and outcome may remain relevant when the Party later becomes invisible, changes version or is excluded, because they are historical evidence of the governed export attempt.
+### 3.4 Canonical alias safety
 
-### 4.4 Canonical alias safety
+Historical Party identifiers may now be aliases. Every examined Party reference is resolved under the accepted topology generation. Failed, stale, cyclic or unavailable resolution fails closed; exact-string comparison is not a successful terminal proof.
 
-Historical import rows or export selections may carry a Party identifier that is now an alias. The adapter therefore resolves every examined Party reference to its current canonical Party under the accepted topology generation bound.
+The shared topology helper preserves two paths:
 
-A failed, stale, cyclic or unavailable canonical resolution fails closed. Exact-string matching alone is insufficient for a successful terminal result.
+- read-write merge/unmerge transactions retain advisory topology and row locks;
+- `REPEATABLE READ, READ ONLY` privacy transactions use one immutable snapshot without forbidden advisory or row locks.
 
-## 5. Frozen scan and rehydration bounds
+Both paths preserve the same topology generation, Party existence, redirect and strict Active merge-lineage validation semantics.
 
-The implementation must publish named constants with these exact initial limits:
+## 4. Frozen scan and rehydration bounds
+
+The accepted implementation publishes:
 
 - `MAX_PRIVACY_IMPORT_ROWS_SCANNED = 16_384`;
 - `MAX_PRIVACY_EXPORT_SELECTION_ITEMS_SCANNED = 16_384`;
@@ -105,180 +94,137 @@ The implementation must publish named constants with these exact initial limits:
 - `MAX_PRIVACY_CANONICAL_PARTY_RESOLUTIONS = 32_768`;
 - `MAX_PRIVACY_OWNER_RECORDS_SCANNED = 65_536`.
 
-Counters apply to actual database rows and canonical resolutions examined, including malformed, duplicate, unrelated and filtered candidates. Deduplication never refunds the counter.
+It also freezes maximum cursor bytes and page size in the contract layer.
 
-The scan is deterministic same-tenant keyset traversal in `record_id` order. Reaching a bound before terminal completeness returns a stable retryable fail-closed owner error and no partial successful contribution.
+Counters apply to actual database rows and canonical resolutions examined, including malformed, duplicate, unrelated and filtered candidates. Deduplication never refunds a counter.
 
-These bounded scans are acceptable only for the contract-only owner proof. Runtime promotion requires measured SLO evidence or a separately governed owner-maintained canonical-subject index with migration, backfill, reconciliation and rollback proof.
+Traversal is deterministic same-tenant keyset pagination in `record_id` order. Exceeding a bound before terminal completeness returns a stable fail-closed owner error and no partial successful contribution.
 
-## 6. Persistence proof
+These scans are accepted only for the contract-only owner proof. Runtime promotion requires measured SLO evidence or a separately governed owner-maintained canonical-subject index with migration, backfill, reconciliation and rollback proof.
 
-Every selected record is validated against its exact authoritative persistence envelope:
+## 5. Strict persistence proof
 
-- owner module;
-- record type;
+Every examined record is validated against its exact authoritative persistence envelope:
+
+- owner module and record type;
 - schema identifier and version;
 - descriptor hash;
-- data class;
-- encoding;
+- data class and encoding;
 - maximum payload size;
 - retention policy;
-- canonical JSON encoding;
-- deterministic identity;
-- positive aggregate version;
-- lifecycle and timestamp invariants.
+- deterministic identity and positive aggregate version;
+- canonical owner lifecycle invariants.
 
-The implementation must use the existing strict owner decoders for import rows, export selection items, execution stages and execution outcomes. Re-parsing fields into a weaker privacy-only shape is forbidden.
+The implementation uses existing strict owner decoders for import rows, export selection items, execution stages and execution outcomes. Selective privacy-only JSON parsing is forbidden. Malformed metadata or payload state fails closed.
 
-## 7. Response boundary
+## 6. Reference-only response boundary
 
-The owner emits deterministic reference-only resources with the four stable resource types listed in section 3.
+Each emitted resource contains only:
 
-Each reference contains only:
-
-- owner module;
 - resource type;
 - resource identifier;
 - positive resource version;
 - `Personal` data class;
 - `RetainMinimizedEvidence` evidence class;
-- the exact owner retention-policy identifier.
+- exact owner retention-policy identifier.
+
+The common contribution lineage may legally contain the accepted canonical Party ID. The response does not expose alias IDs, unrelated Party IDs or owner payload values.
+
+Encoded response bytes exclude:
+
+- source names, external identifiers and import display values;
+- mappings, diagnostics and error details;
+- export CSV rows, hashes, profile fields and manifest details;
+- artifact identifiers, chunks, hashes and sizes;
+- execution payload details and reconciliation values;
+- persisted JSON or human-readable conclusions.
 
 The contribution performs no deletion, anonymization, export assembly, artifact disclosure, legal-hold or retention decision.
 
-Encoded response bytes must not contain:
+## 7. Deterministic four-family pagination
 
-- prepared or target Party identifiers;
-- source names, source-system identifiers or external-identifier digests;
-- imported display names, kinds, mappings, diagnostics or error codes;
-- export profile fields, specification versions or manifest digests;
-- exported CSV rows or row hashes;
-- artifact file identifiers, chunk indices, chunk hashes or byte sizes;
-- exclusion reasons, redaction counts or reconciliation values;
-- job identifiers or manifest positions except where they are already part of the opaque owner resource identifier;
-- persisted JSON or human-readable conclusions.
-
-## 8. Heterogeneous bounded pagination
-
-The frozen global ordering is:
+Frozen global ordering:
 
 1. `customer_data.import_row` by `record_id` ascending;
 2. `customer_data.export_selection_item` by `record_id` ascending;
 3. `customer_data.export_execution_stage` by `record_id` ascending;
 4. `customer_data.export_execution_outcome` by `record_id` ascending.
 
-The owner cursor binds:
+The cursor binds:
 
-- coordinate and contract version;
-- privacy case, tenant, canonical Party and topology generation;
-- registry version/digest, purpose and effective request time;
-- page size;
-- resource-family discriminator;
-- last emitted record identifier;
-- page number and owner cursor digest domain.
+- tenant and privacy case;
+- canonical Party and topology generation;
+- registry digest;
+- purpose and effective request time;
+- semantic request identity through validated lineage;
+- page size and page number;
+- resource-family discriminator and last emitted record ID;
+- owner-specific cursor digest domain.
 
-Every request independently reconstructs the bounded relevant selection set until it has `page_size + 1` matches or proves all four families exhausted. Sparse pages and family transitions must not skip or duplicate records.
+Every request reconstructs bounded relevant evidence and uses `page_size + 1` to prove terminal completeness. Family transitions cannot skip or duplicate records. Cursor tampering, rebinding and stale topology fail closed.
 
-Cursor state must not serialize Party IDs, imported/exported values, manifest positions, artifact evidence or an unverified partial scan result.
+## 8. Transaction and no-write proof
 
-## 9. Transaction and no-write proof
+Each request uses exactly one tenant-bound `REPEATABLE READ, READ ONLY` PostgreSQL transaction with FORCE RLS.
 
-One request uses exactly one tenant-bound `REPEATABLE READ, READ ONLY` PostgreSQL transaction.
+The accepted PostgreSQL matrix proves no query-side changes to:
 
-Inside it the adapter must:
+- records;
+- relationships;
+- business transactions;
+- idempotency records;
+- outbox events;
+- outbox delivery;
+- audit heads;
+- audit records.
 
-1. validate the exact query contract and semantic input hash;
-2. invoke accepted shared lineage and canonical-Party validation;
-3. scan only same-tenant Customer Data Operations records;
-4. resolve Party references through the accepted canonical-resolution primitive;
-5. strictly rehydrate every examined relevant record;
-6. join stage/outcome evidence only through authoritative selection identity;
-7. produce deterministic pagination and reference-only output;
-8. commit the read-only transaction;
-9. produce zero writes to records, relationships, transactions, idempotency, outbox, audit or file artifacts.
+## 9. Permanent acceptance evidence
 
-## 10. Required PostgreSQL acceptance matrix
+`Customer Data Operations Privacy Scope CI` passed on exact source `07f34786e82fdfa78d263790e9f50541529006f8` and proved:
 
-The permanent owner gate must pass on a clean database and again after complete rollback, schema removal and reapply.
+1. architecture boundary;
+2. formatting;
+3. focused Clippy;
+4. focused unit tests;
+5. clean PostgreSQL migrations and owner fixtures;
+6. clean PostgreSQL acceptance;
+7. complete rollback;
+8. complete absence of schema `crm` after rollback;
+9. migration and fixture reapply;
+10. repeated PostgreSQL acceptance;
+11. workspace dependency graph.
 
-### 10.1 Import evidence
+The full exact-head permanent matrix passed 26 of 26 with active 0 and failed 0. `Identity Resolution Privacy Scope CI` also passed after the shared snapshot-proof change.
 
-- prepared Party match;
-- successful target Party match;
-- historical alias resolving to the canonical subject;
-- unrelated and cross-tenant exclusion;
-- pending/invalid rows without Party proof excluded;
-- conflicting or malformed lifecycle state fails closed;
-- source values and diagnostics absent from response bytes.
+The PostgreSQL fixture matrix includes canonical, alias, unrelated and same-ID cross-tenant Parties; relevant and unrelated import rows; relevant selection/stage/outcome chains; unrelated and orphan evidence; multi-page four-family traversal; cursor rebinding rejection; stale generation rejection; strict persisted-contract corruption failure; response-byte exclusions; and no-write counts across all listed surfaces.
 
-### 10.2 Export evidence
+## 10. Stable error boundary
 
-- direct selection-item match;
-- historical alias selection match;
-- emitted and excluded execution stages;
-- emitted and excluded execution outcomes;
-- stage/outcome included only through the exact matching selection item;
-- unrelated job/position evidence excluded;
-- malformed deterministic identity or persistence envelope fails closed;
-- row bytes, hashes, artifact and reconciliation evidence absent from response bytes.
+The adapter owns stable errors for:
 
-### 10.3 Shared-container exclusion
-
-- relevant child records do not emit import/export job references;
-- source artifacts and complete export artifacts are not emitted;
-- one subject cannot cause another subject's shared container to enter its scope;
-- no container-level destructive semantics are introduced.
-
-### 10.4 Pagination, limits and no-write proof
-
-- first, sparse, cross-family and terminal pages;
-- exact `page_size + 1` terminal-completeness behavior;
-- cursor tamper, page-size rebinding and stale topology rejection;
-- raw scanned-row counters before deduplication;
-- every configured bound fails closed with zero partial response;
-- deterministic repeated output;
-- zero records, relationships, transactions, idempotency, outbox, audit or file-artifact writes;
-- full workspace and architecture-policy integrity.
-
-## 11. Error contract
-
-The adapter owns stable errors for at least:
-
-- request, contract or semantic-hash mismatch;
+- request, contract and semantic-hash mismatch;
 - cursor invalid or rebound;
 - canonical resolution stale, invalid or unavailable;
-- persisted import-row state invalid;
-- persisted export-selection state invalid;
-- persisted export-stage state invalid;
-- persisted export-outcome state invalid;
+- persisted import-row, export-selection, export-stage and export-outcome state invalid;
 - selection/stage/outcome identity disagreement;
-- scan, rehydration or canonical-resolution bound exceeded;
+- scan, rehydration and canonical-resolution bounds;
 - database unavailable.
 
-Internal Party identifiers, source values, exported data and artifact details must not appear in safe error messages.
+Safe messages do not disclose Party identifiers, source values, exported data or artifact details.
 
-## 12. Explicit exclusions
+## 11. Explicit exclusions preserved after acceptance
 
-This packet does not add:
+PR #188 added no:
 
 - HTTP or gRPC ingress;
 - application registration or worker reachability;
-- new production tables, relationships or indexes;
+- new production table, relationship or index;
 - file-artifact disclosure;
 - Customer Privacy discovery/orchestration;
 - deletion, anonymization, retention or legal-hold behavior;
-- shared-support behavior expansion;
+- generic privacy runtime;
 - runtime promotion of any owner-scope coordinate.
 
-## 13. Exit criteria
+## 12. Historical conclusion
 
-The packet may enter gate review only when:
-
-1. the exact contract is implemented without speculative shared abstraction;
-2. all four subject-level resource families are proven;
-3. multi-subject containers are explicitly excluded;
-4. bounded alias-safe scans prove terminal completeness or fail closed;
-5. response-byte and no-write tests pass;
-6. clean, rollback, schema-removal, reapply and repeated PostgreSQL acceptance pass;
-7. all applicable permanent workflows pass on one unchanged source SHA;
-8. no runtime route, worker or application registration is introduced.
+All entry and exit criteria are accepted and merged. This packet is immutable historical evidence for the seventh owner contribution. The active owner sequence has advanced to Data Quality, followed by Customer Enrichment. Production discovery remains prohibited until the complete nine-owner set is accepted.
