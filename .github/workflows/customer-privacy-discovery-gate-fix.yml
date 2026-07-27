@@ -1,0 +1,77 @@
+name: Customer Privacy Discovery Gate Fix
+
+on:
+  push:
+    branches:
+      - feature/customer-privacy-production-discovery-snapshot
+    paths:
+      - ".github/workflows/customer-privacy-discovery-gate-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: feature/customer-privacy-production-discovery-snapshot
+          fetch-depth: 0
+      - name: Restore guardrails and correct negative assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          phase8 = Path("docs/PHASE8_DELIVERY_PLAN.md")
+          text = phase8.read_text()
+          anchor = "PR #206 implements the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages and records later evidence without rewriting the historical freeze.\n"
+          addition = """
+
+          Preserved architecture guardrails:
+
+          - Do not implement discovery/snapshot as one new crate per command, query, worker, reader or composition fragment.
+          - If consolidation is required, perform consolidation only in a separate behavior-neutral PR.
+          """
+          guardrail = "Do not implement discovery/snapshot as one new crate per command"
+          if guardrail not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit("Phase 8 Packet D anchor mismatch")
+              text = text.replace(anchor, anchor + addition, 1)
+          phase8.write_text(text)
+
+          workflow = Path(".github/workflows/customer-privacy-discovery.yml")
+          text = workflow.read_text()
+          old = """          test \"$(grep -R --include='*.rs' -l 'customer_privacy.scope.discover' services crates/crm-capability-ingress 2>/dev/null | wc -l)\" = \"0\"
+          test \"$(grep -R --include='*.rs' -l 'CustomerPrivacy.*Worker\\|customer_privacy.*worker' crates/crm-application-runtime crates/crm-application-composition 2>/dev/null | wc -l)\" = \"0\"
+          """
+          new = """          route_matches=\"$(grep -R --include='*.rs' -l 'customer_privacy.scope.discover' services crates/crm-capability-ingress 2>/dev/null || true)\"
+          if [ -n \"${route_matches}\" ]; then
+            printf 'unexpected public discovery route matches:\\n%s\\n' \"${route_matches}\"
+            exit 1
+          fi
+          worker_matches=\"$(grep -R --include='*.rs' -l 'CustomerPrivacy.*Worker\\|customer_privacy.*worker' crates/crm-application-runtime crates/crm-application-composition 2>/dev/null || true)\"
+          if [ -n \"${worker_matches}\" ]; then
+            printf 'unexpected Customer Privacy worker matches:\\n%s\\n' \"${worker_matches}\"
+            exit 1
+          fi
+          """
+          if "route_matches=" not in text:
+              if text.count(old) != 1:
+                  raise SystemExit("Discovery non-effects assertion block mismatch")
+              text = text.replace(old, new, 1)
+          workflow.write_text(text)
+
+          Path(".github/workflows/customer-privacy-discovery-gate-fix.yml").unlink()
+          PY
+      - name: Commit gate fixes and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Fix Customer Privacy discovery acceptance gates"
+          git push origin HEAD:feature/customer-privacy-production-discovery-snapshot
