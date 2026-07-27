@@ -25,7 +25,7 @@ This document is the concise human-readable snapshot. Normative delivery order r
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is in progress.**
 
-Latest accepted package baseline: PR #205 / merge `f0f46238cf103f6e36487f599181e83849342021`. PR #206 implements trusted-internal production discovery and immutable PostgreSQL scope snapshots inside that package boundary without public routes, workers or package growth.
+Latest accepted Customer Privacy runtime baseline: PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` / 31 of 31 permanent workflows. PR #205 / merge `f0f46238cf103f6e36487f599181e83849342021` remains the accepted package baseline.
 
 Merged Customer Privacy runtime inventory remains:
 
@@ -48,12 +48,12 @@ Nine owner-scope coordinates are published as non-public owner-owned reads. All 
 
 Post-merge owner documentation synchronization was accepted through PR #193 / merge `e09d3152c886386c2168f0b49e46d47cc44ed041`.
 
-PR #206 composes the accepted owner executors into trusted-internal discovery. It adds no Customer Privacy worker, public ingress, planning or owner action execution.
+PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` composes the accepted owner executors into trusted-internal discovery. It adds no Customer Privacy worker, public ingress, planning or owner action execution.
 
 ## Active product dependency lane
 
 ```text
-Customer Privacy production scope discovery and immutable snapshot acceptance
+Deterministic Customer Privacy planning and permission-aware plan/outcome reads
 -> deterministic planning and permission-aware plan/outcome reads
 -> approval, immediate deny-only restrictions and legal-hold/retention precedence
 -> replay-safe resumable owner execution and crash-window recovery
@@ -64,9 +64,9 @@ Customer Privacy production scope discovery and immutable snapshot acceptance
 -> Phase 8B Product Catalog, Pricing, CPQ and Quote-to-Revenue
 ```
 
-## Active product packet — Production scope discovery and immutable snapshot
+## Accepted product packet — Production scope discovery and immutable snapshot
 
-State: **Implemented in PR #206; exact-head gate review pending**.
+State: **Accepted through PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` / 31 of 31 permanent workflows**.
 
 The implementation preserves the PR #204 freeze and records later evidence in `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md` and `contracts/customer-privacy-discovery-snapshot-implementation.json`.
 
@@ -87,7 +87,7 @@ Planning, retention decisions, restrictions, legal holds and owner action execut
 
 ## Next bounded product packet — Deterministic planning and permission-aware plan/outcome reads
 
-State: **Ready only after PR #206 exact-head acceptance and merge**.
+State: **Ready; implementation not started**.
 
 The next packet may consume the immutable discovery snapshot but must not silently rediscover, rebase lineage, weaken authorization or begin restrictions, holds, retention decisions or owner execution.
 
@@ -102,6 +102,7 @@ Accepted Stage B foundation and inheritance packets:
 3. PR #200 — all nine owner privacy-scope adapters inherit root `prost` and `sha2`, with Customer Enrichment also inheriting `serde` and `serde_json`; accepted source `31b3ab09caa4eccaba76a34c7d2211622830115f`; merge `aec7130bd48302d20bf821a617c339b2a9d755cf`; 15 of 15 applicable workflows.
 4. PR #203 — every remaining direct/non-inheriting root-family consumer is frozen; accepted source `37cec8e2e68c42e85468cea83b31dcf3ba4138d4`; merge `6a445cd4cb9f423561f834fd7f291635f82eb464`; 4 of 4 applicable workflows.
 5. PR #205 — Customer Privacy golden packages accepted without behavior change; accepted source `18c3e991454241f7ee3b02884345eac462bb6c04`; merge `f0f46238cf103f6e36487f599181e83849342021`; 29 of 29 applicable workflows.
+6. PR #206 — production discovery and immutable snapshot accepted; source `086b17a95058eee285fcb67a903bd21d9263d357`; merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`; 31 of 31 permanent workflows.
 
 Current measured architecture boundary:
 
@@ -109,14 +110,14 @@ Current measured architecture boundary:
 - root `[workspace.dependencies]`: `prost`, `serde`, `serde_json`, `sha2`;
 - accepted direct/non-inheriting debt inventory remains monotonic no-growth;
 - zero registered temporary architecture exceptions;
-- PR #206 adds no package, no external dependency family/version/feature/source drift and no unjustified lockfile growth.
+- PR #206 added no package, no external dependency family/version/feature/source drift and no unjustified lockfile growth.
 
 The closure prevents new dependency debt without forcing a mass manifest migration. Rust/toolchain policy, workspace lints, broader public-surface/fan-out calibration and later issue #194 stages remain natural-boundary work.
 
 ## Correct continuation order
 
 1. preserve the accepted freeze and Stage C golden packages;
-2. accept PR #206 on one unchanged exact head;
+2. preserve accepted PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`;
 3. continue deterministic planning and permission-aware plan/outcome reads;
 4. continue restrictions, holds/retention, execution and convergence only through later bounded packets;
 5. apply residual architecture calibration only at natural packet boundaries unless it blocks correctness.

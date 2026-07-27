@@ -225,8 +225,9 @@ class CustomerPrivacyDiscoverySnapshotFreezeTests(unittest.TestCase):
         ):
             self.assertIn(text.lower(), self.document.lower())
         self.assertIn("scope discovery and immutable snapshot", self.status.lower())
-        self.assertIn("implemented in pr #206", self.status.lower())
-        self.assertIn("exact-head gate review pending", self.status.lower())
+        self.assertIn("accepted through pr #206", self.status.lower())
+        self.assertIn("086b17a95058eee285fcb67a903bd21d9263d357", self.status)
+        self.assertIn("95818fd3aeb54a9593a45642583f0b7224d5ecfe", self.status)
 
 
 if __name__ == "__main__":

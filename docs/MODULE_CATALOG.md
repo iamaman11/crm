@@ -95,7 +95,7 @@ All nine owner coordinates remain non-public and add no Customer Privacy worker 
 
 Shared support was accepted in PR #176 / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. Later owner PRs extended only mechanical consumer and bound-read allowlists where independently proven; owner-specific SQL, rehydration, pagination, evidence, response and errors remain outside shared support.
 
-All nine owner contributions are accepted. PR #206 implements production scope discovery and immutable snapshot and is in exact-head gate review; planning and action execution remain not started and become the next bounded packet only after merge.
+All nine owner contributions and production discovery are accepted. PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` passed 31 of 31 permanent workflows; planning and action execution remain not started and are the next bounded packet.
 
 The accepted Customer Data Operations packet distinguishes subject-level import-row/export-selection/execution evidence from multi-subject job, progress and artifact containers. It is now an historical contract and introduces no container-level deletion semantics.
 
@@ -103,7 +103,7 @@ The accepted Data Quality packet contributes only evaluation job/input, rule out
 
 The accepted Customer Enrichment packet contributes request, response receipt/conflict, suggestion, review, application-attempt and provider-usage references rooted in the typed request/Party relationship. Shared provider-profile/mapping definitions remain validation dependencies and are excluded from Party evidence. The packet introduces no provider call, owner mutation, query-side write or runtime promotion.
 
-The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. The PR #206 candidate additionally proves discovery/snapshot without public routes or workers; planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization and convergence remain unimplemented.
+The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. Merged PR #206 additionally proves discovery/snapshot without public routes or workers; planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization and convergence remain unimplemented.
 
 ## 8. Phase 8A packet accounting
 
@@ -117,7 +117,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. PR #206 implements scope discovery and immutable snapshot and awaits exact-head acceptance. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. All nine owner contributions and PR #206 scope discovery/immutable snapshot are accepted; source `086b17a95058eee285fcb67a903bd21d9263d357`, merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`, 31 of 31 permanent workflows. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 

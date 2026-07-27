@@ -1,6 +1,6 @@
 # Customer Privacy production discovery and immutable snapshot implementation
 
-Status: **Implemented; exact-head acceptance pending until all applicable permanent workflows pass on one unchanged source SHA.**
+Status: **Accepted and merged through PR #206.**
 
 Historical source of truth remains `contracts/customer-privacy-discovery-snapshot-freeze.json` and `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_FREEZE.md`. This document records the later implementation without rewriting the historical `runtime_not_started` evidence from PR #204.
 
@@ -166,4 +166,11 @@ Phase 8A therefore remains open. Product-complete expert modules remain `0` unti
 
 Permanent acceptance is owned by `.github/workflows/customer-privacy-discovery.yml` plus the repository-wide applicable workflows. The machine-readable implementation record is `contracts/customer-privacy-discovery-snapshot-implementation.json`.
 
-The next bounded packet after merge is deterministic planning and permission-aware plan/outcome reads. Restrictions, holds, retention and execution remain blocked until their own packets.
+Accepted evidence:
+
+- PR `#206`;
+- accepted source `086b17a95058eee285fcb67a903bd21d9263d357`;
+- `31 of 31` permanent workflows succeeded on the unchanged source;
+- squash merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`.
+
+The next bounded packet is deterministic planning and permission-aware plan/outcome reads. Restrictions, holds, retention and execution remain blocked until their own packets.

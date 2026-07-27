@@ -146,7 +146,7 @@ Merged public runtime inventory remains:
 - ten public non-runtime Customer Privacy coordinates;
 - zero Customer Privacy workers.
 
-All nine privacy owner-scope implementations are accepted. Their coordinates remain non-public owner-owned reads. PR #206 composes them into trusted-internal production discovery while adding no planning or owner execution runtime.
+All nine privacy owner-scope implementations are accepted. Their coordinates remain non-public owner-owned reads. PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` / 31 of 31 permanent workflows composes them into trusted-internal production discovery while adding no planning or owner execution runtime.
 
 Accepted owner evidence:
 
@@ -164,7 +164,7 @@ Accepted owner evidence:
 
 1. **Scope discovery and immutable snapshot contract/acceptance freeze — Complete.**
 2. **Stage C behavior-neutral Customer Privacy package pilot — Complete.**
-3. **Scope discovery and immutable snapshot runtime implementation — Gate review in PR #206.**
+3. **Scope discovery and immutable snapshot runtime implementation — Complete through PR #206.**
 4. **Deterministic planning and permission-aware plan/outcome reads — Next.**
 5. **Approval and immediate deny-only restrictions — Planned.**
 6. **Legal hold and mandatory-retention precedence — Planned.**
@@ -175,9 +175,9 @@ Accepted owner evidence:
 11. **Phase 8A closure — Blocked on all preceding lifecycle packets.**
 12. **Phase 8B — Blocked on the completed Phase 8A baseline.**
 
-### 7.3 Current bounded packet — production scope discovery and immutable snapshot
+### 7.3 Accepted bounded packet — production scope discovery and immutable snapshot
 
-State: **Gate review in PR #206; implementation complete, merge pending exact-head acceptance**.
+State: **Complete through PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` / 31 of 31 permanent workflows**.
 
 The packet implements exact-nine trusted-internal discovery, immutable lineage and durable page evidence, safe deterministic aggregation, strict immutable snapshot persistence/rehydration, replay/crash recovery, permission-aware internal reads and safe audit.
 
@@ -194,7 +194,7 @@ The workspace remains at 113 packages. No public route or Customer Privacy worke
 
 The accepted guardrail remains: do not modify generic router or worker algorithms merely to register Customer Privacy discovery behavior.
 
-Planning, restrictions, holds, retention decisions, owner execution and Phase 8B remain unimplemented. After merge, the next bounded packet is deterministic planning and permission-aware plan/outcome reads.
+Planning, restrictions, holds, retention decisions, owner execution and Phase 8B remain unimplemented. The next bounded packet is deterministic planning and permission-aware plan/outcome reads.
 
 ## 8. Phase 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
 
