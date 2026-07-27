@@ -39,7 +39,7 @@ Technical crates, process shells, Protobuf packages, SQL migrations and generic 
 | `crm.customer-data-operations` | Governed import/export jobs and evidence | **Expert expansion** | Resumable import, deterministic export/artifacts/reconciliation and crash recovery | More resource profiles and privacy access/deletion integration |
 | `crm.data-quality` | Customer-data quality governance coordinator | **Vertical slice** | Exact-version Party evaluation, findings/completeness, stewardship and governed remediation | Additional owner-resource profiles and privacy coordination |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Exact provider transport/secret boundary, immutable provenance, review, deterministic Party owner-capability application and recovery | Additional providers, target fields, product UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Case create/submit/subject verification/cancel plus permission-aware get/list, Party/topology guards, subject locks, FORCE RLS and real-process acceptance | Approval, plans/outcomes, restriction/legal-hold precedence, owner orchestration, export/deletion/convergence and workers |
+| `crm.customer-privacy` | Privacy case, restriction/legal-hold and owner-orchestration coordinator | **Vertical slice** | Case create/submit/subject verification/cancel plus permission-aware get/list, Party/topology guards, subject locks, FORCE RLS and real-process acceptance | Discovery/snapshot, planning/outcomes, approval, restriction/legal-hold precedence, owner execution, export/deletion/convergence and workers |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -64,7 +64,7 @@ Frozen production inventory:
 - six public mutations;
 - six permission-aware queries;
 - five activation-gated worker-only coordinates;
-- zero completed non-runtime coordinates.
+- zero completed non-runtime coordinates outside the accepted privacy owner contribution.
 
 Mutable customer values remain with authoritative modules. Customer Enrichment owns coordination and immutable provenance, not Party values.
 
@@ -79,7 +79,7 @@ Merged production inventory:
 - ten public non-runtime Customer Privacy coordinates;
 - zero Customer Privacy workers.
 
-Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. Eight authoritative implementations are accepted:
+Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. All nine authoritative implementations are accepted:
 
 - PR #156 — Parties, one authoritative Party record;
 - PR #175 — Consents, multiple authoritative Consent records through owner relationships and bounded pagination;
@@ -88,19 +88,22 @@ Nine owner-scope contribution coordinates are published and remain contract-only
 - PR #183 — Party Relationships, strict two-endpoint temporal relationship rehydration;
 - PR #186 — Identity Resolution, bounded active alias graph, candidate/merge persistence, provenance-only discovery and heterogeneous pagination;
 - PR #188 — Customer Data Operations, strict import/export evidence rehydration, bounded alias-safe scans and exact selection-to-stage/outcome association; accepted source `07f34786e82fdfa78d263790e9f50541529006f8`, merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc`, 26 of 26 permanent workflows;
-- PR #190 — Data Quality, strict nine-type rehydration, shared-definition exclusion, exact seven-family Party evidence and cross-record lineage validation; accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a`, merge `deac197c97cddc15bb9916092ca87f6e767ce1de`, 27 of 27 permanent workflows.
+- PR #190 — Data Quality, strict nine-type rehydration, shared-definition exclusion, exact seven-family Party evidence and cross-record lineage validation; accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a`, merge `deac197c97cddc15bb9916092ca87f6e767ce1de`, 27 of 27 permanent workflows;
+- PR #192 — Customer Enrichment, typed request/Party relationship-rooted discovery, strict nine-type rehydration, shared-definition exclusion and exact seven-family descendant lineage; accepted source `e90e36027de18a07be68e43327ea732810ff332a`, merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c`, 28 of 28 permanent workflows.
 
-All eight remain non-runtime and add no Customer Privacy worker or public ingress.
+All nine remain non-runtime and add no Customer Privacy worker or public ingress.
 
-Shared support was accepted in PR #176 / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. Later owner PRs extend only mechanical consumer and bound-read allowlists where independently proven; owner-specific SQL, rehydration, pagination, evidence, response and errors remain outside shared support.
+Shared support was accepted in PR #176 / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. Later owner PRs extended only mechanical consumer and bound-read allowlists where independently proven; owner-specific SQL, rehydration, pagination, evidence, response and errors remain outside shared support.
 
-Customer Enrichment is the next bounded contract-only owner and the final owner contribution before production scope discovery/planning. Production discovery remains forbidden until all nine owners are accepted.
+All nine owner contributions are accepted. Production scope discovery and immutable snapshot are the next bounded Customer Privacy packet; planning and action execution remain not started.
 
 The accepted Customer Data Operations packet distinguishes subject-level import-row/export-selection/execution evidence from multi-subject job, progress and artifact containers. It is now an historical contract and introduces no container-level deletion semantics.
 
 The accepted Data Quality packet contributes only evaluation job/input, rule outcome, finding/observation, completeness-result and remediation-attempt references. Shared rule-set/profile definitions remain owner validation dependencies and are not Party evidence. The packet introduces no query-side writes or runtime promotion.
 
-The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. It does not yet prove approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization, convergence or workers.
+The accepted Customer Enrichment packet contributes request, response receipt/conflict, suggestion, review, application-attempt and provider-usage references rooted in the typed request/Party relationship. Shared provider-profile/mapping definitions remain validation dependencies and are excluded from Party evidence. The packet introduces no provider call, owner mutation, query-side write or runtime promotion.
+
+The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. It does not yet prove discovery/snapshot, planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization, convergence or workers.
 
 ## 8. Phase 8A packet accounting
 
@@ -114,7 +117,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Eight of nine owner contributions are accepted through PR #190. Customer Enrichment is the ninth and final owner before discovery/planning. Approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. Scope discovery and immutable snapshot are next. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 
