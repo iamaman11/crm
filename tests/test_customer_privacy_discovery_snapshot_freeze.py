@@ -225,7 +225,8 @@ class CustomerPrivacyDiscoverySnapshotFreezeTests(unittest.TestCase):
         ):
             self.assertIn(text.lower(), self.document.lower())
         self.assertIn("scope discovery and immutable snapshot", self.status.lower())
-        self.assertIn("production implementation not started", self.status.lower())
+        self.assertIn("implemented in pr #206", self.status.lower())
+        self.assertIn("exact-head gate review pending", self.status.lower())
 
 
 if __name__ == "__main__":
