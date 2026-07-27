@@ -10,6 +10,7 @@
 mod contract;
 mod digest;
 mod errors;
+#[allow(dead_code)]
 mod postgres;
 mod request;
 mod response;
