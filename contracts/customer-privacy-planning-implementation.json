@@ -69,7 +69,7 @@
     "authoritative_plan_storage": "crm.records",
     "replay_link_table": "crm.customer_privacy_action_plans",
     "audit_table": "crm.customer_privacy_planning_audit",
-    "exact_nanosecond_timestamp_storage": true,
+    "microsecond_aligned_nanosecond_round_trip": true,
     "force_rls": true,
     "canonical_policy_name": "tenant_isolation",
     "cross_tenant_concealment": true,
