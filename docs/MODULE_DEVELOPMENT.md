@@ -1,42 +1,55 @@
 # Ultimate CRM — Golden Module Development
 
-Status: **Normative golden-module workflow**
-Foundation: issue #56 / Phase 7; native production contribution baseline: issue #134 / PR #135.
+Status: **Normative golden-module workflow**  
+Foundation: issue #56 / Phase 7  
+Architecture and developer-experience program: issue #194
 
-This guide defines the repository-supported starting point for new business owner modules and optional link modules. Scaffolding removes repetitive wiring; it does not decide domain ownership and never implies production readiness.
+This guide defines the supported path for new owner/link modules and ordinary capabilities. Scaffolding removes repetitive setup; it never decides ownership and never implies production readiness.
 
 ## 1. Decide ownership before generating code
 
-Create an **owner module** only for a distinct authoritative mutable domain. Create a **link module** only for optional cross-domain coordination over published events/capabilities.
+Create an **owner module** only for a distinct authoritative mutable domain. Create a **link module** only for optional coordination over published events and capabilities.
 
-Do not create a module for a screen, table, team, projection, search index or convenience grouping.
+Do not create a module for a screen, table, report, team, projection, search index or convenience grouping.
 
-Before running the generator, decide:
+Before generating anything, decide:
 
 - immutable `module_id`;
 - owner team and contact;
-- authoritative object identifiers for an owner module;
-- exact required source/target module dependencies for a link module;
-- lifecycle and uninstall expectations.
+- authoritative objects;
+- exact dependencies for a link module;
+- lifecycle, disable, rollback and uninstall expectations;
+- storage and migration ownership;
+- whether any real provider, trust, process or extraction boundary exists.
 
-## 2. Generate an owner module
+## 2. Ordinary capability rule
 
-Example:
+A normal capability added to an existing owner creates **zero new crates**.
 
-```bash
-python scripts/scaffold_module.py owner \
-  --module-id crm.customer \
-  --display-name "CRM Customer" \
-  --team customer-platform \
-  --contact crm-owner@example.com \
-  --object customer.party \
-  --object customer.contact_point
-```
-
-The command creates:
+Add it inside the existing owner structure:
 
 ```text
-modules/crm-customer/
+owner domain
+→ application command/query/worker
+→ existing or justified adapter
+→ owner-owned production contribution
+→ focused owner tests and generic conformance
+```
+
+Do not create a crate for one handler, planner, query, worker, re-export or capability-specific composition function.
+
+Feature behavior and behavior-neutral crate consolidation are separate PRs.
+
+## 3. Current scaffold versus 10/10 target
+
+The current generator creates a **foundation owner/link crate** under `modules/`. It proves naming, manifest, lifecycle placeholders and pure dependency boundaries.
+
+It does not yet generate the complete target owner package set.
+
+Current foundation output:
+
+```text
+modules/crm-<domain>/
   Cargo.toml
   module.yaml
   src/lib.rs
@@ -50,15 +63,36 @@ modules/crm-customer/
   MODULE_CATALOG_ENTRY.md
 ```
 
-and registers the crate in the root Cargo workspace.
+Target owner packaging under issue #194:
 
-Owner generation requires at least one explicit object. This prevents a new owner domain from being created before its authoritative boundary is named.
+```text
+modules/crm-<domain>/                 # pure domain
+crates/crm-<domain>-application/      # commands, queries, workers, validation, ports
+crates/crm-<domain>-postgres/         # persistence and authoritative reads
+crates/crm-<domain>-production/       # routes, workers, contribution, wiring
+```
 
-The generated contract and adapter directories are explicit TODO boundaries, not fake production implementations. Published Protobuf remains in the canonical repository contract tree, and production adapters remain outside the pure module core behind governed composition boundaries.
+An optional fifth package is allowed only for a real provider, trust, process or extraction boundary.
 
-## 3. Generate a link module
+Until Stage C is implemented, do not manually imitate the target by creating a new crate per use case. Evolve one owner through an explicitly reviewed package-boundary packet.
 
-Example:
+## 4. Generate an owner foundation
+
+```bash
+python scripts/scaffold_module.py owner \
+  --module-id crm.customer \
+  --display-name "CRM Customer" \
+  --team customer-platform \
+  --contact crm-owner@example.com \
+  --object customer.party \
+  --object customer.contact_point
+```
+
+Owner generation requires at least one explicit authoritative object. The generator refuses existing directories and duplicate workspace members.
+
+Generated contract/adapter directories are TODO boundaries, not production implementations. Published Protobuf remains in the canonical contract tree. Infrastructure remains outside the pure module core.
+
+## 5. Generate a link foundation
 
 ```bash
 python scripts/scaffold_module.py link \
@@ -70,19 +104,17 @@ python scripts/scaffold_module.py link \
   --requires 'crm.sales@^0.2.0'
 ```
 
-A generated link module:
+A link module:
 
-- owns no authoritative business records;
-- requires explicit source/target module dependencies;
-- receives only private state ownership for delivery/coordination state;
-- defaults to `delete_private_state` on uninstall;
-- must later define exact published source events, target capabilities, deterministic delivery identity and disable/uninstall behavior.
+- owns no source/target authoritative records;
+- declares exact source and target dependencies;
+- owns only private coordination/deduplication/configuration state;
+- consumes published events and invokes governed capabilities;
+- remains independently installable, disableable and uninstallable.
 
-Dependency version ranges are validated before any files are written.
+## 6. Preview safely
 
-## 4. Preview safely
-
-Use `--dry-run` to validate names and see every path that would be created without changing the repository:
+Use `--dry-run` before generation:
 
 ```bash
 python scripts/scaffold_module.py owner \
@@ -94,134 +126,128 @@ python scripts/scaffold_module.py owner \
   --dry-run
 ```
 
-The generator refuses to overwrite an existing module directory or duplicate workspace member.
+## 7. Permanent repository commands
 
-## 5. Permanent repository commands
-
-Use the cross-platform command runner rather than memorizing CI internals:
+Use the stable command runner:
 
 ```bash
-# full native architecture conformance preflight
 python scripts/repo.py conformance
-
-# focused architecture dependency/source boundaries
 python scripts/repo.py architecture
-
-# module manifests, normalized IR and Rust digest parity
 python scripts/repo.py manifests
-
-# verify or regenerate module-to-Protobuf bindings
 python scripts/repo.py contracts
 python scripts/repo.py contracts --write
-
-# format or check formatting
-python scripts/repo.py format
 python scripts/repo.py format --check
-
-# synchronize Cargo.lock
 python scripts/repo.py lock
+python scripts/repo.py affected --base origin/main
+python scripts/repo.py check-affected --base origin/main
 
-# focused package tests
-python scripts/repo.py test crm-sales
-python scripts/repo.py test crm-core-data --test-target postgres_query
-
-# full Rust workspace tests
+python scripts/repo.py test --package crm-sales
+python scripts/repo.py test --package crm-core-data --test-target postgres_query
 python scripts/repo.py test-all
-
-# architecture + formatting check + Clippy + full tests
 python scripts/repo.py quality
 ```
 
-Specialized Contract, Database, Event Runtime and Application Runtime gates remain mandatory when their scopes are affected. `repo.py quality` does not replace those specialized CI proofs.
+Specialized Contract, Database, Event Runtime, Application Runtime, process and frontend gates remain mandatory when affected. `quality` does not replace specialized acceptance.
 
-## 6. Generator acceptance and generated readiness
+Planned commands such as `doctor`, `bootstrap`, `dev-up`, `explain` and `packet-check` are documented in `docs/README.md` but are not available until implemented and permanently tested.
 
-Governance CI validates the generator itself. Its permanent scaffolding suite:
+## 8. From foundation to production
 
-- generates owner and link manifests and checks them against the real manifest schema and semantic validator;
-- proves overwrite protection and dry-run behavior;
-- creates a fresh owner module in a temporary Cargo workspace;
-- runs `cargo check --all-targets` so the generated library and ignored acceptance-test placeholder compile;
-- compares generated dependencies with `architecture-policy.json` and rejects forbidden infrastructure or disallowed internal CRM dependencies.
+Follow `DEVELOPMENT_WORKFLOW.md`:
 
-Every generated module still starts at **Foundation only**.
-
-`ACCEPTANCE.md` contains explicit incomplete gates for:
-
-- ownership/invariants or link-delivery semantics;
-- versioned published contracts;
-- deterministic domain/application behavior;
-- governed adapters;
-- tenant, authorization, retry/idempotency and cross-tenant negative tests;
-- platform-owned persistence/projection/search adapters;
-- replacement of the ignored `tests/acceptance.rs` scaffold gate with real production-path evidence;
-- production composition and end-to-end acceptance;
-- rollback/disable/uninstall behavior;
-- roadmap/status/catalog synchronization.
+1. ownership, invariants and exclusions;
+2. public contract or compatible new version;
+3. application commands/queries/workers and ports;
+4. persistence and migration ownership;
+5. pre-authorization semantic validation;
+6. module-owned production contribution;
+7. exact route/worker registration and durable activation;
+8. focused, PostgreSQL and process acceptance;
+9. operational and documentation closure.
 
 A generated directory, compiling crate or valid manifest is never evidence of a production vertical slice.
 
-## 7. Dependency rules inherited by construction
+## 9. Package-boundary decision
 
-Generated business modules depend only on stable platform boundaries:
+Create a package only when it protects at least one real boundary:
 
-- `crm-core-contracts`;
-- `crm-module-sdk`.
+- forbidden infrastructure dependency;
+- provider SDK, arbitrary HTTP, secrets, broker or object storage;
+- independent trust/security boundary;
+- separately operating worker/process;
+- multiple independent consumers;
+- credible extraction seam documented by ADR.
 
-The repository architecture policy rejects direct infrastructure dependencies such as SQLx/PostgreSQL clients, brokers, arbitrary HTTP clients, secret stores and LLM providers. It also rejects direct imports of another business module's internal crate.
-
-Cross-domain work must remain:
+Required review note:
 
 ```text
-published source event
-→ governed delivery
-→ link-owned deterministic coordination state
-→ CapabilityClient
-→ target owner capability
+New crate justification:
+- protected boundary:
+- isolated dependencies:
+- expected consumers:
+- why an internal module is insufficient:
+- lifecycle/extraction seam:
+- expected fan-out:
+- removal or consolidation condition:
 ```
 
-## 8. From scaffold to production
+## 10. Dependency and Rust visibility rules
 
-After generation, follow `DEVELOPMENT_WORKFLOW.md`:
+Pure business modules depend only on stable platform contracts and governed SDK ports.
 
-1. ownership and invariants;
-2. public contracts;
-3. application ports/use cases;
-4. module-owned production contribution contract;
-5. infrastructure adapters outside the module core;
-6. exact-coordinate composition registration and durable activation;
-7. acceptance tests;
-8. operational and documentation closure.
+- no SQLx/PostgreSQL, broker, arbitrary HTTP, secret-store or provider dependencies;
+- no direct imports of another business module's internals;
+- implementation visibility defaults to private or `pub(crate)`;
+- public Rust APIs are limited to contracts, stable ports and contribution interfaces;
+- concrete adapters and repositories are not re-exported for convenience.
 
-Move the generated `MODULE_CATALOG_ENTRY.md` content into the normative catalog only when the module identity and ownership decision are accepted. Update readiness only when the corresponding merged acceptance evidence exists.
+## 11. Contract publication and retirement
 
-## 9. Publish contract bindings without a second source of truth
+Every provided capability/event/query includes an exact binding to its authoritative Protobuf contract.
 
-Every item under `provides.capabilities` and `provides.events` must include its exact Protobuf binding. Capability entries use `kind: protobuf_rpc` with RPC/request/response names; event entries use `kind: protobuf_message` with the payload message.
-
-The binding is authoring/build metadata. It is removed from normalized runtime module IR, so runtime lifecycle and installation identity stay independent from Protobuf repository organization.
-
-Never edit `contracts/module-contract-bindings.json` directly. Generate it from all manifests and the compiled descriptor set:
+Never edit generated binding registries directly. Use:
 
 ```bash
-python scripts/generate_contract_bindings.py --write
-python scripts/generate_contract_bindings.py --check
+python scripts/repo.py contracts --write
+python scripts/repo.py contracts
 ```
 
-`pnpm web:generate` performs the same generation together with browser clients and contract hashes. Contract CI requires exact module-set completeness, descriptor input/output parity and byte-for-byte generated-artifact freshness. See `CONTRACT_BINDING_REGISTRY.md` for the normative architecture and invariants.
+Published versions are immutable. Semantic change creates a new version. Deprecation requires replacement, consumer inventory, deadline and explicit retirement criteria. Removal occurs only after supported consumers migrate and rollback/compatibility evidence exists.
 
-## Production contribution boundary
+## 12. Persistence and migration ownership
 
-Every generated module contains `production/CONTRIBUTION.md`. The pure module core does not wire itself into the process host. A separately owned adapter/composition crate contributes exact versioned mutation/query routes, pre-authorization semantic validation, activation-gated workers and deterministic worker phases. Adding a module must not require edits to generic router or worker algorithms.
+Each owner declares authoritative storage namespaces and migrations.
 
-Before a generated module can claim a production vertical slice, its contribution must prove:
+- do not alter another owner's tables;
+- enforce tenant context and FORCE RLS;
+- include cross-tenant negative tests;
+- prove forward, rollback/schema-removal and reapply behavior where applicable;
+- version persisted envelopes independently from public wire messages;
+- use an ownership-transfer ADR for any authoritative data move.
+
+## 13. Production contribution boundary
+
+The pure module core does not wire itself into the process host. The owner production package contributes:
+
+- exact mutation/query routes;
+- pre-authorization semantic validators;
+- planner/executor or query bindings;
+- activation-gated workers with deterministic phases;
+- module identity for durable activation.
+
+Adding a capability must not modify generic router or worker algorithms.
+
+Before production readiness, prove:
 
 1. exact owner/identifier/version/kind definitions;
-2. complete validator and handler bindings with startup failure on mismatch;
-3. durable tenant installation, disable and uninstall behavior;
-4. pre-authorization cross-owner validation through governed ports only;
-5. deterministic worker phases, bounded work and retry/idempotency where workers exist;
-6. route-parity coverage or an exact reasoned non-runtime classification;
-7. focused, PostgreSQL and real-process acceptance plus synchronized module/roadmap status.
+2. complete validator/handler bindings with startup failure on mismatch;
+3. durable install/disable/uninstall behavior;
+4. governed cross-owner reads only through stable ports;
+5. worker boundedness, retry and crash recovery where applicable;
+6. exact route parity or individually reasoned non-runtime classification;
+7. focused, PostgreSQL and real-process acceptance;
+8. synchronized status, roadmap and module catalog.
 
-Compiled production coordinates are checked against `contracts/module-contract-bindings.json`. Platform-owned routes and any intentionally non-runtime governed coordinate must be listed individually, with a reason, in `contracts/production-route-classifications.json`; owner-wide or pattern allowlists are forbidden.
+## 14. Navigation expectation
+
+Use `docs/README.md` to select the task path. The future `repo.py explain` and generated repository map will make each owner path mechanical. Until then, any capability whose contract → application → persistence → contribution → tests path cannot be located unambiguously should be recorded as navigation debt under issue #194.
