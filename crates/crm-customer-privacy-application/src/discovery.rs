@@ -3,18 +3,18 @@ use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy::{
     ContributionCompletenessProof, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
     EvidenceClass, OwnerScopeContract, OwnerScopeContribution, OwnerScopeRegistry,
-    SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE, ScopeDiscoveryLineage, ScopeResource,
+    ScopeDiscoveryLineage, ScopeResource,
     discovery_lineage_digest, discovery_sha256,
 };
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ErrorCategory, ModuleId,
-    PayloadEncoding, PortFuture, RecordId, RequestId, RetentionPolicyId, SchemaVersion, SdkError,
+    PortFuture, RecordId, RequestId, RetentionPolicyId, SdkError,
     TenantId, TraceId, TypedPayload,
 };
 use crm_proto_contracts::crm::{customer::v1::PartyRef, customer_privacy::v1 as privacy};
 use crm_query_runtime::{QueryExecutionContext, QueryExecutor, QueryRequest};
 use prost::Message;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 pub const DISCOVERY_PHASE: u16 = 260;
@@ -880,23 +880,22 @@ fn build_owner_contribution(
         scanned = scanned
             .checked_add(page.receipt.scanned_resource_count)
             .ok_or_else(|| corrupt_evidence("owner scanned count overflowed"))?;
+        let request_cursor = if index == 0 {
+            String::new()
+        } else {
+            decode_owner_response(
+                contract.capability_id().as_str(),
+                &pages[index - 1].response_bytes,
+            )?
+            .page_evidence
+            .map(|evidence| evidence.next_cursor)
+            .ok_or_else(|| corrupt_evidence("previous owner page evidence is missing"))?
+        };
         let validated = validate_response_page(
             &lineage,
             &contract,
             page.receipt.page_number,
-            if index == 0 {
-                ""
-            } else {
-                let previous = decode_owner_response(
-                    contract.capability_id().as_str(),
-                    &pages[index - 1].response_bytes,
-                )?;
-                previous
-                    .page_evidence
-                    .as_ref()
-                    .map(|evidence| evidence.next_cursor.as_str())
-                    .ok_or_else(|| corrupt_evidence("previous owner page evidence is missing"))?
-            },
+            &request_cursor,
             &page.response_bytes,
         )?;
         if validated.receipt != page.receipt {
