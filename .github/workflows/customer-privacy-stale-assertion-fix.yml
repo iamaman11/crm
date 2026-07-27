@@ -1,0 +1,110 @@
+name: Customer Privacy Stale Assertion Fix
+
+on:
+  push:
+    branches:
+      - feature/customer-privacy-production-discovery-snapshot
+    paths:
+      - ".github/workflows/customer-privacy-stale-assertion-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: feature/customer-privacy-production-discovery-snapshot
+          fetch-depth: 0
+      - name: Synchronize current discovery gate assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          roadmap = Path("docs/IMPLEMENTATION_ROADMAP.md")
+          text = roadmap.read_text()
+          anchor = "The workspace remains at 113 packages. No public route or Customer Privacy worker is added. The historical freeze remains unchanged and later implementation evidence is separate.\n"
+          sentence = "The accepted guardrail remains: do not modify generic router or worker algorithms merely to register Customer Privacy discovery behavior.\n"
+          if "do not modify generic router or worker algorithms" not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit("roadmap guardrail anchor mismatch")
+              text = text.replace(anchor, anchor + "\n" + sentence, 1)
+          roadmap.write_text(text)
+
+          catalog = Path("docs/MODULE_CATALOG.md")
+          text = catalog.read_text()
+          replacements = {
+              "All nine remain non-runtime and add no Customer Privacy worker or public ingress.":
+                  "All nine owner coordinates remain non-public and add no Customer Privacy worker or public ingress. PR #206 composes their accepted executors into trusted-internal production discovery without changing owner mutation boundaries.",
+              "All nine owner contributions are accepted. Production scope discovery and immutable snapshot are the next bounded Customer Privacy packet; planning and action execution remain not started.":
+                  "All nine owner contributions are accepted. PR #206 implements production scope discovery and immutable snapshot and is in exact-head gate review; planning and action execution remain not started and become the next bounded packet only after merge.",
+              "The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. It does not yet prove discovery/snapshot, planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization, convergence or workers.":
+                  "The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. The PR #206 candidate additionally proves discovery/snapshot without public routes or workers; planning, approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization and convergence remain unimplemented.",
+              "- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. Scope discovery and immutable snapshot are next. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.":
+                  "- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. PR #206 implements scope discovery and immutable snapshot and awaits exact-head acceptance. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.",
+          }
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise SystemExit(f"catalog replacement mismatch: {old[:70]}")
+          catalog.write_text(text)
+
+          freeze_test = Path("tests/test_customer_privacy_discovery_snapshot_freeze.py")
+          text = freeze_test.read_text()
+          old = '''        self.assertIn("scope discovery and immutable snapshot", self.status.lower())
+          self.assertIn("production implementation not started", self.status.lower())
+          '''
+          new = '''        self.assertIn("scope discovery and immutable snapshot", self.status.lower())
+          self.assertIn("implemented in pr #206", self.status.lower())
+          self.assertIn("exact-head gate review pending", self.status.lower())
+          '''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit("freeze status assertion mismatch")
+          freeze_test.write_text(text)
+
+          owner_test = Path("tests/test_customer_privacy_owner_scope_contracts.py")
+          text = owner_test.read_text()
+          text = text.replace(
+              "def test_status_sources_freeze_nine_accepted_owners_and_discovery_next(self) -> None:",
+              "def test_status_sources_track_nine_accepted_owners_and_discovery_gate(self) -> None:",
+              1,
+          )
+          text = text.replace(
+              '            self.assertIn("Scope discovery and immutable snapshot", document)\n',
+              '            self.assertIn("scope discovery and immutable snapshot", document.lower())\n',
+              1,
+          )
+          old = '''        self.assertIn("production discovery is not implemented", phase_plan)
+          self.assertIn("planning and action execution remain not started", module_catalog)
+          '''
+          new = '''        self.assertIn(
+              "Implemented in PR #206; exact-head gate review pending", phase_plan
+          )
+          self.assertIn("PR #206", module_catalog)
+          self.assertIn("planning and action execution remain not started", module_catalog)
+          '''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit("owner status assertion mismatch")
+          owner_test.write_text(text)
+
+          Path(".github/workflows/customer-privacy-conformance-log.yml").unlink(missing_ok=True)
+          Path(".github/workflows/customer-privacy-stale-assertion-fix.yml").unlink()
+          PY
+      - name: Commit synchronized assertions and remove diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Synchronize Customer Privacy discovery gate assertions"
+          git push origin HEAD:feature/customer-privacy-production-discovery-snapshot
