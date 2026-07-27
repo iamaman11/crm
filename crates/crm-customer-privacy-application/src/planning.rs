@@ -4,8 +4,8 @@ use crm_customer_privacy::{
     PrivacyCaseStatus,
 };
 use crm_module_sdk::{
-    ActorId, CorrelationId, ErrorCategory, PortFuture, RecordId, RequestId,
-    SdkError, TenantId, TraceId,
+    ActorId, CorrelationId, ErrorCategory, PortFuture, RecordId, RequestId, SdkError, TenantId,
+    TraceId,
 };
 use std::sync::Arc;
 
