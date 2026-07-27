@@ -11,8 +11,8 @@ use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_cancel_capability_adapter::capability_definitions as cancel_definitions;
 use crm_customer_privacy_capability_adapter::capability_definitions as create_definitions;
 use crm_customer_privacy_query_adapter::query_capability_definitions as case_query_definitions;
-use crm_customer_privacy_submit_capability_adapter::capability_definitions as submit_definitions;
 use crm_customer_privacy_subject_capability_adapter::capability_definitions as subject_definitions;
+use crm_customer_privacy_submit_capability_adapter::capability_definitions as submit_definitions;
 use crm_module_sdk::SdkError;
 
 pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {

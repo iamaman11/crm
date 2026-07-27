@@ -342,12 +342,7 @@ dependencies = [
  "crm-customer-enrichment-suggestion-query-adapter",
  "crm-customer-enrichment-visibility",
  "crm-customer-enrichment-worker-composition",
- "crm-customer-privacy-cancel-capability-adapter",
- "crm-customer-privacy-capability-adapter",
- "crm-customer-privacy-capability-composition",
- "crm-customer-privacy-query-adapter",
- "crm-customer-privacy-subject-capability-adapter",
- "crm-customer-privacy-submit-capability-adapter",
+ "crm-customer-privacy-production",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",
@@ -1200,6 +1195,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-customer-privacy-application"
+version = "0.1.0"
+dependencies = [
+ "crm-capability-runtime",
+ "crm-customer-privacy-cancel-capability-adapter",
+ "crm-customer-privacy-capability-adapter",
+ "crm-customer-privacy-query-adapter",
+ "crm-customer-privacy-subject-capability-adapter",
+ "crm-customer-privacy-submit-capability-adapter",
+ "crm-module-sdk",
+]
+
+[[package]]
 name = "crm-customer-privacy-cancel-capability-adapter"
 version = "0.1.0"
 dependencies = [
@@ -1276,6 +1284,28 @@ dependencies = [
  "crm-capability-plan-support",
  "crm-customer-privacy",
  "crm-module-sdk",
+]
+
+[[package]]
+name = "crm-customer-privacy-postgres"
+version = "0.1.0"
+dependencies = [
+ "crm-customer-privacy-capability-composition",
+ "crm-customer-privacy-persistence-adapter",
+]
+
+[[package]]
+name = "crm-customer-privacy-production"
+version = "0.1.0"
+dependencies = [
+ "crm-application-composition",
+ "crm-capability-runtime",
+ "crm-core-data",
+ "crm-customer-privacy-application",
+ "crm-customer-privacy-postgres",
+ "crm-customer-privacy-query-adapter",
+ "crm-module-sdk",
+ "crm-query-runtime",
 ]
 
 [[package]]

@@ -3,7 +3,8 @@ use crate::native_composition::ProductionCompositionDependencies;
 use crm_application_composition::{ApplicationComposition, ModuleContributionSet};
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_production::{
-    CustomerPrivacyProductionDependencies, build_contribution as build_customer_privacy_contribution,
+    CustomerPrivacyProductionDependencies,
+    build_contribution as build_customer_privacy_contribution,
 };
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
 
@@ -13,9 +14,7 @@ pub use base_runtime::PRODUCTION_REVIEW_POLICY_VERSION;
 /// Privacy inventory contributed by the owner application package.
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_mutation_definitions()?;
-    definitions.extend(
-        crm_customer_privacy_application_inventory()?.0,
-    );
+    definitions.extend(crm_customer_privacy_application_inventory()?.0);
     Ok(definitions)
 }
 
@@ -75,8 +74,8 @@ pub fn build_production_composition(
     contributions.build().map_err(composition_error)
 }
 
-fn crm_customer_privacy_application_inventory(
-) -> Result<(Vec<CapabilityDefinition>, Vec<CapabilityDefinition>), SdkError> {
+fn crm_customer_privacy_application_inventory()
+-> Result<(Vec<CapabilityDefinition>, Vec<CapabilityDefinition>), SdkError> {
     Ok((
         crm_customer_privacy_production::mutation_capability_definitions()?,
         crm_customer_privacy_production::query_capability_definitions()?,
