@@ -117,7 +117,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. All nine owner contributions and PR #206 scope discovery/immutable snapshot are accepted; source `086b17a95058eee285fcb67a903bd21d9263d357`, merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`, 31 of 31 permanent workflows. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. All nine owner contributions and PR #206 scope discovery and immutable snapshot are accepted; source `086b17a95058eee285fcb67a903bd21d9263d357`, merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`, 31 of 31 permanent workflows. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 
