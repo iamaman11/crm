@@ -79,22 +79,23 @@ Merged production inventory:
 - ten public non-runtime Customer Privacy coordinates;
 - zero Customer Privacy workers.
 
-Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. Six authoritative implementations are accepted:
+Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. Seven authoritative implementations are accepted:
 
 - PR #156 — Parties, one authoritative Party record;
 - PR #175 — Consents, multiple authoritative Consent records through owner relationships and bounded pagination;
 - PR #179 — Customer Accounts, strict Account rehydration and embedded `Primary`/`Member` Party associations;
 - PR #181 — Contact Points, strict endpoint rehydration and direct Party binding;
 - PR #183 — Party Relationships, strict two-endpoint temporal relationship rehydration;
-- PR #186 — Identity Resolution, bounded active alias graph, candidate/merge persistence, provenance-only discovery and heterogeneous pagination.
+- PR #186 — Identity Resolution, bounded active alias graph, candidate/merge persistence, provenance-only discovery and heterogeneous pagination;
+- PR #188 — Customer Data Operations, strict import/export evidence rehydration, bounded alias-safe scans and exact selection-to-stage/outcome association; accepted source `07f34786e82fdfa78d263790e9f50541529006f8`, merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc`, 26 of 26 permanent workflows.
 
-All six remain non-runtime and add no Customer Privacy worker or public ingress.
+All seven remain non-runtime and add no Customer Privacy worker or public ingress.
 
 Shared support was accepted in PR #176 / merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. Later owner PRs extend only mechanical consumer and bound-read allowlists where independently proven; owner-specific SQL, rehydration, pagination, evidence, response and errors remain outside shared support.
 
-Customer Data Operations is the next bounded contract-only owner implementation through `customer_data.privacy.scope.contribute@1.0.0`. Data Quality and Customer Enrichment owner contributions follow one at a time before production scope discovery/planning.
+Data Quality is the next bounded contract-only owner. Customer Enrichment follows as the final owner contribution before production scope discovery/planning. Production discovery remains forbidden until all nine owners are accepted.
 
-The Customer Data Operations packet distinguishes subject-level import-row/export-selection/execution evidence from multi-subject job, progress and artifact containers. It requires bounded alias-safe scans, strict owner rehydration and reference-only output without introducing container-level deletion semantics.
+The accepted Customer Data Operations packet distinguishes subject-level import-row/export-selection/execution evidence from multi-subject job, progress and artifact containers. It is now an historical contract and introduces no container-level deletion semantics.
 
 The merged Customer Privacy boundary proves deterministic case identity, optimistic lifecycle transitions, authoritative Party/topology proof, permission-aware reads, race-free cancellation, signed pagination, FORCE RLS, rollback/reapply and real HTTP/gRPC acceptance. It does not yet prove approval, immediate restrictions, legal-hold/retention precedence, owner execution, access/export, deletion/anonymization, convergence or workers.
 
@@ -110,7 +111,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Six of nine owner contributions are accepted through PR #186. Customer Data Operations is next; Data Quality, Customer Enrichment, discovery/planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. Seven of nine owner contributions are accepted through PR #188. Data Quality is next; Customer Enrichment remains the final owner before discovery/planning. Approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.
 
 ## 9. Customer-master ownership baseline
 
