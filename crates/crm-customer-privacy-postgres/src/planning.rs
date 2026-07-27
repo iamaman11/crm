@@ -523,9 +523,11 @@ async fn insert_plan_record_in_transaction(
     .bind(ACTION_PLAN_STATE_SCHEMA_ID)
     .bind(ACTION_PLAN_STATE_SCHEMA_VERSION)
     .bind(action_plan_state_descriptor_hash().as_slice())
-    .bind(i64::try_from(ACTION_PLAN_STATE_MAXIMUM_BYTES).map_err(|_| {
-        planning_state_invalid("action plan maximum size exceeds PostgreSQL range")
-    })?)
+    .bind(
+        i64::try_from(ACTION_PLAN_STATE_MAXIMUM_BYTES).map_err(|_| {
+            planning_state_invalid("action plan maximum size exceeds PostgreSQL range")
+        })?,
+    )
     .bind(ACTION_PLAN_STATE_RETENTION_POLICY_ID)
     .bind(bytes)
     .bind(format!("privacy-plan-{}", hex(&plan.digest()[..12])))
@@ -649,9 +651,7 @@ async fn verify_link_in_transaction(
     .fetch_one(&mut **transaction)
     .await
     .map_err(database_error)?;
-    let source_case_version: i64 = row
-        .try_get("source_case_version")
-        .map_err(database_error)?;
+    let source_case_version: i64 = row.try_get("source_case_version").map_err(database_error)?;
     let resulting_case_version: i64 = row
         .try_get("resulting_case_version")
         .map_err(database_error)?;
@@ -780,10 +780,7 @@ fn planning_audit_digest(
     discovery_sha256(&bytes)
 }
 
-fn digest_column(
-    row: &postgres_sqlx::postgres::PgRow,
-    column: &str,
-) -> Result<[u8; 32], SdkError> {
+fn digest_column(row: &postgres_sqlx::postgres::PgRow, column: &str) -> Result<[u8; 32], SdkError> {
     let value: Vec<u8> = row.try_get(column).map_err(database_error)?;
     value
         .try_into()
