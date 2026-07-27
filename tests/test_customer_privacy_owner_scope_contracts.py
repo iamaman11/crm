@@ -155,7 +155,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("bytes cursor_digest_sha256", contributions)
         self.assertIn("CUSTOMER_DATA_CLASS_RESTRICTED = 9;", types)
 
-    def test_status_sources_freeze_seven_accepted_owners_and_data_quality_next(self) -> None:
+    def test_status_sources_freeze_eight_accepted_owners_and_customer_enrichment_next(self) -> None:
         project_status = (ROOT / "docs/PROJECT_STATUS.md").read_text(encoding="utf-8")
         module_catalog = (ROOT / "docs/MODULE_CATALOG.md").read_text(encoding="utf-8")
         roadmap = (ROOT / "docs/IMPLEMENTATION_ROADMAP.md").read_text(
@@ -170,18 +170,21 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         customer_data_packet = (
             ROOT / "docs/CUSTOMER_DATA_OPERATIONS_PRIVACY_SCOPE_PACKET.md"
         ).read_text(encoding="utf-8")
+        data_quality_packet = (
+            ROOT / "docs/DATA_QUALITY_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
 
         for document in (project_status, module_catalog, roadmap, phase_plan):
             self.assertIn("Customer Data Operations", document)
             self.assertIn("Data Quality", document)
             self.assertIn("Customer Enrichment", document)
 
-        self.assertIn("Seven authoritative owner implementations are accepted", project_status)
-        self.assertIn("Seven authoritative implementations are accepted", module_catalog)
-        self.assertIn("Next bounded packet — Data Quality", project_status)
-        self.assertIn("Data Quality is the next bounded contract-only owner", module_catalog)
-        self.assertIn("Next bounded owner slice — Data Quality", roadmap)
-        self.assertIn("Next bounded owner packet: Data Quality", phase_plan)
+        self.assertIn("Eight authoritative owner implementations are accepted", project_status)
+        self.assertIn("Eight authoritative implementations are accepted", module_catalog)
+        self.assertIn("Next bounded packet — Customer Enrichment", project_status)
+        self.assertIn("Customer Enrichment is the next bounded contract-only owner", module_catalog)
+        self.assertIn("Next bounded owner slice — Customer Enrichment", roadmap)
+        self.assertIn("Next bounded owner packet: Customer Enrichment", phase_plan)
 
         for document in (project_status, module_catalog, roadmap, phase_plan, customer_data_packet):
             self.assertIn("PR #188", document)
@@ -196,16 +199,35 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("Accepted historical contract", customer_data_packet)
         self.assertIn("Production discovery remains prohibited", customer_data_packet)
 
+        for document in (project_status, module_catalog, roadmap, phase_plan, data_quality_packet):
+            self.assertIn("PR #190", document)
+            self.assertIn("dcfe8faebc7462b888f8fc1721cb379a40fea88a", document)
+            self.assertIn("deac197c97cddc15bb9916092ca87f6e767ce1de", document)
+
+        self.assertIn("27 of 27 permanent workflows", project_status)
+        self.assertIn("27 of 27 permanent workflows", module_catalog)
+        self.assertIn("27 of 27 permanent workflows", roadmap)
+        self.assertIn("27 of 27 permanent workflows", phase_plan)
+        self.assertIn("27 of 27 permanent workflows succeeded", data_quality_packet)
+        self.assertIn("Accepted historical contract", data_quality_packet)
+        self.assertIn("Production discovery remains forbidden", data_quality_packet)
+
         stale_claims = (
             "Six authoritative owner implementations are accepted",
             "Six authoritative implementations are accepted",
+            "Seven authoritative owner implementations are accepted",
+            "Seven authoritative implementations are accepted",
             "Customer Data Operations is the next bounded contract-only owner",
+            "Data Quality is the next bounded contract-only owner",
             "Next bounded owner slice — Customer Data Operations",
+            "Next bounded owner slice — Data Quality",
             "Next bounded owner packet: Customer Data Operations",
+            "Next bounded owner packet: Data Quality",
             "Ready; implementation not started",
             "implementation code has not started",
             "Implementation state: **Not started",
             "PR #188 in progress",
+            "PR #190 in progress",
         )
         for stale in stale_claims:
             self.assertNotIn(stale, project_status)
@@ -213,6 +235,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             self.assertNotIn(stale, roadmap)
             self.assertNotIn(stale, phase_plan)
             self.assertNotIn(stale, customer_data_packet)
+            self.assertNotIn(stale, data_quality_packet)
 
         required_identity_controls = (
             "MAX_PRIVACY_ALIAS_HOPS = 64",
@@ -302,7 +325,10 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             "reference-only",
             "no-write proof",
             "Contract-only/non-runtime",
-            "implementation not started",
+            "Accepted historical contract",
+            "27 of 27 permanent workflows succeeded",
+            "dcfe8faebc7462b888f8fc1721cb379a40fea88a",
+            "deac197c97cddc15bb9916092ca87f6e767ce1de",
             "Production discovery remains forbidden",
         )
         for control in required_controls:
