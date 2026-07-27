@@ -214,6 +214,10 @@ impl OwnerContributionEndpoints {
     pub fn len(&self) -> usize {
         self.by_owner.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.by_owner.is_empty()
+    }
 }
 
 #[derive(Clone)]
@@ -1279,6 +1283,7 @@ fn retention(value: impl Into<String>) -> Result<RetentionPolicyId, SdkError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crm_customer_privacy::{SCOPE_DISCOVERY_COORDINATE, SCOPE_SNAPSHOT_RECORD_TYPE};
 
     fn lineage(purpose: &str) -> ScopeDiscoveryLineage {
         let registry = OwnerScopeRegistry::canonical_v1().unwrap();

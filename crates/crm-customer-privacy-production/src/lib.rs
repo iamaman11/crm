@@ -335,6 +335,7 @@ fn configuration_error(reference: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     #[test]
     fn internal_discovery_coordinate_is_not_a_public_inventory_entry() {
