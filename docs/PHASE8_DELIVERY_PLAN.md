@@ -51,7 +51,7 @@ A packet is **Complete** only after merge to `main`. Source or documentation cha
 
 Issue #126 is **In progress**.
 
-Merged runtime inventory:
+Merged public runtime inventory remains:
 
 - four public mutations: `case.create`, `case.submit`, `case.subject.verify`, `case.cancel`;
 - two permission-aware queries: `case.get`, `case.list`;
@@ -70,9 +70,7 @@ All nine authoritative owner implementations are accepted:
 8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows;
 9. Customer Enrichment — PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
 
-Post-merge owner documentation synchronization was accepted through PR #193 / merge `e09d3152c886386c2168f0b49e46d47cc44ed041`.
-
-All nine coordinates remain contract-only/non-runtime. They add no public ingress, Customer Privacy worker, production discovery, planning or owner action execution.
+Their coordinates remain non-public owner-owned reads. PR #206 composes them into trusted-internal production discovery without public ingress, a Customer Privacy worker, planning or owner action execution.
 
 ## 5. Nine-owner set complete
 
@@ -84,40 +82,30 @@ Current exact owner evidence remains recorded in `PROJECT_STATUS.md`, `IMPLEMENT
 
 Issue #194 runs alongside Phase 8A.
 
-Accepted Stage B foundation:
+Accepted prerequisites:
 
-1. PR #197 / merge `dbd7f6646f255b5f654060a045e26f99fc12c1f9` — reproducible 110-package complexity baseline, new-crate justification and machine-readable exception governance.
-2. PR #199 / accepted source `2335ea00bb73d875c291b4a7668921beaec87adc` / merge `cbcce5f18f3b08851ad781d13bc3fe01c2eeb62c` — 13 business-module manifests, 39 inherited declarations, zero violations.
-3. PR #200 / accepted source `31b3ab09caa4eccaba76a34c7d2211622830115f` / merge `aec7130bd48302d20bf821a617c339b2a9d755cf` — nine privacy-scope adapter manifests, 20 inherited declarations, zero violations.
+1. PR #197 — reproducible workspace/dependency/public-surface/CI baseline and exception governance.
+2. PR #199 — business-module dependency inheritance.
+3. PR #200 — privacy-scope adapter dependency inheritance.
+4. PR #203 — repository-wide root-family dependency no-growth.
+5. PR #204 — frozen discovery/snapshot contract and acceptance semantics.
+6. PR #205 — behavior-neutral Customer Privacy golden packages.
 
-Root workspace dependency families are `prost`, `serde`, `serde_json` and `sha2`. Remaining direct non-inheriting consumers are `prost` 53, `serde` 15, `serde_json` 23 and `sha2` 16.
-
-Stage B remains in progress until new direct declarations are blocked outside an explicit owned exception. Existing consumers migrate only through bounded role-based cohorts.
+Stage B no-growth and Stage C packaging are complete. Existing dependency debt may only shrink through bounded role-based cohorts. Workspace package count is `113`.
 
 ## 7. Ordered continuation
 
 ### Packet A — Stage B no-growth closure
 
-State: **Next cross-cutting implementation packet**.
+State: **Complete through PR #203**.
 
-Required result:
-
-- freeze the exact remaining non-inheriting consumer inventory;
-- block new direct version, feature or source declarations for root dependency families outside a machine-readable owned exception;
-- reject growth in the accepted debt inventory;
-- preserve dependency, package, public-surface and fan-out reports;
-- make no Customer Privacy runtime change;
-- avoid a repository-wide manifest rewrite.
-
-This closes the dependency prerequisite for Stage C.
+The accepted gate freezes the remaining non-inheriting root-family inventory, blocks new version/feature/source drift outside an explicit expiring exception and permits monotonic debt reduction only.
 
 ### Packet B — Scope discovery and immutable snapshot freeze
 
-State: **Ready after documentation synchronization; production discovery is not implemented**.
+State: **Complete as the preserved historical freeze through PR #204**.
 
-Inspect the existing Customer Privacy aggregate, schema, migrations, Protobuf contracts, persistence/transaction semantics, topology and canonical Party binding, registry/version/digest authority, authorization/RLS/audit boundaries, all nine owner contracts and current crate boundaries.
-
-Freeze:
+The freeze defines:
 
 1. deterministic invocation of all nine exact owner coordinates;
 2. registry version/digest and owner compatibility binding;
@@ -130,19 +118,15 @@ Freeze:
 9. permission-aware reads and exact audit evidence;
 10. replay, retry, registry/topology drift and crash-window semantics;
 11. clean PostgreSQL, complete schema removal, reapply and repeated acceptance;
-12. real-process acceptance before planning begins.
+12. real production-composition acceptance before planning begins.
+
+The historical fields that described runtime as not started remain historical evidence and are not rewritten by later implementation.
 
 ### Packet C — Stage C Customer Privacy golden-package pilot
 
-State: **Blocked on Packet A and the frozen Packet B boundary**.
+State: **Complete through PR #205**.
 
-Current repository fact:
-
-- `modules/crm-customer-privacy` exists;
-- `crm-customer-privacy-application`, `crm-customer-privacy-postgres` and `crm-customer-privacy-production` do not yet exist;
-- current behavior is split across persistence, create/submit/subject/cancel, query and composition crates.
-
-Target:
+The accepted boundary is:
 
 ```text
 modules/crm-customer-privacy/
@@ -151,32 +135,60 @@ crates/crm-customer-privacy-postgres/
 crates/crm-customer-privacy-production/
 ```
 
-The pilot is behavior-neutral. It preserves coordinates, routes, activation, authorization, RLS, audit, idempotency and process behavior; consolidates only across valid dependency seams; adds no discovery behavior; reports before/after package count, edges, fan-out, public surface and build/test effect; and exposes one Customer Privacy production contribution entry point without generic-runtime business switches.
-
-If consolidation is required, perform consolidation only in a separate behavior-neutral PR.
+The pilot preserved routes, workers and behavior while establishing the package boundary used by Packet D.
 
 ### Packet D — Scope discovery and immutable snapshot implementation
 
-State: **Blocked on accepted Packet C packaging**.
+State: **Implemented in PR #206; exact-head gate review pending**.
 
-Implement the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages.
+PR #206 implements the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages and records later evidence without rewriting the historical freeze.
 
-Do not implement discovery/snapshot as one new crate per command, query, worker, reader or composition fragment.
+Preserved architecture guardrails:
 
-Forbidden:
+- Do not implement discovery/snapshot as one new crate per command, query, worker, reader or composition fragment.
+- If consolidation is required, perform consolidation only in a separate behavior-neutral PR.
 
-- direct owner storage access;
-- generic runtime or worker branching on Customer Privacy IDs;
-- planning, restrictions, legal-hold/retention decisions or owner action execution in this packet.
+Implemented boundary:
 
-Acceptance requires focused tests, applicable generic conformance, FORCE RLS and cross-tenant negatives, complete schema removal/reapply, retry/replay/drift proof, permission-aware query/audit proof and real HTTP/gRPC process evidence on one unchanged exact head.
+- trusted-internal activation-gated exact-nine invocation;
+- descriptor, registry and immutable-lineage validation;
+- default page size `64`, maximum page size `128`, maximum cursor `2048` bytes and terminal completeness;
+- durable append-only pages and contiguous checkpoints;
+- deterministic safe resource aggregation and conflicting-duplicate fail closed;
+- immutable snapshot id/binding and strict rehydration with digest recomputation;
+- idempotent replay and page/checkpoint/finalization crash-window recovery;
+- permission-aware internal snapshot reads and safe audit;
+- FORCE-RLS PostgreSQL persistence, cross-tenant negatives, rollback/schema removal, reapply and repeated acceptance;
+- production composition through the owner package without public route or worker registration.
+
+Preserved metrics:
+
+- workspace packages `113 → 113`;
+- public Customer Privacy mutations `4 → 4`;
+- permission-aware public queries `2 → 2`;
+- Customer Privacy workers `0 → 0`;
+- public discovery routes added `0`.
+
+Forbidden and still unimplemented:
+
+- action planning and plan/outcome reads;
+- owner mutations and provider calls;
+- restrictions;
+- legal-hold and mandatory-retention decisions;
+- owner action execution;
+- access/export assembly;
+- deletion/anonymization;
+- Party tombstone and convergence;
+- Phase 8B.
+
+Acceptance requires every applicable permanent workflow to pass on one unchanged exact source SHA, followed by squash merge with expected-head protection.
 
 ## 8. Sequence after discovery acceptance
 
 1. deterministic planning and permission-aware plan/outcome reads;
 2. approval and immediate deny-only restrictions using final subject locks;
 3. legal-hold and mandatory-retention precedence;
-4. replay-safe resumable owner execution and crash-window recovery;
+4. replay-safe resumable owner execution and crash recovery;
 5. governed access/export assembly;
 6. owner-specific deletion/anonymization;
 7. Party tombstone and no-orphan proof;
@@ -202,18 +214,11 @@ Phase 8A remains **In progress**.
 
 It closes only after discovery, immutable snapshots, planning, restrictions, legal holds, execution, access/export, deletion/anonymization, tombstone/no-orphan behavior, convergence and complete worker/process acceptance are merged.
 
-Closure also requires:
-
-- Customer Privacy contribution aggregation no longer grows generic runtime;
-- no unjustified capability-specific crates introduced by Phase 8A.11;
-- dependency and affected-scope reports for the final packet;
-- synchronized documentation and issue #126 evidence.
+Closure also requires contribution aggregation that does not grow generic runtime, no unjustified capability-specific crates, synchronized documentation/issues and full exact-head evidence.
 
 ## 11. Phase 8B
 
 Product Catalog, Pricing, CPQ, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment boundaries remain **Planned and blocked on completed Phase 8A**. They remain independent owner domains and must not be absorbed into Sales.
-
-Phase 8B must prove that normal capabilities add zero crates, owner contributions do not grow generic runtime, affected iteration stays bounded and frontend/backend ship as complete vertical workflows.
 
 ## 12. Completion rule
 

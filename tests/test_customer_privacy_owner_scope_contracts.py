@@ -159,7 +159,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("bytes cursor_digest_sha256", contributions)
         self.assertIn("CUSTOMER_DATA_CLASS_RESTRICTED = 9;", types)
 
-    def test_status_sources_freeze_nine_accepted_owners_and_discovery_next(self) -> None:
+    def test_status_sources_track_nine_accepted_owners_and_discovery_gate(self) -> None:
         project_status = (ROOT / "docs/PROJECT_STATUS.md").read_text(encoding="utf-8")
         module_catalog = (ROOT / "docs/MODULE_CATALOG.md").read_text(encoding="utf-8")
         roadmap = (ROOT / "docs/IMPLEMENTATION_ROADMAP.md").read_text(
@@ -183,7 +183,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             self.assertIn("Customer Data Operations", document)
             self.assertIn("Data Quality", document)
             self.assertIn("Customer Enrichment", document)
-            self.assertIn("Scope discovery and immutable snapshot", document)
+            self.assertIn("scope discovery and immutable snapshot", document.lower())
             self.assertIn("Current product-complete expert modules: **0**", document)
 
         self.assertIn(
@@ -206,7 +206,10 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("28 of 28 permanent workflows succeeded", enrichment_packet)
         self.assertIn("Production discovery remains forbidden", enrichment_packet)
         self.assertIn("Planning and action execution remain prohibited", enrichment_packet)
-        self.assertIn("production discovery is not implemented", phase_plan)
+        self.assertIn(
+            "Implemented in PR #206; exact-head gate review pending", phase_plan
+        )
+        self.assertIn("PR #206", module_catalog)
         self.assertIn("planning and action execution remain not started", module_catalog)
 
         for document in (*authoritative, customer_data_packet):

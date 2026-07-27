@@ -2,6 +2,11 @@ pub fn discovery_scope_snapshot_state_descriptor_hash() -> [u8; 32] {
     Sha256::digest(DISCOVERY_SCOPE_SNAPSHOT_STATE_DESCRIPTOR).into()
 }
 
+/// Canonical unframed SHA-256 used for exact Protobuf request and cursor evidence.
+pub fn discovery_sha256(bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(bytes).into()
+}
+
 pub fn encode_discovery_scope_snapshot_state(
     snapshot: &DiscoveryScopeSnapshot,
 ) -> Result<Vec<u8>, SdkError> {
@@ -145,7 +150,8 @@ fn valid_discovery_purpose_code(value: &str) -> bool {
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
-fn discovery_lineage_digest(lineage: &ScopeDiscoveryLineage) -> [u8; 32] {
+/// Deterministic digest of the complete immutable discovery lineage.
+pub fn discovery_lineage_digest(lineage: &ScopeDiscoveryLineage) -> [u8; 32] {
     let mut hasher = framed_hasher(b"crm.customer-privacy.discovery-lineage/v1");
     hash_field(&mut hasher, lineage.privacy_case_id.as_str().as_bytes());
     hash_field(&mut hasher, lineage.tenant_id.as_str().as_bytes());
@@ -202,4 +208,3 @@ fn validate_discovery_state_size(bytes: &[u8]) -> Result<(), SdkError> {
     }
     Ok(())
 }
-

@@ -3,7 +3,11 @@
 //! Stable PostgreSQL boundary for Customer Privacy.
 //!
 //! The existing persistence and transaction-guard crates remain transitional
-//! implementation details. New owner persistence must enter through this package.
+//! implementation details. New owner persistence enters through this package.
+
+mod discovery;
+
+pub use discovery::*;
 
 pub use crm_customer_privacy_capability_composition::{
     PostgresCustomerPrivacyCancellationGuard, PostgresCustomerPrivacyPreviousCaseGuard,

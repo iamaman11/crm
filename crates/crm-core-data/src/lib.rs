@@ -55,5 +55,9 @@ pub use postgres_related_query::{
     MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, RelatedRecordListQuery, RelatedRecordQueryPage,
 };
 
+/// Governed implementation dependency for owner PostgreSQL packages. This keeps the
+/// workspace on the already resolved SQLx family without adding direct version debt.
+pub use sqlx as postgres_sqlx;
+
 /// Architecture marker for `crm-core-data`.
 pub const CRATE_NAME: &str = "crm-core-data";

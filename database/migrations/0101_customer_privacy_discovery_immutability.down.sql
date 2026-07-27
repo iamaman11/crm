@@ -1,0 +1,6 @@
+DROP TRIGGER IF EXISTS customer_privacy_discovery_snapshot_records_immutable ON crm.records;
+DROP TRIGGER IF EXISTS customer_privacy_discovery_audit_immutable ON crm.customer_privacy_discovery_audit;
+DROP TRIGGER IF EXISTS customer_privacy_discovery_snapshots_immutable ON crm.customer_privacy_discovery_snapshots;
+DROP TRIGGER IF EXISTS customer_privacy_discovery_owner_pages_immutable ON crm.customer_privacy_discovery_owner_pages;
+DROP TRIGGER IF EXISTS customer_privacy_discovery_attempts_immutable ON crm.customer_privacy_discovery_attempts;
+DROP FUNCTION IF EXISTS crm.reject_customer_privacy_discovery_evidence_mutation();

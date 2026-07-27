@@ -1,0 +1,131 @@
+{
+  "schema_id": "crm.governance.customer-privacy-discovery-snapshot-implementation",
+  "schema_version": "1.0.0",
+  "status": "implemented_pending_exact_head_acceptance",
+  "historical_freeze_preserved": "contracts/customer-privacy-discovery-snapshot-freeze.json",
+  "coordinate": {
+    "capability_id": "customer_privacy.scope.discover",
+    "capability_version": "1.0.0",
+    "phase": 260,
+    "public_ingress": false,
+    "execution_kind": "worker_internal",
+    "generic_runtime_worker_registered": false
+  },
+  "package_boundary": {
+    "domain": "modules/crm-customer-privacy",
+    "application": "crates/crm-customer-privacy-application",
+    "postgres": "crates/crm-customer-privacy-postgres",
+    "production": "crates/crm-customer-privacy-production",
+    "workspace_package_count_before": 113,
+    "workspace_package_count_after": 113,
+    "new_workspace_packages": 0
+  },
+  "owner_registry": {
+    "exact_owner_count": 9,
+    "ordering": [
+      "owner_module_id",
+      "capability_id",
+      "capability_version"
+    ],
+    "coordinates": [
+      "consents.privacy.scope.contribute@1.0.0",
+      "contact_points.privacy.scope.contribute@1.0.0",
+      "customer_accounts.privacy.scope.contribute@1.0.0",
+      "customer_data.privacy.scope.contribute@1.0.0",
+      "customer_enrichment.privacy.scope.contribute@1.0.0",
+      "data_quality.privacy.scope.contribute@1.0.0",
+      "identity_resolution.privacy.scope.contribute@1.0.0",
+      "parties.privacy.scope.contribute@1.0.0",
+      "party_relationships.privacy.scope.contribute@1.0.0"
+    ]
+  },
+  "lineage_fields": [
+    "privacy_case_id",
+    "tenant_id",
+    "canonical_party_id",
+    "identity_resolution_generation",
+    "registry_version",
+    "registry_digest_sha256",
+    "purpose_code",
+    "effective_request_at_unix_ms"
+  ],
+  "pagination": {
+    "default_page_size": 64,
+    "maximum_page_size": 128,
+    "maximum_cursor_bytes": 2048,
+    "first_page_number": 1,
+    "terminal_cursor_empty": true,
+    "terminal_completeness_required_for_all_owners": true,
+    "checkpoint_rule": "contiguous_durable_owner_page_prefix"
+  },
+  "snapshot": {
+    "record_type": "customer-privacy.scope-snapshot",
+    "schema_id": "crm.customer-privacy.discovery_scope_snapshot.state",
+    "schema_version": "1.0.0",
+    "maximum_payload_bytes": 524288,
+    "retention_policy_id": "crm.customer_privacy.discovery_scope_snapshot",
+    "encoding": "canonical_json_crm.cjson/v1",
+    "id_prefix": "privacy-discovery-scope-",
+    "strict_rehydration": true,
+    "identity_and_digests_recomputed": true,
+    "append_only_after_finalize": true
+  },
+  "runtime_inventory": {
+    "public_mutations_before": 4,
+    "public_mutations_after": 4,
+    "public_queries_before": 2,
+    "public_queries_after": 2,
+    "customer_privacy_workers_before": 0,
+    "customer_privacy_workers_after": 0,
+    "public_routes_added": 0
+  },
+  "implemented": [
+    "trusted_internal_activation_gated_invocation",
+    "exact_nine_descriptor_validation",
+    "deterministic_owner_traversal",
+    "immutable_lineage_binding",
+    "bounded_owner_specific_pagination",
+    "durable_owner_page_receipts",
+    "contiguous_checkpoint_recovery",
+    "deterministic_safe_resource_aggregation",
+    "exact_duplicate_deduplication",
+    "conflicting_duplicate_fail_closed",
+    "atomic_or_recoverable_snapshot_finalization",
+    "strict_snapshot_rehydration",
+    "idempotent_replay_and_crash_window_recovery",
+    "permission_aware_internal_snapshot_read",
+    "safe_identifier_digest_count_audit",
+    "force_rls_and_cross_tenant_denial"
+  ],
+  "not_implemented": [
+    "deterministic_action_plan",
+    "permission_aware_plan_outcome_reads",
+    "approval",
+    "processing_restrictions",
+    "legal_hold_decisions",
+    "mandatory_retention_decisions",
+    "owner_action_execution",
+    "deletion_or_anonymization",
+    "access_export_assembly",
+    "party_tombstone",
+    "projection_search_cache_convergence",
+    "customer_privacy_worker_registration",
+    "public_http_grpc_ingress"
+  ],
+  "acceptance": {
+    "workflow": ".github/workflows/customer-privacy-discovery.yml",
+    "postgres_test": "database/tests/0043_customer_privacy_discovery_scope.sql",
+    "requires_clean_database": true,
+    "requires_force_rls": true,
+    "requires_cross_tenant_negatives": true,
+    "requires_complete_schema_removal": true,
+    "requires_reapply": true,
+    "requires_repeated_acceptance": true,
+    "accepted_source_sha": null,
+    "permanent_workflow_count": null,
+    "merge_sha": null
+  },
+  "next_packet": "deterministic planning and permission-aware plan/outcome reads",
+  "phase_8a_complete": false,
+  "product_complete_expert_modules": 0
+}
