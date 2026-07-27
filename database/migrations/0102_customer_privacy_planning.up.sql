@@ -9,7 +9,7 @@ CREATE TABLE crm.customer_privacy_action_plans (
   plan_id text NOT NULL,
   plan_digest bytea NOT NULL CHECK (octet_length(plan_digest) = 32),
   approval_required boolean NOT NULL,
-  planned_at_unix_nanos bigint NOT NULL CHECK (planned_at_unix_nanos > 0),
+  planned_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (tenant_id, privacy_case_id),
   UNIQUE (tenant_id, plan_id)
@@ -28,7 +28,7 @@ CREATE TABLE crm.customer_privacy_planning_audit (
   resulting_case_version bigint NOT NULL CHECK (resulting_case_version > 0),
   actor_id text NOT NULL,
   request_id text NOT NULL,
-  occurred_at_unix_nanos bigint NOT NULL CHECK (occurred_at_unix_nanos > 0),
+  occurred_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (tenant_id, audit_digest)
 );
@@ -44,7 +44,7 @@ CREATE INDEX customer_privacy_planning_audit_case_idx
   ON crm.customer_privacy_planning_audit (
     tenant_id,
     privacy_case_id,
-    occurred_at_unix_nanos,
+    occurred_at,
     audit_digest
   );
 
