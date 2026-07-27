@@ -45,4 +45,3 @@ mod tests {
         assert_eq!(queries.len(), 2);
     }
 }
-
