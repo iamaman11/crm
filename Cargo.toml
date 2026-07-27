@@ -83,6 +83,7 @@ members = [
   "crates/crm-identity-resolution-capability-adapter",
   "crates/crm-identity-resolution-capability-composition",
   "crates/crm-identity-resolution-merge-composition",
+  "crates/crm-identity-resolution-merge-query-adapter",
   "crates/crm-identity-resolution-topology-composition",
   "crates/crm-identity-resolution-query-adapter",
   "crates/crm-identity-resolution-privacy-scope-adapter",
@@ -118,3 +119,10 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "Proprietary"
+
+# Stage B wave 1: exact existing requirements only; no library upgrade is intended.
+[workspace.dependencies]
+prost = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"

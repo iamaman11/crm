@@ -8,6 +8,22 @@
 - Module contribution coordinates:
 - Remaining scope not claimed:
 
+## Workspace/package governance
+- Workspace members added: none / list exact paths
+- Workspace dependencies added or changed: none / list exact requirements and features
+- Lockfile effect: none / explain exact diff
+- Architecture governance registry entries: none / list IDs or paths
+
+New crate justification, required for every added workspace member:
+- protected boundary:
+- isolated dependencies:
+- expected consumers:
+- why an internal Rust module is insufficient:
+- lifecycle or extraction seam:
+- expected build/test fan-out:
+- removal or consolidation condition:
+- tracking issue:
+
 ## Architecture conformance
 - [ ] Domain/application code depends inward only; no business module gained DB, broker, arbitrary HTTP, secret-store, object-storage or LLM-provider clients.
 - [ ] No business module imports another module's internals or storage.
@@ -23,6 +39,7 @@
 ## Acceptance evidence
 - [ ] Focused domain/unit tests
 - [ ] Architecture conformance preflight: `python scripts/repo.py conformance`
+- [ ] Workspace governance: `python scripts/analyze_workspace_governance.py --base-ref origin/main --check`
 - [ ] Rust formatting, Clippy and workspace tests
 - [ ] Contract and Governance CI when applicable
 - [ ] Database and real-process/runtime CI when applicable
