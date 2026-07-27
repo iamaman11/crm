@@ -1,0 +1,86 @@
+name: Customer Privacy Planning Runtime Fix
+
+on:
+  push:
+    branches:
+      - feature/customer-privacy-planning-runtime
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feature/customer-privacy-planning-runtime
+          fetch-depth: 0
+      - name: Apply exact source fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          application = Path("crates/crm-customer-privacy-application/src/planning.rs")
+          text = application.read_text(encoding="utf-8")
+          text = text.replace(
+              "    use crm_customer_privacy::{PrivacyCaseKind, SchemaVersion};\n",
+              "    use crm_module_sdk::SchemaVersion;\n",
+          )
+          text = text.replace(
+              "        assert_eq!(PrivacyCaseKind::Erasure as u8, PrivacyCaseKind::Erasure as u8);\n",
+              "",
+          )
+          application.write_text(text, encoding="utf-8")
+
+          postgres = Path("crates/crm-customer-privacy-postgres/src/planning.rs")
+          text = postgres.read_text(encoding="utf-8")
+          old = '''    let mut bytes = Vec::new();
+    for value in [
+        b"crm.customer-privacy.planning-audit/v1".as_slice(),
+        invocation.tenant_id.as_str().as_bytes(),
+        invocation.privacy_case_id.as_str().as_bytes(),
+        event_type.as_bytes(),
+        plan.plan_id().as_str().as_bytes(),
+        plan.digest().as_slice(),
+        resulting_case_version.to_string().as_bytes(),
+        invocation.actor_id.as_str().as_bytes(),
+        invocation.request_id.as_str().as_bytes(),
+    ] {
+        bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+        bytes.extend_from_slice(value);
+    }
+    discovery_sha256(&bytes)
+'''
+          new = '''    let resulting_case_version = resulting_case_version.to_string();
+    let mut bytes = Vec::new();
+    for value in [
+        b"crm.customer-privacy.planning-audit/v1".as_slice(),
+        invocation.tenant_id.as_str().as_bytes(),
+        invocation.privacy_case_id.as_str().as_bytes(),
+        event_type.as_bytes(),
+        plan.plan_id().as_str().as_bytes(),
+        plan.digest().as_slice(),
+        resulting_case_version.as_bytes(),
+        invocation.actor_id.as_str().as_bytes(),
+        invocation.request_id.as_str().as_bytes(),
+    ] {
+        bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+        bytes.extend_from_slice(value);
+    }
+    discovery_sha256(&bytes)
+'''
+          if old not in text:
+              raise SystemExit("planning audit digest source mismatch")
+          postgres.write_text(text.replace(old, new), encoding="utf-8")
+      - name: Remove one-shot workflow and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/_planning-runtime-fix.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/crm-customer-privacy-application/src/planning.rs crates/crm-customer-privacy-postgres/src/planning.rs .github/workflows/_planning-runtime-fix.yml
+          git commit -m "Fix planning runtime source diagnostics"
+          git push origin HEAD:feature/customer-privacy-planning-runtime
