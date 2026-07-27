@@ -1,0 +1,115 @@
+name: Temporary Customer Enrichment Privacy Accessors
+
+on:
+  push:
+    branches:
+      - feature/customer-enrichment-privacy-scope
+    paths:
+      - ".github/workflows/temp-customer-enrichment-privacy-accessors.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feature/customer-enrichment-privacy-scope
+          fetch-depth: 0
+      - name: Add narrow domain read accessors and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          lifecycle = Path("modules/crm-customer-enrichment/src/lifecycle.rs")
+          text = lifecycle.read_text(encoding="utf-8")
+          old = '''    pub fn request_id(&self) -> &EnrichmentRequestId {
+              &self.request_id
+          }
+
+          pub fn canonical_response_digest(&self) -> &[u8; 32] {
+'''
+          new = '''    pub fn request_id(&self) -> &EnrichmentRequestId {
+              &self.request_id
+          }
+
+          pub fn provider_profile_version_id(&self) -> &ProviderProfileVersionId {
+              &self.provider_profile_version_id
+          }
+
+          pub fn mapping_version_id(&self) -> &MappingVersionId {
+              &self.mapping_version_id
+          }
+
+          pub const fn retrieved_at_unix_ms(&self) -> u64 {
+              self.retrieved_at_unix_ms
+          }
+
+          pub fn canonical_response_digest(&self) -> &[u8; 32] {
+'''
+          if old not in text:
+              raise SystemExit("receipt accessor insertion point was not found")
+          text = text.replace(old, new)
+
+          old = '''    pub fn suggestion_id(&self) -> &SuggestionId {
+              &self.suggestion_id
+          }
+
+          pub fn target(&self) -> &TargetSnapshot {
+'''
+          new = '''    pub fn suggestion_id(&self) -> &SuggestionId {
+              &self.suggestion_id
+          }
+
+          pub fn request_id(&self) -> &EnrichmentRequestId {
+              &self.request_id
+          }
+
+          pub fn target(&self) -> &TargetSnapshot {
+'''
+          if old not in text:
+              raise SystemExit("suggestion accessor insertion point was not found")
+          lifecycle.write_text(text.replace(old, new), encoding="utf-8")
+
+          usage = Path("modules/crm-customer-enrichment/src/provider_usage.rs")
+          text = usage.read_text(encoding="utf-8")
+          old = '''    pub fn request_id(&self) -> &EnrichmentRequestId {
+              &self.request_id
+          }
+
+          pub const fn kind(&self) -> ProviderUsageKind {
+'''
+          new = '''    pub fn request_id(&self) -> &EnrichmentRequestId {
+              &self.request_id
+          }
+
+          pub fn provider_profile_version_id(&self) -> &ProviderProfileVersionId {
+              &self.provider_profile_version_id
+          }
+
+          pub fn response_receipt_id(&self) -> Option<&ProviderResponseReceiptId> {
+              self.response_receipt_id.as_ref()
+          }
+
+          pub const fn recorded_at_unix_ms(&self) -> u64 {
+              self.recorded_at_unix_ms
+          }
+
+          pub const fn kind(&self) -> ProviderUsageKind {
+'''
+          if old not in text:
+              raise SystemExit("usage accessor insertion point was not found")
+          usage.write_text(text.replace(old, new), encoding="utf-8")
+
+          Path(".github/workflows/temp-customer-enrichment-privacy-accessors.yml").unlink()
+          PY
+          cargo fmt --all
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(enrichment): expose strict privacy lineage accessors"
+          git push origin HEAD:feature/customer-enrichment-privacy-scope
