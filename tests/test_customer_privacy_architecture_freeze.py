@@ -4,6 +4,10 @@ import json
 from pathlib import Path
 import unittest
 
+from tests.test_customer_privacy_discovery_snapshot_freeze import (
+    CustomerPrivacyDiscoverySnapshotFreezeTests,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FREEZE_PATH = ROOT / "contracts/customer-privacy-architecture-freeze.json"
