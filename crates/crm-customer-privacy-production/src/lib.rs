@@ -66,7 +66,6 @@ use crm_query_runtime::{
     CursorCodec, QueryExecutionContext, QueryExecutor, QueryRequest, QuerySemanticValidator,
     QueryVisibilityAuthorizer,
 };
-use std::collections::BTreeSet;
 use std::sync::Arc;
 
 const INTERNAL_SNAPSHOT_READ_CAPABILITY: &str = "customer_privacy.scope.snapshot.read";
