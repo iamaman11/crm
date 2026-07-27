@@ -6,18 +6,48 @@
       "package": "crm-identity-resolution-merge-query-adapter",
       "path": "crates/crm-identity-resolution-merge-query-adapter",
       "protected_boundary": "Existing permission-aware Identity Resolution merge-query adapter boundary; this entry only makes the already effective Cargo workspace member explicit.",
-      "isolated_dependencies": [
-        "crm-query-runtime",
-        "crm-proto-contracts",
-        "prost"
-      ],
-      "expected_consumers": [
-        "crm-application-runtime"
-      ],
+      "isolated_dependencies": ["crm-query-runtime", "crm-proto-contracts", "prost"],
+      "expected_consumers": ["crm-application-runtime"],
       "why_internal_module_insufficient": "The package predates Stage B and is already an effective workspace member through a path dependency; explicit listing removes hidden workspace membership without moving or changing behavior.",
       "lifecycle_or_extraction_seam": "Transitional Identity Resolution query-adapter package retained until the domain converges on the target application/postgres/production package model.",
       "expected_build_test_fan_out": "No effective fan-out change: Cargo metadata already included this package before explicit listing; baseline reverse impact is measured by the Stage B analyzer.",
       "removal_or_consolidation_condition": "Consolidate into the accepted Identity Resolution application/production packages in a separate behavior-neutral Stage G packet after public coordinates, consumers and process acceptance are inventoried.",
+      "tracking_issue": "#194"
+    },
+    {
+      "package": "crm-customer-privacy-application",
+      "path": "crates/crm-customer-privacy-application",
+      "protected_boundary": "Stable owner application inventory for all Customer Privacy commands and queries before production discovery is implemented.",
+      "isolated_dependencies": ["crm-capability-runtime", "existing Customer Privacy command/query adapters"],
+      "expected_consumers": ["crm-customer-privacy-production"],
+      "why_internal_module_insufficient": "The application boundary must remain independent from SQLx and process composition while aggregating multiple transitional command/query implementations.",
+      "lifecycle_or_extraction_seam": "Permanent target application package; transitional capability-specific crates are consolidated into internal modules only in later behavior-neutral packets.",
+      "expected_build_test_fan_out": "One production consumer; no generic runtime reverse edge to individual Customer Privacy adapters after the pilot.",
+      "removal_or_consolidation_condition": "Retain as the permanent application package; remove only if the owner package model is superseded by an accepted architecture decision.",
+      "tracking_issue": "#194"
+    },
+    {
+      "package": "crm-customer-privacy-postgres",
+      "path": "crates/crm-customer-privacy-postgres",
+      "protected_boundary": "Stable SQLx/persistence and transaction-guard ownership boundary for Customer Privacy.",
+      "isolated_dependencies": ["existing Customer Privacy persistence and PostgreSQL composition"],
+      "expected_consumers": ["crm-customer-privacy-production"],
+      "why_internal_module_insufficient": "PostgreSQL dependencies and transaction locks must not enter the pure owner module or application package.",
+      "lifecycle_or_extraction_seam": "Permanent target PostgreSQL package; transitional persistence/composition crates remain private implementation dependencies until later consolidation.",
+      "expected_build_test_fan_out": "One production consumer and unchanged existing PostgreSQL acceptance workflows.",
+      "removal_or_consolidation_condition": "Retain as the permanent infrastructure boundary; consolidate the two transitional implementation crates into it in a separate behavior-neutral packet.",
+      "tracking_issue": "#194"
+    },
+    {
+      "package": "crm-customer-privacy-production",
+      "path": "crates/crm-customer-privacy-production",
+      "protected_boundary": "Single owner-owned production contribution entry point for Customer Privacy routes and queries.",
+      "isolated_dependencies": ["crm-application-composition", "crm-customer-privacy-application", "crm-customer-privacy-postgres", "crm-query-runtime"],
+      "expected_consumers": ["crm-application-runtime"],
+      "why_internal_module_insufficient": "The generic process host must consume an owner contribution without importing owner-specific command, query or PostgreSQL implementations.",
+      "lifecycle_or_extraction_seam": "Permanent target production package and future home of discovery worker registration after separate runtime acceptance.",
+      "expected_build_test_fan_out": "Replaces six direct Customer Privacy implementation dependencies in the generic runtime with one owner production dependency.",
+      "removal_or_consolidation_condition": "Retain as the permanent production contribution boundary; no removal is planned while Customer Privacy is first-party runtime behavior.",
       "tracking_issue": "#194"
     }
   ]
