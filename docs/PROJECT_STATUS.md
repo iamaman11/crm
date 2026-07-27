@@ -15,15 +15,16 @@ This document is the concise human-readable snapshot. Normative delivery order r
 7. `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` — issue #194 architecture and developer-experience 10/10 execution program.
 8. `WORKSPACE_COMPLEXITY_BASELINE.md` — reproducible Stage B dependency, packaging, public-surface and CI measurements.
 9. `STAGE_B_DEPENDENCY_NO_GROWTH.md` — machine-enforced root dependency debt closure and continuation boundary.
-10. `CRM_CAPABILITY_COVERAGE.md` — product-completeness guardrail.
-11. `MODULE_CATALOG.md` — business ownership and readiness accounting.
-12. accepted owner packet documents — historical owner-scope acceptance boundaries.
+10. `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_FREEZE.md` — exact discovery lineage, immutable snapshot and later runtime acceptance boundary.
+11. `CRM_CAPABILITY_COVERAGE.md` — product-completeness guardrail.
+12. `MODULE_CATALOG.md` — business ownership and readiness accounting.
+13. accepted owner packet documents — historical owner-scope acceptance boundaries.
 
 ## Current position
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is in progress.**
 
-Latest behavior-affecting architecture baseline: `aec7130bd48302d20bf821a617c339b2a9d755cf`. The Stage B no-growth closure is governance-only and does not change runtime, packaging or dependency resolution.
+Latest production-runtime-affecting architecture baseline: `aec7130bd48302d20bf821a617c339b2a9d755cf`. The Stage B no-growth closure and the discovery/snapshot freeze are non-runtime architecture work and do not add production routes, workers or dependency resolution changes.
 
 Merged Customer Privacy runtime inventory:
 
@@ -62,23 +63,40 @@ Customer Privacy scope discovery and immutable snapshot
 -> Phase 8B Product Catalog, Pricing, CPQ and Quote-to-Revenue
 ```
 
-## Next bounded product packet — Scope discovery and immutable snapshot
+## Frozen product packet — Scope discovery and immutable snapshot
 
-State: **Ready for contract/acceptance freeze; production implementation not started**.
+State: **Contract and acceptance semantics frozen; production implementation not started**.
 
-The packet must freeze and prove:
+The frozen boundary defines:
 
-- deterministic invocation and completeness of all nine accepted owner contributions;
+- deterministic invocation and terminal completeness of all nine exact owner contributions;
 - exact registry version/digest and owner-coordinate compatibility binding;
-- fail-closed behavior for unavailable, stale, disabled or incompatible owners;
-- one immutable scope snapshot bound to tenant, privacy case, canonical Party, topology generation, registry digest, purpose and effective request time;
-- deterministic owner/resource/data-class ordering and bounded pagination without payload disclosure;
-- replay-stable page, cursor and snapshot digests plus terminal completeness;
-- no owner mutation, restriction, legal-hold, retention or destructive action during discovery;
+- fail-closed unavailable, disabled, stale or incompatible owners;
+- one immutable lineage bound to tenant, privacy case, canonical Party, topology generation, registry version/digest, purpose and effective request time;
+- purpose/effective-time-bound authoritative snapshot identity around the existing deterministic aggregation;
+- bounded pagination, page/cursor receipts, deterministic owner/resource/data-class ordering and no payload disclosure;
+- replay, retry, registry/topology drift and crash-window semantics;
 - permission-aware snapshot reads and exact audit evidence;
-- clean PostgreSQL, rollback/schema removal, reapply, crash/retry and real-process acceptance.
+- clean PostgreSQL, FORCE RLS, rollback/schema removal, reapply, repeated and real-process acceptance required before runtime discovery can be accepted.
 
-Planning and action execution remain prohibited until discovery and immutable snapshot are accepted. Runtime discovery is not started by the Stage B closure or by this freeze packet.
+The pure Customer Privacy domain now exposes strict non-runtime lineage, bound-owner contribution and immutable discovery-snapshot contracts with canonical rehydration. It does not register the discovery coordinate in production.
+
+Planning, retention decisions, restrictions, legal holds and owner action execution remain prohibited until discovery and immutable snapshot runtime acceptance is complete.
+
+## Next bounded product packet — Stage C Customer Privacy golden-package pilot
+
+State: **Ready after acceptance of the freeze packet; behavior-neutral only**.
+
+The pilot must establish the accepted Customer Privacy application/PostgreSQL/production ownership boundary without adding discovery behavior:
+
+```text
+modules/crm-customer-privacy/
+crates/crm-customer-privacy-application/
+crates/crm-customer-privacy-postgres/
+crates/crm-customer-privacy-production/
+```
+
+It must preserve every existing coordinate, route, activation, authorization, RLS, audit, idempotency and process behavior; add no generic-runtime business switch; and report package, dependency, fan-out, public-surface and build/test effects. Runtime discovery starts only after this separate behavior-neutral pilot is accepted.
 
 ## Cross-cutting architecture and developer-experience lane
 
@@ -89,45 +107,34 @@ Accepted Stage B foundation and inheritance packets:
 1. PR #197 — reproducible workspace/dependency/public-surface/CI baseline, machine-readable new-crate justification and expiring exception governance; merge `dbd7f6646f255b5f654060a045e26f99fc12c1f9`.
 2. PR #199 — all 13 business modules inherit root `serde`, `serde_json` and `sha2`; accepted source `2335ea00bb73d875c291b4a7668921beaec87adc`; merge `cbcce5f18f3b08851ad781d13bc3fe01c2eeb62c`; 26 of 26 applicable workflows.
 3. PR #200 — all nine owner privacy-scope adapters inherit root `prost` and `sha2`, with Customer Enrichment also inheriting `serde` and `serde_json`; accepted source `31b3ab09caa4eccaba76a34c7d2211622830115f`; merge `aec7130bd48302d20bf821a617c339b2a9d755cf`; 15 of 15 applicable workflows.
-4. Stage B no-growth closure — freezes every remaining direct/non-inheriting root-family consumer, permits monotonic debt reduction and blocks new consumer/version/feature/source debt except through the existing complete expiring exception registry.
+4. PR #203 — every remaining direct/non-inheriting root-family consumer is frozen; accepted source `37cec8e2e68c42e85468cea83b31dcf3ba4138d4`; merge `6a445cd4cb9f423561f834fd7f291635f82eb464`; 4 of 4 applicable workflows.
 
 Current measured architecture baseline and closure boundary:
 
 - 110 effective workspace packages: 96 technical crates, 13 business modules and one deployable service;
 - root `[workspace.dependencies]`: `prost`, `serde`, `serde_json`, `sha2`;
 - two calibrated blocking inheritance policies plus one repository-wide root-family no-growth policy;
-- owner-module policy: 13 manifests, 39 governed declarations, zero violations;
-- privacy-scope adapter policy: nine manifests, 20 governed declarations, zero violations;
 - accepted direct/non-inheriting debt inventory: `prost` 53, `serde` 15, `serde_json` 23, `sha2` 16, total 107 family-manifest entries;
 - current debt must remain an exact subset, so reduction needs no baseline edit and growth fails closed;
 - 268 external direct dependency declarations and 773 internal workspace edges;
 - maximum dependency depth 15 and maximum transitive reverse impact 103;
 - conservative public Rust surface 4,283 items;
 - zero registered temporary architecture exceptions;
-- package count and `Cargo.lock` remain unchanged by the closure.
+- package count and `Cargo.lock` unchanged by the no-growth closure.
 
 The closure prevents new dependency debt before Stage C without forcing a mass manifest migration. Rust/toolchain policy, workspace lints, broader public-surface/fan-out calibration and later dependency cohorts remain issue #194 work at natural packet boundaries.
 
 ## Correct continuation order
 
-1. **Freeze Customer Privacy discovery/snapshot contracts and acceptance semantics.** Define exact identity, registry/topology binding, ordering, digests, replay, authorization, failure and PostgreSQL/process proof before runtime code.
-2. **Run the Stage C golden-package pilot on Customer Privacy as a separate behavior-neutral PR.** The target `crm-customer-privacy-application`, `crm-customer-privacy-postgres` and `crm-customer-privacy-production` packages do not yet exist; current behavior is split across capability-specific persistence, mutation, subject, cancel, query and composition crates.
-3. **Implement scope discovery and immutable snapshot inside the accepted target packages.** Add no command/query/worker/composition-fragment crate and do not grow generic runtime business switches.
-4. **After discovery acceptance, continue deterministic planning and the remaining privacy lifecycle sequence.** Apply residual architecture calibration only at natural packet boundaries unless it blocks the active product packet.
-
-This order preserves issue #194, prevents new architecture debt before Stage C and avoids delaying Phase 8A with an unbounded repository-wide cleanup.
+1. accept the discovery/snapshot contract and acceptance freeze on one unchanged exact head;
+2. run the Stage C behavior-neutral Customer Privacy golden-package pilot;
+3. implement discovery/snapshot inside the accepted application/PostgreSQL/production packages;
+4. after discovery acceptance, continue deterministic planning and the remaining privacy lifecycle sequence;
+5. apply residual architecture calibration only at natural packet boundaries unless it blocks correctness.
 
 ## Guardrail for the active Customer Privacy packet
 
-Do not add one new crate for each discovery command, query, worker or composition fragment.
-
-Required sequence:
-
-1. freeze the discovery/snapshot contract and acceptance boundary;
-2. identify the real Customer Privacy application/PostgreSQL/production ownership and dependency seams;
-3. perform necessary consolidation as a separate behavior-neutral Stage C pilot;
-4. implement discovery/snapshot in the accepted target packages;
-5. preserve focused, PostgreSQL, rollback/reapply and real-process acceptance.
+Do not add one new crate for each discovery command, query, worker or composition fragment. Feature behavior and packaging consolidation remain separate PRs, and generic router/worker algorithms must not grow Customer Privacy branches.
 
 ## Remaining product work
 
