@@ -4,8 +4,8 @@
 //!
 //! This package is the only supported process-composition entry point for
 //! Customer Privacy. It preserves the accepted four mutations and two queries.
-//! Scope discovery is exposed only as an owner-owned internal service: it is not
-//! a public route and is not registered as a generic-runtime worker.
+//! Scope discovery and deterministic planning are exposed only as owner-owned
+//! internal services: neither is a public route or a generic-runtime worker.
 
 use crm_application_composition::{
     ActivationGatedMutationValidator, ActivationGatedQueryValidator, ModuleActivationPort,
@@ -30,16 +30,18 @@ use crm_customer_enrichment_privacy_scope_adapter::{
 };
 use crm_customer_privacy::{SCOPE_SNAPSHOT_RECORD_TYPE, discovery_sha256};
 pub use crm_customer_privacy_application::{
-    DiscoveryInvocation, DiscoverySnapshotReader, ScopeDiscoveryService, SnapshotReadContext,
-    mutation_capability_definitions, query_capability_definitions,
+    DiscoveryInvocation, DiscoverySnapshotReader, PlanningInvocation, PrivacyPlanningService,
+    ScopeDiscoveryService, SnapshotReadContext, mutation_capability_definitions,
+    query_capability_definitions,
 };
 use crm_customer_privacy_application::{
     DiscoverySnapshotVisibilityPort, OwnerContributionEndpoint, OwnerContributionEndpoints,
     SnapshotVisibilityDecision,
 };
 use crm_customer_privacy_postgres::{
-    PostgresDiscoveryPersistence, postgres_case_cancel_executor, postgres_case_create_executor,
-    postgres_case_subject_verify_executor, postgres_case_submit_executor,
+    PostgresDiscoveryPersistence, PostgresPlanningPersistence, postgres_case_cancel_executor,
+    postgres_case_create_executor, postgres_case_subject_verify_executor,
+    postgres_case_submit_executor,
 };
 use crm_customer_privacy_query_adapter::CustomerPrivacyQueryAdapter;
 pub use crm_customer_privacy_query_adapter::{
@@ -85,6 +87,7 @@ pub struct CustomerPrivacyProduction {
     pub contribution: ModuleContributionSet,
     pub discovery: ScopeDiscoveryService,
     pub snapshot_reader: DiscoverySnapshotReader,
+    pub planning: PrivacyPlanningService,
 }
 
 pub fn build_production(
@@ -92,10 +95,12 @@ pub fn build_production(
 ) -> Result<CustomerPrivacyProduction, SdkError> {
     let contribution = build_contribution(dependencies.clone())?;
     let (discovery, snapshot_reader) = build_internal_discovery(&dependencies)?;
+    let planning = build_internal_planning(&dependencies);
     Ok(CustomerPrivacyProduction {
         contribution,
         discovery,
         snapshot_reader,
+        planning,
     })
 }
 
@@ -173,6 +178,17 @@ pub fn build_internal_discovery(
         }),
     );
     Ok((discovery, snapshot_reader))
+}
+
+pub fn build_internal_planning(
+    dependencies: &CustomerPrivacyProductionDependencies,
+) -> PrivacyPlanningService {
+    PrivacyPlanningService::new(
+        dependencies.activation.clone(),
+        Arc::new(PostgresPlanningPersistence::new(Arc::new(
+            dependencies.store.clone(),
+        ))),
+    )
 }
 
 pub fn build_contribution(
@@ -338,17 +354,26 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn internal_discovery_coordinate_is_not_a_public_inventory_entry() {
+    fn internal_discovery_and_planning_coordinates_are_not_public_inventory_entries() {
         let mutations = mutation_capability_definitions().unwrap();
         let queries = query_capability_definitions().unwrap();
         assert_eq!(mutations.len(), 4);
         assert_eq!(queries.len(), 2);
-        assert!(mutations.iter().all(
-            |definition| definition.capability_id.as_str() != "customer_privacy.scope.discover"
-        ));
-        assert!(queries.iter().all(
-            |definition| definition.capability_id.as_str() != "customer_privacy.scope.discover"
-        ));
+        for forbidden in [
+            "customer_privacy.scope.discover",
+            "customer_privacy.plan.build",
+        ] {
+            assert!(
+                mutations
+                    .iter()
+                    .all(|definition| definition.capability_id.as_str() != forbidden)
+            );
+            assert!(
+                queries
+                    .iter()
+                    .all(|definition| definition.capability_id.as_str() != forbidden)
+            );
+        }
     }
 
     #[test]

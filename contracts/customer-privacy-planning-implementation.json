@@ -1,0 +1,142 @@
+{
+  "schema_id": "crm.governance.customer-privacy-planning-implementation",
+  "schema_version": "1.0.0",
+  "status": "implemented_pending_exact_head_acceptance",
+  "historical_freeze_preserved": "contracts/customer-privacy-planning-freeze.json",
+  "coordinate": {
+    "capability_id": "customer_privacy.plan.build",
+    "capability_version": "1.0.0",
+    "phase": 270,
+    "public_ingress": false,
+    "execution_kind": "trusted_internal",
+    "generic_runtime_worker_registered": false
+  },
+  "package_boundary": {
+    "domain": "modules/crm-customer-privacy",
+    "application": "crates/crm-customer-privacy-application",
+    "postgres": "crates/crm-customer-privacy-postgres",
+    "production": "crates/crm-customer-privacy-production",
+    "workspace_package_count_before": 113,
+    "workspace_package_count_after": 113,
+    "new_workspace_packages": 0,
+    "new_dependency_families": 0
+  },
+  "source_requirements": {
+    "privacy_case_status": "scoped",
+    "verified_subject_required": true,
+    "exact_case_version_required": true,
+    "exact_scope_snapshot_reference_required": true,
+    "exact_snapshot_binding_and_completeness_required": true,
+    "exact_registry_and_identity_topology_lineage_required": true,
+    "exact_policy_version_and_jurisdiction_required": true,
+    "silent_case_snapshot_policy_or_topology_rebase_allowed": false
+  },
+  "plan": {
+    "record_type": "customer-privacy.action-plan",
+    "schema_id": "crm.customer-privacy.action_plan.state",
+    "schema_version": "1.0.0",
+    "maximum_payload_bytes": 524288,
+    "retention_policy_id": "crm.customer_privacy.action_plan",
+    "encoding": "canonical_json_crm.cjson/v1",
+    "id_prefix": "privacy-action-plan-",
+    "maximum_items": 16384,
+    "strict_rehydration": true,
+    "lineage_item_and_plan_digests_recomputed": true,
+    "append_only_after_finalize": true,
+    "one_plan_per_case": true,
+    "replay_result": "same_plan_case_transition_and_evidence_or_fail_closed_conflict"
+  },
+  "classification": {
+    "access": "retain",
+    "portability_export": "retain",
+    "restrict_processing": "restrict_only",
+    "erasure_destroyable_subject_data": "delete",
+    "erasure_retain_minimized_evidence": "anonymize",
+    "erasure_immutable_required_evidence": "retain",
+    "erasure_derived_rebuildable_state": "delete",
+    "erasure_crypto_shreddable_data_when_explicitly_supported": "crypto_shred",
+    "unsupported_crypto_shred": "fail_closed_without_destructive_fallback",
+    "no_op_already_compliant_initial_planning": "never_inferred_without_owner_evidence"
+  },
+  "case_transition": {
+    "source": "scoped",
+    "without_approval": "planned",
+    "with_approval": "awaiting_approval",
+    "optimistic_version_increment": 1,
+    "case_plan_and_link_evidence_atomic": true
+  },
+  "persistence": {
+    "authoritative_plan_storage": "crm.records",
+    "replay_link_table": "crm.customer_privacy_action_plans",
+    "audit_table": "crm.customer_privacy_planning_audit",
+    "microsecond_aligned_nanosecond_round_trip": true,
+    "force_rls": true,
+    "canonical_policy_name": "tenant_isolation",
+    "cross_tenant_concealment": true,
+    "immutable_link_audit_and_plan_records": true,
+    "complete_rollback_and_reapply": true
+  },
+  "audit": {
+    "events": [
+      "planning_finalized",
+      "planning_replayed"
+    ],
+    "payload_rule": "tenant_case_plan_digests_versions_actor_request_and_time_only_no_resource_payload"
+  },
+  "runtime_inventory": {
+    "public_mutations_before": 4,
+    "public_mutations_after": 4,
+    "public_queries_before": 2,
+    "public_queries_after": 2,
+    "customer_privacy_workers_before": 0,
+    "customer_privacy_workers_after": 0,
+    "public_routes_added": 0
+  },
+  "implemented": [
+    "trusted_internal_activation_gated_plan_build",
+    "locked_case_and_snapshot_source_validation",
+    "deterministic_action_classification",
+    "deterministic_owner_resource_ordering",
+    "strict_plan_state_rehydration",
+    "atomic_immutable_plan_case_link_and_audit_persistence",
+    "optimistic_scoped_to_planned_or_awaiting_approval_transition",
+    "idempotent_replay_and_concurrent_conflict_detection",
+    "unsupported_crypto_shred_fail_closed",
+    "force_rls_and_cross_tenant_denial",
+    "append_only_planning_evidence"
+  ],
+  "not_implemented": [
+    "public_plan_get_runtime",
+    "public_owner_outcomes_list_runtime",
+    "owner_outcome_persistence",
+    "approval_runtime",
+    "processing_restrictions",
+    "legal_hold_decisions",
+    "mandatory_retention_adjudication",
+    "owner_action_dispatch",
+    "deletion_or_anonymization_execution",
+    "access_export_assembly",
+    "party_tombstone",
+    "projection_search_cache_convergence",
+    "customer_privacy_worker_registration",
+    "public_http_grpc_ingress_for_plan_build"
+  ],
+  "acceptance": {
+    "workflow": ".github/workflows/customer-privacy-planning.yml",
+    "postgres_test": "database/tests/0044_customer_privacy_planning.sql",
+    "requires_clean_database": true,
+    "requires_force_rls": true,
+    "requires_cross_tenant_negatives": true,
+    "requires_immutable_evidence": true,
+    "requires_complete_schema_removal": true,
+    "requires_reapply": true,
+    "requires_repeated_acceptance": true,
+    "accepted_source_sha": null,
+    "permanent_workflow_count": null,
+    "merge_sha": null,
+    "pull_request": null
+  },
+  "next_packet": "permission-aware plan.get and empty future-safe owner_outcomes.list runtime",
+  "phase_8a_complete": false,
+  "product_complete_expert_modules": 0
+}

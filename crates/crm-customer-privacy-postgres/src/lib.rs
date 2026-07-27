@@ -6,8 +6,10 @@
 //! implementation details. New owner persistence enters through this package.
 
 mod discovery;
+mod planning;
 
 pub use discovery::*;
+pub use planning::*;
 
 pub use crm_customer_privacy_capability_composition::{
     PostgresCustomerPrivacyCancellationGuard, PostgresCustomerPrivacyPreviousCaseGuard,
