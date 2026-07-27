@@ -935,7 +935,7 @@ fn strict_job(row: StoredRecordRow) -> Result<Versioned<PartyEvaluationJob>, Sdk
         DataClass::Personal,
     )?;
     let value = party_evaluation_job_from_snapshot(&snapshot).map_err(map_owner_error)?;
-    Ok(versioned(row, value)?)
+    versioned(row, value)
 }
 
 fn strict_input(row: StoredRecordRow) -> Result<Versioned<PartyEvaluationInputSnapshot>, SdkError> {
@@ -952,7 +952,7 @@ fn strict_input(row: StoredRecordRow) -> Result<Versioned<PartyEvaluationInputSn
             "evaluation input identity/version disagrees with its authoritative record",
         ));
     }
-    Ok(versioned(row, value)?)
+    versioned(row, value)
 }
 
 fn strict_outcome(row: StoredRecordRow) -> Result<Versioned<PartyRuleOutcome>, SdkError> {
@@ -968,7 +968,7 @@ fn strict_outcome(row: StoredRecordRow) -> Result<Versioned<PartyRuleOutcome>, S
             "rule outcome identity/version disagrees with its authoritative record",
         ));
     }
-    Ok(versioned(row, value)?)
+    versioned(row, value)
 }
 
 fn strict_finding(row: StoredRecordRow) -> Result<Versioned<PartyFinding>, SdkError> {
@@ -984,7 +984,7 @@ fn strict_finding(row: StoredRecordRow) -> Result<Versioned<PartyFinding>, SdkEr
             "finding identity disagrees with its authoritative record",
         ));
     }
-    Ok(versioned(row, value)?)
+    versioned(row, value)
 }
 
 fn strict_observation(
@@ -1003,7 +1003,7 @@ fn strict_observation(
             "finding observation identity/version disagrees with its authoritative record",
         ));
     }
-    Ok(versioned(row, value)?)
+    versioned(row, value)
 }
 
 fn strict_completeness_result(
@@ -1022,7 +1022,7 @@ fn strict_completeness_result(
             "completeness result identity/version disagrees with its authoritative record",
         ));
     }
-    Ok(versioned(row, value)?)
+    versioned(row, value)
 }
 
 fn strict_remediation_attempt(
@@ -1041,7 +1041,7 @@ fn strict_remediation_attempt(
             "remediation attempt identity/version disagrees with its authoritative record",
         ));
     }
-    Ok(versioned(row, value)?)
+    versioned(row, value)
 }
 
 fn versioned<T>(row: StoredRecordRow, value: T) -> Result<Versioned<T>, SdkError> {
