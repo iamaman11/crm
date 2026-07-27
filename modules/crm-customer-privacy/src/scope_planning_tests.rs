@@ -181,7 +181,7 @@ mod planning_tests {
         let actions = plan
             .items()
             .iter()
-            .map(|item| (item.evidence_class(), item.action(), item.reason()))
+            .map(|item| (item.evidence_class(), (item.action(), item.reason())))
             .collect::<BTreeMap<_, _>>();
         assert_eq!(
             actions[&EvidenceClass::DestroyableSubjectData],
