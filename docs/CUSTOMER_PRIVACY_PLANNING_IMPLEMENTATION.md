@@ -73,7 +73,7 @@ Migration `0102_customer_privacy_planning` adds:
 
 Both tables use ENABLE + FORCE RLS and the canonical `tenant_isolation` policy with `crm.current_tenant_id()` in both `USING` and `WITH CHECK`.
 
-The case/plan link, audit rows and `customer-privacy.action-plan` records are append-only. Exact nanosecond values are stored as `bigint`; no timestamp precision is discarded.
+The case/plan link, audit rows and `customer-privacy.action-plan` records are append-only. Planning times must be microsecond aligned; the application validates that constraint and PostgreSQL `timestamptz` round-trips the canonical nanosecond integer exactly.
 
 Rollback removes both tables, their record trigger and the planning immutability function. Reapply and repeated acceptance are mandatory.
 
