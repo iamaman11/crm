@@ -1,0 +1,211 @@
+name: Customer Privacy Discovery Documentation Sync
+
+on:
+  push:
+    branches:
+      - feature/customer-privacy-production-discovery-snapshot
+    paths:
+      - ".github/workflows/customer-privacy-discovery-doc-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: feature/customer-privacy-production-discovery-snapshot
+          fetch-depth: 0
+      - name: Synchronize bounded status sections
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def load(path):
+              return Path(path).read_text()
+
+          def save(path, text):
+              Path(path).write_text(text)
+
+          def one(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              return text.replace(old, new)
+
+          def section(text, start, end, replacement, label):
+              first = text.find(start)
+              if first < 0:
+                  raise SystemExit(f"{label}: start heading missing")
+              last = text.find(end, first + len(start))
+              if last < 0:
+                  raise SystemExit(f"{label}: end heading missing")
+              return text[:first] + replacement.rstrip() + "\n\n" + text[last:]
+
+          path = "docs/PROJECT_STATUS.md"
+          text = load(path)
+          text = one(
+              text,
+              "Latest production-runtime-affecting architecture baseline: `aec7130bd48302d20bf821a617c339b2a9d755cf`. The Stage B no-growth closure and the discovery/snapshot freeze are non-runtime architecture work and do not add production routes, workers or dependency resolution changes.",
+              "Latest accepted package baseline: PR #205 / merge `f0f46238cf103f6e36487f599181e83849342021`. PR #206 implements trusted-internal production discovery and immutable PostgreSQL scope snapshots inside that package boundary without public routes, workers or package growth.",
+              "project baseline",
+          )
+          text = one(
+              text,
+              "All nine contributions remain contract-only/non-runtime. They add no Customer Privacy worker, public ingress, production discovery, planning or owner action execution.",
+              "All nine contribution coordinates remain non-public owner-owned reads. PR #206 composes their accepted executors into trusted-internal discovery while adding no Customer Privacy worker, public ingress, planning or owner action execution.",
+              "project owner runtime",
+          )
+          text = section(
+              text,
+              "## Frozen product packet — Scope discovery and immutable snapshot",
+              "## Cross-cutting architecture and developer-experience lane",
+              '''## Active product packet — Production scope discovery and immutable snapshot
+
+State: **Implemented in PR #206; exact-head gate review pending**.
+
+The implementation preserves the PR #204 freeze and records later evidence in `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md` and `contracts/customer-privacy-discovery-snapshot-implementation.json`.
+
+It provides exact-nine activation-gated discovery, immutable lineage, bounded owner pagination, durable page receipts and contiguous checkpoints, deterministic safe-resource aggregation, strict snapshot identity/rehydration, replay and crash-window recovery, permission-aware internal reads, safe audit evidence and FORCE-RLS PostgreSQL persistence.
+
+Public routes remain unchanged, Customer Privacy workers remain zero, mutations remain four, queries remain two and workspace packages remain 113. Planning, restrictions, legal holds, mandatory-retention decisions and owner action execution remain unimplemented.
+
+## Next bounded product packet — Deterministic planning and permission-aware plan/outcome reads
+
+State: **Ready only after PR #206 exact-head acceptance and merge**.
+
+The next packet may consume the immutable snapshot but cannot silently rediscover or rebase lineage, and it cannot begin restrictions, holds, retention decisions or owner execution.''',
+              "project active packet",
+          )
+          text = one(
+              text,
+              "Issue #194 is **Open**. Stage A is complete. The bounded **Stage B no-growth closure is complete**; broader issue #194 stages and later natural-boundary calibration remain open.",
+              "Issue #194 is **Open**. Stage A, Stage B no-growth and the Stage C Customer Privacy golden-package pilot are complete; broader stages and natural-boundary calibration remain open.",
+              "project architecture state",
+          )
+          text = one(
+              text,
+              "- 110 effective workspace packages: 96 technical crates, 13 business modules and one deployable service;",
+              "- 113 effective workspace packages after the accepted Stage C golden package: 99 technical crates, 13 business modules and one deployable service;",
+              "project package count",
+          )
+          text = section(
+              text,
+              "## Correct continuation order",
+              "## Guardrail for the active Customer Privacy packet",
+              '''## Correct continuation order
+
+1. preserve the accepted freeze and Stage C golden packages;
+2. accept PR #206 on one unchanged exact head;
+3. continue deterministic planning and permission-aware plan/outcome reads;
+4. continue restrictions, holds/retention, execution and convergence only through later bounded packets;
+5. apply residual architecture calibration only at natural packet boundaries unless it blocks correctness.''',
+              "project continuation",
+          )
+          save(path, text)
+
+          path = "docs/IMPLEMENTATION_ROADMAP.md"
+          text = load(path)
+          text = one(
+              text,
+              "| B — dependency, crate and exception governance | **In progress — foundation accepted** | Reproducible baseline, new-crate/exception governance and two calibrated inheritance policies are accepted. Complete the no-growth boundary before Stage C. |",
+              "| B — dependency, crate and exception governance | **Complete for no-growth prerequisite** | Repository-wide root-family no-growth is accepted; later debt reduction remains bounded natural-boundary work. |",
+              "roadmap stage b",
+          )
+          text = one(
+              text,
+              "| C — golden owner package and persistence model | **Ready after Stage B no-growth closure and feature freeze** | Use Customer Privacy as the first real pilot; keep consolidation behavior-neutral. |",
+              "| C — golden owner package and persistence model | **Complete** | PR #205 accepted the Customer Privacy domain/application/PostgreSQL/production package boundary. |",
+              "roadmap stage c",
+          )
+          text = section(
+              text,
+              "### 5.3 Required continuation order",
+              "## 6. Completed foundation",
+              '''### 5.3 Required continuation order
+
+1. **Accepted prerequisites:** Stage B no-growth, the discovery/snapshot freeze and Stage C Customer Privacy golden packages remain authoritative.
+2. **Current gate review:** accept production discovery and immutable snapshot persistence on one unchanged exact head without public ingress, worker registration, package growth or dependency debt.
+3. **Next privacy packet:** deterministic planning and permission-aware plan/outcome reads over the immutable snapshot.
+4. **Later privacy lifecycle packets:** restrictions, legal hold/retention, execution, access/export, deletion/anonymization, tombstone and convergence.
+5. **Residual architecture calibration:** later stages proceed at natural product boundaries unless they block correctness.''',
+              "roadmap continuation",
+          )
+          text = one(
+              text,
+              "All nine privacy owner-scope implementations are accepted. The coordinates remain contract-only/non-runtime and add no Customer Privacy discovery, planning or execution runtime.",
+              "All nine privacy owner-scope implementations are accepted. Their coordinates remain non-public owner-owned reads; PR #206 composes them into trusted-internal production discovery while adding no planning or execution runtime.",
+              "roadmap owner runtime",
+          )
+          text = section(
+              text,
+              "### 7.3 Next bounded packet — scope discovery and immutable snapshot freeze",
+              "## 8. Phase 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue",
+              '''### 7.3 Current bounded packet — production scope discovery and immutable snapshot
+
+State: **Gate review in PR #206; implementation complete, merge pending exact-head acceptance**.
+
+The packet implements exact-nine trusted-internal discovery, immutable lineage/page evidence, safe deterministic aggregation, strict immutable snapshot persistence/rehydration, replay/crash recovery, permission-aware reads and safe audit. It remains inside the accepted four Customer Privacy packages, keeps the workspace at 113 packages and adds no public route or Customer Privacy worker.
+
+The historical freeze remains unchanged. Planning, restrictions, holds, retention decisions, owner execution and Phase 8B remain unimplemented. After merge, the next bounded packet is deterministic planning and permission-aware plan/outcome reads.''',
+              "roadmap current packet",
+          )
+          save(path, text)
+
+          path = "docs/PHASE8_DELIVERY_PLAN.md"
+          text = load(path)
+          text = one(
+              text,
+              "All nine coordinates remain contract-only/non-runtime. They add no public ingress, Customer Privacy worker, production discovery, planning or owner action execution.",
+              "All nine coordinates remain non-public owner-owned reads. PR #206 composes them into trusted-internal production discovery without public ingress, a Customer Privacy worker, planning or owner action execution.",
+              "phase8 owner runtime",
+          )
+          text = one(
+              text,
+              "Stage B remains in progress until new direct declarations are blocked outside an explicit owned exception. Existing consumers migrate only through bounded role-based cohorts.",
+              "Stage B no-growth is accepted through PR #203, and the Stage C Customer Privacy golden-package pilot is accepted through PR #205. Existing dependency debt may only shrink through bounded role-based cohorts.",
+              "phase8 architecture state",
+          )
+          text = one(text, "State: **Next cross-cutting implementation packet**.", "State: **Complete for the no-growth prerequisite through PR #203**.", "phase8 packet a")
+          text = one(text, "State: **Ready after documentation synchronization; production discovery is not implemented**.", "State: **Complete as the preserved historical freeze through PR #204**.", "phase8 packet b")
+          text = section(
+              text,
+              "### Packet C — Stage C Customer Privacy golden-package pilot",
+              "### Packet D — Scope discovery and immutable snapshot implementation",
+              '''### Packet C — Stage C Customer Privacy golden-package pilot
+
+State: **Complete through PR #205**.
+
+The accepted boundary is:
+
+```text
+modules/crm-customer-privacy/
+crates/crm-customer-privacy-application/
+crates/crm-customer-privacy-postgres/
+crates/crm-customer-privacy-production/
+```
+
+The pilot preserved routes, workers and behavior while establishing the package boundary used by Packet D.''',
+              "phase8 packet c",
+          )
+          text = one(text, "State: **Blocked on accepted Packet C packaging**.", "State: **Implemented in PR #206; exact-head gate review pending**.", "phase8 packet d state")
+          text = one(
+              text,
+              "Implement the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages.",
+              "PR #206 implements the frozen Packet B semantics inside the accepted application/PostgreSQL/production packages and records later evidence without rewriting the historical freeze.",
+              "phase8 packet d body",
+          )
+          save(path, text)
+
+          Path(".github/workflows/customer-privacy-discovery-doc-sync.yml").unlink()
+      - name: Commit synchronized documents
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Synchronize Customer Privacy discovery status"
+          git push origin HEAD:feature/customer-privacy-production-discovery-snapshot
