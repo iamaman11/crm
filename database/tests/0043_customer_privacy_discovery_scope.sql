@@ -94,7 +94,7 @@ INSERT INTO crm.customer_privacy_discovery_owner_pages (
   1,
   true,
   decode('010203', 'hex'),
-  digest(decode('010203', 'hex'), 'sha256')
+  decode('039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81', 'hex')
 );
 
 INSERT INTO crm.customer_privacy_discovery_checkpoints (
