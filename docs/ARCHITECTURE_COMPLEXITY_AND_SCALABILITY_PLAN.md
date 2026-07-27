@@ -3,17 +3,17 @@
 Status: **Normative cross-cutting execution plan**  
 Tracking issue: #194  
 Audit baseline: **2026-07-27**  
-Applies to: repository structure, Rust workspace packaging, module composition, dependency governance, CI/test selection, developer tooling, documentation consistency, frontend architecture and production operations.
+Applies to: repository structure, Rust workspace packaging, module composition, dependency governance, contracts, persistence ownership, CI/test selection, developer tooling, documentation navigation, local development, frontend architecture and production operations.
 
 Governing precedence:
 
 1. `SYSTEM_INVARIANTS.md`;
-2. accepted ADRs and published contracts;
-3. `APPLICATION_ARCHITECTURE.md`;
+2. published contracts and accepted ADRs;
+3. `APPLICATION_ARCHITECTURE.md` and the accepted readiness baseline;
 4. this execution plan;
-5. descriptive module and packet documentation.
+5. descriptive module, packet and orientation documentation.
 
-This document is the single current execution plan for architecture complexity and developer experience. Historical PR evidence remains in the relevant packet documents and must not be duplicated here.
+This document is the **single current execution plan for architecture complexity and developer experience**. Historical PR evidence remains in accepted packet documents and must not be duplicated here.
 
 ## 1. Executive decision
 
@@ -21,9 +21,9 @@ The foundational architecture is sound and must not be replaced.
 
 The platform already has the correct long-term model:
 
-- a modular monolith with independently governed owner and link modules;
+- modular monolith with independently governed owner and link modules;
 - one authoritative owner for every mutable aggregate;
-- pure domain modules behind stable contracts and SDK ports;
+- pure domain modules behind stable contracts and governed ports;
 - no direct cross-module storage access;
 - exact versioned mutation, query, event and worker coordinates;
 - durable tenant activation;
@@ -33,19 +33,21 @@ The platform already has the correct long-term model:
 - rebuildable non-authoritative projections, search and caches;
 - exact-head acceptance discipline.
 
-The remaining architecture risk is accidental complexity:
+The remaining risk is accidental complexity:
 
 - too many physical crates for one business capability;
 - manual domain-specific composition in the central application runtime;
 - repeated dependency declarations and feature divergence;
 - copied acceptance wiring and expanding workflow fan-out;
 - too many files and packages touched by a normal vertical change;
+- incomplete local-environment automation;
 - incomplete repository navigation and packet explanation tooling;
-- documentation entry points that can drift from the active roadmap.
+- documentation entry points that can drift;
+- uncontrolled public Rust surface, contract retirement and migration ownership.
 
 The required direction is:
 
-> Preserve strict business ownership and governed runtime boundaries while making the normal cost of adding or changing one capability close to constant with respect to total product size.
+> Preserve strict ownership, security and governed runtime boundaries while making the normal cost of adding or changing one capability close to constant with respect to total product size.
 
 No big-bang rewrite, premature microservice split or weakening of acceptance rules is authorized.
 
@@ -62,15 +64,16 @@ Audit score at the 2026-07-27 baseline:
 | Extensibility cost | 7.4/10 | 10/10 |
 | Developer comprehension | 7.5/10 | 10/10 |
 | Build and CI scalability | 6.9/10 | 10/10 |
+| Local development reproducibility | 6.5/10 | 10/10 |
 | Overall architecture maturity | 8.3/10 | 10/10 |
 
-These scores are planning signals, not product-completion claims. Product-complete expert modules remain counted separately in `MODULE_CATALOG.md` and `PROJECT_STATUS.md`.
+These scores are planning signals, not product-completion claims.
 
-The root Cargo workspace currently contains 109 members. Strict compile-time boundaries are valuable, but workspace growth must no longer track individual commands, queries or delivery packets.
+The root Cargo workspace currently contains **109 members**. Strict compile-time boundaries remain valuable, but workspace growth must no longer track individual commands, queries or delivery packets.
 
 ## 3. 10/10 target state
 
-Architecture and developer experience are considered 10/10 only when all conditions below are executable and measured.
+Architecture and developer experience are 10/10 only when the conditions below are executable, measured and difficult to bypass.
 
 ### 3.1 Business ownership
 
@@ -82,25 +85,25 @@ Architecture and developer experience are considered 10/10 only when all conditi
 
 ### 3.2 Physical packaging
 
-- A normal capability added to an existing owner creates **zero new crates**.
+- A **normal capability added to an existing owner creates zero new crates**.
 - A normal owner domain targets **three to five technical packages**:
   - pure domain;
   - application;
   - PostgreSQL/infrastructure;
   - production contribution;
-  - optional extra package only for a real provider, trust, process or extraction boundary.
-- Crates exist for dependency, trust, reuse, process or extraction boundaries—not for every handler.
+  - one optional provider, trust, process or extraction boundary.
+- Crates exist for real dependency, trust, reuse, lifecycle, process or extraction boundaries—not for every handler.
 - Transitional capability-specific crates are consolidated gradually through behavior-neutral packets with measured benefit.
 
 ### 3.3 Layering
 
-The required dependency direction remains:
+Required dependency direction:
 
 ```text
-domain <- application <- adapters <- production composition
+domain <- application <- adapters <- production composition <- delivery
 ```
 
-The normal owner layout is:
+Target owner layout:
 
 ```text
 modules/crm-<domain>/
@@ -129,33 +132,37 @@ crates/crm-<domain>-production/
 
 A small owner may combine application and production only when infrastructure cannot leak into the pure core.
 
-### 3.4 Extensibility
+### 3.4 Extensibility and change locality
 
-A normal new capability follows:
+A normal capability follows:
 
 ```text
 internal command/query/worker
--> existing owner application package
--> existing owner production contribution
--> generic conformance
--> affected owner acceptance
+→ existing owner application package
+→ existing owner adapter when needed
+→ existing owner-owned production contribution
+→ generic conformance
+→ affected owner acceptance
 ```
 
 It must not require:
 
 ```text
 new crate
--> new central runtime dependency
--> new business switch
--> copied platform test suite
--> unrelated full-workspace iteration
+→ new generic runtime dependency
+→ new business switch
+→ copied platform test suite
+→ unrelated migration
+→ unrelated full-workspace iteration
 ```
 
-Generic router and worker algorithms must remain unchanged when one owner adds a route or worker.
+Generic router and worker algorithms remain unchanged when one owner adds a route or worker.
 
-### 3.5 Composition
+A representative leaf change should touch one owner closure. It must touch zero generic-runtime files, zero unrelated owner files, zero unrelated migrations and zero new workflows unless a real platform boundary changes.
 
-Every owner production package exposes one stable contribution entry point:
+### 3.5 Module-owned production contribution
+
+Every owner production package exposes one stable entry point:
 
 ```rust
 pub fn build_contribution(
@@ -163,50 +170,103 @@ pub fn build_contribution(
 ) -> Result<ModuleContributionSet, SdkError>;
 ```
 
-The first-party bundle only aggregates owner-owned entry points. It contains no route catalog, capability switch or owner-specific dispatch.
+The first-party bundle aggregates owner-owned entry points only. It contains no route catalog, capability switch or owner-specific dispatch.
 
-The generic application runtime consumes contribution sets and must not grow direct dependencies for ordinary capability registration.
+The generic application runtime consumes contribution sets and does not gain direct domain dependencies for ordinary registration.
 
 ### 3.6 Dependency governance
 
 - Common third-party dependencies are declared under root `[workspace.dependencies]`.
-- Internal packages inherit workspace versions and approved feature sets.
+- Internal packages inherit approved versions and feature sets.
 - Duplicate direct dependency families are zero unless explicitly allowlisted.
-- Multiple major/minor versions require a named blocker and removal condition.
-- New heavy features, reverse-dependency fan-out and lockfile drift are reported mechanically.
-- A new workspace member requires a short architecture justification.
+- Multiple major/minor versions require a named blocker, owner and removal condition.
+- Heavy features, reverse-dependency fan-out and lockfile drift are reported mechanically.
+- Every new workspace member requires a review-visible architecture justification.
 
-### 3.7 Build and test scalability
+### 3.7 Rust public API surface
+
+- Implementation visibility defaults to private or `pub(crate)`.
+- Cross-package APIs are limited to published contracts, stable ports and production contribution interfaces.
+- Concrete adapters, repositories and infrastructure clients are not re-exported for convenience.
+- Shared DTOs do not replace owner-domain value objects.
+- Every new public Rust symbol requires a real consumer and compatibility rationale.
+- Public-surface growth is measured per structural PR.
+
+### 3.8 Contract lifecycle
+
+Published versions remain immutable. A semantic change creates a new version.
+
+The full lifecycle is:
+
+```text
+publish new version
+→ compatibility and impact report
+→ parallel support window
+→ usage/deprecation telemetry
+→ consumer migration
+→ explicit retirement gate
+→ removal only after zero supported consumers and rollback proof
+```
+
+A deprecated coordinate must retain owner, replacement, deadline, consumer inventory and removal condition. Silent reinterpretation or deletion is forbidden.
+
+### 3.9 Persistence and migration ownership
+
+- Every owner declares its PostgreSQL namespaces and migration ownership.
+- A migration may not alter another owner's authoritative tables.
+- Ownership transfer requires an ADR, dual-version compatibility, data migration, rollback and exact consumer cutover.
+- RLS, tenant context, indexes, retention, legal-hold and recovery consequences are part of schema review.
+- Forward, rollback/schema-removal, reapply and repeated acceptance are required where applicable.
+- Persisted envelopes evolve independently from public wire contracts.
+
+### 3.10 Build and test scalability
 
 During development:
 
 - structural preflight always runs;
 - changed packages and reverse dependencies are calculated;
 - affected contracts, migrations, routes, workers and frontend packages select required checks;
-- skipped checks have a machine-readable reason;
+- skipped checks have machine-readable reasons;
 - unknown impact defaults to broader validation.
 
-Full repository proof remains mandatory for:
+Full repository proof remains mandatory for shared/core/runtime changes, architecture policy changes, phase closure, releases, nightly validation and any change whose closure cannot be proven.
 
-- shared/core/runtime changes;
-- architecture policy changes;
-- phase closure;
-- release;
-- nightly validation;
-- any change whose affected closure cannot be proven.
+**Affected-scope CI** never weakens the unchanged exact-head merge rule.
 
-Affected-scope optimization never weakens the unchanged exact-head merge rule.
+### 3.11 Reproducible local development
 
-### 3.8 Developer comprehension
+The supported local environment must be discoverable and repeatable through one command surface:
 
-A developer or coding agent must be able to answer from one command:
+```bash
+python scripts/repo.py doctor
+python scripts/repo.py bootstrap
+python scripts/repo.py dev-up
+python scripts/repo.py dev-reset
+python scripts/repo.py seed-demo
+python scripts/repo.py smoke
+```
+
+Requirements:
+
+- pinned and validated Rust, Python, Node, pnpm, Buf and PostgreSQL versions;
+- one documented configuration path with safe defaults;
+- deterministic database, migration and demo-tenant setup;
+- safe complete reset without hidden manual cleanup;
+- local smoke path matching production ingress/composition;
+- clear diagnostics for missing tools, ports and environment variables;
+- no requirement to memorize raw CI commands;
+- local commands must call the same scripts/libraries used by CI where practical.
+
+### 3.12 Developer comprehension and navigation
+
+A developer or coding agent must answer from one command:
 
 - who owns this behavior;
 - where its contract lives;
 - which command/query/worker implements it;
-- which persistence adapter is authoritative;
+- which persistence adapter and migrations are authoritative;
 - how it enters production composition;
-- what tests and workflows are required;
+- which tests and workflows are required;
 - what is explicitly out of scope.
 
 Required tooling:
@@ -219,20 +279,21 @@ python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
 ```
 
-Required generated navigation:
+Required navigation:
 
-- `docs/ACTIVE_PACKET.md`;
-- `docs/generated/REPOSITORY_MAP.md`.
+- stable human index `docs/README.md`;
+- generated `docs/ACTIVE_PACKET.md`;
+- generated `docs/generated/REPOSITORY_MAP.md`.
 
 Generated navigation is never an independent source of truth.
 
-### 3.9 Frontend and operations
+### 3.13 Frontend and operations
 
 The same standard applies beyond backend architecture:
 
 - frontend features are organized by stable domain surfaces;
 - generated/governed clients are the only backend boundary;
-- component, accessibility and browser tests cover critical workflows;
+- component, accessibility and browser tests cover critical journeys;
 - session, routing, navigation and search concerns are separated;
 - backup/restore, SLO, performance, security and supply-chain evidence are executable;
 - restore tests prove active restrictions, legal holds, tombstones and audit integrity survive recovery.
@@ -240,17 +301,19 @@ The same standard applies beyond backend architecture:
 ## 4. Hard rules for all new work
 
 1. A normal capability creates zero new crates.
-2. A new owner module is justified by a new authoritative mutable domain, not by a screen, table, report, team or workflow step.
-3. A new crate must protect a real dependency, trust, reuse, process, lifecycle or extraction boundary.
-4. Generic router and worker code must not branch on business IDs.
-5. Central manual composition LOC must not grow for an ordinary owner capability.
-6. Feature behavior and crate consolidation must be separate PRs.
+2. A new owner module is justified by a new authoritative mutable domain, not a screen, table, report, team or workflow step.
+3. A new crate protects a real dependency, trust, reuse, process, lifecycle or extraction boundary.
+4. Generic router and worker code does not branch on business IDs.
+5. Central manual composition LOC does not grow for an ordinary owner capability.
+6. **Feature behavior and crate consolidation must be separate PRs.**
 7. Shared abstractions are extracted only after at least two contrasting real implementations prove common behavior.
 8. No cross-owner SQL, internal imports or repository access.
 9. No replacement of live authorization with cached approval.
 10. No reduction of PostgreSQL, process, rollback, RLS or exact-head evidence for speed.
-11. Every structural PR reports before/after complexity impact.
-12. Documentation status changes are mechanically checked against the active roadmap.
+11. Every structural PR reports before/after complexity and change-locality impact.
+12. Documentation status and navigation freshness are mechanically checked.
+13. Temporary exceptions are machine-readable, owned and expiring.
+14. A planned command or generated artifact is never represented as implemented before permanent tests prove it.
 
 ## 5. Crate creation decision
 
@@ -264,14 +327,7 @@ A new crate is accepted only when at least one condition is true:
 - it is a credible future extraction seam documented by ADR;
 - package visibility cannot enforce the same rule adequately.
 
-A new crate is rejected when it contains only:
-
-- one command handler;
-- one query planner;
-- one capability-specific composition function;
-- a thin re-export;
-- copied validation for one owner;
-- types that belong to an existing contract or application package.
+A new crate is rejected when it contains only one handler, one planner, one capability-specific composition function, a thin re-export, copied validation or types belonging to an existing contract/application package.
 
 Required review note:
 
@@ -280,229 +336,169 @@ New crate justification:
 - protected boundary:
 - isolated dependencies:
 - expected consumers:
-- why an internal Rust module is insufficient:
+- why an internal module is insufficient:
 - lifecycle or extraction seam:
 - expected build/test fan-out:
+- removal or consolidation condition:
 ```
 
-## 6. Module-owned production contribution program
+## 6. Contribution aggregation program
 
-### 6.1 Current gap
-
-`crm-first-party-modules` proves the aggregation model for a limited owner set, but `crm-application-runtime` still imports many concrete domain adapters and composition crates.
-
-This is the highest-priority extensibility hotspot.
-
-### 6.2 Target
+Current gap: `crm-first-party-modules` proves the aggregation model for a limited owner set, while `crm-application-runtime` still imports many concrete domain adapters and composition crates.
 
 For every first-party owner:
 
 1. define one owner-owned `build_contribution`;
 2. compose validators, planners, handlers, queries and workers inside the owner production package;
 3. expose exact route/worker metadata;
-4. merge the result into the mechanically checked first-party bundle;
-5. remove corresponding concrete imports from the generic application runtime;
+4. merge into the mechanically checked first-party bundle;
+5. remove corresponding concrete imports from generic runtime;
 6. retain startup rejection for duplicates, owner mismatch, route-kind mismatch and incomplete handlers.
 
-### 6.3 Completion evidence
+Completion evidence:
 
 - adding a capability changes no generic runtime source;
 - adding a worker changes no generic worker algorithm;
-- adding a module changes its manifest/package and generated/mechanically checked bundle only;
+- adding a module changes its package/manifest and generated/mechanically checked bundle only;
 - manual module-ID lists outside authoritative inventories are absent;
-- central application-runtime direct domain dependencies and LOC decrease or remain stable.
+- central runtime direct domain dependencies and LOC decrease or remain stable.
 
-## 7. Workspace dependency program
+## 7. Workspace dependency and exception governance
 
-### 7.1 Target root policy
-
-Introduce root `[workspace.dependencies]` for common families, including as applicable:
-
-- `serde`;
-- `serde_json`;
-- `sha2`;
-- `prost`;
-- `tokio`;
-- `sqlx`;
-- `tonic`;
-- `http`;
-- common test libraries.
-
-Internal packages use `.workspace = true` where compatible.
-
-### 7.2 Mechanical checks
+Introduce root `[workspace.dependencies]` for common families such as `serde`, `serde_json`, `sha2`, `prost`, `tokio`, `sqlx`, `tonic`, `http` and test libraries.
 
 Use `cargo metadata` and `cargo tree --duplicates` to report:
 
-- duplicate direct dependency families;
-- duplicate major/minor versions;
-- packages not inheriting an available workspace dependency;
-- feature-set divergence;
-- unexpectedly enabled heavy features;
-- reverse-dependency fan-out changes.
+- duplicate dependency families and major/minor versions;
+- packages not inheriting available workspace dependencies;
+- feature-set divergence and unexpectedly heavy features;
+- reverse-dependency fan-out changes;
+- public API and workspace-member growth.
 
 Lockfile-only drift must be reproducible through `python scripts/repo.py lock`.
+
+Temporary exceptions live in one machine-readable registry and include:
+
+```text
+id
+owner
+rule being bypassed
+reason and risk
+scope
+created date
+expiry date
+removal condition
+compensating checks
+tracking issue
+```
+
+Expired, ownerless or undocumented exceptions block conformance.
 
 ## 8. Test architecture program
 
 ### 8.1 Structural preflight
 
-Always verify:
-
-- architecture dependency/source boundaries;
-- manifest and normalized-IR parity;
-- Protobuf binding freshness;
-- production route and non-runtime classification parity;
-- generated source freshness;
-- formatting;
-- dependency policy;
-- new-crate justification;
-- documentation consistency.
+Always verify architecture boundaries, manifests/IR, Protobuf bindings, route classifications, generated-source freshness, formatting, dependency policy, crate justification, exception validity and documentation/navigation consistency.
 
 ### 8.2 Generic conformance
 
-Reusable suites own standard platform behavior.
+**Generic conformance** suites own standard platform behavior.
 
-Mutation conformance:
+Mutation conformance covers activation, malformed input, tenant mismatch, denied live authorization, idempotency/replay, safe errors and atomic audit/outbox/idempotency evidence.
 
-- module inactive/not installed;
-- malformed coordinate or payload;
-- tenant mismatch;
-- denied live authorization;
-- idempotency/replay;
-- safe typed errors;
-- audit/outbox/idempotency expectations.
+Query conformance covers activation, authorization denial, not-found concealment, tenant mismatch, malformed cursor, no query-side writes and pagination evidence.
 
-Query conformance:
-
-- module inactive/not installed;
-- live authorization denial;
-- not-found concealment;
-- tenant mismatch;
-- malformed cursor;
-- no query-side writes;
-- pagination evidence.
-
-Worker conformance:
-
-- durable activation gating;
-- deterministic phase;
-- bounded work;
-- retry classification;
-- idempotent claim and crash recovery;
-- no fixed central wiring.
+Worker conformance covers activation, deterministic phase, bounded work, retry classification, idempotent claim/crash recovery and no fixed central wiring.
 
 Owner suites remain responsible for unique domain semantics.
 
 ### 8.3 CI levels
 
-- **Level 0:** fast structural preflight.
-- **Level 1:** affected Rust/package closure.
-- **Level 2:** affected owner domain acceptance.
-- **Level 3:** real process acceptance for route, worker, persistence, authorization or protocol changes.
-- **Level 4:** full repository matrix.
+- Level 0: fast structural preflight.
+- Level 1: affected Rust/package closure.
+- Level 2: affected owner-domain acceptance.
+- Level 3: real process acceptance for route, worker, persistence, authorization or protocol changes.
+- Level 4: full repository matrix.
 
-## 9. Developer tooling program
+## 9. Developer tooling and navigation program
 
-### 9.1 `repo.py explain`
+### 9.1 Stable documentation index
+
+`docs/README.md` is the task-oriented human navigation entry point. It links to authoritative sources and does not copy live evidence.
+
+README and `AGENTS.md` are orientation only. They point to the index, status and active issue rather than maintaining independent roadmaps.
+
+### 9.2 `repo.py explain`
 
 The command traces:
 
 ```text
 module manifest
--> published contract
--> command/query/worker
--> validator/planner/handler
--> persistence/external adapter
--> production contribution
--> ingress or worker inventory
--> focused tests
--> required workflows
+→ published contract
+→ command/query/worker
+→ validator/planner/handler
+→ persistence/external adapter and migrations
+→ production contribution
+→ ingress or worker inventory
+→ focused tests
+→ required workflows
 ```
 
-### 9.2 `repo.py packet-check`
+### 9.3 `repo.py packet-check`
 
-The command reports:
+The command reports active packet and baseline SHA, allowed/forbidden paths, affected closure, contracts/routes/workers/migrations, missing documentation or generated updates, required checks, evidence state and blockers.
 
-- active packet and accepted baseline SHA;
-- changed architecture areas;
-- allowed and forbidden paths;
-- affected package closure;
-- contracts/routes/workers/migrations in scope;
-- missing documentation or inventory updates;
-- required checks;
-- exact-head evidence state;
-- blockers to gate review.
+### 9.4 Active packet
 
-### 9.3 Repository map
+`docs/ACTIVE_PACKET.md` is generated from authoritative status, issue and contract inputs. It includes:
 
-Each module entry includes:
+- packet identity and state;
+- accepted baseline SHA;
+- owner and exact scope;
+- explicit exclusions;
+- allowed and forbidden architecture areas;
+- required acceptance levels;
+- links to authoritative sources.
 
-- identity and owner;
-- authoritative objects;
-- pure core;
-- application;
-- infrastructure;
-- production contribution;
-- contracts, capabilities, queries, events and workers;
-- migrations;
-- focused commands;
-- applicable policies.
+### 9.5 Repository map
+
+`docs/generated/REPOSITORY_MAP.md` is generated from manifests, Cargo metadata, contracts, route/worker inventories, migration ownership and focused test metadata.
+
+Each module entry includes identity, owner, authoritative objects, pure core, application, infrastructure, production contribution, contracts, routes/workers, migrations, tests and applicable policies.
+
+### 9.6 Freshness
+
+Generated navigation has deterministic ordering and a source digest. CI rejects stale output. Human editing of generated sections is forbidden.
 
 ## 10. Documentation source-of-truth model
 
 Use documents for distinct purposes:
 
 - `SYSTEM_INVARIANTS.md` — hard architecture rules;
-- `APPLICATION_ARCHITECTURE.md` — stable layer and composition model;
-- this document — current 10/10 cross-cutting execution program;
-- `IMPLEMENTATION_ROADMAP.md` — dependency order of product phases and cross-cutting programs;
-- `PHASE8_DELIVERY_PLAN.md` — active Phase 8 sequence and packet constraints;
-- `PROJECT_STATUS.md` — concise current merged state and next step;
-- `MODULE_CATALOG.md` — business owner and product-completeness accounting;
-- active GitHub issues — executable work state;
-- accepted packet documents — historical acceptance boundaries.
+- published contracts and ADRs — immutable machine/public decisions;
+- `APPLICATION_ARCHITECTURE.md` — stable layer/composition model;
+- this document — 10/10 cross-cutting execution program;
+- `IMPLEMENTATION_ROADMAP.md` — product dependency order;
+- `PHASE8_DELIVERY_PLAN.md` — active Phase 8 sequence;
+- `PROJECT_STATUS.md` — concise merged state and next step;
+- `MODULE_CATALOG.md` — owner and product-completeness accounting;
+- active issues/PRs — executable work state;
+- accepted packet documents — historical boundaries;
+- `docs/README.md` and generated navigation — orientation only.
 
-README is orientation only. It must not contain a second independently maintained roadmap.
-
-Mechanically reject:
-
-- stale phase claims;
-- stale owner counts;
-- conflicting next-packet statements;
-- product-completion claims unsupported by the catalog;
-- execution status embedded in historical packet documents;
-- duplicate normative lists maintained independently.
+Mechanically reject stale phases, stale owner counts, conflicting next packets, unsupported completion claims, changing status in historical documents and duplicate normative lists.
 
 ## 11. Transitional crate consolidation
 
-Consolidation is gradual and evidence-based.
+**Transitional crate consolidation** is gradual and evidence-based.
 
-Prioritize:
+Prioritize one-consumer capability-specific adapters, thin composition crates, command/query crates with no unique boundary, private packages with no lifecycle and domain clusters with many physical locations per capability.
 
-- one-consumer capability-specific adapters;
-- thin composition crates;
-- command/query crates with no unique dependency boundary;
-- private packages with no independent lifecycle;
-- domain clusters with many physical locations per capability.
+Do not automatically consolidate pure owner modules, core contracts/SDKs/runtimes, provider/secret boundaries, independent processes, packages with multiple stable consumers or deliberate extraction seams.
 
-Do not automatically consolidate:
+Every consolidation PR is behavior-neutral, preserves public coordinates and route/activation parity, proves applicable PostgreSQL/process behavior and reports package count, fan-out, public surface, build/test effect and files-per-capability before/after.
 
-- pure owner modules;
-- core contracts, SDKs and runtimes;
-- provider transports and secret boundaries;
-- independent worker/process boundaries;
-- packages with multiple stable consumers;
-- deliberate extraction seams.
-
-Every consolidation PR must:
-
-- be behavior-neutral;
-- preserve public contracts and exact coordinates;
-- preserve route/manifest/activation parity;
-- prove focused, PostgreSQL and real-process behavior as applicable;
-- report package count, dependency fan-out, build/test effect and files-per-capability before and after;
-- be reverted or stopped when measurable complexity worsens.
+Stop or revert when measured complexity worsens.
 
 ## 12. Immediate Customer Privacy rule
 
@@ -513,14 +509,14 @@ Do not implement it by adding one crate per command, query, worker or compositio
 Required sequence:
 
 1. freeze the discovery/snapshot contract and acceptance boundary;
-2. identify the target Customer Privacy package ownership;
-3. perform any necessary behavior-neutral consolidation separately;
-4. implement discovery/snapshot inside the target application/postgres/production packages;
-5. add generic conformance only for proven shared platform behavior;
+2. identify target Customer Privacy package ownership;
+3. perform necessary consolidation only in a separate behavior-neutral PR;
+4. implement inside target application/postgres/production packages;
+5. add generic conformance only for proven shared behavior;
 6. run focused, PostgreSQL, rollback/reapply and real-process acceptance;
 7. synchronize roadmap/status/catalog/issue evidence after merge.
 
-Target Customer Privacy packaging:
+Target packaging:
 
 ```text
 modules/crm-customer-privacy/
@@ -529,151 +525,124 @@ crates/crm-customer-privacy-postgres/
 crates/crm-customer-privacy-production/
 ```
 
-Provider or process packages may be added only when a real boundary exists.
-
 ## 13. Delivery sequence
 
-The cross-cutting program is tracked by issue #194 and proceeds without pausing product delivery.
+The program runs alongside product delivery and is tracked by issue #194.
 
 ### Stage A — documentation and policy baseline
 
-- establish this single current plan;
-- synchronize README, roadmap, Phase 8 plan and status;
-- add mechanical stale-document checks;
-- record baseline workspace/package and composition metrics.
+Establish one plan, synchronize status/roadmap, add stale-document checks, create the stable documentation index and record reproducible metrics.
 
-Exit: one unambiguous source hierarchy and reproducible baseline.
+Exit: one unambiguous source hierarchy and baseline.
 
-### Stage B — dependency and crate governance
+### Stage B — dependency, crate and exception governance
 
-- add workspace dependency inheritance;
-- report duplicates/features/fan-out;
-- require new-crate justification;
-- begin with warnings, then promote calibrated hard failures.
+Add workspace dependency inheritance; report duplicates, features, fan-out and public surface; require crate justification; introduce expiring exception registry; promote calibrated rules from measurement to warning to blocking.
 
-Exit: normal changes cannot silently add packaging or dependency debt.
+Exit: changes cannot silently add packaging or dependency debt.
 
-### Stage C — golden owner package model
+### Stage C — golden owner package and persistence model
 
-- approve domain/application/postgres/production structure;
-- extend scaffolding;
-- prove it on one owner;
-- require zero new crates for normal capabilities.
+Approve domain/application/postgres/production structure; extend scaffolding; enforce migration ownership and Rust visibility; prove on one owner; require zero new crates for normal capabilities.
 
-Exit: predictable paths and constant-cost capability additions.
+Exit: predictable code and schema ownership.
 
 ### Stage D — contribution aggregation
 
-- finalize stable contribution interface;
-- migrate one small owner;
-- migrate Customer Privacy;
-- migrate remaining owners incrementally;
-- remove concrete domain imports from generic runtime.
+Finalize contribution interface, migrate a small owner, migrate Customer Privacy, migrate remaining owners and remove concrete domain imports from generic runtime.
 
-Exit: generic composition size is stable.
+Exit: generic composition remains stable.
 
 ### Stage E — affected-scope CI
 
-- map changed paths and reverse dependencies;
-- map contracts, migrations, routes, workers and frontend scopes;
-- make check selection explainable;
-- retain full nightly/closure/release matrices.
+Map changed paths, reverse dependencies, contracts, migrations, routes, workers and frontend scopes; explain broadening; retain full nightly/closure/release matrices.
 
-Exit: local and PR iteration cost follows the affected closure.
+Exit: iteration cost follows affected closure.
 
-### Stage F — generic conformance
+### Stage F — generic conformance and contract lifecycle
 
-- centralize standard mutation/query/worker guarantees;
-- migrate owners without losing domain-specific tests;
-- measure copied-test reduction.
+Centralize mutation/query/worker guarantees; add compatibility/deprecation/retirement checks; migrate owners without losing semantic tests; measure copied-test reduction.
 
-Exit: standard platform proof is reusable and owner semantics remain explicit.
+Exit: shared proof is reusable and published versions have controlled lifecycle.
 
 ### Stage G — transitional consolidation
 
-- rank candidates by one-consumer status, fan-out and files-per-capability;
-- consolidate one domain cluster at a time;
-- preserve behavior and exact coordinates;
-- stop when metrics do not improve.
+Rank candidates, consolidate one domain cluster at a time, preserve behavior and stop when metrics do not improve.
 
 Exit: fewer physical locations without weaker boundaries.
 
-### Stage H — developer navigation
+### Stage H — reproducible developer environment and navigation
 
-- generate active packet and repository map;
-- implement `explain` and `packet-check`;
-- include changed-scope reasoning in CI.
+Implement `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain` and `packet-check`; generate active packet and repository map; freshness-check navigation; include changed-scope reasoning in CI.
 
-Exit: a new developer can locate the correct change path without reconstructing the repository manually.
+Exit: a new developer can prepare the environment and locate the correct change path without repository archaeology.
 
-### Stage I — frontend and operations parity
+### Stage I — Frontend and operations parity
 
-- add real component/browser/accessibility proof;
-- organize frontend by domain surfaces;
-- add restore, SLO, performance, security and supply-chain gates.
+Add component/browser/accessibility proof, organize frontend by domain surfaces and add restore, SLO, performance, security and supply-chain gates.
 
-Exit: architecture quality is proven across the full product and operational lifecycle.
+Exit: architecture quality is proven across product and operations.
 
 ## 14. Metrics and budgets
 
 Publish per structural PR:
 
 ```text
-Workspace members:
-Business modules:
-Packages by category:
-Maximum dependency depth:
-Maximum reverse fan-out:
-Duplicate dependency versions:
-Manual composition LOC:
-Manual registration points:
-Packages affected by representative leaf change:
-Files changed per normal capability:
-Focused/domain/full test duration:
-Clean and incremental build duration:
-Generic versus owner-specific test ratio:
+Workspace members
+Business modules
+Packages by category
+Maximum dependency depth and reverse fan-out
+Duplicate dependency versions/features
+Public Rust symbols
+Manual composition LOC and registration points
+Packages and files affected by representative leaf change
+Generic-runtime and unrelated-owner files touched
+Focused/domain/full test duration
+Clean and incremental build duration
+Local bootstrap and smoke duration
+Generic versus owner-specific test ratio
+Navigation freshness and unresolved explain gaps
 ```
 
 Initial budgets:
 
 - normal capability: zero new crates;
 - normal owner: three to five technical packages;
+- generic-runtime files touched by ordinary capability: zero;
+- unrelated owner/migration/workflow files touched: zero;
 - duplicate direct dependency versions: zero unless allowlisted;
-- generic composition LOC: no growth for ordinary capability registration;
-- manual module-ID lists: zero outside authoritative generated paths;
-- more than 15% build/test regression requires explanation;
-- more than 25% regression blocks unless explicitly accepted for necessary functionality;
-- leaf-domain affected closure must not grow without dependency rationale.
+- generic composition LOC: no growth for ordinary registration;
+- manual module-ID lists: zero outside generated authoritative paths;
+- more than 15% build/test/bootstrap regression requires explanation;
+- more than 25% regression blocks unless explicitly accepted;
+- leaf-domain affected closure does not grow without dependency rationale;
+- expired architecture exceptions: zero.
 
-Budgets move from measurement to warning to blocking only after a representative baseline is collected.
+Budgets move from measurement to warning to blocking only after representative baselines are collected.
 
 ## 15. 10/10 completion criteria
 
 Issue #194 closes only when:
 
 1. ordinary capabilities create zero new crates by enforced default;
-2. new owner domains use the golden package model;
-3. generic application runtime no longer grows for ordinary module registration;
+2. new owner domains use the golden package and migration-ownership model;
+3. generic application runtime no longer grows for ordinary registration;
 4. all active first-party owners expose module-owned contribution entry points;
-5. workspace dependency and feature policy is mechanically enforced;
-6. affected-scope CI is implemented with explainable broadening and safe fallback;
+5. workspace dependency, feature, public-surface and exception policy is enforced;
+6. affected-scope CI has explainable broadening and safe fallback;
 7. generic mutation/query/worker conformance suites are adopted;
-8. at least one transitional domain cluster is consolidated with measured improvement;
-9. `ACTIVE_PACKET`, repository map, `explain` and `packet-check` are available;
-10. stale phase/status/next-packet documentation is mechanically rejected;
-11. frontend critical journeys have component/browser/accessibility evidence;
-12. restore, SLO, performance, security and supply-chain gates are executable;
-13. exact-head, tenant, RLS, authorization, audit, idempotency, rollback and route parity guarantees remain unchanged;
-14. at least two later expert domain waves demonstrate that extension cost remains bounded as module count grows.
+8. contract compatibility, deprecation and retirement lifecycle is enforced;
+9. at least one transitional domain cluster is consolidated with measured improvement;
+10. `docs/README.md`, `docs/ACTIVE_PACKET.md`, `docs/generated/REPOSITORY_MAP.md`, `explain` and `packet-check` are available and freshness-checked;
+11. `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` provide reproducible local development;
+12. stale phase/status/next-packet documentation is mechanically rejected;
+13. frontend critical journeys have component/browser/accessibility evidence;
+14. restore, SLO, performance, security and supply-chain gates are executable;
+15. exact-head, tenant, RLS, authorization, audit, idempotency, rollback and route parity guarantees remain unchanged;
+16. at least two later expert domain waves demonstrate bounded extension cost as module count grows.
 
 ## 16. Change control
 
-This plan may be changed only with:
-
-- explicit architecture rationale;
-- effect on ownership and dependency enforcement;
-- before/after complexity evidence;
-- acceptance and rollback strategy;
-- synchronized roadmap/status/issue changes.
+This plan may change only with explicit architecture rationale, ownership/dependency impact, before/after complexity evidence, acceptance/rollback strategy and synchronized issue/status updates.
 
 An optimization is accepted only when it makes the correct architecture easier to extend, easier to understand, easier to verify and harder to bypass.

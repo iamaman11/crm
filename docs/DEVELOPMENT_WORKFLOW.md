@@ -2,221 +2,259 @@
 
 Status: **Normative contributor and coding-agent workflow**
 
-This document defines how implementation work is grouped, validated and merged. It complements `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `IMPLEMENTATION_ROADMAP.md`, `MULTI_AGENT_DEVELOPMENT.md` and `AGENTS.md`.
+This document defines how implementation is scoped, validated and merged. Use `docs/README.md` to locate task-specific guidance. Architecture invariants and published contracts always take precedence.
 
 ## 1. Unit of delivery
 
-The default unit of delivery is a **coherent delivery packet**, not a pull request per class, crate, file or mechanical change.
+The default unit is a **coherent delivery packet**, not a PR per class, crate, file or mechanical step.
 
-A delivery packet must produce one independently understandable architecture result, for example:
+A packet produces one independently understandable result, such as:
 
-- complete event-driven runtime support for one governed integration;
-- a deployable application composition root;
-- one bounded-context module with domain, contracts, capabilities, queries, persistence and acceptance evidence;
+- one owner capability with complete governed production path;
+- one behavior-neutral structural consolidation;
+- one platform runtime boundary;
 - one rebuildable projection/search capability;
-- one complete frontend/backend vertical user workflow.
+- one end-to-end product workflow;
+- one dependency, CI or developer-experience improvement with measured evidence.
 
-Line count is not the primary limit. Cohesion, reviewability, rollback safety and invariant coverage are the limits.
+Cohesion, reviewability, rollback safety and invariant coverage—not line count—define the boundary.
 
-## 2. Working branches
+## 2. Separate behavior from structure
 
-A delivery packet uses one long-lived implementation branch.
+Do not mix:
 
-Example:
+- new product behavior and crate consolidation;
+- contract semantic changes and unrelated refactors;
+- migration ownership changes and ordinary feature work;
+- CI optimization and weakened acceptance;
+- local-environment tooling and unrelated runtime changes.
 
-```text
-develop/phase6-runtime-completion
-```
+A behavior-neutral structural PR must prove unchanged public contracts, routes, workers, activation, persistence behavior and applicable acceptance evidence.
 
-Inside the working branch:
+## 3. Working branches and exact identity
 
-- ordinary incremental and temporary commits are allowed;
-- incomplete checkpoints must remain clearly marked and must not be merged;
-- contributors may refactor adjacent code needed to preserve clean boundaries;
-- documentation is synchronized at meaningful milestones rather than after every tiny edit;
-- the final review history is reduced to a small number of semantic commits.
+A coherent packet uses one implementation branch. Temporary commits are allowed, but incomplete checkpoints remain clearly marked.
 
-Do not create a new branch or pull request for formatting, lockfile refreshes, import ordering, a single constructor field or another mechanical sub-step.
+Do not create separate branches/PRs for formatting, lockfile refreshes, import ordering or one constructor field when they belong to the same packet.
 
-When more than one agent or contributor participates in the same packet, the branch remains a shared delivery line but overlapping code has exactly one primary writer at a time. Verification handoffs use immutable commit SHAs, not a moving branch name. See `MULTI_AGENT_DEVELOPMENT.md`.
+When multiple contributors participate, overlapping code has one primary writer. Verification uses exact commit SHA, never a moving branch name.
 
-## 3. Required architecture sequence
+## 4. Required architecture sequence
 
-Implement each packet in this order unless an accepted ADR says otherwise:
-
-```text
-1. ownership and invariants
-2. public contracts
-3. application ports/use cases
-4. module-owned production contribution contract
-5. infrastructure adapters
-6. exact-coordinate composition registration
-7. acceptance tests
-8. operational and documentation closure
-```
-
-The dependency direction remains:
+Unless an accepted ADR says otherwise:
 
 ```text
-domain <- application <- adapters <- composition root
+1. authoritative owner, invariants and exclusions
+2. public contract or compatible new version
+3. application commands/queries/workers and ports
+4. persistence and migration ownership
+5. pre-authorization semantic validation
+6. owner-owned production contribution
+7. exact route/worker registration and durable activation
+8. focused, PostgreSQL and real-process acceptance
+9. operational and documentation closure
 ```
 
-Business owner modules never import transport, PostgreSQL, brokers, secret stores, arbitrary HTTP clients, LLM providers or another business module's internals.
+Dependency direction remains:
 
-## 4. Checkpoints
+```text
+domain <- application <- adapters <- production composition <- delivery
+```
 
-Full repository CI is required at coherent checkpoints, not after every edit.
+## 5. Normal capability budget
 
-When an independent local verifier is available, these checkpoints also define the default exact-SHA handoff levels. The verifier accelerates feedback but does not replace final GitHub CI.
+An ordinary capability inside an existing owner should:
 
-### Checkpoint A — architecture
+- create zero new crates;
+- touch zero generic router/worker files;
+- touch zero unrelated owners, migrations or workflows;
+- reuse the owner application/postgres/production packages;
+- extend the owner contribution rather than central composition;
+- reuse generic conformance and add only owner-specific semantic tests;
+- run an explainable affected closure.
 
-- dependency and source-boundary checks pass;
-- affected crates/packages compile;
-- published contracts and module manifests are internally consistent;
-- no forbidden cross-module or infrastructure dependency is introduced;
-- exact route/worker ownership, durable activation and classification impacts are identified;
-- generic router and worker algorithms remain free of business switches.
+A deviation requires an architecture justification and measured fan-out/change-locality impact.
+
+## 6. Architecture checkpoints
+
+### Checkpoint A — scope and structure
+
+- one authoritative owner and explicit exclusions;
+- dependency/source-boundary checks pass;
+- public contract/version implications are identified;
+- migration/storage ownership is explicit;
+- exact route/worker and activation impacts are identified;
+- no generic business switch or unjustified crate is introduced;
+- affected scope is explainable.
 
 ### Checkpoint B — behavior
 
-- focused domain/unit tests pass;
-- affected integration tests pass;
-- retry, idempotency, tenant and authorization behavior is covered;
-- negative and failure paths are explicit.
+- focused domain/application tests pass;
+- affected integration/PostgreSQL tests pass;
+- tenant, authorization, idempotency/retry and failure behavior is covered;
+- no-op, replay, conflict and crash windows are explicit where relevant;
+- cross-tenant negative proof exists for changed storage/read boundaries.
 
 ### Checkpoint C — delivery
 
-- `cargo fmt --all --check` passes for Rust scope;
-- Clippy passes with warnings denied for Rust scope;
-- workspace tests pass as required by the affected scope;
-- Contract and Governance CI pass when applicable;
-- Database CI passes for SQL, runtime, composition or PostgreSQL behavior;
-- product-plane typecheck/lint/unit/browser gates pass when defined and applicable;
-- roadmap/status/catalog changes match actual merged behavior.
+- formatting and Clippy pass for Rust scope;
+- required workspace/affected tests pass;
+- Contract, Governance, Database, process and frontend gates pass when applicable;
+- rollback/reapply or compensation is proven;
+- generated contracts/navigation are fresh when affected;
+- roadmap/status/catalog/issue claims match actual behavior;
+- all applicable workflows are green on one unchanged final review head.
 
-A packet that uses an independent verifier must publish the exact SHA, requested checkpoint, required commands and verification mode. Any new commit invalidates green evidence for checks not rerun on the new SHA.
+## 7. Pull request policy
 
-## 5. Pull request policy
+Open a PR at a coherent review boundary. Use multiple PRs only for a real boundary, for example:
 
-Open a pull request when the packet has a coherent review boundary. A packet may use two or three pull requests only when there is a real architecture boundary, such as:
+- contract freeze;
+- behavior-neutral consolidation;
+- feature implementation;
+- process-level acceptance and governance closure.
 
-- reusable platform runtime;
-- deployable application composition;
-- complete process-level acceptance and closure.
+A PR description states:
 
-A pull request description must state:
+- architecture result;
+- owner and dependency boundaries;
+- changed contracts, routes, workers, migrations and data classes;
+- production path and contribution entry point;
+- activation, authorization, tenant and failure behavior;
+- rollback/reapply or compensation;
+- before/after complexity for structural work;
+- affected-scope reasoning and specialized gates;
+- exact final head and acceptance evidence;
+- explicit remaining scope.
 
-- the architecture result;
-- ownership and dependency boundaries;
-- exact production path and module-owned contribution coordinates;
-- tenant activation, worker-phase and route-classification impact;
-- failure and rollback behavior;
-- acceptance evidence;
-- local exact-SHA verification status when the multi-agent protocol is used;
-- exact final review head and applicable GitHub gate evidence before completion is claimed;
-- remaining scope not claimed by the PR.
+Do not imply unrun checks have passed.
 
-The repository PR template is the default evidence structure. A PR may be opened before local verification is green, but it must not imply that unrun checks have passed.
+## 8. Commit policy
 
-## 6. Commit policy
+Commits are implementation tools; PRs are delivery artifacts.
 
-Commits are internal working tools. Pull requests are delivery artifacts.
+Use iterative commits while working, then prefer a compact semantic history before merge. Every verification claim names the exact commit actually tested.
 
-During implementation, commits may be small and iterative. Before merge, prefer a compact semantic history such as:
+A new commit makes older evidence stale for checks not rerun.
 
-```text
-1. add governed runtime contracts and state model
-2. compose production adapters and process path
-3. add acceptance evidence and synchronize documentation
-```
+## 9. Golden owner pattern
 
-Do not spend implementation time manufacturing a clean commit for every mechanical fix. Clean the history once the packet is ready for review.
-
-For multi-agent work, a commit also serves as an immutable verification checkpoint. This does not require every commit to be clean or release-ready; it requires only that every verification claim name the exact commit actually tested.
-
-## 7. Golden module pattern
-
-Every business owner module should converge on the same conceptual layers:
+The conceptual owner layers are:
 
 ```text
-module manifest
+manifest and ownership
 published contracts
-domain aggregates and value objects
-application commands/queries and ports
-pre-authorization semantic validators
-capability/query adapters
-persistence and external adapters
+pure domain aggregates/value objects/policies
+application commands/queries/workers and ports
+pre-authorization validators
+PostgreSQL/external adapters
 module-owned production contribution
-exact-coordinate composition registration and durable activation
-unit/integration/PostgreSQL/process acceptance
+exact routes/workers and durable activation
+focused/PostgreSQL/process acceptance
 ```
 
-Physical crate boundaries may vary, but ownership and dependency direction may not.
+Target physical packaging is domain + application + postgres + production, with one optional real provider/process/trust boundary. Ordinary capabilities stay inside existing packages.
 
-The repository provides permanent scaffolding and validation commands tracked by issue #56 so future modules are generated from the proven pattern rather than copied manually.
+See `MODULE_DEVELOPMENT.md` for current scaffold limitations and target evolution.
 
-## 8. Domain-wave development
+## 10. Public contract lifecycle
 
-After the first production runtime proof, build CRM breadth as domain waves tracked by issue #57:
+Published versions are immutable.
 
-1. Customer 360;
-2. Revenue lifecycle;
-3. Service and support;
-4. Growth and marketing;
-5. Product platform, analytics and automation.
+A semantic change requires a new version, compatibility/impact report, parallel support window, consumer migration and explicit retirement gate. Deprecation includes owner, replacement, deadline, consumer inventory and removal condition.
 
-Each wave includes backend ownership, contracts, persistence, projections, frontend surface and acceptance evidence. Backend and frontend evolve together after the product-shell foundation exists.
+Do not remove a supported coordinate merely because repository code no longer calls it directly.
 
-## 9. Exact-SHA multi-agent development
+## 11. Migration and data ownership
 
-The repository-supported two-agent model is defined normatively in `MULTI_AGENT_DEVELOPMENT.md`.
+A migration belongs to the authoritative owner of the affected state.
 
-The default roles are:
+- no cross-owner table edits;
+- FORCE RLS and tenant context remain enforced;
+- forward, rollback/schema-removal and reapply evidence is required where applicable;
+- ownership transfer requires ADR, compatibility window, cutover and rollback;
+- retention, legal-hold, export/deletion and restore consequences are explicit.
 
-- **Architect / Implementer** — primary writer and design authority for the delivery packet;
-- **Local Integrator / Verifier** — independent exact-SHA build/test/reproduction role, defaulting to `VERIFY_ONLY`;
-- **GitHub CI** — final exact-head merge authority.
+## 12. Test architecture
 
-The default sequence is:
+Use generic conformance for repeated platform behavior and owner suites for unique semantics.
+
+During iteration:
+
+```bash
+python scripts/repo.py conformance
+python scripts/repo.py affected --base origin/main
+python scripts/repo.py check-affected --base origin/main
+```
+
+Then run all specialized gates selected by contracts, migrations, routes, workers, processes, frontend or security scope.
+
+Affected-scope optimization changes iteration cost, not the final exact-head acceptance rule.
+
+## 13. Local development and navigation
+
+Use `docs/README.md` as the stable task map.
+
+Currently implemented commands are defined by `scripts/repo.py`. Planned commands such as `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain` and `packet-check` are part of issue #194 and must not be claimed as available before permanent tests exist.
+
+The target local workflow is:
+
+```text
+doctor
+→ bootstrap
+→ dev-up
+→ seed-demo
+→ focused implementation
+→ explain/affected/packet-check
+→ smoke
+→ exact-head gates
+```
+
+Generated active-packet and repository-map documents are reproducible navigation outputs, not sources of truth.
+
+## 14. Multi-agent exact-SHA workflow
+
+Default roles:
+
+- **Architect / Implementer** — scope, architecture, primary implementation and fixes;
+- **Local Integrator / Verifier** — independent exact-SHA build/test/reproduction, default `VERIFY_ONLY`;
+- **GitHub CI** — final exact-head authority.
 
 ```text
 planning
-→ implementation by one primary writer
-→ exact-SHA local verification handoff
-→ structured verification report
-→ implementation fixes
-→ broader local delivery preflight
-→ exact final review head
-→ all applicable GitHub CI
+→ one primary writer
+→ exact-SHA local handoff when useful
+→ structured report
+→ fixes
+→ final unchanged review head
+→ all applicable GitHub workflows
 → merge
 ```
 
-Do not run two hidden writers concurrently on overlapping code. A verifier may make repository changes only through an explicit mechanical-fix authorization or writer handoff. Architectural and behavioral fixes return to the Architect / Implementer by default.
+Do not run hidden concurrent writers on overlapping code. A verifier writes only through explicit authorization or handoff.
 
-Use these coordination signals where useful:
+## 15. Documentation closure
 
-- `SECOND_AGENT_NOT_NEEDED`;
-- `CONNECT_SECOND_AGENT`;
-- `SECOND_AGENT_REPORT_NEEDED`;
-- `READY_FOR_EXACT_HEAD_CI`.
+README and `AGENTS.md` are orientation. `docs/README.md` is the stable index. Current state belongs in `PROJECT_STATUS.md`, the roadmap/phase plan, module catalog and active issues.
 
-The signals are convenience labels only. The active issue, branch, PR, committed protocol and exact SHA are the durable source of truth.
+Historical packet documents retain accepted boundaries and must not be edited into live status trackers.
 
-## 10. Non-negotiable gates
+Documentation changes invalidate exact-head evidence until applicable checks rerun.
 
-Faster delivery must never weaken:
+## 16. Non-negotiable gates
+
+Faster delivery never weakens:
 
 - single owner per mutable aggregate;
-- versioned capability/event/query contracts;
+- immutable versioned contracts;
 - live authorization before side effects;
 - tenant isolation and cross-tenant negative tests;
-- idempotency and optimistic concurrency;
-- atomic state, outbox, audit and idempotency evidence;
-- rebuildable non-authoritative projections;
-- safe disable, upgrade, rollback and uninstall behavior;
-- exact typed money, time, identity and lifecycle semantics;
-- module-owned route/worker contributions with no central business switches;
-- exact manifest/binding/production-route parity and individually reasoned classifications.
+- idempotency, concurrency and crash recovery;
+- atomic state/outbox/audit/idempotency evidence;
+- rebuildable derived state;
+- safe disable, upgrade, rollback and uninstall;
+- module-owned routes/workers without central business switches;
+- manifest/binding/route parity;
+- exact-head acceptance.
 
-The process is optimized for fewer coordination steps, faster evidence and earlier failure reproduction, not fewer correctness guarantees.
+The process is optimized for fewer decisions, faster feedback and local changes—not fewer correctness guarantees.
