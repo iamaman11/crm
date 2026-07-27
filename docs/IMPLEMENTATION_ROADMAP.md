@@ -108,14 +108,15 @@ Accepted owner-scope implementations:
 3. Customer Accounts — PR #179;
 4. Contact Points — PR #181;
 5. Party Relationships — PR #183;
-6. Identity Resolution — PR #186, accepted source `24456b86379a1ef23ed5a60804cdcae5075d407c`, merge `509eb304a76055c9f49b0beed3b007963a91cb22`, 25/25 permanent workflows.
+6. Identity Resolution — PR #186 / accepted source `24456b86379a1ef23ed5a60804cdcae5075d407c` / merge `509eb304a76055c9f49b0beed3b007963a91cb22` / 25 of 25 permanent workflows;
+7. Customer Data Operations — PR #188 / accepted source `07f34786e82fdfa78d263790e9f50541529006f8` / merge `089be72fa3010b4aa15aff7f9ea55fd86290f8fc` / 26 of 26 permanent workflows.
 
 All nine owner coordinates remain contract-only/non-runtime. Accepted owner implementations add no public ingress, application registration or Customer Privacy worker.
 
 ### 6.2 Active sequence
 
-1. **Customer Data Operations owner slice — Ready:** implement `customer_data.privacy.scope.contribute@1.0.0` under `CUSTOMER_DATA_OPERATIONS_PRIVACY_SCOPE_PACKET.md`.
-2. **Data Quality owner slice:** freeze and implement its owner-specific subject-evidence boundary.
+1. **Data Quality owner slice — inspection/entry freeze next:** define authoritative record families, Party relevance, shared-container exclusions, retention/evidence semantics, pagination and frozen bounds before implementation.
+2. **Data Quality owner implementation:** implement only after the bounded entry packet removes record-family ambiguity.
 3. **Customer Enrichment owner slice:** freeze and implement provider/provenance/review/application evidence scope.
 4. **Complete nine-owner set:** require all owner gates before production discovery.
 5. **Scope discovery and immutable snapshot:** prove owner availability/staleness, deterministic completeness and immutable scope evidence.
@@ -129,25 +130,31 @@ All nine owner coordinates remain contract-only/non-runtime. Accepted owner impl
 13. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged.
 14. **Phase 8B / #29:** start only from the completed Phase 8A baseline.
 
-### 6.3 Next bounded owner slice — Customer Data Operations
+### 6.3 Accepted historical owner slice — Customer Data Operations
 
-The packet covers subject-level:
+PR #188 accepted the subject-level families:
 
 - `customer_data.import_row`;
 - `customer_data.export_selection_item`;
 - `customer_data.export_execution_stage`;
 - `customer_data.export_execution_outcome`.
 
-It must:
+The accepted packet proves strict existing-owner rehydration, bounded same-tenant keyset scans, historical alias resolution to the canonical Party, exact stage/outcome relevance through authoritative selection `(job_id, manifest_position)`, deterministic four-family pagination, reference-only evidence, clean/rollback/schema-removal/reapply PostgreSQL acceptance and zero writes. Multi-subject jobs, boundaries, progress and complete artifacts remain excluded. The coordinate remains non-runtime.
 
-- strictly rehydrate exact owner persistence envelopes;
-- resolve historical Party references to the accepted canonical subject under bounded topology evidence;
-- join export stage/outcome evidence only through authoritative selection identity;
-- exclude multi-subject jobs, boundaries, progress and complete artifacts from automatic subject scope;
-- paginate deterministically across all four resource families;
-- emit reference-only evidence;
-- prove clean/rollback/schema-removal/reapply PostgreSQL acceptance and zero writes;
-- remain non-runtime with no shared-support behavior expansion.
+### 6.4 Next bounded owner slice — Data Quality
+
+Before adapter implementation, freeze:
+
+- the authoritative issue/rule/run/finding/observation/remediation/evidence record families;
+- direct Party references and indirect provenance references that constitute subject relevance;
+- shared or multi-subject containers that remain owner-controlled but are not emitted for one Party;
+- exact owner decoders and malformed-state fail-closed behavior;
+- alias-aware relevance under the accepted topology generation;
+- deterministic cross-family ordering, keyset scans, raw-row counters and terminal `page_size + 1` proof;
+- owner-wide scan, rehydration, relationship and canonical-resolution bounds;
+- retention-policy and minimized reference-only evidence mapping;
+- required PostgreSQL indexes and clean rollback/reapply acceptance;
+- contract-only implementation with no public route, worker, application registration or runtime promotion.
 
 ## 7. Phase 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
 
