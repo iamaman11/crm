@@ -7,7 +7,7 @@ use crm_customer_privacy::{
     DISCOVERY_SCOPE_SNAPSHOT_STATE_RETENTION_POLICY_ID, DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_ID,
     DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_VERSION, DiscoveryScopeSnapshot, MODULE_ID,
     SCOPE_SNAPSHOT_RECORD_TYPE, decode_discovery_scope_snapshot_state,
-    discovery_attempt_digest as _, discovery_scope_snapshot_state_descriptor_hash,
+    discovery_scope_snapshot_state_descriptor_hash,
     discovery_sha256, encode_discovery_scope_snapshot_state,
 };
 use crm_customer_privacy_application::{
