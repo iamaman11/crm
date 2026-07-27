@@ -1,0 +1,349 @@
+name: Temporary Customer Enrichment Governance Sync
+
+on:
+  push:
+    branches:
+      - docs/customer-enrichment-privacy-accepted
+    paths:
+      - ".github/workflows/temp-enrichment-governance-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: docs/customer-enrichment-privacy-accepted
+          fetch-depth: 0
+      - name: Synchronize nine-owner authoritative state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          SOURCE = "e90e36027de18a07be68e43327ea732810ff332a"
+          MERGE = "e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c"
+
+          def read(path):
+              return Path(path).read_text(encoding="utf-8")
+
+          def write(path, text):
+              Path(path).write_text(text, encoding="utf-8")
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              return text.replace(old, new)
+
+          # PROJECT_STATUS
+          path = "docs/PROJECT_STATUS.md"
+          text = read(path)
+          text = replace_once(text,
+              "10. `DATA_QUALITY_PRIVACY_SCOPE_PACKET.md` — accepted historical contract for the eighth owner contribution.",
+              "10. `DATA_QUALITY_PRIVACY_SCOPE_PACKET.md` — accepted historical contract for the eighth owner contribution.\n11. `CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PACKET.md` — accepted historical contract for the ninth owner contribution.",
+              "status references")
+          text = replace_once(text,
+              "Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. Eight authoritative owner implementations are accepted:",
+              "Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. All nine authoritative owner implementations are accepted:",
+              "status owner count")
+          text = replace_once(text,
+              "8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows.",
+              "8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows.\n9. Customer Enrichment — PR #192 / accepted source `" + SOURCE + "` / merge `" + MERGE + "` / 28 of 28 permanent workflows.",
+              "status owner entry")
+          text = replace_once(text,
+              "Data Quality also remains contract-only/non-runtime. Its accepted gate proves strict nine-type owner rehydration, exclusion of shared rule/profile definitions, exact seven-family Party evidence, alias-aware relevance, rule/profile/job/input/outcome/finding/observation/completeness/remediation association integrity, deterministic pagination, minimized reference-only bytes, primary-key access-path proof, zero writes and clean/rollback/reapply PostgreSQL acceptance.",
+              "Data Quality also remains contract-only/non-runtime. Its accepted gate proves strict nine-type owner rehydration, exclusion of shared rule/profile definitions, exact seven-family Party evidence, alias-aware relevance, rule/profile/job/input/outcome/finding/observation/completeness/remediation association integrity, deterministic pagination, minimized reference-only bytes, primary-key access-path proof, zero writes and clean/rollback/reapply PostgreSQL acceptance.\n\nCustomer Enrichment remains contract-only/non-runtime. Its accepted gate proves typed request/Party relationship-rooted discovery, strict nine-type owner rehydration, shared-definition exclusion, exact seven-family descendant lineage, alias-aware relevance, deterministic pagination, minimized reference-only bytes, relationship/record primary-key access paths, zero writes and clean/rollback/reapply PostgreSQL acceptance.",
+              "status accepted proof")
+          text = replace_once(text,
+              "Customer Enrichment privacy owner contribution\n-> complete nine-owner set\n-> Customer Privacy scope discovery and immutable snapshot",
+              "Customer Privacy scope discovery and immutable snapshot",
+              "status active lane")
+          text = replace_once(text,
+              "Only one owner implementation remains. Production scope discovery remains forbidden until all nine owner contributions are accepted. No remaining owner contribution gains HTTP/gRPC ingress, application registration or worker reachability in its contract-only packet.",
+              "All nine owner contributions are accepted. Production scope discovery and immutable snapshot are now the next bounded packet, but they are not yet implemented. Owner contributions remain contract-only/non-runtime and add no Customer Privacy worker or public ingress.",
+              "status owner closure")
+          replacement = '''## Next bounded packet — Scope discovery and immutable snapshot
+
+State: **Ready for bounded implementation; not started**
+
+The next packet must prove:
+
+- deterministic invocation and completeness of all nine accepted owner contributions;
+- fail-closed behavior for unavailable, stale, disabled or incompatible owners;
+- one immutable scope snapshot bound to tenant, privacy case, canonical Party, topology generation, registry digest, purpose and effective request time;
+- deterministic owner/resource/data-class ordering without payload disclosure;
+- replay-stable page/cursor and snapshot digests;
+- no owner mutation, restriction, legal-hold, retention or destructive action during discovery;
+- permission-aware scope/snapshot reads and exact audit evidence;
+- clean PostgreSQL, rollback/reapply, crash/retry and real-process acceptance before planning begins.
+
+All nine owners are available as contract-only contributors. Production planning and action execution remain prohibited until discovery and immutable snapshot are accepted.
+
+'''
+          text, count = re.subn(r"## Next bounded packet — Customer Enrichment\n.*?(?=## Remaining product work)", replacement, text, flags=re.S)
+          if count != 1:
+              raise SystemExit(f"status next packet replacement count {count}")
+          write(path, text)
+
+          # MODULE_CATALOG
+          path = "docs/MODULE_CATALOG.md"
+          text = read(path)
+          text = replace_once(text,
+              "Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. Eight authoritative implementations are accepted:",
+              "Nine owner-scope contribution coordinates are published and remain contract-only/non-runtime. All nine authoritative implementations are accepted:",
+              "catalog owner count")
+          text = replace_once(text,
+              "- PR #190 — Data Quality, strict nine-type rehydration, shared-definition exclusion, exact seven-family Party evidence and cross-record lineage validation; accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a`, merge `deac197c97cddc15bb9916092ca87f6e767ce1de`, 27 of 27 permanent workflows.",
+              "- PR #190 — Data Quality, strict nine-type rehydration, shared-definition exclusion, exact seven-family Party evidence and cross-record lineage validation; accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a`, merge `deac197c97cddc15bb9916092ca87f6e767ce1de`, 27 of 27 permanent workflows.\n- PR #192 — Customer Enrichment, typed request/Party relationship-rooted discovery, strict nine-type rehydration, shared-definition exclusion and exact seven-family descendant lineage; accepted source `" + SOURCE + "`, merge `" + MERGE + "`, 28 of 28 permanent workflows.",
+              "catalog owner entry")
+          text = replace_once(text, "All eight remain non-runtime", "All nine remain non-runtime", "catalog all nine")
+          text = replace_once(text,
+              "Customer Enrichment is the next bounded contract-only owner and the final owner contribution before production scope discovery/planning. Production discovery remains forbidden until all nine owners are accepted.",
+              "All nine owner contributions are accepted. Production scope discovery and immutable snapshot are the next bounded Customer Privacy packet; planning and action execution remain not started.",
+              "catalog next lane")
+          text = replace_once(text,
+              "The accepted Data Quality packet contributes only evaluation job/input, rule outcome, finding/observation, completeness-result and remediation-attempt references. Shared rule-set/profile definitions remain owner validation dependencies and are not Party evidence. The packet introduces no query-side writes or runtime promotion.",
+              "The accepted Data Quality packet contributes only evaluation job/input, rule outcome, finding/observation, completeness-result and remediation-attempt references. Shared rule-set/profile definitions remain owner validation dependencies and are not Party evidence. The packet introduces no query-side writes or runtime promotion.\n\nThe accepted Customer Enrichment packet contributes request, response receipt/conflict, suggestion, review, application-attempt and provider-usage references rooted in the typed request/Party relationship. Shared provider-profile/mapping definitions remain validation dependencies and are excluded from Party evidence. The packet introduces no provider call, owner mutation, query-side write or runtime promotion.",
+              "catalog accepted packet")
+          text = replace_once(text,
+              "- 8A.11 / #126 — Customer Privacy. Eight of nine owner contributions are accepted through PR #190. Customer Enrichment is the ninth and final owner before discovery/planning. Approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.",
+              "- 8A.11 / #126 — Customer Privacy. All nine owner contributions are accepted through PR #192. Scope discovery and immutable snapshot are next. Planning, approval, restrictions, legal holds, execution, access/export, deletion/anonymization and convergence remain incomplete.",
+              "catalog accounting")
+          write(path, text)
+
+          # IMPLEMENTATION_ROADMAP
+          path = "docs/IMPLEMENTATION_ROADMAP.md"
+          text = read(path)
+          text = replace_once(text,
+              "8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows.",
+              "8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows.\n9. Customer Enrichment — PR #192 / accepted source `" + SOURCE + "` / merge `" + MERGE + "` / 28 of 28 permanent workflows.",
+              "roadmap owner entry")
+          sequence = '''1. **Scope discovery and immutable snapshot:** prove all nine owner contributions, owner availability/staleness, deterministic completeness and immutable scope evidence.
+2. **Deterministic planning and reads:** prove owner/data-class actions and permission-aware plan/outcome disclosure.
+3. **Approval and immediate restrictions:** preserve deny-only enforcement and final subject locking.
+4. **Legal hold and retention:** prove legal-hold > mandatory-retention > approved-action precedence.
+5. **Resumable execution and recovery:** prove exact owner capabilities, idempotency, checkpoints and crash-window reconciliation.
+6. **Access/export and deletion/anonymization:** use governed artifacts and owner-specific actions without cross-owner storage bypass.
+7. **Tombstone and convergence:** prove Party tombstone/no-orphan behavior and projection/search/cache convergence.
+8. **Worker and end-to-end acceptance:** prove disable/uninstall fail-closed behavior and complete lifecycle processing.
+9. **Phase 8A closure:** only after the complete privacy/customer-master interaction baseline is merged.
+10. **Phase 8B / #29:** start only from the completed Phase 8A baseline.'''
+          text, count = re.subn(r"1\. \*\*Customer Enrichment owner slice.*?13\. \*\*Phase 8B / #29:\*\* start only from the completed Phase 8A baseline\.", sequence, text, flags=re.S)
+          if count != 1:
+              raise SystemExit(f"roadmap sequence replacement count {count}")
+          replacement = '''### 6.5 Accepted historical owner slice — Customer Enrichment
+
+PR #192 accepted seven relationship-rooted evidence families:
+
+- `customer_enrichment.request`;
+- `customer_enrichment.provider_response_receipt`;
+- `customer_enrichment.provider_response_conflict`;
+- `customer_enrichment.suggestion`;
+- `customer_enrichment.review_decision`;
+- `customer_enrichment.application_attempt`;
+- `customer_enrichment.provider_usage_entry`.
+
+The accepted packet proves strict typed request/Party links, strict owner rehydration for all nine persisted types, exclusion of shared provider-profile/mapping definitions, alias-aware Party relevance, exact descendant lineage, deterministic pagination, minimized reference-only evidence, relationship/record primary-key access paths, zero writes and clean/rollback/schema-removal/reapply PostgreSQL acceptance. The coordinate remains non-runtime.
+
+### 6.6 Next bounded packet — Scope discovery and immutable snapshot
+
+Implement only after freezing:
+
+- deterministic all-nine-owner invocation and complete terminal evidence;
+- unavailable, disabled, stale and incompatible owner fail-closed semantics;
+- immutable snapshot identity, lineage, retention and digest contracts;
+- deterministic owner/resource/data-class ordering and bounded aggregation;
+- permission-aware snapshot reads without resource-payload disclosure;
+- replay, retry, registry/topology drift and crash-window behavior;
+- no owner mutation or destructive action during discovery;
+- clean PostgreSQL, rollback/reapply and real-process acceptance.
+
+'''
+          text, count = re.subn(r"### 6\.5 Next bounded owner slice — Customer Enrichment\n.*?(?=## 7\.)", replacement, text, flags=re.S)
+          if count != 1:
+              raise SystemExit(f"roadmap owner section replacement count {count}")
+          write(path, text)
+
+          # PHASE8_DELIVERY_PLAN
+          path = "docs/PHASE8_DELIVERY_PLAN.md"
+          text = read(path)
+          text = replace_once(text,
+              "8. Data Quality — PR #190 / source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows.",
+              "8. Data Quality — PR #190 / source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows.\n9. Customer Enrichment — PR #192 / source `" + SOURCE + "` / merge `" + MERGE + "` / 28 of 28 permanent workflows.",
+              "phase owner entry")
+          text = replace_once(text,
+              "Data Quality remains non-runtime. Its accepted gate proves strict nine-type rehydration, exclusion of shared definitions, seven-family Party evidence, exact association integrity, alias-aware relevance, deterministic pagination, minimized output, no writes, primary-key access-path proof and repeated clean PostgreSQL acceptance.",
+              "Data Quality remains non-runtime. Its accepted gate proves strict nine-type rehydration, exclusion of shared definitions, seven-family Party evidence, exact association integrity, alias-aware relevance, deterministic pagination, minimized output, no writes, primary-key access-path proof and repeated clean PostgreSQL acceptance.\n\nCustomer Enrichment remains non-runtime. Its accepted gate proves typed request/Party relationship-rooted discovery, strict nine-type rehydration, shared-definition exclusion, seven-family descendant evidence, exact association integrity, alias-aware relevance, deterministic pagination, minimized output, no writes, relationship/record primary-key plans and repeated clean PostgreSQL acceptance.",
+              "phase accepted proof")
+          replacement = '''## 4. Nine-owner set complete
+
+All nine authoritative owner contributions are accepted and remain contract-only/non-runtime.
+
+### Accepted historical packet: Customer Enrichment
+
+`CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PACKET.md` is an accepted historical contract for PR #192. It contributes request, response receipt/conflict, suggestion, review, application-attempt and provider-usage references rooted in the typed request/Party relationship. Shared provider-profile/mapping definitions remain strict validation dependencies and are excluded from Party evidence.
+
+The implementation introduces no provider call, secret resolution, Party mutation, query-side write, public route, application composition or Customer Privacy worker.
+
+### Next bounded packet: Scope discovery and immutable snapshot
+
+State: **Ready for bounded implementation; not started**
+
+The packet must freeze all-nine-owner invocation, unavailable/stale/disabled owner semantics, immutable snapshot identity and digests, deterministic bounded aggregation, permission-aware reads, replay/registry/topology drift behavior, no-mutation guarantees and clean PostgreSQL/process acceptance.
+
+'''
+          text, count = re.subn(r"## 4\. Current owner sequence\n.*?(?=## 5\. Discovery and lifecycle sequence after all owners)", replacement, text, flags=re.S)
+          if count != 1:
+              raise SystemExit(f"phase owner section replacement count {count}")
+          text = replace_once(text,
+              "Production discovery does not begin until all nine owner implementations are accepted.\n\nThen deliver, in order:",
+              "All nine owner implementations are accepted. Production discovery and immutable snapshot are now next, but remain not implemented.\n\nDeliver, in order:",
+              "phase discovery transition")
+          write(path, text)
+
+          # CUSTOMER_ENRICHMENT PACKET
+          path = "docs/CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PACKET.md"
+          text = read(path)
+          text = replace_once(text,
+              "Status: **Bounded entry contract frozen; implementation not started**  \nParent program: #126  \nCoordinate: `customer_enrichment.privacy.scope.contribute@1.0.0`  \nBaseline: `a2373255d7625c6807cd0bef89dc0fa22453a29b`  \nRuntime state: **Contract-only/non-runtime; no route, worker or application registration is permitted in this packet**",
+              "Status: **Accepted historical contract**  \nParent program: #126  \nCoordinate: `customer_enrichment.privacy.scope.contribute@1.0.0`  \nAccepted source: `" + SOURCE + "`  \nMerge: `" + MERGE + "`  \nExact-head gate: **28 of 28 permanent workflows succeeded**  \nRuntime state: **Contract-only/non-runtime; no route, worker or application registration was added**",
+              "packet status")
+          text = replace_once(text,
+              "This entry packet freezes authoritative discovery, the seven subject-evidence families, strict parent/provenance associations, alias handling, bounds, pagination, response minimization, PostgreSQL access paths and permanent acceptance before adapter code is written.",
+              "The accepted implementation preserves the frozen authoritative discovery, seven subject-evidence families, strict parent associations, alias handling, bounds, pagination, response minimization, PostgreSQL access paths and permanent acceptance boundary.",
+              "packet objective")
+          text = replace_once(text,
+              "Add a permanent `Customer Enrichment Privacy Scope CI` only with implementation code. It must prove:",
+              "The permanent `Customer Enrichment Privacy Scope CI` was added with implementation code and proves:",
+              "packet workflow tense")
+          text = replace_once(text, "The workflow must remain permanent after merge.", "The workflow remains permanent after merge.", "packet permanent tense")
+          conclusion = '''## 17. Acceptance conclusion
+
+The owner model was implemented without weakening the frozen contract. PR #192 accepted the dedicated Customer Enrichment privacy adapter and permanent workflow on source `''' + SOURCE + '''`, with 28 of 28 permanent workflows successful before squash merge `''' + MERGE + '''`.
+
+This packet is now an accepted historical contract. All nine owner contributions are accepted. Production scope discovery and immutable snapshot are the next bounded packet and remain not implemented; planning and action execution remain prohibited until that packet is accepted.
+'''
+          text, count = re.subn(r"## 17\. Entry conclusion\n.*\Z", conclusion, text, flags=re.S)
+          if count != 1:
+              raise SystemExit(f"packet conclusion replacement count {count}")
+          write(path, text)
+
+          # REGRESSION TEST
+          path = "tests/test_customer_privacy_owner_scope_contracts.py"
+          text = read(path)
+          text = replace_once(text,
+              "def test_status_sources_freeze_eight_accepted_owners_and_customer_enrichment_next(self) -> None:",
+              "def test_status_sources_freeze_nine_accepted_owners_and_discovery_next(self) -> None:",
+              "test status name")
+          text = replace_once(text,
+              '''        data_quality_packet = (
+            ROOT / "docs/DATA_QUALITY_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
+''',
+              '''        data_quality_packet = (
+            ROOT / "docs/DATA_QUALITY_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
+        enrichment_packet = (
+            ROOT / "docs/CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PACKET.md"
+        ).read_text(encoding="utf-8")
+''',
+              "test packet read")
+          text = replace_once(text,
+              '''        self.assertIn("Eight authoritative owner implementations are accepted", project_status)
+        self.assertIn("Eight authoritative implementations are accepted", module_catalog)
+        self.assertIn("Next bounded packet — Customer Enrichment", project_status)
+        self.assertIn("Customer Enrichment is the next bounded contract-only owner", module_catalog)
+        self.assertIn("Next bounded owner slice — Customer Enrichment", roadmap)
+        self.assertIn("Next bounded owner packet: Customer Enrichment", phase_plan)
+''',
+              '''        self.assertIn("All nine authoritative owner implementations are accepted", project_status)
+        self.assertIn("All nine authoritative implementations are accepted", module_catalog)
+        self.assertIn("Next bounded packet — Scope discovery and immutable snapshot", project_status)
+        self.assertIn("Production scope discovery and immutable snapshot are the next bounded", module_catalog)
+        self.assertIn("Next bounded packet — Scope discovery and immutable snapshot", roadmap)
+        self.assertIn("Next bounded packet: Scope discovery and immutable snapshot", phase_plan)
+''',
+              "test current state")
+          anchor = '''        self.assertIn("Production discovery remains forbidden", data_quality_packet)
+'''
+          addition = anchor + '''
+        for document in (project_status, module_catalog, roadmap, phase_plan, enrichment_packet):
+            self.assertIn("PR #192", document)
+            self.assertIn("''' + SOURCE + '''", document)
+            self.assertIn("''' + MERGE + '''", document)
+
+        self.assertIn("28 of 28 permanent workflows", project_status)
+        self.assertIn("28 of 28 permanent workflows", module_catalog)
+        self.assertIn("28 of 28 permanent workflows", roadmap)
+        self.assertIn("28 of 28 permanent workflows", phase_plan)
+        self.assertIn("28 of 28 permanent workflows succeeded", enrichment_packet)
+        self.assertIn("Accepted historical contract", enrichment_packet)
+        self.assertIn("Production scope discovery and immutable snapshot are the next bounded packet", enrichment_packet)
+'''
+          text = replace_once(text, anchor, addition, "test enrichment evidence")
+          text = replace_once(text,
+              '''            "Seven authoritative owner implementations are accepted",
+            "Seven authoritative implementations are accepted",
+''',
+              '''            "Seven authoritative owner implementations are accepted",
+            "Seven authoritative implementations are accepted",
+            "Eight authoritative owner implementations are accepted",
+            "Eight authoritative implementations are accepted",
+''',
+              "test stale owner counts")
+          text = replace_once(text,
+              '''            "Next bounded owner packet: Data Quality",
+            "Ready; implementation not started",
+''',
+              '''            "Next bounded owner packet: Data Quality",
+            "Next bounded packet — Customer Enrichment",
+            "Next bounded owner slice — Customer Enrichment",
+            "Next bounded owner packet: Customer Enrichment",
+            "Customer Enrichment is the next bounded contract-only owner",
+            "Ready; implementation not started",
+''',
+              "test stale next packet")
+          text = replace_once(text,
+              '''            "PR #190 in progress",
+''',
+              '''            "PR #190 in progress",
+            "PR #192 in progress",
+''',
+              "test stale PR")
+          text = replace_once(text,
+              '''            self.assertNotIn(stale, data_quality_packet)
+''',
+              '''            self.assertNotIn(stale, data_quality_packet)
+            self.assertNotIn(stale, enrichment_packet)
+''',
+              "test stale packet loop")
+          text = replace_once(text,
+              '''            "Contract-only/non-runtime",
+            "implementation not started",
+            "ninth and final owner",
+            "Production discovery remains forbidden",
+''',
+              '''            "Contract-only/non-runtime",
+            "Accepted historical contract",
+            "28 of 28 permanent workflows succeeded",
+            "''' + SOURCE + '''",
+            "''' + MERGE + '''",
+            "All nine owner contributions are accepted",
+            "Production scope discovery and immutable snapshot are the next bounded packet",
+''',
+              "test enrichment accepted controls")
+          write(path, text)
+
+          Path(".github/workflows/temp-enrichment-governance-sync.yml").unlink()
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs(privacy): accept Customer Enrichment owner contribution"
+          git push origin HEAD:docs/customer-enrichment-privacy-accepted
