@@ -1,5 +1,6 @@
 name: Temporary Customer Enrichment Privacy Accessors
 
+# Second push activates the already-installed branch workflow.
 on:
   push:
     branches:
@@ -32,7 +33,7 @@ jobs:
           }
 
           pub fn canonical_response_digest(&self) -> &[u8; 32] {
-'''
+          '''
           new = '''    pub fn request_id(&self) -> &EnrichmentRequestId {
               &self.request_id
           }
@@ -50,7 +51,7 @@ jobs:
           }
 
           pub fn canonical_response_digest(&self) -> &[u8; 32] {
-'''
+          '''
           if old not in text:
               raise SystemExit("receipt accessor insertion point was not found")
           text = text.replace(old, new)
@@ -60,7 +61,7 @@ jobs:
           }
 
           pub fn target(&self) -> &TargetSnapshot {
-'''
+          '''
           new = '''    pub fn suggestion_id(&self) -> &SuggestionId {
               &self.suggestion_id
           }
@@ -70,7 +71,7 @@ jobs:
           }
 
           pub fn target(&self) -> &TargetSnapshot {
-'''
+          '''
           if old not in text:
               raise SystemExit("suggestion accessor insertion point was not found")
           lifecycle.write_text(text.replace(old, new), encoding="utf-8")
@@ -82,7 +83,7 @@ jobs:
           }
 
           pub const fn kind(&self) -> ProviderUsageKind {
-'''
+          '''
           new = '''    pub fn request_id(&self) -> &EnrichmentRequestId {
               &self.request_id
           }
@@ -100,7 +101,7 @@ jobs:
           }
 
           pub const fn kind(&self) -> ProviderUsageKind {
-'''
+          '''
           if old not in text:
               raise SystemExit("usage accessor insertion point was not found")
           usage.write_text(text.replace(old, new), encoding="utf-8")
