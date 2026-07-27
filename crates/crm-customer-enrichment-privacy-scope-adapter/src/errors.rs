@@ -76,7 +76,10 @@ fn lineage_contract_invalid(suffix: &'static str) -> SdkError {
         "PAGE_SIZE_INVALID" => "CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_PAGE_SIZE_INVALID",
         _ => "CUSTOMER_ENRICHMENT_PRIVACY_SCOPE_LINEAGE_INVALID",
     };
-    invalid_contract(code, "The Customer Enrichment privacy scope lineage is invalid.")
+    invalid_contract(
+        code,
+        "The Customer Enrichment privacy scope lineage is invalid.",
+    )
 }
 
 pub(crate) fn map_canonical_party_claim_error(error: CanonicalPartyClaimError) -> SdkError {

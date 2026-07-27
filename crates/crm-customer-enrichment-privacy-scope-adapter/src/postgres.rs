@@ -15,31 +15,30 @@ use crate::errors::{
 use crate::request::{
     CursorState, ResourceFamily, ValidatedRequest, validate_request_contract, validate_wire_request,
 };
-use crate::response::{
-    VerifiedCustomerEnrichmentResource, build_response, typed_output,
-};
+use crate::response::{VerifiedCustomerEnrichmentResource, build_response, typed_output};
 use crm_capability_plan_support::PersistedPayloadContract;
 use crm_capability_runtime::CapabilityDefinition;
 use crm_core_data::{BoundReadTransaction, PostgresDataStore};
 use crm_customer_enrichment::{
     APPLICATION_ATTEMPT_RECORD_TYPE, APPLICATION_ATTEMPT_STATE_MAXIMUM_BYTES,
     APPLICATION_ATTEMPT_STATE_SCHEMA_ID, ApplicationAttempt, ENRICHMENT_REQUEST_RECORD_TYPE,
-    LIFECYCLE_STATE_RETENTION_POLICY_ID, LIFECYCLE_STATE_SCHEMA_VERSION, MAPPING_VERSION_RECORD_TYPE,
-    MappingVersion, PROVIDER_PROFILE_VERSION_RECORD_TYPE, PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE,
-    PROVIDER_RESPONSE_CONFLICT_STATE_RETENTION_POLICY_ID, PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE,
-    PROVIDER_RESPONSE_RECEIPT_STATE_MAXIMUM_BYTES, PROVIDER_RESPONSE_RECEIPT_STATE_SCHEMA_ID,
-    PROVIDER_USAGE_ENTRY_RECORD_TYPE, PROVIDER_USAGE_ENTRY_STATE_MAXIMUM_BYTES,
-    PROVIDER_USAGE_ENTRY_STATE_RETENTION_POLICY_ID, PROVIDER_USAGE_ENTRY_STATE_SCHEMA_ID,
-    PROVIDER_USAGE_ENTRY_STATE_SCHEMA_VERSION, ProviderProfileVersion, ProviderResponseClass,
-    ProviderResponseConflict, ProviderResponseReceipt, ProviderUsageEntry, ProviderUsageKind,
-    REVIEW_DECISION_RECORD_TYPE, REVIEW_DECISION_STATE_MAXIMUM_BYTES,
-    REVIEW_DECISION_STATE_SCHEMA_ID, ReviewDecision, SUGGESTION_RECORD_TYPE,
-    SUGGESTION_STATE_MAXIMUM_BYTES, SUGGESTION_STATE_SCHEMA_ID, Suggestion, TargetField,
-    TargetSnapshot, application_attempt_state_descriptor_hash, decode_application_attempt_state,
-    decode_provider_response_conflict_state, decode_provider_response_receipt_state,
-    decode_provider_usage_entry_state, encode_application_attempt_state,
-    encode_provider_response_receipt_state, encode_provider_usage_entry_state,
-    provider_response_receipt_state_descriptor_hash, provider_usage_entry_state_descriptor_hash,
+    LIFECYCLE_STATE_RETENTION_POLICY_ID, LIFECYCLE_STATE_SCHEMA_VERSION,
+    MAPPING_VERSION_RECORD_TYPE, MappingVersion, PROVIDER_PROFILE_VERSION_RECORD_TYPE,
+    PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE, PROVIDER_RESPONSE_CONFLICT_STATE_RETENTION_POLICY_ID,
+    PROVIDER_RESPONSE_RECEIPT_RECORD_TYPE, PROVIDER_RESPONSE_RECEIPT_STATE_MAXIMUM_BYTES,
+    PROVIDER_RESPONSE_RECEIPT_STATE_SCHEMA_ID, PROVIDER_USAGE_ENTRY_RECORD_TYPE,
+    PROVIDER_USAGE_ENTRY_STATE_MAXIMUM_BYTES, PROVIDER_USAGE_ENTRY_STATE_RETENTION_POLICY_ID,
+    PROVIDER_USAGE_ENTRY_STATE_SCHEMA_ID, PROVIDER_USAGE_ENTRY_STATE_SCHEMA_VERSION,
+    ProviderProfileVersion, ProviderResponseClass, ProviderResponseConflict,
+    ProviderResponseReceipt, ProviderUsageEntry, ProviderUsageKind, REVIEW_DECISION_RECORD_TYPE,
+    REVIEW_DECISION_STATE_MAXIMUM_BYTES, REVIEW_DECISION_STATE_SCHEMA_ID, ReviewDecision,
+    SUGGESTION_RECORD_TYPE, SUGGESTION_STATE_MAXIMUM_BYTES, SUGGESTION_STATE_SCHEMA_ID, Suggestion,
+    TargetField, TargetSnapshot, application_attempt_state_descriptor_hash,
+    decode_application_attempt_state, decode_provider_response_conflict_state,
+    decode_provider_response_receipt_state, decode_provider_usage_entry_state,
+    encode_application_attempt_state, encode_provider_response_receipt_state,
+    encode_provider_usage_entry_state, provider_response_receipt_state_descriptor_hash,
+    provider_usage_entry_state_descriptor_hash,
 };
 use crm_customer_enrichment_application_adapter::{
     application_attempt_from_snapshot, application_attempt_persisted_contract,
@@ -48,7 +47,8 @@ use crm_customer_enrichment_application_adapter::{
 use crm_customer_enrichment_capability_adapter::{
     MODULE_ID, REQUEST_PARTY_RELATIONSHIP_TYPE, REQUEST_PARTY_SOURCE_RECORD_TYPE,
     enrichment_request_from_snapshot, enrichment_request_persisted_contract, mapping_from_snapshot,
-    mapping_persisted_contract, provider_profile_from_snapshot, provider_profile_persisted_contract,
+    mapping_persisted_contract, provider_profile_from_snapshot,
+    provider_profile_persisted_contract,
 };
 use crm_customer_enrichment_provider_process_composition::provider_response_conflict_persisted_contract;
 use crm_customer_enrichment_review_adapter::{
@@ -110,12 +110,9 @@ impl CustomerEnrichmentPrivacyScopeQueryAdapter {
         .await
         .map_err(map_canonical_party_claim_error)?;
 
-        let page = read_customer_enrichment_page(
-            &mut transaction,
-            &request.context.tenant_id,
-            &validated,
-        )
-        .await?;
+        let page =
+            read_customer_enrichment_page(&mut transaction, &request.context.tenant_id, &validated)
+                .await?;
         let response = build_response(
             &validated,
             &page.resources,
@@ -262,11 +259,15 @@ impl CanonicalResolutionCache {
             ));
         }
         let requested = PartyReference::try_new(party_id).map_err(|error| {
-            topology_invalid(format!("persisted request Party reference is invalid: {error}"))
+            topology_invalid(format!(
+                "persisted request Party reference is invalid: {error}"
+            ))
         })?;
         let canonical =
             PartyReference::try_new(request.canonical_party_id.as_str()).map_err(|error| {
-                topology_invalid(format!("accepted canonical Party reference is invalid: {error}"))
+                topology_invalid(format!(
+                    "accepted canonical Party reference is invalid: {error}"
+                ))
             })?;
         let relevant = match prove_canonical_party_in_transaction(
             transaction,
@@ -439,34 +440,14 @@ async fn read_customer_enrichment_page(
         relationship_rows,
     )
     .await?;
-    let relevant_request_ids = validate_associations(
-        tenant_id,
-        &definitions,
-        &records,
-        &relationships,
-    )?;
+    let relevant_request_ids =
+        validate_associations(tenant_id, &definitions, &records, &relationships)?;
 
     let mut ordered = Vec::new();
-    append_request_resources(
-        &mut ordered,
-        &records.requests,
-        &relevant_request_ids,
-    );
-    append_receipt_resources(
-        &mut ordered,
-        &records.receipts,
-        &relevant_request_ids,
-    );
-    append_conflict_resources(
-        &mut ordered,
-        &records.conflicts,
-        &relevant_request_ids,
-    );
-    append_suggestion_resources(
-        &mut ordered,
-        &records.suggestions,
-        &relevant_request_ids,
-    );
+    append_request_resources(&mut ordered, &records.requests, &relevant_request_ids);
+    append_receipt_resources(&mut ordered, &records.receipts, &relevant_request_ids);
+    append_conflict_resources(&mut ordered, &records.conflicts, &relevant_request_ids);
+    append_suggestion_resources(&mut ordered, &records.suggestions, &relevant_request_ids);
     append_review_resources(
         &mut ordered,
         &records.reviews,
@@ -479,11 +460,7 @@ async fn read_customer_enrichment_page(
         &records.suggestions,
         &relevant_request_ids,
     )?;
-    append_usage_resources(
-        &mut ordered,
-        &records.usage_entries,
-        &relevant_request_ids,
-    );
+    append_usage_resources(&mut ordered, &records.usage_entries, &relevant_request_ids);
 
     let mut matching = ordered
         .into_iter()
@@ -554,12 +531,7 @@ async fn validate_relationships(
             ));
         }
         if resolution_cache
-            .resolves_to_subject(
-                transaction,
-                tenant_id,
-                source_party_id.as_str(),
-                request,
-            )
+            .resolves_to_subject(transaction, tenant_id, source_party_id.as_str(), request)
             .await?
         {
             relevant_requests.insert(target_request_id.as_str().to_owned());
@@ -626,9 +598,12 @@ fn validate_associations(
     let mut receipt_by_request = BTreeMap::<String, String>::new();
     for (receipt_id, receipt) in &records.receipts {
         counter.charge("receipt parent request")?;
-        let parent = records.requests.get(&receipt.view.request_id).ok_or_else(|| {
-            association_state_invalid("provider response receipt references a missing request")
-        })?;
+        let parent = records
+            .requests
+            .get(&receipt.view.request_id)
+            .ok_or_else(|| {
+                association_state_invalid("provider response receipt references a missing request")
+            })?;
         if receipt.view.receipt_id != *receipt_id
             || receipt.view.provider_profile_version_id
                 != parent.value.provider_profile_version_id().as_str()
@@ -742,9 +717,10 @@ fn validate_associations(
         let suggestion = records.suggestions.get(suggestion_id).ok_or_else(|| {
             association_state_invalid("review decision references a missing suggestion")
         })?;
-        let target = suggestion.view.target.as_ref().ok_or_else(|| {
-            association_state_invalid("reviewed suggestion target is missing")
-        })?;
+        let target =
+            suggestion.view.target.as_ref().ok_or_else(|| {
+                association_state_invalid("reviewed suggestion target is missing")
+            })?;
         if review.view.target_party_resource_version != target.party_resource_version
             || review.view.proposed_value_digest != suggestion.view.proposed_value_digest
         {
@@ -764,7 +740,9 @@ fn validate_associations(
             .view
             .suggestion_ref
             .as_ref()
-            .ok_or_else(|| association_state_invalid("application suggestion reference is missing"))?
+            .ok_or_else(|| {
+                association_state_invalid("application suggestion reference is missing")
+            })?
             .suggestion_id
             .as_str();
         let review_id = application
@@ -809,9 +787,12 @@ fn validate_associations(
 
     for usage in records.usage_entries.values() {
         counter.charge("usage parent request")?;
-        let request = records.requests.get(&usage.view.request_id).ok_or_else(|| {
-            association_state_invalid("provider usage references a missing request")
-        })?;
+        let request = records
+            .requests
+            .get(&usage.view.request_id)
+            .ok_or_else(|| {
+                association_state_invalid("provider usage references a missing request")
+            })?;
         if usage.view.provider_profile_version_id
             != request.value.provider_profile_version_id().as_str()
         {
@@ -821,9 +802,10 @@ fn validate_associations(
         }
         if let Some(receipt_id) = &usage.view.response_receipt_id {
             counter.charge("usage response receipt")?;
-            let receipt = records.receipts.get(receipt_id).ok_or_else(|| {
-                association_state_invalid("provider usage receipt is missing")
-            })?;
+            let receipt = records
+                .receipts
+                .get(receipt_id)
+                .ok_or_else(|| association_state_invalid("provider usage receipt is missing"))?;
             if receipt.view.request_id != usage.view.request_id
                 || usage.view.recorded_at_unix_ms < receipt.view.retrieved_at_unix_ms
             {
@@ -891,10 +873,7 @@ fn strict_requests(
                 DataClass::Personal,
             )?;
             let value = enrichment_request_from_snapshot(&snapshot).map_err(map_owner_error)?;
-            Ok((
-                row.record_id.as_str().to_owned(),
-                versioned(row, value)?,
-            ))
+            Ok((row.record_id.as_str().to_owned(), versioned(row, value)?))
         })
         .collect()
 }
@@ -959,10 +938,7 @@ fn strict_conflicts(
                     "provider response conflict identity/version is invalid",
                 ));
             }
-            Ok((
-                row.record_id.as_str().to_owned(),
-                versioned(row, value)?,
-            ))
+            Ok((row.record_id.as_str().to_owned(), versioned(row, value)?))
         })
         .collect()
 }
@@ -992,9 +968,7 @@ fn strict_suggestions(
         .collect()
 }
 
-fn strict_reviews(
-    rows: Vec<StoredRecordRow>,
-) -> Result<BTreeMap<String, ReviewRecord>, SdkError> {
+fn strict_reviews(rows: Vec<StoredRecordRow>) -> Result<BTreeMap<String, ReviewRecord>, SdkError> {
     rows.into_iter()
         .map(|row| {
             let snapshot = strict_snapshot(
@@ -1189,7 +1163,9 @@ fn append_application_resources(
             .view
             .suggestion_ref
             .as_ref()
-            .ok_or_else(|| association_state_invalid("application suggestion reference is missing"))?
+            .ok_or_else(|| {
+                association_state_invalid("application suggestion reference is missing")
+            })?
             .suggestion_id
             .as_str();
         let suggestion = suggestions.get(suggestion_id).ok_or_else(|| {
@@ -1542,6 +1518,5 @@ fn strict_snapshot(
 }
 
 fn positive_version(version: i64) -> Result<u64, SdkError> {
-    u64::try_from(version)
-        .map_err(|_| stored_state_invalid("resource version must be positive"))
+    u64::try_from(version).map_err(|_| stored_state_invalid("resource version must be positive"))
 }

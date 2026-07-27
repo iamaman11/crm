@@ -87,39 +87,41 @@ pub(crate) fn build_response(
     );
     let page_digest = page_digest(request, resources, scanned_resource_count, &cursor_digest);
 
-    Ok(privacy::CustomerEnrichmentPrivacyScopeContributionResponse {
-        contribution: Some(privacy::PrivacyScopeContributionResponseEnvelope {
-            owner_module_id: MODULE_ID.to_owned(),
-            capability_id: CAPABILITY_ID.to_owned(),
-            capability_version: CAPABILITY_VERSION.to_owned(),
-            lineage: Some(request.lineage.clone()),
-            resources: resources
-                .iter()
-                .map(|resource| privacy::PrivacyScopeResourceReference {
-                    resource_type: resource.resource_type().to_owned(),
-                    resource_id: resource.record_id.as_str().to_owned(),
-                    resource_version: resource.resource_version,
-                    data_class: privacy::CustomerDataClass::Personal as i32,
-                    evidence_class: privacy::PrivacyScopeEvidenceClass::RetainMinimizedEvidence
-                        as i32,
-                    retention_policy_id: resource.retention_policy_id().to_owned(),
-                })
-                .collect(),
-            page_evidence: Some(privacy::PrivacyScopeContributionPageEvidence {
-                page_number: request.page_number,
-                scanned_resource_count,
-                emitted_resource_count: u64::try_from(resources.len()).map_err(|_| {
-                    association_state_invalid(
-                        "Customer Enrichment privacy emitted count does not fit in u64",
-                    )
-                })?,
-                next_cursor,
-                terminal_complete: next_state.is_none(),
-                cursor_digest_sha256: cursor_digest.to_vec(),
-                page_digest_sha256: page_digest.to_vec(),
+    Ok(
+        privacy::CustomerEnrichmentPrivacyScopeContributionResponse {
+            contribution: Some(privacy::PrivacyScopeContributionResponseEnvelope {
+                owner_module_id: MODULE_ID.to_owned(),
+                capability_id: CAPABILITY_ID.to_owned(),
+                capability_version: CAPABILITY_VERSION.to_owned(),
+                lineage: Some(request.lineage.clone()),
+                resources: resources
+                    .iter()
+                    .map(|resource| privacy::PrivacyScopeResourceReference {
+                        resource_type: resource.resource_type().to_owned(),
+                        resource_id: resource.record_id.as_str().to_owned(),
+                        resource_version: resource.resource_version,
+                        data_class: privacy::CustomerDataClass::Personal as i32,
+                        evidence_class: privacy::PrivacyScopeEvidenceClass::RetainMinimizedEvidence
+                            as i32,
+                        retention_policy_id: resource.retention_policy_id().to_owned(),
+                    })
+                    .collect(),
+                page_evidence: Some(privacy::PrivacyScopeContributionPageEvidence {
+                    page_number: request.page_number,
+                    scanned_resource_count,
+                    emitted_resource_count: u64::try_from(resources.len()).map_err(|_| {
+                        association_state_invalid(
+                            "Customer Enrichment privacy emitted count does not fit in u64",
+                        )
+                    })?,
+                    next_cursor,
+                    terminal_complete: next_state.is_none(),
+                    cursor_digest_sha256: cursor_digest.to_vec(),
+                    page_digest_sha256: page_digest.to_vec(),
+                }),
             }),
-        }),
-    })
+        },
+    )
 }
 
 pub(crate) fn typed_output(bytes: Vec<u8>) -> Result<TypedPayload, SdkError> {
