@@ -116,11 +116,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(grep -R --include='*.rs' -l 'customer_privacy.scope.discover' services crates/crm-capability-ingress 2>/dev/null | wc -l)" = "0"
-          test "$(grep -R --include='*.rs' -l 'CustomerPrivacy.*Worker\|customer_privacy.*worker' crates/crm-application-runtime crates/crm-application-composition 2>/dev/null | wc -l)" = "0"
+          route_matches="$(grep -R --include='*.rs' -l 'customer_privacy.scope.discover' services crates/crm-capability-ingress 2>/dev/null || true)"
+          if [ -n "${route_matches}" ]; then
+            printf 'unexpected public discovery route matches:\n%s\n' "${route_matches}"
+            exit 1
+          fi
+          worker_matches="$(grep -R --include='*.rs' -l 'CustomerPrivacy.*Worker\|customer_privacy.*worker' crates/crm-application-runtime crates/crm-application-composition 2>/dev/null || true)"
+          if [ -n "${worker_matches}" ]; then
+            printf 'unexpected Customer Privacy worker matches:\n%s\n' "${worker_matches}"
+            exit 1
+          fi
           grep -q 'assert_eq!(mutations.len(), 4)' crates/crm-customer-privacy-production/src/lib.rs
           grep -q 'assert_eq!(queries.len(), 2)' crates/crm-customer-privacy-production/src/lib.rs
-          test "$(grep -R --include='Cargo.toml' '^name = ' modules crates services | wc -l)" = "113"
+          package_count="$(grep -R --include='Cargo.toml' '^name = ' modules crates services | wc -l)"
+          if [ "${package_count}" != "113" ]; then
+            printf 'unexpected workspace package count: %s\n' "${package_count}"
+            exit 1
+          fi
       - name: Roll back authoritative schema
         shell: bash
         run: |
