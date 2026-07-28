@@ -13,9 +13,7 @@ use crm_contact_points_capability_adapter::{
 use crm_contact_points_capability_composition::{
     ContactPointCreateCustomerSubjectGuard, ContactPointPartyReferenceSemanticValidator,
 };
-use crm_core_data::{
-    PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner,
-};
+use crm_core_data::{PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner};
 use crm_customer_privacy_production::{
     CustomerPrivacyProductionDependencies, PostgresCustomerPrivacySubjectPolicy,
     build_contribution_with_restrictions as build_customer_privacy_contribution,
@@ -62,9 +60,7 @@ pub fn build_production_composition(
     let contact_create_count = base
         .mutation_definitions()
         .iter()
-        .filter(|definition| {
-            definition.capability_id.as_str() == CONTACT_POINT_CREATE_CAPABILITY
-        })
+        .filter(|definition| definition.capability_id.as_str() == CONTACT_POINT_CREATE_CAPABILITY)
         .count();
     if contact_create_count != 1 {
         return Err(configuration_error(
@@ -95,11 +91,10 @@ pub fn build_production_composition(
 
     let contact_create_definition =
         contact_point_capability_definition(CONTACT_POINT_CREATE_CAPABILITY)?;
-    let contact_semantic_validator: Arc<dyn CapabilitySemanticValidator> = Arc::new(
-        ContactPointPartyReferenceSemanticValidator::new(Arc::new(
+    let contact_semantic_validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ContactPointPartyReferenceSemanticValidator::new(Arc::new(
             PostgresPartyReferenceReader::new(dependencies.store.clone()),
-        )),
-    );
+        )));
     let contact_validator: Arc<dyn CapabilitySemanticValidator> =
         Arc::new(ActivationGatedMutationValidator::new(
             dependencies.activation.clone(),
@@ -107,15 +102,14 @@ pub fn build_production_composition(
         ));
     let contact_planner: Arc<dyn TransactionalAggregatePlanner> =
         Arc::new(ContactPointCapabilityPlanner);
-    let contact_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        PostgresTransactionalAggregateExecutor::guarded(
+    let contact_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(PostgresTransactionalAggregateExecutor::guarded(
             dependencies.store.clone(),
             contact_planner,
             Arc::new(ContactPointCreateCustomerSubjectGuard::new(Arc::new(
                 PostgresCustomerPrivacySubjectPolicy,
             ))),
-        ),
-    );
+        ));
     contributions
         .add_mutations(
             [contact_create_definition],
