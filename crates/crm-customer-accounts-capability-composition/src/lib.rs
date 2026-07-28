@@ -13,10 +13,12 @@ use crm_capability_runtime::{
 use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
 use crm_customer_accounts_capability_adapter::{
     CREATE_CAPABILITY, CustomerAccountCapabilityPlanner, MUTATION_CAPABILITY_IDS,
-    UPDATE_CAPABILITY, capability_definitions, referenced_party_ids_from_create,
-    referenced_party_ids_from_update,
+    UPDATE_CAPABILITY, capability_definitions as adapter_mutation_capability_definitions,
+    referenced_party_ids_from_create, referenced_party_ids_from_update,
 };
-use crm_customer_accounts_query_adapter::{AccountQueryAdapter, query_capability_definitions};
+use crm_customer_accounts_query_adapter::{
+    AccountQueryAdapter, query_capability_definitions as adapter_query_capability_definitions,
+};
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
 use crm_party_reference_composition::PartyReferenceReader;
 use crm_query_runtime::{
@@ -114,6 +116,18 @@ pub struct CustomerAccountsProductionDependencies {
     pub cursor_key: [u8; 32],
 }
 
+/// Returns the exact Customer Accounts mutation inventory owned by this
+/// production composition package.
+pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    adapter_mutation_capability_definitions()
+}
+
+/// Returns the exact Customer Accounts query inventory owned by this production
+/// composition package.
+pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    adapter_query_capability_definitions()
+}
+
 /// Builds the complete Customer Accounts mutation/query contribution inside
 /// the authoritative owner package rather than the generic process host.
 pub fn build_contribution(
@@ -140,7 +154,7 @@ pub fn build_contribution(
         ));
     contributions
         .add_mutations(
-            capability_definitions()?,
+            mutation_capability_definitions()?,
             mutation_validator,
             mutation_executor,
         )

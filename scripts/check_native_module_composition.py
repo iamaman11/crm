@@ -134,6 +134,16 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
         "build_consents_contribution",
         "Consents owner builder bypassed the first-party aggregate",
     ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "use crm_customer_accounts_capability_adapter",
+        "Customer Accounts mutation inventory bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "use crm_customer_accounts_query_adapter",
+        "Customer Accounts query inventory bypassed the first-party aggregate",
+    ),
 )
 
 

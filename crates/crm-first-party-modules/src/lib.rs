@@ -15,6 +15,10 @@ use crm_customer_accounts_capability_composition::{
     CustomerAccountsProductionDependencies,
     build_contribution as build_customer_accounts_contribution,
 };
+pub use crm_customer_accounts_capability_composition::{
+    mutation_capability_definitions as customer_accounts_mutation_capability_definitions,
+    query_capability_definitions as customer_accounts_query_capability_definitions,
+};
 use crm_module_sdk::SdkError;
 use crm_party_reference_composition::PartyReferenceReader;
 use crm_query_runtime::QueryVisibilityAuthorizer;
