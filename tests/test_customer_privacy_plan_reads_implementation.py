@@ -24,20 +24,24 @@ class CustomerPrivacyPlanReadsImplementationTests(unittest.TestCase):
             PLANNING_RUNTIME_PATH.read_text(encoding="utf-8")
         )
 
-    def test_pending_packet_identity_and_historical_evidence_are_exact(self) -> None:
+    def test_accepted_packet_identity_and_historical_evidence_are_exact(self) -> None:
         self.assertEqual(
             self.evidence["schema_id"],
             "crm.governance.customer-privacy-plan-reads-implementation",
         )
         self.assertEqual(self.evidence["schema_version"], "1.0.0")
-        self.assertEqual(
-            self.evidence["status"], "implemented_pending_exact_head_acceptance"
-        )
+        self.assertEqual(self.evidence["status"], "accepted_merged")
         acceptance = self.evidence["acceptance"]
         self.assertEqual(acceptance["pull_request"], 211)
-        self.assertIsNone(acceptance["accepted_source_sha"])
-        self.assertIsNone(acceptance["permanent_workflow_count"])
-        self.assertIsNone(acceptance["merge_sha"])
+        self.assertEqual(
+            acceptance["accepted_source_sha"],
+            "933fa4b502d60a23b83de9ccee279cc6517b5cba",
+        )
+        self.assertEqual(acceptance["permanent_workflow_count"], 32)
+        self.assertEqual(
+            acceptance["merge_sha"],
+            "a1f3a60a6d8e8bba7bda50f936c57a61bc3521f7",
+        )
         self.assertEqual(
             self.planning_freeze["packet"]["state"],
             "contract_acceptance_frozen_runtime_not_started",
@@ -48,7 +52,9 @@ class CustomerPrivacyPlanReadsImplementationTests(unittest.TestCase):
                 "not_implemented",
             )
         self.assertEqual(self.planning_runtime["status"], "accepted_merged")
+        self.assertIn("Accepted and merged through PR #211", self.document)
         self.assertIn("Historical sources remain immutable", self.document)
+        self.assertIn("32 of 32", self.document)
 
     def test_exact_two_read_coordinates_are_promoted_without_mutation_or_worker(self) -> None:
         coordinates = self.evidence["coordinates"]

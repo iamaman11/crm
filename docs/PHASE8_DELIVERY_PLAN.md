@@ -30,7 +30,7 @@ Ordinary capabilities add zero crates, generic router/worker algorithms do not g
 
 Issue #126 is **In progress**.
 
-Latest accepted public runtime inventory remains four mutations, two permission-aware public queries and zero Customer Privacy workers through PR #209. PR #211 implements two additional reads and targets 4 mutations / 4 queries / 0 workers pending unchanged exact-head acceptance. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
+Latest accepted public runtime inventory is four mutations, four permission-aware public queries and zero Customer Privacy workers through PR #211. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
 
 All nine authoritative owner implementations are accepted:
 
@@ -75,9 +75,9 @@ Implemented behavior:
 - FORCE RLS, canonical `tenant_isolation`, cross-tenant concealment, clean PostgreSQL, rollback/reapply and repeated acceptance;
 - unchanged 113 packages, 4 mutations, 2 queries and 0 workers at the PR #209 boundary.
 
-## 8. Permission-aware reads pending exact-head acceptance
+## 8. Accepted permission-aware reads
 
-PR #211 promotes only:
+PR #211 / accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1f3a60a6d8e8bba7bda50f936c57a61bc3521f7` / 32 of 32 permanent workflows promotes only:
 
 1. `customer_privacy.case.plan.get@1.0.0` with module activation, live permission/visibility, tenant-bound reads, strict case↔snapshot↔plan↔replay evidence, payload-safe summary, audited read and concealed unauthorized/cross-tenant existence;
 2. `customer_privacy.case.owner_outcomes.list@1.0.0` with bounded validation and a deterministic empty terminal page (`items = []`) until owner execution and outcome persistence exist.
@@ -88,8 +88,8 @@ No new crate, generic-runtime switch, mutation, worker, owner mutation, approval
 
 ## 9. Ordered continuation
 
-1. permission-aware plan/outcome reads — implemented in PR #211, pending exact-head acceptance;
-2. approval runtime — next after accepted merge of PR #211;
+1. permission-aware plan/outcome reads — complete through PR #211;
+2. approval runtime — next;
 3. immediate deny-only processing restrictions using final subject locks;
 4. legal-hold and mandatory-retention precedence;
 5. replay-safe resumable owner execution;
@@ -115,7 +115,7 @@ legal hold > mandatory retention > approved privacy action > ordinary retention
 
 Phase 8A remains **In progress**.
 
-It closes only after reads, approval, restrictions, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle and full process acceptance are merged.
+It closes only after approval, restrictions, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle and full process acceptance are merged.
 
 ## 12. Phase 8B and completion rule
 
