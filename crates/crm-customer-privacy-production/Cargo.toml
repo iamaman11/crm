@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[lib]
+path = "src/root.rs"
+
 [dependencies]
 crm-application-composition = { path = "../crm-application-composition" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
