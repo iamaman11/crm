@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-28
+Status date: 2026-07-29
 
 This is the concise current-state snapshot. Normative product dependencies remain in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order is in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains in `MODULE_CATALOG.md`.
 
@@ -20,11 +20,11 @@ This is the concise current-state snapshot. Normative product dependencies remai
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is in progress.**
 
-Latest accepted Customer Privacy runtime baseline is PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows.
+Latest accepted Customer Privacy runtime baseline is PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows.
 
-Latest accepted repository architecture prerequisite is PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows.
+Latest accepted repository architecture prerequisite remains PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows.
 
-The accepted inventory is five public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
+The accepted inventory is six public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
 
 **All nine authoritative owner implementations are accepted:**
 
@@ -86,15 +86,25 @@ PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash me
 
 `crm-core-data` now exposes a transaction-scoped `TransactionalCustomerSubjectPolicyPort` for authoritative live processing/communication decisions in the caller's PostgreSQL transaction and a deterministic `TransactionalAggregateGuardChain` for ordered final guards. The port contract requires the shared tenant + canonical Party lock and bounded denial on unavailable, stale, corrupt or cross-tenant decisions. No no-op or allow-all production implementation exists.
 
-The three-file packet adds no route, coordinate, public inventory, restriction runtime, owner integration, persistence, migration, dependency family, manifest, `Cargo.lock`, workspace package, worker or product behavior. Restrictions remain unimplemented.
+The three-file prerequisite added no route, coordinate, public inventory, restriction runtime, owner integration, persistence, migration, dependency family, manifest, `Cargo.lock`, workspace package, worker or product behavior. Those historical prerequisite non-effects remain accepted.
+
+## Accepted immediate deny-only restriction runtime
+
+Repository step 4 is accepted through PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows on one unchanged source-authored head.
+
+`customer_privacy.restriction.place@1.0.0` is public, activation-gated, live-authorized, tenant-bound and idempotent. Placement proves the Party is currently canonical, acquires the shared tenant + Party lock, validates a strict high-risk Personal contract, persists record/event/audit/idempotency/business evidence and uses deterministic tenant/idempotency-bound identity.
+
+The authoritative PostgreSQL final decision reads bounded FORCE-RLS state under the same lock and fails closed on unavailable, malformed, over-bound or cross-tenant evidence. `contact-points.contact-point.create@1.0.0` is the first complete protected-owner boundary and checks the final policy immediately before persistence. Permanent real-process acceptance proves pre-restriction success, public placement, active denial without side effects, unrelated-Party isolation, full rollback/reapply and repeated acceptance.
+
+Restriction release/reads, legal-hold and mandatory-retention adjudication, owner execution, access/export assembly, destructive actions and Customer Privacy workers remain non-runtime.
 
 ## Next permitted repository packet
 
-Repository step 4 remains immediate deny-only Customer Privacy processing restrictions using final subject locks. It must implement the authoritative Customer Privacy policy decision and integrate the final guard into the bounded protected owner paths before public promotion. Legal-hold/mandatory-retention adjudication, owner execution, destructive actions and workers remain later packets.
+Repository step 5 is `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and the generated repository map. This packet is behavior-neutral developer tooling and navigation; it must not change routes, contracts, persistence or product semantics.
 
 ## Following permitted repository packet
 
-Repository step 5 is `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and the generated repository map.
+Repository step 6 is Customer Privacy legal-hold and mandatory-retention precedence.
 
 ## Architecture and developer-experience 10/10 checkpoint
 
@@ -102,7 +112,7 @@ Issue #194 remains open.
 
 - Stage A documentation/source hierarchy and stable navigation are complete.
 - Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance and three exact expiring legacy lint exceptions are accepted; broader dependency/public-surface calibration and exception removal remain.
-- Stage C is in progress: the Customer Privacy domain/application/postgres/production golden pilot and the final customer-subject policy port/guard-chain prerequisite are accepted, but the authoritative restriction decision and protected-owner integration are not implemented.
+- Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public placement and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
 - Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222, but the generic runtime still imports many other concrete owner adapters and remaining owners have not migrated.
 - Stage E has a working foundation but is incomplete: affected-scope selection is not yet complete across every database/process/product/frontend/operations dimension.
 - Stages F–I remain foundation-only or unstarted; generic conformance/lifecycle, measured consolidation, reproducible local environment, generated navigation, frontend and operations parity are not complete.
@@ -116,12 +126,12 @@ Only one implementation packet may be active. The current order begins:
 -> 2. Customer Privacy approval runtime — complete through PR #220
 -> 3. bounded contribution aggregation — complete through PR #222
 -> 3a. final customer-subject policy port prerequisite — complete through PR #224
--> 4. immediate deny-only restrictions — next
--> 5. explain / packet-check / generated active packet and repository map
+-> 4. immediate deny-only restrictions — complete through PR #226
+-> 5. explain / packet-check / generated active packet and repository map — next
 -> 6. legal-hold and mandatory-retention precedence
 ```
 
-The complete binding order through Phase 8B entry is `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. No later item may start while an earlier item is unfinished. The prerequisite did not renumber the master sequence; it was inserted under the existing minimal-prerequisite rule and work now returns to repository step 4.
+The complete binding order through Phase 8B entry is `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. No later item may start while an earlier item is unfinished.
 
 Phase 8A closure does not make the universal CRM complete. Product Catalog/Pricing/CPQ/Orders/Contracts/Subscriptions/Billing and the wider expert CRM domains remain planned or incomplete.
 
