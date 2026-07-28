@@ -2,6 +2,7 @@ use crm_customer_privacy_capability_adapter::{
     PLACE_PROCESSING_RESTRICTION_CAPABILITY, deterministic_processing_restriction_id,
     place_processing_restriction_capability_definition,
 };
+use crm_module_sdk::DataClass;
 
 #[test]
 fn restriction_place_definition_is_exact_and_fail_closed() {
@@ -14,6 +15,18 @@ fn restriction_place_definition_is_exact_and_fail_closed() {
     );
     assert_eq!(definition.capability_version.as_str(), "1.0.0");
     assert_eq!(definition.owner_module_id.as_str(), "crm.customer-privacy");
+    assert_eq!(
+        definition.input_contract.allowed_data_classes,
+        vec![DataClass::Personal]
+    );
+    assert_eq!(
+        definition
+            .output_contract
+            .as_ref()
+            .expect("restriction placement output contract")
+            .allowed_data_classes,
+        vec![DataClass::Personal]
+    );
     assert!(definition.mutation);
     assert!(definition.requires_idempotency);
     assert!(!definition.requires_approval);
