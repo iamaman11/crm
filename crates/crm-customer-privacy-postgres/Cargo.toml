@@ -5,9 +5,11 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
 crm-customer-privacy-application = { path = "../crm-customer-privacy-application" }
 crm-customer-privacy-capability-composition = { path = "../crm-customer-privacy-capability-composition" }
 crm-customer-privacy-persistence-adapter = { path = "../crm-customer-privacy-persistence-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
+crm-party-reference-composition = { path = "../crm-party-reference-composition" }
