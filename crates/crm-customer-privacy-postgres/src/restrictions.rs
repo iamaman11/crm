@@ -1,17 +1,13 @@
-use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::{
-    CustomerSubjectOperationClass, TransactionalCustomerSubjectPolicyPort,
+    CapabilityRequest, CustomerSubjectOperationClass, TransactionalCustomerSubjectPolicyPort,
     postgres_sqlx::{Postgres, Row, Transaction, postgres::PgRow},
 };
-use crm_customer_privacy::{
-    MODULE_ID, RESTRICTION_RECORD_TYPE, RestrictionScope,
-};
+use crm_customer_privacy::{MODULE_ID, RESTRICTION_RECORD_TYPE, RestrictionScope};
 use crm_customer_privacy_persistence_adapter::processing_restriction_from_snapshot;
 use crm_module_sdk::{
     DataClass, ErrorCategory, ModuleId, PayloadEncoding, PortFuture, RecordId, RecordRef,
     RecordSnapshot, RecordType, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
 };
-use crm_party_reference_composition::lock_customer_subject_in_transaction;
 
 const MAXIMUM_RESTRICTIONS_PER_SUBJECT: i64 = 1_000;
 
@@ -59,13 +55,12 @@ impl TransactionalCustomerSubjectPolicyPort for PostgresCustomerPrivacySubjectPo
         operation_class: CustomerSubjectOperationClass,
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
-            lock_customer_subject_in_transaction(
+            lock_customer_subject(
                 transaction,
                 &request.context.execution.tenant_id,
                 canonical_party_id,
             )
-            .await
-            .map_err(subject_lock_unavailable)?;
+            .await?;
 
             let rows = crm_core_data::postgres_sqlx::query(SUBJECT_RESTRICTIONS_SQL)
                 .bind(request.context.execution.tenant_id.as_str())
@@ -96,9 +91,9 @@ impl TransactionalCustomerSubjectPolicyPort for PostgresCustomerPrivacySubjectPo
                         "restriction identity differs from the locked tenant or canonical Party",
                     ));
                 }
-                if restriction.is_active_at(
-                    request.context.execution.request_started_at_unix_nanos,
-                ) && scope_blocks(restriction.scope(), operation_class)
+                if restriction
+                    .is_active_at(request.context.execution.request_started_at_unix_nanos)
+                    && scope_blocks(restriction.scope(), operation_class)
                 {
                     return Err(restriction_active());
                 }
@@ -106,6 +101,20 @@ impl TransactionalCustomerSubjectPolicyPort for PostgresCustomerPrivacySubjectPo
             Ok(())
         })
     }
+}
+
+async fn lock_customer_subject(
+    transaction: &mut Transaction<'_, Postgres>,
+    tenant_id: &crm_module_sdk::TenantId,
+    canonical_party_id: &RecordId,
+) -> Result<(), SdkError> {
+    crm_core_data::postgres_sqlx::query("SELECT crm.lock_customer_subject($1, $2)")
+        .bind(tenant_id.as_str())
+        .bind(canonical_party_id.as_str())
+        .execute(&mut **transaction)
+        .await
+        .map_err(subject_lock_unavailable)?;
+    Ok(())
 }
 
 fn scope_blocks(
@@ -199,14 +208,14 @@ fn restriction_active() -> SdkError {
     )
 }
 
-fn subject_lock_unavailable(error: SdkError) -> SdkError {
+fn subject_lock_unavailable(error: impl std::fmt::Display) -> SdkError {
     SdkError::new(
         "CUSTOMER_PRIVACY_SUBJECT_LOCK_UNAVAILABLE",
         ErrorCategory::Unavailable,
         true,
         "The customer subject could not be locked for a final privacy decision.",
     )
-    .with_internal_reference(format!("shared subject lock failed with {}", error.code))
+    .with_internal_reference(error.to_string())
 }
 
 fn restriction_store_unavailable(error: impl std::fmt::Display) -> SdkError {
