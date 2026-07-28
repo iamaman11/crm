@@ -47,11 +47,7 @@ fn main() {
         "SELECT set_config('app.tenant_id', '{TENANT_ID}', true);"
     )
     .unwrap();
-    writeln!(
-        sql,
-        "SELECT set_config('app.actor_id', 'actor-a', true);"
-    )
-    .unwrap();
+    writeln!(sql, "SELECT set_config('app.actor_id', 'actor-a', true);").unwrap();
     writeln!(
         sql,
         "SELECT set_config('app.request_id', 'request-bootstrap-a', true);"
