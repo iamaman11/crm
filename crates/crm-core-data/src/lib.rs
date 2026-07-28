@@ -53,7 +53,7 @@ pub use postgres_query::{
     RecordQueryPage, RecordQuerySort,
 };
 pub use postgres_related_query::{
-    MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, RelatedRecordListQuery, RecordQueryPage as _,
+    MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, RelatedRecordListQuery, RelatedRecordQueryPage,
 };
 pub use subject_policy::{
     CustomerSubjectOperationClass, TransactionalCustomerSubjectPolicyPort,
