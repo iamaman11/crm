@@ -7,7 +7,7 @@ Governing rules: `SYSTEM_INVARIANTS.md`
 Delivery-control policy: `DELIVERY_GOVERNANCE.md`  
 Current concise state: `PROJECT_STATUS.md`  
 Detailed Phase 8 sequence: `PHASE8_DELIVERY_PLAN.md`  
-Architecture/developer-experience program: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` / issue #194  
+Architecture/developer-experience program and repository order: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` / issue #194  
 Measured architecture baseline: `WORKSPACE_COMPLEXITY_BASELINE.md`  
 Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`  
 Business-module accounting: `MODULE_CATALOG.md`
@@ -26,6 +26,8 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 8. An ordinary capability added to an existing owner creates zero new crates by default.
 9. Generic router and worker algorithms do not change merely to register one owner capability.
 10. Feature behavior and physical crate consolidation remain separate packets.
+11. Repository implementation is strictly sequential: only the first unfinished item in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4 may start.
+12. Only one implementation packet may be active; evidence synchronization closes the accepted packet before the next implementation begins.
 
 For the active Customer Privacy lane, **do not modify generic router or worker algorithms** merely to register one owner capability.
 
@@ -38,7 +40,7 @@ Only merged `main` work may be represented as **Complete**.
 | 0.1–7 | #3–#10 | Governed platform, Sales/Activities proof, search, product shell and native composition | **Complete** |
 | 8 | #11 | Expert modules and product-quality CRM experience | **In progress** |
 | 8A | #28 | Canonical customer master, identity, consent and governed customer-data lifecycle | **In progress** |
-| 8B | #29 | Product Catalog, CPQ and quote-to-revenue lifecycle | **Planned; blocked on completed 8A** |
+| 8B | #29 | Product Catalog, CPQ and quote-to-revenue lifecycle | **Planned; blocked on repository steps 1–19 and completed 8A** |
 | 9 | #12 | AI-native governed actor/tool layer | **Planned** |
 | 10 | #13 | Signed marketplace and sandboxed untrusted extensions | **Planned** |
 | 11 | #14 | Enterprise security, resilience and production proof | **Planned / continuous** |
@@ -53,6 +55,8 @@ Issue #194 remains **Open**.
 - Stages D–I — broader contribution aggregation, affected-scope expansion, conformance, consolidation, reproducible environment, frontend and operations parity remain open.
 
 Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204 and PR #205. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; zero temporary architecture exceptions are active.
+
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. The current next packet is repository step 1: supported Rust toolchain, workspace `rust-version` and measured lint baseline.
 
 ## 4. Phase 8A completed foundation
 
@@ -102,29 +106,24 @@ The packet requires module activation, live visibility, tenant-bound reads, stri
 
 It adds no crate, dependency family, mutation, worker, owner mutation, approval, restriction, hold/retention adjudication or destructive execution.
 
-## 6. Active sequence
+## 6. Binding active sequence
 
-1. **Scope discovery and immutable snapshot contract/freeze — Complete.**
-2. **Stage C Customer Privacy golden packages — Complete.**
-3. **Production discovery and immutable snapshot runtime — Complete through PR #206.**
-4. **Deterministic planning freeze — Complete through PR #208.**
-5. **Trusted-internal deterministic planning runtime — Complete through PR #209.**
-6. **Permission-aware plan.get and empty future-safe owner_outcomes.list — Complete through PR #211.**
-7. **Approval runtime — Next.**
-8. **Immediate deny-only processing restrictions with final subject locks — Planned.**
-9. **Legal-hold and mandatory-retention precedence — Planned.**
-10. **Replay-safe resumable owner execution and crash-window recovery — Planned.**
-11. **Governed access/export and owner-specific deletion/anonymization/crypto-shred — Planned.**
-12. **Party tombstone, no-orphan proof and projection/search/cache convergence — Planned.**
-13. **Customer Privacy worker and complete process/end-to-end acceptance — Planned.**
-14. **Phase 8A closure — Blocked on all preceding lifecycle packets.**
-15. **Phase 8B — Blocked on completed Phase 8A.**
+The only permitted current sequence is:
 
-The approval packet must not introduce restrictions, legal-hold/retention adjudication, owner execution or destructive behavior early. It must preserve existing tenant, visibility, audit, replay and architecture guardrails.
+1. **Repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — Next.**
+2. **Repository step 2 — approval runtime.**
+3. **Repository step 3 — bounded contribution aggregation without behavior change.**
+4. **Repository step 4 — immediate deny-only processing restrictions with final subject locks.**
+5. **Repository step 5 — `explain`, `packet-check` and generated navigation.**
+6. **Repository step 6 — legal-hold and mandatory-retention precedence.**
+7. **Repository steps 7–19 — continue exactly as numbered in the architecture plan.**
+8. **Repository step 20 — first Phase 8B packet.**
+
+Approval runtime remains the next product packet, but it is not the next repository packet. It may start only after repository step 1 is accepted and merged. Its implementation must not introduce restrictions, legal-hold/retention adjudication, owner execution or destructive behavior early.
 
 ## 7. Phase 8B and later expert domains
 
-Phase 8B remains planned and blocked on completed Phase 8A. Independent owner domains include Product Catalog, Price Books/Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment boundaries. They must not be absorbed into Sales.
+Phase 8B remains planned and blocked on repository steps 1–19 and completed Phase 8A. Independent owner domains include Product Catalog, Price Books/Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment boundaries. They must not be absorbed into Sales.
 
 Later planned work includes broader Sales/Activities, omnichannel, Marketing, Service/Knowledge/Field Service, Customer Success, projects/configurable work, documents/e-signature, analytics, workflow/collaboration, governed AI, marketplace and enterprise operational proof.
 

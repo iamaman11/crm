@@ -92,7 +92,47 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 | H — reproducible environment and navigation | **Partially started** | stable docs index plus `repo.py affected` and `check-affected` exist | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain`, `packet-check`, generated active packet and repository map |
 | I — frontend and operations parity | **Not started as a complete stage** | existing product/process checks remain preserved | domain-oriented frontend proof, accessibility/browser evidence, restore/SLO/performance/security/supply-chain gates |
 
-The next bounded architecture packet should establish a supported Rust toolchain/`rust-version` decision and a measured workspace lint baseline. It must not mix dependency upgrades, product behavior or broad lint cleanup.
+The next bounded architecture packet must establish a supported Rust toolchain/`rust-version` decision and a measured workspace lint baseline. It must not mix dependency upgrades, product behavior or broad lint cleanup.
+
+### 2.4 Single repository execution order
+
+Repository development is strictly sequential. Product and architecture work are categories of packets, not independent queues.
+
+Execution rules:
+
+1. At most one implementation packet may be active in the repository.
+2. A second implementation branch or pull request must not begin until the current packet has unchanged exact-head acceptance and is merged or explicitly closed.
+3. The next permitted packet is the first unfinished item in the numbered master sequence below.
+4. A documentation/evidence synchronization PR belongs to closure of the packet that produced the accepted fact and must finish before the next implementation packet begins.
+5. Every product packet starts with architecture preflight against ownership, packaging, dependency, composition, affected-scope and test budgets.
+6. If that preflight proves the product packet cannot satisfy an existing hard rule, insert only the smallest required architecture prerequisite immediately before the blocked product packet, accept and merge it, then return to that same product packet. This is the only permitted insertion rule; unrelated work must not skip ahead.
+7. Feature behavior, architecture governance, contribution refactoring, crate consolidation and evidence synchronization remain separate pull requests even when adjacent in the sequence.
+8. Stage labels A–I describe completion accounting. They do not authorize work outside this master order.
+
+Current master sequence:
+
+1. supported Rust toolchain, workspace `rust-version` and measured lint baseline;
+2. Customer Privacy approval runtime only;
+3. first bounded contribution-aggregation packet: expand owner-owned first-party registration and reduce selected concrete generic-runtime imports without behavior changes;
+4. immediate deny-only Customer Privacy processing restrictions using final subject locks;
+5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map;
+6. Customer Privacy legal-hold and mandatory-retention precedence;
+7. reusable generic mutation and query conformance suites adopted by representative owners;
+8. replay-safe resumable Customer Privacy owner execution and crash-window recovery;
+9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks;
+10. governed Customer Privacy access/export assembly;
+11. owner-specific deletion, anonymization and supported crypto-shred execution;
+12. first measured behavior-neutral transitional domain-cluster consolidation;
+13. Party tombstone, no-orphan proof and projection/search/cache convergence;
+14. reusable generic worker conformance suite;
+15. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;
+16. Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
+17. Phase 8A frontend, accessibility, browser, restore, SLO, performance, security and supply-chain evidence;
+18. Phase 8A closure;
+19. architecture remeasurement, remaining-gate review and publication of the next numbered sequence;
+20. first Phase 8B packet only after step 19 is accepted.
+
+No item may be described as “next” when an earlier unfinished item exists. Any change to this order requires the change-control evidence in section 13 and synchronized updates to the normative roadmap, Phase 8 plan, project status and active issues before implementation starts.
 
 ## 3. 10/10 target state
 
@@ -189,7 +229,7 @@ Published versions remain immutable. A semantic change creates a new version.
 ```text
 publish new version
 → compatibility and impact report
-→ parallel support window
+→ overlapping support window
 → usage/deprecation telemetry
 → consumer migration
 → explicit retirement gate
@@ -289,6 +329,7 @@ Generated navigation is reproducible orientation, never an independent source of
 12. Documentation status and navigation freshness are mechanically checked.
 13. Temporary exceptions are machine-readable, owned and expiring.
 14. A planned command or generated artifact is never represented as implemented before permanent tests prove it.
+15. Repository execution follows section 2.4; only one implementation packet is active and earlier unfinished items block later items.
 
 ## 5. New-crate decision
 
@@ -375,16 +416,16 @@ Distinct source purposes:
 - `SYSTEM_INVARIANTS.md` — hard rules;
 - contracts and ADRs — immutable machine/public decisions;
 - `APPLICATION_ARCHITECTURE.md` — stable layering/composition;
-- this document — cross-cutting 10/10 execution program;
-- `IMPLEMENTATION_ROADMAP.md` — product dependency order;
-- `PHASE8_DELIVERY_PLAN.md` — active Phase 8 sequence;
-- `PROJECT_STATUS.md` — concise merged state and next product packet;
+- this document — cross-cutting 10/10 execution program and repository master order;
+- `IMPLEMENTATION_ROADMAP.md` — product dependency order and reference to the repository master order;
+- `PHASE8_DELIVERY_PLAN.md` — active Phase 8 dependency detail within the repository master order;
+- `PROJECT_STATUS.md` — concise merged state and next permitted repository packet;
 - `MODULE_CATALOG.md` — owner and completeness accounting;
-- issue #194 — active architecture packet and progress;
+- issue #194 — active architecture packet and order checkpoint;
 - accepted packet documents — historical boundaries;
 - root README, `AGENTS.md`, `docs/README.md` and generated navigation — orientation only.
 
-Mechanically reject stale phases, owner counts, next packets, completion claims and planned-command claims.
+Mechanically reject stale phases, owner counts, next packets, completion claims, planned-command claims and execution-order ambiguity.
 
 ## 9. Transitional crate consolidation
 
@@ -409,9 +450,9 @@ Accepted through the current checkpoint:
 - 4 mutations / 4 queries / 0 workers;
 - 113 workspace packages and zero new dependency families for the later capability packets.
 
-The next product packet is **approval runtime only**. It must remain inside the existing Customer Privacy packages and add no generic-runtime business switch, restriction execution, legal-hold/retention adjudication, owner execution, destructive action or worker.
+The next product packet is **approval runtime only**, but it is repository step 2 and remains blocked until repository step 1 is accepted. It must remain inside the existing Customer Privacy packages and add no generic-runtime business switch, restriction execution, legal-hold/retention adjudication, owner execution, destructive action or worker.
 
-Product delivery under issue #126 and architecture delivery under issue #194 run in parallel. Neither may silently absorb the other's structural scope.
+Issue #126 supplies product semantics. Issue #194 supplies architecture acceptance and the repository order. Their scopes remain separate, and section 2.4 determines exactly which packet may start.
 
 ## 11. Metrics and budgets
 
@@ -473,6 +514,6 @@ Issue #194 closes only when:
 
 ## 13. Change control
 
-This plan may change only with explicit architecture rationale, ownership/dependency impact, before/after complexity evidence, acceptance/rollback strategy and synchronized issue/status updates.
+This plan, including the numbered repository order, may change only with explicit architecture rationale, ownership/dependency impact, before/after complexity evidence, acceptance/rollback strategy and synchronized issue/status updates.
 
 An optimization is accepted only when it makes the correct architecture easier to extend, easier to understand, easier to verify and harder to bypass.

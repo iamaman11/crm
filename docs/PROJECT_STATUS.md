@@ -2,11 +2,12 @@
 
 Status date: 2026-07-28
 
-This is the concise current-state snapshot. Normative order remains in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; module readiness remains in `MODULE_CATALOG.md`; issue #194 is governed by `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`.
+This is the concise current-state snapshot. Normative product dependencies remain in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order is in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains in `MODULE_CATALOG.md`.
 
 ## Authoritative references
 
 - `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `DELIVERY_GOVERNANCE.md`;
+- `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4 for the only permitted repository packet order;
 - `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, `MODULE_CATALOG.md`;
 - `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_FREEZE.md` and `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md`;
 - `CUSTOMER_PRIVACY_PLANNING_FREEZE.md` and `CUSTOMER_PRIVACY_PLANNING_IMPLEMENTATION.md`;
@@ -55,9 +56,13 @@ PR #211 / accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1
 
 `case.owner_outcomes.list` validates bounded page/cursor input and returns a deterministic empty terminal page (`items = []`, empty terminal cursor) because owner execution and outcome persistence remain absent. Stable page/terminal digests and safe allow/deny evidence are append-only in a FORCE-RLS audit table. No outcome table, synthetic outcomes, mutation or worker is added.
 
-## Next bounded product packet
+## Next permitted repository packet
 
-Implement approval runtime only. Immediate deny-only restrictions, legal-hold/mandatory-retention precedence, owner execution, destructive actions and workers remain later separate packets.
+Implement the supported Rust toolchain, workspace `rust-version` decision and measured lint baseline. This is repository step 1 and must not include dependency upgrades, broad lint cleanup, product behavior or crate consolidation.
+
+## Following permitted repository packet
+
+After repository step 1 is accepted and merged, implement Customer Privacy approval runtime only as repository step 2. Immediate deny-only restrictions, legal-hold/mandatory-retention precedence, owner execution, destructive actions and workers remain later numbered packets.
 
 ## Architecture and developer-experience 10/10 checkpoint
 
@@ -69,24 +74,20 @@ Issue #194 remains open.
 - Stages D and E have working foundations but are incomplete: the generic runtime still imports many concrete owner adapters, and affected-scope selection is not yet complete across every database/process/product/frontend/operations dimension.
 - Stages F–I remain foundation-only or unstarted; generic conformance/lifecycle, measured consolidation, reproducible local environment, generated navigation, frontend and operations parity are not complete.
 
-The next bounded architecture packet is a supported Rust toolchain/`rust-version` decision plus a measured workspace lint baseline. It must not mix dependency upgrades, broad lint cleanup, product behavior or crate consolidation.
+## Repository continuation order
 
-## Continuation order
+Only one implementation packet may be active. The current order begins:
 
 ```text
-accepted scope discovery and immutable snapshot
--> accepted deterministic planning runtime
--> accepted permission-aware plan/outcome reads
--> approval runtime
--> immediate deny-only restrictions
--> legal-hold and mandatory-retention precedence
--> replay-safe resumable owner execution and crash recovery
--> governed access/export and deletion/anonymization/crypto-shred
--> Party tombstone, no-orphan proof and projection/search/cache convergence
--> Customer Privacy worker and full lifecycle acceptance
--> Phase 8A closure
--> Phase 8B / issue #29
+1. supported Rust toolchain / rust-version / measured lint baseline
+-> 2. Customer Privacy approval runtime
+-> 3. bounded contribution aggregation
+-> 4. immediate deny-only restrictions
+-> 5. explain / packet-check / generated active packet and repository map
+-> 6. legal-hold and mandatory-retention precedence
 ```
+
+The complete binding order through Phase 8B entry is `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. No later item may start while an earlier item is unfinished. A minimal architecture prerequisite may be inserted only when preflight proves the current product packet cannot satisfy an existing hard rule; after that prerequisite is accepted, work returns to the same blocked product packet.
 
 Phase 8A closure does not make the universal CRM complete. Product Catalog/Pricing/CPQ/Orders/Contracts/Subscriptions/Billing and the wider expert CRM domains remain planned or incomplete.
 

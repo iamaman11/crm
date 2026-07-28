@@ -7,7 +7,7 @@ Customer-master program: #28
 Customer Privacy packet: #126  
 Commercial follow-on: #29  
 Architecture/developer-experience program: #194  
-Architecture guardrail: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`  
+Architecture guardrail and repository order: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4  
 Delivery governance: `DELIVERY_GOVERNANCE.md`
 
 ## 1. Packet contract
@@ -17,6 +17,8 @@ Every Phase 8 packet defines authoritative ownership, stable identity, exact coo
 Ordinary capabilities add zero crates, generic router/worker algorithms do not grow owner-specific switches, feature implementation and physical consolidation remain separate, and frozen historical evidence is not rewritten by later runtime acceptance.
 
 **Do not implement discovery/snapshot as one new crate per command**, query, worker, reader or composition fragment. If consolidation is required, **perform consolidation only in a separate behavior-neutral PR**.
+
+Repository implementation is strictly sequential. Only the first unfinished item in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4 may start, and only one implementation packet may be active.
 
 ## 2. Phase 8A completed work
 
@@ -48,9 +50,11 @@ All nine authoritative owner implementations are accepted:
 
 The owner implementation lane is complete. No accepted owner may be described as unstarted and no additional owner contribution is the next packet.
 
-## 5. Accepted architecture prerequisites
+## 5. Accepted architecture prerequisites and current gate
 
-Issue #194 runs alongside Phase 8A. PR #197, PR #199, PR #200 and PR #203 established reproducible architecture/dependency no-growth controls. PR #204 froze scope discovery and immutable snapshot semantics. PR #205 accepted the Customer Privacy domain/application/PostgreSQL/production package boundary. Workspace packages remain `113`.
+PR #197, PR #199, PR #200 and PR #203 established reproducible architecture/dependency no-growth controls. PR #204 froze scope discovery and immutable snapshot semantics. PR #205 accepted the Customer Privacy domain/application/PostgreSQL/production package boundary. Workspace packages remain `113`.
+
+The next permitted repository packet is the supported Rust toolchain, workspace `rust-version` and measured lint baseline. Customer Privacy approval runtime is repository step 2 and may start only after step 1 is accepted and merged.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -86,22 +90,32 @@ The packet adds one append-only FORCE-RLS safe read-audit table and no owner-out
 
 No new crate, generic-runtime switch, mutation, worker, owner mutation, approval, restriction, hold/retention decision or destructive execution is included.
 
-## 9. Ordered continuation
+## 9. Binding repository continuation
 
-1. permission-aware plan/outcome reads — complete through PR #211;
-2. approval runtime — next;
-3. immediate deny-only processing restrictions using final subject locks;
-4. legal-hold and mandatory-retention precedence;
-5. replay-safe resumable owner execution;
-6. crash-window recovery;
-7. governed access/export assembly;
-8. owner-specific deletion, anonymization and crypto-shred execution;
-9. Party tombstone and no-orphan proof;
-10. projection/search/cache convergence;
-11. Customer Privacy worker;
-12. disable/uninstall fail-closed semantics;
-13. complete process/end-to-end acceptance;
-14. Phase 8A closure and then Phase 8B / issue #29.
+The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. The Phase 8 positions are:
+
+1. repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline;
+2. repository step 2 — Customer Privacy approval runtime;
+3. repository step 3 — bounded contribution aggregation without behavior change;
+4. repository step 4 — immediate deny-only processing restrictions using final subject locks;
+5. repository step 5 — `explain`, `packet-check` and generated navigation;
+6. repository step 6 — legal-hold and mandatory-retention precedence;
+7. repository step 7 — reusable generic mutation/query conformance;
+8. repository step 8 — replay-safe resumable owner execution and crash-window recovery;
+9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks;
+10. repository step 10 — governed access/export assembly;
+11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution;
+12. repository step 12 — first measured behavior-neutral consolidation;
+13. repository step 13 — Party tombstone, no-orphan proof and projection/search/cache convergence;
+14. repository step 14 — reusable generic worker conformance;
+15. repository step 15 — deterministic local lifecycle commands;
+16. repository step 16 — Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
+17. repository step 17 — Phase 8A frontend and operations evidence;
+18. repository step 18 — Phase 8A closure;
+19. repository step 19 — architecture remeasurement and publication of the next numbered order;
+20. repository step 20 — first Phase 8B packet.
+
+A later step must not start while an earlier step is unfinished. If architecture preflight proves that the current product step cannot satisfy an existing hard rule, only the smallest required architecture prerequisite may be inserted immediately before it; after acceptance, work returns to that same product step.
 
 ## 10. Frozen ownership
 
@@ -115,10 +129,10 @@ legal hold > mandatory retention > approved privacy action > ordinary retention
 
 Phase 8A remains **In progress**.
 
-It closes only after approval, restrictions, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle and full process acceptance are merged.
+It closes only after approval, restrictions, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
 
 ## 12. Phase 8B and completion rule
 
-Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment remain planned and blocked on completed Phase 8A.
+Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment remain planned and blocked on repository steps 1–19 and completed Phase 8A.
 
 Current product-complete expert modules: **0**.
