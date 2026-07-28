@@ -31,6 +31,18 @@ struct Fixture {
     corrupt_planning_link: bool,
 }
 
+struct RecordFixture<'a> {
+    record_type: &'a str,
+    record_id: &'a str,
+    version: i64,
+    schema_id: &'a str,
+    schema_version: &'a str,
+    descriptor_hash: &'a [u8; 32],
+    maximum_payload_size: u64,
+    retention_policy_id: &'a str,
+    payload_bytes: &'a [u8],
+}
+
 fn main() {
     let fixtures = [
         build_fixture("success", false),
@@ -168,42 +180,51 @@ fn append_fixture_sql(sql: &mut String, fixture: &Fixture) {
     let case_bytes = encode_privacy_case_state(&fixture.privacy_case).unwrap();
     let snapshot_bytes = encode_discovery_scope_snapshot_state(&fixture.snapshot).unwrap();
     let plan_bytes = encode_action_plan_state(&fixture.plan).unwrap();
+    let case_descriptor_hash = privacy_case_state_descriptor_hash();
+    let snapshot_descriptor_hash = discovery_scope_snapshot_state_descriptor_hash();
+    let plan_descriptor_hash = action_plan_state_descriptor_hash();
 
     append_record_sql(
         sql,
-        PRIVACY_CASE_RECORD_TYPE,
-        fixture.privacy_case.case_id().as_str(),
-        i64::try_from(fixture.privacy_case.version()).unwrap(),
-        PRIVACY_CASE_STATE_SCHEMA_ID,
-        PRIVACY_CASE_STATE_SCHEMA_VERSION,
-        &privacy_case_state_descriptor_hash(),
-        PRIVACY_CASE_STATE_MAXIMUM_BYTES,
-        PRIVACY_CASE_STATE_RETENTION_POLICY_ID,
-        &case_bytes,
+        RecordFixture {
+            record_type: PRIVACY_CASE_RECORD_TYPE,
+            record_id: fixture.privacy_case.case_id().as_str(),
+            version: i64::try_from(fixture.privacy_case.version()).unwrap(),
+            schema_id: PRIVACY_CASE_STATE_SCHEMA_ID,
+            schema_version: PRIVACY_CASE_STATE_SCHEMA_VERSION,
+            descriptor_hash: &case_descriptor_hash,
+            maximum_payload_size: PRIVACY_CASE_STATE_MAXIMUM_BYTES,
+            retention_policy_id: PRIVACY_CASE_STATE_RETENTION_POLICY_ID,
+            payload_bytes: &case_bytes,
+        },
     );
     append_record_sql(
         sql,
-        SCOPE_SNAPSHOT_RECORD_TYPE,
-        fixture.snapshot.snapshot_id().as_str(),
-        1,
-        DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_ID,
-        DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_VERSION,
-        &discovery_scope_snapshot_state_descriptor_hash(),
-        DISCOVERY_SCOPE_SNAPSHOT_STATE_MAXIMUM_BYTES,
-        DISCOVERY_SCOPE_SNAPSHOT_STATE_RETENTION_POLICY_ID,
-        &snapshot_bytes,
+        RecordFixture {
+            record_type: SCOPE_SNAPSHOT_RECORD_TYPE,
+            record_id: fixture.snapshot.snapshot_id().as_str(),
+            version: 1,
+            schema_id: DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_ID,
+            schema_version: DISCOVERY_SCOPE_SNAPSHOT_STATE_SCHEMA_VERSION,
+            descriptor_hash: &snapshot_descriptor_hash,
+            maximum_payload_size: DISCOVERY_SCOPE_SNAPSHOT_STATE_MAXIMUM_BYTES,
+            retention_policy_id: DISCOVERY_SCOPE_SNAPSHOT_STATE_RETENTION_POLICY_ID,
+            payload_bytes: &snapshot_bytes,
+        },
     );
     append_record_sql(
         sql,
-        ACTION_PLAN_RECORD_TYPE,
-        fixture.plan.plan_id().as_str(),
-        1,
-        ACTION_PLAN_STATE_SCHEMA_ID,
-        ACTION_PLAN_STATE_SCHEMA_VERSION,
-        &action_plan_state_descriptor_hash(),
-        ACTION_PLAN_STATE_MAXIMUM_BYTES,
-        ACTION_PLAN_STATE_RETENTION_POLICY_ID,
-        &plan_bytes,
+        RecordFixture {
+            record_type: ACTION_PLAN_RECORD_TYPE,
+            record_id: fixture.plan.plan_id().as_str(),
+            version: 1,
+            schema_id: ACTION_PLAN_STATE_SCHEMA_ID,
+            schema_version: ACTION_PLAN_STATE_SCHEMA_VERSION,
+            descriptor_hash: &plan_descriptor_hash,
+            maximum_payload_size: ACTION_PLAN_STATE_MAXIMUM_BYTES,
+            retention_policy_id: ACTION_PLAN_STATE_RETENTION_POLICY_ID,
+            payload_bytes: &plan_bytes,
+        },
     );
 
     let plan_digest = if fixture.corrupt_planning_link {
@@ -222,31 +243,19 @@ fn append_fixture_sql(sql: &mut String, fixture: &Fixture) {
     .unwrap();
 }
 
-#[allow(clippy::too_many_arguments)]
-fn append_record_sql(
-    sql: &mut String,
-    record_type: &str,
-    record_id: &str,
-    version: i64,
-    schema_id: &str,
-    schema_version: &str,
-    descriptor_hash: &[u8; 32],
-    maximum_payload_size: u64,
-    retention_policy_id: &str,
-    payload_bytes: &[u8],
-) {
+fn append_record_sql(sql: &mut String, record: RecordFixture<'_>) {
     writeln!(
         sql,
         "INSERT INTO crm.records (tenant_id, record_type, record_id, version, owner_module_id, schema_id, schema_version, descriptor_hash, data_class, payload_encoding, maximum_payload_size, retention_policy_id, payload_bytes, last_business_transaction_id) VALUES ('{TENANT_ID}', '{}', '{}', {}, '{MODULE_ID}', '{}', '{}', decode('{}', 'hex'), 'confidential', 'json', {}, '{}', decode('{}', 'hex'), '{BOOTSTRAP_BUSINESS_TRANSACTION_ID}');",
-        sql_literal(record_type),
-        sql_literal(record_id),
-        version,
-        sql_literal(schema_id),
-        sql_literal(schema_version),
-        hex(descriptor_hash),
-        maximum_payload_size,
-        sql_literal(retention_policy_id),
-        hex(payload_bytes),
+        sql_literal(record.record_type),
+        sql_literal(record.record_id),
+        record.version,
+        sql_literal(record.schema_id),
+        sql_literal(record.schema_version),
+        hex(record.descriptor_hash),
+        record.maximum_payload_size,
+        sql_literal(record.retention_policy_id),
+        hex(record.payload_bytes),
     )
     .unwrap();
 }
