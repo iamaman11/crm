@@ -19,10 +19,28 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+        with:
+          toolchain: 1.97.1
           components: rustfmt, clippy
-      - run: python scripts/check_architecture.py
+      - name: Test Rust governance analyzer
+        run: python -m unittest tests.test_rust_governance
+      - name: Run architecture preflight
+        id: architecture
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/check_architecture.py 2>&1 | tee architecture.txt
+      - name: Upload architecture diagnostics
+        if: always() && steps.architecture.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: architecture-diagnostics
+          path: architecture.txt
+          if-no-files-found: error
+          retention-days: 7
       - name: Generate resolved Cargo lockfile
         run: cargo generate-lockfile
       - name: Upload resolved Cargo lockfile
@@ -58,20 +76,63 @@ jobs:
             services/*/src/
           if-no-files-found: error
           retention-days: 7
+      - name: Measure Rust compiler warnings
+        id: rustc
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo check --workspace --all-targets --all-features --message-format=json \
+            2> >(tee rustc-stderr.txt >&2) | tee rustc.json > /dev/null
+      - name: Upload Rust compiler diagnostics
+        if: always() && steps.rustc.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rustc-diagnostics
+          path: |
+            rustc.json
+            rustc-stderr.txt
+          if-no-files-found: error
+          retention-days: 7
       - name: Run Clippy
         id: clippy
         shell: bash
         run: |
           set -o pipefail
-          cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1 | tee clippy.txt
+          cargo clippy --workspace --all-targets --all-features --message-format=json -- -D warnings \
+            2> >(tee clippy-stderr.txt >&2) | tee clippy.json > /dev/null
       - name: Upload Clippy diagnostics
-        if: always()
+        if: always() && steps.clippy.outcome != 'skipped'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: clippy-diagnostics
-          path: clippy.txt
+          path: |
+            clippy.json
+            clippy-stderr.txt
           if-no-files-found: error
           retention-days: 7
+      - name: Enforce Rust toolchain and lint governance
+        if: always() && steps.rustc.outcome == 'success' && steps.clippy.outcome == 'success'
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          python scripts/check_rust_governance.py \
+            --base-ref "origin/${BASE_REF}" \
+            --rustc-json rustc.json \
+            --clippy-json clippy.json \
+            --require-lint-measurements \
+            --check \
+            --json-output rust-governance.json \
+            --markdown-output rust-governance.md
+      - name: Upload Rust governance report
+        if: always() && steps.rustc.outcome == 'success' && steps.clippy.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rust-governance-report
+          path: |
+            rust-governance.json
+            rust-governance.md
+          if-no-files-found: error
+          retention-days: 30
       - name: Run workspace tests
         id: tests
         shell: bash
@@ -79,7 +140,7 @@ jobs:
           set -o pipefail
           cargo test --workspace --all-features 2>&1 | tee tests.txt
       - name: Upload test diagnostics
-        if: always()
+        if: always() && steps.tests.outcome != 'skipped'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-diagnostics

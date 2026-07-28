@@ -4,6 +4,12 @@ import json
 import sys
 import tomllib
 
+from check_rust_governance import (
+    POLICY_FILE as RUST_GOVERNANCE_POLICY_FILE,
+    cargo_metadata as rust_cargo_metadata,
+    load_json as load_rust_json,
+    validate as validate_rust_governance,
+)
 from check_workspace_dependency_policy import validate_policy_document
 
 root = Path(__file__).resolve().parents[1]
@@ -148,6 +154,23 @@ errors.extend(
 )
 for warning in dependency_policy["warnings"]:
     print(f"Architecture dependency policy warning: {warning}")
+
+rust_governance = validate_rust_governance(
+    root=root,
+    policy=load_rust_json(root / RUST_GOVERNANCE_POLICY_FILE),
+    metadata=rust_cargo_metadata(root),
+    base_ref=None,
+    rustc_json=None,
+    clippy_json=None,
+    require_lint_measurements=False,
+    skip_tool_versions=True,
+)
+errors.extend(
+    f"Rust governance policy: {error}"
+    for error in rust_governance["governance"]["blocking_errors"]
+)
+for warning in rust_governance["governance"]["warnings"]:
+    print(f"Rust governance policy warning: {warning}")
 
 if errors:
     print("Architecture boundary check FAILED:")
