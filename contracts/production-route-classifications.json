@@ -151,18 +151,6 @@
     },
     {
       "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.case.plan.get",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but action-plan disclosure remains non-runtime until worker orchestration and permission-aware query visibility are complete."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.case.owner_outcomes.list",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but owner-outcome disclosure remains non-runtime until worker orchestration, bounded evidence visibility and real-process acceptance are complete."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.restriction.place",
       "version": "1.0.0",
       "reason": "FORCE RLS persistence is proven, but restriction placement remains non-runtime until the shared subject lock, deny-only precedence enforcement, live composition and real-process acceptance are complete."
