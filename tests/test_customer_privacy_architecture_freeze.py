@@ -7,6 +7,9 @@ import unittest
 from tests.test_customer_privacy_discovery_snapshot_freeze import (
     CustomerPrivacyDiscoverySnapshotFreezeTests,
 )
+from tests.test_customer_privacy_plan_reads_implementation import (
+    CustomerPrivacyPlanReadsImplementationTests,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
