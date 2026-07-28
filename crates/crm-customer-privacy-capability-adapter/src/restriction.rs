@@ -4,9 +4,7 @@ use crm_core_data::{
     AggregatePresence, AggregateTarget, BatchMutationPlan, CapabilityBatchExecutionPlan,
     RecordMutation, TransactionalAggregatePlanner,
 };
-use crm_customer_privacy::{
-    MODULE_ID, ProcessingRestriction, RestrictionScope, RestrictionStatus,
-};
+use crm_customer_privacy::{MODULE_ID, ProcessingRestriction, RestrictionScope, RestrictionStatus};
 use crm_customer_privacy_persistence_adapter::{
     processing_restriction_persisted_payload, processing_restriction_record_ref,
 };
@@ -17,14 +15,12 @@ use crm_module_sdk::{
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_privacy::v1 as wire};
 use sha2::{Digest, Sha256};
 
-pub const PLACE_PROCESSING_RESTRICTION_CAPABILITY: &str =
-    "customer_privacy.restriction.place";
+pub const PLACE_PROCESSING_RESTRICTION_CAPABILITY: &str = "customer_privacy.restriction.place";
 pub const PLACE_PROCESSING_RESTRICTION_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.PlaceProcessingRestrictionRequest";
 pub const PLACE_PROCESSING_RESTRICTION_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.PlaceProcessingRestrictionResponse";
-pub const PROCESSING_RESTRICTION_PLACED_EVENT_TYPE: &str =
-    "customer_privacy.restriction.placed";
+pub const PROCESSING_RESTRICTION_PLACED_EVENT_TYPE: &str = "customer_privacy.restriction.placed";
 pub const PROCESSING_RESTRICTION_PLACED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.ProcessingRestrictionPlacedEvent";
 
@@ -68,12 +64,7 @@ impl TransactionalAggregatePlanner for CustomerPrivacyRestrictionPlaceCapability
         )?;
         let expires_at_unix_nanos = command
             .expires_at_unix_ms
-            .map(|value| {
-                millis_to_nanos(
-                    value,
-                    "customer_privacy.restriction.expires_at_unix_ms",
-                )
-            })
+            .map(|value| millis_to_nanos(value, "customer_privacy.restriction.expires_at_unix_ms"))
             .transpose()?;
         let restriction = processing_restriction_from_command(
             request,
@@ -91,8 +82,8 @@ impl TransactionalAggregatePlanner for CustomerPrivacyRestrictionPlaceCapability
     }
 }
 
-pub fn place_processing_restriction_capability_definition(
-) -> Result<CapabilityDefinition, SdkError> {
+pub fn place_processing_restriction_capability_definition() -> Result<CapabilityDefinition, SdkError>
+{
     Ok(CapabilityDefinition {
         capability_id: configured(CapabilityId::try_new(
             PLACE_PROCESSING_RESTRICTION_CAPABILITY,
@@ -152,12 +143,7 @@ pub fn processing_restriction_from_place_request(
     )?;
     let expires_at_unix_nanos = command
         .expires_at_unix_ms
-        .map(|value| {
-            millis_to_nanos(
-                value,
-                "customer_privacy.restriction.expires_at_unix_ms",
-            )
-        })
+        .map(|value| millis_to_nanos(value, "customer_privacy.restriction.expires_at_unix_ms"))
         .transpose()?;
     processing_restriction_from_command(
         request,
@@ -285,12 +271,7 @@ fn processing_restriction_to_wire(
             "customer_privacy.restriction.effective_from_unix_ms",
         )?,
         expires_at_unix_ms: expires_at_unix_nanos
-            .map(|value| {
-                nanos_to_millis(
-                    value,
-                    "customer_privacy.restriction.expires_at_unix_ms",
-                )
-            })
+            .map(|value| nanos_to_millis(value, "customer_privacy.restriction.expires_at_unix_ms"))
             .transpose()?,
         released_by_actor_id: None,
         released_at_unix_ms: None,
@@ -344,12 +325,12 @@ fn restriction_scope_from_wire(value: i32) -> Result<RestrictionScope, SdkError>
         Ok(wire::ProcessingRestrictionScope::ProcessingAndCommunication) => {
             Ok(RestrictionScope::ProcessingAndCommunication)
         }
-        Ok(wire::ProcessingRestrictionScope::Unspecified) | Err(_) => Err(
-            SdkError::invalid_argument(
+        Ok(wire::ProcessingRestrictionScope::Unspecified) | Err(_) => {
+            Err(SdkError::invalid_argument(
                 "customer_privacy.restriction.scope",
                 "Processing restriction scope is unsupported.",
-            ),
-        ),
+            ))
+        }
     }
 }
 
@@ -484,8 +465,7 @@ mod tests {
     fn deterministic_identity_is_tenant_and_idempotency_bound() {
         let first = deterministic_processing_restriction_id("tenant-a", "same-key").unwrap();
         let replay = deterministic_processing_restriction_id("tenant-a", "same-key").unwrap();
-        let other_tenant =
-            deterministic_processing_restriction_id("tenant-b", "same-key").unwrap();
+        let other_tenant = deterministic_processing_restriction_id("tenant-b", "same-key").unwrap();
         assert_eq!(first, replay);
         assert_ne!(first, other_tenant);
         assert!(first.as_str().starts_with(RESTRICTION_ID_PREFIX));
