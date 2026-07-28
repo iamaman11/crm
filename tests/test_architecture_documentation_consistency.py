@@ -22,6 +22,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.roadmap = read("docs/IMPLEMENTATION_ROADMAP.md")
         cls.phase8 = read("docs/PHASE8_DELIVERY_PLAN.md")
         cls.plan = read("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
+        cls.catalog = read("docs/MODULE_CATALOG.md")
         cls.workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
         cls.module_development = read("docs/MODULE_DEVELOPMENT.md")
         cls.repo_runner = read("scripts/repo.py")
@@ -33,9 +34,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("approval runtime", document.lower())
             self.assertIn("permission-aware", document.lower())
             self.assertIn("bounded contribution", document.lower())
+            self.assertIn("immediate deny-only", document.lower())
             self.assertIn("rust-version", document)
             self.assertIn("PR #218", document)
             self.assertIn("PR #220", document)
+            self.assertIn("PR #222", document)
 
         self.assertIn("Phases 0.1–7 are complete", self.status)
         self.assertIn("Current product-complete expert modules: **0**", self.status)
@@ -95,18 +98,26 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         step_3 = (
             "3. first bounded contribution-aggregation packet: expand owner-owned "
             "first-party registration and reduce selected concrete generic-runtime imports "
-            "without behavior changes — **Next**;"
+            "without behavior changes — **Complete through PR #222**;"
+        )
+        step_4 = (
+            "4. immediate deny-only Customer Privacy processing restrictions using final "
+            "subject locks — **Next**;"
         )
         self.assertIn(step_1, self.plan)
         self.assertIn(step_2, self.plan)
         self.assertIn(step_3, self.plan)
+        self.assertIn(step_4, self.plan)
         self.assertLess(self.plan.index(step_1), self.plan.index(step_2))
         self.assertLess(self.plan.index(step_2), self.plan.index(step_3))
+        self.assertLess(self.plan.index(step_3), self.plan.index(step_4))
 
         self.assertIn("## Next permitted repository packet", self.status)
         self.assertIn("## Following permitted repository packet", self.status)
         self.assertIn("Repository step 1", self.roadmap)
         self.assertIn("Repository step 2", self.roadmap)
+        self.assertIn("Repository step 3", self.roadmap)
+        self.assertIn("Repository step 4", self.roadmap)
         self.assertIn("## 9. Binding repository continuation", self.phase8)
 
         forbidden_ambiguous_phrases = (
@@ -148,6 +159,33 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("five public mutations", self.status.lower())
         self.assertIn("five public mutations", self.roadmap.lower())
         self.assertIn("five mutations", self.phase8.lower())
+
+    def test_repository_step_3_acceptance_is_synchronized(self) -> None:
+        accepted_source = "b5651e784a156758b39eaa04abc1124c7c0832f9"
+        merge = "fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1"
+        for document in (
+            self.plan,
+            self.status,
+            self.roadmap,
+            self.phase8,
+            self.catalog,
+        ):
+            with self.subTest(document=document[:40]):
+                self.assertIn("PR #222", document)
+                self.assertIn(accepted_source, document)
+                self.assertIn(merge, document)
+                self.assertIn("16 of 16", document)
+                self.assertIn("Customer Accounts", document)
+                self.assertIn("first-party", document.lower())
+
+        for document in (self.plan, self.status, self.roadmap, self.phase8):
+            self.assertIn("immediate deny-only", document.lower())
+            self.assertIn("final subject locks", document.lower())
+
+        self.assertIn("5 mutations / 4 queries / 0 workers", self.plan)
+        self.assertNotIn("4 mutations / 4 queries / 0 workers", self.plan)
+        self.assertIn("workspace remains at 113 packages", self.roadmap.lower())
+        self.assertIn("workspace packages remain 113", self.catalog.lower())
 
     def test_navigation_has_one_stable_human_index(self) -> None:
         self.assertIn("docs/README.md", self.readme)
@@ -295,6 +333,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Customer Privacy approval runtime is now repository step 2 and the next permitted implementation packet",
             "Approval runtime is now the next permitted repository and product packet",
             "Approval runtime is the next packet",
+            "The next permitted repository and product packet is **Customer Privacy approval runtime only**",
+            "Repository step 3 — bounded contribution aggregation without behavior change — Next",
+            "bounded contribution aggregation is the next repository packet",
+            "bounded contribution aggregation without behavior change is now repository step 3 and the next permitted implementation packet",
+            "The next permitted implementation packet is repository step 3",
         )
         for statement in stale:
             for document in (
@@ -305,6 +348,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 self.roadmap,
                 self.phase8,
                 self.plan,
+                self.catalog,
             ):
                 with self.subTest(statement=statement):
                     self.assertNotIn(statement, document)
