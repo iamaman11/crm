@@ -30,7 +30,7 @@ Ordinary capabilities add zero crates, generic router/worker algorithms do not g
 
 Issue #126 is **In progress**.
 
-Merged public runtime inventory remains four mutations, two permission-aware public queries and zero Customer Privacy workers. Trusted-internal `customer_privacy.plan.build@1.0.0` has no public ingress. The two published plan/outcome read coordinates remain non-runtime.
+Latest accepted public runtime inventory remains four mutations, two permission-aware public queries and zero Customer Privacy workers through PR #209. PR #211 implements two additional reads and targets 4 mutations / 4 queries / 0 workers pending unchanged exact-head acceptance. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
 
 All nine authoritative owner implementations are accepted:
 
@@ -73,21 +73,23 @@ Implemented behavior:
 - atomic `Scoped → Planned` or `Scoped → AwaitingApproval` transition;
 - strict rehydration, replay/conflict detection and append-only case/snapshot/plan/audit evidence;
 - FORCE RLS, canonical `tenant_isolation`, cross-tenant concealment, clean PostgreSQL, rollback/reapply and repeated acceptance;
-- unchanged 113 packages, 4 mutations, 2 queries and 0 workers.
+- unchanged 113 packages, 4 mutations, 2 queries and 0 workers at the PR #209 boundary.
 
-## 8. Next packet — permission-aware reads
+## 8. Permission-aware reads pending exact-head acceptance
 
-Promote only:
+PR #211 promotes only:
 
-1. `customer_privacy.case.plan.get@1.0.0` with module activation, live permission/visibility, tenant-bound reads, strict case↔plan↔snapshot lineage and replay evidence, payload-safe summary, audited read and concealed unauthorized/cross-tenant existence;
+1. `customer_privacy.case.plan.get@1.0.0` with module activation, live permission/visibility, tenant-bound reads, strict case↔snapshot↔plan↔replay evidence, payload-safe summary, audited read and concealed unauthorized/cross-tenant existence;
 2. `customer_privacy.case.owner_outcomes.list@1.0.0` with bounded validation and a deterministic empty terminal page (`items = []`) until owner execution and outcome persistence exist.
 
-No new crate, generic-runtime switch, mutation, worker, owner mutation, approval, restriction, hold/retention decision, synthetic outcome or destructive execution is allowed.
+The packet adds one append-only FORCE-RLS safe read-audit table and no owner-outcome table. Stable page/terminal digests are durable audit evidence; no synthetic outcome is returned.
+
+No new crate, generic-runtime switch, mutation, worker, owner mutation, approval, restriction, hold/retention decision or destructive execution is included.
 
 ## 9. Ordered continuation
 
-1. permission-aware plan/outcome reads;
-2. approval runtime;
+1. permission-aware plan/outcome reads — implemented in PR #211, pending exact-head acceptance;
+2. approval runtime — next after accepted merge of PR #211;
 3. immediate deny-only processing restrictions using final subject locks;
 4. legal-hold and mandatory-retention precedence;
 5. replay-safe resumable owner execution;
