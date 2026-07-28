@@ -104,11 +104,7 @@ async fn restriction_place_blocks_protected_contact_point_create_atomically() {
     let placement = mutate(
         &mut grpc,
         &restriction_place,
-        restriction_payload(
-            &restriction_place,
-            &protected_party,
-            effective_from_unix_ms,
-        ),
+        restriction_payload(&restriction_place, &protected_party, effective_from_unix_ms),
         TENANT_A,
         "restriction-process-place",
         true,
