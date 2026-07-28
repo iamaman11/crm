@@ -16,15 +16,9 @@ Use the documentation index instead of reading every document linearly. Accepted
 
 ## Current state
 
-**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.11 / issue #126 is in progress.**
-
-The current bounded product packet is **Customer Privacy scope discovery and immutable snapshot**. All nine authoritative privacy owner-scope implementations are accepted, but production discovery, planning and owner execution are not yet implemented.
+Live phase, runtime inventory, accepted evidence, product-completeness accounting and the next permitted packet are intentionally **not duplicated in this orientation file**. Read [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md), the normative roadmap/phase plan and the active issue.
 
 The cross-cutting architecture and developer-experience program is tracked by **issue #194** and [`docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`](docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md). It preserves the modular architecture while reducing accidental crate proliferation, central manual composition, dependency drift, CI fan-out, local-environment friction and repository navigation cost.
-
-Current product-complete expert modules: **0**.
-
-See [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for exact merged evidence and the next permitted implementation boundary.
 
 ## Architectural model
 
@@ -76,9 +70,12 @@ python scripts/repo.py architecture
 python scripts/repo.py manifests
 python scripts/repo.py contracts
 python scripts/repo.py conformance
+python scripts/repo.py lock
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
 python scripts/repo.py format --check
+python scripts/repo.py test --package <package>
+python scripts/repo.py test-all
 python scripts/repo.py quality
 ```
 
