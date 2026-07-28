@@ -266,19 +266,24 @@ fn customer_privacy_visibility(
     definition: &CapabilityDefinition,
 ) -> Vec<BootstrapVisibilityResource> {
     let capability_id = definition.capability_id.as_str();
-    let resources = match capability_id {
+    match capability_id {
         GET_PRIVACY_CASE_CAPABILITY | LIST_PRIVACY_CASES_CAPABILITY => {
             customer_privacy_query_visibility_resources(capability_id)
+                .into_iter()
+                .map(|resource| BootstrapVisibilityResource {
+                    owner_module_id: resource.owner_module_id,
+                    resource_type: resource.resource_type,
+                    allowed_fields: resource.allowed_fields,
+                })
+                .collect()
         }
         GET_PRIVACY_ACTION_PLAN_CAPABILITY | LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY => {
             customer_privacy_plan_read_visibility_resources(capability_id)
                 .into_iter()
-                .map(|resource| {
-                    crm_customer_privacy_query_adapter::CustomerPrivacyQueryVisibilityResource {
-                        owner_module_id: resource.owner_module_id,
-                        resource_type: resource.resource_type,
-                        allowed_fields: resource.allowed_fields,
-                    }
+                .map(|resource| BootstrapVisibilityResource {
+                    owner_module_id: resource.owner_module_id,
+                    resource_type: resource.resource_type,
+                    allowed_fields: resource.allowed_fields,
                 })
                 .collect()
         }
@@ -289,15 +294,7 @@ fn customer_privacy_visibility(
             );
             Vec::new()
         }
-    };
-    resources
-        .into_iter()
-        .map(|resource| BootstrapVisibilityResource {
-            owner_module_id: resource.owner_module_id,
-            resource_type: resource.resource_type,
-            allowed_fields: resource.allowed_fields,
-        })
-        .collect()
+    }
 }
 
 fn data_quality_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
