@@ -48,7 +48,6 @@ async fn restriction_place_blocks_protected_contact_point_create_atomically() {
     for fixture in [
         include_str!("../../../database/tests/0005_party_adapter.sql"),
         include_str!("../../../database/tests/0007_contact_point_adapter.sql"),
-        include_str!("../../../database/tests/0020_customer_privacy_persistence_fixture.sql"),
     ] {
         admin
             .execute(sqlx::raw_sql(fixture))
