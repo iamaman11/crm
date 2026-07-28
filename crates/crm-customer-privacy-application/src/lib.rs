@@ -26,8 +26,7 @@ use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_cancel_capability_adapter::capability_definitions as cancel_definitions;
 use crm_customer_privacy_capability_adapter::capability_definitions as case_create_definitions;
 pub use crm_customer_privacy_capability_adapter::{
-    PLACE_PROCESSING_RESTRICTION_CAPABILITY,
-    place_processing_restriction_capability_definition,
+    PLACE_PROCESSING_RESTRICTION_CAPABILITY, place_processing_restriction_capability_definition,
 };
 use crm_customer_privacy_query_adapter::query_capability_definitions as case_query_definitions;
 use crm_customer_privacy_subject_capability_adapter::capability_definitions as subject_definitions;
@@ -45,8 +44,8 @@ pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, Sd
 }
 
 /// Exact production inventory once immediate restriction placement is enabled.
-pub fn mutation_capability_definitions_with_restrictions(
-) -> Result<Vec<CapabilityDefinition>, SdkError> {
+pub fn mutation_capability_definitions_with_restrictions()
+-> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = mutation_capability_definitions()?;
     definitions.insert(1, place_processing_restriction_capability_definition()?);
     Ok(definitions)
@@ -77,9 +76,11 @@ mod tests {
             APPROVE_PRIVACY_CASE_CAPABILITY,
             PLACE_PROCESSING_RESTRICTION_CAPABILITY,
         ] {
-            assert!(step_four.iter().any(|definition| {
-                definition.capability_id.as_str() == capability
-            }));
+            assert!(
+                step_four
+                    .iter()
+                    .any(|definition| { definition.capability_id.as_str() == capability })
+            );
         }
     }
 }

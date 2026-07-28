@@ -40,9 +40,7 @@ pub fn build_contribution_with_restrictions(
         ));
     }
     let restriction_definition = place_processing_restriction_capability_definition()?;
-    if inventory
-        .get(1)
-        .map(|definition| &definition.capability_id)
+    if inventory.get(1).map(|definition| &definition.capability_id)
         != Some(&restriction_definition.capability_id)
     {
         return Err(composition_error(
