@@ -472,12 +472,9 @@ mod tests {
     #[test]
     fn nanosecond_request_timestamp_is_truncated_to_wire_milliseconds() {
         assert_eq!(
-            nanos_to_millis(1_999_999, "execution_context.request_started_at_unix_nanos")
-                .unwrap(),
+            nanos_to_millis(1_999_999, "execution_context.request_started_at_unix_nanos").unwrap(),
             1
         );
-        assert!(
-            nanos_to_millis(-1, "execution_context.request_started_at_unix_nanos").is_err()
-        );
+        assert!(nanos_to_millis(-1, "execution_context.request_started_at_unix_nanos").is_err());
     }
 }
