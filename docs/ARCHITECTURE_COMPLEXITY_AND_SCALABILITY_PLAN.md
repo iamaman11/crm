@@ -83,7 +83,7 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 | Stage | Current state | Accepted progress | Remaining exit work |
 |---|---|---|---|
 | A — documentation and policy baseline | **Complete** | one plan, stable `docs/README.md`, source hierarchy and permanent consistency guard | preserve freshness and avoid duplicate live roadmaps |
-| B — dependency, crate and exception governance | **In progress** | reproducible baseline, crate justification, zero active exceptions, calibrated inheritance cohorts and root-family no-growth | supported `rust-version`, measured workspace lints, additional homogeneous dependency cohorts, public-surface/fan-out calibration |
+| B — dependency, crate and exception governance | **In progress** | reproducible baseline, crate justification, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1` toolchain/workspace `rust-version`, measured zero-warning Rust/Clippy baseline and three exact expiring legacy lint exceptions | additional homogeneous dependency cohorts, removal of the three direct-lint exceptions, public-surface/fan-out calibration |
 | C — golden owner package and persistence model | **In progress** | Customer Privacy domain/application/postgres/production pilot accepted; ordinary Customer Privacy capabilities add zero crates | generalize scaffolding, migration ownership and visibility policy; adopt the model for later owners without forced rewrites |
 | D — contribution aggregation | **In progress** | owner-owned contribution pattern proven; Customer Privacy enters through one production package | migrate remaining owners, expand the first-party bundle and remove concrete domain imports from generic runtime |
 | E — affected-scope CI | **In progress** | changed paths, Rust reverse closure, structural preflight and explainable broadening exist | complete contract, migration, process, product, frontend and operations scope selection with safe fallback |
@@ -92,7 +92,9 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 | H — reproducible environment and navigation | **Partially started** | stable docs index plus `repo.py affected` and `check-affected` exist | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain`, `packet-check`, generated active packet and repository map |
 | I — frontend and operations parity | **Not started as a complete stage** | existing product/process checks remain preserved | domain-oriented frontend proof, accessibility/browser evidence, restore/SLO/performance/security/supply-chain gates |
 
-The next bounded architecture packet must establish a supported Rust toolchain/`rust-version` decision and a measured workspace lint baseline. It must not mix dependency upgrades, product behavior or broad lint cleanup.
+Repository step 1 is accepted through PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 permanent workflows. The exact supported compiler and workspace `rust-version` are `1.97.1`; Rust and Clippy warning/error budgets are zero; the 113-package workspace and `Cargo.lock` are unchanged; three pre-existing direct `too_many_arguments` lint tables are exact, expiring, no-growth exceptions.
+
+The next permitted implementation packet is repository step 2: Customer Privacy approval runtime only. It must not include restrictions, legal-hold/mandatory-retention precedence, owner execution, destructive actions, workers, dependency upgrades or crate consolidation.
 
 ### 2.4 Single repository execution order
 
@@ -111,8 +113,8 @@ Execution rules:
 
 Current master sequence:
 
-1. supported Rust toolchain, workspace `rust-version` and measured lint baseline;
-2. Customer Privacy approval runtime only;
+1. supported Rust toolchain, workspace `rust-version` and measured lint baseline — **Complete through PR #218**;
+2. Customer Privacy approval runtime only — **Next**;
 3. first bounded contribution-aggregation packet: expand owner-owned first-party registration and reduce selected concrete generic-runtime imports without behavior changes;
 4. immediate deny-only Customer Privacy processing restrictions using final subject locks;
 5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map;
@@ -447,10 +449,11 @@ Accepted through the current checkpoint:
 - production scope discovery and immutable snapshots;
 - trusted-internal deterministic planning;
 - permission-aware plan and future-safe empty outcome reads;
+- exact Rust `1.97.1` toolchain/workspace `rust-version` and measured zero-warning governance;
 - 4 mutations / 4 queries / 0 workers;
 - 113 workspace packages and zero new dependency families for the later capability packets.
 
-The next product packet is **approval runtime only**, but it is repository step 2 and remains blocked until repository step 1 is accepted. It must remain inside the existing Customer Privacy packages and add no generic-runtime business switch, restriction execution, legal-hold/retention adjudication, owner execution, destructive action or worker.
+The next permitted repository and product packet is **Customer Privacy approval runtime only**. It must remain inside the existing Customer Privacy packages and add no generic-runtime business switch, restriction execution, legal-hold/retention adjudication, owner execution, destructive action, worker, dependency upgrade or crate consolidation.
 
 Issue #126 supplies product semantics. Issue #194 supplies architecture acceptance and the repository order. Their scopes remain separate, and section 2.4 determines exactly which packet may start.
 
