@@ -403,6 +403,11 @@ fn read_transaction_id(context: &PrivacyReadContext) -> String {
 fn read_audit_digest(record: &PrivacyReadAuditRecord) -> [u8; 32] {
     let page_size = record.page_size.map(|value| value.to_string());
     let occurred_at = record.context.request_started_at_unix_nanos.to_string();
+    let decision = if record.allowed {
+        b"allow".as_slice()
+    } else {
+        b"deny".as_slice()
+    };
     let mut bytes = Vec::new();
     for value in [
         b"crm.customer-privacy.plan-read-audit/v1".as_slice(),
@@ -423,7 +428,7 @@ fn read_audit_digest(record: &PrivacyReadAuditRecord) -> [u8; 32] {
             .as_bytes(),
         page_size.as_deref().unwrap_or("").as_bytes(),
         record.authorization_digest.as_slice(),
-        if record.allowed { b"allow" } else { b"deny" }.as_slice(),
+        decision,
         record.result_code.as_bytes(),
         record.context.actor_id.as_str().as_bytes(),
         record.context.request_id.as_str().as_bytes(),
