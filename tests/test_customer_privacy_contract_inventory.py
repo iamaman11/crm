@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CustomerPrivacyContractInventoryTests(unittest.TestCase):
-    def test_public_contract_inventory_matches_freeze_and_promotes_case_list(self) -> None:
+    def test_public_contract_inventory_matches_freeze_and_promotes_plan_reads(self) -> None:
         manifest_path = ROOT / "modules/crm-customer-privacy/module.yaml"
         manifest = strict_yaml_load(
             manifest_path.read_text(encoding="utf-8"), str(manifest_path)
@@ -75,6 +75,8 @@ class CustomerPrivacyContractInventoryTests(unittest.TestCase):
         runtime_queries = {
             "customer_privacy.case.get",
             "customer_privacy.case.list",
+            "customer_privacy.case.plan.get",
+            "customer_privacy.case.owner_outcomes.list",
         }
         non_runtime = {
             (route["owner_module_id"], route["id"], route["version"])
@@ -88,7 +90,7 @@ class CustomerPrivacyContractInventoryTests(unittest.TestCase):
             - runtime_queries
         }
         self.assertEqual(non_runtime, expected_non_runtime)
-        self.assertEqual(len(non_runtime), 10)
+        self.assertEqual(len(non_runtime), 8)
         for runtime_id in runtime_mutations | runtime_queries:
             self.assertNotIn(
                 ("crm.customer-privacy", runtime_id, "1.0.0"),
