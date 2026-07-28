@@ -9,9 +9,11 @@
 
 mod discovery;
 mod planning;
+mod reads;
 
 pub use discovery::*;
 pub use planning::*;
+pub use reads::*;
 
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_cancel_capability_adapter::capability_definitions as cancel_definitions;
@@ -30,7 +32,9 @@ pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, Sd
 }
 
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    case_query_definitions()
+    let mut definitions = case_query_definitions()?;
+    definitions.extend(plan_read_query_capability_definitions()?);
+    Ok(definitions)
 }
 
 #[cfg(test)]
@@ -38,10 +42,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn inventory_preserves_four_mutations_and_two_queries() {
+    fn inventory_preserves_four_mutations_and_promotes_four_queries() {
         let mutations = mutation_capability_definitions().unwrap();
         let queries = query_capability_definitions().unwrap();
         assert_eq!(mutations.len(), 4);
-        assert_eq!(queries.len(), 2);
+        assert_eq!(queries.len(), 4);
     }
 }
