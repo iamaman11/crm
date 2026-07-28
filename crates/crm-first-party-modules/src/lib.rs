@@ -15,6 +15,14 @@ use crm_customer_accounts_capability_composition::{
     CustomerAccountsProductionDependencies,
     build_contribution as build_customer_accounts_contribution,
 };
+use crm_customer_privacy_production::{
+    CustomerPrivacyProductionDependencies,
+    build_contribution as build_customer_privacy_owner_contribution,
+};
+pub use crm_customer_privacy_production::{
+    mutation_capability_definitions as customer_privacy_mutation_capability_definitions,
+    query_capability_definitions as customer_privacy_query_capability_definitions,
+};
 use crm_module_sdk::SdkError;
 use crm_party_reference_composition::PartyReferenceReader;
 use crm_query_runtime::QueryVisibilityAuthorizer;
@@ -24,6 +32,14 @@ use std::sync::Arc;
 pub struct FirstPartyProductionDependencies {
     pub store: PostgresDataStore,
     pub parties: Arc<dyn PartyReferenceReader>,
+    pub activation: Arc<dyn ModuleActivationPort>,
+    pub visibility_authorizer: Arc<dyn QueryVisibilityAuthorizer>,
+    pub cursor_key: [u8; 32],
+}
+
+#[derive(Clone)]
+pub struct CustomerPrivacyFirstPartyDependencies {
+    pub store: PostgresDataStore,
     pub activation: Arc<dyn ModuleActivationPort>,
     pub visibility_authorizer: Arc<dyn QueryVisibilityAuthorizer>,
     pub cursor_key: [u8; 32],
@@ -65,6 +81,26 @@ pub fn build_all(
     )?);
 
     Ok(contributions)
+}
+
+/// Routes the already-stable Customer Privacy production contribution through
+/// the first-party bundle while preserving its existing late merge point in
+/// the generic application runtime.
+pub fn build_customer_privacy(
+    dependencies: CustomerPrivacyFirstPartyDependencies,
+) -> Result<ModuleContributionSet, SdkError> {
+    let CustomerPrivacyFirstPartyDependencies {
+        store,
+        activation,
+        visibility_authorizer,
+        cursor_key,
+    } = dependencies;
+    build_customer_privacy_owner_contribution(CustomerPrivacyProductionDependencies {
+        store,
+        activation,
+        visibility_authorizer,
+        cursor_key,
+    })
 }
 
 pub const CRATE_NAME: &str = "crm-first-party-modules";
