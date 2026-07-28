@@ -10,6 +10,7 @@
 mod approval;
 mod discovery;
 mod planning;
+mod restriction;
 mod reads {
     #[cfg(test)]
     use crm_customer_privacy::{ACTION_PLAN_GET_COORDINATE, OWNER_OUTCOMES_LIST_COORDINATE};
@@ -21,6 +22,7 @@ pub use approval::*;
 pub use discovery::*;
 pub use planning::*;
 pub use reads::*;
+pub use restriction::*;
 
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_cancel_capability_adapter::capability_definitions as cancel_definitions;
