@@ -3,7 +3,7 @@
 Status: **Normative cross-cutting execution plan**  
 Tracking issue: #194  
 Original audit baseline: **2026-07-27**  
-Current execution checkpoint: **2026-07-28**
+Current execution checkpoint: **2026-07-29**
 
 Applies to repository structure, Rust workspace packaging, module composition, dependency governance, contracts, persistence ownership, CI/test selection, developer tooling, documentation navigation, local development, frontend architecture and production operations.
 
@@ -84,7 +84,7 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 |---|---|---|---|
 | A — documentation and policy baseline | **Complete** | one plan, stable `docs/README.md`, source hierarchy and permanent consistency guard | preserve freshness and avoid duplicate live roadmaps |
 | B — dependency, crate and exception governance | **In progress** | reproducible baseline, crate justification, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1` toolchain/workspace `rust-version`, measured zero-warning Rust/Clippy baseline and three exact expiring legacy lint exceptions | additional homogeneous dependency cohorts, removal of the three direct-lint exceptions, public-surface/fan-out calibration |
-| C — golden owner package and persistence model | **In progress** | Customer Privacy domain/application/postgres/production pilot plus the transaction-scoped final customer-subject policy port and deterministic guard-chain prerequisite are accepted; ordinary Customer Privacy capabilities add zero crates | implement the authoritative restriction decision and protected-owner integration; generalize scaffolding, migration ownership and visibility policy; adopt the model for later owners without forced rewrites |
+| C — golden owner package and persistence model | **In progress** | Customer Privacy domain/application/postgres/production pilot, transaction-scoped final policy port, authoritative deny-only restriction decision, public placement and first protected-owner integration are accepted; ordinary Customer Privacy capabilities add zero crates | generalize scaffolding, migration ownership and visibility policy; adopt the model for later owners without forced rewrites |
 | D — contribution aggregation | **In progress** | owner-owned contribution pattern proven; first bounded Customer Accounts registration-inventory aggregation accepted through the first-party bundle | migrate remaining owners, expand the first-party bundle and remove additional concrete domain imports from generic runtime |
 | E — affected-scope CI | **In progress** | changed paths, Rust reverse closure, structural preflight and explainable broadening exist | complete contract, migration, process, product, frontend and operations scope selection with safe fallback |
 | F — generic conformance and contract lifecycle | **Foundation only** | native conformance, manifest/route parity and exact-head gates exist | reusable mutation/query/worker suites plus compatibility, deprecation and retirement enforcement |
@@ -100,7 +100,9 @@ Repository step 3 is accepted through PR #222 / accepted source `b5651e784a15675
 
 The architecture preflight for repository step 4 proved that restriction placement could not satisfy the accepted final-state enforcement rule without a stable transaction-scoped policy port and deterministic composition of owner-specific plus Customer Privacy final guards. PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows accepts that smallest inserted prerequisite. It changes no route, public inventory, restriction runtime, owner integration, persistence, dependency, `Cargo.lock`, package count or product behavior and provides no allow-all implementation.
 
-The next permitted implementation packet remains repository step 4: immediate deny-only Customer Privacy processing restrictions using final subject locks.
+Repository step 4 is accepted through PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows. It promotes deny-only restriction placement, implements the authoritative FORCE-RLS final decision, shares the canonical Party lock with protected Contact Point creation and proves public placement, immediate denial without side effects, tenant isolation, rollback/reapply and repeated real-process acceptance.
+
+The next permitted implementation packet is repository step 5: `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map.
 
 ### 2.4 Single repository execution order
 
@@ -117,15 +119,15 @@ Execution rules:
 7. Feature behavior, architecture governance, contribution refactoring, crate consolidation and evidence synchronization remain separate pull requests even when adjacent in the sequence.
 8. Stage labels A–I describe completion accounting. They do not authorize work outside this master order.
 
-The inserted repository step 4 prerequisite is complete through PR #224. It does not renumber the master sequence and work returns to the same blocked product packet.
+The inserted repository step 4 prerequisite is complete through PR #224, and repository step 4 itself is complete through PR #226. Neither changes the master numbering.
 
 Current master sequence:
 
 1. supported Rust toolchain, workspace `rust-version` and measured lint baseline — **Complete through PR #218**;
 2. Customer Privacy approval runtime only — **Complete through PR #220**;
 3. first bounded contribution-aggregation packet: expand owner-owned first-party registration and reduce selected concrete generic-runtime imports without behavior changes — **Complete through PR #222**;
-4. immediate deny-only Customer Privacy processing restrictions using final subject locks — **Next**;
-5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map;
+4. immediate deny-only Customer Privacy processing restrictions using final subject locks — **Complete through PR #226**;
+5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map — **Next**;
 6. Customer Privacy legal-hold and mandatory-retention precedence;
 7. reusable generic mutation and query conformance suites adopted by representative owners;
 8. replay-safe resumable Customer Privacy owner execution and crash-window recovery;
@@ -161,7 +163,7 @@ Architecture and developer experience reach 10/10 only when the conditions below
 - A **normal capability added to an existing owner creates zero new crates**.
 - A normal owner targets **three to five technical packages**: pure domain, application, PostgreSQL/infrastructure, production contribution and one optional real provider/trust/process/extraction boundary.
 - Crates exist for dependency, trust, reuse, lifecycle, process or extraction boundaries—not for every handler.
-- Transitional capability-specific crates are consolidated gradually through behavior-neutral packets with measured benefit.
+- Transitional capability-specific packages are consolidated gradually through behavior-neutral packets with measured benefit.
 
 ### 3.3 Layering
 
@@ -459,12 +461,13 @@ Accepted through the current checkpoint:
 - permission-aware plan and future-safe empty outcome reads;
 - public approval runtime;
 - exact Rust `1.97.1` toolchain/workspace `rust-version` and measured zero-warning governance;
-- 5 mutations / 4 queries / 0 workers;
+- 6 mutations / 4 queries / 0 workers;
 - 113 workspace packages and zero new dependency families for the later capability packets;
 - behavior-neutral repository step 3 contribution aggregation with unchanged Customer Privacy inventory and semantics;
-- transaction-scoped final customer-subject policy port and deterministic aggregate guard composition accepted through PR #224, with no allow-all implementation and no restriction behavior yet.
+- transaction-scoped final customer-subject policy port and deterministic aggregate guard composition accepted through PR #224;
+- authoritative deny-only restriction placement and final owner guard accepted through PR #226, with no allow-all fallback.
 
-The next permitted repository and product packet is **immediate deny-only Customer Privacy processing restrictions using final subject locks**. It must implement the authoritative Customer Privacy live decision, share the tenant + canonical Party lock with restriction placement and every bounded protected owner transaction, and fail closed on unavailable, stale, corrupt or cross-tenant evidence. It must add no legal-hold/mandatory-retention adjudication, owner execution, destructive action, worker, dependency upgrade, crate consolidation or generic-runtime business switch.
+The next permitted repository packet is **repository step 5: `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map**. It is behavior-neutral navigation/tooling work and must not add legal-hold/mandatory-retention adjudication, owner execution, destructive action, worker, dependency upgrade, crate consolidation or product runtime behavior.
 
 Issue #126 supplies product semantics. Issue #194 supplies architecture acceptance and the repository order. Their scopes remain separate, and section 2.4 determines exactly which packet may start.
 

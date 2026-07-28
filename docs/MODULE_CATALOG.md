@@ -22,14 +22,14 @@ Readiness states are Planned, Foundation, Vertical slice, Production integration
 | `crm.activities` | Activities/productivity owner | **Vertical slice** | Task create/update/complete/reminder/get/list | Appointments, recurring work and calendar synchronization |
 | `crm.parties` | Canonical person/organization identity | **Expert expansion** | Party create/update/get/list/search | Structured profile depth and source identifiers |
 | `crm.customer-accounts` | Customer/commercial relationship | **Vertical slice** | Account create/update/get/list with Party associations | Advanced hierarchy and product UX |
-| `crm.contact-points` | Canonical communication endpoints | **Vertical slice** | Create/update/verify/get/list | Broader channel UX and omnichannel use |
+| `crm.contact-points` | Canonical communication endpoints | **Vertical slice** | Create/update/verify/get/list; create is protected by the final Customer Privacy restriction guard | Broader channel UX and omnichannel use |
 | `crm.party-relationships` | Typed temporal Party relationships | **Vertical slice** | Create/update/get/list and hierarchy foundation | Additional relationship semantics |
 | `crm.consents` | Purpose/channel authorization | **Vertical slice** | Immutable assertions, withdrawal and exact decisions | Wider privacy enforcement |
 | `crm.identity-resolution` | Duplicate cases, merge lineage and canonical resolution | **Expert expansion** | Candidate/review plus reversible merge/unmerge | Broader survivorship and privacy orchestration |
 | `crm.customer-data-operations` | Governed import/export coordination | **Expert expansion** | Resumable import, deterministic export and recovery | More profiles and privacy execution integration |
 | `crm.data-quality` | Customer-data quality coordinator | **Vertical slice** | Evaluation, findings/completeness, stewardship and remediation | Additional owner-resource profiles |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Provider boundary, provenance, review and deterministic owner application | Additional providers, fields, UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, approval, permission-aware get/list/plan/outcome reads, trusted-internal exact-nine discovery/immutable snapshots and deterministic planning | Restrictions, holds/retention, owner execution, export/deletion/convergence and workers |
+| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, approval, permission-aware get/list/plan/outcome reads, trusted-internal exact-nine discovery/immutable snapshots and deterministic planning, public deny-only restriction placement and first protected-owner enforcement | Restriction release/reads, holds/retention, owner execution, export/deletion/convergence and workers |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -43,7 +43,7 @@ Current merged business-module total: **13** — twelve authoritative/coordinati
 
 Phase 8A.11 / issue #126 remains **In progress**.
 
-Latest accepted public inventory is five mutations, four permission-aware public queries and zero Customer Privacy workers through PR #220. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
+Latest accepted public inventory is six mutations, four permission-aware public queries and zero Customer Privacy workers through PR #226. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
 
 Nine owner-scope contribution coordinates are published as non-public owner-owned reads. **All nine authoritative implementations are accepted:**
 
@@ -67,9 +67,11 @@ PR #220 / source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / merge `01118df3b63
 
 PR #222 / source `b5651e784a156758b39eaa04abc1124c7c0832f9` / merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows accepted the first behavior-neutral contribution-aggregation packet. Customer Accounts data-only mutation/query factories are now re-exported through `crm-first-party-modules`, and generic application runtime consumes those selected inventories through the first-party facade with unchanged ordering and activation behavior. No Customer Privacy inventory or product behavior changed; workspace packages remain 113.
 
-PR #224 / source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows accepted the final customer-subject policy prerequisite. The shared platform now exposes a transaction-scoped live policy port and deterministic final guard chain, but no Customer Privacy restriction decision, restriction placement, owner integration or public inventory change was implemented.
+PR #224 / source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows accepted the final customer-subject policy prerequisite. The shared platform exposes a transaction-scoped live policy port and deterministic final guard chain; this prerequisite itself changed no Customer Privacy restriction behavior.
 
-Immediate deny-only Customer Privacy processing restrictions using final subject locks remain the next repository packet. They must supply the authoritative Customer Privacy policy implementation and protected-owner integration before public promotion. Legal-hold/retention adjudication, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows accepted public `customer_privacy.restriction.place@1.0.0`, the authoritative bounded FORCE-RLS final decision and the first complete protected-owner integration on Contact Point creation. Placement and owner execution share the tenant + canonical Party lock. Real-process acceptance proves active denial without side effects, unrelated-Party isolation, rollback/reapply and repeated acceptance.
+
+Repository step 5 — `repo.py explain`, `repo.py packet-check`, generated active packet and repository map — is the next repository packet. Legal-hold/retention adjudication, restriction release/reads, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
 
 ## 5. Phase 8A packet accounting
 
@@ -83,7 +85,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Scope discovery, immutable snapshot, trusted-internal deterministic planning, permission-aware plan/outcome reads, approval and the final-policy architecture prerequisite are accepted. Restrictions, legal holds, execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. Scope discovery, immutable snapshot, trusted-internal deterministic planning, permission-aware plan/outcome reads, approval, final-policy architecture prerequisite, immediate deny-only restriction placement and first protected-owner enforcement are accepted. Restriction release/reads, legal holds, execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
 
 ## 6. Customer-master ownership baseline
 

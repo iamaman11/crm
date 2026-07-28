@@ -52,13 +52,13 @@ Issue #194 remains **Open**.
 
 - Stage A documentation/navigation baseline — **Complete**.
 - Stage B dependency, crate and exception governance — **In progress; Rust toolchain and measured lint prerequisite accepted through PR #218**.
-- Stage C Customer Privacy golden owner packages — **Complete** through PR #205; final customer-subject policy port and deterministic guard-chain prerequisite accepted through PR #224.
+- Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, and immediate deny-only restriction placement/final owner guard accepted through PR #226.
 - Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222**.
 - Stages E–I — affected-scope expansion, conformance, consolidation, reproducible environment, frontend and operations parity remain open.
 
-Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222 and PR #224. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224 and PR #226. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
-The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–3 are complete through PR #218, PR #220 and PR #222. PR #224 accepted the smallest inserted prerequisite required by step 4; immediate deny-only Customer Privacy processing restrictions using final subject locks remain repository step 4 and the current next packet.
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–4 are complete through PR #218, PR #220, PR #222 and PR #226; PR #224 accepted the smallest inserted prerequisite required by step 4. Repository step 5 — `explain`, `packet-check` and generated navigation — is the current next packet.
 
 ## 4. Phase 8A completed foundation
 
@@ -72,7 +72,7 @@ The architecture stage table is completion accounting, not a set of independent 
 
 Issue #126 is **In progress**.
 
-Latest accepted runtime inventory is five public mutations, four permission-aware public queries and zero Customer Privacy workers through PR #220. `customer_privacy.plan.build@1.0.0` remains accepted trusted-internal runtime without public ingress.
+Latest accepted runtime inventory is six public mutations, four permission-aware public queries and zero Customer Privacy workers through PR #226. `customer_privacy.plan.build@1.0.0` remains accepted trusted-internal runtime without public ingress.
 
 All nine privacy owner-scope implementations are accepted:
 
@@ -136,7 +136,15 @@ PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash me
 
 The existing `crm-core-data` package now exposes a transaction-scoped `TransactionalCustomerSubjectPolicyPort` and deterministic `TransactionalAggregateGuardChain`. Future Customer Privacy production policy must acquire the shared tenant + canonical Party lock and make a live decision in the owner transaction immediately before protected persistence or I/O. Unavailable, stale, corrupt and cross-tenant decisions must fail closed. No allow-all implementation is provided.
 
-The prerequisite changes no route, coordinate, public inventory, restriction runtime, owner integration, persistence, migration, dependency family, manifest, `Cargo.lock`, workspace package count, worker or product behavior. Restrictions remain unimplemented.
+The prerequisite changes no route, coordinate, public inventory, restriction runtime, owner integration, persistence, migration, dependency family, manifest, `Cargo.lock`, workspace package count, worker or product behavior. Those historical prerequisite non-effects remain accepted.
+
+### 5.8 Accepted immediate deny-only restrictions
+
+PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows completes repository step 4.
+
+The packet promotes `customer_privacy.restriction.place@1.0.0`, implements an authoritative tenant-bound FORCE-RLS decision over bounded strictly rehydrated state, shares the canonical Party lock between placement and protected owner execution, and integrates the final guard into `contact-points.contact-point.create@1.0.0` immediately before persistence. Exact Personal contracts, deterministic tenant/idempotency identity, live authorization, audit, idempotency and atomic business evidence remain enforced.
+
+Permanent PostgreSQL and real-process acceptance proves pre-restriction owner success, public placement, active denial without side effects, unrelated-Party isolation, malformed/cross-tenant fail-closed behavior, retained lock, complete rollback/reapply and repeated acceptance. Restriction release/reads, legal holds, retention decisions, owner execution, destructive behavior and workers remain non-runtime.
 
 ## 6. Binding active sequence
 
@@ -146,13 +154,13 @@ The only permitted current sequence is:
 2. **Repository step 2 — Customer Privacy approval runtime — Complete through PR #220.**
 3. **Repository step 3 — bounded contribution aggregation without behavior change — Complete through PR #222.**
 3a. **Inserted repository step 4 prerequisite — final customer-subject policy port and deterministic guard composition — Complete through PR #224.**
-4. **Repository step 4 — immediate deny-only processing restrictions with final subject locks — Next.**
-5. **Repository step 5 — `explain`, `packet-check` and generated navigation.**
+4. **Repository step 4 — immediate deny-only processing restrictions with final subject locks — Complete through PR #226.**
+5. **Repository step 5 — `explain`, `packet-check` and generated navigation — Next.**
 6. **Repository step 6 — legal-hold and mandatory-retention precedence.**
 7–19. **Repository steps 7–19 — continue exactly as numbered in the architecture plan.**
 20. **Repository step 20 — first Phase 8B packet.**
 
-The inserted prerequisite did not renumber the master sequence. Immediate deny-only processing restrictions using final subject locks remain repository step 4 and the next permitted product packet.
+The inserted prerequisite did not renumber the master sequence. Repository step 5 is now the next permitted behavior-neutral architecture/developer-experience packet.
 
 ## 7. Phase 8B and later expert domains
 
@@ -164,4 +172,4 @@ Later planned work includes broader Sales/Activities, omnichannel, Marketing, Se
 
 Current product-complete expert modules: **0**.
 
-A module, phase or product is not complete merely because a crate, contract, migration or one backend path exists. Completion requires defined domain breadth, governed APIs, persistence, authorization, audit, product workflow, frontend experience and production/operational evidence.
+A module, phase or product is not complete merely because a crate, contract, migration or one backend path exists. Completion requires defined domain breadth, governed APIs, persistence, authorization, audit, product UX and production/operational evidence.
