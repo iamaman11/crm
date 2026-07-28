@@ -145,7 +145,11 @@ pub fn plan_read_visibility_resources(
         return Vec::new();
     }
     let plan_fields = if capability_id == GET_PRIVACY_ACTION_PLAN_CAPABILITY {
-        PLAN_SUMMARY_FIELDS.iter().copied().map(str::to_owned).collect()
+        PLAN_SUMMARY_FIELDS
+            .iter()
+            .copied()
+            .map(str::to_owned)
+            .collect()
     } else {
         BTreeSet::from([OWNER_OUTCOMES_FIELD.to_owned()])
     };
@@ -220,7 +224,11 @@ impl CustomerPrivacyPlanReadAdapter {
             decode_input(request, GET_PRIVACY_ACTION_PLAN_REQUEST_SCHEMA)?;
         let privacy_case_id = privacy_case_id(command.privacy_case_ref)?;
         let source = self
-            .authorized_source(request, &privacy_case_id, GET_PRIVACY_ACTION_PLAN_CAPABILITY)
+            .authorized_source(
+                request,
+                &privacy_case_id,
+                GET_PRIVACY_ACTION_PLAN_CAPABILITY,
+            )
             .await?;
         let output = wire::PrivacyActionPlan {
             privacy_action_plan_ref: Some(wire::PrivacyActionPlanRef {
@@ -328,14 +336,22 @@ impl CustomerPrivacyPlanReadAdapter {
     ) -> Result<PrivacyPlanReadSource, SdkError> {
         let context = PrivacyReadContext::from_request(request);
         let case_ref = record_ref(PRIVACY_CASE_RECORD_TYPE, privacy_case_id)?;
-        let case_decision = self.visibility.authorize_visibility(request, &case_ref).await?;
+        let case_decision = self
+            .visibility
+            .authorize_visibility(request, &case_ref)
+            .await?;
         let case_allowed = case_decision.resource_visible
             && CASE_REQUIRED_FIELDS
                 .iter()
                 .all(|field| case_decision.allows_field(field));
         if !case_allowed {
-            self.audit_concealed(&context, privacy_case_id, capability_id, "case_visibility_denied")
-                .await?;
+            self.audit_concealed(
+                &context,
+                privacy_case_id,
+                capability_id,
+                "case_visibility_denied",
+            )
+            .await?;
             return Err(read_not_found());
         }
 
@@ -357,15 +373,26 @@ impl CustomerPrivacyPlanReadAdapter {
             evidence_invalid("privacy case has no verified canonical subject binding")
         })?;
         let party_ref = record_ref(PARTY_RECORD_TYPE, &binding.canonical_party_id)?;
-        let party_decision = self.visibility.authorize_visibility(request, &party_ref).await?;
+        let party_decision = self
+            .visibility
+            .authorize_visibility(request, &party_ref)
+            .await?;
         if !party_decision.resource_visible {
-            self.audit_concealed(&context, privacy_case_id, capability_id, "party_visibility_denied")
-                .await?;
+            self.audit_concealed(
+                &context,
+                privacy_case_id,
+                capability_id,
+                "party_visibility_denied",
+            )
+            .await?;
             return Err(read_not_found());
         }
 
         let plan_ref = record_ref(ACTION_PLAN_RECORD_TYPE, source.action_plan.plan_id())?;
-        let plan_decision = self.visibility.authorize_visibility(request, &plan_ref).await?;
+        let plan_decision = self
+            .visibility
+            .authorize_visibility(request, &plan_ref)
+            .await?;
         let required_fields: &[&str] = if capability_id == GET_PRIVACY_ACTION_PLAN_CAPABILITY {
             PLAN_SUMMARY_FIELDS
         } else {
@@ -376,8 +403,13 @@ impl CustomerPrivacyPlanReadAdapter {
                 .iter()
                 .all(|field| plan_decision.allows_field(field));
         if !plan_allowed {
-            self.audit_concealed(&context, privacy_case_id, capability_id, "plan_visibility_denied")
-                .await?;
+            self.audit_concealed(
+                &context,
+                privacy_case_id,
+                capability_id,
+                "plan_visibility_denied",
+            )
+            .await?;
             return Err(read_not_found());
         }
         Ok(source)
@@ -557,16 +589,14 @@ fn validate_source(
         || plan_lineage.case_kind() != case.kind()
         || plan_lineage.policy_version() != case.policy_version()
         || plan_lineage.canonical_party_id() != &binding.canonical_party_id
-        || plan_lineage.identity_resolution_generation()
-            != binding.identity_resolution_generation
+        || plan_lineage.identity_resolution_generation() != binding.identity_resolution_generation
         || snapshot_lineage.tenant_id() != &context.tenant_id
         || snapshot_lineage.privacy_case_id() != privacy_case_id
         || snapshot_lineage.canonical_party_id() != &binding.canonical_party_id
         || snapshot_lineage.identity_resolution_generation()
             != binding.identity_resolution_generation
         || plan_lineage.scope_snapshot_binding_digest() != snapshot.binding_digest()
-        || plan_lineage.scope_completeness_digest()
-            != snapshot.aggregation().completeness_digest()
+        || plan_lineage.scope_completeness_digest() != snapshot.aggregation().completeness_digest()
         || plan_lineage.registry_digest() != snapshot_lineage.registry_digest()
         || plan_lineage.purpose_code() != snapshot_lineage.purpose_code()
         || plan_lineage.effective_request_at_unix_ms()
@@ -693,10 +723,7 @@ fn owner_module_filter(value: Option<String>) -> Result<Option<ModuleId>, SdkErr
         .filter(|value| !value.is_empty())
         .map(|value| {
             ModuleId::try_new(value).map_err(|error| {
-                SdkError::invalid_argument(
-                    "customer_privacy.owner_module_id",
-                    error.to_string(),
-                )
+                SdkError::invalid_argument("customer_privacy.owner_module_id", error.to_string())
             })
         })
         .transpose()

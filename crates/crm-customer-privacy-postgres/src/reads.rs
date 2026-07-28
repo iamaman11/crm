@@ -49,15 +49,14 @@ impl PrivacyReadPersistencePort for PostgresPrivacyReadPersistence {
         Box::pin(async move {
             let mut transaction = self.store.pool().begin().await.map_err(database_error)?;
             bind_context(&mut transaction, context).await?;
-            let privacy_case = match load_case(&mut transaction, &context.tenant_id, privacy_case_id)
-                .await?
-            {
-                Some(value) => value,
-                None => {
-                    transaction.commit().await.map_err(database_error)?;
-                    return Ok(None);
-                }
-            };
+            let privacy_case =
+                match load_case(&mut transaction, &context.tenant_id, privacy_case_id).await? {
+                    Some(value) => value,
+                    None => {
+                        transaction.commit().await.map_err(database_error)?;
+                        return Ok(None);
+                    }
+                };
             let snapshot_id = privacy_case.scope_snapshot_id().ok_or_else(|| {
                 evidence_invalid("privacy case has no immutable scope snapshot reference")
             })?;
@@ -70,13 +69,10 @@ impl PrivacyReadPersistencePort for PostgresPrivacyReadPersistence {
             let action_plan = load_plan(&mut transaction, &context.tenant_id, plan_id)
                 .await?
                 .ok_or_else(|| evidence_invalid("referenced action plan is missing"))?;
-            let replay_link = load_replay_link(
-                &mut transaction,
-                &context.tenant_id,
-                privacy_case_id,
-            )
-            .await?
-            .ok_or_else(|| evidence_invalid("durable case-plan replay link is missing"))?;
+            let replay_link =
+                load_replay_link(&mut transaction, &context.tenant_id, privacy_case_id)
+                    .await?
+                    .ok_or_else(|| evidence_invalid("durable case-plan replay link is missing"))?;
             transaction.commit().await.map_err(database_error)?;
             Ok(Some(PrivacyPlanReadSource {
                 privacy_case,
@@ -123,7 +119,12 @@ impl PrivacyReadPersistencePort for PostgresPrivacyReadPersistence {
             .bind(record.owner_module_filter.as_ref().map(ModuleId::as_str))
             .bind(page_size)
             .bind(record.page_digest.as_ref().map(|value| value.as_slice()))
-            .bind(record.terminal_digest.as_ref().map(|value| value.as_slice()))
+            .bind(
+                record
+                    .terminal_digest
+                    .as_ref()
+                    .map(|value| value.as_slice()),
+            )
             .bind(record.authorization_digest.as_slice())
             .bind(record.allowed)
             .bind(record.result_code)
@@ -160,10 +161,15 @@ async fn load_snapshot(
     tenant_id: &TenantId,
     snapshot_id: &RecordId,
 ) -> Result<Option<DiscoveryScopeSnapshot>, SdkError> {
-    select_record(transaction, tenant_id, SCOPE_SNAPSHOT_RECORD_TYPE, snapshot_id)
-        .await?
-        .map(|row| decode_snapshot_row(tenant_id, snapshot_id, row))
-        .transpose()
+    select_record(
+        transaction,
+        tenant_id,
+        SCOPE_SNAPSHOT_RECORD_TYPE,
+        snapshot_id,
+    )
+    .await?
+    .map(|row| decode_snapshot_row(tenant_id, snapshot_id, row))
+    .transpose()
 }
 
 async fn load_plan(
@@ -238,9 +244,7 @@ async fn load_replay_link(
             )
             .map_err(evidence_invalid)?,
             plan_digest: digest_column(&row, "plan_digest")?,
-            approval_required: row
-                .try_get("approval_required")
-                .map_err(database_error)?,
+            approval_required: row.try_get("approval_required").map_err(database_error)?,
             planned_at_unix_nanos: row
                 .try_get("planned_at_unix_nanos")
                 .map_err(database_error)?,
@@ -263,8 +267,8 @@ fn decode_snapshot_row(
         DISCOVERY_SCOPE_SNAPSHOT_STATE_MAXIMUM_BYTES,
         DISCOVERY_SCOPE_SNAPSHOT_STATE_RETENTION_POLICY_ID,
     )?;
-    let value = decode_discovery_scope_snapshot_state(&snapshot.payload.bytes)
-        .map_err(evidence_invalid)?;
+    let value =
+        decode_discovery_scope_snapshot_state(&snapshot.payload.bytes).map_err(evidence_invalid)?;
     if value.snapshot_id() != snapshot_id || value.lineage().tenant_id() != tenant_id {
         return Err(evidence_invalid(
             "scope snapshot identity differs from its record envelope",
@@ -311,7 +315,9 @@ fn decode_record_snapshot(
     let maximum: i64 = row
         .try_get("maximum_payload_size")
         .map_err(evidence_invalid)?;
-    let retention: String = row.try_get("retention_policy_id").map_err(evidence_invalid)?;
+    let retention: String = row
+        .try_get("retention_policy_id")
+        .map_err(evidence_invalid)?;
     let bytes: Vec<u8> = row.try_get("payload_bytes").map_err(evidence_invalid)?;
     if data_class != "confidential" || encoding != "json" {
         return Err(evidence_invalid(
@@ -335,8 +341,7 @@ fn decode_record_snapshot(
             encoding: PayloadEncoding::Json,
             maximum_size_bytes: u64::try_from(maximum)
                 .map_err(|_| evidence_invalid("read source maximum size is negative"))?,
-            retention_policy_id: RetentionPolicyId::try_new(retention)
-                .map_err(evidence_invalid)?,
+            retention_policy_id: RetentionPolicyId::try_new(retention).map_err(evidence_invalid)?,
             bytes,
         },
     })
@@ -404,8 +409,18 @@ fn read_audit_digest(record: &PrivacyReadAuditRecord) -> [u8; 32] {
         record.context.tenant_id.as_str().as_bytes(),
         record.context.capability_id.as_str().as_bytes(),
         record.privacy_case_id.as_str().as_bytes(),
-        record.plan_id.as_ref().map(RecordId::as_str).unwrap_or("").as_bytes(),
-        record.owner_module_filter.as_ref().map(ModuleId::as_str).unwrap_or("").as_bytes(),
+        record
+            .plan_id
+            .as_ref()
+            .map(RecordId::as_str)
+            .unwrap_or("")
+            .as_bytes(),
+        record
+            .owner_module_filter
+            .as_ref()
+            .map(ModuleId::as_str)
+            .unwrap_or("")
+            .as_bytes(),
         page_size.as_deref().unwrap_or("").as_bytes(),
         record.authorization_digest.as_slice(),
         if record.allowed { b"allow" } else { b"deny" }.as_slice(),
@@ -421,7 +436,10 @@ fn read_audit_digest(record: &PrivacyReadAuditRecord) -> [u8; 32] {
         record.page_digest.as_ref(),
         record.terminal_digest.as_ref(),
     ] {
-        append_field(&mut bytes, digest.map(|value| value.as_slice()).unwrap_or(&[]));
+        append_field(
+            &mut bytes,
+            digest.map(|value| value.as_slice()).unwrap_or(&[]),
+        );
     }
     discovery_sha256(&bytes)
 }
@@ -485,10 +503,8 @@ mod tests {
             request_id: crm_module_sdk::RequestId::try_new("request-a").unwrap(),
             correlation_id: crm_module_sdk::CorrelationId::try_new("correlation-a").unwrap(),
             trace_id: crm_module_sdk::TraceId::try_new("trace-a").unwrap(),
-            capability_id: crm_module_sdk::CapabilityId::try_new(
-                "customer_privacy.case.plan.get",
-            )
-            .unwrap(),
+            capability_id: crm_module_sdk::CapabilityId::try_new("customer_privacy.case.plan.get")
+                .unwrap(),
             capability_version: crm_module_sdk::CapabilityVersion::try_new("1.0.0").unwrap(),
             request_started_at_unix_nanos: 1_000,
         };

@@ -29,15 +29,15 @@ use crm_customer_enrichment_privacy_scope_adapter::{
     CustomerEnrichmentPrivacyScopeQueryAdapter, customer_enrichment_privacy_scope_definition,
 };
 use crm_customer_privacy::{SCOPE_SNAPSHOT_RECORD_TYPE, discovery_sha256};
+use crm_customer_privacy_application::{
+    CustomerPrivacyPlanReadAdapter, DiscoverySnapshotVisibilityPort, OwnerContributionEndpoint,
+    OwnerContributionEndpoints, SnapshotVisibilityDecision, plan_read_query_capability_definitions,
+};
 pub use crm_customer_privacy_application::{
     DiscoveryInvocation, DiscoverySnapshotReader, GET_PRIVACY_ACTION_PLAN_CAPABILITY,
     LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY, PlanningInvocation, PrivacyPlanningService,
     ScopeDiscoveryService, SnapshotReadContext, mutation_capability_definitions,
     plan_read_visibility_resources, query_capability_definitions,
-};
-use crm_customer_privacy_application::{
-    CustomerPrivacyPlanReadAdapter, DiscoverySnapshotVisibilityPort, OwnerContributionEndpoint,
-    OwnerContributionEndpoints, SnapshotVisibilityDecision, plan_read_query_capability_definitions,
 };
 use crm_customer_privacy_postgres::{
     PostgresDiscoveryPersistence, PostgresPlanningPersistence, PostgresPrivacyReadPersistence,
@@ -240,12 +240,11 @@ pub fn build_contribution(
         cursor(dependencies.cursor_key)?,
         dependencies.visibility_authorizer.clone(),
     ));
-    let case_query_validator: Arc<dyn QuerySemanticValidator> = Arc::new(
-        ActivationGatedQueryValidator::new(
+    let case_query_validator: Arc<dyn QuerySemanticValidator> =
+        Arc::new(ActivationGatedQueryValidator::new(
             dependencies.activation.clone(),
             case_query_adapter.clone(),
-        ),
-    );
+        ));
     let case_query_executor: Arc<dyn QueryExecutor> = case_query_adapter;
     contributions
         .add_queries(case_queries, case_query_validator, case_query_executor)

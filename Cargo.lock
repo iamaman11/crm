@@ -1200,6 +1200,7 @@ name = "crm-customer-privacy-application"
 version = "0.1.0"
 dependencies = [
  "crm-application-composition",
+ "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-customer-privacy",
  "crm-customer-privacy-cancel-capability-adapter",
