@@ -92,7 +92,10 @@ fn registry_resolves_all_four_customer_privacy_queries() {
     let definitions = customer_privacy_query_capability_definitions().unwrap();
     assert_eq!(definitions.len(), 4);
     for definition in definitions {
-        assert_eq!(definition.owner_module_id.as_str(), CUSTOMER_PRIVACY_MODULE_ID);
+        assert_eq!(
+            definition.owner_module_id.as_str(),
+            CUSTOMER_PRIVACY_MODULE_ID
+        );
         let capability = definition.capability_id.as_str();
         let resources = registry.resources_for(&definition).unwrap();
         let expected_count = if matches!(
@@ -109,7 +112,9 @@ fn registry_resolves_all_four_customer_privacy_queries() {
             "unexpected visibility resource count for {capability}"
         );
         assert!(
-            resources.iter().all(|resource| !resource.resource_type.is_empty()),
+            resources
+                .iter()
+                .all(|resource| !resource.resource_type.is_empty()),
             "empty resource type for {capability}"
         );
     }
