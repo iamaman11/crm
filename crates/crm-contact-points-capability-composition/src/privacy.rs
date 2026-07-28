@@ -8,7 +8,7 @@ use crm_core_data::{
     postgres_sqlx::{Postgres, Transaction},
 };
 use crm_identity_resolution_topology_composition::require_current_canonical_party_in_transaction;
-use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
+use crm_module_sdk::{ErrorCategory, PortFuture, RecordId, SdkError};
 use std::fmt;
 use std::sync::Arc;
 
@@ -47,7 +47,9 @@ impl TransactionalAggregateGuard for ContactPointCreateCustomerSubjectGuard {
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
             ensure_create_coordinate(request)?;
-            let canonical_party_id = referenced_party_id_from_create(request)?;
+            let referenced_party = referenced_party_id_from_create(request)?;
+            let canonical_party_id = RecordId::try_new(referenced_party.as_str())
+                .map_err(contact_party_reference_invalid)?;
             require_current_canonical_party_in_transaction(
                 transaction,
                 &request.context.execution.tenant_id,
@@ -80,6 +82,16 @@ fn ensure_create_coordinate(request: &CapabilityRequest) -> Result<(), SdkError>
         ));
     }
     Ok(())
+}
+
+fn contact_party_reference_invalid(error: crm_module_sdk::IdentifierError) -> SdkError {
+    SdkError::new(
+        "CONTACT_POINTS_PARTY_REFERENCE_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "The validated Contact Point Party reference is invalid.",
+    )
+    .with_internal_reference(error.to_string())
 }
 
 fn canonical_party_unavailable(error: SdkError) -> SdkError {
