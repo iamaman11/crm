@@ -67,7 +67,9 @@ PR #220 / source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / merge `01118df3b63
 
 PR #222 / source `b5651e784a156758b39eaa04abc1124c7c0832f9` / merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows accepted the first behavior-neutral contribution-aggregation packet. Customer Accounts data-only mutation/query factories are now re-exported through `crm-first-party-modules`, and generic application runtime consumes those selected inventories through the first-party facade with unchanged ordering and activation behavior. No Customer Privacy inventory or product behavior changed; workspace packages remain 113.
 
-Immediate deny-only Customer Privacy processing restrictions using final subject locks are the next repository packet. Legal-hold/retention adjudication, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+PR #224 / source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows accepted the final customer-subject policy prerequisite. The shared platform now exposes a transaction-scoped live policy port and deterministic final guard chain, but no Customer Privacy restriction decision, restriction placement, owner integration or public inventory change was implemented.
+
+Immediate deny-only Customer Privacy processing restrictions using final subject locks remain the next repository packet. They must supply the authoritative Customer Privacy policy implementation and protected-owner integration before public promotion. Legal-hold/retention adjudication, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
 
 ## 5. Phase 8A packet accounting
 
@@ -81,7 +83,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Scope discovery, immutable snapshot, trusted-internal deterministic planning, permission-aware plan/outcome reads and approval are accepted. Restrictions, legal holds, execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. Scope discovery, immutable snapshot, trusted-internal deterministic planning, permission-aware plan/outcome reads, approval and the final-policy architecture prerequisite are accepted. Restrictions, legal holds, execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
 
 ## 6. Customer-master ownership baseline
 
