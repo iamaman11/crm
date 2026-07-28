@@ -7,7 +7,8 @@ use crm_customer_privacy_production::{
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
     DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
-    RecordId, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
+    RecordId, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId,
+    TypedPayload,
 };
 use sqlx::{PgPool, Postgres, Transaction, postgres::PgPoolOptions};
 
@@ -89,7 +90,10 @@ async fn final_restriction_decision_is_live_tenant_bound_strict_and_lock_safe() 
         .await
         .expect("subject without a directive is allowed");
 
-    let mut competing = app.begin().await.expect("begin competing subject transaction");
+    let mut competing = app
+        .begin()
+        .await
+        .expect("begin competing subject transaction");
     bind_context(&mut competing, &locked_request.context)
         .await
         .expect("bind competing subject transaction");
@@ -109,7 +113,10 @@ async fn final_restriction_decision_is_live_tenant_bound_strict_and_lock_safe() 
         .rollback()
         .await
         .expect("roll back competing transaction");
-    locked.commit().await.expect("commit first subject transaction");
+    locked
+        .commit()
+        .await
+        .expect("commit first subject transaction");
 
     let processing_error = decide(
         &app,
@@ -120,10 +127,7 @@ async fn final_restriction_decision_is_live_tenant_bound_strict_and_lock_safe() 
     )
     .await
     .expect_err("active processing directive must deny processing");
-    assert_eq!(
-        processing_error.code,
-        "CUSTOMER_PRIVACY_RESTRICTION_ACTIVE"
-    );
+    assert_eq!(processing_error.code, "CUSTOMER_PRIVACY_RESTRICTION_ACTIVE");
     assert!(!processing_error.retryable);
 
     decide(
@@ -322,8 +326,10 @@ fn request(tenant: &str, identity: &str, started_at_unix_nanos: i64) -> Capabili
                 tenant_id: TenantId::try_new(tenant).unwrap(),
                 actor_id: ActorId::try_new(ACTOR_A).unwrap(),
                 request_id: RequestId::try_new(format!("restriction-request-{identity}")).unwrap(),
-                correlation_id: CorrelationId::try_new(format!("restriction-correlation-{identity}"))
-                    .unwrap(),
+                correlation_id: CorrelationId::try_new(format!(
+                    "restriction-correlation-{identity}"
+                ))
+                .unwrap(),
                 causation_id: CausationId::try_new(format!("restriction-causation-{identity}"))
                     .unwrap(),
                 trace_id: TraceId::try_new(format!("restriction-trace-{identity}")).unwrap(),
