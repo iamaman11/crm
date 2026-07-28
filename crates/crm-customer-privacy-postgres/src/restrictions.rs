@@ -29,7 +29,7 @@ const SUBJECT_RESTRICTIONS_SQL: &str = r#"
       AND owner_module_id = $2
       AND record_type = $3
       AND deleted_at IS NULL
-      AND convert_from(payload_bytes, 'UTF8')::jsonb ->> 'canonical_party_id' = $4
+      AND crm.customer_privacy_restriction_canonical_party_id(payload_bytes) = $4
     ORDER BY record_id ASC
     LIMIT $5
     FOR SHARE
