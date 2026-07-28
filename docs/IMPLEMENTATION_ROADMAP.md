@@ -12,143 +12,63 @@ Measured architecture baseline: `WORKSPACE_COMPLEXITY_BASELINE.md`
 Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`  
 Business-module accounting: `MODULE_CATALOG.md`
 
-## 1. Purpose
+## 1. Purpose and delivery rules
 
-This roadmap defines dependency order for a universal modular expert CRM platform. It is not a feature wishlist, architecture essay or historical status log.
+This roadmap defines dependency order for a universal modular expert CRM platform. A phase or packet is complete only when implemented, merged and backed by unchanged exact-head evidence.
 
-A phase or packet is complete only when its acceptance boundary is implemented, merged and backed by unchanged exact-head evidence. Cross-cutting architecture work must preserve product delivery and cannot use a big-bang rewrite as a substitute for bounded implementation.
+1. Preserve one authoritative owner for every mutable aggregate.
+2. Enter state-changing behavior through exact versioned capabilities with typed audit evidence.
+3. Never access another module's storage or internals directly.
+4. Treat security, privacy, tenant isolation, rollback and operations as implementation requirements.
+5. Require real composition, persistence and process evidence before runtime claims.
+6. Invalidate old exact-SHA evidence after every source or documentation change.
+7. Synchronize roadmap, phase plan, status, catalog, issues and PR descriptions.
+8. An ordinary capability added to an existing owner creates zero new crates by default.
+9. Generic router and worker algorithms do not change merely to register one owner capability.
+10. Feature behavior and physical crate consolidation remain separate packets.
 
-## 2. Delivery rules
-
-1. Deliver coherent reviewable packets linked to roadmap or cross-cutting issues.
-2. Preserve one authoritative owner for every mutable aggregate.
-3. Enter state-changing behavior through exact versioned capabilities with typed audit evidence.
-4. Never access another module's storage or internals directly.
-5. Treat security, privacy, tenant isolation, compatibility, rollback and operations as implementation requirements.
-6. Require real composition, persistence and process evidence before runtime claims.
-7. Invalidate exact-SHA evidence after every source or documentation change until applicable checks rerun.
-8. Synchronize roadmap, phase plan, status, catalog, issues and PR descriptions.
-9. Do not mark the universal CRM product complete while required capability families remain incomplete.
-10. A normal capability added to an existing owner creates zero new crates by default.
-11. Generic router and worker algorithms must not change merely to register one owner capability.
-12. Feature behavior and physical crate consolidation are separate delivery packets.
-13. Shared abstractions are extracted only after contrasting real implementations prove common behavior.
-14. Iterative affected-scope CI may reduce feedback cost but never weakens final exact-head acceptance.
-15. Cross-cutting stages advance in dependency order, but product work may proceed at a natural boundary when prerequisites are accepted.
-
-## 3. Work states
-
-- Planned
-- Ready
-- In progress
-- Gate review
-- Complete
-- Blocked
-- Superseded
+For the active Customer Privacy lane, **do not modify generic router or worker algorithms** merely to register one owner capability.
 
 Only merged `main` work may be represented as **Complete**.
 
-## 4. Product phase map
+## 2. Product phase map
 
-| Phase | Issue | Primary result | State | Depends on |
-|---|---:|---|---|---|
-| 0.1 | #3 | Repository hardening and executable roadmap | **Complete** | Governance v1 |
-| 1 | #4 | Typed Module Manifest IR and deterministic identity | **Complete** | #3 |
-| 2 | #5 | Governed Module SDK and test harness | **Complete** | #4 |
-| 3 | #6 | Module lifecycle and registry runtime | **Complete** | #4, #5 |
-| 4 | #7 | PostgreSQL tenant, record, artifact, outbox and audit foundation | **Complete** | #6 |
-| 5 | #8 | Capability execution gateway | **Complete** | #5, #7 |
-| 6 | #9 | Sales + Activities + link/projection/application vertical proof | **Complete** | #8 |
-| 7 | #10 | Search, generalized projections, product shell, Admin Studio and UI-extension isolation | **Complete** | #9 |
-| 8 | #11 | Expert modules and product-quality CRM experience | **In progress** | #5, #9, #10 |
-| 8A | #28 | Canonical customer master, identity, consent and governed customer-data lifecycle | **In progress** | #9, #10 |
-| 8B | #29 | Product catalog, CPQ and quote-to-revenue lifecycle | **Planned** | completed 8A baseline |
-| 9 | #12 | AI-native governed actor/tool layer | **Planned** | mature domain capabilities |
-| 10 | #13 | Signed marketplace and sandboxed untrusted extensions | **Planned** | #6, #8, #10 |
-| 11 | #14 | Enterprise security, resilience and production proof | **Planned / continuous** | all critical phases |
+| Phase | Issue | Primary result | State |
+|---|---:|---|---|
+| 0.1–7 | #3–#10 | Governed platform, Sales/Activities proof, search, product shell and native composition | **Complete** |
+| 8 | #11 | Expert modules and product-quality CRM experience | **In progress** |
+| 8A | #28 | Canonical customer master, identity, consent and governed customer-data lifecycle | **In progress** |
+| 8B | #29 | Product Catalog, CPQ and quote-to-revenue lifecycle | **Planned; blocked on completed 8A** |
+| 9 | #12 | AI-native governed actor/tool layer | **Planned** |
+| 10 | #13 | Signed marketplace and sandboxed untrusted extensions | **Planned** |
+| 11 | #14 | Enterprise security, resilience and production proof | **Planned / continuous** |
 
-## 5. Cross-cutting architecture 10/10 program
+## 3. Cross-cutting architecture 10/10 program
 
-Issue #194 is **Open** and runs alongside product delivery. It is complete only when the measurable criteria in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` are implemented.
+Issue #194 remains **Open**.
 
-### 5.1 Stage state
+- Stage A documentation/navigation baseline — **Complete**.
+- Stage B dependency, crate and exception governance — **Complete for the no-growth prerequisite**.
+- Stage C Customer Privacy golden owner packages — **Complete** through PR #205.
+- Stages D–I — broader contribution aggregation, affected-scope expansion, conformance, consolidation, reproducible environment, frontend and operations parity remain open.
 
-| Stage | State | Current result / next dependency |
-|---|---|---|
-| A — documentation and policy baseline | **Complete** | Stable hierarchy, navigation and permanent consistency checks are accepted. |
-| B — dependency, crate and exception governance | **Complete for the no-growth prerequisite** | PR #203 freezes root-family direct dependency debt; later debt reduction remains bounded work. |
-| C — golden owner package and persistence model | **Complete** | PR #205 accepted the Customer Privacy domain/application/PostgreSQL/production package boundary. |
-| D — contribution aggregation | **Planned** | Begin only at a later natural boundary; PR #206 must not become generic-runtime consolidation. |
-| E — affected-scope CI | **Partial foundation accepted / planned expansion** | Existing affected-scope proof remains active. |
-| F — generic conformance and contract lifecycle | **Planned** | Depends on stable owner package/contribution boundaries. |
-| G — transitional consolidation | **Planned** | Begin with one measured cluster only after explicit packet approval. |
-| H — reproducible environment and generated navigation | **Planned** | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain` and packet tooling remain open. |
-| I — frontend and operations parity | **Planned** | Follows stable backend/product delivery paths. |
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204 and PR #205. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; zero temporary architecture exceptions are active.
 
-### 5.2 Accepted architecture evidence
-
-1. PR #197 / merge `dbd7f6646f255b5f654060a045e26f99fc12c1f9` — reproducible workspace/dependency/public-surface/CI baseline and exception governance.
-2. PR #199 / accepted source `2335ea00bb73d875c291b4a7668921beaec87adc` / merge `cbcce5f18f3b08851ad781d13bc3fe01c2eeb62c` — business-module dependency inheritance.
-3. PR #200 / accepted source `31b3ab09caa4eccaba76a34c7d2211622830115f` / merge `aec7130bd48302d20bf821a617c339b2a9d755cf` — owner privacy-scope adapter dependency inheritance.
-4. PR #203 / accepted source `37cec8e2e68c42e85468cea83b31dcf3ba4138d4` / merge `6a445cd4cb9f423561f834fd7f291635f82eb464` — repository-wide root-family no-growth.
-5. PR #204 / accepted source `e9a0c1f67d81a3d1f6f6b4504487ac11216edf56` / merge `33186bab67932d5e878019fc7e59181e123bbf67` — Customer Privacy discovery/snapshot freeze.
-6. PR #205 / accepted source `18c3e991454241f7ee3b02884345eac462bb6c04` / merge `f0f46238cf103f6e36487f599181e83849342021` — behavior-neutral Customer Privacy golden packages.
-
-Current workspace package count is `113`. PR #206 must keep it unchanged and may add no dependency family, direct version, feature/source drift or unjustified lockfile growth.
-
-### 5.3 Required continuation order
-
-1. Preserve the accepted Stage B no-growth, PR #204 freeze and PR #205 package boundary.
-2. Accept PR #206 production discovery and immutable snapshot persistence on one unchanged exact head.
-3. Continue deterministic planning and permission-aware plan/outcome reads over the immutable snapshot.
-4. Continue restrictions, legal hold/retention, execution, access/export, deletion/anonymization, tombstone and convergence only through later bounded packets.
-5. Continue residual architecture calibration only at natural product boundaries unless it blocks correctness.
-
-## 6. Completed foundation
-
-### Phases 0.1–5 — Complete
-
-Repository governance, immutable module identity, governed Module SDK, lifecycle, PostgreSQL tenant/RLS/record/artifact/idempotency/outbox/audit foundations and exact-version capability execution are merged.
-
-### Phase 6 — Complete
-
-Independent Sales and Activities owners, optional governed link, projections and deployable application composition are merged.
-
-### Phase 7 — Complete
-
-Generalized projections, permission-aware search, typed product shell, metadata/Admin Studio and trusted UI-extension isolation are merged.
-
-### Native application-composition integrity — Complete
-
-Issue #134 / PR #135 established module-owned exact-coordinate routing, tenant activation, pre-authorization cross-owner semantics, deterministic worker contributions and production-route parity.
-
-## 7. Phase 8A — canonical customer master and governed customer-data lifecycle
-
-State: **In progress**  
-Parent issue: #28
-
-Completed packets:
+## 4. Phase 8A completed foundation
 
 - **8A.1–8A.6** — customer references, Party, Account, Contact Point, Party Relationship, Customer 360, Consent and reversible Identity Resolution;
-- **8A.7** — governed immutable import sources, parsing/validation, resumable Party import and recovery;
-- **8A.8** — governed Party export, immutable selection/manifests, deterministic artifacts and recovery;
+- **8A.7** — governed immutable import and recovery;
+- **8A.8** — governed deterministic export and recovery;
 - **8A.9** — Customer Data Quality Rules, Completeness and Stewardship;
 - **8A.10** — Governed Customer Enrichment and Provenance.
 
-### 7.1 Phase 8A.11 Customer Privacy — current boundary
+## 5. Phase 8A.11 Customer Privacy — current boundary
 
 Issue #126 is **In progress**.
 
-Merged public runtime inventory remains:
+Merged public runtime inventory remains four mutations, two permission-aware queries and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` is accepted trusted-internal runtime without public ingress. `customer_privacy.case.plan.get@1.0.0` and `customer_privacy.case.owner_outcomes.list@1.0.0` remain published but non-runtime.
 
-- four public mutations: `case.create`, `case.submit`, `case.subject.verify`, `case.cancel`;
-- two permission-aware queries: `case.get`, `case.list`;
-- ten public non-runtime Customer Privacy coordinates;
-- zero Customer Privacy workers.
-
-All nine privacy owner-scope implementations are accepted. Their coordinates remain non-public owner-owned reads. PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` / 31 of 31 permanent workflows composes them into trusted-internal production discovery while adding no planning or owner execution runtime.
-
-Accepted owner evidence:
+All nine privacy owner-scope implementations are accepted:
 
 1. Parties — PR #156;
 2. Consents — PR #175;
@@ -160,53 +80,47 @@ Accepted owner evidence:
 8. Data Quality — PR #190 / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows;
 9. Customer Enrichment — PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
 
-### 7.2 Active sequence
+### 5.1 Accepted scope discovery and immutable snapshot
 
-1. **Scope discovery and immutable snapshot contract/acceptance freeze — Complete.**
-2. **Stage C behavior-neutral Customer Privacy package pilot — Complete.**
-3. **Scope discovery and immutable snapshot runtime implementation — Complete through PR #206.**
-4. **Deterministic planning and permission-aware plan/outcome reads — Next.**
-5. **Approval and immediate deny-only restrictions — Planned.**
-6. **Legal hold and mandatory-retention precedence — Planned.**
-7. **Replay-safe resumable owner execution and crash recovery — Planned.**
-8. **Governed access/export and owner-specific deletion/anonymization — Planned.**
-9. **Party tombstone, no-orphan proof and projection/search/cache convergence — Planned.**
-10. **Worker and complete end-to-end lifecycle acceptance — Planned.**
-11. **Phase 8A closure — Blocked on all preceding lifecycle packets.**
-12. **Phase 8B — Blocked on the completed Phase 8A baseline.**
+PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` / 31 of 31 permanent workflows implements trusted-internal exact-nine discovery, immutable snapshot lineage, bounded durable pages/checkpoints, strict rehydration, replay/crash recovery, permission-aware reads, audit, FORCE RLS, cross-tenant concealment, rollback/reapply and repeated acceptance.
 
-### 7.3 Accepted bounded packet — production scope discovery and immutable snapshot
+PR #207 synchronized its machine-readable and human-readable evidence without changing the historical PR #204 freeze.
 
-State: **Complete through PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` / 31 of 31 permanent workflows**.
+### 5.2 Accepted deterministic planning freeze and runtime
 
-The packet implements exact-nine trusted-internal discovery, immutable lineage and durable page evidence, safe deterministic aggregation, strict immutable snapshot persistence/rehydration, replay/crash recovery, permission-aware internal reads and safe audit.
+PR #208 / accepted source `d16a42551918ac6142d7a57cbeb7802f8f162fb9` / merge `bbdbc12ed139367efe75033c2a7e7ddb3eaec59d` / 16 of 16 permanent workflows froze immutable planning lineage, exact actions, ordering, digests, strict rehydration, unsupported crypto-shred failure and permission-aware read boundaries.
 
-It remains inside:
+PR #209 / accepted source `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b` / merge `30621ffff5c1e07e1275cc80fee3f1297a91f49e` / 29 of 29 permanent workflows implements trusted-internal activation-gated deterministic planning inside the accepted Customer Privacy packages.
 
-```text
-modules/crm-customer-privacy/
-crates/crm-customer-privacy-application/
-crates/crm-customer-privacy-postgres/
-crates/crm-customer-privacy-production/
-```
+It verifies the exact case, immutable scope snapshot, Party/Identity Resolution binding, policy and jurisdiction lineage; builds one immutable action plan; transitions `Scoped → Planned` or `Scoped → AwaitingApproval`; persists append-only replay and audit evidence; preserves FORCE RLS, canonical `tenant_isolation`, cross-tenant concealment, rollback/reapply and unchanged 113-package / 4-mutation / 2-query / 0-worker boundaries.
 
-The workspace remains at 113 packages. No public route or Customer Privacy worker is added. The historical freeze remains unchanged and later implementation evidence is separate.
+## 6. Active sequence
 
-The accepted guardrail remains: do not modify generic router or worker algorithms merely to register Customer Privacy discovery behavior.
+1. **Scope discovery and immutable snapshot contract/freeze — Complete.**
+2. **Stage C Customer Privacy golden packages — Complete.**
+3. **Production discovery and immutable snapshot runtime — Complete through PR #206.**
+4. **Deterministic planning freeze — Complete through PR #208.**
+5. **Trusted-internal deterministic planning runtime — Complete through PR #209.**
+6. **Permission-aware plan.get and empty future-safe owner_outcomes.list — Next.**
+7. **Approval runtime — Planned.**
+8. **Immediate deny-only processing restrictions with final subject locks — Planned.**
+9. **Legal-hold and mandatory-retention precedence — Planned.**
+10. **Replay-safe resumable owner execution and crash-window recovery — Planned.**
+11. **Governed access/export and owner-specific deletion/anonymization/crypto-shred — Planned.**
+12. **Party tombstone, no-orphan proof and projection/search/cache convergence — Planned.**
+13. **Customer Privacy worker and complete process/end-to-end acceptance — Planned.**
+14. **Phase 8A closure — Blocked on all preceding lifecycle packets.**
+15. **Phase 8B — Blocked on completed Phase 8A.**
 
-Planning, restrictions, holds, retention decisions, owner execution and Phase 8B remain unimplemented. The next bounded packet is deterministic planning and permission-aware plan/outcome reads.
+The next read packet must add no crate, mutation, worker, owner mutation, approval, restriction, hold/retention decision, outcome persistence or destructive execution. It must preserve live permission/visibility checks, tenant binding, strict rehydration, safe audit, cross-tenant concealment and fail-closed evidence validation.
 
-## 8. Phase 8B — Product Catalog, Pricing, CPQ and Quote-to-Revenue
+## 7. Phase 8B and later expert domains
 
-State: **Planned; blocked on completed Phase 8A baseline**.
+Phase 8B remains planned and blocked on completed Phase 8A. Independent owner domains include Product Catalog, Price Books/Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment boundaries. They must not be absorbed into Sales.
 
-Required independent owner domains include Product Catalog, Price Books/Pricing, CPQ, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment boundaries. These domains must not be absorbed into Sales.
+Later planned work includes broader Sales/Activities, omnichannel, Marketing, Service/Knowledge/Field Service, Customer Success, projects/configurable work, documents/e-signature, analytics, workflow/collaboration, governed AI, marketplace and enterprise operational proof.
 
-## 9. Later expert domains
-
-Planned work includes broader Sales/Activities, omnichannel, Marketing, Service/Knowledge/Field Service, Customer Success, projects/configurable work, documents/e-signature, analytics, workflow/collaboration, governed AI, marketplace and enterprise operational proof.
-
-## 10. Completion rule
+## 8. Completion rule
 
 Current product-complete expert modules: **0**.
 

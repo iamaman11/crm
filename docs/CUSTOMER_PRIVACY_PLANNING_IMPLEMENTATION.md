@@ -1,8 +1,8 @@
 # Customer Privacy deterministic planning implementation
 
-Status: **Implemented; exact-head acceptance pending until every applicable permanent workflow passes on one unchanged source SHA.**
+Status: **Accepted and merged through PR #209.** Accepted source `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b` passed **29 of 29 permanent workflows** unchanged and was squash-merged as `30621ffff5c1e07e1275cc80fee3f1297a91f49e`.
 
-Historical source of truth remains `contracts/customer-privacy-planning-freeze.json` and `CUSTOMER_PRIVACY_PLANNING_FREEZE.md`. This document records the later runtime implementation without rewriting the historical `runtime_not_started` evidence accepted in PR #208.
+Historical source of truth remains `contracts/customer-privacy-planning-freeze.json` and `CUSTOMER_PRIVACY_PLANNING_FREEZE.md`. This document records the later runtime implementation and acceptance without rewriting the historical `runtime_not_started` evidence accepted in PR #208.
 
 ## Implemented coordinate
 
@@ -26,7 +26,7 @@ Any case, snapshot, topology, registry, policy or replay mismatch fails closed. 
 
 ## Deterministic planning
 
-The implementation consumes the PR #208 immutable domain contract. It preserves:
+The implementation consumes the immutable PR #208 domain contract. It preserves:
 
 - canonical owner/resource/data-class ordering;
 - contiguous item sequence beginning at one;
@@ -79,9 +79,9 @@ Rollback removes both tables, their record trigger and the planning immutability
 
 ## Production composition and non-effects
 
-The existing `crm-customer-privacy-production` owner entry point now exposes internal discovery, snapshot reading and planning services together. Generic application runtime code does not import a concrete planner or add a Customer Privacy branch.
+The existing `crm-customer-privacy-production` owner entry point exposes internal discovery, snapshot reading and planning services together. Generic application runtime code does not import a concrete planner or add a Customer Privacy branch.
 
-Merged public inventory remains unchanged in this packet:
+Accepted public inventory remains unchanged:
 
 - four public mutations;
 - two permission-aware public queries;
@@ -92,8 +92,22 @@ Merged public inventory remains unchanged in this packet:
 
 `customer_privacy.case.plan.get@1.0.0` and `customer_privacy.case.owner_outcomes.list@1.0.0` remain published but non-runtime. Their permission-aware runtime promotion is the next bounded packet.
 
-## Acceptance ownership
+## Accepted evidence
 
-Permanent acceptance is owned by `.github/workflows/customer-privacy-planning.yml` and the repository-wide applicable workflows. The machine-readable implementation record is `contracts/customer-privacy-planning-implementation.json`.
+The immutable implementation evidence is recorded in `contracts/customer-privacy-planning-implementation.json`:
 
-Acceptance requires clean PostgreSQL, strict package tests, FORCE RLS and cross-tenant negatives, immutable evidence, full rollback/schema removal, reapply, repeated acceptance, unchanged 4/2/0 public inventory, unchanged package count and all applicable workflows successful on one unchanged exact source SHA.
+- pull request: `209`;
+- accepted source: `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b`;
+- permanent workflow matrix: `29 of 29` successful on the unchanged source;
+- squash merge: `30621ffff5c1e07e1275cc80fee3f1297a91f49e`.
+
+Acceptance included clean PostgreSQL, strict package tests, FORCE RLS and cross-tenant negatives, immutable evidence, full rollback/schema removal, reapply, repeated acceptance, unchanged 4/2/0 public inventory, unchanged package count and all applicable workflows successful on one unchanged exact source SHA.
+
+## Next bounded packet
+
+Promote only the existing published reads:
+
+- `customer_privacy.case.plan.get@1.0.0` as a permission-aware, tenant-bound, payload-safe plan summary with strict case↔plan↔snapshot lineage validation and audited concealment;
+- `customer_privacy.case.owner_outcomes.list@1.0.0` as a bounded deterministic empty terminal page until owner execution and outcome persistence exist.
+
+Approval, restrictions, legal-hold/retention adjudication, owner execution, destructive actions and Customer Privacy workers remain outside that packet.
