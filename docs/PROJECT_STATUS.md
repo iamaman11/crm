@@ -55,9 +55,21 @@ PR #211 / accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1
 
 `case.owner_outcomes.list` validates bounded page/cursor input and returns a deterministic empty terminal page (`items = []`, empty terminal cursor) because owner execution and outcome persistence remain absent. Stable page/terminal digests and safe allow/deny evidence are append-only in a FORCE-RLS audit table. No outcome table, synthetic outcomes, mutation or worker is added.
 
-## Next bounded packet
+## Next bounded product packet
 
 Implement approval runtime only. Immediate deny-only restrictions, legal-hold/mandatory-retention precedence, owner execution, destructive actions and workers remain later separate packets.
+
+## Architecture and developer-experience 10/10 checkpoint
+
+Issue #194 remains open.
+
+- Stage A documentation/source hierarchy and stable navigation are complete.
+- Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, zero active exceptions and root-family no-growth are accepted; `rust-version`, workspace lint policy and broader dependency/public-surface calibration remain.
+- Stage C is in progress: the Customer Privacy domain/application/postgres/production golden pilot is accepted, but scaffolding, migration-ownership policy and later-owner adoption are not generalized.
+- Stages D and E have working foundations but are incomplete: the generic runtime still imports many concrete owner adapters, and affected-scope selection is not yet complete across every database/process/product/frontend/operations dimension.
+- Stages F–I remain foundation-only or unstarted; generic conformance/lifecycle, measured consolidation, reproducible local environment, generated navigation, frontend and operations parity are not complete.
+
+The next bounded architecture packet is a supported Rust toolchain/`rust-version` decision plus a measured workspace lint baseline. It must not mix dependency upgrades, broad lint cleanup, product behavior or crate consolidation.
 
 ## Continuation order
 
@@ -75,8 +87,6 @@ accepted scope discovery and immutable snapshot
 -> Phase 8A closure
 -> Phase 8B / issue #29
 ```
-
-Issue #194 remains open. Stage A, the Stage B dependency no-growth prerequisite and the Stage C Customer Privacy golden-package pilot are accepted; broader architecture/developer-experience stages remain incomplete.
 
 Phase 8A closure does not make the universal CRM complete. Product Catalog/Pricing/CPQ/Orders/Contracts/Subscriptions/Billing and the wider expert CRM domains remain planned or incomplete.
 
