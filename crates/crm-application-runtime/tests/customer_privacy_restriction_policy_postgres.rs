@@ -241,6 +241,13 @@ async fn bind_context(
     Ok(())
 }
 
+async fn disable_fixture_triggers(transaction: &mut Transaction<'_, Postgres>) {
+    sqlx::query("SET LOCAL session_replication_role = replica")
+        .execute(&mut **transaction)
+        .await
+        .expect("disable trigger-backed evidence verification for admin fixture seeding");
+}
+
 async fn insert_restriction(admin: &PgPool, fixture: RestrictionFixture<'_>) {
     let restriction = ProcessingRestriction::place(
         RecordId::try_new(fixture.restriction_id).unwrap(),
@@ -262,6 +269,7 @@ async fn insert_restriction(admin: &PgPool, fixture: RestrictionFixture<'_>) {
 
     let fixture_request = fixture_request(fixture.restriction_id);
     let mut transaction = begin_bound(admin, &fixture_request.context).await;
+    disable_fixture_triggers(&mut transaction).await;
     insert_business_transaction(&mut transaction, &fixture_request.context).await;
     insert_payload(
         &mut transaction,
@@ -293,7 +301,7 @@ async fn insert_business_transaction(
           expected_audit_records,
           expected_idempotency_records
         )
-        VALUES ($1, $2, $3, $4, $5, $6, 0, 0, 0)
+        VALUES ($1, $2, $3, $4, $5, $6, 1, 1, 1)
         "#,
     )
     .bind(context.execution.tenant_id.as_str())
@@ -354,6 +362,7 @@ async fn insert_payload(
 async fn cleanup(admin: &PgPool) {
     let cleanup_request = request(TENANT_A, "cleanup", DECISION_AT);
     let mut transaction = begin_bound(admin, &cleanup_request.context).await;
+    disable_fixture_triggers(&mut transaction).await;
     sqlx::query(
         r#"
         DELETE FROM crm.records
@@ -371,6 +380,20 @@ async fn cleanup(admin: &PgPool) {
     .execute(&mut *transaction)
     .await
     .expect("clean restriction policy fixtures");
+    sqlx::query(
+        r#"
+        DELETE FROM crm.business_transactions
+        WHERE tenant_id = $1
+          AND business_transaction_id IN ($2, $3, $4)
+        "#,
+    )
+    .bind(TENANT_A)
+    .bind(format!("restriction-tx-{ACTIVE_RESTRICTION}"))
+    .bind(format!("restriction-tx-{MALFORMED_RESTRICTION}"))
+    .bind(format!("restriction-tx-{FUTURE_RESTRICTION}"))
+    .execute(&mut *transaction)
+    .await
+    .expect("clean restriction policy fixture transactions");
     transaction
         .commit()
         .await
