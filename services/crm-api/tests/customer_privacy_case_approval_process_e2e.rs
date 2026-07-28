@@ -4,7 +4,8 @@
 mod support;
 
 use crm_application_runtime::gateway_v1::{
-    MutateResponse, QueryResponse, application_gateway_service_client::ApplicationGatewayServiceClient,
+    MutateResponse, QueryResponse,
+    application_gateway_service_client::ApplicationGatewayServiceClient,
 };
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_query_adapter::query_capability_definition;
@@ -17,8 +18,8 @@ use sqlx::{PgPool, Row};
 use tonic::{Code, Status};
 
 use support::{
-    ACTOR, TENANT_A, TENANT_B, TENANT_OUTSIDE_TOKEN, connect_grpc, free_port, http_mutate,
-    mutate, mutation_definition, payload, query, spawn_crm_api, stop_process, wait_until_ready,
+    ACTOR, TENANT_A, TENANT_B, TENANT_OUTSIDE_TOKEN, connect_grpc, free_port, http_mutate, mutate,
+    mutation_definition, payload, query, spawn_crm_api, stop_process, wait_until_ready,
 };
 
 const PRIVACY_MODULE: &str = "crm.customer-privacy";
@@ -104,7 +105,12 @@ async fn customer_privacy_case_approval_real_process_is_atomic_and_fail_closed()
     )
     .await
     .expect_err("tenant outside bearer grant must be denied before approval");
-    assert_safe_status(&outside_token, Code::PermissionDenied, "TENANT_FORBIDDEN", false);
+    assert_safe_status(
+        &outside_token,
+        Code::PermissionDenied,
+        "TENANT_FORBIDDEN",
+        false,
+    );
     assert_case_version(&admin, TENANT_A, SUCCESS_CASE, 6).await;
 
     let success_key = "privacy-approval-success";
@@ -463,7 +469,10 @@ async fn set_privacy_module_status(pool: &PgPool, status: &str) {
     for (name, value) in [
         ("app.tenant_id", TENANT_A),
         ("app.actor_id", "customer-privacy-approval-process-admin"),
-        ("app.request_id", "customer-privacy-approval-process-activation"),
+        (
+            "app.request_id",
+            "customer-privacy-approval-process-activation",
+        ),
         ("app.capability_id", "customer_privacy.process.activation"),
         ("app.capability_version", "1.0.0"),
         ("app.business_transaction_id", transaction_id.as_str()),
