@@ -1,9 +1,9 @@
 name: Repository Step 3 Builder
 
 on:
-  push:
+  pull_request:
     branches:
-      - architecture/repository-step3-contribution-aggregation
+      - main
 
 permissions:
   contents: write
