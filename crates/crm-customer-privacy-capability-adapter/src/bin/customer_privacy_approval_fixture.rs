@@ -22,7 +22,7 @@ use std::fmt::Write as _;
 const TENANT_ID: &str = "tenant-a";
 const CANONICAL_PARTY_ID: &str = "privacy-approval-canonical-party";
 const POLICY_VERSION: &str = "privacy-policy/1";
-const BUSINESS_TRANSACTION_QUERY: &str = "(SELECT last_business_transaction_id FROM crm.module_installations WHERE tenant_id = 'tenant-a' AND module_id = 'crm.customer-privacy')";
+const BOOTSTRAP_BUSINESS_TRANSACTION_ID: &str = "tx-bootstrap-a";
 
 struct Fixture {
     privacy_case: PrivacyCase,
@@ -49,17 +49,17 @@ fn main() {
     .unwrap();
     writeln!(
         sql,
-        "SELECT set_config('app.actor_id', 'customer-privacy-approval-fixture', true);"
+        "SELECT set_config('app.actor_id', 'actor-a', true);"
     )
     .unwrap();
     writeln!(
         sql,
-        "SELECT set_config('app.request_id', 'customer-privacy-approval-fixture', true);"
+        "SELECT set_config('app.request_id', 'request-bootstrap-a', true);"
     )
     .unwrap();
     writeln!(
         sql,
-        "SELECT set_config('app.capability_id', 'customer_privacy.approval.fixture', true);"
+        "SELECT set_config('app.capability_id', 'test.record.mutate', true);"
     )
     .unwrap();
     writeln!(
@@ -69,7 +69,7 @@ fn main() {
     .unwrap();
     writeln!(
         sql,
-        "SELECT set_config('app.business_transaction_id', {BUSINESS_TRANSACTION_QUERY}, true);"
+        "SELECT set_config('app.business_transaction_id', '{BOOTSTRAP_BUSINESS_TRANSACTION_ID}', true);"
     )
     .unwrap();
 
@@ -241,7 +241,7 @@ fn append_record_sql(
 ) {
     writeln!(
         sql,
-        "INSERT INTO crm.records (tenant_id, record_type, record_id, version, owner_module_id, schema_id, schema_version, descriptor_hash, data_class, payload_encoding, maximum_payload_size, retention_policy_id, payload_bytes, last_business_transaction_id) VALUES ('{TENANT_ID}', '{}', '{}', {}, '{MODULE_ID}', '{}', '{}', decode('{}', 'hex'), 'confidential', 'json', {}, '{}', decode('{}', 'hex'), {BUSINESS_TRANSACTION_QUERY});",
+        "INSERT INTO crm.records (tenant_id, record_type, record_id, version, owner_module_id, schema_id, schema_version, descriptor_hash, data_class, payload_encoding, maximum_payload_size, retention_policy_id, payload_bytes, last_business_transaction_id) VALUES ('{TENANT_ID}', '{}', '{}', {}, '{MODULE_ID}', '{}', '{}', decode('{}', 'hex'), 'confidential', 'json', {}, '{}', decode('{}', 'hex'), '{BOOTSTRAP_BUSINESS_TRANSACTION_ID}');",
         sql_literal(record_type),
         sql_literal(record_id),
         version,
