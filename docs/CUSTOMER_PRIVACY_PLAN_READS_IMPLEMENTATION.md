@@ -99,7 +99,7 @@ Permanent `.github/workflows/customer-privacy-planning.yml` proves:
 - complete schema rollback/removal;
 - reapply and repeated SQL/Rust acceptance.
 
-Machine-readable pending evidence is in `contracts/customer-privacy-plan-reads-implementation.json`. Accepted source SHA, permanent workflow count and merge SHA remain null until unchanged exact-head acceptance and post-merge synchronization.
+Machine-readable pending evidence is in `contracts/customer-privacy-plan-reads-implementation.json`. Accepted source SHA, permanent workflow count and merge SHA remain null until every applicable permanent workflow succeeds on one unchanged source-authored or connector-authored exact head; bot-authored synchronization commits are not accepted as final evidence.
 
 ## Next bounded packet
 
