@@ -53,11 +53,12 @@ Issue #194 remains **Open**.
 - Stage A documentation/navigation baseline — **Complete**.
 - Stage B dependency, crate and exception governance — **In progress; Rust toolchain and measured lint prerequisite accepted through PR #218**.
 - Stage C Customer Privacy golden owner packages — **Complete** through PR #205.
-- Stages D–I — broader contribution aggregation, affected-scope expansion, conformance, consolidation, reproducible environment, frontend and operations parity remain open.
+- Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222**.
+- Stages E–I — affected-scope expansion, conformance, consolidation, reproducible environment, frontend and operations parity remain open.
 
-Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205 and PR #218. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218 and PR #222. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
-The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1 and 2 are complete through PR #218 and PR #220; the current next packet is repository step 3: bounded contribution aggregation without behavior change.
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–3 are complete through PR #218, PR #220 and PR #222; the current next packet is repository step 4: immediate deny-only Customer Privacy processing restrictions using final subject locks.
 
 ## 4. Phase 8A completed foundation
 
@@ -121,20 +122,28 @@ PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash me
 
 The accepted boundary is exact Rust `1.97.1`, root workspace `rust-version = "1.97.1"`, zero measured Rust/Clippy warnings and errors, and three exact expiring no-growth direct-lint exceptions.
 
+### 5.6 Accepted bounded contribution aggregation
+
+PR #222 / accepted source `b5651e784a156758b39eaa04abc1124c7c0832f9` / squash merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows completes repository step 3 on one unchanged exact head.
+
+The packet exposes the exact Customer Accounts data-only mutation/query definition factories from the existing owner composition package, re-exports them through `crm-first-party-modules`, and replaces the selected direct generic-runtime inventory imports with the first-party facade. Exact mutation/query ordering, deterministic Account-before-Consents registration and activation semantics remain unchanged.
+
+It changes no route, coordinate, public inventory, persistence, migration, tenant isolation, authorization, audit, idempotency, dependency family, manifest, `Cargo.lock`, workspace package count, worker, Customer Privacy product behavior or generic business dispatch algorithm. The workspace remains at 113 packages.
+
 ## 6. Binding active sequence
 
 The only permitted current sequence is:
 
 1. **Repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — Complete through PR #218.**
 2. **Repository step 2 — Customer Privacy approval runtime — Complete through PR #220.**
-3. **Repository step 3 — bounded contribution aggregation without behavior change — Next.**
-4. **Repository step 4 — immediate deny-only processing restrictions with final subject locks.**
+3. **Repository step 3 — bounded contribution aggregation without behavior change — Complete through PR #222.**
+4. **Repository step 4 — immediate deny-only processing restrictions with final subject locks — Next.**
 5. **Repository step 5 — `explain`, `packet-check` and generated navigation.**
 6. **Repository step 6 — legal-hold and mandatory-retention precedence.**
 7. **Repository steps 7–19 — continue exactly as numbered in the architecture plan.**
 8. **Repository step 20 — first Phase 8B packet.**
 
-Bounded contribution aggregation is now the next permitted repository packet. It must remain behavior-neutral: no route, coordinate, persistence, authorization, dependency, public-inventory or Customer Privacy product-semantic changes are permitted. Immediate deny-only restrictions remain repository step 4.
+Immediate deny-only processing restrictions using final subject locks are now the next permitted repository packet. Repository step 3 remains behavior-neutral and did not alter routes, coordinates, persistence, authorization, dependencies, public inventory or Customer Privacy semantics.
 
 ## 7. Phase 8B and later expert domains
 
