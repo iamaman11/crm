@@ -9,7 +9,12 @@
 
 mod discovery;
 mod planning;
-mod reads;
+mod reads {
+    #[cfg(test)]
+    use crm_customer_privacy::{ACTION_PLAN_GET_COORDINATE, OWNER_OUTCOMES_LIST_COORDINATE};
+
+    include!("reads.rs");
+}
 
 pub use discovery::*;
 pub use planning::*;
