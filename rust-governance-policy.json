@@ -23,17 +23,17 @@
     "minimum_rust_version_inherited_packages": 0,
     "minimum_workspace_lints_inherited_packages": 0,
     "maximum_missing_rust_version_packages": 113,
-    "maximum_missing_workspace_lints_packages": 113,
+    "maximum_missing_workspace_lints_packages": 110,
     "maximum_direct_rust_version_declarations": 0,
-    "maximum_direct_lint_tables": 0,
+    "maximum_direct_lint_tables": 3,
     "maximum_workspace_rustc_warnings": 0,
     "maximum_workspace_clippy_warnings": 0,
-    "active_rust_governance_exceptions": 0
+    "active_rust_governance_exceptions": 3
   },
   "adoption_policy": {
-    "legacy_cohort": "The 113 packages accepted before this policy are a measured migration cohort. Their missing inheritance may only decrease in homogeneous behavior-neutral packets.",
+    "legacy_cohort": "The 113 packages accepted before this policy are a measured migration cohort. Missing inheritance and the three exact direct-lint exceptions may only decrease in homogeneous behavior-neutral packets.",
     "new_workspace_members": "Every new workspace package must set rust-version.workspace = true and [lints] workspace = true before acceptance.",
-    "direct_overrides": "Direct package rust-version declarations and direct package lint tables are forbidden unless an active architecture-governance exception names the exact manifest.",
+    "direct_overrides": "Direct package rust-version declarations are forbidden. The three measured direct lint tables require exact active architecture-governance exceptions and are frozen by permanent tests; no additional direct lint table is permitted.",
     "target": "All workspace packages inherit the workspace rust-version and lint policy.",
     "tracking_issue": "#194"
   },
