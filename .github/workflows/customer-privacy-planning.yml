@@ -15,12 +15,16 @@ on:
       - "crates/crm-customer-privacy-application/**"
       - "crates/crm-customer-privacy-postgres/**"
       - "crates/crm-customer-privacy-production/**"
+      - "contracts/production-route-classifications.json"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0043_customer_privacy_discovery_scope.sql"
       - "database/tests/0044_customer_privacy_planning.sql"
+      - "database/tests/0045_customer_privacy_plan_reads.sql"
       - "contracts/customer-privacy-planning-implementation.json"
+      - "contracts/customer-privacy-plan-reads-implementation.json"
       - "docs/CUSTOMER_PRIVACY_PLANNING_IMPLEMENTATION.md"
+      - "docs/CUSTOMER_PRIVACY_PLAN_READS_IMPLEMENTATION.md"
       - ".github/workflows/customer-privacy-planning.yml"
   pull_request:
     paths:
@@ -34,12 +38,16 @@ on:
       - "crates/crm-customer-privacy-application/**"
       - "crates/crm-customer-privacy-postgres/**"
       - "crates/crm-customer-privacy-production/**"
+      - "contracts/production-route-classifications.json"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0043_customer_privacy_discovery_scope.sql"
       - "database/tests/0044_customer_privacy_planning.sql"
+      - "database/tests/0045_customer_privacy_plan_reads.sql"
       - "contracts/customer-privacy-planning-implementation.json"
+      - "contracts/customer-privacy-plan-reads-implementation.json"
       - "docs/CUSTOMER_PRIVACY_PLANNING_IMPLEMENTATION.md"
+      - "docs/CUSTOMER_PRIVACY_PLAN_READS_IMPLEMENTATION.md"
       - ".github/workflows/customer-privacy-planning.yml"
 
 concurrency:
@@ -103,7 +111,8 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0043_customer_privacy_discovery_scope.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0044_customer_privacy_planning.sql
-      - name: Verify planning packages and production inventory
+          psql --set ON_ERROR_STOP=1 --file database/tests/0045_customer_privacy_plan_reads.sql
+      - name: Verify planning and read packages and production inventory
         shell: bash
         run: |
           set -o pipefail
@@ -127,8 +136,13 @@ jobs:
             printf 'unexpected Customer Privacy worker matches:\n%s\n' "${worker_matches}"
             exit 1
           fi
+          outcome_persistence_matches="$(find database/migrations crates/crm-customer-privacy-postgres -type f -print0 | xargs -0 grep -l 'CREATE TABLE crm.customer_privacy_owner_outcomes\|INSERT INTO crm.customer_privacy_owner_outcomes' 2>/dev/null || true)"
+          if [ -n "${outcome_persistence_matches}" ]; then
+            printf 'unexpected owner outcome persistence matches:\n%s\n' "${outcome_persistence_matches}"
+            exit 1
+          fi
           package_count="$(cargo metadata --no-deps --format-version 1 | python -c 'import json, sys; print(len(json.load(sys.stdin)["workspace_members"]))')"
-          printf 'verified internal planning only; workspace packages: %s\n' "${package_count}"
+          printf 'verified internal planning and bounded reads; workspace packages: %s\n' "${package_count}"
           test "${package_count}" = "113"
       - name: Roll back authoritative schema
         shell: bash
@@ -149,6 +163,7 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0043_customer_privacy_discovery_scope.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0044_customer_privacy_planning.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0045_customer_privacy_plan_reads.sql
           cargo test \
             -p crm-customer-privacy-application \
             -p crm-customer-privacy-postgres \
