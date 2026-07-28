@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod aggregate_guard_chain;
 pub mod aggregate_executor;
 mod audit;
 mod audited_read;
@@ -25,6 +26,7 @@ mod search_store;
 mod subject_policy;
 
 pub use aggregate_executor::*;
+pub use aggregate_guard_chain::TransactionalAggregateGuardChain;
 pub use audit::AuditIntent;
 pub use audited_read::*;
 pub use capability_executor::*;
