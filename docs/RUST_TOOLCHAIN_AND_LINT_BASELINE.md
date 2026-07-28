@@ -42,6 +42,7 @@ The checker counts only compiler messages whose Cargo package IDs belong to the 
 
 CI publishes:
 
+- architecture-preflight diagnostics;
 - raw Rust JSON diagnostics and stderr;
 - raw Clippy JSON diagnostics and stderr;
 - a machine-readable Rust governance report;
@@ -62,17 +63,26 @@ Current measured cohort:
 | Packages missing inherited `rust-version` | 113 |
 | Direct package `rust-version` overrides | 0 |
 | Packages inheriting workspace lints | 0 |
-| Packages missing inherited workspace lints | 113 |
-| Direct package lint tables | 0 |
-| Active Rust-governance exceptions | 0 |
+| Packages missing inherited workspace lints | 110 |
+| Direct package lint tables | 3 |
+| Active Rust-governance exceptions | 3 |
+
+The three historical direct lint tables all contain only `clippy.too_many_arguments = "allow"` and are frozen at these exact manifests:
+
+- `crates/crm-application-runtime/Cargo.toml`;
+- `crates/crm-customer-data-operations-execution-composition/Cargo.toml`;
+- `services/crm-api/Cargo.toml`.
+
+Each scope has a complete `rust-governance` exception in `architecture-governance.json`, expires on `2027-01-31`, names its removal condition and retains full-workspace Clippy and test coverage as compensating checks. Permanent tests reject a fourth scope, changed lint contents or silently extended expiry.
 
 Rules from this point forward:
 
 1. every new workspace package must use `rust-version.workspace = true` and `[lints] workspace = true`;
-2. direct package overrides are forbidden unless an exact manifest has a complete, active and time-bounded `rust-governance` exception in `architecture-governance.json`;
-3. the legacy missing-inheritance cohort may only shrink;
-4. migration of existing packages must use homogeneous behavior-neutral packets rather than a repository-wide manifest rewrite;
-5. changing the package count requires updating the measured policy baseline in the same reviewed packet.
+2. direct package `rust-version` declarations are forbidden;
+3. no new direct package lint table is permitted; the three measured scopes require exact active exceptions and may only be removed or migrated to workspace inheritance;
+4. the legacy missing-inheritance cohorts may only shrink;
+5. migration of existing packages must use homogeneous behavior-neutral packets rather than a repository-wide manifest rewrite;
+6. changing the package count or measured cohort requires updating the machine-readable policy baseline in the same reviewed packet.
 
 ## 4. Permanent enforcement
 
@@ -84,8 +94,9 @@ Rules from this point forward:
 - exact workspace lint table;
 - workspace package count and inheritance cohorts;
 - absence of unauthorized direct overrides;
+- exact no-growth treatment of the three legacy direct lint scopes;
 - required inheritance for newly added workspace members;
-- exact, non-expired Rust-governance exception scopes;
+- exact, complete and non-expired Rust-governance exception scopes;
 - executing compiler version;
 - zero-warning and zero-error measurement budgets.
 
@@ -102,14 +113,15 @@ This packet intentionally adds no:
 - Customer Privacy approval behavior;
 - generic runtime registration or dispatch change;
 - broad package-manifest migration;
-- resolver 3 adoption.
+- resolver 3 adoption;
+- lint cleanup or API refactor for the three historical direct lint scopes.
 
-Resolver 3 remains a separate measured dependency-resolution decision because it can affect lockfile semantics and minimum supported Rust behavior.
+Resolver 3 remains a separate measured dependency-resolution decision because it can affect lockfile semantics and minimum supported Rust behavior. Removal of each direct lint exception also remains a separate behavior-neutral packet so repository step 1 does not absorb constructor/API restructuring.
 
 ## 6. Acceptance and rollback
 
-Acceptance requires all applicable permanent workflows to succeed on one unchanged exact source head. The Rust governance artifact must report Rust `1.97.1`, 113 workspace packages, zero measured warnings/errors and zero blocking policy errors.
+Acceptance requires all applicable permanent workflows to succeed on one unchanged exact source head. The Rust governance artifact must report Rust `1.97.1`, 113 workspace packages, zero measured warnings/errors, three exact active legacy exceptions and zero blocking policy errors.
 
-Rollback removes the root Rust policy, restores the previous moving `stable` toolchain and removes the checker/CI measurements. No schema, data, contract, runtime or lockfile rollback is required.
+Rollback removes the root Rust policy, restores the previous moving `stable` toolchain and removes the checker/CI measurements and the three policy-only exception records. No package lint table, schema, data, contract, runtime or lockfile rollback is required.
 
 After unchanged exact-head acceptance and merge, a separate evidence synchronization change may mark repository step 1 complete and release repository step 2: Customer Privacy approval runtime only.
