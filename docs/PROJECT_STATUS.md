@@ -8,6 +8,7 @@ This is the concise current-state snapshot. Normative product dependencies remai
 
 - `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `DELIVERY_GOVERNANCE.md`;
 - `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4 for the only permitted repository packet order;
+- `RUST_TOOLCHAIN_AND_LINT_BASELINE.md` and `rust-governance-policy.json` for the accepted Rust boundary and measured lint cohorts;
 - `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, `MODULE_CATALOG.md`;
 - `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_FREEZE.md` and `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md`;
 - `CUSTOMER_PRIVACY_PLANNING_FREEZE.md` and `CUSTOMER_PRIVACY_PLANNING_IMPLEMENTATION.md`;
@@ -56,20 +57,28 @@ PR #211 / accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1
 
 `case.owner_outcomes.list` validates bounded page/cursor input and returns a deterministic empty terminal page (`items = []`, empty terminal cursor) because owner execution and outcome persistence remain absent. Stable page/terminal digests and safe allow/deny evidence are append-only in a FORCE-RLS audit table. No outcome table, synthetic outcomes, mutation or worker is added.
 
+## Accepted Rust toolchain and lint governance
+
+Repository step 1 is accepted through PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 applicable permanent workflows.
+
+The repository now supports exact Rust `1.97.1`; root workspace `rust-version` is `1.97.1`; Rust and Clippy warning/error budgets are zero and measured from JSON compiler output; `Cargo.lock`, all 113 workspace packages, dependencies and product behavior remain unchanged. Three historical direct `clippy.too_many_arguments = "allow"` tables are exact no-growth exceptions with named owners, compensating checks, removal conditions and expiry on `2027-01-31`.
+
 ## Next permitted repository packet
 
-Implement the supported Rust toolchain, workspace `rust-version` decision and measured lint baseline. This is repository step 1 and must not include dependency upgrades, broad lint cleanup, product behavior or crate consolidation.
+Implement Customer Privacy approval runtime only as repository step 2.
+
+The packet must stay inside the existing Customer Privacy packages and must not introduce immediate processing restrictions, legal-hold/mandatory-retention adjudication, owner execution, destructive actions, workers, dependency upgrades, generic-runtime business switches or crate consolidation.
 
 ## Following permitted repository packet
 
-After repository step 1 is accepted and merged, implement Customer Privacy approval runtime only as repository step 2. Immediate deny-only restrictions, legal-hold/mandatory-retention precedence, owner execution, destructive actions and workers remain later numbered packets.
+After approval runtime is accepted, merged and evidence-synchronized, repository step 3 is the first bounded contribution-aggregation packet without behavior changes.
 
 ## Architecture and developer-experience 10/10 checkpoint
 
 Issue #194 remains open.
 
 - Stage A documentation/source hierarchy and stable navigation are complete.
-- Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, zero active exceptions and root-family no-growth are accepted; `rust-version`, workspace lint policy and broader dependency/public-surface calibration remain.
+- Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance and three exact expiring legacy lint exceptions are accepted; broader dependency/public-surface calibration and exception removal remain.
 - Stage C is in progress: the Customer Privacy domain/application/postgres/production golden pilot is accepted, but scaffolding, migration-ownership policy and later-owner adoption are not generalized.
 - Stages D and E have working foundations but are incomplete: the generic runtime still imports many concrete owner adapters, and affected-scope selection is not yet complete across every database/process/product/frontend/operations dimension.
 - Stages F–I remain foundation-only or unstarted; generic conformance/lifecycle, measured consolidation, reproducible local environment, generated navigation, frontend and operations parity are not complete.
@@ -79,8 +88,8 @@ Issue #194 remains open.
 Only one implementation packet may be active. The current order begins:
 
 ```text
-1. supported Rust toolchain / rust-version / measured lint baseline
--> 2. Customer Privacy approval runtime
+1. supported Rust toolchain / rust-version / measured lint baseline — complete through PR #218
+-> 2. Customer Privacy approval runtime — next
 -> 3. bounded contribution aggregation
 -> 4. immediate deny-only restrictions
 -> 5. explain / packet-check / generated active packet and repository map
