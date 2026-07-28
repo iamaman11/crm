@@ -59,7 +59,10 @@ async fn restriction_place_blocks_protected_contact_point_create_atomically() {
     let party_create = mutation_definition(PARTY_CREATE);
     let contact_create = mutation_definition(CONTACT_POINT_CREATE);
     let restriction_place = mutation_definition(RESTRICTION_PLACE);
-    assert_eq!(restriction_place.owner_module_id.as_str(), "crm.customer-privacy");
+    assert_eq!(
+        restriction_place.owner_module_id.as_str(),
+        "crm.customer-privacy"
+    );
 
     let http_addr = format!("127.0.0.1:{}", free_port());
     let grpc_addr = format!("127.0.0.1:{}", free_port());
@@ -260,13 +263,25 @@ fn restriction_payload(definition: &CapabilityDefinition, party_id: &str) -> Typ
 }
 
 async fn contact_point_evidence(admin: &PgPool) -> EvidenceCounts {
-    evidence(admin, "crm.contact-points", "contact-points.contact_point", CONTACT_POINT_CREATE,
-        "contact-points.contact-point.created").await
+    evidence(
+        admin,
+        "crm.contact-points",
+        "contact-points.contact_point",
+        CONTACT_POINT_CREATE,
+        "contact-points.contact-point.created",
+    )
+    .await
 }
 
 async fn restriction_evidence(admin: &PgPool) -> EvidenceCounts {
-    evidence(admin, "crm.customer-privacy", "customer-privacy.restriction", RESTRICTION_PLACE,
-        "customer_privacy.restriction.placed").await
+    evidence(
+        admin,
+        "crm.customer-privacy",
+        "customer-privacy.restriction",
+        RESTRICTION_PLACE,
+        "customer_privacy.restriction.placed",
+    )
+    .await
 }
 
 async fn evidence(
@@ -359,7 +374,13 @@ fn assert_safe_status(
             .expect("ASCII retryability metadata"),
         if expected_retryable { "true" } else { "false" }
     );
-    for forbidden in ["blocked@example.com", "payload_bytes", "postgres://", "sqlx", "SELECT"] {
+    for forbidden in [
+        "blocked@example.com",
+        "payload_bytes",
+        "postgres://",
+        "sqlx",
+        "SELECT",
+    ] {
         assert!(
             !status.message().contains(forbidden)
                 && !format!("{:?}", status.metadata()).contains(forbidden),
