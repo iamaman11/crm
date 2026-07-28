@@ -3,9 +3,9 @@
 //! Owner-owned production contribution for `crm.customer-privacy`.
 //!
 //! This package is the only supported process-composition entry point for
-//! Customer Privacy. It preserves the accepted four mutations and two queries.
-//! Scope discovery and deterministic planning are exposed only as owner-owned
-//! internal services: neither is a public route or a generic-runtime worker.
+//! Customer Privacy. It preserves four mutations and promotes four permission-aware queries.
+//! Scope discovery and deterministic planning remain owner-owned internal services:
+//! neither is a public route or a generic-runtime worker.
 
 use crm_application_composition::{
     ActivationGatedMutationValidator, ActivationGatedQueryValidator, ModuleActivationPort,
@@ -30,20 +30,23 @@ use crm_customer_enrichment_privacy_scope_adapter::{
 };
 use crm_customer_privacy::{SCOPE_SNAPSHOT_RECORD_TYPE, discovery_sha256};
 pub use crm_customer_privacy_application::{
-    DiscoveryInvocation, DiscoverySnapshotReader, PlanningInvocation, PrivacyPlanningService,
+    DiscoveryInvocation, DiscoverySnapshotReader, GET_PRIVACY_ACTION_PLAN_CAPABILITY,
+    LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY, PlanningInvocation, PrivacyPlanningService,
     ScopeDiscoveryService, SnapshotReadContext, mutation_capability_definitions,
-    query_capability_definitions,
+    plan_read_visibility_resources, query_capability_definitions,
 };
 use crm_customer_privacy_application::{
-    DiscoverySnapshotVisibilityPort, OwnerContributionEndpoint, OwnerContributionEndpoints,
-    SnapshotVisibilityDecision,
+    CustomerPrivacyPlanReadAdapter, DiscoverySnapshotVisibilityPort, OwnerContributionEndpoint,
+    OwnerContributionEndpoints, SnapshotVisibilityDecision, plan_read_query_capability_definitions,
 };
 use crm_customer_privacy_postgres::{
-    PostgresDiscoveryPersistence, PostgresPlanningPersistence, postgres_case_cancel_executor,
-    postgres_case_create_executor, postgres_case_subject_verify_executor,
-    postgres_case_submit_executor,
+    PostgresDiscoveryPersistence, PostgresPlanningPersistence, PostgresPrivacyReadPersistence,
+    postgres_case_cancel_executor, postgres_case_create_executor,
+    postgres_case_subject_verify_executor, postgres_case_submit_executor,
 };
-use crm_customer_privacy_query_adapter::CustomerPrivacyQueryAdapter;
+use crm_customer_privacy_query_adapter::{
+    CustomerPrivacyQueryAdapter, query_capability_definitions as case_query_capability_definitions,
+};
 pub use crm_customer_privacy_query_adapter::{
     GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY, query_visibility_resources,
 };
@@ -200,10 +203,17 @@ pub fn build_contribution(
             "Customer Privacy production inventory must contain exactly four mutations",
         ));
     }
-    let queries = query_capability_definitions()?;
-    if queries.len() != 2 {
+    let all_queries = query_capability_definitions()?;
+    if all_queries.len() != 4 {
         return Err(configuration_error(
-            "Customer Privacy production inventory must contain exactly two queries",
+            "Customer Privacy production inventory must contain exactly four queries",
+        ));
+    }
+    let case_queries = case_query_capability_definitions()?;
+    let plan_queries = plan_read_query_capability_definitions()?;
+    if case_queries.len() != 2 || plan_queries.len() != 2 {
+        return Err(configuration_error(
+            "Customer Privacy query ownership must remain split into two case reads and two plan reads",
         ));
     }
 
@@ -225,17 +235,33 @@ pub fn build_contribution(
             .map_err(composition_error)?;
     }
 
-    let query_adapter = Arc::new(CustomerPrivacyQueryAdapter::new_with_cursor(
-        dependencies.store,
+    let case_query_adapter = Arc::new(CustomerPrivacyQueryAdapter::new_with_cursor(
+        dependencies.store.clone(),
         cursor(dependencies.cursor_key)?,
+        dependencies.visibility_authorizer.clone(),
+    ));
+    let case_query_validator: Arc<dyn QuerySemanticValidator> = Arc::new(
+        ActivationGatedQueryValidator::new(
+            dependencies.activation.clone(),
+            case_query_adapter.clone(),
+        ),
+    );
+    let case_query_executor: Arc<dyn QueryExecutor> = case_query_adapter;
+    contributions
+        .add_queries(case_queries, case_query_validator, case_query_executor)
+        .map_err(composition_error)?;
+
+    let plan_query_adapter = Arc::new(CustomerPrivacyPlanReadAdapter::new(
+        dependencies.activation,
+        Arc::new(PostgresPrivacyReadPersistence::new(Arc::new(
+            dependencies.store,
+        ))),
         dependencies.visibility_authorizer,
     ));
-    let query_validator: Arc<dyn QuerySemanticValidator> = Arc::new(
-        ActivationGatedQueryValidator::new(dependencies.activation, query_adapter.clone()),
-    );
-    let query_executor: Arc<dyn QueryExecutor> = query_adapter;
+    let plan_query_validator: Arc<dyn QuerySemanticValidator> = plan_query_adapter.clone();
+    let plan_query_executor: Arc<dyn QueryExecutor> = plan_query_adapter;
     contributions
-        .add_queries(queries, query_validator, query_executor)
+        .add_queries(plan_queries, plan_query_validator, plan_query_executor)
         .map_err(composition_error)?;
 
     Ok(contributions)
@@ -358,7 +384,7 @@ mod tests {
         let mutations = mutation_capability_definitions().unwrap();
         let queries = query_capability_definitions().unwrap();
         assert_eq!(mutations.len(), 4);
-        assert_eq!(queries.len(), 2);
+        assert_eq!(queries.len(), 4);
         for forbidden in [
             "customer_privacy.scope.discover",
             "customer_privacy.plan.build",
@@ -374,6 +400,12 @@ mod tests {
                     .all(|definition| definition.capability_id.as_str() != forbidden)
             );
         }
+        assert!(queries.iter().any(|definition| {
+            definition.capability_id.as_str() == GET_PRIVACY_ACTION_PLAN_CAPABILITY
+        }));
+        assert!(queries.iter().any(|definition| {
+            definition.capability_id.as_str() == LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY
+        }));
     }
 
     #[test]
