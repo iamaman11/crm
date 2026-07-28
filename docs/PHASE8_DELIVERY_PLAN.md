@@ -101,7 +101,7 @@ No new crate, generic-runtime switch, mutation, worker, owner mutation, approval
 
 PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / squash merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows accepts `customer_privacy.case.approve@1.0.0` through the existing Customer Privacy packages.
 
-The mutation is activation-gated, live-authorized, tenant-bound, expected-version protected and idempotent. It permits only `AwaitingApproval → Planned`, locks the case and immutable scope/plan evidence, validates exact case↔subject↔snapshot↔plan lineage, records immutable actor/time and atomically persists status, event, audit, idempotency and business evidence. Exact replay succeeds; conflicting replay, corrupt evidence, unauthorized access and cross-tenant existence fail closed.
+The mutation is activation-gated, live-authorized, tenant-bound, expected-version protected and idempotent. It permits only `AwaitingApproval → Planned`, locks the case and immutable scope/plan evidence, validates exact case↔subject↔snapshot↔plan lineage, records immutable approval actor/time and atomically persists status, event, audit, idempotency and business evidence. Exact replay succeeds; conflicting replay, corrupt evidence, unauthorized access and cross-tenant existence fail closed.
 
 No restriction placement/release, legal-hold/mandatory-retention decision, owner execution/outcome persistence, access/export assembly, destructive action, worker, crate, dependency family or generic-runtime business switch is added.
 
@@ -128,24 +128,24 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 1. repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — **complete through PR #218**;
 2. repository step 2 — Customer Privacy approval runtime — **complete through PR #220**;
 3. repository step 3 — bounded contribution aggregation without behavior change — **complete through PR #222**;
-4. inserted prerequisite for repository step 4 — final customer-subject policy port and deterministic guard composition — **complete through PR #224**;
-5. repository step 4 — immediate deny-only processing restrictions using final subject locks — **next**;
-6. repository step 5 — `explain`, `packet-check` and generated navigation;
-7. repository step 6 — legal-hold and mandatory-retention precedence;
-8. repository step 7 — reusable generic mutation/query conformance;
-9. repository step 8 — replay-safe resumable owner execution and crash-window recovery;
-10. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks;
-11. repository step 10 — governed access/export assembly;
-12. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution;
-13. repository step 12 — first measured behavior-neutral consolidation;
-14. repository step 13 — Party tombstone, no-orphan proof and projection/search/cache convergence;
-15. repository step 14 — reusable generic worker conformance;
-16. repository step 15 — deterministic local lifecycle commands;
-17. repository step 16 — Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
-18. repository step 17 — Phase 8A frontend and operations evidence;
-19. repository step 18 — Phase 8A closure;
-20. repository step 19 — architecture remeasurement and publication of the next numbered order;
-21. repository step 20 — first Phase 8B packet.
+3a. inserted prerequisite for repository step 4 — final customer-subject policy port and deterministic guard composition — **complete through PR #224**;
+4. repository step 4 — immediate deny-only processing restrictions using final subject locks — **next**;
+5. repository step 5 — `explain`, `packet-check` and generated navigation;
+6. repository step 6 — legal-hold and mandatory-retention precedence;
+7. repository step 7 — reusable generic mutation/query conformance;
+8. repository step 8 — replay-safe resumable owner execution and crash-window recovery;
+9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks;
+10. repository step 10 — governed access/export assembly;
+11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution;
+12. repository step 12 — first measured behavior-neutral consolidation;
+13. repository step 13 — Party tombstone, no-orphan proof and projection/search/cache convergence;
+14. repository step 14 — reusable generic worker conformance;
+15. repository step 15 — deterministic local lifecycle commands;
+16. repository step 16 — Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
+17. repository step 17 — Phase 8A frontend and operations evidence;
+18. repository step 18 — Phase 8A closure;
+19. repository step 19 — architecture remeasurement and publication of the next numbered order;
+20. repository step 20 — first Phase 8B packet.
 
 The inserted prerequisite did not renumber the normative master sequence. Work now returns to repository step 4. A later step must not start while repository step 4 is unfinished.
 
