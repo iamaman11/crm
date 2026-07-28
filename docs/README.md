@@ -78,10 +78,14 @@ Currently available:
 python scripts/repo.py architecture
 python scripts/repo.py manifests
 python scripts/repo.py contracts
+python scripts/repo.py contracts --write
 python scripts/repo.py conformance
+python scripts/repo.py format --check
+python scripts/repo.py lock
+python scripts/repo.py test --package <package>
+python scripts/repo.py test-all
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
-python scripts/repo.py format --check
 python scripts/repo.py quality
 ```
 

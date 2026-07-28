@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tomllib
 import unittest
 
 
@@ -24,18 +25,25 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
         cls.module_development = read("docs/MODULE_DEVELOPMENT.md")
         cls.repo_runner = read("scripts/repo.py")
+        cls.workspace = tomllib.loads(read("Cargo.toml"))
 
-    def test_current_phase_and_next_packet_are_consistent(self) -> None:
-        for document in (self.readme, self.status, self.roadmap, self.phase8):
+    def test_current_phase_and_next_packet_are_authoritative_and_consistent(self) -> None:
+        for document in (self.status, self.roadmap, self.phase8):
             self.assertIn("Phase 8A", document)
-            self.assertIn("scope discovery and immutable snapshot", document.lower())
+            self.assertIn("approval runtime", document.lower())
+            self.assertIn("permission-aware", document.lower())
 
-        self.assertIn("Phases 0.1–7 are complete", self.readme)
         self.assertIn("Phases 0.1–7 are complete", self.status)
-        self.assertIn("Current product-complete expert modules: **0**", self.readme)
         self.assertIn("Current product-complete expert modules: **0**", self.status)
         self.assertIn("Current product-complete expert modules: **0**", self.roadmap)
         self.assertIn("Current product-complete expert modules: **0**", self.phase8)
+
+    def test_root_readme_is_orientation_not_a_second_live_roadmap(self) -> None:
+        self.assertIn("not duplicated in this orientation file", self.readme)
+        self.assertIn("docs/PROJECT_STATUS.md", self.readme)
+        self.assertNotIn("The current bounded product packet is", self.readme)
+        self.assertNotIn("Phases 0.1–7 are complete", self.readme)
+        self.assertNotIn("Current product-complete expert modules", self.readme)
 
     def test_architecture_program_is_single_linked_execution_lane(self) -> None:
         for document in (self.readme, self.status, self.roadmap, self.phase8):
@@ -47,6 +55,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.plan,
         )
         self.assertIn("Tracking issue: #194", self.plan)
+        self.assertIn("Current program position", self.plan)
+        for stage in (
+            "A — documentation and policy baseline",
+            "B — dependency, crate and exception governance",
+            "C — golden owner package and persistence model",
+            "D — contribution aggregation",
+            "E — affected-scope CI",
+            "F — generic conformance and contract lifecycle",
+            "G — transitional consolidation",
+            "H — reproducible environment and navigation",
+            "I — frontend and operations parity",
+        ):
+            self.assertIn(stage, self.plan)
 
     def test_navigation_has_one_stable_human_index(self) -> None:
         self.assertIn("docs/README.md", self.readme)
@@ -77,7 +98,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Frontend and operations",
             "restore, SLO, performance, security and supply-chain",
             "Feature behavior and crate consolidation must be separate PRs",
-            "109 members",
+            "113 effective packages",
             "Reproducible local development",
             "Rust public API surface",
             "Contract lifecycle",
@@ -88,11 +109,21 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "python scripts/repo.py bootstrap",
             "python scripts/repo.py dev-up",
             "python scripts/repo.py smoke",
+            "approval runtime only",
+            "supported Rust toolchain/`rust-version` decision",
         )
         plan_lower = self.plan.lower()
         for statement in required:
             with self.subTest(statement=statement):
                 self.assertIn(statement.lower(), plan_lower)
+
+    def test_plan_workspace_count_matches_current_manifest(self) -> None:
+        members = self.workspace["workspace"]["members"]
+        self.assertEqual(len(members), 113)
+        self.assertIn(
+            f"current accepted workspace contains **{len(members)} effective packages**",
+            self.plan,
+        )
 
     def test_module_and_workflow_guides_match_target_cost_model(self) -> None:
         for document in (self.agents, self.workflow, self.module_development):
@@ -103,7 +134,6 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("crates/crm-<domain>-application/", self.module_development)
         self.assertIn("crates/crm-<domain>-postgres/", self.module_development)
         self.assertIn("crates/crm-<domain>-production/", self.module_development)
-
         self.assertIn(
             "python scripts/repo.py test --package crm-sales",
             self.module_development,
@@ -113,11 +143,42 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.module_development,
         )
 
+    def test_documented_repository_commands_match_implemented_surface(self) -> None:
+        implemented = (
+            "architecture",
+            "manifests",
+            "contracts",
+            "conformance",
+            "format",
+            "lock",
+            "test",
+            "test-all",
+            "affected",
+            "check-affected",
+            "quality",
+        )
+        for command in implemented:
+            self.assertIn(f'add_parser(\n        "{command}"', self.repo_runner)
+
+        for command_line in (
+            "python scripts/repo.py lock",
+            "python scripts/repo.py test --package <package>",
+            "python scripts/repo.py test-all",
+        ):
+            self.assertIn(command_line, self.readme)
+            self.assertIn(command_line, self.docs_index)
+
     def test_planned_navigation_and_local_commands_are_not_claimed_as_implemented(self) -> None:
         self.assertIn("Planned and required for the 10/10 target", self.docs_index)
         self.assertIn("must not be represented as implemented", self.docs_index)
         self.assertIn("are planned under issue #194", self.agents)
         self.assertIn("are not available until implemented", self.module_development)
+
+        for missing_path in (
+            ROOT / "docs/ACTIVE_PACKET.md",
+            ROOT / "docs/generated/REPOSITORY_MAP.md",
+        ):
+            self.assertFalse(missing_path.exists())
 
     def test_phase8_prevents_new_privacy_crate_proliferation(self) -> None:
         self.assertIn(
@@ -139,6 +200,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "five privacy owners accepted",
             "next new privacy owner",
             "Customer Enrichment implementation is not started",
+            "The current bounded product packet is **Customer Privacy scope discovery",
+            "The next Phase 8A packet remains scope discovery and immutable snapshot",
+            "production discovery remains unimplemented",
+            "Customer Privacy public runtime remains four mutations, two queries",
         )
         for statement in stale:
             for document in (
