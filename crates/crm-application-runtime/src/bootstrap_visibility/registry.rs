@@ -273,15 +273,20 @@ fn customer_privacy_visibility(
         GET_PRIVACY_ACTION_PLAN_CAPABILITY | LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY => {
             customer_privacy_plan_read_visibility_resources(capability_id)
                 .into_iter()
-                .map(|resource| crm_customer_privacy_query_adapter::CustomerPrivacyQueryVisibilityResource {
-                    owner_module_id: resource.owner_module_id,
-                    resource_type: resource.resource_type,
-                    allowed_fields: resource.allowed_fields,
+                .map(|resource| {
+                    crm_customer_privacy_query_adapter::CustomerPrivacyQueryVisibilityResource {
+                        owner_module_id: resource.owner_module_id,
+                        resource_type: resource.resource_type,
+                        allowed_fields: resource.allowed_fields,
+                    }
                 })
                 .collect()
         }
         _ => {
-            debug_assert!(false, "unsupported Customer Privacy query visibility coordinate");
+            debug_assert!(
+                false,
+                "unsupported Customer Privacy query visibility coordinate"
+            );
             Vec::new()
         }
     };
