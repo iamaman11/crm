@@ -31,8 +31,6 @@ use crm_customer_360_query_adapter::{
     Customer360QueryAdapter,
     query_capability_definitions as customer_360_query_capability_definitions,
 };
-use crm_customer_accounts_capability_adapter::capability_definitions as account_capability_definitions;
-use crm_customer_accounts_query_adapter::query_capability_definitions as account_query_capability_definitions;
 use crm_customer_data_operations_capability_adapter::{
     CREATE_PARTY_IMPORT_JOB_CAPABILITY, CustomerDataOperationsCapabilityPlanner,
     VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
@@ -70,6 +68,8 @@ use crm_data_quality_query_adapter::{
 };
 use crm_first_party_modules::{
     FirstPartyProductionDependencies, build_all as build_first_party_modules,
+    customer_accounts_mutation_capability_definitions as account_capability_definitions,
+    customer_accounts_query_capability_definitions as account_query_capability_definitions,
 };
 use crm_global_search_composition::GLOBAL_SEARCH_INDEX_ID;
 use crm_identity_resolution_capability_adapter::{
