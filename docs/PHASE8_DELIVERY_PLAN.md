@@ -8,6 +8,7 @@ Customer Privacy packet: #126
 Commercial follow-on: #29  
 Architecture/developer-experience program: #194  
 Architecture guardrail and repository order: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4  
+Accepted Rust boundary: `RUST_TOOLCHAIN_AND_LINT_BASELINE.md` / `rust-governance-policy.json`  
 Delivery governance: `DELIVERY_GOVERNANCE.md`
 
 ## 1. Packet contract
@@ -54,7 +55,9 @@ The owner implementation lane is complete. No accepted owner may be described as
 
 PR #197, PR #199, PR #200 and PR #203 established reproducible architecture/dependency no-growth controls. PR #204 froze scope discovery and immutable snapshot semantics. PR #205 accepted the Customer Privacy domain/application/PostgreSQL/production package boundary. Workspace packages remain `113`.
 
-The next permitted repository packet is the supported Rust toolchain, workspace `rust-version` and measured lint baseline. Customer Privacy approval runtime is repository step 2 and may start only after step 1 is accepted and merged.
+PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 permanent workflows completes repository step 1. Exact Rust `1.97.1`, root workspace `rust-version = "1.97.1"`, zero measured Rust/Clippy warnings and errors, unchanged `Cargo.lock`, unchanged 113 packages and three exact expiring no-growth direct-lint exceptions are accepted.
+
+Customer Privacy approval runtime is now repository step 2 and the next permitted implementation packet.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -94,8 +97,8 @@ No new crate, generic-runtime switch, mutation, worker, owner mutation, approval
 
 The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. The Phase 8 positions are:
 
-1. repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline;
-2. repository step 2 — Customer Privacy approval runtime;
+1. repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — **complete through PR #218**;
+2. repository step 2 — Customer Privacy approval runtime — **next**;
 3. repository step 3 — bounded contribution aggregation without behavior change;
 4. repository step 4 — immediate deny-only processing restrictions using final subject locks;
 5. repository step 5 — `explain`, `packet-check` and generated navigation;
@@ -116,6 +119,8 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 20. repository step 20 — first Phase 8B packet.
 
 A later step must not start while an earlier step is unfinished. If architecture preflight proves that the current product step cannot satisfy an existing hard rule, only the smallest required architecture prerequisite may be inserted immediately before it; after acceptance, work returns to that same product step.
+
+Approval runtime must remain inside existing Customer Privacy packages. It may add only the exact approval behavior and evidence required by issue #126; restrictions, legal-hold/mandatory-retention adjudication, owner execution, destructive actions, workers, dependency upgrades, generic-runtime business switches and crate consolidation remain forbidden in repository step 2.
 
 ## 10. Frozen ownership
 
