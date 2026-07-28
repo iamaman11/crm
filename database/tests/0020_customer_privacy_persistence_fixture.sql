@@ -42,24 +42,43 @@ INSERT INTO crm.capability_registry (
   bulk_allowed,
   export_allowed
 )
-VALUES (
-  'customer_privacy.case.create',
-  '1.0.0',
-  'crm.customer-privacy',
-  '0.2.0',
-  'crm.customer_privacy.v1.CustomerPrivacyCaseService',
-  'CreatePrivacyCase',
-  decode(repeat('69', 32), 'hex'),
-  decode(repeat('6a', 32), 'hex'),
-  'high',
-  true,
-  true,
-  false,
-  false,
-  false,
-  false,
-  false
-)
+VALUES
+  (
+    'customer_privacy.case.create',
+    '1.0.0',
+    'crm.customer-privacy',
+    '0.2.0',
+    'crm.customer_privacy.v1.CustomerPrivacyCaseService',
+    'CreatePrivacyCase',
+    decode(repeat('69', 32), 'hex'),
+    decode(repeat('6a', 32), 'hex'),
+    'high',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false
+  ),
+  (
+    'customer_privacy.case.approve',
+    '1.0.0',
+    'crm.customer-privacy',
+    '0.2.0',
+    'crm.customer_privacy.v1.CustomerPrivacyCaseService',
+    'ApprovePrivacyCase',
+    decode(repeat('6b', 32), 'hex'),
+    decode(repeat('6c', 32), 'hex'),
+    'high',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false
+  )
 ON CONFLICT (capability_id, capability_version) DO UPDATE
 SET owner_module_id = EXCLUDED.owner_module_id,
     owner_module_version = EXCLUDED.owner_module_version,
