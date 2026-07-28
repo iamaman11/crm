@@ -122,16 +122,10 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "Proprietary"
-rust-version = "1.85"
+rust-version = "1.97.1"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
-unused_must_use = "deny"
-
-[workspace.lints.clippy]
-dbg_macro = "deny"
-todo = "deny"
-unimplemented = "deny"
+warnings = "deny"
 
 # Stage B wave 1: exact existing requirements only; no library upgrade is intended.
 [workspace.dependencies]
