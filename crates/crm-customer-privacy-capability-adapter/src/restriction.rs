@@ -372,10 +372,8 @@ fn millis_to_nanos(value: i64, field: &'static str) -> Result<i64, SdkError> {
 }
 
 fn nanos_to_millis(value: i64, field: &'static str) -> Result<i64, SdkError> {
-    if value < 0 || value % NANOS_PER_MILLISECOND != 0 {
-        return Err(plan_invalid(format!(
-            "{field} is negative or not millisecond aligned"
-        )));
+    if value < 0 {
+        return Err(plan_invalid(format!("{field} is negative")));
     }
     Ok(value / NANOS_PER_MILLISECOND)
 }
@@ -469,5 +467,17 @@ mod tests {
         assert_eq!(first, replay);
         assert_ne!(first, other_tenant);
         assert!(first.as_str().starts_with(RESTRICTION_ID_PREFIX));
+    }
+
+    #[test]
+    fn nanosecond_request_timestamp_is_truncated_to_wire_milliseconds() {
+        assert_eq!(
+            nanos_to_millis(1_999_999, "execution_context.request_started_at_unix_nanos")
+                .unwrap(),
+            1
+        );
+        assert!(
+            nanos_to_millis(-1, "execution_context.request_started_at_unix_nanos").is_err()
+        );
     }
 }
