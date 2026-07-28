@@ -7,6 +7,7 @@ Customer-master program: #28
 Customer Privacy packet: #126  
 Commercial follow-on: #29  
 Architecture/developer-experience program: #194  
+Architecture guardrail: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`  
 Delivery governance: `DELIVERY_GOVERNANCE.md`
 
 ## 1. Packet contract
@@ -14,6 +15,8 @@ Delivery governance: `DELIVERY_GOVERNANCE.md`
 Every Phase 8 packet defines authoritative ownership, stable identity, exact coordinates, persistence, tenant/authorization/audit boundaries, recovery, architecture impact and focused/process/rollback acceptance. A packet is complete only after merge to `main` with unchanged exact-head evidence.
 
 Ordinary capabilities add zero crates, generic router/worker algorithms do not grow owner-specific switches, feature implementation and physical consolidation remain separate, and frozen historical evidence is not rewritten by later runtime acceptance.
+
+**Do not implement discovery/snapshot as one new crate per command**, query, worker, reader or composition fragment. If consolidation is required, **perform consolidation only in a separate behavior-neutral PR**.
 
 ## 2. Phase 8A completed work
 
