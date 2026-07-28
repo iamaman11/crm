@@ -29,7 +29,7 @@ Readiness states are Planned, Foundation, Vertical slice, Production integration
 | `crm.customer-data-operations` | Governed import/export coordination | **Expert expansion** | Resumable import, deterministic export and recovery | More profiles and privacy execution integration |
 | `crm.data-quality` | Customer-data quality coordinator | **Vertical slice** | Evaluation, findings/completeness, stewardship and remediation | Additional owner-resource profiles |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Provider boundary, provenance, review and deterministic owner application | Additional providers, fields, UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, permission-aware get/list, trusted-internal exact-nine discovery/immutable snapshots and deterministic planning | Plan/outcome reads, approval, restrictions, holds/retention, owner execution, export/deletion/convergence and workers |
+| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, permission-aware get/list, trusted-internal exact-nine discovery/immutable snapshots and deterministic planning; plan/outcome reads implemented pending PR #211 acceptance | Approval, restrictions, holds/retention, owner execution, export/deletion/convergence and workers |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -43,7 +43,7 @@ Current merged business-module total: **13** — twelve authoritative/coordinati
 
 Phase 8A.11 / issue #126 remains **In progress**.
 
-Merged public inventory remains four mutations, two permission-aware public queries and zero Customer Privacy workers. Trusted-internal `customer_privacy.plan.build@1.0.0` has no public ingress; `case.plan.get` and `case.owner_outcomes.list` remain non-runtime.
+Latest accepted public inventory remains four mutations, two permission-aware public queries and zero Customer Privacy workers through PR #209. PR #211 targets 4 mutations / 4 permission-aware queries / 0 workers pending unchanged exact-head acceptance. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
 
 Nine owner-scope contribution coordinates are published as non-public owner-owned reads. **All nine authoritative implementations are accepted:**
 
@@ -59,9 +59,11 @@ Nine owner-scope contribution coordinates are published as non-public owner-owne
 
 PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` passed 31 of 31 permanent workflows and accepted production scope discovery and immutable snapshot behavior. At that historical PR #206 boundary, **planning and action execution remain not started**.
 
-PR #208 later froze deterministic planning and read semantics. PR #209 / source `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b` / merge `30621ffff5c1e07e1275cc80fee3f1297a91f49e` / 29 of 29 permanent workflows accepted trusted-internal planning runtime without changing public routes, workers, package count or owner mutation boundaries.
+PR #208 later froze deterministic planning and read semantics. PR #209 / source `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b` / merge `30621ffff5c1e07e1275cc80fee3f1297a91f49e` / 29 of 29 permanent workflows accepted trusted-internal planning runtime without changing its historical public 4/2/0 boundary.
 
-The next bounded packet promotes only permission-aware `case.plan.get` and an empty future-safe `case.owner_outcomes.list`. Approval, restrictions, legal-hold/retention adjudication, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+PR #211 implements permission-aware `case.plan.get` and an empty future-safe `case.owner_outcomes.list` through existing packages. It adds strict case/snapshot/plan/replay validation, payload-safe summary output, bounded terminal outcomes semantics and append-only FORCE-RLS read audit. It adds no outcome persistence, synthetic outcomes, mutation, worker, approval, restriction, hold/retention decision or destructive action.
+
+Approval runtime is the next packet after PR #211 acceptance. Restrictions, legal-hold/retention adjudication, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
 
 ## 5. Phase 8A packet accounting
 
@@ -75,7 +77,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Scope discovery and immutable snapshot and trusted-internal deterministic planning are accepted. Plan/outcome reads, approval, restrictions, legal holds, execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. Scope discovery, immutable snapshot and trusted-internal deterministic planning are accepted. Plan/outcome reads are implemented in PR #211 pending exact-head acceptance. Approval, restrictions, legal holds, execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
 
 ## 6. Customer-master ownership baseline
 

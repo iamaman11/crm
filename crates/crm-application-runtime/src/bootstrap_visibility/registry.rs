@@ -25,6 +25,10 @@ use crm_customer_data_operations_capability_adapter::{
 use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_customer_enrichment::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_customer_enrichment_visibility::query_visibility_resources as customer_enrichment_query_visibility_resources;
+use crm_customer_privacy_production::{
+    GET_PRIVACY_ACTION_PLAN_CAPABILITY, LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY,
+    plan_read_visibility_resources as customer_privacy_plan_read_visibility_resources,
+};
 use crm_customer_privacy_query_adapter::query_visibility_resources as customer_privacy_query_visibility_resources;
 use crm_customer_privacy_query_adapter::{
     GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY,
@@ -261,18 +265,36 @@ fn customer_enrichment_visibility(
 fn customer_privacy_visibility(
     definition: &CapabilityDefinition,
 ) -> Vec<BootstrapVisibilityResource> {
-    debug_assert!(matches!(
-        definition.capability_id.as_str(),
-        GET_PRIVACY_CASE_CAPABILITY | LIST_PRIVACY_CASES_CAPABILITY
-    ));
-    customer_privacy_query_visibility_resources(definition.capability_id.as_str())
-        .into_iter()
-        .map(|resource| BootstrapVisibilityResource {
-            owner_module_id: resource.owner_module_id,
-            resource_type: resource.resource_type,
-            allowed_fields: resource.allowed_fields,
-        })
-        .collect()
+    let capability_id = definition.capability_id.as_str();
+    match capability_id {
+        GET_PRIVACY_CASE_CAPABILITY | LIST_PRIVACY_CASES_CAPABILITY => {
+            customer_privacy_query_visibility_resources(capability_id)
+                .into_iter()
+                .map(|resource| BootstrapVisibilityResource {
+                    owner_module_id: resource.owner_module_id,
+                    resource_type: resource.resource_type,
+                    allowed_fields: resource.allowed_fields,
+                })
+                .collect()
+        }
+        GET_PRIVACY_ACTION_PLAN_CAPABILITY | LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY => {
+            customer_privacy_plan_read_visibility_resources(capability_id)
+                .into_iter()
+                .map(|resource| BootstrapVisibilityResource {
+                    owner_module_id: resource.owner_module_id,
+                    resource_type: resource.resource_type,
+                    allowed_fields: resource.allowed_fields,
+                })
+                .collect()
+        }
+        _ => {
+            debug_assert!(
+                false,
+                "unsupported Customer Privacy query visibility coordinate"
+            );
+            Vec::new()
+        }
+    }
 }
 
 fn data_quality_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {

@@ -1,0 +1,118 @@
+{
+  "schema_id": "crm.governance.customer-privacy-plan-reads-implementation",
+  "schema_version": "1.0.0",
+  "status": "implemented_pending_exact_head_acceptance",
+  "historical_planning_freeze_preserved": "contracts/customer-privacy-planning-freeze.json",
+  "historical_planning_runtime_preserved": "contracts/customer-privacy-planning-implementation.json",
+  "coordinates": [
+    {
+      "capability_id": "customer_privacy.case.plan.get",
+      "capability_version": "1.0.0",
+      "mutation": false,
+      "worker": false,
+      "public_ingress": true
+    },
+    {
+      "capability_id": "customer_privacy.case.owner_outcomes.list",
+      "capability_version": "1.0.0",
+      "mutation": false,
+      "worker": false,
+      "public_ingress": true
+    }
+  ],
+  "package_boundary": {
+    "domain": "modules/crm-customer-privacy",
+    "application": "crates/crm-customer-privacy-application",
+    "postgres": "crates/crm-customer-privacy-postgres",
+    "production": "crates/crm-customer-privacy-production",
+    "new_workspace_packages": 0,
+    "workspace_package_count_before": 113,
+    "workspace_package_count_after": 113,
+    "new_dependency_families": 0,
+    "generic_runtime_switch_added": false
+  },
+  "plan_get": {
+    "module_activation_required": true,
+    "live_visibility_required": true,
+    "tenant_bound_reads": true,
+    "strict_case_snapshot_plan_replay_rehydration": true,
+    "payload_safe_summary_only": true,
+    "owner_resource_payload_exposed": false,
+    "safe_read_audit": true,
+    "unauthorized_and_cross_tenant_concealed": true,
+    "missing_corrupt_or_conflicting_evidence": "fail_closed"
+  },
+  "owner_outcomes_list": {
+    "module_activation_required": true,
+    "live_visibility_required": true,
+    "tenant_bound_reads": true,
+    "default_page_size": 64,
+    "maximum_page_size": 128,
+    "maximum_cursor_bytes": 2048,
+    "items": [],
+    "next_cursor": "terminal_empty_string",
+    "stable_page_digest": true,
+    "stable_terminal_digest": true,
+    "outcome_records_persisted": false,
+    "synthetic_outcomes_returned": false,
+    "safe_read_audit": true,
+    "unauthorized_and_cross_tenant_concealed": true
+  },
+  "persistence": {
+    "read_audit_table": "crm.customer_privacy_plan_read_audit",
+    "append_only": true,
+    "force_rls": true,
+    "canonical_policy_name": "tenant_isolation",
+    "owner_outcome_table_added": false,
+    "complete_rollback_and_reapply_required": true
+  },
+  "runtime_inventory": {
+    "public_mutations_before": 4,
+    "public_mutations_after": 4,
+    "public_queries_before": 2,
+    "public_queries_after": 4,
+    "customer_privacy_workers_before": 0,
+    "customer_privacy_workers_after": 0
+  },
+  "implemented": [
+    "activation_gated_plan_get",
+    "live_permission_and_visibility_checks",
+    "tenant_bound_case_snapshot_plan_and_replay_reads",
+    "strict_canonical_rehydration",
+    "payload_safe_plan_summary",
+    "bounded_empty_terminal_owner_outcomes_page",
+    "stable_page_and_terminal_digests",
+    "safe_append_only_read_audit",
+    "cross_tenant_and_unauthorized_concealment",
+    "complete_schema_rollback_reapply_and_repeated_acceptance"
+  ],
+  "not_implemented": [
+    "owner_outcome_persistence",
+    "owner_execution",
+    "approval_runtime",
+    "processing_restrictions",
+    "legal_hold_decisions",
+    "mandatory_retention_adjudication",
+    "deletion_anonymization_or_crypto_shred_execution",
+    "customer_privacy_worker"
+  ],
+  "acceptance": {
+    "workflow": ".github/workflows/customer-privacy-planning.yml",
+    "postgres_test": "database/tests/0045_customer_privacy_plan_reads.sql",
+    "requires_clean_database": true,
+    "requires_force_rls": true,
+    "requires_cross_tenant_negatives": true,
+    "requires_append_only_audit": true,
+    "requires_no_owner_outcome_persistence": true,
+    "requires_complete_schema_removal": true,
+    "requires_reapply": true,
+    "requires_repeated_acceptance": true,
+    "accepted_source_sha": null,
+    "permanent_workflow_count": null,
+    "merge_sha": null,
+    "pull_request": 211
+  },
+  "next_packet": "approval runtime",
+  "phase_8a_complete": false,
+  "product_complete_expert_modules": 0
+}
