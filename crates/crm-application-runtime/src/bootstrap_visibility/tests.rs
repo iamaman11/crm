@@ -90,7 +90,19 @@ fn registry_resolves_module_owned_resources_without_owner_switches() {
 fn registry_resolves_all_four_customer_privacy_queries() {
     let registry = build_bootstrap_visibility_registry().unwrap();
     let definitions = customer_privacy_query_capability_definitions().unwrap();
-    assert_eq!(definitions.len(), 4);
+    let capability_ids = definitions
+        .iter()
+        .map(|definition| definition.capability_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        capability_ids,
+        vec![
+            "customer_privacy.case.get",
+            "customer_privacy.case.list",
+            GET_PRIVACY_ACTION_PLAN_CAPABILITY,
+            LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY,
+        ]
+    );
     for definition in definitions {
         assert_eq!(
             definition.owner_module_id.as_str(),
