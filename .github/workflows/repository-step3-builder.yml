@@ -1,0 +1,96 @@
+name: Repository Step 3 Builder
+
+on:
+  push:
+    branches:
+      - architecture/repository-step3-contribution-aggregation
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-check:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: architecture/repository-step3-contribution-aggregation
+          fetch-depth: 0
+
+      - name: Apply deterministic source patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          native = Path("crates/crm-application-runtime/src/native_composition.rs")
+          text = native.read_text(encoding="utf-8")
+          old_accounts = '''use crm_customer_accounts_capability_adapter::capability_definitions as account_capability_definitions;
+          use crm_customer_accounts_query_adapter::query_capability_definitions as account_query_capability_definitions;
+          '''
+          if old_accounts not in text:
+              raise SystemExit("expected direct Customer Accounts inventory imports are absent")
+          text = text.replace(old_accounts, "", 1)
+          old_bundle = '''use crm_first_party_modules::{
+              FirstPartyProductionDependencies, build_all as build_first_party_modules,
+          };
+          '''
+          new_bundle = '''use crm_first_party_modules::{
+              FirstPartyProductionDependencies, build_all as build_first_party_modules,
+              customer_accounts_mutation_capability_definitions as account_capability_definitions,
+              customer_accounts_query_capability_definitions as account_query_capability_definitions,
+          };
+          '''
+          if old_bundle not in text:
+              raise SystemExit("expected first-party import block is absent")
+          native.write_text(text.replace(old_bundle, new_bundle, 1), encoding="utf-8")
+
+          checker = Path("scripts/check_native_module_composition.py")
+          text = checker.read_text(encoding="utf-8")
+          old_markers = '''    LegacyMarker(
+              "crates/crm-application-runtime/Cargo.toml",
+              "crm-customer-privacy-production =",
+              "Customer Privacy owner production returned as a direct generic-runtime dependency",
+          ),
+          LegacyMarker(
+              "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+              "crm_customer_privacy_production",
+              "Customer Privacy owner production bypassed the first-party aggregate",
+          ),
+          '''
+          new_markers = '''    LegacyMarker(
+              "crates/crm-application-runtime/src/native_composition.rs",
+              "use crm_customer_accounts_capability_adapter",
+              "Customer Accounts mutation inventory bypassed the first-party aggregate",
+          ),
+          LegacyMarker(
+              "crates/crm-application-runtime/src/native_composition.rs",
+              "use crm_customer_accounts_query_adapter",
+              "Customer Accounts query inventory bypassed the first-party aggregate",
+          ),
+          '''
+          if old_markers not in text:
+              raise SystemExit("expected temporary Customer Privacy markers are absent")
+          checker.write_text(text.replace(old_markers, new_markers, 1), encoding="utf-8")
+
+      - name: Install exact Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+
+      - name: Focused validation
+        run: |
+          cargo fmt --all -- --check
+          python -m unittest tests.test_native_module_composition
+          python scripts/check_native_module_composition.py
+          cargo check --locked -p crm-first-party-modules -p crm-application-runtime
+          git diff --exit-code -- Cargo.lock Cargo.toml crates/crm-application-runtime/Cargo.toml crates/crm-first-party-modules/Cargo.toml
+
+      - name: Commit deterministic patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-application-runtime/src/native_composition.rs scripts/check_native_module_composition.py
+          git commit -m "Route Customer Accounts inventory through first-party aggregate"
+          git push origin HEAD:architecture/repository-step3-contribution-aggregation
