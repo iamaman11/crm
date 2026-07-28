@@ -13,15 +13,16 @@ This is the concise current-state snapshot. Normative product dependencies remai
 - `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_FREEZE.md` and `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md`;
 - `CUSTOMER_PRIVACY_PLANNING_FREEZE.md` and `CUSTOMER_PRIVACY_PLANNING_IMPLEMENTATION.md`;
 - `CUSTOMER_PRIVACY_PLAN_READS_IMPLEMENTATION.md` and its machine-readable evidence;
+- `CUSTOMER_PRIVACY_APPROVAL_IMPLEMENTATION.md` and `contracts/customer-privacy-approval-implementation.json`;
 - `CRM_CAPABILITY_COVERAGE.md` and the accepted historical owner packet documents.
 
 ## Current position
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is in progress.**
 
-Latest accepted Customer Privacy runtime baseline is PR #211 / accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1f3a60a6d8e8bba7bda50f936c57a61bc3521f7` / 32 of 32 permanent workflows.
+Latest accepted Customer Privacy runtime baseline is PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows.
 
-The accepted inventory is four mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`), four permission-aware queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
+The accepted inventory is five public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
 
 **All nine authoritative owner implementations are accepted:**
 
@@ -57,6 +58,12 @@ PR #211 / accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1
 
 `case.owner_outcomes.list` validates bounded page/cursor input and returns a deterministic empty terminal page (`items = []`, empty terminal cursor) because owner execution and outcome persistence remain absent. Stable page/terminal digests and safe allow/deny evidence are append-only in a FORCE-RLS audit table. No outcome table, synthetic outcomes, mutation or worker is added.
 
+## Accepted approval runtime
+
+PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / squash merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows completes repository step 2. `customer_privacy.case.approve@1.0.0` is activation-gated, live-authorized, tenant-bound and optimistic-concurrency protected. It permits only `AwaitingApproval → Planned`, locks the case and immutable snapshot/plan evidence, preserves exact case↔subject↔snapshot↔plan lineage, records immutable approval actor/time, and atomically persists status, event, audit, idempotency and business evidence. Exact replay succeeds; conflicting replay, corrupt evidence, unauthorized access and cross-tenant existence fail closed.
+
+The packet adds no crate, dependency family, worker, restriction placement/release, legal-hold or mandatory-retention adjudication, owner execution/outcome persistence, access/export assembly or destructive action.
+
 ## Accepted Rust toolchain and lint governance
 
 Repository step 1 is accepted through PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 applicable permanent workflows.
@@ -65,13 +72,11 @@ The repository now supports exact Rust `1.97.1`; root workspace `rust-version` i
 
 ## Next permitted repository packet
 
-Implement Customer Privacy approval runtime only as repository step 2.
-
-The packet must stay inside the existing Customer Privacy packages and must not introduce immediate processing restrictions, legal-hold/mandatory-retention adjudication, owner execution, destructive actions, workers, dependency upgrades, generic-runtime business switches or crate consolidation.
+Repository step 3 is the first bounded contribution-aggregation packet without behavior changes. It may expand owner-owned first-party registration and remove selected concrete owner imports from generic runtime only where behavior, routes, coordinates, persistence, dependencies and public inventory remain unchanged.
 
 ## Following permitted repository packet
 
-After approval runtime is accepted, merged and evidence-synchronized, repository step 3 is the first bounded contribution-aggregation packet without behavior changes.
+Repository step 4 is immediate deny-only Customer Privacy processing restrictions using final subject locks. Legal-hold/mandatory-retention adjudication, owner execution, destructive actions and workers remain later packets.
 
 ## Architecture and developer-experience 10/10 checkpoint
 
@@ -89,8 +94,8 @@ Only one implementation packet may be active. The current order begins:
 
 ```text
 1. supported Rust toolchain / rust-version / measured lint baseline — complete through PR #218
--> 2. Customer Privacy approval runtime — next
--> 3. bounded contribution aggregation
+-> 2. Customer Privacy approval runtime — complete through PR #220
+-> 3. bounded contribution aggregation — next
 -> 4. immediate deny-only restrictions
 -> 5. explain / packet-check / generated active packet and repository map
 -> 6. legal-hold and mandatory-retention precedence

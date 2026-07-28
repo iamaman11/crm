@@ -33,7 +33,7 @@ Repository implementation is strictly sequential. Only the first unfinished item
 
 Issue #126 is **In progress**.
 
-Latest accepted public runtime inventory is four mutations, four permission-aware public queries and zero Customer Privacy workers through PR #211. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
+Latest accepted public runtime inventory is five mutations, four permission-aware public queries and zero Customer Privacy workers through PR #220. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
 
 All nine authoritative owner implementations are accepted:
 
@@ -57,7 +57,7 @@ PR #197, PR #199, PR #200 and PR #203 established reproducible architecture/depe
 
 PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 permanent workflows completes repository step 1. Exact Rust `1.97.1`, root workspace `rust-version = "1.97.1"`, zero measured Rust/Clippy warnings and errors, unchanged `Cargo.lock`, unchanged 113 packages and three exact expiring no-growth direct-lint exceptions are accepted.
 
-Customer Privacy approval runtime is now repository step 2 and the next permitted implementation packet.
+PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / squash merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows completes repository step 2. Bounded contribution aggregation without behavior change is now repository step 3 and the next permitted implementation packet.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -93,13 +93,21 @@ The packet adds one append-only FORCE-RLS safe read-audit table and no owner-out
 
 No new crate, generic-runtime switch, mutation, worker, owner mutation, approval, restriction, hold/retention decision or destructive execution is included.
 
+### 8.1 Accepted approval runtime
+
+PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / squash merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows accepts `customer_privacy.case.approve@1.0.0` through the existing Customer Privacy packages.
+
+The mutation is activation-gated, live-authorized, tenant-bound, expected-version protected and idempotent. It permits only `AwaitingApproval → Planned`, locks the case and immutable scope/plan evidence, validates exact case↔subject↔snapshot↔plan lineage, records immutable approval actor/time and atomically persists status, event, audit, idempotency and business evidence. Exact replay succeeds; conflicting replay, corrupt evidence, unauthorized access and cross-tenant existence fail closed.
+
+No restriction placement/release, legal-hold/mandatory-retention decision, owner execution/outcome persistence, access/export assembly, destructive action, worker, crate, dependency family or generic-runtime business switch is added.
+
 ## 9. Binding repository continuation
 
 The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. The Phase 8 positions are:
 
 1. repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — **complete through PR #218**;
-2. repository step 2 — Customer Privacy approval runtime — **next**;
-3. repository step 3 — bounded contribution aggregation without behavior change;
+2. repository step 2 — Customer Privacy approval runtime — **complete through PR #220**;
+3. repository step 3 — bounded contribution aggregation without behavior change — **next**;
 4. repository step 4 — immediate deny-only processing restrictions using final subject locks;
 5. repository step 5 — `explain`, `packet-check` and generated navigation;
 6. repository step 6 — legal-hold and mandatory-retention precedence;
@@ -120,7 +128,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 
 A later step must not start while an earlier step is unfinished. If architecture preflight proves that the current product step cannot satisfy an existing hard rule, only the smallest required architecture prerequisite may be inserted immediately before it; after acceptance, work returns to that same product step.
 
-Approval runtime must remain inside existing Customer Privacy packages. It may add only the exact approval behavior and evidence required by issue #126; restrictions, legal-hold/mandatory-retention adjudication, owner execution, destructive actions, workers, dependency upgrades, generic-runtime business switches and crate consolidation remain forbidden in repository step 2.
+Repository step 3 must remain behavior-neutral. It may expand owner-owned first-party registration and reduce selected concrete generic-runtime imports, but must not change routes, coordinates, persistence, authorization semantics, dependencies, public inventory or Customer Privacy behavior. Immediate deny-only restrictions remain repository step 4.
 
 ## 10. Frozen ownership
 
@@ -134,7 +142,7 @@ legal hold > mandatory retention > approved privacy action > ordinary retention
 
 Phase 8A remains **In progress**.
 
-It closes only after approval, restrictions, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
+It closes only after restrictions, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
 
 ## 12. Phase 8B and completion rule
 
