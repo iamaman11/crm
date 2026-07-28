@@ -267,7 +267,6 @@ dependencies = [
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-360-composition",
- "crm-customer-privacy",
  "crm-customer-privacy-cancel-capability-adapter",
  "crm-customer-privacy-capability-adapter",
  "crm-customer-privacy-query-adapter",

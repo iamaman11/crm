@@ -22,8 +22,7 @@ use std::fmt::Write as _;
 const TENANT_ID: &str = "tenant-a";
 const CANONICAL_PARTY_ID: &str = "privacy-approval-canonical-party";
 const POLICY_VERSION: &str = "privacy-policy/1";
-const BUSINESS_TRANSACTION_QUERY: &str =
-    "(SELECT last_business_transaction_id FROM crm.module_installations WHERE tenant_id = 'tenant-a' AND module_id = 'crm.customer-privacy')";
+const BUSINESS_TRANSACTION_QUERY: &str = "(SELECT last_business_transaction_id FROM crm.module_installations WHERE tenant_id = 'tenant-a' AND module_id = 'crm.customer-privacy')";
 
 struct Fixture {
     privacy_case: PrivacyCase,
@@ -129,14 +128,8 @@ fn build_fixture(suffix: &str, corrupt_planning_link: bool) -> Fixture {
         .enumerate()
         .map(|(index, contract)| {
             let terminal_cursor_digest = [u8::try_from(index + 1).unwrap(); 32];
-            let completeness = ContributionCompletenessProof::new(
-                true,
-                1,
-                0,
-                0,
-                terminal_cursor_digest,
-            )
-            .unwrap();
+            let completeness =
+                ContributionCompletenessProof::new(true, 1, 0, 0, terminal_cursor_digest).unwrap();
             let contribution = OwnerScopeContribution::new(
                 contract.clone(),
                 tenant_id.clone(),
