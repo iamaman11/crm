@@ -5,19 +5,18 @@
 //! The existing persistence and transaction-guard crates remain transitional
 //! implementation details. New owner persistence enters through this package.
 
-mod approval;
 mod discovery;
 mod planning;
 mod reads;
 
-pub use approval::*;
 pub use discovery::*;
 pub use planning::*;
 pub use reads::*;
 
 pub use crm_customer_privacy_capability_composition::{
-    PostgresCustomerPrivacyCancellationGuard, PostgresCustomerPrivacyPreviousCaseGuard,
-    PostgresCustomerPrivacySubjectVerificationGuard, postgres_case_cancel_executor,
+    PostgresCustomerPrivacyApprovalGuard, PostgresCustomerPrivacyCancellationGuard,
+    PostgresCustomerPrivacyPreviousCaseGuard, PostgresCustomerPrivacySubjectVerificationGuard,
+    postgres_case_approval_executor, postgres_case_cancel_executor,
     postgres_case_create_executor, postgres_case_subject_verify_executor,
     postgres_case_submit_executor,
 };
