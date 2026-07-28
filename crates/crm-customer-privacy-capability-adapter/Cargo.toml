@@ -7,6 +7,11 @@ publish = false
 [features]
 test-support = []
 
+[[bin]]
+name = "customer-privacy-approval-fixture"
+path = "src/bin/customer_privacy_approval_fixture.rs"
+required-features = ["test-support"]
+
 [dependencies]
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
