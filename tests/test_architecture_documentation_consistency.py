@@ -36,11 +36,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("bounded contribution", document.lower())
             self.assertIn("final customer-subject policy", document.lower())
             self.assertIn("immediate deny-only", document.lower())
+            self.assertIn("repo.py explain", document)
+            self.assertIn("packet-check", document)
             self.assertIn("rust-version", document)
             self.assertIn("PR #218", document)
             self.assertIn("PR #220", document)
             self.assertIn("PR #222", document)
             self.assertIn("PR #224", document)
+            self.assertIn("PR #226", document)
 
         self.assertIn("Phases 0.1–7 are complete", self.status)
         self.assertIn("Current product-complete expert modules: **0**", self.status)
@@ -104,15 +107,21 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         step_4 = (
             "4. immediate deny-only Customer Privacy processing restrictions using final "
-            "subject locks — **Next**;"
+            "subject locks — **Complete through PR #226**;"
+        )
+        step_5 = (
+            "5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` "
+            "and generated repository map — **Next**;"
         )
         self.assertIn(step_1, self.plan)
         self.assertIn(step_2, self.plan)
         self.assertIn(step_3, self.plan)
         self.assertIn(step_4, self.plan)
+        self.assertIn(step_5, self.plan)
         self.assertLess(self.plan.index(step_1), self.plan.index(step_2))
         self.assertLess(self.plan.index(step_2), self.plan.index(step_3))
         self.assertLess(self.plan.index(step_3), self.plan.index(step_4))
+        self.assertLess(self.plan.index(step_4), self.plan.index(step_5))
 
         self.assertIn("## Next permitted repository packet", self.status)
         self.assertIn("## Following permitted repository packet", self.status)
@@ -120,6 +129,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("Repository step 2", self.roadmap)
         self.assertIn("Repository step 3", self.roadmap)
         self.assertIn("Repository step 4", self.roadmap)
+        self.assertIn("Repository step 5", self.roadmap)
         self.assertIn("## 9. Binding repository continuation", self.phase8)
 
         forbidden_ambiguous_phrases = (
@@ -157,10 +167,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 self.assertIn(accepted_source, document)
                 self.assertIn(merge, document)
                 self.assertIn("21 of 21", document)
-
-        self.assertIn("five public mutations", self.status.lower())
-        self.assertIn("five public mutations", self.roadmap.lower())
-        self.assertIn("five mutations", self.phase8.lower())
+                self.assertIn("approval", document.lower())
 
     def test_repository_step_3_acceptance_is_synchronized(self) -> None:
         accepted_source = "b5651e784a156758b39eaa04abc1124c7c0832f9"
@@ -184,7 +191,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("immediate deny-only", document.lower())
             self.assertIn("final subject locks", document.lower())
 
-        self.assertIn("5 mutations / 4 queries / 0 workers", self.plan)
+        self.assertIn("6 mutations / 4 queries / 0 workers", self.plan)
         self.assertNotIn("4 mutations / 4 queries / 0 workers", self.plan)
         self.assertIn("workspace remains at 113 packages", self.roadmap.lower())
         self.assertIn("workspace packages remain 113", self.catalog.lower())
@@ -212,11 +219,34 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("immediate deny-only", document.lower())
             self.assertIn("final subject locks", document.lower())
 
-        self.assertIn("Restrictions remain unimplemented", self.status)
-        self.assertIn("Restrictions remain unimplemented", self.roadmap)
-        self.assertIn("Restrictions remain unimplemented", self.phase8)
-        self.assertIn("no restriction behavior yet", self.plan)
-        self.assertIn("no Customer Privacy restriction decision", self.catalog)
+    def test_repository_step_4_restriction_acceptance_is_synchronized(self) -> None:
+        accepted_source = "ad08a691ec759b8b3b523fa66a034cecf4138ff0"
+        merge = "a46460623e90c5649d36bedba055fb55023d9349"
+        for document in (
+            self.plan,
+            self.status,
+            self.roadmap,
+            self.phase8,
+            self.catalog,
+        ):
+            with self.subTest(document=document[:40]):
+                self.assertIn("PR #226", document)
+                self.assertIn(accepted_source, document)
+                self.assertIn(merge, document)
+                self.assertIn("34 of 34", document)
+                self.assertIn("restriction.place", document)
+                self.assertIn("protected-owner", document.lower())
+
+        for document in (self.plan, self.status, self.roadmap, self.phase8):
+            self.assertIn("repository step 5", document.lower())
+            self.assertIn("packet-check", document)
+            self.assertIn("generated", document.lower())
+
+        self.assertIn("six public mutations", self.status.lower())
+        self.assertIn("six public mutations", self.roadmap.lower())
+        self.assertIn("six mutations", self.phase8.lower())
+        self.assertIn("six mutations", self.catalog.lower())
+        self.assertIn("6 mutations / 4 queries / 0 workers", self.plan)
 
     def test_navigation_has_one_stable_human_index(self) -> None:
         self.assertIn("docs/README.md", self.readme)
@@ -371,6 +401,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "The next permitted implementation packet is repository step 3",
             "final customer-subject policy prerequisite is next",
             "Repository step 4 remains blocked until this prerequisite is accepted",
+            "Repository step 4 has not started",
+            "Restrictions remain unimplemented",
+            "no Customer Privacy restriction decision",
+            "no restriction behavior yet",
+            "immediate deny-only Customer Privacy processing restrictions using final subject locks remain repository step 4 and the current next packet",
+            "4. immediate deny-only Customer Privacy processing restrictions using final subject locks — **Next**",
         )
         for statement in stale:
             for document in (
