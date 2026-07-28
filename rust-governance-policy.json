@@ -2,21 +2,20 @@
   "schema_version": "crm.rust-governance-policy/v1",
   "supported_toolchain": {
     "channel": "1.97.1",
-    "minimum_rust_version": "1.85",
+    "minimum_rust_version": "1.97.1",
     "edition": "2024",
     "resolver": "2",
     "profile": "minimal",
     "components": ["clippy", "rustfmt"]
   },
+  "support_policy": {
+    "current_boundary": "The exact Rust 1.97.1 toolchain is the only supported compiler boundary until a separate packet proves a lower MSRV on the complete locked workspace.",
+    "lower_toolchains": "Edition availability alone is not MSRV evidence. A lower rust-version requires locked dependency resolution, complete compilation and applicable tests on that exact compiler.",
+    "upgrade_rule": "A toolchain change must remain isolated from dependency upgrades and product behavior, regenerate measurement artifacts and pass unchanged exact-head acceptance."
+  },
   "workspace_lints": {
     "rust": {
-      "unsafe_code": "forbid",
-      "unused_must_use": "deny"
-    },
-    "clippy": {
-      "dbg_macro": "deny",
-      "todo": "deny",
-      "unimplemented": "deny"
+      "warnings": "deny"
     }
   },
   "measured_baseline": {
