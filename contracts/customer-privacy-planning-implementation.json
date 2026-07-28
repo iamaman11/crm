@@ -1,7 +1,7 @@
 {
   "schema_id": "crm.governance.customer-privacy-planning-implementation",
   "schema_version": "1.0.0",
-  "status": "implemented_pending_exact_head_acceptance",
+  "status": "accepted_merged",
   "historical_freeze_preserved": "contracts/customer-privacy-planning-freeze.json",
   "coordinate": {
     "capability_id": "customer_privacy.plan.build",
@@ -131,10 +131,10 @@
     "requires_complete_schema_removal": true,
     "requires_reapply": true,
     "requires_repeated_acceptance": true,
-    "accepted_source_sha": null,
-    "permanent_workflow_count": null,
-    "merge_sha": null,
-    "pull_request": null
+    "accepted_source_sha": "b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b",
+    "permanent_workflow_count": 29,
+    "merge_sha": "30621ffff5c1e07e1275cc80fee3f1297a91f49e",
+    "pull_request": 209
   },
   "next_packet": "permission-aware plan.get and empty future-safe owner_outcomes.list runtime",
   "phase_8a_complete": false,
