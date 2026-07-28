@@ -1,0 +1,152 @@
+name: Customer Privacy Restriction Policy CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "architecture-policy.json"
+      - "scripts/check_architecture.py"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "crates/crm-application-runtime/tests/customer_privacy_restriction_policy_postgres.rs"
+      - "modules/crm-customer-privacy/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - ".github/workflows/customer-privacy-restriction-policy.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "architecture-policy.json"
+      - "scripts/check_architecture.py"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "crates/crm-application-runtime/tests/customer_privacy_restriction_policy_postgres.rs"
+      - "modules/crm-customer-privacy/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - ".github/workflows/customer-privacy-restriction-policy.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  restriction-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_privacy_restriction_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5452:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_privacy_restriction_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5452
+      PGDATABASE: crm_privacy_restriction_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5452/crm_privacy_restriction_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5452/crm_privacy_restriction_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+        with:
+          toolchain: 1.97.1
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Run architecture preflight
+        run: python scripts/check_architecture.py
+      - name: Apply clean authoritative schema and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify authoritative final restriction decision
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-application-runtime \
+            --test customer_privacy_restriction_policy_postgres \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-restriction-policy-clean.log
+      - name: Roll back authoritative schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply authoritative schema and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Repeat authoritative final restriction decision
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-application-runtime \
+            --test customer_privacy_restriction_policy_postgres \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-restriction-policy-reapplied.log
+      - name: Capture PostgreSQL diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/customer-privacy-restriction-policy-postgres.log 2>&1
+          fi
+      - name: Upload restriction policy diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: customer-privacy-restriction-policy-diagnostics
+          path: |
+            crates/crm-customer-privacy-postgres/
+            crates/crm-customer-privacy-production/
+            crates/crm-application-runtime/tests/customer_privacy_restriction_policy_postgres.rs
+            database/customer-privacy-restriction-policy-*.log
+          if-no-files-found: warn
+          retention-days: 7
