@@ -39,9 +39,14 @@ class CustomerPrivacyPlanReadsImplementationTests(unittest.TestCase):
         self.assertIsNone(acceptance["permanent_workflow_count"])
         self.assertIsNone(acceptance["merge_sha"])
         self.assertEqual(
-            self.planning_freeze["implementation_status"]["runtime"],
-            "not_started",
+            self.planning_freeze["packet"]["state"],
+            "contract_acceptance_frozen_runtime_not_started",
         )
+        for coordinate in ("plan_build", "plan_get", "owner_outcomes_list"):
+            self.assertEqual(
+                self.planning_freeze["coordinates"][coordinate]["runtime_state"],
+                "not_implemented",
+            )
         self.assertEqual(self.planning_runtime["status"], "accepted_merged")
         self.assertIn("Historical sources remain immutable", self.document)
 
@@ -130,7 +135,10 @@ class CustomerPrivacyPlanReadsImplementationTests(unittest.TestCase):
         self.assertIn("CustomerPrivacyPlanReadAdapter", application)
         self.assertIn("owner_outcome_page_digest", application)
         self.assertIn("privacy_owner_outcomes: Vec::new()", application)
-        self.assertIn("Customer Privacy production inventory must contain exactly four queries", production)
+        self.assertIn(
+            "Customer Privacy production inventory must contain exactly four queries",
+            production,
+        )
         self.assertIn("CREATE TABLE crm.customer_privacy_plan_read_audit", migration)
         self.assertIn("FORCE ROW LEVEL SECURITY", migration)
         self.assertIn("CREATE POLICY tenant_isolation", migration)
