@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 crm-application-composition = { path = "../crm-application-composition" }
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
 crm-customer-privacy-capability-adapter = { path = "../crm-customer-privacy-capability-adapter" }
