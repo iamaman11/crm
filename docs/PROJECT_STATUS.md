@@ -10,15 +10,16 @@ This is the concise current-state snapshot. Normative order remains in `IMPLEMEN
 - `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, `MODULE_CATALOG.md`;
 - `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_FREEZE.md` and `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md`;
 - `CUSTOMER_PRIVACY_PLANNING_FREEZE.md` and `CUSTOMER_PRIVACY_PLANNING_IMPLEMENTATION.md`;
+- `CUSTOMER_PRIVACY_PLAN_READS_IMPLEMENTATION.md` and its machine-readable evidence;
 - `CRM_CAPABILITY_COVERAGE.md` and the accepted historical owner packet documents.
 
 ## Current position
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is in progress.**
 
-Latest accepted Customer Privacy runtime baseline: PR #209 / accepted source `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b` / merge `30621ffff5c1e07e1275cc80fee3f1297a91f49e` / 29 of 29 permanent workflows.
+Latest accepted Customer Privacy runtime baseline remains PR #209 / accepted source `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b` / merge `30621ffff5c1e07e1275cc80fee3f1297a91f49e` / 29 of 29 permanent workflows. PR #211 implements the next bounded read packet and is pending unchanged exact-head acceptance.
 
-Merged public inventory remains four mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`), two permission-aware queries (`case.get`, `case.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` is trusted-internal runtime with no public route. `customer_privacy.case.plan.get@1.0.0` and `customer_privacy.case.owner_outcomes.list@1.0.0` remain published but non-runtime.
+PR #211 target inventory is four mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`), four permission-aware queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
 
 **All nine authoritative owner implementations are accepted:**
 
@@ -44,24 +45,28 @@ PR #208 froze the deterministic action-plan and permission-aware read semantics.
 
 PR #209 later accepted the trusted-internal activation-gated planning runtime. It verifies the exact case, immutable scope snapshot, Party/Identity Resolution binding, policy and jurisdiction lineage; builds deterministic `Retain`, `RestrictOnly`, `Anonymize`, `Delete` or supported `CryptoShred` items; reserves `NoOpAlreadyCompliant`; strictly rehydrates the plan; atomically persists case/snapshot/plan replay evidence and transitions `Scoped → Planned` or `Scoped → AwaitingApproval`.
 
-Accepted controls include canonical owner/resource order, contiguous sequence, lineage/item/plan digests, unsupported crypto-shred fail closed, idempotent replay/conflict detection, append-only evidence, FORCE RLS, canonical `tenant_isolation`, cross-tenant concealment, clean PostgreSQL, rollback/reapply and repeated acceptance. Workspace packages remain 113 and public inventory remains 4 mutations / 2 queries / 0 workers.
+Accepted controls include canonical owner/resource order, contiguous sequence, lineage/item/plan digests, unsupported crypto-shred fail closed, idempotent replay/conflict detection, append-only evidence, FORCE RLS, canonical `tenant_isolation`, cross-tenant concealment, clean PostgreSQL, rollback/reapply and repeated acceptance. PR #209 historical inventory remains 4 mutations / 2 queries / 0 workers.
+
+## Implemented read packet pending acceptance
+
+PR #211 promotes only `customer_privacy.case.plan.get@1.0.0` and `customer_privacy.case.owner_outcomes.list@1.0.0` through the existing Customer Privacy application/PostgreSQL/production packages.
+
+`case.plan.get` is activation-gated, tenant-bound and live permission-aware. It strictly validates the case, immutable snapshot, immutable plan and durable replay link before returning a payload-safe summary without owner resource payloads.
+
+`case.owner_outcomes.list` validates bounded page/cursor input and returns a deterministic empty terminal page (`items = []`, empty terminal cursor) because owner execution and outcome persistence remain absent. Stable page/terminal digests and safe allow/deny evidence are append-only in a FORCE-RLS audit table. No outcome table, synthetic outcomes, mutation or worker is added.
 
 ## Next bounded packet
 
-Implement only:
-
-- permission-aware, activation-gated, tenant-bound `customer_privacy.case.plan.get@1.0.0` with strict case↔plan↔snapshot lineage, payload-safe summary, audited read and concealed unauthorized/cross-tenant absence;
-- bounded `customer_privacy.case.owner_outcomes.list@1.0.0` returning `items = []` and a deterministic terminal page until owner execution exists.
-
-No new crate, mutation, worker, owner mutation, approval, restriction, legal-hold/retention adjudication, outcome persistence or destructive execution belongs in this packet.
+After PR #211 is accepted and merged, implement approval runtime only. Immediate deny-only restrictions, legal-hold/mandatory-retention precedence, owner execution, destructive actions and workers remain later separate packets.
 
 ## Continuation order
 
 ```text
 accepted scope discovery and immutable snapshot
 -> accepted deterministic planning runtime
--> permission-aware plan/outcome reads
--> approval and immediate deny-only restrictions
+-> permission-aware plan/outcome reads pending exact-head acceptance
+-> approval runtime
+-> immediate deny-only restrictions
 -> legal-hold and mandatory-retention precedence
 -> replay-safe resumable owner execution and crash recovery
 -> governed access/export and deletion/anonymization/crypto-shred
