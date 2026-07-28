@@ -8,10 +8,12 @@
 mod discovery;
 mod planning;
 mod reads;
+mod restrictions;
 
 pub use discovery::*;
 pub use planning::*;
 pub use reads::*;
+pub use restrictions::*;
 
 pub use crm_customer_privacy_capability_composition::{
     PostgresCustomerPrivacyApprovalGuard, PostgresCustomerPrivacyCancellationGuard,
