@@ -1,0 +1,48 @@
+#![forbid(unsafe_code)]
+
+#[path = "lib.rs"]
+mod case_create;
+mod restriction;
+
+pub use case_create::{
+    CREATE_PRIVACY_CASE_CAPABILITY, CREATE_PRIVACY_CASE_REQUEST_SCHEMA,
+    CREATE_PRIVACY_CASE_RESPONSE_SCHEMA, CustomerPrivacyCaseCreateCapabilityPlanner,
+    CustomerPrivacyCasePreviousReferencePlanner, PRIVACY_CASE_CREATED_EVENT_SCHEMA,
+    PRIVACY_CASE_CREATED_EVENT_TYPE, capability_definition, deterministic_privacy_case_id,
+    previous_case_id_from_request, previous_case_not_found, privacy_case_from_create_request,
+    privacy_case_ref_from_id, validate_previous_case_snapshot,
+};
+pub use restriction::*;
+
+use crm_capability_runtime::CapabilityDefinition;
+use crm_module_sdk::SdkError;
+
+pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
+    CREATE_PRIVACY_CASE_CAPABILITY,
+    PLACE_PROCESSING_RESTRICTION_CAPABILITY,
+];
+
+pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    Ok(vec![
+        capability_definition()?,
+        place_processing_restriction_capability_definition()?,
+    ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exact_inventory_contains_case_create_and_restriction_place() {
+        let definitions = capability_definitions().unwrap();
+        assert_eq!(definitions.len(), 2);
+        assert_eq!(
+            definitions
+                .iter()
+                .map(|definition| definition.capability_id.as_str())
+                .collect::<Vec<_>>(),
+            IMPLEMENTED_MUTATION_CAPABILITY_IDS
+        );
+    }
+}
