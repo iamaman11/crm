@@ -145,12 +145,12 @@ The only permitted current sequence is:
 1. **Repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — Complete through PR #218.**
 2. **Repository step 2 — Customer Privacy approval runtime — Complete through PR #220.**
 3. **Repository step 3 — bounded contribution aggregation without behavior change — Complete through PR #222.**
-4. **Inserted step 4 prerequisite — final customer-subject policy port and deterministic guard composition — Complete through PR #224.**
-5. **Repository step 4 — immediate deny-only processing restrictions with final subject locks — Next.**
-6. **Repository step 5 — `explain`, `packet-check` and generated navigation.**
-7. **Repository step 6 — legal-hold and mandatory-retention precedence.**
-8. **Repository steps 7–19 — continue exactly as numbered in the architecture plan.**
-9. **Repository step 20 — first Phase 8B packet.**
+3a. **Inserted repository step 4 prerequisite — final customer-subject policy port and deterministic guard composition — Complete through PR #224.**
+4. **Repository step 4 — immediate deny-only processing restrictions with final subject locks — Next.**
+5. **Repository step 5 — `explain`, `packet-check` and generated navigation.**
+6. **Repository step 6 — legal-hold and mandatory-retention precedence.**
+7–19. **Repository steps 7–19 — continue exactly as numbered in the architecture plan.**
+20. **Repository step 20 — first Phase 8B packet.**
 
 The inserted prerequisite did not renumber the master sequence. Immediate deny-only processing restrictions using final subject locks remain repository step 4 and the next permitted product packet.
 
