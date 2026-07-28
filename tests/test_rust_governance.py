@@ -4,6 +4,7 @@ from datetime import date
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import tomllib
 import unittest
 
 from scripts.check_rust_governance import (
@@ -12,6 +13,20 @@ from scripts.check_rust_governance import (
     package_adoption,
     workspace_members_from_text,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_LEGACY_DIRECT_LINTS = {
+    "crates/crm-application-runtime/Cargo.toml": {
+        "clippy": {"too_many_arguments": "allow"}
+    },
+    "crates/crm-customer-data-operations-execution-composition/Cargo.toml": {
+        "clippy": {"too_many_arguments": "allow"}
+    },
+    "services/crm-api/Cargo.toml": {
+        "clippy": {"too_many_arguments": "allow"}
+    },
+}
 
 
 class RustGovernanceTests(unittest.TestCase):
@@ -129,6 +144,36 @@ version = "0.1.0"
         self.assertEqual(set(active), {"crates/valid/Cargo.toml"})
         self.assertTrue(any("expired" in error for error in errors))
         self.assertTrue(any("exact Cargo.toml" in error for error in errors))
+
+    def test_repository_legacy_direct_lint_exceptions_are_exact(self) -> None:
+        registry = json.loads(
+            (ROOT / "architecture-governance.json").read_text(encoding="utf-8")
+        )
+        rust_exceptions = {
+            item["scope"]: item
+            for item in registry["exceptions"]
+            if item.get("rule") == "rust-governance"
+        }
+        self.assertEqual(set(rust_exceptions), set(EXPECTED_LEGACY_DIRECT_LINTS))
+
+        for relative, expected_lints in EXPECTED_LEGACY_DIRECT_LINTS.items():
+            with self.subTest(manifest=relative):
+                manifest = tomllib.loads(
+                    (ROOT / relative).read_text(encoding="utf-8")
+                )
+                self.assertEqual(manifest.get("lints"), expected_lints)
+                self.assertEqual(
+                    rust_exceptions[relative]["expiry_date"],
+                    "2027-01-31",
+                )
+
+        policy = json.loads(
+            (ROOT / "rust-governance-policy.json").read_text(encoding="utf-8")
+        )
+        baseline = policy["measured_baseline"]
+        self.assertEqual(baseline["maximum_direct_lint_tables"], 3)
+        self.assertEqual(baseline["maximum_missing_workspace_lints_packages"], 110)
+        self.assertEqual(baseline["active_rust_governance_exceptions"], 3)
 
     def test_workspace_member_parser_uses_only_declared_members(self) -> None:
         text = """[workspace]
