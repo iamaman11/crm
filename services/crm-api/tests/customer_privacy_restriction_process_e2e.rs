@@ -255,7 +255,7 @@ fn restriction_payload(definition: &CapabilityDefinition, party_id: &str) -> Typ
             }),
             scope: privacy::ProcessingRestrictionScope::Processing as i32,
             policy_version: "privacy-policy/1".to_owned(),
-            effective_from_unix_ms: 0,
+            effective_from_unix_ms: now_millis(),
             expires_at_unix_ms: None,
         },
     )
@@ -386,6 +386,16 @@ fn assert_safe_status(
             "safe restriction denial leaked protected detail: {forbidden}"
         );
     }
+}
+
+fn now_millis() -> i64 {
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time after Unix epoch")
+            .as_millis(),
+    )
+    .expect("current timestamp fits i64")
 }
 
 fn unique_id(prefix: &str) -> String {
