@@ -32,8 +32,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("Phase 8A", document)
             self.assertIn("approval runtime", document.lower())
             self.assertIn("permission-aware", document.lower())
+            self.assertIn("bounded contribution", document.lower())
             self.assertIn("rust-version", document)
             self.assertIn("PR #218", document)
+            self.assertIn("PR #220", document)
 
         self.assertIn("Phases 0.1–7 are complete", self.status)
         self.assertIn("Current product-complete expert modules: **0**", self.status)
@@ -87,8 +89,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "1. supported Rust toolchain, workspace `rust-version` and measured lint "
             "baseline — **Complete through PR #218**;"
         )
-        step_2 = "2. Customer Privacy approval runtime only — **Next**;"
-        step_3 = "3. first bounded contribution-aggregation packet"
+        step_2 = (
+            "2. Customer Privacy approval runtime only — **Complete through PR #220**;"
+        )
+        step_3 = (
+            "3. first bounded contribution-aggregation packet: expand owner-owned "
+            "first-party registration and reduce selected concrete generic-runtime imports "
+            "without behavior changes — **Next**;"
+        )
         self.assertIn(step_1, self.plan)
         self.assertIn(step_2, self.plan)
         self.assertIn(step_3, self.plan)
@@ -126,6 +134,20 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("three exact expiring", self.roadmap.lower())
         self.assertIn("three exact expiring", self.phase8.lower())
         self.assertIn("three exact expiring", self.plan.lower())
+
+    def test_customer_privacy_approval_acceptance_is_synchronized(self) -> None:
+        accepted_source = "98000b0c1c2c15e14c7ee0cd2a366020040567e6"
+        merge = "01118df3b6349b6d854c4182c17f7eb9a6316b9c"
+        for document in (self.plan, self.status, self.roadmap, self.phase8):
+            with self.subTest(document=document[:40]):
+                self.assertIn("PR #220", document)
+                self.assertIn(accepted_source, document)
+                self.assertIn(merge, document)
+                self.assertIn("21 of 21", document)
+
+        self.assertIn("five public mutations", self.status.lower())
+        self.assertIn("five public mutations", self.roadmap.lower())
+        self.assertIn("five mutations", self.phase8.lower())
 
     def test_navigation_has_one_stable_human_index(self) -> None:
         self.assertIn("docs/README.md", self.readme)
@@ -268,6 +290,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "The current next packet is repository step 1",
             "Repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — Next",
             "remains blocked until repository step 1 is accepted",
+            "Implement Customer Privacy approval runtime only as repository step 2",
+            "Repository step 2 — Customer Privacy approval runtime — Next",
+            "Customer Privacy approval runtime is now repository step 2 and the next permitted implementation packet",
+            "Approval runtime is now the next permitted repository and product packet",
+            "Approval runtime is the next packet",
         )
         for statement in stale:
             for document in (

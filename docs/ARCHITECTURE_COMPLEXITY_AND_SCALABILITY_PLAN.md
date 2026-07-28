@@ -94,7 +94,9 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 
 Repository step 1 is accepted through PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 permanent workflows. The exact supported compiler and workspace `rust-version` are `1.97.1`; Rust and Clippy warning/error budgets are zero; the 113-package workspace and `Cargo.lock` are unchanged; three pre-existing direct `too_many_arguments` lint tables are exact, expiring, no-growth exceptions.
 
-The next permitted implementation packet is repository step 2: Customer Privacy approval runtime only. It must not include restrictions, legal-hold/mandatory-retention precedence, owner execution, destructive actions, workers, dependency upgrades or crate consolidation.
+Repository step 2 is accepted through PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / squash merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows. Approval remains inside the existing Customer Privacy packages and adds no restrictions, hold/retention adjudication, owner execution, destructive actions, workers, dependency upgrades or crate consolidation.
+
+The next permitted implementation packet is repository step 3: the first bounded contribution-aggregation packet without behavior changes.
 
 ### 2.4 Single repository execution order
 
@@ -114,8 +116,8 @@ Execution rules:
 Current master sequence:
 
 1. supported Rust toolchain, workspace `rust-version` and measured lint baseline — **Complete through PR #218**;
-2. Customer Privacy approval runtime only — **Next**;
-3. first bounded contribution-aggregation packet: expand owner-owned first-party registration and reduce selected concrete generic-runtime imports without behavior changes;
+2. Customer Privacy approval runtime only — **Complete through PR #220**;
+3. first bounded contribution-aggregation packet: expand owner-owned first-party registration and reduce selected concrete generic-runtime imports without behavior changes — **Next**;
 4. immediate deny-only Customer Privacy processing restrictions using final subject locks;
 5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map;
 6. Customer Privacy legal-hold and mandatory-retention precedence;
