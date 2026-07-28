@@ -281,10 +281,11 @@ fn processing_restriction_to_wire(
 fn decode_place_request(
     request: &CapabilityRequest,
 ) -> Result<wire::PlaceProcessingRestrictionRequest, SdkError> {
-    support::decode_request(
+    support::decode_request_with_data_class(
         request,
         MODULE_ID,
         PLACE_PROCESSING_RESTRICTION_REQUEST_SCHEMA,
+        DataClass::Personal,
     )
 }
 
