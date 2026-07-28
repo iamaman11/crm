@@ -8,6 +8,7 @@ Delivery-control policy: `DELIVERY_GOVERNANCE.md`
 Current concise state: `PROJECT_STATUS.md`  
 Detailed Phase 8 sequence: `PHASE8_DELIVERY_PLAN.md`  
 Architecture/developer-experience program and repository order: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` / issue #194  
+Accepted Rust boundary: `RUST_TOOLCHAIN_AND_LINT_BASELINE.md` / `rust-governance-policy.json`  
 Measured architecture baseline: `WORKSPACE_COMPLEXITY_BASELINE.md`  
 Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`  
 Business-module accounting: `MODULE_CATALOG.md`
@@ -50,13 +51,13 @@ Only merged `main` work may be represented as **Complete**.
 Issue #194 remains **Open**.
 
 - Stage A documentation/navigation baseline — **Complete**.
-- Stage B dependency, crate and exception governance — **Complete for the no-growth prerequisite**.
+- Stage B dependency, crate and exception governance — **In progress; Rust toolchain and measured lint prerequisite accepted through PR #218**.
 - Stage C Customer Privacy golden owner packages — **Complete** through PR #205.
 - Stages D–I — broader contribution aggregation, affected-scope expansion, conformance, consolidation, reproducible environment, frontend and operations parity remain open.
 
-Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204 and PR #205. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; zero temporary architecture exceptions are active.
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205 and PR #218. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
-The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. The current next packet is repository step 1: supported Rust toolchain, workspace `rust-version` and measured lint baseline.
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository step 1 is complete; the current next packet is repository step 2: Customer Privacy approval runtime only.
 
 ## 4. Phase 8A completed foundation
 
@@ -106,12 +107,18 @@ The packet requires module activation, live visibility, tenant-bound reads, stri
 
 It adds no crate, dependency family, mutation, worker, owner mutation, approval, restriction, hold/retention adjudication or destructive execution.
 
+### 5.4 Accepted Rust prerequisite
+
+PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 permanent workflows completes repository step 1 without changing Customer Privacy behavior, dependencies, `Cargo.lock` or the 113-package workspace.
+
+The accepted boundary is exact Rust `1.97.1`, root workspace `rust-version = "1.97.1"`, zero measured Rust/Clippy warnings and errors, and three exact expiring no-growth direct-lint exceptions.
+
 ## 6. Binding active sequence
 
 The only permitted current sequence is:
 
-1. **Repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — Next.**
-2. **Repository step 2 — approval runtime.**
+1. **Repository step 1 — supported Rust toolchain, workspace `rust-version` and measured lint baseline — Complete through PR #218.**
+2. **Repository step 2 — Customer Privacy approval runtime — Next.**
 3. **Repository step 3 — bounded contribution aggregation without behavior change.**
 4. **Repository step 4 — immediate deny-only processing restrictions with final subject locks.**
 5. **Repository step 5 — `explain`, `packet-check` and generated navigation.**
@@ -119,7 +126,7 @@ The only permitted current sequence is:
 7. **Repository steps 7–19 — continue exactly as numbered in the architecture plan.**
 8. **Repository step 20 — first Phase 8B packet.**
 
-Approval runtime remains the next product packet, but it is not the next repository packet. It may start only after repository step 1 is accepted and merged. Its implementation must not introduce restrictions, legal-hold/retention adjudication, owner execution or destructive behavior early.
+Approval runtime is now the next permitted repository and product packet. Its implementation must not introduce restrictions, legal-hold/retention adjudication, owner execution, destructive behavior, workers, dependency upgrades, generic-runtime business switches or crate consolidation.
 
 ## 7. Phase 8B and later expert domains
 
