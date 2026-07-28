@@ -20,7 +20,7 @@ Before generating anything, decide:
 - exact dependencies for a link module;
 - lifecycle, disable, rollback and uninstall expectations;
 - storage and migration ownership;
-- whether any real provider, trust, process or extraction boundary exists.
+- whether a real provider, trust, process or extraction boundary exists.
 
 ## 2. Ordinary capability rule
 
@@ -44,8 +44,6 @@ Feature behavior and behavior-neutral crate consolidation are separate PRs.
 
 The current generator creates a **foundation owner/link crate** under `modules/`. It proves naming, manifest, lifecycle placeholders and pure dependency boundaries.
 
-It does not yet generate the complete target owner package set.
-
 Current foundation output:
 
 ```text
@@ -63,7 +61,7 @@ modules/crm-<domain>/
   MODULE_CATALOG_ENTRY.md
 ```
 
-Target owner packaging under issue #194:
+The accepted Customer Privacy pilot proves the target technical package model:
 
 ```text
 modules/crm-<domain>/                 # pure domain
@@ -74,7 +72,7 @@ crates/crm-<domain>-production/       # routes, workers, contribution, wiring
 
 An optional fifth package is allowed only for a real provider, trust, process or extraction boundary.
 
-Until Stage C is implemented, do not manually imitate the target by creating a new crate per use case. Evolve one owner through an explicitly reviewed package-boundary packet.
+Stage C is not complete merely because one pilot exists. Until scaffolding, migration ownership and visibility rules are generalized, evolve another owner only through an explicitly reviewed package-boundary packet. Never imitate the target by creating one new crate per use case.
 
 ## 4. Generate an owner foundation
 
@@ -112,21 +110,9 @@ A link module:
 - consumes published events and invokes governed capabilities;
 - remains independently installable, disableable and uninstallable.
 
-## 6. Preview safely
+Use `--dry-run` before generation.
 
-Use `--dry-run` before generation:
-
-```bash
-python scripts/scaffold_module.py owner \
-  --module-id crm.customer \
-  --display-name "CRM Customer" \
-  --team customer-platform \
-  --contact crm-owner@example.com \
-  --object customer.party \
-  --dry-run
-```
-
-## 7. Permanent repository commands
+## 6. Permanent repository commands
 
 Use the stable command runner:
 
@@ -149,13 +135,13 @@ python scripts/repo.py quality
 
 Specialized Contract, Database, Event Runtime, Application Runtime, process and frontend gates remain mandatory when affected. `quality` does not replace specialized acceptance.
 
-Planned commands such as `doctor`, `bootstrap`, `dev-up`, `explain` and `packet-check` are documented in `docs/README.md` but are not available until implemented and permanently tested.
+Planned commands such as `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain` and `packet-check` are documented in `docs/README.md` but are not available until implemented and permanently tested.
 
-## 8. From foundation to production
+## 7. From foundation to production
 
 Follow `DEVELOPMENT_WORKFLOW.md`:
 
-1. ownership, invariants and exclusions;
+1. authoritative ownership, invariants and exclusions;
 2. public contract or compatible new version;
 3. application commands/queries/workers and ports;
 4. persistence and migration ownership;
@@ -167,7 +153,7 @@ Follow `DEVELOPMENT_WORKFLOW.md`:
 
 A generated directory, compiling crate or valid manifest is never evidence of a production vertical slice.
 
-## 9. Package-boundary decision
+## 8. Package-boundary decision
 
 Create a package only when it protects at least one real boundary:
 
@@ -176,7 +162,8 @@ Create a package only when it protects at least one real boundary:
 - independent trust/security boundary;
 - separately operating worker/process;
 - multiple independent consumers;
-- credible extraction seam documented by ADR.
+- credible extraction seam documented by ADR;
+- visibility that package boundaries must enforce.
 
 Required review note:
 
@@ -191,7 +178,7 @@ New crate justification:
 - removal or consolidation condition:
 ```
 
-## 10. Dependency and Rust visibility rules
+## 9. Dependency and Rust visibility rules
 
 Pure business modules depend only on stable platform contracts and governed SDK ports.
 
@@ -201,7 +188,7 @@ Pure business modules depend only on stable platform contracts and governed SDK 
 - public Rust APIs are limited to contracts, stable ports and contribution interfaces;
 - concrete adapters and repositories are not re-exported for convenience.
 
-## 11. Contract publication and retirement
+## 10. Contract publication and retirement
 
 Every provided capability/event/query includes an exact binding to its authoritative Protobuf contract.
 
@@ -214,7 +201,7 @@ python scripts/repo.py contracts
 
 Published versions are immutable. Semantic change creates a new version. Deprecation requires replacement, consumer inventory, deadline and explicit retirement criteria. Removal occurs only after supported consumers migrate and rollback/compatibility evidence exists.
 
-## 12. Persistence and migration ownership
+## 11. Persistence and migration ownership
 
 Each owner declares authoritative storage namespaces and migrations.
 
@@ -225,7 +212,7 @@ Each owner declares authoritative storage namespaces and migrations.
 - version persisted envelopes independently from public wire messages;
 - use an ownership-transfer ADR for any authoritative data move.
 
-## 13. Production contribution boundary
+## 12. Production contribution boundary
 
 The pure module core does not wire itself into the process host. The owner production package contributes:
 
@@ -248,6 +235,6 @@ Before production readiness, prove:
 7. focused, PostgreSQL and real-process acceptance;
 8. synchronized status, roadmap and module catalog.
 
-## 14. Navigation expectation
+## 13. Navigation expectation
 
 Use `docs/README.md` to select the task path. The future `repo.py explain` and generated repository map will make each owner path mechanical. Until then, any capability whose contract → application → persistence → contribution → tests path cannot be located unambiguously should be recorded as navigation debt under issue #194.
