@@ -1,0 +1,65 @@
+{
+  "schema_version": "crm.repository-packet/v1",
+  "packet_id": "repository-step-5",
+  "title": "Repository explanation, packet checking and generated navigation",
+  "status": "active",
+  "baseline": {
+    "ref": "main",
+    "sha": "f7e6dc51cbe09add8025174640fca539b8327a25"
+  },
+  "tracking_issues": [194],
+  "objective": "Provide deterministic repository explanation, packet validation and generated navigation without changing product runtime behavior.",
+  "allowed_paths": [
+    ".github/workflows/rust-generated-sync.yml",
+    "AGENTS.md",
+    "README.md",
+    "docs/ACTIVE_PACKET.md",
+    "docs/DEVELOPMENT_WORKFLOW.md",
+    "docs/MODULE_DEVELOPMENT.md",
+    "docs/README.md",
+    "docs/generated/REPOSITORY_MAP.md",
+    "repository-packet.json",
+    "scripts/generate_repository_navigation.py",
+    "scripts/repo.py",
+    "scripts/repository_navigation.py",
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_repository_navigation.py"
+  ],
+  "forbidden_paths": [
+    "Cargo.lock",
+    "contracts/**",
+    "crates/**/src/**",
+    "database/migrations/**",
+    "modules/**/src/**",
+    "proto/**",
+    "services/**/src/**"
+  ],
+  "deliverables": [
+    "python scripts/repo.py explain crm.customer-privacy",
+    "python scripts/repo.py explain customer_privacy.case.submit@1.0.0",
+    "python scripts/repo.py packet-check --base origin/main",
+    "docs/ACTIVE_PACKET.md",
+    "docs/generated/REPOSITORY_MAP.md"
+  ],
+  "required_checks": [
+    "Governance CI",
+    "Affected Scope CI",
+    "Rust CI",
+    "Rust Generated Sync"
+  ],
+  "acceptance": [
+    "module and capability explanations are deterministic and fail closed for unknown targets",
+    "packet-check validates baseline, changed paths, affected closure, workflow selection and generated freshness",
+    "generated navigation uses deterministic ordering and source digests",
+    "CI rejects stale generated navigation",
+    "no runtime route, contract, persistence, migration, dependency or product behavior changes"
+  ],
+  "non_goals": [
+    "Customer Privacy legal-hold or retention behavior",
+    "runtime route or worker changes",
+    "contract or schema changes",
+    "crate consolidation",
+    "dependency upgrades",
+    "local lifecycle commands reserved for repository step 15"
+  ]
+}
