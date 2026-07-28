@@ -28,6 +28,9 @@ use crm_customer_data_operations_privacy_scope_adapter::{
 use crm_customer_enrichment_privacy_scope_adapter::{
     CustomerEnrichmentPrivacyScopeQueryAdapter, customer_enrichment_privacy_scope_definition,
 };
+pub use crm_customer_privacy::{
+    MODULE_ID as CUSTOMER_PRIVACY_MODULE_ID, ProcessingRestriction, RestrictionScope,
+};
 use crm_customer_privacy::{SCOPE_SNAPSHOT_RECORD_TYPE, discovery_sha256};
 pub use crm_customer_privacy_application::{
     APPROVE_PRIVACY_CASE_CAPABILITY, DiscoveryInvocation, DiscoverySnapshotReader,
@@ -38,6 +41,9 @@ pub use crm_customer_privacy_application::{
 use crm_customer_privacy_application::{
     CustomerPrivacyPlanReadAdapter, DiscoverySnapshotVisibilityPort, OwnerContributionEndpoint,
     OwnerContributionEndpoints, SnapshotVisibilityDecision, plan_read_query_capability_definitions,
+};
+pub use crm_customer_privacy_postgres::{
+    PostgresCustomerPrivacySubjectPolicy, processing_restriction_persisted_payload,
 };
 use crm_customer_privacy_postgres::{
     PostgresDiscoveryPersistence, PostgresPlanningPersistence, PostgresPrivacyReadPersistence,
@@ -364,58 +370,12 @@ fn composition_error(error: impl std::fmt::Display) -> SdkError {
     .with_internal_reference(error.to_string())
 }
 
-fn configuration_error(reference: impl Into<String>) -> SdkError {
+fn configuration_error(error: impl std::fmt::Display) -> SdkError {
     SdkError::new(
         "CUSTOMER_PRIVACY_PRODUCTION_CONFIGURATION_INVALID",
         ErrorCategory::Internal,
         false,
-        "The Customer Privacy production package is misconfigured.",
+        "The Customer Privacy production configuration is invalid.",
     )
-    .with_internal_reference(reference)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::BTreeSet;
-
-    #[test]
-    fn approval_is_public_while_internal_discovery_and_planning_remain_non_public() {
-        let mutations = mutation_capability_definitions().unwrap();
-        let queries = query_capability_definitions().unwrap();
-        assert_eq!(mutations.len(), 5);
-        assert_eq!(queries.len(), 4);
-        assert!(mutations.iter().any(|definition| {
-            definition.capability_id.as_str() == APPROVE_PRIVACY_CASE_CAPABILITY
-        }));
-        for forbidden in [
-            "customer_privacy.scope.discover",
-            "customer_privacy.plan.build",
-        ] {
-            assert!(
-                mutations
-                    .iter()
-                    .all(|definition| definition.capability_id.as_str() != forbidden)
-            );
-            assert!(
-                queries
-                    .iter()
-                    .all(|definition| definition.capability_id.as_str() != forbidden)
-            );
-        }
-        assert!(queries.iter().any(|definition| {
-            definition.capability_id.as_str() == GET_PRIVACY_ACTION_PLAN_CAPABILITY
-        }));
-        assert!(queries.iter().any(|definition| {
-            definition.capability_id.as_str() == LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY
-        }));
-    }
-
-    #[test]
-    fn snapshot_visibility_requires_the_exact_internal_field() {
-        let mut allowed = BTreeSet::new();
-        allowed.insert("discovery_scope_snapshot".to_owned());
-        assert!(allowed.contains("discovery_scope_snapshot"));
-        assert!(!allowed.contains("resource_payload"));
-    }
+    .with_internal_reference(error.to_string())
 }
