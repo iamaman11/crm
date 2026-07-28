@@ -6,10 +6,8 @@ use crm_application_composition::{
     ActivationGatedMutationValidator, ModuleContributionSet, NoopMutationSemanticValidator,
 };
 use crm_capability_runtime::CapabilitySemanticValidator;
-use crm_customer_privacy_application::{
-    mutation_capability_definitions_with_restrictions,
-    place_processing_restriction_capability_definition,
-};
+pub use crm_customer_privacy_application::mutation_capability_definitions_with_restrictions;
+use crm_customer_privacy_application::place_processing_restriction_capability_definition;
 use crm_customer_privacy_postgres::postgres_restriction_place_executor;
 use crm_module_sdk::{ErrorCategory, SdkError};
 use std::sync::Arc;
