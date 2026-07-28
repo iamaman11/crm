@@ -33,7 +33,7 @@ Repository implementation is strictly sequential. Only the first unfinished item
 
 Issue #126 is **In progress**.
 
-Latest accepted public runtime inventory is five mutations, four permission-aware public queries and zero Customer Privacy workers through PR #220. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
+Latest accepted public runtime inventory is six mutations, four permission-aware public queries and zero Customer Privacy workers through PR #226. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
 
 All nine authoritative owner implementations are accepted:
 
@@ -61,7 +61,9 @@ PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / squash me
 
 PR #222 / accepted source `b5651e784a156758b39eaa04abc1124c7c0832f9` / squash merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows completes repository step 3 without behavior changes.
 
-PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows accepts the smallest inserted prerequisite required by repository step 4: a transaction-scoped customer-subject policy port and deterministic final guard composition. Immediate deny-only Customer Privacy processing restrictions using final subject locks remain repository step 4 and the next permitted implementation packet.
+PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows accepts the smallest inserted prerequisite required by repository step 4: a transaction-scoped customer-subject policy port and deterministic final guard composition.
+
+PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows completes repository step 4. Immediate deny-only restriction placement and the first complete protected-owner boundary are accepted; repository step 5 is now the next permitted implementation packet.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -103,13 +105,13 @@ PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / squash me
 
 The mutation is activation-gated, live-authorized, tenant-bound, expected-version protected and idempotent. It permits only `AwaitingApproval → Planned`, locks the case and immutable scope/plan evidence, validates exact case↔subject↔snapshot↔plan lineage, records immutable approval actor/time and atomically persists status, event, audit, idempotency and business evidence. Exact replay succeeds; conflicting replay, corrupt evidence, unauthorized access and cross-tenant existence fail closed.
 
-No restriction placement/release, legal-hold/mandatory-retention decision, owner execution/outcome persistence, access/export assembly, destructive action, worker, crate, dependency family or generic-runtime business switch is added.
+No restriction placement/release, legal-hold/mandatory-retention decision, owner execution/outcome persistence, access/export assembly, destructive action, worker, crate, dependency family or generic-runtime business switch was added by approval.
 
 ### 8.2 Accepted bounded contribution aggregation
 
 PR #222 / accepted source `b5651e784a156758b39eaa04abc1124c7c0832f9` / squash merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows accepts the first behavior-neutral contribution-aggregation packet.
 
-Customer Accounts data-only mutation/query definition factories remain owned by its existing production composition package and are re-exported through `crm-first-party-modules`. Generic application runtime consumes those selected inventory factories through the aggregate while retaining exact public inventory order, deterministic Account-before-Consents contribution order and existing module activation behavior.
+Customer Accounts data-only mutation/query definition factories remain owned by its existing production composition package and are re-exported through `crm-first-party-modules`. Generic application runtime consumes those selected inventories through the aggregate while retaining exact public inventory order, deterministic Account-before-Consents contribution order and existing module activation behavior.
 
 The packet changes no Customer Privacy route, coordinate, persistence, migration, authorization, tenant, audit, idempotency, public inventory or product behavior. It adds no dependency family, manifest, `Cargo.lock`, workspace package, crate consolidation, worker or generic business dispatch switch.
 
@@ -119,7 +121,15 @@ PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash me
 
 `TransactionalCustomerSubjectPolicyPort` is transaction-scoped and requires the shared tenant + canonical Party lock plus an authoritative live decision before protected persistence or I/O. `TransactionalAggregateGuardChain` composes owner-specific and Customer Privacy final guards deterministically without changing the generic executor algorithm. Processing and communication operation classes are explicit. Unavailable, stale, corrupt or cross-tenant decisions must fail closed; no allow-all production implementation exists.
 
-The prerequisite changes no route, coordinate, public inventory, restriction runtime, owner integration, persistence, migration, dependency family, manifest, `Cargo.lock`, workspace package, worker or product behavior. Restrictions remain unimplemented.
+The prerequisite changes no route, coordinate, public inventory, restriction runtime, owner integration, persistence, migration, dependency family, manifest, `Cargo.lock`, workspace package, worker or product behavior. Those historical prerequisite non-effects remain accepted.
+
+### 8.4 Accepted immediate deny-only restrictions
+
+PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows accepts repository step 4.
+
+`customer_privacy.restriction.place@1.0.0` is promoted through the generic ingress with a strict high-risk Personal contract, deterministic tenant/idempotency identity, canonical topology proof, shared Party lock and atomic record/event/audit/idempotency/business evidence. The PostgreSQL final decision evaluates bounded strictly rehydrated FORCE-RLS state under the same lock and fails closed on unavailable, malformed, over-bound and cross-tenant evidence.
+
+`contact-points.contact-point.create@1.0.0` is the first complete protected-owner path. Real-process acceptance proves placement, active denial immediately before persistence, zero denied side effects, unrelated-Party isolation, rollback/reapply and repeated acceptance. Restriction release/reads, legal holds, retention decisions, owner execution, access/export, destructive actions and workers remain later work.
 
 ## 9. Binding repository continuation
 
@@ -129,8 +139,8 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 2. repository step 2 — Customer Privacy approval runtime — **complete through PR #220**;
 3. repository step 3 — bounded contribution aggregation without behavior change — **complete through PR #222**;
 3a. inserted prerequisite for repository step 4 — final customer-subject policy port and deterministic guard composition — **complete through PR #224**;
-4. repository step 4 — immediate deny-only processing restrictions using final subject locks — **next**;
-5. repository step 5 — `explain`, `packet-check` and generated navigation;
+4. repository step 4 — immediate deny-only processing restrictions using final subject locks — **complete through PR #226**;
+5. repository step 5 — `explain`, `packet-check` and generated navigation — **next**;
 6. repository step 6 — legal-hold and mandatory-retention precedence;
 7. repository step 7 — reusable generic mutation/query conformance;
 8. repository step 8 — replay-safe resumable owner execution and crash-window recovery;
@@ -147,7 +157,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 19. repository step 19 — architecture remeasurement and publication of the next numbered order;
 20. repository step 20 — first Phase 8B packet.
 
-The inserted prerequisite did not renumber the normative master sequence. Work now returns to repository step 4. A later step must not start while repository step 4 is unfinished.
+The inserted prerequisite did not renumber the normative master sequence. A later step must not start while repository step 5 is unfinished.
 
 ## 10. Frozen ownership
 
@@ -161,10 +171,10 @@ legal hold > mandatory retention > approved privacy action > ordinary retention
 
 Phase 8A remains **In progress**.
 
-It closes only after restrictions, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
+It closes only after restrictions are extended with release/read lifecycle where required, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
 
 ## 12. Phase 8B and completion rule
 
-Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment remain planned and blocked on repository steps 1–19 and completed Phase 8A.
+Product Catalog, Pricing, CPQ, Orders, Contracts, Subscriptions and Billing remain blocked until the repository order and Phase 8A closure permit them.
 
 Current product-complete expert modules: **0**.
