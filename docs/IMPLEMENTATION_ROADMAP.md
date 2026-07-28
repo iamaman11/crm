@@ -27,6 +27,8 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 9. Generic router and worker algorithms do not change merely to register one owner capability.
 10. Feature behavior and physical crate consolidation remain separate packets.
 
+For the active Customer Privacy lane, **do not modify generic router or worker algorithms** merely to register one owner capability.
+
 Only merged `main` work may be represented as **Complete**.
 
 ## 2. Product phase map
