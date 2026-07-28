@@ -22,7 +22,13 @@ pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
     PLACE_PROCESSING_RESTRICTION_CAPABILITY,
 ];
 
+/// Preserves the accepted case-create contribution for legacy callers while the
+/// step-four production boundary adds restriction placement explicitly.
 pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    Ok(vec![capability_definition()?])
+}
+
+pub fn implemented_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![
         capability_definition()?,
         place_processing_restriction_capability_definition()?,
@@ -34,8 +40,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exact_inventory_contains_case_create_and_restriction_place() {
-        let definitions = capability_definitions().unwrap();
+    fn implemented_inventory_contains_case_create_and_restriction_place() {
+        let definitions = implemented_capability_definitions().unwrap();
         assert_eq!(definitions.len(), 2);
         assert_eq!(
             definitions
@@ -44,5 +50,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             IMPLEMENTED_MUTATION_CAPABILITY_IDS
         );
+        assert_eq!(capability_definitions().unwrap().len(), 1);
     }
 }
