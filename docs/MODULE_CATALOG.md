@@ -65,7 +65,9 @@ PR #211 / source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1f3a60a6d8
 
 PR #220 / source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows accepted public `case.approve`. It adds activation and live authorization gates, tenant-bound expected-version enforcement, `AwaitingApproval → Planned`, strict locked case/snapshot/plan lineage, immutable actor/time evidence, atomic status/event/audit/idempotency/business persistence, exact replay and fail-closed conflict/corruption behavior.
 
-Bounded contribution aggregation is the next repository packet. Restrictions, legal-hold/retention adjudication, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+PR #222 / source `b5651e784a156758b39eaa04abc1124c7c0832f9` / merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows accepted the first behavior-neutral contribution-aggregation packet. Customer Accounts data-only mutation/query factories are now re-exported through `crm-first-party-modules`, and generic application runtime consumes those selected inventories through the first-party facade with unchanged ordering and activation behavior. No Customer Privacy inventory or product behavior changed; workspace packages remain 113.
+
+Immediate deny-only Customer Privacy processing restrictions using final subject locks are the next repository packet. Legal-hold/retention adjudication, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
 
 ## 5. Phase 8A packet accounting
 
