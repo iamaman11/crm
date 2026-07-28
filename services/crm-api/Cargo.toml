@@ -21,7 +21,6 @@ crm-customer-360-composition = { path = "../../crates/crm-customer-360-compositi
 crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
 crm-customer-privacy-cancel-capability-adapter = { path = "../../crates/crm-customer-privacy-cancel-capability-adapter" }
 crm-customer-privacy-capability-adapter = { path = "../../crates/crm-customer-privacy-capability-adapter" }
-crm-customer-privacy-persistence-adapter = { path = "../../crates/crm-customer-privacy-persistence-adapter" }
 crm-customer-privacy-query-adapter = { path = "../../crates/crm-customer-privacy-query-adapter" }
 crm-customer-privacy-subject-capability-adapter = { path = "../../crates/crm-customer-privacy-subject-capability-adapter" }
 crm-data-quality = { path = "../../modules/crm-data-quality" }
