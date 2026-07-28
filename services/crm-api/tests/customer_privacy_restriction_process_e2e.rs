@@ -12,7 +12,7 @@ use crm_proto_contracts::crm::{
 };
 use prost::Message;
 use sqlx::{Executor, PgPool};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tonic::{Code, Status};
 
 use support::{
@@ -99,11 +99,16 @@ async fn restriction_place_blocks_protected_contact_point_create_atomically() {
     .expect("Contact Point create must work before restriction placement");
     assert_incremented(contact_before, contact_point_evidence(&admin).await);
 
+    let effective_from_unix_ms = now_millis() + 5_000;
     let privacy_before = restriction_evidence(&admin).await;
     let placement = mutate(
         &mut grpc,
         &restriction_place,
-        restriction_payload(&restriction_place, &protected_party),
+        restriction_payload(
+            &restriction_place,
+            &protected_party,
+            effective_from_unix_ms,
+        ),
         TENANT_A,
         "restriction-process-place",
         true,
@@ -138,7 +143,9 @@ async fn restriction_place_blocks_protected_contact_point_create_atomically() {
         privacy::ProcessingRestrictionStatus::Active as i32
     );
     assert_eq!(placed.version, 1);
+    assert_eq!(placed.effective_from_unix_ms, effective_from_unix_ms);
     assert_incremented(privacy_before, restriction_evidence(&admin).await);
+    wait_until_effective(effective_from_unix_ms).await;
 
     let before_denied = contact_point_evidence(&admin).await;
     let denied = mutate(
@@ -246,7 +253,11 @@ fn contact_point_payload(
     )
 }
 
-fn restriction_payload(definition: &CapabilityDefinition, party_id: &str) -> TypedPayload {
+fn restriction_payload(
+    definition: &CapabilityDefinition,
+    party_id: &str,
+    effective_from_unix_ms: i64,
+) -> TypedPayload {
     payload(
         definition,
         privacy::PlaceProcessingRestrictionRequest {
@@ -255,7 +266,7 @@ fn restriction_payload(definition: &CapabilityDefinition, party_id: &str) -> Typ
             }),
             scope: privacy::ProcessingRestrictionScope::Processing as i32,
             policy_version: "privacy-policy/1".to_owned(),
-            effective_from_unix_ms: now_millis(),
+            effective_from_unix_ms,
             expires_at_unix_ms: None,
         },
     )
@@ -385,6 +396,18 @@ fn assert_safe_status(
                 && !format!("{:?}", status.metadata()).contains(forbidden),
             "safe restriction denial leaked protected detail: {forbidden}"
         );
+    }
+}
+
+async fn wait_until_effective(effective_from_unix_ms: i64) {
+    let remaining_millis = effective_from_unix_ms
+        .saturating_sub(now_millis())
+        .saturating_add(50);
+    if remaining_millis > 0 {
+        tokio::time::sleep(Duration::from_millis(
+            u64::try_from(remaining_millis).expect("positive effective delay fits u64"),
+        ))
+        .await;
     }
 }
 
