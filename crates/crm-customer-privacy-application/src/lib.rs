@@ -7,6 +7,7 @@
 //! package rather than adding another command/query crate or a generic-runtime
 //! dependency.
 
+mod approval;
 mod discovery;
 mod planning;
 mod reads {
@@ -16,6 +17,7 @@ mod reads {
     include!("reads.rs");
 }
 
+pub use approval::*;
 pub use discovery::*;
 pub use planning::*;
 pub use reads::*;
@@ -32,6 +34,7 @@ pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, Sd
     let mut definitions = create_definitions()?;
     definitions.extend(submit_definitions()?);
     definitions.extend(subject_definitions()?);
+    definitions.push(approval_capability_definition()?);
     definitions.extend(cancel_definitions()?);
     Ok(definitions)
 }
@@ -47,10 +50,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn inventory_preserves_four_mutations_and_promotes_four_queries() {
+    fn inventory_promotes_five_mutations_and_preserves_four_queries() {
         let mutations = mutation_capability_definitions().unwrap();
         let queries = query_capability_definitions().unwrap();
-        assert_eq!(mutations.len(), 4);
+        assert_eq!(mutations.len(), 5);
         assert_eq!(queries.len(), 4);
+        assert!(mutations.iter().any(|definition| {
+            definition.capability_id.as_str() == APPROVE_PRIVACY_CASE_CAPABILITY
+        }));
     }
 }

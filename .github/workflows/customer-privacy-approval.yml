@@ -1,0 +1,250 @@
+name: Customer Privacy Approval CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "rust-governance-policy.json"
+      - "architecture-policy.json"
+      - "scripts/check_architecture.py"
+      - "proto/crm/customer_privacy/**"
+      - "modules/crm-customer-privacy/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-privacy-application/**"
+      - "crates/crm-customer-privacy-capability-adapter/**"
+      - "crates/crm-customer-privacy-capability-composition/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "crates/crm-customer-privacy-query-adapter/**"
+      - "services/crm-api/**"
+      - "contracts/production-route-classifications.json"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - "database/tests/0021_customer_privacy_force_rls.sql"
+      - "database/tests/0043_customer_privacy_discovery_scope.sql"
+      - "database/tests/0044_customer_privacy_planning.sql"
+      - "database/tests/0045_customer_privacy_plan_reads.sql"
+      - ".github/workflows/customer-privacy-approval.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "rust-governance-policy.json"
+      - "architecture-policy.json"
+      - "scripts/check_architecture.py"
+      - "proto/crm/customer_privacy/**"
+      - "modules/crm-customer-privacy/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-customer-privacy-application/**"
+      - "crates/crm-customer-privacy-capability-adapter/**"
+      - "crates/crm-customer-privacy-capability-composition/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "crates/crm-customer-privacy-query-adapter/**"
+      - "services/crm-api/**"
+      - "contracts/production-route-classifications.json"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - "database/tests/0021_customer_privacy_force_rls.sql"
+      - "database/tests/0043_customer_privacy_discovery_scope.sql"
+      - "database/tests/0044_customer_privacy_planning.sql"
+      - "database/tests/0045_customer_privacy_plan_reads.sql"
+      - ".github/workflows/customer-privacy-approval.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  approval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_customer_privacy_approval_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5451:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_customer_privacy_approval_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5451
+      PGDATABASE: crm_customer_privacy_approval_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5451/crm_customer_privacy_approval_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5451/crm_customer_privacy_approval_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Run architecture preflight
+        run: python scripts/check_architecture.py
+      - name: Apply clean authoritative schema and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0021_customer_privacy_force_rls.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0043_customer_privacy_discovery_scope.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0044_customer_privacy_planning.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0045_customer_privacy_plan_reads.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify approval libraries and production inventory
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-customer-privacy-application \
+            -p crm-customer-privacy-capability-adapter \
+            -p crm-customer-privacy-capability-composition \
+            -p crm-customer-privacy-postgres \
+            -p crm-customer-privacy-production \
+            --lib --all-features -- --nocapture \
+            2>&1 | tee database/customer-privacy-approval-packages-clean.log
+      - name: Generate and apply canonical approval fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --quiet \
+            -p crm-customer-privacy-capability-adapter \
+            --features test-support \
+            --bin customer-privacy-approval-fixture \
+            > database/customer-privacy-approval-fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/customer-privacy-approval-fixture.sql
+      - name: Verify real crm-api approval process
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test customer_privacy_case_approval_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-approval-process-clean.log
+      - name: Verify frozen non-effects and bounded complexity
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          package_count="$(cargo metadata --no-deps --format-version 1 | python -c 'import json, sys; print(len(json.load(sys.stdin)["workspace_members"]))')"
+          test "${package_count}" = "113"
+          git diff --exit-code "origin/${BASE_REF}"...HEAD -- Cargo.lock database/migrations
+          test -z "$(git diff --name-only "origin/${BASE_REF}"...HEAD -- crates/crm-application-runtime/Cargo.toml crates/crm-application-runtime/src crates/crm-application-composition/Cargo.toml crates/crm-application-composition/src || true)"
+          added_rust="$(git diff --unified=0 "origin/${BASE_REF}"...HEAD -- '*.rs' | grep '^+' | grep -v '^+++' || true)"
+          if printf '%s\n' "${added_rust}" | grep -E 'CustomerPrivacy.*Worker|customer_privacy_owner_outcomes|restriction\.(place|release)|legal_hold\.(place|release)|owner.*execute'; then
+            echo "approval packet introduced a forbidden later-step runtime effect"
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('contracts/production-route-classifications.json').read_text())
+          coordinates = {(item['owner_module_id'], item['id'], item['version']) for item in data['non_runtime_contract_routes']}
+          assert ('crm.customer-privacy', 'customer_privacy.case.approve', '1.0.0') not in coordinates
+          for capability in (
+              'customer_privacy.restriction.place',
+              'customer_privacy.restriction.release',
+              'customer_privacy.legal_hold.place',
+              'customer_privacy.legal_hold.release',
+          ):
+              assert ('crm.customer-privacy', capability, '1.0.0') in coordinates
+          PY
+      - name: Roll back authoritative schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply authoritative schema and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0021_customer_privacy_force_rls.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0043_customer_privacy_discovery_scope.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0044_customer_privacy_planning.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0045_customer_privacy_plan_reads.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+          cargo run --quiet \
+            -p crm-customer-privacy-capability-adapter \
+            --features test-support \
+            --bin customer-privacy-approval-fixture \
+            > database/customer-privacy-approval-fixture-reapplied.sql
+          psql --set ON_ERROR_STOP=1 --file database/customer-privacy-approval-fixture-reapplied.sql
+      - name: Repeat approval library and real-process acceptance
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test \
+            -p crm-customer-privacy-application \
+            -p crm-customer-privacy-capability-adapter \
+            -p crm-customer-privacy-capability-composition \
+            -p crm-customer-privacy-postgres \
+            -p crm-customer-privacy-production \
+            --lib --all-features -- --nocapture \
+            2>&1 | tee database/customer-privacy-approval-packages-reapplied.log
+          cargo test -p crm-api --test customer_privacy_case_approval_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-approval-process-reapplied.log
+      - name: Capture PostgreSQL diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/customer-privacy-approval-postgres.log 2>&1
+          fi
+      - name: Upload approval diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: customer-privacy-approval-diagnostics
+          path: |
+            crates/crm-customer-privacy-application/
+            crates/crm-customer-privacy-capability-adapter/
+            crates/crm-customer-privacy-capability-composition/
+            crates/crm-customer-privacy-postgres/
+            crates/crm-customer-privacy-production/
+            services/crm-api/tests/customer_privacy_case_approval_process_e2e.rs
+            database/customer-privacy-approval-*.log
+            database/customer-privacy-approval-fixture*.sql
+          if-no-files-found: warn
+          retention-days: 7

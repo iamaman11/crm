@@ -8,6 +8,7 @@ const PRIVACY_OWNER: &str = "crm.customer-privacy";
 const CREATE: &str = "customer_privacy.case.create";
 const SUBMIT: &str = "customer_privacy.case.submit";
 const SUBJECT_VERIFY: &str = "customer_privacy.case.subject.verify";
+const APPROVE: &str = "customer_privacy.case.approve";
 const CANCEL: &str = "customer_privacy.case.cancel";
 const GET_CASE: &str = "customer_privacy.case.get";
 const LIST_CASES: &str = "customer_privacy.case.list";
@@ -28,7 +29,7 @@ struct ClassifiedRoute {
 }
 
 #[test]
-fn customer_privacy_runtime_inventory_promotes_four_mutations_and_four_queries() {
+fn customer_privacy_runtime_inventory_promotes_five_mutations_and_four_queries() {
     let runtime_privacy_mutations = application_mutation_definitions()
         .unwrap()
         .into_iter()
@@ -46,6 +47,7 @@ fn customer_privacy_runtime_inventory_promotes_four_mutations_and_four_queries()
             (CREATE.to_owned(), "1.0.0".to_owned()),
             (SUBMIT.to_owned(), "1.0.0".to_owned()),
             (SUBJECT_VERIFY.to_owned(), "1.0.0".to_owned()),
+            (APPROVE.to_owned(), "1.0.0".to_owned()),
             (CANCEL.to_owned(), "1.0.0".to_owned()),
         ])
     );
@@ -82,7 +84,6 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
         .map(|route| (route.id.clone(), route.version.clone()))
         .collect::<BTreeSet<_>>();
     let expected_non_runtime = [
-        "customer_privacy.case.approve",
         "customer_privacy.restriction.place",
         "customer_privacy.restriction.release",
         "customer_privacy.restriction.get",
@@ -99,6 +100,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
         CREATE,
         SUBMIT,
         SUBJECT_VERIFY,
+        APPROVE,
         CANCEL,
         GET_CASE,
         LIST_CASES,
@@ -143,7 +145,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
             .iter()
             .chain(classifications.non_runtime_contract_routes.iter())
             .all(|route| !route.id.contains("crypto_shred") && !route.id.contains("crypto-shred")),
-        "plan-read promotion may not introduce or reclassify crypto-shred coordinates"
+        "approval promotion may not introduce or reclassify crypto-shred coordinates"
     );
 }
 

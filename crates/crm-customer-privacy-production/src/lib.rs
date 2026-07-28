@@ -3,7 +3,7 @@
 //! Owner-owned production contribution for `crm.customer-privacy`.
 //!
 //! This package is the only supported process-composition entry point for
-//! Customer Privacy. It preserves four mutations and promotes four permission-aware queries.
+//! Customer Privacy. It promotes five mutations and preserves four permission-aware queries.
 //! Scope discovery and deterministic planning remain owner-owned internal services:
 //! neither is a public route or a generic-runtime worker.
 
@@ -29,19 +29,19 @@ use crm_customer_enrichment_privacy_scope_adapter::{
     CustomerEnrichmentPrivacyScopeQueryAdapter, customer_enrichment_privacy_scope_definition,
 };
 use crm_customer_privacy::{SCOPE_SNAPSHOT_RECORD_TYPE, discovery_sha256};
+pub use crm_customer_privacy_application::{
+    APPROVE_PRIVACY_CASE_CAPABILITY, DiscoveryInvocation, DiscoverySnapshotReader,
+    GET_PRIVACY_ACTION_PLAN_CAPABILITY, LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY, PlanningInvocation,
+    PrivacyPlanningService, ScopeDiscoveryService, SnapshotReadContext,
+    mutation_capability_definitions, plan_read_visibility_resources, query_capability_definitions,
+};
 use crm_customer_privacy_application::{
     CustomerPrivacyPlanReadAdapter, DiscoverySnapshotVisibilityPort, OwnerContributionEndpoint,
     OwnerContributionEndpoints, SnapshotVisibilityDecision, plan_read_query_capability_definitions,
 };
-pub use crm_customer_privacy_application::{
-    DiscoveryInvocation, DiscoverySnapshotReader, GET_PRIVACY_ACTION_PLAN_CAPABILITY,
-    LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY, PlanningInvocation, PrivacyPlanningService,
-    ScopeDiscoveryService, SnapshotReadContext, mutation_capability_definitions,
-    plan_read_visibility_resources, query_capability_definitions,
-};
 use crm_customer_privacy_postgres::{
     PostgresDiscoveryPersistence, PostgresPlanningPersistence, PostgresPrivacyReadPersistence,
-    postgres_case_cancel_executor, postgres_case_create_executor,
+    postgres_case_approval_executor, postgres_case_cancel_executor, postgres_case_create_executor,
     postgres_case_subject_verify_executor, postgres_case_submit_executor,
 };
 use crm_customer_privacy_query_adapter::{
@@ -198,9 +198,9 @@ pub fn build_contribution(
     dependencies: CustomerPrivacyProductionDependencies,
 ) -> Result<ModuleContributionSet, SdkError> {
     let mutations = mutation_capability_definitions()?;
-    if mutations.len() != 4 {
+    if mutations.len() != 5 {
         return Err(configuration_error(
-            "Customer Privacy production inventory must contain exactly four mutations",
+            "Customer Privacy production inventory must contain exactly five mutations",
         ));
     }
     let all_queries = query_capability_definitions()?;
@@ -222,6 +222,7 @@ pub fn build_contribution(
         postgres_case_create_executor(dependencies.store.clone()),
         postgres_case_submit_executor(dependencies.store.clone()),
         postgres_case_subject_verify_executor(dependencies.store.clone()),
+        postgres_case_approval_executor(dependencies.store.clone()),
         postgres_case_cancel_executor(dependencies.store.clone()),
     ];
     for (definition, executor) in mutations.into_iter().zip(executors) {
@@ -379,11 +380,14 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn internal_discovery_and_planning_coordinates_are_not_public_inventory_entries() {
+    fn approval_is_public_while_internal_discovery_and_planning_remain_non_public() {
         let mutations = mutation_capability_definitions().unwrap();
         let queries = query_capability_definitions().unwrap();
-        assert_eq!(mutations.len(), 4);
+        assert_eq!(mutations.len(), 5);
         assert_eq!(queries.len(), 4);
+        assert!(mutations.iter().any(|definition| {
+            definition.capability_id.as_str() == APPROVE_PRIVACY_CASE_CAPABILITY
+        }));
         for forbidden in [
             "customer_privacy.scope.discover",
             "customer_privacy.plan.build",
