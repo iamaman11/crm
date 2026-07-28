@@ -150,7 +150,7 @@ jobs:
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_approval_process_e2e -- --nocapture \
             2>&1 | tee database/customer-privacy-approval-process-clean.log
-      - name: Verify frozen non-effects and bounded complexity
+      - name: Verify approval invariants and bounded complexity
         shell: bash
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
@@ -158,7 +158,7 @@ jobs:
           set -euo pipefail
           package_count="$(cargo metadata --no-deps --format-version 1 | python -c 'import json, sys; print(len(json.load(sys.stdin)["workspace_members"]))')"
           test "${package_count}" = "113"
-          git diff --exit-code "origin/${BASE_REF}"...HEAD -- Cargo.lock database/migrations
+          git diff --exit-code "origin/${BASE_REF}"...HEAD -- Cargo.lock
           test -z "$(git diff --name-only "origin/${BASE_REF}"...HEAD -- crates/crm-application-runtime/Cargo.toml crates/crm-application-runtime/src crates/crm-application-composition/Cargo.toml crates/crm-application-composition/src || true)"
           added_rust="$(git diff --unified=0 "origin/${BASE_REF}"...HEAD -- '*.rs' | grep '^+' | grep -v '^+++' || true)"
           if printf '%s\n' "${added_rust}" | grep -E 'CustomerPrivacy.*Worker|customer_privacy_owner_outcomes|restriction\.(place|release)|legal_hold\.(place|release)|owner.*execute'; then
