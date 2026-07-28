@@ -72,9 +72,7 @@ impl TransactionalCustomerSubjectPolicyPort for PostgresCustomerPrivacySubjectPo
                 .await
                 .map_err(restriction_store_unavailable)?;
 
-            if i64::try_from(rows.len()).unwrap_or(i64::MAX)
-                > MAXIMUM_RESTRICTIONS_PER_SUBJECT
-            {
+            if i64::try_from(rows.len()).unwrap_or(i64::MAX) > MAXIMUM_RESTRICTIONS_PER_SUBJECT {
                 return Err(restriction_state_invalid(
                     "subject restriction inventory exceeds the supported bound",
                 ));
@@ -91,8 +89,7 @@ impl TransactionalCustomerSubjectPolicyPort for PostgresCustomerPrivacySubjectPo
                         "restriction identity differs from the locked tenant or canonical Party",
                     ));
                 }
-                if restriction
-                    .is_active_at(request.context.execution.request_started_at_unix_nanos)
+                if restriction.is_active_at(request.context.execution.request_started_at_unix_nanos)
                     && scope_blocks(restriction.scope(), operation_class)
                 {
                     return Err(restriction_active());
@@ -117,22 +114,20 @@ async fn lock_customer_subject(
     Ok(())
 }
 
-fn scope_blocks(
-    scope: RestrictionScope,
-    operation_class: CustomerSubjectOperationClass,
-) -> bool {
+fn scope_blocks(scope: RestrictionScope, operation_class: CustomerSubjectOperationClass) -> bool {
     matches!(
         (scope, operation_class),
-        (RestrictionScope::Processing, CustomerSubjectOperationClass::Processing)
-            | (
-                RestrictionScope::Communication,
-                CustomerSubjectOperationClass::Communication
-            )
-            | (
-                RestrictionScope::ProcessingAndCommunication,
-                CustomerSubjectOperationClass::Processing
-                    | CustomerSubjectOperationClass::Communication
-            )
+        (
+            RestrictionScope::Processing,
+            CustomerSubjectOperationClass::Processing
+        ) | (
+            RestrictionScope::Communication,
+            CustomerSubjectOperationClass::Communication
+        ) | (
+            RestrictionScope::ProcessingAndCommunication,
+            CustomerSubjectOperationClass::Processing
+                | CustomerSubjectOperationClass::Communication
+        )
     )
 }
 
@@ -149,9 +144,7 @@ fn decode_restriction_snapshot(row: PgRow) -> Result<RecordSnapshot, SdkError> {
     let descriptor_hash: Vec<u8> = row
         .try_get("descriptor_hash")
         .map_err(restriction_row_invalid)?;
-    let data_class: String = row
-        .try_get("data_class")
-        .map_err(restriction_row_invalid)?;
+    let data_class: String = row.try_get("data_class").map_err(restriction_row_invalid)?;
     let payload_encoding: String = row
         .try_get("payload_encoding")
         .map_err(restriction_row_invalid)?;
