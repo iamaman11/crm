@@ -293,7 +293,7 @@ async fn insert_business_transaction(
           expected_audit_records,
           expected_idempotency_records
         )
-        VALUES ($1, $2, $3, $4, $5, $6, 1, 1, 1)
+        VALUES ($1, $2, $3, $4, $5, $6, 0, 0, 0)
         "#,
     )
     .bind(context.execution.tenant_id.as_str())
