@@ -9,7 +9,7 @@ use crm_module_sdk::{
     DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
     RecordId, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
 };
-use sqlx::{PgPool, Postgres, Row, Transaction, postgres::PgPoolOptions};
+use sqlx::{PgPool, Postgres, Transaction, postgres::PgPoolOptions};
 
 const TENANT_A: &str = "tenant-a";
 const TENANT_B: &str = "tenant-b";
@@ -48,7 +48,7 @@ async fn final_restriction_decision_is_live_tenant_bound_strict_and_lock_safe() 
         ACTIVE_SUBJECT,
         RestrictionScope::Processing,
         1_000_000_000,
-        [41; 32],
+        false,
     )
     .await;
     insert_restriction(
@@ -58,10 +58,19 @@ async fn final_restriction_decision_is_live_tenant_bound_strict_and_lock_safe() 
         FUTURE_SUBJECT,
         RestrictionScope::ProcessingAndCommunication,
         3_000_000_000,
-        [42; 32],
+        false,
     )
     .await;
-    insert_malformed_restriction(&admin).await;
+    insert_restriction(
+        &admin,
+        MALFORMED_RESTRICTION,
+        TENANT_A,
+        MALFORMED_SUBJECT,
+        RestrictionScope::Processing,
+        1_000_000_000,
+        true,
+    )
+    .await;
 
     let policy = PostgresCustomerPrivacySubjectPolicy;
 
@@ -90,12 +99,11 @@ async fn final_restriction_decision_is_live_tenant_bound_strict_and_lock_safe() 
         .execute(&mut *competing)
         .await
         .expect_err("the final decision must retain the shared lock until transaction end");
-    assert_eq!(
+    assert!(
         lock_error
             .as_database_error()
             .and_then(|error| error.code())
-            .as_deref(),
-        Some("55P03")
+            .is_some_and(|code| code.as_ref() == "55P03")
     );
     competing
         .rollback()
@@ -219,6 +227,7 @@ async fn bind_context(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn insert_restriction(
     admin: &PgPool,
     restriction_id: &str,
@@ -226,7 +235,7 @@ async fn insert_restriction(
     subject: &str,
     scope: RestrictionScope,
     effective_from_unix_nanos: i64,
-    hash: [u8; 32],
+    corrupt_descriptor: bool,
 ) {
     let restriction = ProcessingRestriction::place(
         RecordId::try_new(restriction_id).unwrap(),
@@ -242,28 +251,10 @@ async fn insert_restriction(
     .expect("construct valid restriction fixture");
     let mut payload = processing_restriction_persisted_payload(&restriction)
         .expect("encode valid restriction fixture");
-    payload.descriptor_hash = hash;
-    if restriction_id != MALFORMED_RESTRICTION {
-        payload.descriptor_hash = crm_customer_privacy_production::processing_restriction_persisted_payload(
-            &restriction,
-        )
-        .unwrap()
-        .descriptor_hash;
+    if corrupt_descriptor {
+        payload.descriptor_hash = [99; 32];
     }
     insert_payload(admin, restriction_id, tenant, payload).await;
-}
-
-async fn insert_malformed_restriction(admin: &PgPool) {
-    insert_restriction(
-        admin,
-        MALFORMED_RESTRICTION,
-        TENANT_A,
-        MALFORMED_SUBJECT,
-        RestrictionScope::Processing,
-        1_000_000_000,
-        [99; 32],
-    )
-    .await;
 }
 
 async fn insert_payload(admin: &PgPool, restriction_id: &str, tenant: &str, payload: TypedPayload) {
@@ -307,10 +298,17 @@ async fn insert_payload(admin: &PgPool, restriction_id: &str, tenant: &str, payl
 
 async fn cleanup(admin: &PgPool) {
     sqlx::query(
-        "DELETE FROM crm.records WHERE owner_module_id = $1 AND record_type = 'customer-privacy.restriction' AND record_id = ANY($2)",
+        r#"
+        DELETE FROM crm.records
+        WHERE owner_module_id = $1
+          AND record_type = 'customer-privacy.restriction'
+          AND record_id IN ($2, $3, $4)
+        "#,
     )
     .bind(CUSTOMER_PRIVACY_MODULE_ID)
-    .bind(vec![ACTIVE_RESTRICTION, MALFORMED_RESTRICTION, FUTURE_RESTRICTION])
+    .bind(ACTIVE_RESTRICTION)
+    .bind(MALFORMED_RESTRICTION)
+    .bind(FUTURE_RESTRICTION)
     .execute(admin)
     .await
     .expect("clean restriction policy fixtures");
