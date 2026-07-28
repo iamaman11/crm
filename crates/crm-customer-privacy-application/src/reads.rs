@@ -2,9 +2,9 @@ use crm_application_composition::ModuleActivationPort;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_customer_privacy::{
-    ACTION_PLAN_GET_COORDINATE, ACTION_PLAN_RECORD_TYPE, DiscoveryScopeSnapshot, MODULE_ID,
+    ACTION_PLAN_RECORD_TYPE, DiscoveryScopeSnapshot, MODULE_ID,
     OWNER_OUTCOME_DEFAULT_PAGE_SIZE, OWNER_OUTCOME_MAXIMUM_CURSOR_BYTES,
-    OWNER_OUTCOME_MAXIMUM_PAGE_SIZE, OWNER_OUTCOMES_LIST_COORDINATE, PRIVACY_CASE_RECORD_TYPE,
+    OWNER_OUTCOME_MAXIMUM_PAGE_SIZE, PRIVACY_CASE_RECORD_TYPE,
     PrivacyActionPlan, PrivacyCase, PrivacyCaseStatus, discovery_sha256,
 };
 use crm_module_sdk::{
