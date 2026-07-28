@@ -36,8 +36,8 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use tonic::{Code, Status};
 
 use support::{
-    ACTOR, TENANT_A, TENANT_B, TENANT_OUTSIDE_TOKEN, connect_grpc, free_port, http_mutate,
-    mutate, mutation_definition, payload, spawn_crm_api, stop_process, wait_until_ready,
+    ACTOR, TENANT_A, TENANT_B, TENANT_OUTSIDE_TOKEN, connect_grpc, free_port, http_mutate, mutate,
+    mutation_definition, payload, spawn_crm_api, stop_process, wait_until_ready,
 };
 
 const APPROVE_CASE: &str = "customer_privacy.case.approve";
@@ -112,7 +112,12 @@ async fn customer_privacy_case_approval_real_process_is_atomic_and_fail_closed()
     )
     .await
     .expect_err("tenant outside bearer grant must be denied before approval");
-    assert_safe_status(&outside_token, Code::PermissionDenied, "TENANT_FORBIDDEN", false);
+    assert_safe_status(
+        &outside_token,
+        Code::PermissionDenied,
+        "TENANT_FORBIDDEN",
+        false,
+    );
     assert_case_version(&admin, TENANT_A, &success.case_id, 6).await;
 
     let success_key = "privacy-approval-success";
@@ -295,13 +300,7 @@ async fn customer_privacy_case_approval_real_process_is_atomic_and_fail_closed()
         false,
         None,
     );
-    wait_until_ready(
-        &http,
-        &mut denied_process,
-        &denied_http_addr,
-        false,
-    )
-    .await;
+    wait_until_ready(&http, &mut denied_process, &denied_http_addr, false).await;
     let mut denied_grpc: ApplicationGatewayServiceClient<tonic::transport::Channel> =
         connect_grpc(&denied_grpc_addr).await;
     let denied = mutate(
@@ -394,13 +393,8 @@ async fn seed_awaiting_approval(
             DiscoveryOwnerScopeContribution::new(lineage.clone(), contribution).unwrap()
         })
         .collect::<Vec<_>>();
-    let snapshot = DiscoveryScopeSnapshot::finalize(
-        lineage,
-        registry,
-        5_000_000_000,
-        contributions,
-    )
-    .unwrap();
+    let snapshot =
+        DiscoveryScopeSnapshot::finalize(lineage, registry, 5_000_000_000, contributions).unwrap();
     privacy_case
         .record_scope(4, snapshot.snapshot_id().clone(), 5_000_000_000)
         .unwrap();
@@ -414,12 +408,7 @@ async fn seed_awaiting_approval(
     )
     .unwrap();
     privacy_case
-        .record_plan(
-            5,
-            plan.plan_id().clone(),
-            true,
-            6_000_000_000,
-        )
+        .record_plan(5, plan.plan_id().clone(), true, 6_000_000_000)
         .unwrap();
     assert_eq!(privacy_case.status(), PrivacyCaseStatus::AwaitingApproval);
     assert_eq!(privacy_case.version(), 6);
@@ -457,7 +446,10 @@ async fn seed_awaiting_approval(
     .fetch_one(pool)
     .await
     .expect("read Customer Privacy installation transaction");
-    let mut transaction = pool.begin().await.expect("start approval fixture transaction");
+    let mut transaction = pool
+        .begin()
+        .await
+        .expect("start approval fixture transaction");
     bind_fixture_context(&mut transaction, &transaction_id, suffix).await;
     insert_record(
         &mut transaction,
@@ -729,7 +721,10 @@ async fn set_privacy_module_status(pool: &PgPool, status: &str) {
     for (name, value) in [
         ("app.tenant_id", TENANT_A),
         ("app.actor_id", "customer-privacy-approval-process-admin"),
-        ("app.request_id", "customer-privacy-approval-process-activation"),
+        (
+            "app.request_id",
+            "customer-privacy-approval-process-activation",
+        ),
         ("app.capability_id", "customer_privacy.process.activation"),
         ("app.capability_version", "1.0.0"),
         ("app.business_transaction_id", transaction_id.as_str()),
