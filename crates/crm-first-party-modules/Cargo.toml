@@ -8,6 +8,7 @@ publish = false
 crm-application-composition = { path = "../crm-application-composition" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-accounts-capability-composition = { path = "../crm-customer-accounts-capability-composition" }
+crm-customer-privacy-production = { path = "../crm-customer-privacy-production" }
 crm-consents-capability-composition = { path = "../crm-consents-capability-composition" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-party-reference-composition = { path = "../crm-party-reference-composition" }
