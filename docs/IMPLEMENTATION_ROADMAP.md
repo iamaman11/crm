@@ -66,7 +66,7 @@ Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #
 
 Issue #126 is **In progress**.
 
-Latest accepted runtime inventory remains four mutations, two permission-aware queries and zero Customer Privacy workers through PR #209. PR #211 implements two additional permission-aware reads and targets 4 mutations / 4 queries / 0 workers pending unchanged exact-head acceptance. `customer_privacy.plan.build@1.0.0` remains accepted trusted-internal runtime without public ingress.
+Latest accepted runtime inventory is four mutations, four permission-aware queries and zero Customer Privacy workers through PR #211. `customer_privacy.plan.build@1.0.0` remains accepted trusted-internal runtime without public ingress.
 
 All nine privacy owner-scope implementations are accepted:
 
@@ -94,9 +94,9 @@ PR #209 / accepted source `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b` / merge `30
 
 It verifies the exact case, immutable scope snapshot, Party/Identity Resolution binding, policy and jurisdiction lineage; builds one immutable action plan; transitions `Scoped → Planned` or `Scoped → AwaitingApproval`; persists append-only replay and audit evidence; preserves FORCE RLS, canonical `tenant_isolation`, cross-tenant concealment, rollback/reapply and unchanged 113-package / 4-mutation / 2-query / 0-worker historical boundary.
 
-### 5.3 Permission-aware plan and outcome reads pending acceptance
+### 5.3 Accepted permission-aware plan and outcome reads
 
-PR #211 promotes only `customer_privacy.case.plan.get@1.0.0` and `customer_privacy.case.owner_outcomes.list@1.0.0` through existing Customer Privacy packages.
+PR #211 / accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1f3a60a6d8e8bba7bda50f936c57a61bc3521f7` / 32 of 32 permanent workflows promotes only `customer_privacy.case.plan.get@1.0.0` and `customer_privacy.case.owner_outcomes.list@1.0.0` through existing Customer Privacy packages.
 
 The packet requires module activation, live visibility, tenant-bound reads, strict case↔snapshot↔plan↔replay evidence, payload-safe plan summaries, append-only safe read audit and concealed unauthorized/cross-tenant existence. Owner outcomes remain an empty deterministic terminal page with bounded request validation, stable page/terminal digests, no synthetic records and no outcome persistence.
 
@@ -109,8 +109,8 @@ It adds no crate, dependency family, mutation, worker, owner mutation, approval,
 3. **Production discovery and immutable snapshot runtime — Complete through PR #206.**
 4. **Deterministic planning freeze — Complete through PR #208.**
 5. **Trusted-internal deterministic planning runtime — Complete through PR #209.**
-6. **Permission-aware plan.get and empty future-safe owner_outcomes.list — Implemented in PR #211, pending exact-head acceptance.**
-7. **Approval runtime — Next after accepted merge of PR #211.**
+6. **Permission-aware plan.get and empty future-safe owner_outcomes.list — Complete through PR #211.**
+7. **Approval runtime — Next.**
 8. **Immediate deny-only processing restrictions with final subject locks — Planned.**
 9. **Legal-hold and mandatory-retention precedence — Planned.**
 10. **Replay-safe resumable owner execution and crash-window recovery — Planned.**
