@@ -34,11 +34,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("approval runtime", document.lower())
             self.assertIn("permission-aware", document.lower())
             self.assertIn("bounded contribution", document.lower())
+            self.assertIn("final customer-subject policy", document.lower())
             self.assertIn("immediate deny-only", document.lower())
             self.assertIn("rust-version", document)
             self.assertIn("PR #218", document)
             self.assertIn("PR #220", document)
             self.assertIn("PR #222", document)
+            self.assertIn("PR #224", document)
 
         self.assertIn("Phases 0.1–7 are complete", self.status)
         self.assertIn("Current product-complete expert modules: **0**", self.status)
@@ -186,6 +188,35 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertNotIn("4 mutations / 4 queries / 0 workers", self.plan)
         self.assertIn("workspace remains at 113 packages", self.roadmap.lower())
         self.assertIn("workspace packages remain 113", self.catalog.lower())
+
+    def test_final_customer_subject_policy_prerequisite_is_synchronized(self) -> None:
+        accepted_source = "e57307fcb1b5192d5e6340247cb6633f32b7ba34"
+        merge = "67804d9478b2bbaf342a398b649e23bd5ead6c08"
+        for document in (
+            self.plan,
+            self.status,
+            self.roadmap,
+            self.phase8,
+            self.catalog,
+        ):
+            with self.subTest(document=document[:40]):
+                self.assertIn("PR #224", document)
+                self.assertIn(accepted_source, document)
+                self.assertIn(merge, document)
+                self.assertIn("28 of 28", document)
+                self.assertIn("transaction-scoped", document.lower())
+                self.assertIn("guard", document.lower())
+
+        for document in (self.plan, self.status, self.roadmap, self.phase8):
+            self.assertIn("repository step 4", document.lower())
+            self.assertIn("immediate deny-only", document.lower())
+            self.assertIn("final subject locks", document.lower())
+
+        self.assertIn("Restrictions remain unimplemented", self.status)
+        self.assertIn("Restrictions remain unimplemented", self.roadmap)
+        self.assertIn("Restrictions remain unimplemented", self.phase8)
+        self.assertIn("no restriction behavior yet", self.plan)
+        self.assertIn("no Customer Privacy restriction decision", self.catalog)
 
     def test_navigation_has_one_stable_human_index(self) -> None:
         self.assertIn("docs/README.md", self.readme)
@@ -338,6 +369,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "bounded contribution aggregation is the next repository packet",
             "bounded contribution aggregation without behavior change is now repository step 3 and the next permitted implementation packet",
             "The next permitted implementation packet is repository step 3",
+            "final customer-subject policy prerequisite is next",
+            "Repository step 4 remains blocked until this prerequisite is accepted",
         )
         for statement in stale:
             for document in (
