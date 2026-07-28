@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+#[allow(dead_code)]
 #[path = "lib.rs"]
 mod case_create;
 mod restriction;
