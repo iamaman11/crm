@@ -5,10 +5,12 @@
 //! The existing persistence and transaction-guard crates remain transitional
 //! implementation details. New owner persistence enters through this package.
 
+mod approval;
 mod discovery;
 mod planning;
 mod reads;
 
+pub use approval::*;
 pub use discovery::*;
 pub use planning::*;
 pub use reads::*;
