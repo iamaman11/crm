@@ -135,14 +135,14 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
         "Consents owner builder bypassed the first-party aggregate",
     ),
     LegacyMarker(
-        "crates/crm-application-runtime/Cargo.toml",
-        "crm-customer-privacy-production =",
-        "Customer Privacy owner production returned as a direct generic-runtime dependency",
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "use crm_customer_accounts_capability_adapter",
+        "Customer Accounts mutation inventory bypassed the first-party aggregate",
     ),
     LegacyMarker(
-        "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
-        "crm_customer_privacy_production",
-        "Customer Privacy owner production bypassed the first-party aggregate",
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "use crm_customer_accounts_query_adapter",
+        "Customer Accounts query inventory bypassed the first-party aggregate",
     ),
 )
 
