@@ -29,16 +29,15 @@ use crm_customer_enrichment_privacy_scope_adapter::{
     CustomerEnrichmentPrivacyScopeQueryAdapter, customer_enrichment_privacy_scope_definition,
 };
 use crm_customer_privacy::{SCOPE_SNAPSHOT_RECORD_TYPE, discovery_sha256};
+pub use crm_customer_privacy_application::{
+    APPROVE_PRIVACY_CASE_CAPABILITY, DiscoveryInvocation, DiscoverySnapshotReader,
+    GET_PRIVACY_ACTION_PLAN_CAPABILITY, LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY, PlanningInvocation,
+    PrivacyPlanningService, ScopeDiscoveryService, SnapshotReadContext,
+    mutation_capability_definitions, plan_read_visibility_resources, query_capability_definitions,
+};
 use crm_customer_privacy_application::{
     CustomerPrivacyPlanReadAdapter, DiscoverySnapshotVisibilityPort, OwnerContributionEndpoint,
     OwnerContributionEndpoints, SnapshotVisibilityDecision, plan_read_query_capability_definitions,
-};
-pub use crm_customer_privacy_application::{
-    APPROVE_PRIVACY_CASE_CAPABILITY, DiscoveryInvocation, DiscoverySnapshotReader,
-    GET_PRIVACY_ACTION_PLAN_CAPABILITY, LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY,
-    PlanningInvocation, PrivacyPlanningService, ScopeDiscoveryService, SnapshotReadContext,
-    mutation_capability_definitions, plan_read_visibility_resources,
-    query_capability_definitions,
 };
 use crm_customer_privacy_postgres::{
     PostgresDiscoveryPersistence, PostgresPlanningPersistence, PostgresPrivacyReadPersistence,

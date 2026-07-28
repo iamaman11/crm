@@ -231,20 +231,15 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyApprovalGuard {
         request: &'a CapabilityRequest,
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
-            if request.context.execution.capability_id.as_str()
-                != APPROVE_PRIVACY_CASE_CAPABILITY
-            {
+            if request.context.execution.capability_id.as_str() != APPROVE_PRIVACY_CASE_CAPABILITY {
                 return Err(approval_guard_unsupported());
             }
             let reference = privacy_case_ref_from_request(request)?;
             let expected_version = expected_version_from_request(request)?;
-            let privacy_case = load_case_in_transaction(
-                transaction,
-                &reference.record_id,
-                RowLock::Update,
-            )
-            .await?
-            .ok_or_else(case_not_found)?;
+            let privacy_case =
+                load_case_in_transaction(transaction, &reference.record_id, RowLock::Update)
+                    .await?
+                    .ok_or_else(case_not_found)?;
 
             if privacy_case.case_id() != &reference.record_id
                 || privacy_case.tenant_id() != &request.context.execution.tenant_id
@@ -315,8 +310,7 @@ fn validate_exact_lineage(
         || plan_lineage.case_kind() != privacy_case.kind()
         || plan_lineage.policy_version() != privacy_case.policy_version()
         || plan_lineage.canonical_party_id() != &binding.canonical_party_id
-        || plan_lineage.identity_resolution_generation()
-            != binding.identity_resolution_generation
+        || plan_lineage.identity_resolution_generation() != binding.identity_resolution_generation
         || plan_lineage.scope_snapshot_id() != snapshot.snapshot_id()
         || privacy_case.scope_snapshot_id() != Some(snapshot.snapshot_id())
         || privacy_case.action_plan_id() != Some(plan.plan_id())
@@ -332,14 +326,12 @@ fn validate_exact_lineage(
         || snapshot_lineage.identity_resolution_generation()
             != binding.identity_resolution_generation
         || plan_lineage.scope_snapshot_binding_digest() != snapshot.binding_digest()
-        || plan_lineage.scope_completeness_digest()
-            != snapshot.aggregation().completeness_digest()
+        || plan_lineage.scope_completeness_digest() != snapshot.aggregation().completeness_digest()
         || plan_lineage.registry_digest() != snapshot_lineage.registry_digest()
         || plan_lineage.purpose_code() != snapshot_lineage.purpose_code()
         || plan_lineage.effective_request_at_unix_ms()
             != snapshot_lineage.effective_request_at_unix_ms()
-        || plan_lineage.snapshot_captured_at_unix_nanos()
-            != snapshot.captured_at_unix_nanos()
+        || plan_lineage.snapshot_captured_at_unix_nanos() != snapshot.captured_at_unix_nanos()
     {
         return Err(approval_evidence_invalid(
             "scope snapshot and immutable action-plan lineage do not match exactly",
@@ -370,7 +362,8 @@ async fn load_snapshot_in_transaction(
     lock: RowLock,
 ) -> Result<Option<DiscoveryScopeSnapshot>, SdkError> {
     let row = select_record_row(transaction, SCOPE_SNAPSHOT_RECORD_TYPE, snapshot_id, lock).await?;
-    row.map(|row| decode_snapshot_row(snapshot_id, row)).transpose()
+    row.map(|row| decode_snapshot_row(snapshot_id, row))
+        .transpose()
 }
 
 async fn load_plan_in_transaction(
@@ -466,7 +459,8 @@ fn decode_plan_row(
         ACTION_PLAN_STATE_MAXIMUM_BYTES,
         ACTION_PLAN_STATE_RETENTION_POLICY_ID,
     )?;
-    let value = decode_action_plan_state(&snapshot.payload.bytes).map_err(approval_evidence_invalid)?;
+    let value =
+        decode_action_plan_state(&snapshot.payload.bytes).map_err(approval_evidence_invalid)?;
     if value.plan_id() != plan_id {
         return Err(approval_evidence_invalid(
             "action plan identity differs from its record envelope",
@@ -484,7 +478,9 @@ fn decode_record_snapshot(
     let owner: String = row
         .try_get("owner_module_id")
         .map_err(approval_evidence_invalid)?;
-    let schema_id: String = row.try_get("schema_id").map_err(approval_evidence_invalid)?;
+    let schema_id: String = row
+        .try_get("schema_id")
+        .map_err(approval_evidence_invalid)?;
     let schema_version: String = row
         .try_get("schema_version")
         .map_err(approval_evidence_invalid)?;
@@ -597,8 +593,9 @@ async fn verify_planning_link_in_transaction(
     })?;
 
     if source_case_version
-        != i64::try_from(plan.lineage().source_case_version())
-            .map_err(|_| approval_evidence_invalid("source case version exceeds PostgreSQL range"))?
+        != i64::try_from(plan.lineage().source_case_version()).map_err(|_| {
+            approval_evidence_invalid("source case version exceeds PostgreSQL range")
+        })?
         || resulting_case_version
             != i64::try_from(privacy_case.version()).map_err(|_| {
                 approval_evidence_invalid("resulting case version exceeds PostgreSQL range")
@@ -704,7 +701,9 @@ fn subject_binding_to_wire(
     })
 }
 
-fn rescope_to_wire(value: &RescopeRequirement) -> Result<wire::PrivacyRescopeRequirement, SdkError> {
+fn rescope_to_wire(
+    value: &RescopeRequirement,
+) -> Result<wire::PrivacyRescopeRequirement, SdkError> {
     Ok(wire::PrivacyRescopeRequirement {
         previous_canonical_party_ref: Some(customer_wire::PartyRef {
             party_id: value.previous_canonical_party_id.as_str().to_owned(),
@@ -881,7 +880,9 @@ fn version_conflict(expected: u64, actual: u64) -> SdkError {
         true,
         "The privacy case changed before approval could be committed.",
     )
-    .with_internal_reference(format!("expected version {expected}, actual version {actual}"))
+    .with_internal_reference(format!(
+        "expected version {expected}, actual version {actual}"
+    ))
 }
 
 fn approval_conflict(reference: impl Into<String>) -> SdkError {
