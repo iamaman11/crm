@@ -24,14 +24,15 @@ pub use reads::*;
 
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_cancel_capability_adapter::capability_definitions as cancel_definitions;
-use crm_customer_privacy_capability_adapter::capability_definitions as create_definitions;
+use crm_customer_privacy_capability_adapter::capability_definitions as owner_mutation_definitions;
+pub use crm_customer_privacy_capability_adapter::PLACE_PROCESSING_RESTRICTION_CAPABILITY;
 use crm_customer_privacy_query_adapter::query_capability_definitions as case_query_definitions;
 use crm_customer_privacy_subject_capability_adapter::capability_definitions as subject_definitions;
 use crm_customer_privacy_submit_capability_adapter::capability_definitions as submit_definitions;
 use crm_module_sdk::SdkError;
 
 pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    let mut definitions = create_definitions()?;
+    let mut definitions = owner_mutation_definitions()?;
     definitions.extend(submit_definitions()?);
     definitions.extend(subject_definitions()?);
     definitions.push(approval_capability_definition()?);
@@ -50,13 +51,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn inventory_promotes_five_mutations_and_preserves_four_queries() {
+    fn inventory_promotes_six_mutations_and_preserves_four_queries() {
         let mutations = mutation_capability_definitions().unwrap();
         let queries = query_capability_definitions().unwrap();
-        assert_eq!(mutations.len(), 5);
+        assert_eq!(mutations.len(), 6);
         assert_eq!(queries.len(), 4);
-        assert!(mutations.iter().any(|definition| {
-            definition.capability_id.as_str() == APPROVE_PRIVACY_CASE_CAPABILITY
-        }));
+        for capability in [
+            APPROVE_PRIVACY_CASE_CAPABILITY,
+            PLACE_PROCESSING_RESTRICTION_CAPABILITY,
+        ] {
+            assert!(mutations.iter().any(|definition| {
+                definition.capability_id.as_str() == capability
+            }));
+        }
     }
 }
