@@ -22,6 +22,7 @@ mod postgres_related_query;
 mod projection_store;
 mod search_generation_store;
 mod search_store;
+mod subject_policy;
 
 pub use aggregate_executor::*;
 pub use audit::AuditIntent;
@@ -52,7 +53,10 @@ pub use postgres_query::{
     RecordQueryPage, RecordQuerySort,
 };
 pub use postgres_related_query::{
-    MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, RelatedRecordListQuery, RelatedRecordQueryPage,
+    MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, RelatedRecordListQuery, RecordQueryPage as _,
+};
+pub use subject_policy::{
+    CustomerSubjectOperationClass, TransactionalCustomerSubjectPolicyPort,
 };
 
 /// Governed implementation dependency for owner PostgreSQL packages. This keeps the
