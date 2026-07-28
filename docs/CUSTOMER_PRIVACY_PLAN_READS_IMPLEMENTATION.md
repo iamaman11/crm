@@ -1,12 +1,18 @@
 # Customer Privacy permission-aware plan reads
 
-Status: **Implemented in PR #211 and pending unchanged exact-head acceptance.**
+Status: **Accepted and merged through PR #211.**
+
+Acceptance evidence:
+
+- accepted source: `933fa4b502d60a23b83de9ccee279cc6517b5cba`;
+- permanent workflows: **32 of 32** successful on the unchanged source-authored SHA;
+- squash merge: `a1f3a60a6d8e8bba7bda50f936c57a61bc3521f7`.
 
 Historical sources remain immutable:
 
 - `contracts/customer-privacy-planning-freeze.json` / PR #208 freeze the planning and read semantics before runtime work;
 - `contracts/customer-privacy-planning-implementation.json` / PR #209 record accepted trusted-internal planning runtime;
-- this packet promotes only the two already published read coordinates.
+- this accepted packet promotes only the two already published read coordinates.
 
 ## Runtime coordinates
 
@@ -75,7 +81,7 @@ No `customer_privacy_owner_outcomes` persistence exists in this packet.
 
 ## Production inventory
 
-After this packet the intended Customer Privacy inventory is:
+The accepted Customer Privacy inventory is:
 
 - four public mutations;
 - four permission-aware public queries;
@@ -87,7 +93,7 @@ Trusted-internal `customer_privacy.plan.build@1.0.0` remains non-public. Scope d
 
 ## Acceptance
 
-Permanent `.github/workflows/customer-privacy-planning.yml` proves:
+Permanent `.github/workflows/customer-privacy-planning.yml` proved:
 
 - clean PostgreSQL application;
 - `database/tests/0045_customer_privacy_plan_reads.sql`;
@@ -99,7 +105,7 @@ Permanent `.github/workflows/customer-privacy-planning.yml` proves:
 - complete schema rollback/removal;
 - reapply and repeated SQL/Rust acceptance.
 
-Machine-readable pending evidence is in `contracts/customer-privacy-plan-reads-implementation.json`. Accepted source SHA, permanent workflow count and merge SHA remain null until every applicable permanent workflow succeeds on one unchanged source-authored or connector-authored exact head; bot-authored synchronization commits are not accepted as final evidence.
+The complete exact-head matrix was 32 of 32 permanent workflows on accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba`. Machine-readable accepted evidence is in `contracts/customer-privacy-plan-reads-implementation.json`. Bot-authored synchronization commits were not used as final evidence.
 
 ## Next bounded packet
 
