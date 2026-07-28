@@ -22,6 +22,8 @@ This is the concise current-state snapshot. Normative product dependencies remai
 
 Latest accepted Customer Privacy runtime baseline is PR #220 / accepted source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows.
 
+Latest accepted repository architecture packet is PR #222 / accepted source `b5651e784a156758b39eaa04abc1124c7c0832f9` / squash merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows.
+
 The accepted inventory is five public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
 
 **All nine authoritative owner implementations are accepted:**
@@ -70,13 +72,21 @@ Repository step 1 is accepted through PR #218 / accepted source `71c88f3e894f1fd
 
 The repository now supports exact Rust `1.97.1`; root workspace `rust-version` is `1.97.1`; Rust and Clippy warning/error budgets are zero and measured from JSON compiler output; `Cargo.lock`, all 113 workspace packages, dependencies and product behavior remain unchanged. Three historical direct `clippy.too_many_arguments = "allow"` tables are exact no-growth exceptions with named owners, compensating checks, removal conditions and expiry on `2027-01-31`.
 
+## Accepted bounded contribution aggregation
+
+Repository step 3 is accepted through PR #222 / accepted source `b5651e784a156758b39eaa04abc1124c7c0832f9` / squash merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows on one unchanged exact head.
+
+The Customer Accounts owner composition now exposes its exact data-only mutation/query definition factories, and `crm-first-party-modules` re-exports them beside the already accepted owner contribution builder. Generic application runtime consumes those selected inventory factories through the first-party facade while preserving the exact mutation/query order, deterministic Account-before-Consents contribution order and existing activation gates.
+
+The five-file packet changed no route, coordinate, public inventory, persistence, migration, tenant isolation, authorization, audit, idempotency, product behavior, dependency family, manifest, `Cargo.lock`, workspace member, worker or Customer Privacy behavior. Workspace package count remains 113.
+
 ## Next permitted repository packet
 
-Repository step 3 is the first bounded contribution-aggregation packet without behavior changes. It may expand owner-owned first-party registration and remove selected concrete owner imports from generic runtime only where behavior, routes, coordinates, persistence, dependencies and public inventory remain unchanged.
+Repository step 4 is immediate deny-only Customer Privacy processing restrictions using final subject locks. Legal-hold/mandatory-retention adjudication, owner execution, destructive actions and workers remain later packets.
 
 ## Following permitted repository packet
 
-Repository step 4 is immediate deny-only Customer Privacy processing restrictions using final subject locks. Legal-hold/mandatory-retention adjudication, owner execution, destructive actions and workers remain later packets.
+Repository step 5 is `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and the generated repository map.
 
 ## Architecture and developer-experience 10/10 checkpoint
 
@@ -85,7 +95,8 @@ Issue #194 remains open.
 - Stage A documentation/source hierarchy and stable navigation are complete.
 - Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance and three exact expiring legacy lint exceptions are accepted; broader dependency/public-surface calibration and exception removal remain.
 - Stage C is in progress: the Customer Privacy domain/application/postgres/production golden pilot is accepted, but scaffolding, migration-ownership policy and later-owner adoption are not generalized.
-- Stages D and E have working foundations but are incomplete: the generic runtime still imports many concrete owner adapters, and affected-scope selection is not yet complete across every database/process/product/frontend/operations dimension.
+- Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222, but the generic runtime still imports many other concrete owner adapters and remaining owners have not migrated.
+- Stage E has a working foundation but is incomplete: affected-scope selection is not yet complete across every database/process/product/frontend/operations dimension.
 - Stages F–I remain foundation-only or unstarted; generic conformance/lifecycle, measured consolidation, reproducible local environment, generated navigation, frontend and operations parity are not complete.
 
 ## Repository continuation order
@@ -95,8 +106,8 @@ Only one implementation packet may be active. The current order begins:
 ```text
 1. supported Rust toolchain / rust-version / measured lint baseline — complete through PR #218
 -> 2. Customer Privacy approval runtime — complete through PR #220
--> 3. bounded contribution aggregation — next
--> 4. immediate deny-only restrictions
+-> 3. bounded contribution aggregation — complete through PR #222
+-> 4. immediate deny-only restrictions — next
 -> 5. explain / packet-check / generated active packet and repository map
 -> 6. legal-hold and mandatory-retention precedence
 ```
