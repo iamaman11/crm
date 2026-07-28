@@ -10,14 +10,26 @@ on:
       - "rust-toolchain.toml"
       - "architecture-policy.json"
       - "scripts/check_architecture.py"
+      - "proto/crm/customer/**"
+      - "proto/crm/parties/**"
+      - "proto/crm/contact_points/**"
+      - "proto/crm/customer_privacy/**"
       - "crates/crm-core-data/**"
+      - "crates/crm-customer-privacy-capability-adapter/**"
+      - "crates/crm-customer-privacy-capability-composition/**"
       - "crates/crm-customer-privacy-postgres/**"
       - "crates/crm-customer-privacy-production/**"
+      - "crates/crm-contact-points-capability-composition/**"
+      - "crates/crm-identity-resolution-topology-composition/**"
+      - "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
       - "crates/crm-application-runtime/tests/customer_privacy_restriction_policy_postgres.rs"
+      - "services/crm-api/**"
       - "modules/crm-customer-privacy/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0005_party_adapter.sql"
+      - "database/tests/0007_contact_point_adapter.sql"
       - "database/tests/0020_customer_privacy_persistence_fixture.sql"
       - ".github/workflows/customer-privacy-restriction-policy.yml"
   pull_request:
@@ -27,14 +39,26 @@ on:
       - "rust-toolchain.toml"
       - "architecture-policy.json"
       - "scripts/check_architecture.py"
+      - "proto/crm/customer/**"
+      - "proto/crm/parties/**"
+      - "proto/crm/contact_points/**"
+      - "proto/crm/customer_privacy/**"
       - "crates/crm-core-data/**"
+      - "crates/crm-customer-privacy-capability-adapter/**"
+      - "crates/crm-customer-privacy-capability-composition/**"
       - "crates/crm-customer-privacy-postgres/**"
       - "crates/crm-customer-privacy-production/**"
+      - "crates/crm-contact-points-capability-composition/**"
+      - "crates/crm-identity-resolution-topology-composition/**"
+      - "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
       - "crates/crm-application-runtime/tests/customer_privacy_restriction_policy_postgres.rs"
+      - "services/crm-api/**"
       - "modules/crm-customer-privacy/**"
       - "database/migrations/**"
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0005_party_adapter.sql"
+      - "database/tests/0007_contact_point_adapter.sql"
       - "database/tests/0020_customer_privacy_persistence_fixture.sql"
       - ".github/workflows/customer-privacy-restriction-policy.yml"
 
@@ -48,7 +72,7 @@ permissions:
 jobs:
   restriction-policy:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17-alpine
@@ -91,6 +115,8 @@ jobs:
           done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Verify authoritative final restriction decision
@@ -101,6 +127,14 @@ jobs:
             --test customer_privacy_restriction_policy_postgres \
             -- --nocapture \
             2>&1 | tee database/customer-privacy-restriction-policy-clean.log
+      - name: Verify public placement and protected-owner denial
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api \
+            --test customer_privacy_restriction_process_e2e \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-restriction-process-clean.log
       - name: Roll back authoritative schema
         shell: bash
         run: |
@@ -119,9 +153,11 @@ jobs:
           done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
           psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
-      - name: Repeat authoritative final restriction decision
+      - name: Repeat final decision and real-process acceptance
         shell: bash
         run: |
           set -o pipefail
@@ -129,6 +165,10 @@ jobs:
             --test customer_privacy_restriction_policy_postgres \
             -- --nocapture \
             2>&1 | tee database/customer-privacy-restriction-policy-reapplied.log
+          cargo test -p crm-api \
+            --test customer_privacy_restriction_process_e2e \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-restriction-process-reapplied.log
       - name: Capture PostgreSQL diagnostics
         if: failure()
         shell: bash
@@ -147,6 +187,7 @@ jobs:
             crates/crm-customer-privacy-postgres/
             crates/crm-customer-privacy-production/
             crates/crm-application-runtime/tests/customer_privacy_restriction_policy_postgres.rs
-            database/customer-privacy-restriction-policy-*.log
+            services/crm-api/tests/customer_privacy_restriction_process_e2e.rs
+            database/customer-privacy-restriction-*.log
           if-no-files-found: warn
           retention-days: 7
