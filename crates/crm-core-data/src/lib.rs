@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-mod aggregate_guard_chain;
 pub mod aggregate_executor;
+mod aggregate_guard_chain;
 mod audit;
 mod audited_read;
 pub mod capability_executor;
@@ -57,9 +57,7 @@ pub use postgres_query::{
 pub use postgres_related_query::{
     MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, RelatedRecordListQuery, RelatedRecordQueryPage,
 };
-pub use subject_policy::{
-    CustomerSubjectOperationClass, TransactionalCustomerSubjectPolicyPort,
-};
+pub use subject_policy::{CustomerSubjectOperationClass, TransactionalCustomerSubjectPolicyPort};
 
 /// Governed implementation dependency for owner PostgreSQL packages. This keeps the
 /// workspace on the already resolved SQLx family without adding direct version debt.
