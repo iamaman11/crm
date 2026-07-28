@@ -32,6 +32,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("Phase 8A", document)
             self.assertIn("approval runtime", document.lower())
             self.assertIn("permission-aware", document.lower())
+            self.assertIn("rust-version", document)
 
         self.assertIn("Phases 0.1–7 are complete", self.status)
         self.assertIn("Current product-complete expert modules: **0**", self.status)
@@ -68,6 +69,43 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "I — frontend and operations parity",
         ):
             self.assertIn(stage, self.plan)
+
+    def test_repository_execution_order_is_strict_and_mechanically_visible(self) -> None:
+        self.assertIn("### 2.4 Single repository execution order", self.plan)
+        self.assertIn("At most one implementation packet may be active", self.plan)
+        self.assertIn(
+            "The next permitted packet is the first unfinished item",
+            self.plan,
+        )
+        self.assertIn(
+            "No item may be described as “next” when an earlier unfinished item exists",
+            self.plan,
+        )
+
+        step_1 = "1. supported Rust toolchain, workspace `rust-version` and measured lint baseline;"
+        step_2 = "2. Customer Privacy approval runtime only;"
+        step_3 = "3. first bounded contribution-aggregation packet"
+        self.assertIn(step_1, self.plan)
+        self.assertIn(step_2, self.plan)
+        self.assertIn(step_3, self.plan)
+        self.assertLess(self.plan.index(step_1), self.plan.index(step_2))
+        self.assertLess(self.plan.index(step_2), self.plan.index(step_3))
+
+        self.assertIn("## Next permitted repository packet", self.status)
+        self.assertIn("## Following permitted repository packet", self.status)
+        self.assertIn("Repository step 1", self.roadmap)
+        self.assertIn("Repository step 2", self.roadmap)
+        self.assertIn("## 9. Binding repository continuation", self.phase8)
+
+        forbidden_ambiguous_phrases = (
+            "run in parallel",
+            "separate parallel lane",
+            "runs alongside Phase 8A",
+        )
+        for statement in forbidden_ambiguous_phrases:
+            for document in (self.plan, self.status, self.roadmap, self.phase8):
+                with self.subTest(statement=statement):
+                    self.assertNotIn(statement, document)
 
     def test_navigation_has_one_stable_human_index(self) -> None:
         self.assertIn("docs/README.md", self.readme)
@@ -111,6 +149,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "python scripts/repo.py smoke",
             "approval runtime only",
             "supported Rust toolchain/`rust-version` decision",
+            "Single repository execution order",
         )
         plan_lower = self.plan.lower()
         for statement in required:
