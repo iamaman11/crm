@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 #[path = "lib.rs"]
-mod legacy;
+mod base;
 mod restriction;
 
-pub use legacy::*;
+pub use base::*;
 pub use restriction::*;
