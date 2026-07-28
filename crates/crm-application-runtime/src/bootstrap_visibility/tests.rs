@@ -1,5 +1,5 @@
 use super::registry::{
-    ACTIVITIES_MODULE_ID, BootstrapVisibilityResource, SALES_MODULE_ID,
+    ACTIVITIES_MODULE_ID, BootstrapVisibilityResource, CUSTOMER_PRIVACY_MODULE_ID, SALES_MODULE_ID,
     build_bootstrap_visibility_registry,
 };
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk, PayloadContract};
@@ -8,6 +8,10 @@ use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_customer_enrichment::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_customer_enrichment_visibility::{
     QUERY_VISIBILITY_CAPABILITY_IDS, query_visibility_resources,
+};
+use crm_customer_privacy_production::{
+    GET_PRIVACY_ACTION_PLAN_CAPABILITY, LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY,
+    query_capability_definitions as customer_privacy_query_capability_definitions,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, SchemaId, SchemaVersion,
@@ -79,6 +83,35 @@ fn registry_resolves_module_owned_resources_without_owner_switches() {
             .collect::<Vec<_>>();
         assert!(!actual.is_empty(), "missing visibility for {capability}");
         assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn registry_resolves_all_four_customer_privacy_queries() {
+    let registry = build_bootstrap_visibility_registry().unwrap();
+    let definitions = customer_privacy_query_capability_definitions().unwrap();
+    assert_eq!(definitions.len(), 4);
+    for definition in definitions {
+        assert_eq!(definition.owner_module_id.as_str(), CUSTOMER_PRIVACY_MODULE_ID);
+        let capability = definition.capability_id.as_str();
+        let resources = registry.resources_for(&definition).unwrap();
+        let expected_count = if matches!(
+            capability,
+            GET_PRIVACY_ACTION_PLAN_CAPABILITY | LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY
+        ) {
+            3
+        } else {
+            2
+        };
+        assert_eq!(
+            resources.len(),
+            expected_count,
+            "unexpected visibility resource count for {capability}"
+        );
+        assert!(
+            resources.iter().all(|resource| !resource.resource_type.is_empty()),
+            "empty resource type for {capability}"
+        );
     }
 }
 
