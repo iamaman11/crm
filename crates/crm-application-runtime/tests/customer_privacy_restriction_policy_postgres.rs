@@ -260,8 +260,9 @@ async fn insert_restriction(admin: &PgPool, fixture: RestrictionFixture<'_>) {
         payload.descriptor_hash = [99; 32];
     }
 
-    let fixture_request = request(TENANT_A, fixture.restriction_id, DECISION_AT);
+    let fixture_request = fixture_request(fixture.restriction_id);
     let mut transaction = begin_bound(admin, &fixture_request.context).await;
+    insert_business_transaction(&mut transaction, &fixture_request.context).await;
     insert_payload(
         &mut transaction,
         fixture.restriction_id,
@@ -273,6 +274,37 @@ async fn insert_restriction(admin: &PgPool, fixture: RestrictionFixture<'_>) {
         .commit()
         .await
         .expect("commit restriction fixture");
+}
+
+async fn insert_business_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    context: &ModuleExecutionContext,
+) {
+    sqlx::query(
+        r#"
+        INSERT INTO crm.business_transactions (
+          tenant_id,
+          business_transaction_id,
+          actor_id,
+          request_id,
+          capability_id,
+          capability_version,
+          expected_outbox_events,
+          expected_audit_records,
+          expected_idempotency_records
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 1, 1, 1)
+        "#,
+    )
+    .bind(context.execution.tenant_id.as_str())
+    .bind(context.execution.business_transaction_id.as_str())
+    .bind(context.execution.actor_id.as_str())
+    .bind(context.execution.request_id.as_str())
+    .bind(context.execution.capability_id.as_str())
+    .bind(context.execution.capability_version.as_str())
+    .execute(&mut **transaction)
+    .await
+    .expect("insert restriction fixture business transaction");
 }
 
 async fn insert_payload(
@@ -343,6 +375,14 @@ async fn cleanup(admin: &PgPool) {
         .commit()
         .await
         .expect("commit restriction fixture cleanup");
+}
+
+fn fixture_request(identity: &str) -> CapabilityRequest {
+    let mut fixture = request(TENANT_A, identity, DECISION_AT);
+    fixture.context.module_id = ModuleId::try_new("crm.test").unwrap();
+    fixture.context.execution.capability_id = CapabilityId::try_new("test.record.mutate").unwrap();
+    fixture.input.owner = ModuleId::try_new("crm.test").unwrap();
+    fixture
 }
 
 fn request(tenant: &str, identity: &str, started_at_unix_nanos: i64) -> CapabilityRequest {
