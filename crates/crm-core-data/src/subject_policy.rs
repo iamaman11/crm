@@ -10,6 +10,15 @@ pub enum CustomerSubjectOperationClass {
     Communication,
 }
 
+impl CustomerSubjectOperationClass {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Processing => "processing",
+            Self::Communication => "communication",
+        }
+    }
+}
+
 /// Transaction-scoped final policy boundary for customer-subject operations.
 ///
 /// Implementations must acquire the platform-wide tenant + canonical Party
@@ -41,12 +50,12 @@ mod tests {
             CustomerSubjectOperationClass::Communication
         );
         assert_eq!(
-            format!("{:?}", CustomerSubjectOperationClass::Processing),
-            "Processing"
+            CustomerSubjectOperationClass::Processing.label(),
+            "processing"
         );
         assert_eq!(
-            format!("{:?}", CustomerSubjectOperationClass::Communication),
-            "Communication"
+            CustomerSubjectOperationClass::Communication.label(),
+            "communication"
         );
     }
 }
