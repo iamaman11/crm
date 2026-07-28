@@ -30,6 +30,7 @@ pub use aggregate_guard_chain::TransactionalAggregateGuardChain;
 pub use audit::AuditIntent;
 pub use audited_read::*;
 pub use capability_executor::*;
+pub use crm_capability_runtime::CapabilityRequest;
 pub use crm_core_files::{
     AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactMetadata,
     FileArtifactStatus, ImmutableFileArtifactStore,

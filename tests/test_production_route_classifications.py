@@ -47,7 +47,6 @@ class ProductionRouteClassificationTests(unittest.TestCase):
             ("crm.customer-privacy", "customer_privacy.legal_hold.place", "1.0.0"),
             ("crm.customer-privacy", "customer_privacy.legal_hold.release", "1.0.0"),
             ("crm.customer-privacy", "customer_privacy.restriction.get", "1.0.0"),
-            ("crm.customer-privacy", "customer_privacy.restriction.place", "1.0.0"),
             ("crm.customer-privacy", "customer_privacy.restriction.release", "1.0.0"),
         }
         owner_scope_contract_only = {
@@ -113,6 +112,7 @@ class ProductionRouteClassificationTests(unittest.TestCase):
             "customer_privacy.case.subject.verify",
             "customer_privacy.case.approve",
             "customer_privacy.case.cancel",
+            "customer_privacy.restriction.place",
             "customer_privacy.case.get",
             "customer_privacy.case.list",
             "customer_privacy.case.plan.get",

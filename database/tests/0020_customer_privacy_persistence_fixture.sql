@@ -78,6 +78,24 @@ VALUES
     false,
     false,
     false
+  ),
+  (
+    'customer_privacy.restriction.place',
+    '1.0.0',
+    'crm.customer-privacy',
+    '0.2.0',
+    'crm.customer_privacy.v1.CustomerPrivacyControlService',
+    'PlaceProcessingRestriction',
+    decode(repeat('6d', 32), 'hex'),
+    decode(repeat('6e', 32), 'hex'),
+    'high',
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false
   )
 ON CONFLICT (capability_id, capability_version) DO UPDATE
 SET owner_module_id = EXCLUDED.owner_module_id,

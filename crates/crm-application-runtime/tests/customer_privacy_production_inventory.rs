@@ -10,6 +10,7 @@ const SUBMIT: &str = "customer_privacy.case.submit";
 const SUBJECT_VERIFY: &str = "customer_privacy.case.subject.verify";
 const APPROVE: &str = "customer_privacy.case.approve";
 const CANCEL: &str = "customer_privacy.case.cancel";
+const RESTRICTION_PLACE: &str = "customer_privacy.restriction.place";
 const GET_CASE: &str = "customer_privacy.case.get";
 const LIST_CASES: &str = "customer_privacy.case.list";
 const GET_PLAN: &str = "customer_privacy.case.plan.get";
@@ -29,7 +30,7 @@ struct ClassifiedRoute {
 }
 
 #[test]
-fn customer_privacy_runtime_inventory_promotes_five_mutations_and_four_queries() {
+fn customer_privacy_runtime_inventory_promotes_six_mutations_and_four_queries() {
     let runtime_privacy_mutations = application_mutation_definitions()
         .unwrap()
         .into_iter()
@@ -49,6 +50,7 @@ fn customer_privacy_runtime_inventory_promotes_five_mutations_and_four_queries()
             (SUBJECT_VERIFY.to_owned(), "1.0.0".to_owned()),
             (APPROVE.to_owned(), "1.0.0".to_owned()),
             (CANCEL.to_owned(), "1.0.0".to_owned()),
+            (RESTRICTION_PLACE.to_owned(), "1.0.0".to_owned()),
         ])
     );
 
@@ -84,7 +86,6 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
         .map(|route| (route.id.clone(), route.version.clone()))
         .collect::<BTreeSet<_>>();
     let expected_non_runtime = [
-        "customer_privacy.restriction.place",
         "customer_privacy.restriction.release",
         "customer_privacy.restriction.get",
         "customer_privacy.legal_hold.place",
@@ -102,6 +103,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
         SUBJECT_VERIFY,
         APPROVE,
         CANCEL,
+        RESTRICTION_PLACE,
         GET_CASE,
         LIST_CASES,
         GET_PLAN,

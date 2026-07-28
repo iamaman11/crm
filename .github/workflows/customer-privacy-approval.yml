@@ -20,6 +20,9 @@ on:
       - "crates/crm-customer-privacy-postgres/**"
       - "crates/crm-customer-privacy-production/**"
       - "crates/crm-customer-privacy-query-adapter/**"
+      - "crates/crm-contact-points-capability-composition/**"
+      - "crates/crm-identity-resolution-topology-composition/**"
+      - "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
       - "services/crm-api/**"
       - "contracts/production-route-classifications.json"
       - "database/migrations/**"
@@ -48,6 +51,9 @@ on:
       - "crates/crm-customer-privacy-postgres/**"
       - "crates/crm-customer-privacy-production/**"
       - "crates/crm-customer-privacy-query-adapter/**"
+      - "crates/crm-contact-points-capability-composition/**"
+      - "crates/crm-identity-resolution-topology-composition/**"
+      - "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
       - "services/crm-api/**"
       - "contracts/production-route-classifications.json"
       - "database/migrations/**"
@@ -150,19 +156,20 @@ jobs:
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_approval_process_e2e -- --nocapture \
             2>&1 | tee database/customer-privacy-approval-process-clean.log
-      - name: Verify frozen non-effects and bounded complexity
+      - name: Verify approval and restriction invariants
         shell: bash
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
-          package_count="$(cargo metadata --no-deps --format-version 1 | python -c 'import json, sys; print(len(json.load(sys.stdin)["workspace_members"]))')"
+          package_count="$(cargo metadata --locked --no-deps --format-version 1 | python -c 'import json, sys; print(len(json.load(sys.stdin)["workspace_members"]))')"
           test "${package_count}" = "113"
-          git diff --exit-code "origin/${BASE_REF}"...HEAD -- Cargo.lock database/migrations
-          test -z "$(git diff --name-only "origin/${BASE_REF}"...HEAD -- crates/crm-application-runtime/Cargo.toml crates/crm-application-runtime/src crates/crm-application-composition/Cargo.toml crates/crm-application-composition/src || true)"
+          runtime_changes="$(git diff --name-only "origin/${BASE_REF}"...HEAD -- crates/crm-application-runtime/Cargo.toml crates/crm-application-runtime/src crates/crm-application-composition/Cargo.toml crates/crm-application-composition/src || true)"
+          unexpected_runtime_changes="$(printf '%s\n' "${runtime_changes}" | grep -v '^crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs$' || true)"
+          test -z "${unexpected_runtime_changes}"
           added_rust="$(git diff --unified=0 "origin/${BASE_REF}"...HEAD -- '*.rs' | grep '^+' | grep -v '^+++' || true)"
-          if printf '%s\n' "${added_rust}" | grep -E 'CustomerPrivacy.*Worker|customer_privacy_owner_outcomes|restriction\.(place|release)|legal_hold\.(place|release)|owner.*execute'; then
-            echo "approval packet introduced a forbidden later-step runtime effect"
+          if printf '%s\n' "${added_rust}" | grep -E 'CustomerPrivacy.*Worker|customer_privacy_owner_outcomes|restriction\.release|legal_hold\.(place|release)|owner.*execute'; then
+            echo "restriction packet introduced a forbidden later-step runtime effect"
             exit 1
           fi
           python - <<'PY'
@@ -170,9 +177,12 @@ jobs:
           from pathlib import Path
           data = json.loads(Path('contracts/production-route-classifications.json').read_text())
           coordinates = {(item['owner_module_id'], item['id'], item['version']) for item in data['non_runtime_contract_routes']}
-          assert ('crm.customer-privacy', 'customer_privacy.case.approve', '1.0.0') not in coordinates
           for capability in (
+              'customer_privacy.case.approve',
               'customer_privacy.restriction.place',
+          ):
+              assert ('crm.customer-privacy', capability, '1.0.0') not in coordinates
+          for capability in (
               'customer_privacy.restriction.release',
               'customer_privacy.legal_hold.place',
               'customer_privacy.legal_hold.release',

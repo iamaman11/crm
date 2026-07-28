@@ -1,20 +1,35 @@
 use crate::customer_enrichment_reject_promotion as base_runtime;
 use crate::native_composition::ProductionCompositionDependencies;
-use crm_application_composition::{ApplicationComposition, ModuleContributionSet};
-use crm_capability_runtime::CapabilityDefinition;
+use crm_application_composition::{
+    ActivationGatedMutationValidator, ApplicationComposition, ModuleContributionSet,
+};
+use crm_capability_runtime::{
+    CapabilityDefinition, CapabilitySemanticValidator, TransactionalCapabilityExecutor,
+};
+use crm_contact_points_capability_adapter::{
+    CREATE_CAPABILITY as CONTACT_POINT_CREATE_CAPABILITY, ContactPointCapabilityPlanner,
+    capability_definition as contact_point_capability_definition,
+};
+use crm_contact_points_capability_composition::{
+    ContactPointCreateCustomerSubjectGuard, ContactPointPartyReferenceSemanticValidator,
+};
+use crm_core_data::{PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner};
 use crm_customer_privacy_production::{
-    CustomerPrivacyProductionDependencies,
-    build_contribution as build_customer_privacy_contribution,
+    CustomerPrivacyProductionDependencies, PostgresCustomerPrivacySubjectPolicy,
+    build_contribution_with_restrictions as build_customer_privacy_contribution,
+    mutation_capability_definitions_with_restrictions,
 };
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
+use crm_party_reference_composition::PostgresPartyReferenceReader;
+use std::sync::Arc;
 
 pub use base_runtime::PRODUCTION_REVIEW_POLICY_VERSION;
 
 /// Returns the accepted public mutation inventory plus the exact Customer
-/// Privacy inventory contributed by the owner application package.
+/// Privacy step-four inventory contributed by the owner application package.
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_mutation_definitions()?;
-    definitions.extend(crm_customer_privacy_application_inventory()?.0);
+    definitions.extend(mutation_capability_definitions_with_restrictions()?);
     Ok(definitions)
 }
 
@@ -22,13 +37,14 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
 /// inventory contributed by the owner application package.
 pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_query_definitions()?;
-    definitions.extend(crm_customer_privacy_application_inventory()?.1);
+    definitions.extend(crm_customer_privacy_production::query_capability_definitions()?);
     Ok(definitions)
 }
 
-/// Extends the existing production composition exclusively through the stable
-/// owner-owned Customer Privacy production entry point. No concrete Customer
-/// Privacy command, query or PostgreSQL implementation is imported here.
+/// Extends the accepted production composition through owner-owned boundaries:
+/// Customer Privacy contributes restriction placement, while Contact Points
+/// replaces only `contact-point.create` with a final transaction guard. Generic
+/// dispatch and every unrelated owner route remain unchanged.
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {
@@ -41,10 +57,26 @@ pub fn build_production_composition(
         cursor_key: dependencies.cursor_key,
     };
     let base = base_runtime::build_production_composition(base_dependencies)?;
+    let contact_create_count = base
+        .mutation_definitions()
+        .iter()
+        .filter(|definition| definition.capability_id.as_str() == CONTACT_POINT_CREATE_CAPABILITY)
+        .count();
+    if contact_create_count != 1 {
+        return Err(configuration_error(
+            "the accepted base composition must contain exactly one Contact Point create route",
+        ));
+    }
+
     let mut contributions = ModuleContributionSet::new();
     contributions
         .add_mutations(
-            base.mutation_definitions().iter().cloned(),
+            base.mutation_definitions()
+                .iter()
+                .filter(|definition| {
+                    definition.capability_id.as_str() != CONTACT_POINT_CREATE_CAPABILITY
+                })
+                .cloned(),
             base.mutation_validator(),
             base.mutation_executor(),
         )
@@ -54,6 +86,35 @@ pub fn build_production_composition(
             base.query_definitions().iter().cloned(),
             base.query_validator(),
             base.query_executor(),
+        )
+        .map_err(composition_error)?;
+
+    let contact_create_definition =
+        contact_point_capability_definition(CONTACT_POINT_CREATE_CAPABILITY)?;
+    let contact_semantic_validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ContactPointPartyReferenceSemanticValidator::new(Arc::new(
+            PostgresPartyReferenceReader::new(dependencies.store.clone()),
+        )));
+    let contact_validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ActivationGatedMutationValidator::new(
+            dependencies.activation.clone(),
+            contact_semantic_validator,
+        ));
+    let contact_planner: Arc<dyn TransactionalAggregatePlanner> =
+        Arc::new(ContactPointCapabilityPlanner);
+    let contact_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(PostgresTransactionalAggregateExecutor::guarded(
+            dependencies.store.clone(),
+            contact_planner,
+            Arc::new(ContactPointCreateCustomerSubjectGuard::new(Arc::new(
+                PostgresCustomerPrivacySubjectPolicy,
+            ))),
+        ));
+    contributions
+        .add_mutations(
+            [contact_create_definition],
+            contact_validator,
+            contact_executor,
         )
         .map_err(composition_error)?;
 
@@ -72,14 +133,6 @@ pub fn build_production_composition(
             .map_err(composition_error)?;
     }
     contributions.build().map_err(composition_error)
-}
-
-fn crm_customer_privacy_application_inventory()
--> Result<(Vec<CapabilityDefinition>, Vec<CapabilityDefinition>), SdkError> {
-    Ok((
-        crm_customer_privacy_production::mutation_capability_definitions()?,
-        crm_customer_privacy_production::query_capability_definitions()?,
-    ))
 }
 
 fn composition_error(error: impl std::fmt::Display) -> SdkError {
