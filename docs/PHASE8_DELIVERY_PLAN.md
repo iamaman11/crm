@@ -63,7 +63,9 @@ PR #222 / accepted source `b5651e784a156758b39eaa04abc1124c7c0832f9` / squash me
 
 PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows accepts the smallest inserted prerequisite required by repository step 4: a transaction-scoped customer-subject policy port and deterministic final guard composition.
 
-PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows completes repository step 4. Immediate deny-only restriction placement and the first complete protected-owner boundary are accepted; repository step 5 is now the next permitted implementation packet.
+PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows completes repository step 4. Immediate deny-only restriction placement and the first complete protected-owner boundary are accepted.
+
+PR #228 / accepted source `a9aa0bef028d906b61e83803436167bf6f91e634` / squash merge `727a244fcf174dc517dec6fdbb6b8997eb205f14` / 5 of 5 applicable permanent workflows completes repository step 5. Deterministic explanation, packet validation, real-diff affected enforcement and generated navigation are accepted; repository step 6 is now the next permitted implementation packet.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -131,6 +133,12 @@ PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash me
 
 `contact-points.contact-point.create@1.0.0` is the first complete protected-owner path. Real-process acceptance proves placement, active denial immediately before persistence, zero denied side effects, unrelated-Party isolation, rollback/reapply and repeated acceptance. Restriction release/reads, legal holds, retention decisions, owner execution, access/export, destructive actions and workers remain later work.
 
+### 8.5 Accepted repository explanation and generated navigation
+
+PR #228 / accepted source `a9aa0bef028d906b61e83803436167bf6f91e634` / squash merge `727a244fcf174dc517dec6fdbb6b8997eb205f14` / 5 of 5 applicable permanent workflows accepts repository step 5.
+
+The packet provides deterministic module/capability explanation, exact baseline and path-policy packet checking, real pull-request diff enforcement, generated active-packet/repository-map navigation and freshness-checked conformance. It changes no Customer Privacy runtime, route, contract, manifest, persistence, migration, dependency, `Cargo.lock`, package or worker.
+
 ## 9. Binding repository continuation
 
 The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. The Phase 8 positions are:
@@ -140,8 +148,8 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 3. repository step 3 — bounded contribution aggregation without behavior change — **complete through PR #222**;
 3a. inserted prerequisite for repository step 4 — final customer-subject policy port and deterministic guard composition — **complete through PR #224**;
 4. repository step 4 — immediate deny-only processing restrictions using final subject locks — **complete through PR #226**;
-5. repository step 5 — `explain`, `packet-check` and generated navigation — **next**;
-6. repository step 6 — legal-hold and mandatory-retention precedence;
+5. repository step 5 — `explain`, `packet-check` and generated navigation — **complete through PR #228**;
+6. repository step 6 — legal-hold and mandatory-retention precedence — **next**;
 7. repository step 7 — reusable generic mutation/query conformance;
 8. repository step 8 — replay-safe resumable owner execution and crash-window recovery;
 9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks;
@@ -157,7 +165,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 19. repository step 19 — architecture remeasurement and publication of the next numbered order;
 20. repository step 20 — first Phase 8B packet.
 
-The inserted prerequisite did not renumber the normative master sequence. A later step must not start while repository step 5 is unfinished.
+The inserted prerequisite did not renumber the normative master sequence. A later step must not start while repository step 6 is unfinished.
 
 ## 10. Frozen ownership
 

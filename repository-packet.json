@@ -1,46 +1,40 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-5",
-  "title": "Repository explanation, packet checking and generated navigation",
+  "packet_id": "repository-step-5-evidence-sync",
+  "title": "Synchronize accepted repository step 5 evidence",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "f7e6dc51cbe09add8025174640fca539b8327a25"
+    "sha": "727a244fcf174dc517dec6fdbb6b8997eb205f14"
   },
-  "tracking_issues": [194],
-  "objective": "Provide deterministic repository explanation, packet validation and generated navigation without changing product runtime behavior.",
+  "tracking_issues": [
+    194
+  ],
+  "objective": "Synchronize accepted repository step 5 evidence and expose repository step 6 as the only next implementation packet.",
   "allowed_paths": [
-    ".github/workflows/affected-scope.yml",
-    ".github/workflows/rust-generated-sync.yml",
-    "AGENTS.md",
-    "README.md",
     "docs/ACTIVE_PACKET.md",
-    "docs/DEVELOPMENT_WORKFLOW.md",
-    "docs/MODULE_DEVELOPMENT.md",
-    "docs/README.md",
-    "docs/generated/REPOSITORY_MAP.md",
+    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+    "docs/IMPLEMENTATION_ROADMAP.md",
+    "docs/PHASE8_DELIVERY_PLAN.md",
+    "docs/PROJECT_STATUS.md",
     "repository-packet.json",
-    "scripts/generate_repository_navigation.py",
-    "scripts/repo.py",
-    "scripts/repository_navigation.py",
-    "tests/test_architecture_documentation_consistency.py",
-    "tests/test_repository_navigation.py"
+    "tests/test_architecture_documentation_consistency.py"
   ],
   "forbidden_paths": [
     "Cargo.lock",
     "contracts/**",
     "crates/**/src/**",
     "database/migrations/**",
+    "modules/**/module.yaml",
     "modules/**/src/**",
     "proto/**",
     "services/**/src/**"
   ],
   "deliverables": [
-    "python scripts/repo.py explain crm.customer-privacy",
-    "python scripts/repo.py explain customer_privacy.case.submit@1.0.0",
-    "python scripts/repo.py packet-check --base origin/main",
-    "docs/ACTIVE_PACKET.md",
-    "docs/generated/REPOSITORY_MAP.md"
+    "record PR #228 accepted source, merge and 5-of-5 evidence",
+    "mark repository step 5 complete",
+    "mark repository step 6 next",
+    "regenerate docs/ACTIVE_PACKET.md"
   ],
   "required_checks": [
     "Governance CI",
@@ -49,19 +43,15 @@
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "module and capability explanations are deterministic and fail closed for unknown targets",
-    "packet-check validates baseline, changed paths, affected closure, workflow selection and generated freshness",
-    "Affected Scope CI executes packet-check against the real pull-request diff",
-    "generated navigation uses deterministic ordering and source digests",
-    "CI rejects stale generated navigation",
-    "no runtime route, contract, persistence, migration, dependency or product behavior changes"
+    "all authoritative status documents agree on accepted step 5 evidence",
+    "repository step 6 is the only next implementation packet",
+    "generated active-packet navigation is fresh",
+    "no runtime, contract, manifest, persistence, migration, dependency, Cargo.lock or product behavior changes"
   ],
   "non_goals": [
-    "Customer Privacy legal-hold or retention behavior",
-    "runtime route or worker changes",
-    "contract or schema changes",
-    "crate consolidation",
-    "dependency upgrades",
-    "local lifecycle commands reserved for repository step 15"
+    "implement repository step 6",
+    "change Customer Privacy runtime",
+    "change public contracts or route classifications",
+    "change workspace packages or dependencies"
   ]
 }
