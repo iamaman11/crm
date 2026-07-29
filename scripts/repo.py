@@ -76,6 +76,7 @@ def command_conformance(_: argparse.Namespace) -> None:
     command_architecture(argparse.Namespace())
     command_manifests(argparse.Namespace())
     command_contracts(argparse.Namespace(write=False))
+    run([sys.executable, "scripts/generate_repository_navigation.py", "--check"])
     run([sys.executable, "scripts/check_native_module_composition.py"])
     run([sys.executable, "scripts/check_production_route_classifications.py"])
     run(
@@ -93,6 +94,7 @@ def command_conformance(_: argparse.Namespace) -> None:
             "tests/test_module_scaffolding.py",
             "tests/test_native_module_composition.py",
             "tests/test_production_route_classifications.py",
+            "tests/test_repository_navigation.py",
         ]
     )
     run(
@@ -145,6 +147,43 @@ def command_affected(args: argparse.Namespace) -> None:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(markdown_report(report), end="")
+
+
+def command_explain(args: argparse.Namespace) -> None:
+    from repository_navigation import NavigationError, explain_target, render_explanation
+
+    try:
+        explanation = explain_target(ROOT, args.target)
+    except NavigationError as error:
+        raise CommandError(str(error)) from error
+    if args.json:
+        print(json.dumps(explanation, indent=2, sort_keys=True))
+    else:
+        print(render_explanation(explanation), end="")
+
+
+def command_packet_check(args: argparse.Namespace) -> None:
+    from repository_navigation import (
+        NavigationError,
+        packet_check,
+        render_packet_check,
+        write_generated_documents,
+    )
+
+    try:
+        if args.write_generated:
+            changed = write_generated_documents(ROOT)
+            for path in changed:
+                print(f"WROTE {path}", flush=True)
+        report = packet_check(ROOT, args.base)
+    except (NavigationError, RuntimeError) as error:
+        raise CommandError(str(error)) from error
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(render_packet_check(report), end="")
+    if not report["ok"]:
+        raise CommandError("active repository packet check failed")
 
 
 def affected_clippy_command(report: dict) -> list[str] | None:
@@ -290,6 +329,27 @@ def build_parser() -> argparse.ArgumentParser:
     affected.add_argument("--base", default="origin/main")
     affected.add_argument("--json", action="store_true")
     affected.set_defaults(handler=command_affected)
+
+    explain = subparsers.add_parser(
+        "explain",
+        help="trace one exact module or capability through repository ownership and evidence",
+    )
+    explain.add_argument("target")
+    explain.add_argument("--json", action="store_true")
+    explain.set_defaults(handler=command_explain)
+
+    packet_check_parser = subparsers.add_parser(
+        "packet-check",
+        help="validate the active packet, changed paths, affected closure and navigation freshness",
+    )
+    packet_check_parser.add_argument("--base", default="origin/main")
+    packet_check_parser.add_argument("--json", action="store_true")
+    packet_check_parser.add_argument(
+        "--write-generated",
+        action="store_true",
+        help="write generated navigation before checking the packet",
+    )
+    packet_check_parser.set_defaults(handler=command_packet_check)
 
     check_affected = subparsers.add_parser(
         "check-affected",

@@ -2,7 +2,7 @@
 
 Status: **Normative contributor and coding-agent workflow**
 
-This document defines how implementation is scoped, validated and merged. Use `docs/README.md` to locate task-specific guidance. Architecture invariants and published contracts always take precedence.
+This document defines how implementation is scoped, validated and merged. Use `docs/README.md` for task navigation, `docs/ACTIVE_PACKET.md` for generated packet orientation and `docs/PROJECT_STATUS.md` for merged state. Architecture invariants and published contracts always take precedence.
 
 ## 1. Unit of delivery
 
@@ -19,7 +19,21 @@ A packet produces one independently understandable result, such as:
 
 Cohesion, reviewability, rollback safety and invariant coverage—not line count—define the boundary.
 
-## 2. Separate behavior from structure
+## 2. Declare and explain the packet
+
+Every bounded packet should have an explicit owner, objective, baseline, allowed paths, forbidden paths, acceptance and non-goals. When `repository-packet.json` is present, it is the machine-readable packet declaration and `docs/ACTIVE_PACKET.md` is generated orientation only.
+
+Use:
+
+```bash
+python scripts/repo.py explain <module-or-coordinate>
+python scripts/repo.py packet-check --base origin/main
+python scripts/generate_repository_navigation.py --check
+```
+
+`explain` identifies exact owner, manifest, contract and route classification. `packet-check` fails closed on baseline mismatch, disallowed changed paths, inconsistent affected closure, missing required workflows or stale generated navigation.
+
+## 3. Separate behavior from structure
 
 Do not mix:
 
@@ -31,15 +45,15 @@ Do not mix:
 
 A behavior-neutral structural PR must prove unchanged public contracts, routes, workers, activation, persistence behavior and applicable acceptance evidence.
 
-## 3. Working branches and exact identity
+## 4. Working branches and exact identity
 
 A coherent packet uses one implementation branch. Temporary commits are allowed, but incomplete checkpoints remain clearly marked.
 
-Do not create separate branches/PRs for formatting, lockfile refreshes, import ordering or one constructor field when they belong to the same packet.
+Do not create separate branches or PRs for formatting, lockfile refreshes, import ordering or one constructor field when they belong to the same packet.
 
 When multiple contributors participate, overlapping code has one primary writer. Verification uses exact commit SHA, never a moving branch name.
 
-## 4. Required architecture sequence
+## 5. Required architecture sequence
 
 Unless an accepted ADR says otherwise:
 
@@ -49,7 +63,7 @@ Unless an accepted ADR says otherwise:
 3. application commands/queries/workers and ports
 4. persistence and migration ownership
 5. pre-authorization semantic validation
-6. owner-owned production contribution
+6. module-owned production contribution
 7. exact route/worker registration and durable activation
 8. focused, PostgreSQL and real-process acceptance
 9. operational and documentation closure
@@ -61,29 +75,30 @@ Dependency direction remains:
 domain <- application <- adapters <- production composition <- delivery
 ```
 
-## 5. Normal capability budget
+## 6. Normal capability budget
 
 An ordinary capability inside an existing owner should:
 
 - create zero new crates;
-- touch zero generic router/worker files;
+- touch zero generic router or worker algorithms;
 - touch zero unrelated owners, migrations or workflows;
 - reuse the owner application/postgres/production packages;
-- extend the owner contribution rather than central composition;
+- extend the module-owned production contribution;
 - reuse generic conformance and add only owner-specific semantic tests;
 - run an explainable affected closure.
 
-A deviation requires an architecture justification and measured fan-out/change-locality impact.
+A deviation requires architecture justification and measured fan-out/change-locality impact.
 
-## 6. Architecture checkpoints
+## 7. Architecture checkpoints
 
 ### Checkpoint A — scope and structure
 
-- one authoritative owner and explicit exclusions;
+- exact owner and coordinate resolve through `repo.py explain`;
+- explicit exclusions and packet path policy exist;
 - dependency/source-boundary checks pass;
-- public contract/version implications are identified;
+- contract/version implications are identified;
 - migration/storage ownership is explicit;
-- exact route/worker and activation impacts are identified;
+- route/worker and activation impacts are identified;
 - no generic business switch or unjustified crate is introduced;
 - affected scope is explainable.
 
@@ -101,20 +116,13 @@ A deviation requires an architecture justification and measured fan-out/change-l
 - required workspace/affected tests pass;
 - Contract, Governance, Database, process and frontend gates pass when applicable;
 - rollback/reapply or compensation is proven;
-- generated contracts/navigation are fresh when affected;
-- roadmap/status/catalog/issue claims match actual behavior;
+- generated contracts and navigation are fresh;
+- roadmap/status/catalog/issue claims match merged behavior;
 - all applicable workflows are green on one unchanged final review head.
 
-## 7. Pull request policy
+## 8. Pull request policy
 
-Open a PR at a coherent review boundary. Use multiple PRs only for a real boundary, for example:
-
-- contract freeze;
-- behavior-neutral consolidation;
-- feature implementation;
-- process-level acceptance and governance closure.
-
-A PR description states:
+Open a PR at a coherent review boundary. A PR description states:
 
 - architecture result;
 - owner and dependency boundaries;
@@ -123,23 +131,20 @@ A PR description states:
 - activation, authorization, tenant and failure behavior;
 - rollback/reapply or compensation;
 - before/after complexity for structural work;
-- affected-scope reasoning and specialized gates;
+- affected-scope and packet-check reasoning;
+- specialized gates;
 - exact final head and acceptance evidence;
 - explicit remaining scope.
 
-Do not imply unrun checks have passed.
+Do not imply unrun checks have passed. Keep draft status while generated outputs, documentation or exact-head acceptance remain incomplete.
 
-## 8. Commit policy
+## 9. Commit policy
 
-Commits are implementation tools; PRs are delivery artifacts.
+Commits are implementation tools; PRs are delivery artifacts. Use iterative commits while working, then prefer compact semantic history before merge.
 
-Use iterative commits while working, then prefer a compact semantic history before merge. Every verification claim names the exact commit actually tested.
+Every verification claim names the exact commit actually tested. A new commit makes older evidence stale for checks not rerun. Bot-authored generated-sync commits must be followed by a meaningful source-authored commit before final exact-head acceptance when repository policy requires human-authored review identity.
 
-A new commit makes older evidence stale for checks not rerun.
-
-## 9. Golden owner pattern
-
-The conceptual owner layers are:
+## 10. Golden owner pattern
 
 ```text
 manifest and ownership
@@ -155,19 +160,15 @@ focused/PostgreSQL/process acceptance
 
 Target physical packaging is domain + application + postgres + production, with one optional real provider/process/trust boundary. Ordinary capabilities stay inside existing packages.
 
-See `MODULE_DEVELOPMENT.md` for current scaffold limitations and target evolution.
+## 11. Contract lifecycle
 
-## 10. Public contract lifecycle
+Published versions are immutable. A semantic change requires a new version, compatibility/impact report, parallel support window, consumer migration and explicit retirement gate.
 
-Published versions are immutable.
+Do not remove a supported coordinate merely because repository code no longer calls it directly. Generated contract registries must be regenerated through repository commands, never edited manually.
 
-A semantic change requires a new version, compatibility/impact report, parallel support window, consumer migration and explicit retirement gate. Deprecation includes owner, replacement, deadline, consumer inventory and removal condition.
+## 12. Migration and data ownership
 
-Do not remove a supported coordinate merely because repository code no longer calls it directly.
-
-## 11. Migration and data ownership
-
-A migration belongs to the authoritative owner of the affected state.
+A migration belongs to the authoritative owner of affected state.
 
 - no cross-owner table edits;
 - FORCE RLS and tenant context remain enforced;
@@ -175,7 +176,7 @@ A migration belongs to the authoritative owner of the affected state.
 - ownership transfer requires ADR, compatibility window, cutover and rollback;
 - retention, legal-hold, export/deletion and restore consequences are explicit.
 
-## 12. Test architecture
+## 13. Test architecture
 
 Use generic conformance for repeated platform behavior and owner suites for unique semantics.
 
@@ -185,19 +186,25 @@ During iteration:
 python scripts/repo.py conformance
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
+python scripts/repo.py packet-check --base origin/main
 ```
 
-Then run all specialized gates selected by contracts, migrations, routes, workers, processes, frontend or security scope.
+Then run every specialized gate selected by contracts, migrations, routes, workers, processes, frontend, security or operations scope. Affected-scope optimization changes iteration cost, not final exact-head acceptance.
 
-Affected-scope optimization changes iteration cost, not the final exact-head acceptance rule.
+## 14. Navigation and local development
 
-## 13. Local development and navigation
+Implemented navigation commands are defined by `scripts/repo.py` and permanently tested:
 
-Use `docs/README.md` as the stable task map.
+```bash
+python scripts/repo.py explain crm.customer-privacy
+python scripts/repo.py explain customer_privacy.case.submit@1.0.0
+python scripts/repo.py packet-check --base origin/main
+python scripts/generate_repository_navigation.py --check
+```
 
-Currently implemented commands are defined by `scripts/repo.py`. Planned commands such as `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain` and `packet-check` are part of issue #194 and must not be claimed as available before permanent tests exist.
+Generated active-packet and repository-map documents are reproducible navigation outputs, not sources of truth.
 
-The target local workflow is:
+The target local lifecycle remains:
 
 ```text
 doctor
@@ -210,9 +217,9 @@ doctor
 → exact-head gates
 ```
 
-Generated active-packet and repository-map documents are reproducible navigation outputs, not sources of truth.
+`doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain future repository step 15 work. They must not be claimed as available until implementation and permanent acceptance exist.
 
-## 14. Multi-agent exact-SHA workflow
+## 15. Multi-agent exact-SHA workflow
 
 Default roles:
 
@@ -220,28 +227,15 @@ Default roles:
 - **Local Integrator / Verifier** — independent exact-SHA build/test/reproduction, default `VERIFY_ONLY`;
 - **GitHub CI** — final exact-head authority.
 
-```text
-planning
-→ one primary writer
-→ exact-SHA local handoff when useful
-→ structured report
-→ fixes
-→ final unchanged review head
-→ all applicable GitHub workflows
-→ merge
-```
-
 Do not run hidden concurrent writers on overlapping code. A verifier writes only through explicit authorization or handoff.
 
-## 15. Documentation closure
+## 16. Documentation closure
 
-README and `AGENTS.md` are orientation. `docs/README.md` is the stable index. Current state belongs in `PROJECT_STATUS.md`, the roadmap/phase plan, module catalog and active issues.
+README and `AGENTS.md` are orientation. `docs/README.md` is the stable index. Current merged state belongs in `PROJECT_STATUS.md`, roadmap/phase plan, module catalog and active issues.
 
-Historical packet documents retain accepted boundaries and must not be edited into live status trackers.
+Historical packet documents retain accepted boundaries and must not become live trackers. Generated navigation must be deterministic and freshness-checked. Documentation changes invalidate exact-head evidence until applicable checks rerun.
 
-Documentation changes invalidate exact-head evidence until applicable checks rerun.
-
-## 16. Non-negotiable gates
+## 17. Non-negotiable gates
 
 Faster delivery never weakens:
 
