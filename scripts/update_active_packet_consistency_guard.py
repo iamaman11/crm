@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# One-shot branch-local patch helper; deleted before prerequisite acceptance.
 from pathlib import Path
 
 path = Path("tests/test_architecture_documentation_consistency.py")
