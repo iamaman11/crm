@@ -124,7 +124,7 @@ python scripts/repo.py contracts
 python scripts/repo.py contracts --write
 python scripts/repo.py explain crm.customer-privacy
 python scripts/repo.py explain customer_privacy.case.submit@1.0.0
-python scripts/repo.py navigation --check
+python scripts/generate_repository_navigation.py --check
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
 python scripts/repo.py packet-check --base origin/main
@@ -139,7 +139,7 @@ python scripts/repo.py quality
 
 Specialized Contract, Database, Event Runtime, Application Runtime, process and frontend gates remain mandatory when affected. `quality` does not replace specialized acceptance.
 
-Generated `docs/ACTIVE_PACKET.md` and `docs/generated/REPOSITORY_MAP.md` are deterministic orientation outputs. Never edit them manually; regenerate or freshness-check them through `repo.py navigation`.
+Generated `docs/ACTIVE_PACKET.md` and `docs/generated/REPOSITORY_MAP.md` are deterministic orientation outputs. Never edit them manually; regenerate or freshness-check them through `generate_repository_navigation.py`.
 
 Local lifecycle commands `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain future repository step 15 work and are not available until implemented and permanently tested.
 
