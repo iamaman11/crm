@@ -3,6 +3,8 @@ name: Temporary Step 8 PostgreSQL Verify
 on:
   pull_request:
     paths:
+      - ".github/step8-application-source.b64"
+      - ".github/step8-reads-source.b64"
       - ".github/step8-pg-test-source.b64"
       - ".github/workflows/temporary-step8-postgres-verify.yml"
       - "crates/crm-customer-privacy-production/src/owner_execution.rs"
@@ -57,22 +59,221 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Materialize reviewed PostgreSQL acceptance
+      - name: Materialize reviewed step 8 sources
         shell: bash
         run: |
           set -euo pipefail
+
+          test "$(wc -c < .github/step8-application-source.b64)" -eq 7376
+          echo "313228caa3ce27a8b5512baf3f2bb9a6be3454b2da340b36ee5b84cd90b21559  .github/step8-application-source.b64" | sha256sum --check
+          base64 --decode .github/step8-application-source.b64 > /tmp/step8-application.rs.gz
+          test "$(wc -c < /tmp/step8-application.rs.gz)" -eq 5532
+          echo "0ba1db0003c521afdc113421ce194e2e1cc398f607011d23c5c91d714ee3c158  /tmp/step8-application.rs.gz" | sha256sum --check
+          gzip --decompress --stdout /tmp/step8-application.rs.gz > crates/crm-customer-privacy-application/src/execution.rs
+
+          test "$(wc -c < .github/step8-reads-source.b64)" -eq 11796
+          echo "e72fc31055df57da5e5f922c843d7ebb4e170855ec081dd6b8af05aa1a06d551  .github/step8-reads-source.b64" | sha256sum --check
+          base64 --decode .github/step8-reads-source.b64 > /tmp/step8-reads.rs.gz
+          test "$(wc -c < /tmp/step8-reads.rs.gz)" -eq 8847
+          echo "6623588dda27edaacd2ece295120bc581613fb726875dd35e142a39e3ff57784  /tmp/step8-reads.rs.gz" | sha256sum --check
+          gzip --decompress --stdout /tmp/step8-reads.rs.gz > crates/crm-customer-privacy-application/src/reads.rs
+
           test "$(wc -c < .github/step8-pg-test-source.b64)" -eq 7496
           echo "14f2e2ab71a6feedf858fb0f68c6861a364605214a937acaa28571ce99a20cd7  .github/step8-pg-test-source.b64" | sha256sum --check
           base64 --decode .github/step8-pg-test-source.b64 > /tmp/step8-pg-test.rs.gz
           test "$(wc -c < /tmp/step8-pg-test.rs.gz)" -eq 5622
           echo "ae73505cdde00bcf508cf0cdcd2befede6e29b7d6c82941c91f5cd11ff7f3e29  /tmp/step8-pg-test.rs.gz" | sha256sum --check
           gzip --decompress --stdout /tmp/step8-pg-test.rs.gz > crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
+      - name: Apply reviewed structural lint corrections
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          application = Path("crates/crm-customer-privacy-application/src/execution.rs")
+          text = application.read_text()
+          replacements = [
+              (
+                  """    Ready {
+                  attempt: PrivacyOwnerActionAttempt,
+                  attempt_replayed: bool,
+              },""".replace("                  ", "        "),
+                  """    Ready {
+                  attempt: Box<PrivacyOwnerActionAttempt>,
+                  attempt_replayed: bool,
+              },""".replace("                  ", "        "),
+              ),
+              (
+                  "            } => (attempt, attempt_replayed),",
+                  "            } => (*attempt, attempt_replayed),",
+              ),
+              (
+                  """            preparation: ExecutionPreparation::Ready {
+                      attempt,
+                      attempt_replayed,
+                  },""".replace("                      ", "                "),
+                  """            preparation: ExecutionPreparation::Ready {
+                      attempt: Box::new(attempt),
+                      attempt_replayed,
+                  },""".replace("                      ", "                "),
+              ),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"application correction did not match: {old!r}")
+              text = text.replace(old, new, 1)
+          application.write_text(text)
+
+          postgres = Path("crates/crm-customer-privacy-postgres/src/execution.rs")
+          text = postgres.read_text()
+          old = """            Ok(ExecutionPreparation::Ready {
+                  attempt,
+                  attempt_replayed: replayed || !inserted,
+              })""".replace("                  ", "                ")
+          new = """            Ok(ExecutionPreparation::Ready {
+                  attempt: Box::new(attempt),
+                  attempt_replayed: replayed || !inserted,
+              })""".replace("                  ", "                ")
+          if old not in text:
+              raise SystemExit("PostgreSQL ready-attempt correction did not match")
+          postgres.write_text(text.replace(old, new, 1))
+
+          acceptance = Path("crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs")
+          text = acceptance.read_text()
+          old = """            assert_eq!(attempt_replayed, replayed);
+              attempt""".replace("              ", "            ")
+          new = """            assert_eq!(attempt_replayed, replayed);
+              *attempt""".replace("              ", "            ")
+          if old not in text:
+              raise SystemExit("acceptance ready-attempt correction did not match")
+          acceptance.write_text(text.replace(old, new, 1))
+
+          reads = Path("crates/crm-customer-privacy-application/src/reads.rs")
+          text = reads.read_text()
+          marker = "pub fn owner_outcome_page_digest(\n"
+          if marker not in text:
+              raise SystemExit("page digest marker missing")
+          context = """#[derive(Debug, Clone, Copy)]
+          pub struct PrivacyOwnerOutcomePageDigestContext<'a> {
+              pub tenant_id: &'a TenantId,
+              pub privacy_case_id: &'a RecordId,
+              pub action_plan_id: &'a RecordId,
+              pub owner_module_filter: Option<&'a ModuleId>,
+              pub page_size: u32,
+          }
+
+          """.replace("          ", "")
+          text = text.replace(marker, context + marker, 1)
+
+          old = """    owner_outcome_page_digest_for_items(
+              tenant_id,
+              privacy_case_id,
+              plan_id,
+              owner_module_filter,
+              page_size,
+              None,
+              &[],
+              "",
+          )""".replace("              ", "        ")
+          new = """    owner_outcome_page_digest_for_items(
+              &PrivacyOwnerOutcomePageDigestContext {
+                  tenant_id,
+                  privacy_case_id,
+                  action_plan_id: plan_id,
+                  owner_module_filter,
+                  page_size,
+              },
+              None,
+              &[],
+              "",
+          )""".replace("              ", "        ")
+          if old not in text:
+              raise SystemExit("page digest wrapper correction did not match")
+          text = text.replace(old, new, 1)
+
+          old = """pub fn owner_outcome_page_digest_for_items(
+              tenant_id: &TenantId,
+              privacy_case_id: &RecordId,
+              plan_id: &RecordId,
+              owner_module_filter: Option<&ModuleId>,
+              page_size: u32,
+              after: Option<&PrivacyOwnerOutcomePosition>,
+              outcomes: &[PrivacyOwnerActionOutcome],
+              next_cursor: &str,
+          ) -> [u8; 32] {
+              let page_size = page_size.to_string();
+              let owner = owner_module_filter.map(ModuleId::as_str).unwrap_or("");
+          """.replace("              ", "    ")
+          new = """pub fn owner_outcome_page_digest_for_items(
+              context: &PrivacyOwnerOutcomePageDigestContext<'_>,
+              after: Option<&PrivacyOwnerOutcomePosition>,
+              outcomes: &[PrivacyOwnerActionOutcome],
+              next_cursor: &str,
+          ) -> [u8; 32] {
+              let page_size = context.page_size.to_string();
+              let owner = context
+                  .owner_module_filter
+                  .map(ModuleId::as_str)
+                  .unwrap_or("");
+          """.replace("              ", "    ")
+          if old not in text:
+              raise SystemExit("page digest signature correction did not match")
+          text = text.replace(old, new, 1)
+
+          old = """        tenant_id.as_str().as_bytes(),
+              privacy_case_id.as_str().as_bytes(),
+              plan_id.as_str().as_bytes(),""".replace("              ", "        ")
+          new = """        context.tenant_id.as_str().as_bytes(),
+              context.privacy_case_id.as_str().as_bytes(),
+              context.action_plan_id.as_str().as_bytes(),""".replace("              ", "        ")
+          if old not in text:
+              raise SystemExit("page digest lineage correction did not match")
+          text = text.replace(old, new, 1)
+
+          old = """        let page_digest = owner_outcome_page_digest_for_items(
+              &request.context.tenant_id,
+              &privacy_case_id,
+              source.action_plan.plan_id(),
+              owner_module_filter.as_ref(),
+              page_size,
+              after.as_ref(),
+              &page.outcomes,
+              &next_cursor,
+          );""".replace("              ", "            ")
+          new = """        let page_digest = owner_outcome_page_digest_for_items(
+              &PrivacyOwnerOutcomePageDigestContext {
+                  tenant_id: &request.context.tenant_id,
+                  privacy_case_id: &privacy_case_id,
+                  action_plan_id: source.action_plan.plan_id(),
+                  owner_module_filter: owner_module_filter.as_ref(),
+                  page_size,
+              },
+              after.as_ref(),
+              &page.outcomes,
+              &next_cursor,
+          );""".replace("              ", "            ")
+          if old not in text:
+              raise SystemExit("page digest call correction did not match")
+          reads.write_text(text.replace(old, new, 1))
+          PY
+          cargo fmt --all
       - name: Verify format, compile and Clippy
         shell: bash
         run: |
           set -euo pipefail
-          cargo fmt --all
           cargo fmt --all --check
+          cargo test --locked \
+            -p crm-customer-privacy \
+            -p crm-customer-privacy-application \
+            -p crm-customer-privacy-postgres \
+            -p crm-customer-privacy-production
+          cargo clippy --locked \
+            -p crm-customer-privacy \
+            -p crm-customer-privacy-application \
+            -p crm-customer-privacy-postgres \
+            -p crm-customer-privacy-production \
+            --all-targets -- -D warnings
           cargo test --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres --no-run
           cargo clippy --locked -p crm-application-runtime \
@@ -126,15 +327,19 @@ jobs:
           cargo test --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres -- --nocapture \
             2>&1 | tee database/customer-privacy-owner-execution-reapplied.log
-      - name: Publish verified PostgreSQL acceptance
+      - name: Publish verified step 8 source
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
+          git add \
+            crates/crm-customer-privacy-application/src/execution.rs \
+            crates/crm-customer-privacy-application/src/reads.rs \
+            crates/crm-customer-privacy-postgres/src/execution.rs \
+            crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
           if ! git diff --cached --quiet; then
-            git commit -m "WIP: verify step 8 PostgreSQL crash recovery"
+            git commit -m "WIP: verify step 8 replay and PostgreSQL recovery"
             git pull --rebase origin "${{ github.head_ref }}"
             git push origin "HEAD:${{ github.head_ref }}"
           fi
