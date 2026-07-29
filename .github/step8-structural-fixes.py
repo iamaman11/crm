@@ -91,6 +91,12 @@ text = replace_once(
     "            assert_eq!(attempt_replayed, replayed);\n            *attempt",
     "PostgreSQL acceptance ready extraction",
 )
+text = replace_once(
+    text,
+    '"CUSTOMER_PRIVACY_OWNER_EXECUTION_CASE_NOT_FOUND"',
+    '"CUSTOMER_PRIVACY_CASE_NOT_FOUND"',
+    "PostgreSQL acceptance cross-tenant concealment code",
+)
 acceptance.write_text(text)
 
 reads = Path("crates/crm-customer-privacy-application/src/reads.rs")
