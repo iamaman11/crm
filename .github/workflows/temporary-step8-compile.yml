@@ -56,13 +56,40 @@ jobs:
           test "$(wc -c < /tmp/execution.rs.gz)" -eq 5424
           echo "1589d8eeeeb3c9bc713e4f69939e96ba3599feb6989600e1d1e7537c74edf15c  /tmp/execution.rs.gz" | sha256sum --check
           gzip --decompress --stdout /tmp/execution.rs.gz > modules/crm-customer-privacy/src/execution.rs
-          sed -i 's/^mod tests {$/mod execution_tests {/' modules/crm-customer-privacy/src/execution.rs
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("modules/crm-customer-privacy/src/execution.rs")
+          text = path.read_text()
+          text = text.replace("mod tests {", "mod execution_tests {", 1)
+          old = '''    if let Some(code) = safe_failure_code {
+              if code.is_empty()
+                  || code.len() > MAX_SAFE_CODE_BYTES
+                  || !code.bytes().all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+              {
+                  return Err(execution_invalid("safe failure code is not canonical"));
+              }
+          }'''
+          new = '''    if let Some(code) = safe_failure_code
+              && (code.is_empty()
+                  || code.len() > MAX_SAFE_CODE_BYTES
+                  || !code.bytes().all(|byte| {
+                      byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_'
+                  }))
+          {
+              return Err(execution_invalid("safe failure code is not canonical"));
+          }'''
+          if old not in text:
+              raise SystemExit("safe failure validation source did not match expected text")
+          path.write_text(text.replace(old, new, 1))
+          PY
 
           cat .github/step8-pg-execution-fixed.part-{0..4} > /tmp/pg-execution.b64
           test "$(wc -c < /tmp/pg-execution.b64)" -eq 12228
           echo "c7178934a3699e9dfb1fe83237d7461d69f805179dce5e306566f7af389bd045  /tmp/pg-execution.b64" | sha256sum --check
           base64 --decode /tmp/pg-execution.b64 > /tmp/pg-execution.rs.gz
           test "$(wc -c < /tmp/pg-execution.rs.gz)" -eq 9171
+          echo "dface5c5158489e9dfb1fe83237d7461d69f805179dce5e306566f7af389bd045  /tmp/pg-execution.rs.gz" >/dev/null
           echo "dface5c5158489d12c7914f5bae7e5761a84cec0e74a360dca95dc9c2b13528b  /tmp/pg-execution.rs.gz" | sha256sum --check
           gzip --decompress --stdout /tmp/pg-execution.rs.gz > crates/crm-customer-privacy-postgres/src/execution.rs
       - name: Canonical formatting
