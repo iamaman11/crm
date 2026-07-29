@@ -41,8 +41,8 @@ The remaining risk is accidental complexity:
 - repeated dependency declarations and feature divergence;
 - copied acceptance wiring and expanding workflow fan-out;
 - too many files and packages touched by a normal vertical change;
-- incomplete local-environment automation;
-- incomplete repository navigation and packet explanation tooling;
+- incomplete local-environment lifecycle automation;
+- remaining affected-scope coverage outside the accepted real-diff Rust/tooling closure;
 - uncontrolled public Rust surface, contract retirement and migration ownership;
 - descriptive documents that can drift from authoritative current state.
 
@@ -86,10 +86,10 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 | B — dependency, crate and exception governance | **In progress** | reproducible baseline, crate justification, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1` toolchain/workspace `rust-version`, measured zero-warning Rust/Clippy baseline and three exact expiring legacy lint exceptions | additional homogeneous dependency cohorts, removal of the three direct-lint exceptions, public-surface/fan-out calibration |
 | C — golden owner package and persistence model | **In progress** | Customer Privacy domain/application/postgres/production pilot, transaction-scoped final policy port, authoritative deny-only restriction decision, public placement and first protected-owner integration are accepted; ordinary Customer Privacy capabilities add zero crates | generalize scaffolding, migration ownership and visibility policy; adopt the model for later owners without forced rewrites |
 | D — contribution aggregation | **In progress** | owner-owned contribution pattern proven; first bounded Customer Accounts registration-inventory aggregation accepted through the first-party bundle | migrate remaining owners, expand the first-party bundle and remove additional concrete domain imports from generic runtime |
-| E — affected-scope CI | **In progress** | changed paths, Rust reverse closure, structural preflight and explainable broadening exist | complete contract, migration, process, product, frontend and operations scope selection with safe fallback |
+| E — affected-scope CI | **In progress** | changed paths, Rust reverse closure, structural preflight, explainable broadening and real-diff packet-check enforcement are accepted | complete contract, migration, process, product, frontend and operations scope selection with safe fallback |
 | F — generic conformance and contract lifecycle | **Foundation only** | native conformance, manifest/route parity and exact-head gates exist | reusable mutation/query/worker suites plus compatibility, deprecation and retirement enforcement |
 | G — transitional consolidation | **Not started** | candidates and stop rules are defined | complete at least one behavior-neutral domain-cluster consolidation with measured improvement |
-| H — reproducible environment and navigation | **Partially started** | stable docs index plus `repo.py affected` and `check-affected` exist | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain`, `packet-check`, generated active packet and repository map |
+| H — reproducible environment and navigation | **In progress** | stable docs index, `affected`, `check-affected`, deterministic `explain`, fail-closed `packet-check`, generated active packet and repository map are accepted through PR #228 | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` |
 | I — frontend and operations parity | **Not started as a complete stage** | existing product/process checks remain preserved | domain-oriented frontend proof, accessibility/browser evidence, restore/SLO/performance/security/supply-chain gates |
 
 Repository step 1 is accepted through PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 permanent workflows. The exact supported compiler and workspace `rust-version` are `1.97.1`; Rust and Clippy warning/error budgets are zero; the 113-package workspace and `Cargo.lock` are unchanged; three pre-existing direct `too_many_arguments` lint tables are exact, expiring, no-growth exceptions.
@@ -102,7 +102,9 @@ The architecture preflight for repository step 4 proved that restriction placeme
 
 Repository step 4 is accepted through PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows. It promotes deny-only restriction placement, implements the authoritative FORCE-RLS final decision, shares the canonical Party lock with protected Contact Point creation and proves public placement, immediate denial without side effects, tenant isolation, rollback/reapply and repeated real-process acceptance.
 
-The next permitted implementation packet is repository step 5: `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map.
+Repository step 5 is accepted through PR #228 / accepted source `a9aa0bef028d906b61e83803436167bf6f91e634` / squash merge `727a244fcf174dc517dec6fdbb6b8997eb205f14` / 5 of 5 applicable permanent workflows. It adds deterministic explanation, fail-closed packet validation, real-diff Affected Scope enforcement and generated navigation without changing product behavior, contracts, persistence, dependencies, `Cargo.lock` or package count.
+
+The next permitted implementation packet is repository step 6: Customer Privacy legal-hold and mandatory-retention precedence.
 
 ### 2.4 Single repository execution order
 
@@ -119,7 +121,7 @@ Execution rules:
 7. Feature behavior, architecture governance, contribution refactoring, crate consolidation and evidence synchronization remain separate pull requests even when adjacent in the sequence.
 8. Stage labels A–I describe completion accounting. They do not authorize work outside this master order.
 
-The inserted repository step 4 prerequisite is complete through PR #224, and repository step 4 itself is complete through PR #226. Neither changes the master numbering.
+The inserted repository step 4 prerequisite is complete through PR #224, repository step 4 is complete through PR #226, and repository step 5 is complete through PR #228. None changes the master numbering.
 
 Current master sequence:
 
@@ -127,8 +129,8 @@ Current master sequence:
 2. Customer Privacy approval runtime only — **Complete through PR #220**;
 3. first bounded contribution-aggregation packet: expand owner-owned first-party registration and reduce selected concrete generic-runtime imports without behavior changes — **Complete through PR #222**;
 4. immediate deny-only Customer Privacy processing restrictions using final subject locks — **Complete through PR #226**;
-5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map — **Next**;
-6. Customer Privacy legal-hold and mandatory-retention precedence;
+5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map — **Complete through PR #228**;
+6. Customer Privacy legal-hold and mandatory-retention precedence — **Next**;
 7. reusable generic mutation and query conformance suites adopted by representative owners;
 8. replay-safe resumable Customer Privacy owner execution and crash-window recovery;
 9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks;
@@ -467,7 +469,7 @@ Accepted through the current checkpoint:
 - transaction-scoped final customer-subject policy port and deterministic aggregate guard composition accepted through PR #224;
 - authoritative deny-only restriction placement and final owner guard accepted through PR #226, with no allow-all fallback.
 
-The next permitted repository packet is **repository step 5: `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map**. It is behavior-neutral navigation/tooling work and must not add legal-hold/mandatory-retention adjudication, owner execution, destructive action, worker, dependency upgrade, crate consolidation or product runtime behavior.
+The next permitted repository packet is **repository step 6: Customer Privacy legal-hold and mandatory-retention precedence**. It must preserve shared subject locking and immediate deny-only behavior while adding authoritative legal-hold-over-retention-over-approved-action adjudication; it must not include owner execution, access/export assembly, destructive action, workers, dependency upgrades or crate consolidation.
 
 Issue #126 supplies product semantics. Issue #194 supplies architecture acceptance and the repository order. Their scopes remain separate, and section 2.4 determines exactly which packet may start.
 
