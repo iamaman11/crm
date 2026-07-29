@@ -76,15 +76,12 @@ jobs:
 
           path = Path("modules/crm-customer-privacy/src/execution.rs")
           text = path.read_text()
-          old = '''    if let Some(code) = safe_failure_code {
-              if code.is_empty()
-                  || code.len() > MAX_SAFE_CODE_BYTES
-                  || !code.bytes().all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
-              {
-                  return Err(execution_invalid("safe failure code is not canonical"));
-              }
-          }'''.replace("              ", "        ")
-          new = '''    if let Some(code) = safe_failure_code
+          marker = "    if let Some(code) = safe_failure_code {"
+          if text.count(marker) != 1:
+              raise SystemExit("safe failure validation marker is not unique")
+          start = text.index(marker)
+          end = text.index("    Ok(())", start)
+          replacement = '''    if let Some(code) = safe_failure_code
               && (code.is_empty()
                   || code.len() > MAX_SAFE_CODE_BYTES
                   || !code.bytes().all(|byte| {
@@ -92,10 +89,9 @@ jobs:
                   }))
           {
               return Err(execution_invalid("safe failure code is not canonical"));
-          }'''
-          if old not in text:
-              raise SystemExit("safe failure validation source did not match expected text")
-          path.write_text(text.replace(old, new, 1))
+          }
+'''
+          path.write_text(text[:start] + replacement + text[end:])
           PY
           cargo fmt --all
       - name: Verify canonical formatting
