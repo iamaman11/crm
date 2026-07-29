@@ -490,14 +490,13 @@ fn validate_safe_failure(
     if requires != safe_failure_code.is_some() {
         return Err(execution_invalid("failure status and safe failure code do not match"));
     }
-    if let Some(code) = safe_failure_code {
-        if code.is_empty()
+    if let Some(code) = safe_failure_code
+        && (code.is_empty()
             || code.len() > MAX_SAFE_CODE_BYTES
-            || !code.bytes().all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+            || !code.bytes().all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_'))
         {
             return Err(execution_invalid("safe failure code is not canonical"));
         }
-    }
     Ok(())
 }
 
