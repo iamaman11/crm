@@ -33,7 +33,7 @@ Repository implementation is strictly sequential. Only the first unfinished item
 
 Issue #126 is **In progress**.
 
-Latest accepted public runtime inventory is six mutations, four permission-aware public queries and zero Customer Privacy workers through PR #226. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
+Latest accepted public runtime inventory is seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #230. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
 
 All nine authoritative owner implementations are accepted:
 
@@ -67,7 +67,9 @@ PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash me
 
 PR #228 / accepted source `a9aa0bef028d906b61e83803436167bf6f91e634` / squash merge `727a244fcf174dc517dec6fdbb6b8997eb205f14` / 5 of 5 applicable permanent workflows completes repository step 5. Deterministic explanation, packet validation, real-diff affected enforcement and generated navigation are accepted.
 
-PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash merge `3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed` / 5 of 5 applicable permanent workflows accepts the smallest repository-step-6 architecture prerequisite. Rust Generated Sync and Rust CI now verify the committed dependency graph with locked Cargo commands, preserve `Cargo.lock` byte-for-byte on ordinary packets and cannot auto-commit registry drift. Intentional lockfile refresh remains explicit through `python scripts/repo.py lock` inside a bounded packet. The six-file change adds no product behavior, contract, manifest, dependency, package, persistence or migration change. Repository step 6 remains the next permitted implementation packet.
+PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash merge `3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed` / 5 of 5 applicable permanent workflows accepts the smallest repository-step-6 architecture prerequisite. Rust Generated Sync and Rust CI now verify the committed dependency graph with locked Cargo commands, preserve `Cargo.lock` byte-for-byte on ordinary packets and cannot auto-commit registry drift. Intentional lockfile refresh remains explicit through `python scripts/repo.py lock` inside a bounded packet. The six-file change adds no product behavior, contract, manifest, dependency, package, persistence or migration change.
+
+Repository step 6 is accepted through PR #230 / accepted source `131285e07ad7c36c00e399b65d55591db13f0948` / squash merge `18e6218a7e7495219ac9e8c71cafcda1be64a31b` / 32 of 32 permanent workflows on one unchanged source-authored head. It promotes `customer_privacy.legal_hold.place@1.0.0`, preserves the shared tenant + canonical Party lock, strictly rehydrates bounded FORCE-RLS legal-hold state and evaluates immutable plan items with precedence active legal hold → mandatory retention → approved privacy action. Public placement is activation-gated, live-authorized, tenant-bound, idempotent and atomic; malformed, unavailable, stale, over-bound and cross-tenant evidence fails closed. Clean PostgreSQL, real `crm-api`, rollback/reapply, replay and repeated acceptance are proven. The accepted inventory is 7 mutations / 4 permission-aware queries / 0 workers, with no owner execution, outcome persistence, export assembly, destructive action, dependency, `Cargo.lock`, manifest or workspace-package change. Repository step 7 is now the next permitted implementation packet.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -141,6 +143,10 @@ PR #228 / accepted source `a9aa0bef028d906b61e83803436167bf6f91e634` / squash me
 
 The packet provides deterministic module/capability explanation, exact baseline and path-policy packet checking, real pull-request diff enforcement, generated active-packet/repository-map navigation and freshness-checked conformance. It changes no Customer Privacy runtime, route, contract, manifest, persistence, migration, dependency, `Cargo.lock`, package or worker.
 
+### 8.6 Accepted legal-hold and mandatory-retention precedence
+
+Repository step 6 is accepted through PR #230 / accepted source `131285e07ad7c36c00e399b65d55591db13f0948` / squash merge `18e6218a7e7495219ac9e8c71cafcda1be64a31b` / 32 of 32 permanent workflows on one unchanged source-authored head. It promotes `customer_privacy.legal_hold.place@1.0.0`, preserves the shared tenant + canonical Party lock, strictly rehydrates bounded FORCE-RLS legal-hold state and evaluates immutable plan items with precedence active legal hold → mandatory retention → approved privacy action. Public placement is activation-gated, live-authorized, tenant-bound, idempotent and atomic; malformed, unavailable, stale, over-bound and cross-tenant evidence fails closed. Clean PostgreSQL, real `crm-api`, rollback/reapply, replay and repeated acceptance are proven. The accepted inventory is 7 mutations / 4 permission-aware queries / 0 workers, with no owner execution, outcome persistence, export assembly, destructive action, dependency, `Cargo.lock`, manifest or workspace-package change.
+
 ## 9. Binding repository continuation
 
 The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. The Phase 8 positions are:
@@ -152,8 +158,8 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 4. repository step 4 — immediate deny-only processing restrictions using final subject locks — **complete through PR #226**;
 5. repository step 5 — `explain`, `packet-check` and generated navigation — **complete through PR #228**;
 5a. inserted lockfile-preservation prerequisite before repository step 6 — **complete through PR #232**;
-6. repository step 6 — legal-hold and mandatory-retention precedence — **next**;
-7. repository step 7 — reusable generic mutation/query conformance;
+6. repository step 6 — legal-hold and mandatory-retention precedence — **complete through PR #230**;
+7. repository step 7 — reusable generic mutation/query conformance — **next**;
 8. repository step 8 — replay-safe resumable owner execution and crash-window recovery;
 9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks;
 10. repository step 10 — governed access/export assembly;
@@ -168,7 +174,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 19. repository step 19 — architecture remeasurement and publication of the next numbered order;
 20. repository step 20 — first Phase 8B packet.
 
-The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 6 is unfinished.
+The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 7 is unfinished.
 
 ## 10. Frozen ownership
 
@@ -182,7 +188,7 @@ legal hold > mandatory retention > approved privacy action > ordinary retention
 
 Phase 8A remains **In progress**.
 
-It closes only after restrictions are extended with release/read lifecycle where required, holds/retention, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
+It closes only after restrictions and legal holds are extended with release/read lifecycle where required, owner execution, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
 
 ## 12. Phase 8B and completion rule
 

@@ -20,11 +20,11 @@ This is the concise current-state snapshot. Normative product dependencies remai
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is in progress.**
 
-Latest accepted Customer Privacy runtime baseline is PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows.
+Latest accepted Customer Privacy runtime baseline is PR #230 / accepted source `131285e07ad7c36c00e399b65d55591db13f0948` / squash merge `18e6218a7e7495219ac9e8c71cafcda1be64a31b` / 32 of 32 permanent workflows.
 
 Latest accepted repository architecture/developer-experience packet is PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash merge `3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed` / 5 of 5 applicable permanent workflows.
 
-The accepted inventory is six public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
+The accepted inventory is seven public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`, `legal_hold.place`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
 
 **All nine authoritative owner implementations are accepted:**
 
@@ -96,7 +96,7 @@ Repository step 4 is accepted through PR #226 / accepted source `ad08a691ec759b8
 
 The authoritative PostgreSQL final decision reads bounded FORCE-RLS state under the same lock and fails closed on unavailable, malformed, over-bound or cross-tenant evidence. `contact-points.contact-point.create@1.0.0` is the first complete protected-owner boundary and checks the final policy immediately before persistence. Permanent real-process acceptance proves pre-restriction success, public placement, active denial without side effects, unrelated-Party isolation, full rollback/reapply and repeated acceptance.
 
-Restriction release/reads, legal-hold and mandatory-retention adjudication, owner execution, access/export assembly, destructive actions and Customer Privacy workers remain non-runtime.
+Restriction release/reads, owner execution/outcomes, access/export assembly, destructive actions and Customer Privacy workers remain non-runtime.
 
 ## Accepted repository explanation and generated navigation
 
@@ -110,13 +110,17 @@ The accepted generated inventory is 113 workspace packages, 14 business manifest
 
 PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash merge `3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed` / 5 of 5 applicable permanent workflows accepts the smallest repository-step-6 architecture prerequisite. Rust Generated Sync and Rust CI now verify the committed dependency graph with locked Cargo commands, preserve `Cargo.lock` byte-for-byte on ordinary packets and cannot auto-commit registry drift. Intentional lockfile refresh remains explicit through `python scripts/repo.py lock` inside a bounded packet. The six-file change adds no product behavior, contract, manifest, dependency, package, persistence or migration change.
 
+## Accepted legal-hold and mandatory-retention precedence
+
+Repository step 6 is accepted through PR #230 / accepted source `131285e07ad7c36c00e399b65d55591db13f0948` / squash merge `18e6218a7e7495219ac9e8c71cafcda1be64a31b` / 32 of 32 permanent workflows on one unchanged source-authored head. It promotes `customer_privacy.legal_hold.place@1.0.0`, preserves the shared tenant + canonical Party lock, strictly rehydrates bounded FORCE-RLS legal-hold state and evaluates immutable plan items with precedence active legal hold → mandatory retention → approved privacy action. Public placement is activation-gated, live-authorized, tenant-bound, idempotent and atomic; malformed, unavailable, stale, over-bound and cross-tenant evidence fails closed. Clean PostgreSQL, real `crm-api`, rollback/reapply, replay and repeated acceptance are proven. The accepted inventory is 7 mutations / 4 permission-aware queries / 0 workers, with no owner execution, outcome persistence, export assembly, destructive action, dependency, `Cargo.lock`, manifest or workspace-package change.
+
 ## Next permitted repository packet
 
-Repository step 6 is Customer Privacy legal-hold and mandatory-retention precedence.
+Repository step 7 is reusable generic mutation and query conformance.
 
 ## Following permitted repository packet
 
-Repository step 7 is reusable generic mutation and query conformance.
+Repository step 8 is replay-safe resumable Customer Privacy owner execution and crash-window recovery.
 
 ## Architecture and developer-experience 10/10 checkpoint
 
@@ -124,7 +128,7 @@ Issue #194 remains open.
 
 - Stage A documentation/source hierarchy and stable navigation are complete.
 - Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions are accepted; broader dependency/public-surface calibration and exception removal remain.
-- Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public placement and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
+- Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public restriction/legal-hold placement, retention adjudication and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
 - Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222, but the generic runtime still imports many other concrete owner adapters and remaining owners have not migrated.
 - Stage E has a working foundation but is incomplete: real-diff packet validation and Rust broadening are accepted, while database/process/product/frontend/operations selection remains incomplete.
 - Stage H is in progress: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands remain repository step 15.
@@ -142,7 +146,8 @@ Only one implementation packet may be active. The current order begins:
 -> 4. immediate deny-only restrictions — complete through PR #226
 -> 5. explain / packet-check / generated active packet and repository map — complete through PR #228
 -> 5a. lockfile-preserving Rust workflow prerequisite — complete through PR #232
--> 6. legal-hold and mandatory-retention precedence — next
+-> 6. legal-hold and mandatory-retention precedence — complete through PR #230
+-> 7. reusable generic mutation/query conformance — next
 ```
 
 The complete binding order through Phase 8B entry is `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. No later item may start while an earlier item is unfinished.
