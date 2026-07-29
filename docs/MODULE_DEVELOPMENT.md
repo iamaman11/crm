@@ -4,7 +4,7 @@ Status: **Normative golden-module workflow**
 Foundation: issue #56 / Phase 7  
 Architecture and developer-experience program: issue #194
 
-This guide defines the supported path for new owner/link modules and ordinary capabilities. Scaffolding removes repetitive setup; it never decides ownership and never implies production readiness.
+This guide defines the supported path for new owner/link modules and ordinary capabilities. Scaffolding removes repetitive setup; generated navigation removes repository archaeology. Neither decides ownership or implies production readiness.
 
 ## 1. Decide ownership before generating code
 
@@ -22,6 +22,8 @@ Before generating anything, decide:
 - storage and migration ownership;
 - whether a real provider, trust, process or extraction boundary exists.
 
+Use `python scripts/repo.py explain <module-or-coordinate>` before extending an existing owner. Unknown or ambiguous targets must fail closed instead of being guessed.
+
 ## 2. Ordinary capability rule
 
 A normal capability added to an existing owner creates **zero new crates**.
@@ -32,13 +34,11 @@ Add it inside the existing owner structure:
 owner domain
 → application command/query/worker
 → existing or justified adapter
-→ owner-owned production contribution
+→ module-owned production contribution
 → focused owner tests and generic conformance
 ```
 
-Do not create a crate for one handler, planner, query, worker, re-export or capability-specific composition function.
-
-Feature behavior and behavior-neutral crate consolidation are separate PRs.
+Do not create a crate for one handler, planner, query, worker, re-export or capability-specific composition function. Feature behavior and behavior-neutral crate consolidation are separate PRs.
 
 ## 3. Current scaffold versus 10/10 target
 
@@ -122,10 +122,14 @@ python scripts/repo.py architecture
 python scripts/repo.py manifests
 python scripts/repo.py contracts
 python scripts/repo.py contracts --write
-python scripts/repo.py format --check
-python scripts/repo.py lock
+python scripts/repo.py explain crm.customer-privacy
+python scripts/repo.py explain customer_privacy.case.submit@1.0.0
+python scripts/repo.py navigation --check
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
+python scripts/repo.py packet-check --base origin/main
+python scripts/repo.py format --check
+python scripts/repo.py lock
 
 python scripts/repo.py test --package crm-sales
 python scripts/repo.py test --package crm-core-data --test-target postgres_query
@@ -135,7 +139,9 @@ python scripts/repo.py quality
 
 Specialized Contract, Database, Event Runtime, Application Runtime, process and frontend gates remain mandatory when affected. `quality` does not replace specialized acceptance.
 
-Planned commands such as `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke`, `explain` and `packet-check` are documented in `docs/README.md` but are not available until implemented and permanently tested.
+Generated `docs/ACTIVE_PACKET.md` and `docs/generated/REPOSITORY_MAP.md` are deterministic orientation outputs. Never edit them manually; regenerate or freshness-check them through `repo.py navigation`.
+
+Local lifecycle commands `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain future repository step 15 work and are not available until implemented and permanently tested.
 
 ## 7. From foundation to production
 
@@ -237,4 +243,6 @@ Before production readiness, prove:
 
 ## 13. Navigation expectation
 
-Use `docs/README.md` to select the task path. The future `repo.py explain` and generated repository map will make each owner path mechanical. Until then, any capability whose contract → application → persistence → contribution → tests path cannot be located unambiguously should be recorded as navigation debt under issue #194.
+Use `docs/README.md` for task selection and `docs/generated/REPOSITORY_MAP.md` for inventory. `repo.py explain` makes each owner or capability path mechanical; `packet-check` makes declared scope and required CI explainable.
+
+Any coordinate that cannot be resolved unambiguously is a defect. Fix the authoritative manifest/classification or navigation generator rather than adding a manual exception.
