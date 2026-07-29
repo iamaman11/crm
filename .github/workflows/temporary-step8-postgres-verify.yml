@@ -91,69 +91,109 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+
           application = Path("crates/crm-customer-privacy-application/src/execution.rs")
           text = application.read_text()
-          replacements = [
-              (
-                  """    Ready {
+          text = replace_once(
+              text,
+              """    Ready {
                   attempt: PrivacyOwnerActionAttempt,
                   attempt_replayed: bool,
-              },""".replace("                  ", "        "),
-                  """    Ready {
+              },""".replace("              ", "        "),
+              """    Ready {
                   attempt: Box<PrivacyOwnerActionAttempt>,
                   attempt_replayed: bool,
-              },""".replace("                  ", "        "),
-              ),
-              (
-                  "            } => (attempt, attempt_replayed),",
-                  "            } => (*attempt, attempt_replayed),",
-              ),
-              (
-                  """            preparation: ExecutionPreparation::Ready {
-                      attempt,
-                      attempt_replayed,
-                  },""".replace("                      ", "                "),
-                  """            preparation: ExecutionPreparation::Ready {
-                      attempt: Box::new(attempt),
-                      attempt_replayed,
-                  },""".replace("                      ", "                "),
-              ),
-          ]
-          for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f"application correction did not match: {old!r}")
-              text = text.replace(old, new, 1)
+              },""".replace("              ", "        "),
+              "application ready variant",
+          )
+          text = replace_once(
+              text,
+              "            } => (attempt, attempt_replayed),",
+              "            } => (*attempt, attempt_replayed),",
+              "application ready extraction",
+          )
+          text = replace_once(
+              text,
+              """            preparation: ExecutionPreparation::Ready {
+                  attempt,
+                  attempt_replayed,
+              },""".replace("              ", "            "),
+              """            preparation: ExecutionPreparation::Ready {
+                  attempt: Box::new(attempt),
+                  attempt_replayed,
+              },""".replace("              ", "            "),
+              "application scripted preparation",
+          )
           application.write_text(text)
 
           postgres = Path("crates/crm-customer-privacy-postgres/src/execution.rs")
           text = postgres.read_text()
-          old = """            Ok(ExecutionPreparation::Ready {
+          text = replace_once(
+              text,
+              """            Ok(ExecutionPreparation::Ready {
                   attempt,
                   attempt_replayed: replayed || !inserted,
-              })""".replace("                  ", "                ")
-          new = """            Ok(ExecutionPreparation::Ready {
+              })""".replace("              ", "            "),
+              """            Ok(ExecutionPreparation::Ready {
                   attempt: Box::new(attempt),
                   attempt_replayed: replayed || !inserted,
-              })""".replace("                  ", "                ")
-          if old not in text:
-              raise SystemExit("PostgreSQL ready-attempt correction did not match")
-          postgres.write_text(text.replace(old, new, 1))
+              })""".replace("              ", "            "),
+              "PostgreSQL ready preparation",
+          )
+          postgres.write_text(text)
 
           acceptance = Path("crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs")
           text = acceptance.read_text()
-          old = """            assert_eq!(attempt_replayed, replayed);
-              attempt""".replace("              ", "            ")
-          new = """            assert_eq!(attempt_replayed, replayed);
-              *attempt""".replace("              ", "            ")
-          if old not in text:
-              raise SystemExit("acceptance ready-attempt correction did not match")
-          acceptance.write_text(text.replace(old, new, 1))
+          text = replace_once(
+              text,
+              """        } => {
+                  assert_eq!(attempt_replayed, replayed);
+                  attempt
+              }""".replace("              ", "        "),
+              """        } => {
+                  assert_eq!(attempt_replayed, replayed);
+                  *attempt
+              }""".replace("              ", "        "),
+              "PostgreSQL acceptance ready extraction",
+          )
+          acceptance.write_text(text)
 
           reads = Path("crates/crm-customer-privacy-application/src/reads.rs")
           text = reads.read_text()
+          text = replace_once(
+              text,
+              """        let page_digest = owner_outcome_page_digest_for_items(
+                  &request.context.tenant_id,
+                  &privacy_case_id,
+                  source.action_plan.plan_id(),
+                  owner_module_filter.as_ref(),
+                  page_size,
+                  after.as_ref(),
+                  &page.outcomes,
+                  &next_cursor,
+              );""".replace("              ", "        "),
+              """        let page_digest = owner_outcome_page_digest_for_items(
+                  &PrivacyOwnerOutcomePageDigestContext {
+                      tenant_id: &request.context.tenant_id,
+                      privacy_case_id: &privacy_case_id,
+                      action_plan_id: source.action_plan.plan_id(),
+                      owner_module_filter: owner_module_filter.as_ref(),
+                      page_size,
+                  },
+                  after.as_ref(),
+                  &page.outcomes,
+                  &next_cursor,
+              );""".replace("              ", "        "),
+              "owner outcome digest call",
+          )
           marker = "pub fn owner_outcome_page_digest(\n"
-          if marker not in text:
-              raise SystemExit("page digest marker missing")
+          if text.count(marker) != 1:
+              raise SystemExit("owner outcome digest context marker is not unique")
           context = """#[derive(Debug, Clone, Copy)]
           pub struct PrivacyOwnerOutcomePageDigestContext<'a> {
               pub tenant_id: &'a TenantId,
@@ -165,97 +205,70 @@ jobs:
 
           """.replace("          ", "")
           text = text.replace(marker, context + marker, 1)
-
-          old = """    owner_outcome_page_digest_for_items(
-              tenant_id,
-              privacy_case_id,
-              plan_id,
-              owner_module_filter,
-              page_size,
-              None,
-              &[],
-              "",
-          )""".replace("              ", "        ")
-          new = """    owner_outcome_page_digest_for_items(
-              &PrivacyOwnerOutcomePageDigestContext {
+          text = replace_once(
+              text,
+              """    owner_outcome_page_digest_for_items(
                   tenant_id,
                   privacy_case_id,
-                  action_plan_id: plan_id,
+                  plan_id,
                   owner_module_filter,
                   page_size,
-              },
-              None,
-              &[],
-              "",
-          )""".replace("              ", "        ")
-          if old not in text:
-              raise SystemExit("page digest wrapper correction did not match")
-          text = text.replace(old, new, 1)
-
-          old = """pub fn owner_outcome_page_digest_for_items(
-              tenant_id: &TenantId,
-              privacy_case_id: &RecordId,
-              plan_id: &RecordId,
-              owner_module_filter: Option<&ModuleId>,
-              page_size: u32,
-              after: Option<&PrivacyOwnerOutcomePosition>,
-              outcomes: &[PrivacyOwnerActionOutcome],
-              next_cursor: &str,
-          ) -> [u8; 32] {
-              let page_size = page_size.to_string();
-              let owner = owner_module_filter.map(ModuleId::as_str).unwrap_or("");
-          """.replace("              ", "    ")
-          new = """pub fn owner_outcome_page_digest_for_items(
-              context: &PrivacyOwnerOutcomePageDigestContext<'_>,
-              after: Option<&PrivacyOwnerOutcomePosition>,
-              outcomes: &[PrivacyOwnerActionOutcome],
-              next_cursor: &str,
-          ) -> [u8; 32] {
-              let page_size = context.page_size.to_string();
-              let owner = context
-                  .owner_module_filter
-                  .map(ModuleId::as_str)
-                  .unwrap_or("");
-          """.replace("              ", "    ")
-          if old not in text:
-              raise SystemExit("page digest signature correction did not match")
-          text = text.replace(old, new, 1)
-
-          old = """        tenant_id.as_str().as_bytes(),
-              privacy_case_id.as_str().as_bytes(),
-              plan_id.as_str().as_bytes(),""".replace("              ", "        ")
-          new = """        context.tenant_id.as_str().as_bytes(),
-              context.privacy_case_id.as_str().as_bytes(),
-              context.action_plan_id.as_str().as_bytes(),""".replace("              ", "        ")
-          if old not in text:
-              raise SystemExit("page digest lineage correction did not match")
-          text = text.replace(old, new, 1)
-
-          old = """        let page_digest = owner_outcome_page_digest_for_items(
-              &request.context.tenant_id,
-              &privacy_case_id,
-              source.action_plan.plan_id(),
-              owner_module_filter.as_ref(),
-              page_size,
-              after.as_ref(),
-              &page.outcomes,
-              &next_cursor,
-          );""".replace("              ", "            ")
-          new = """        let page_digest = owner_outcome_page_digest_for_items(
-              &PrivacyOwnerOutcomePageDigestContext {
-                  tenant_id: &request.context.tenant_id,
-                  privacy_case_id: &privacy_case_id,
-                  action_plan_id: source.action_plan.plan_id(),
-                  owner_module_filter: owner_module_filter.as_ref(),
-                  page_size,
-              },
-              after.as_ref(),
-              &page.outcomes,
-              &next_cursor,
-          );""".replace("              ", "            ")
-          if old not in text:
-              raise SystemExit("page digest call correction did not match")
-          reads.write_text(text.replace(old, new, 1))
+                  None,
+                  &[],
+                  "",
+              )""".replace("              ", "    "),
+              """    owner_outcome_page_digest_for_items(
+                  &PrivacyOwnerOutcomePageDigestContext {
+                      tenant_id,
+                      privacy_case_id,
+                      action_plan_id: plan_id,
+                      owner_module_filter,
+                      page_size,
+                  },
+                  None,
+                  &[],
+                  "",
+              )""".replace("              ", "    "),
+              "owner outcome digest wrapper",
+          )
+          text = replace_once(
+              text,
+              """pub fn owner_outcome_page_digest_for_items(
+                  tenant_id: &TenantId,
+                  privacy_case_id: &RecordId,
+                  plan_id: &RecordId,
+                  owner_module_filter: Option<&ModuleId>,
+                  page_size: u32,
+                  after: Option<&PrivacyOwnerOutcomePosition>,
+                  outcomes: &[PrivacyOwnerActionOutcome],
+                  next_cursor: &str,
+              ) -> [u8; 32] {
+                  let page_size = page_size.to_string();
+                  let owner = owner_module_filter.map(ModuleId::as_str).unwrap_or("");""".replace("              ", "    "),
+              """pub fn owner_outcome_page_digest_for_items(
+                  context: &PrivacyOwnerOutcomePageDigestContext<'_>,
+                  after: Option<&PrivacyOwnerOutcomePosition>,
+                  outcomes: &[PrivacyOwnerActionOutcome],
+                  next_cursor: &str,
+              ) -> [u8; 32] {
+                  let page_size = context.page_size.to_string();
+                  let owner = context
+                      .owner_module_filter
+                      .map(ModuleId::as_str)
+                      .unwrap_or("");""".replace("              ", "    "),
+              "owner outcome digest signature",
+          )
+          text = replace_once(
+              text,
+              """        tenant_id.as_str().as_bytes(),
+                  privacy_case_id.as_str().as_bytes(),
+                  plan_id.as_str().as_bytes(),""".replace("              ", "        "),
+              """        context.tenant_id.as_str().as_bytes(),
+                  context.privacy_case_id.as_str().as_bytes(),
+                  context.action_plan_id.as_str().as_bytes(),""".replace("              ", "        "),
+              "owner outcome digest lineage",
+          )
+          reads.write_text(text)
           PY
           cargo fmt --all
       - name: Verify format, compile and Clippy
