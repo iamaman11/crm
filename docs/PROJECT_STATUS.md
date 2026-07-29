@@ -22,7 +22,7 @@ This is the concise current-state snapshot. Normative product dependencies remai
 
 Latest accepted Customer Privacy runtime baseline is PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows.
 
-Latest accepted repository architecture/developer-experience packet is PR #228 / accepted source `a9aa0bef028d906b61e83803436167bf6f91e634` / squash merge `727a244fcf174dc517dec6fdbb6b8997eb205f14` / 5 of 5 applicable permanent workflows.
+Latest accepted repository architecture/developer-experience packet is PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash merge `3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed` / 5 of 5 applicable permanent workflows.
 
 The accepted inventory is six public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0` remains trusted-internal runtime with no public route.
 
@@ -106,6 +106,10 @@ The repository now has deterministic `repo.py explain` for exact module/capabili
 
 The accepted generated inventory is 113 workspace packages, 14 business manifests, 119 published capability coordinates, 70 published event coordinates, 7 platform runtime routes, 5 worker runtime routes, 17 non-runtime contract routes and one route-less module. Product runtime, contracts, manifests, migrations, dependencies, `Cargo.lock`, package count and Customer Privacy behavior are unchanged.
 
+## Accepted lockfile-preserving Rust workflow prerequisite
+
+PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash merge `3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed` / 5 of 5 applicable permanent workflows accepts the smallest repository-step-6 architecture prerequisite. Rust Generated Sync and Rust CI now verify the committed dependency graph with locked Cargo commands, preserve `Cargo.lock` byte-for-byte on ordinary packets and cannot auto-commit registry drift. Intentional lockfile refresh remains explicit through `python scripts/repo.py lock` inside a bounded packet. The six-file change adds no product behavior, contract, manifest, dependency, package, persistence or migration change.
+
 ## Next permitted repository packet
 
 Repository step 6 is Customer Privacy legal-hold and mandatory-retention precedence.
@@ -119,7 +123,7 @@ Repository step 7 is reusable generic mutation and query conformance.
 Issue #194 remains open.
 
 - Stage A documentation/source hierarchy and stable navigation are complete.
-- Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance and three exact expiring legacy lint exceptions are accepted; broader dependency/public-surface calibration and exception removal remain.
+- Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions are accepted; broader dependency/public-surface calibration and exception removal remain.
 - Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public placement and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
 - Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222, but the generic runtime still imports many other concrete owner adapters and remaining owners have not migrated.
 - Stage E has a working foundation but is incomplete: real-diff packet validation and Rust broadening are accepted, while database/process/product/frontend/operations selection remains incomplete.
@@ -137,6 +141,7 @@ Only one implementation packet may be active. The current order begins:
 -> 3a. final customer-subject policy port prerequisite — complete through PR #224
 -> 4. immediate deny-only restrictions — complete through PR #226
 -> 5. explain / packet-check / generated active packet and repository map — complete through PR #228
+-> 5a. lockfile-preserving Rust workflow prerequisite — complete through PR #232
 -> 6. legal-hold and mandatory-retention precedence — next
 ```
 
