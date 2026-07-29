@@ -1,10 +1,18 @@
 use crate::legacy::CustomerPrivacyProductionDependencies;
-pub use crm_customer_privacy_application::{
-    OwnerActionEndpoint, OwnerActionEndpoints, OwnerActionRequest, OwnerActionResult,
-    OwnerExecutionInvocation, OwnerExecutionResult, OwnerPrivacyActionPort,
-    PrivacyOwnerExecutionService,
+pub use crm_customer_privacy::{
+    PrivacyOwnerActionAttempt, PrivacyOwnerActionOutcome, PrivacyOwnerOutcomeStatus,
 };
-use crm_customer_privacy_postgres::PostgresOwnerExecutionPersistence;
+pub use crm_customer_privacy_application::{
+    CheckpointAdvance, ExecutionPreparation, OwnerActionEndpoint, OwnerActionEndpoints,
+    OwnerActionRequest, OwnerActionResult, OwnerExecutionInvocation, OwnerExecutionPersistencePort,
+    OwnerExecutionResult, OwnerPrivacyActionPort, PrivacyOwnerExecutionService,
+    PrivacyOwnerOutcomePage, PrivacyOwnerOutcomePosition, PrivacyReadContext,
+    PrivacyReadPersistencePort,
+};
+pub use crm_customer_privacy_postgres::{
+    PostgresOwnerExecutionPersistence, PostgresPrivacyReadPersistence,
+    retention_decision_persisted_payload,
+};
 use crm_module_sdk::SdkError;
 use std::sync::Arc;
 
