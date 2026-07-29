@@ -17,8 +17,10 @@
     "docs/IMPLEMENTATION_ROADMAP.md",
     "docs/PHASE8_DELIVERY_PLAN.md",
     "docs/PROJECT_STATUS.md",
+    "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
-    "tests/test_architecture_documentation_consistency.py"
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
     "Cargo.lock",
