@@ -28,7 +28,7 @@ Use:
 ```bash
 python scripts/repo.py explain <module-or-coordinate>
 python scripts/repo.py packet-check --base origin/main
-python scripts/repo.py navigation --check
+python scripts/generate_repository_navigation.py --check
 ```
 
 `explain` identifies exact owner, manifest, contract and route classification. `packet-check` fails closed on baseline mismatch, disallowed changed paths, inconsistent affected closure, missing required workflows or stale generated navigation.
@@ -199,7 +199,7 @@ Implemented navigation commands are defined by `scripts/repo.py` and permanently
 python scripts/repo.py explain crm.customer-privacy
 python scripts/repo.py explain customer_privacy.case.submit@1.0.0
 python scripts/repo.py packet-check --base origin/main
-python scripts/repo.py navigation --check
+python scripts/generate_repository_navigation.py --check
 ```
 
 Generated active-packet and repository-map documents are reproducible navigation outputs, not sources of truth.
