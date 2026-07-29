@@ -27,6 +27,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         packet = load_packet(ROOT)
         self.assertEqual(packet["packet_id"], "repository-step-5-evidence-sync")
         self.assertEqual(packet["status"], "active")
+        self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
             "727a244fcf174dc517dec6fdbb6b8997eb205f14",
@@ -38,6 +39,10 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("contracts/**", packet["forbidden_paths"])
         self.assertIn(
             "repository step 6 is the only next implementation packet",
+            packet["acceptance"],
+        )
+        self.assertIn(
+            "no runtime, contract, manifest, persistence, migration, dependency, Cargo.lock or product behavior changes",
             packet["acceptance"],
         )
 
