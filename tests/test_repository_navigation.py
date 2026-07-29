@@ -41,11 +41,15 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
         self.assertIn(".github/workflows/rust.yml", packet["allowed_paths"])
         self.assertIn("docs/ACTIVE_PACKET.md", packet["allowed_paths"])
+        self.assertIn(
+            "tests/test_architecture_documentation_consistency.py",
+            packet["allowed_paths"],
+        )
         self.assertIn("tests/test_repository_navigation.py", packet["allowed_paths"])
         self.assertIn("Cargo.lock", packet["forbidden_paths"])
         self.assertIn("Rust CI", packet["required_checks"])
         self.assertIn(
-            "Cargo.lock remains byte-identical throughout Rust Generated Sync",
+            "Cargo.lock remains byte-identical throughout Rust Generated Sync and Rust CI",
             packet["acceptance"],
         )
         self.assertIn(
@@ -165,6 +169,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             ".github/workflows/rust.yml",
             "docs/ACTIVE_PACKET.md",
             "repository-packet.json",
+            "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ]
         affected = {
