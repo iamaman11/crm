@@ -6,12 +6,14 @@
 //! implementation details. New owner persistence enters through this package.
 
 mod discovery;
+mod execution;
 mod planning;
 mod reads;
 mod restrictions;
 mod retention;
 
 pub use discovery::*;
+pub use execution::*;
 pub use planning::*;
 pub use reads::*;
 pub use restrictions::*;
