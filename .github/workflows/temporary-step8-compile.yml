@@ -27,7 +27,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           toolchain: "1.97.1"
-          components: rustfmt
+          components: rustfmt, clippy
       - name: Reconstruct exact reviewed source
         shell: bash
         run: |
@@ -66,6 +66,8 @@ jobs:
           gzip --decompress --stdout /tmp/pg-execution.rs.gz > crates/crm-customer-privacy-postgres/src/execution.rs
       - name: Canonical formatting
         run: cargo fmt --all
+      - name: Verify canonical formatting
+        run: cargo fmt --all --check
       - name: Compile step 8 packages
         run: >-
           cargo check --locked
@@ -73,6 +75,21 @@ jobs:
           -p crm-customer-privacy-application
           -p crm-customer-privacy-postgres
           -p crm-customer-privacy-production
+      - name: Test step 8 packages
+        run: >-
+          cargo test --locked
+          -p crm-customer-privacy
+          -p crm-customer-privacy-application
+          -p crm-customer-privacy-postgres
+          -p crm-customer-privacy-production
+      - name: Clippy step 8 packages
+        run: >-
+          cargo clippy --locked
+          -p crm-customer-privacy
+          -p crm-customer-privacy-application
+          -p crm-customer-privacy-postgres
+          -p crm-customer-privacy-production
+          --all-targets -- -D warnings
       - name: Upload formatted step 8 source
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
