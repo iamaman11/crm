@@ -27,33 +27,29 @@ class RepositoryNavigationTests(unittest.TestCase):
         packet = load_packet(ROOT)
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-6-generated-sync-prerequisite",
+            "repository-step-6-lockfile-prerequisite-evidence-sync",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "59ab9242a5d38aa143313c120d3e076adad9b851",
+            "3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed",
         )
         self.assertEqual(packet["tracking_issues"], [194, 231])
-        self.assertIn(
-            ".github/workflows/rust-generated-sync.yml", packet["allowed_paths"]
-        )
-        self.assertIn(".github/workflows/rust.yml", packet["allowed_paths"])
-        self.assertIn("docs/ACTIVE_PACKET.md", packet["allowed_paths"])
-        self.assertIn(
+        for path in (
+            "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "tests/test_architecture_documentation_consistency.py",
-            packet["allowed_paths"],
-        )
-        self.assertIn("tests/test_repository_navigation.py", packet["allowed_paths"])
+            "tests/test_repository_navigation.py",
+        ):
+            self.assertIn(path, packet["allowed_paths"])
         self.assertIn("Cargo.lock", packet["forbidden_paths"])
         self.assertIn("Rust CI", packet["required_checks"])
         self.assertIn(
-            "Cargo.lock remains byte-identical throughout Rust Generated Sync and Rust CI",
-            packet["acceptance"],
-        )
-        self.assertIn(
-            "repository step 6 remains blocked and unchanged until this prerequisite is accepted and evidence-synchronized",
+            "repository step 6 remains the only next implementation packet",
             packet["acceptance"],
         )
 
@@ -165,9 +161,11 @@ class RepositoryNavigationTests(unittest.TestCase):
 
     def test_packet_check_reports_affected_scope_without_running_git_or_cargo(self) -> None:
         changed_paths = [
-            ".github/workflows/rust-generated-sync.yml",
-            ".github/workflows/rust.yml",
             "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
@@ -188,7 +186,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="59ab9242a5d38aa143313c120d3e076adad9b851",
+                return_value="3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),

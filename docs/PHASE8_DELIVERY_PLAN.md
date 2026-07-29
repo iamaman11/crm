@@ -65,7 +65,9 @@ PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / squash me
 
 PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows completes repository step 4. Immediate deny-only restriction placement and the first complete protected-owner boundary are accepted.
 
-PR #228 / accepted source `a9aa0bef028d906b61e83803436167bf6f91e634` / squash merge `727a244fcf174dc517dec6fdbb6b8997eb205f14` / 5 of 5 applicable permanent workflows completes repository step 5. Deterministic explanation, packet validation, real-diff affected enforcement and generated navigation are accepted; repository step 6 is now the next permitted implementation packet.
+PR #228 / accepted source `a9aa0bef028d906b61e83803436167bf6f91e634` / squash merge `727a244fcf174dc517dec6fdbb6b8997eb205f14` / 5 of 5 applicable permanent workflows completes repository step 5. Deterministic explanation, packet validation, real-diff affected enforcement and generated navigation are accepted.
+
+PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash merge `3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed` / 5 of 5 applicable permanent workflows accepts the smallest repository-step-6 architecture prerequisite. Rust Generated Sync and Rust CI now verify the committed dependency graph with locked Cargo commands, preserve `Cargo.lock` byte-for-byte on ordinary packets and cannot auto-commit registry drift. Intentional lockfile refresh remains explicit through `python scripts/repo.py lock` inside a bounded packet. The six-file change adds no product behavior, contract, manifest, dependency, package, persistence or migration change. Repository step 6 remains the next permitted implementation packet.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -149,6 +151,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 3a. inserted prerequisite for repository step 4 — final customer-subject policy port and deterministic guard composition — **complete through PR #224**;
 4. repository step 4 — immediate deny-only processing restrictions using final subject locks — **complete through PR #226**;
 5. repository step 5 — `explain`, `packet-check` and generated navigation — **complete through PR #228**;
+5a. inserted lockfile-preservation prerequisite before repository step 6 — **complete through PR #232**;
 6. repository step 6 — legal-hold and mandatory-retention precedence — **next**;
 7. repository step 7 — reusable generic mutation/query conformance;
 8. repository step 8 — replay-safe resumable owner execution and crash-window recovery;
@@ -165,7 +168,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 19. repository step 19 — architecture remeasurement and publication of the next numbered order;
 20. repository step 20 — first Phase 8B packet.
 
-The inserted prerequisite did not renumber the normative master sequence. A later step must not start while repository step 6 is unfinished.
+The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 6 is unfinished.
 
 ## 10. Frozen ownership
 
