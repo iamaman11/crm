@@ -14,6 +14,7 @@
   "objective": "Accept the smallest architecture prerequisite required before repository step 6 can obtain unchanged exact-head evidence: make Rust Generated Sync verify the committed dependency graph without resolving or auto-committing Cargo.lock.",
   "allowed_paths": [
     ".github/workflows/rust-generated-sync.yml",
+    ".github/workflows/rust.yml",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "tests/test_repository_navigation.py"
@@ -35,6 +36,7 @@
   ],
   "deliverables": [
     "replace automatic cargo generate-lockfile with locked dependency verification",
+    "replace Rust CI lockfile regeneration with locked dependency verification",
     "prove Cargo.lock remains byte-identical during formatting, generation and Clippy maintenance",
     "exclude Cargo.lock from generated-sync staging and commits",
     "preserve the explicit python scripts/repo.py lock command for intentional bounded lockfile refresh",
@@ -43,12 +45,13 @@
   "required_checks": [
     "Governance CI",
     "Affected Scope CI",
+    "Rust CI",
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "ordinary feature packets cannot receive generated dependency drift",
+    "ordinary feature packets cannot receive generated or Rust-CI dependency drift",
     "Cargo.lock remains byte-identical throughout Rust Generated Sync",
-    "locked Cargo metadata, generated contracts, generated navigation, formatting and Clippy remain enforced",
+    "locked Cargo metadata, Rust check/test/Clippy, generated contracts, generated navigation and formatting remain enforced",
     "intentional lockfile refresh remains explicit through python scripts/repo.py lock inside a bounded packet",
     "repository step 6 remains blocked and unchanged until this prerequisite is accepted and evidence-synchronized",
     "no product behavior, contract, manifest, dependency, package, persistence or migration changes"
