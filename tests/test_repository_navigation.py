@@ -25,24 +25,35 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-5-evidence-sync")
+        self.assertEqual(
+            packet["packet_id"],
+            "repository-step-6-generated-sync-prerequisite",
+        )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "727a244fcf174dc517dec6fdbb6b8997eb205f14",
+            "59ab9242a5d38aa143313c120d3e076adad9b851",
         )
-        self.assertEqual(packet["tracking_issues"], [194])
-        self.assertIn("docs/PROJECT_STATUS.md", packet["allowed_paths"])
-        self.assertIn("docs/generated/REPOSITORY_MAP.md", packet["allowed_paths"])
-        self.assertIn("tests/test_repository_navigation.py", packet["allowed_paths"])
-        self.assertIn("contracts/**", packet["forbidden_paths"])
+        self.assertEqual(packet["tracking_issues"], [194, 231])
         self.assertIn(
-            "repository step 6 is the only next implementation packet",
+            ".github/workflows/rust-generated-sync.yml", packet["allowed_paths"]
+        )
+        self.assertIn(".github/workflows/rust.yml", packet["allowed_paths"])
+        self.assertIn("docs/ACTIVE_PACKET.md", packet["allowed_paths"])
+        self.assertIn(
+            "tests/test_architecture_documentation_consistency.py",
+            packet["allowed_paths"],
+        )
+        self.assertIn("tests/test_repository_navigation.py", packet["allowed_paths"])
+        self.assertIn("Cargo.lock", packet["forbidden_paths"])
+        self.assertIn("Rust CI", packet["required_checks"])
+        self.assertIn(
+            "Cargo.lock remains byte-identical throughout Rust Generated Sync and Rust CI",
             packet["acceptance"],
         )
         self.assertIn(
-            "no runtime, contract, manifest, persistence, migration, dependency, Cargo.lock or product behavior changes",
+            "repository step 6 remains blocked and unchanged until this prerequisite is accepted and evidence-synchronized",
             packet["acceptance"],
         )
 
@@ -58,6 +69,38 @@ class RepositoryNavigationTests(unittest.TestCase):
             workflow.index("Validate active repository packet"),
             workflow.index("Run affected structural preflight"),
         )
+
+    def test_rust_workflows_preserve_the_committed_lockfile(self) -> None:
+        generated_sync = (
+            ROOT / ".github/workflows/rust-generated-sync.yml"
+        ).read_text(encoding="utf-8")
+        rust_ci = (ROOT / ".github/workflows/rust.yml").read_text(encoding="utf-8")
+        repo_runner = (ROOT / "scripts/repo.py").read_text(encoding="utf-8")
+
+        for workflow in (generated_sync, rust_ci):
+            self.assertNotIn("cargo generate-lockfile", workflow)
+            self.assertIn(
+                "cargo metadata --locked --format-version 1 --no-deps", workflow
+            )
+            self.assertIn("lockfile_before=", workflow)
+            self.assertIn("lockfile_after=", workflow)
+            self.assertIn("git diff --exit-code -- Cargo.lock", workflow)
+
+        self.assertNotIn("git add Cargo.lock", generated_sync)
+        self.assertIn(
+            "cargo run --locked -p crm-proto-contracts", generated_sync
+        )
+        self.assertIn("cargo clippy --locked --fix", generated_sync)
+        self.assertIn("cargo clippy --locked --workspace", generated_sync)
+
+        self.assertNotIn("Upload resolved Cargo lockfile", rust_ci)
+        self.assertNotIn("name: cargo-lockfile", rust_ci)
+        self.assertIn("cargo check --locked --workspace", rust_ci)
+        self.assertIn("cargo clippy --locked --workspace", rust_ci)
+        self.assertIn("cargo test --locked --workspace", rust_ci)
+
+        self.assertIn('run(["cargo", "generate-lockfile"])', repo_runner)
+        self.assertIn('"lock", help="regenerate the committed Cargo lockfile"', repo_runner)
 
     def test_module_explanation_traces_customer_privacy_owner(self) -> None:
         explanation = explain_target(ROOT, "crm.customer-privacy")
@@ -122,8 +165,11 @@ class RepositoryNavigationTests(unittest.TestCase):
 
     def test_packet_check_reports_affected_scope_without_running_git_or_cargo(self) -> None:
         changed_paths = [
-            "docs/PROJECT_STATUS.md",
+            ".github/workflows/rust-generated-sync.yml",
+            ".github/workflows/rust.yml",
+            "docs/ACTIVE_PACKET.md",
             "repository-packet.json",
+            "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ]
         affected = {
@@ -142,7 +188,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="727a244fcf174dc517dec6fdbb6b8997eb205f14",
+                return_value="59ab9242a5d38aa143313c120d3e076adad9b851",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),

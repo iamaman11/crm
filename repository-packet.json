@@ -1,42 +1,47 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-5-evidence-sync",
-  "title": "Synchronize accepted repository step 5 evidence",
+  "packet_id": "repository-step-6-generated-sync-prerequisite",
+  "title": "Keep Rust workflows lockfile-preserving",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "727a244fcf174dc517dec6fdbb6b8997eb205f14"
+    "sha": "59ab9242a5d38aa143313c120d3e076adad9b851"
   },
   "tracking_issues": [
-    194
+    194,
+    231
   ],
-  "objective": "Synchronize accepted repository step 5 evidence and expose repository step 6 as the only next implementation packet.",
+  "objective": "Accept the smallest architecture prerequisite required before repository step 6 can obtain unchanged exact-head evidence: make Rust Generated Sync and Rust CI verify the committed dependency graph without resolving or auto-committing Cargo.lock.",
   "allowed_paths": [
+    ".github/workflows/rust-generated-sync.yml",
+    ".github/workflows/rust.yml",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
-    "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
     "Cargo.lock",
+    "Cargo.toml",
     "contracts/**",
-    "crates/**/src/**",
-    "database/migrations/**",
-    "modules/**/module.yaml",
-    "modules/**/src/**",
+    "crates/**",
+    "database/**",
+    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+    "docs/IMPLEMENTATION_ROADMAP.md",
+    "docs/PHASE8_DELIVERY_PLAN.md",
+    "docs/PROJECT_STATUS.md",
+    "modules/**",
+    "packages/**",
     "proto/**",
-    "services/**/src/**"
+    "services/**"
   ],
   "deliverables": [
-    "record PR #228 accepted source, merge and 5-of-5 evidence",
-    "mark repository step 5 complete",
-    "mark repository step 6 next",
-    "regenerate docs/ACTIVE_PACKET.md"
+    "replace automatic cargo generate-lockfile with locked dependency verification",
+    "replace Rust CI lockfile regeneration with locked dependency verification",
+    "prove Cargo.lock remains byte-identical during formatting, generation, Rust checks, tests and Clippy maintenance",
+    "exclude Cargo.lock from generated-sync staging and commits",
+    "preserve the explicit python scripts/repo.py lock command for intentional bounded lockfile refresh",
+    "add permanent repository-navigation and documentation-consistency governance coverage"
   ],
   "required_checks": [
     "Governance CI",
@@ -45,15 +50,18 @@
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "all authoritative status documents agree on accepted step 5 evidence",
-    "repository step 6 is the only next implementation packet",
-    "generated active-packet navigation is fresh",
-    "no runtime, contract, manifest, persistence, migration, dependency, Cargo.lock or product behavior changes"
+    "ordinary feature packets cannot receive generated or Rust-CI dependency drift",
+    "Cargo.lock remains byte-identical throughout Rust Generated Sync and Rust CI",
+    "locked Cargo metadata, Rust check/test/Clippy, generated contracts, generated navigation and formatting remain enforced",
+    "intentional lockfile refresh remains explicit through python scripts/repo.py lock inside a bounded packet",
+    "repository step 6 remains blocked and unchanged until this prerequisite is accepted and evidence-synchronized",
+    "no product behavior, contract, manifest, dependency, package, persistence or migration changes"
   ],
   "non_goals": [
-    "implement repository step 6",
-    "change Customer Privacy runtime",
-    "change public contracts or route classifications",
-    "change workspace packages or dependencies"
+    "implement repository step 6 legal-hold or mandatory-retention behavior",
+    "change dependency versions or Cargo.lock",
+    "change public contracts, manifests or runtime routes",
+    "change product behavior",
+    "change crate packaging or contribution aggregation"
   ]
 }

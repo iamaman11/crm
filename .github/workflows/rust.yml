@@ -41,22 +41,15 @@ jobs:
           path: architecture.txt
           if-no-files-found: error
           retention-days: 7
-      - name: Generate resolved Cargo lockfile
-        run: cargo generate-lockfile
-      - name: Upload resolved Cargo lockfile
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: cargo-lockfile
-          path: Cargo.lock
-          if-no-files-found: error
-          retention-days: 7
-      - name: Verify committed Cargo lockfile is current
+      - name: Verify committed Cargo lockfile without resolving a new graph
+        shell: bash
         run: |
-          if [ -n "$(git status --porcelain -- Cargo.lock)" ]; then
-            echo "Cargo.lock is missing or out of date. Download the cargo-lockfile artifact and commit it."
-            git status --short -- Cargo.lock
-            exit 1
-          fi
+          set -euo pipefail
+          lockfile_before="$(sha256sum Cargo.lock | cut -d ' ' -f1)"
+          cargo metadata --locked --format-version 1 --no-deps >/dev/null
+          lockfile_after="$(sha256sum Cargo.lock | cut -d ' ' -f1)"
+          test "${lockfile_before}" = "${lockfile_after}"
+          git diff --exit-code -- Cargo.lock
       - name: Check Rust formatting
         id: rustfmt
         run: cargo fmt --all -- --check
@@ -81,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo check --workspace --all-targets --all-features --message-format=json \
+          cargo check --locked --workspace --all-targets --all-features --message-format=json \
             2> >(tee rustc-stderr.txt >&2) | tee rustc.json > /dev/null
       - name: Upload Rust compiler diagnostics
         if: always() && steps.rustc.outcome != 'skipped'
@@ -98,7 +91,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo clippy --workspace --all-targets --all-features --message-format=json -- -D warnings \
+          cargo clippy --locked --workspace --all-targets --all-features --message-format=json -- -D warnings \
             2> >(tee clippy-stderr.txt >&2) | tee clippy.json > /dev/null
       - name: Upload Clippy diagnostics
         if: always() && steps.clippy.outcome != 'skipped'
@@ -138,7 +131,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test --workspace --all-features 2>&1 | tee tests.txt
+          cargo test --locked --workspace --all-features 2>&1 | tee tests.txt
       - name: Upload test diagnostics
         if: always() && steps.tests.outcome != 'skipped'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
