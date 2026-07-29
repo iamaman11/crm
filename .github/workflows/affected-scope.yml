@@ -39,6 +39,10 @@ jobs:
         env:
           BASE_REF: origin/${{ github.base_ref }}
         run: python scripts/repo.py affected --base "${BASE_REF}"
+      - name: Validate active repository packet
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: python scripts/repo.py packet-check --base "${BASE_REF}"
       - name: Run affected structural preflight
         env:
           BASE_REF: origin/${{ github.base_ref }}
