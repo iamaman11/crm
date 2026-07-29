@@ -9,10 +9,11 @@ For a new contributor or coding agent:
 1. [`AGENTS.md`](AGENTS.md) — repository operating model and change workflow.
 2. [`docs/README.md`](docs/README.md) — task-oriented documentation map and source-of-truth hierarchy.
 3. [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_INVARIANTS.md) — absolute architecture rules.
-4. [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) — concise current merged state and next packet.
-5. The active GitHub issue for the bounded work packet.
+4. [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) — concise current merged state and next permitted packet.
+5. [`docs/ACTIVE_PACKET.md`](docs/ACTIVE_PACKET.md) — generated orientation for the active bounded packet.
+6. The active GitHub issue for executable scope and acceptance.
 
-Use the documentation index instead of reading every document linearly. Accepted ADRs and published contracts take precedence over descriptive prose unless they violate an absolute system invariant.
+Use the documentation index and generated repository map instead of reading the repository linearly. Accepted ADRs and published contracts take precedence over descriptive prose unless they violate an absolute system invariant.
 
 ## Current state
 
@@ -55,11 +56,27 @@ Generic router and worker algorithms must not change merely to register one owne
 - `services/` — deployable composition roots; `services/crm-api` is the production process.
 - `database/` — authoritative migrations and PostgreSQL acceptance assets.
 - `schemas/` — strict authoring schemas compiled into typed runtime IR.
-- `docs/` — normative architecture, status, execution plans, navigation and historical acceptance evidence.
+- `docs/` — normative architecture, status, execution plans, generated navigation and historical evidence.
 - `scripts/` — architecture, contract, manifest, affected-scope and repository tooling.
 - `.github/workflows/` — permanent conformance and acceptance gates.
 
-Generated `build/` content and workflow artifacts are reproducible outputs and are not authoritative source files.
+Generated `build/` content and workflow artifacts are reproducible outputs and are not authoritative source files. Committed generated navigation is freshness-checked and remains orientation only.
+
+## Repository navigation
+
+Use exact machine-generated navigation instead of repository archaeology:
+
+```bash
+python scripts/repo.py explain crm.customer-privacy
+python scripts/repo.py explain customer_privacy.case.submit@1.0.0
+python scripts/repo.py packet-check --base origin/main
+python scripts/repo.py navigation --check
+```
+
+- [`docs/ACTIVE_PACKET.md`](docs/ACTIVE_PACKET.md) describes the active bounded packet from `repository-packet.json`.
+- [`docs/generated/REPOSITORY_MAP.md`](docs/generated/REPOSITORY_MAP.md) inventories workspace packages, business manifests and route classifications.
+- `explain` resolves exact module or capability ownership and fails closed for unknown or ambiguous targets.
+- `packet-check` validates the declared baseline, changed-path policy, affected package closure, workflow selection and generated freshness.
 
 ## Local validation
 
@@ -73,13 +90,16 @@ python scripts/repo.py conformance
 python scripts/repo.py lock
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
+python scripts/repo.py explain <module-or-coordinate>
+python scripts/repo.py packet-check --base origin/main
+python scripts/repo.py navigation --check
 python scripts/repo.py format --check
 python scripts/repo.py test --package <package>
 python scripts/repo.py test-all
 python scripts/repo.py quality
 ```
 
-Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Planned local-environment and navigation commands are listed in [`docs/README.md`](docs/README.md) and must not be treated as implemented until permanent tests prove them.
+Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Local lifecycle commands such as `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain future repository step 15 work and must not be represented as implemented.
 
 ## Status synchronization rule
 
