@@ -22,6 +22,17 @@ pub mod domain {
     pub use scope::*;
 
     include!("query_access.rs");
+    include!("retention.rs");
+
+    impl CustomerDataLegalHold {
+        pub const fn effective_from_unix_nanos(&self) -> i64 {
+            self.effective_from_unix_nanos
+        }
+
+        pub const fn effective_until_unix_nanos(&self) -> Option<i64> {
+            self.effective_until_unix_nanos
+        }
+    }
 
     pub mod persistence {
         use crate::canonicalization::persisted_state_json as serde_json;
@@ -52,6 +63,8 @@ pub const OWNER_SCOPE_CONTRIBUTION_RECEIPT_RECORD_TYPE: &str =
     "customer-privacy.owner-scope-contribution";
 /// Immutable owner-aware privacy action plan record type.
 pub const ACTION_PLAN_RECORD_TYPE: &str = "customer-privacy.action-plan";
+/// Immutable legal-hold and mandatory-retention adjudication record type.
+pub const RETENTION_DECISION_RECORD_TYPE: &str = "customer-privacy.retention-decision";
 /// Deterministic owner action attempt record type.
 pub const OWNER_ACTION_ATTEMPT_RECORD_TYPE: &str = "customer-privacy.owner-action-attempt";
 /// Append-once owner action outcome record type.
@@ -74,10 +87,11 @@ mod tests {
             SCOPE_SNAPSHOT_RECORD_TYPE,
             OWNER_SCOPE_CONTRIBUTION_RECEIPT_RECORD_TYPE,
             ACTION_PLAN_RECORD_TYPE,
+            RETENTION_DECISION_RECORD_TYPE,
             OWNER_ACTION_ATTEMPT_RECORD_TYPE,
             OWNER_ACTION_OUTCOME_RECORD_TYPE,
         ];
-        assert_eq!(record_types.len(), 8);
+        assert_eq!(record_types.len(), 9);
         assert!(
             record_types
                 .iter()

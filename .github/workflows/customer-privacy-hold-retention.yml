@@ -1,0 +1,211 @@
+name: Customer Privacy Hold Retention CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.lock"
+      - "contracts/production-route-classifications.json"
+      - "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
+      - "crates/crm-application-runtime/tests/customer_privacy_hold_retention_postgres.rs"
+      - "crates/crm-application-runtime/tests/customer_privacy_production_inventory.rs"
+      - "crates/crm-customer-privacy-application/**"
+      - "crates/crm-customer-privacy-capability-adapter/**"
+      - "crates/crm-customer-privacy-capability-composition/**"
+      - "crates/crm-customer-privacy-persistence-adapter/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "modules/crm-customer-privacy/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0005_party_adapter.sql"
+      - "database/tests/0007_contact_point_adapter.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - "services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs"
+      - "services/crm-api/tests/support/customer_enrichment_process/**"
+      - "tests/test_customer_privacy_contract_inventory.py"
+      - "tests/test_production_route_classifications.py"
+      - ".github/workflows/customer-privacy-hold-retention.yml"
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "contracts/production-route-classifications.json"
+      - "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
+      - "crates/crm-application-runtime/tests/customer_privacy_hold_retention_postgres.rs"
+      - "crates/crm-application-runtime/tests/customer_privacy_production_inventory.rs"
+      - "crates/crm-customer-privacy-application/**"
+      - "crates/crm-customer-privacy-capability-adapter/**"
+      - "crates/crm-customer-privacy-capability-composition/**"
+      - "crates/crm-customer-privacy-persistence-adapter/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "modules/crm-customer-privacy/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0004_search_runtime_role_grants.sql"
+      - "database/tests/0005_party_adapter.sql"
+      - "database/tests/0007_contact_point_adapter.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - "services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs"
+      - "services/crm-api/tests/support/customer_enrichment_process/**"
+      - "tests/test_customer_privacy_contract_inventory.py"
+      - "tests/test_production_route_classifications.py"
+      - ".github/workflows/customer-privacy-hold-retention.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  hold-retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_privacy_hold_retention_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5453:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_privacy_hold_retention_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5453
+      PGDATABASE: crm_privacy_hold_retention_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5453/crm_privacy_hold_retention_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5453/crm_privacy_hold_retention_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # repository rust-toolchain.toml
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Run architecture and route-classification preflight
+        run: |
+          python -m pip install --requirement requirements-dev.txt
+          python scripts/check_architecture.py
+          python -m unittest \
+            tests.test_customer_privacy_contract_inventory \
+            tests.test_production_route_classifications
+      - name: Verify hold-retention package contracts
+        run: |
+          cargo test -p crm-customer-privacy
+          cargo test -p crm-customer-privacy-application
+          cargo test -p crm-customer-privacy-capability-adapter \
+            --test legal_hold_public_contract
+          cargo test -p crm-customer-privacy-persistence-adapter
+          cargo test -p crm-customer-privacy-postgres \
+            --test hold_retention_contract
+          cargo test -p crm-customer-privacy-production
+          cargo test -p crm-application-runtime \
+            --test customer_privacy_production_inventory
+      - name: Prove bounded non-effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only '${{ github.event.pull_request.base.sha || github.event.before }}' HEAD 2>/dev/null || true)"
+          test -z "$(printf '%s\n' "${changed}" | grep -E 'modules/.*/module\.yaml|proto/|services/crm-api/src/' || true)"
+          ! grep -R -E 'owner_action_(dispatch|outcome)|crypto[_-]shred|tombstone|anonymi[sz]e|legal_hold\.release|restriction\.release' \
+            crates/crm-customer-privacy-application/src/retention.rs \
+            crates/crm-customer-privacy-postgres/src/retention.rs \
+            crates/crm-customer-privacy-production/src/legal_hold.rs
+      - name: Apply clean authoritative schema and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify phase-260 PostgreSQL adjudication
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p crm-application-runtime \
+            --test customer_privacy_hold_retention_postgres \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-hold-retention-postgres-clean.log
+      - name: Verify real legal-hold placement process
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p crm-api \
+            --test customer_privacy_hold_retention_process_e2e \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-hold-retention-process-clean.log
+      - name: Roll back authoritative schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply authoritative schema and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Repeat phase-260 and real-process acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p crm-application-runtime \
+            --test customer_privacy_hold_retention_postgres \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-hold-retention-postgres-reapplied.log
+          cargo test -p crm-api \
+            --test customer_privacy_hold_retention_process_e2e \
+            -- --nocapture \
+            2>&1 | tee database/customer-privacy-hold-retention-process-reapplied.log
+      - name: Capture PostgreSQL diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          if [ -n "${postgres_container}" ]; then
+            docker logs "${postgres_container}" > database/customer-privacy-hold-retention-server.log 2>&1
+          fi
+      - name: Upload hold-retention diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: customer-privacy-hold-retention-diagnostics
+          path: |
+            crates/crm-customer-privacy-application/
+            crates/crm-customer-privacy-postgres/
+            crates/crm-customer-privacy-production/
+            crates/crm-application-runtime/tests/customer_privacy_hold_retention_postgres.rs
+            services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs
+            database/customer-privacy-hold-retention-*.log
+          if-no-files-found: warn
+          retention-days: 7

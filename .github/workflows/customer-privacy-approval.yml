@@ -156,7 +156,7 @@ jobs:
           set -o pipefail
           cargo test -p crm-api --test customer_privacy_case_approval_process_e2e -- --nocapture \
             2>&1 | tee database/customer-privacy-approval-process-clean.log
-      - name: Verify approval and restriction invariants
+      - name: Verify approval and directive invariants
         shell: bash
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
@@ -167,9 +167,20 @@ jobs:
           runtime_changes="$(git diff --name-only "origin/${BASE_REF}"...HEAD -- crates/crm-application-runtime/Cargo.toml crates/crm-application-runtime/src crates/crm-application-composition/Cargo.toml crates/crm-application-composition/src || true)"
           unexpected_runtime_changes="$(printf '%s\n' "${runtime_changes}" | grep -v '^crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs$' || true)"
           test -z "${unexpected_runtime_changes}"
-          added_rust="$(git diff --unified=0 "origin/${BASE_REF}"...HEAD -- '*.rs' | grep '^+' | grep -v '^+++' || true)"
-          if printf '%s\n' "${added_rust}" | grep -E 'CustomerPrivacy.*Worker|customer_privacy_owner_outcomes|restriction\.release|legal_hold\.(place|release)|owner.*execute'; then
-            echo "restriction packet introduced a forbidden later-step runtime effect"
+          added_rust="$(
+            git diff --unified=0 "origin/${BASE_REF}"...HEAD -- \
+              modules/crm-customer-privacy/src \
+              crates/crm-customer-privacy-application/src \
+              crates/crm-customer-privacy-capability-adapter/src \
+              crates/crm-customer-privacy-capability-composition/src \
+              crates/crm-customer-privacy-persistence-adapter/src \
+              crates/crm-customer-privacy-postgres/src \
+              crates/crm-customer-privacy-production/src \
+              crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs \
+            | grep '^+' | grep -v '^+++' || true
+          )"
+          if printf '%s\n' "${added_rust}" | grep -E 'CustomerPrivacy.*Worker|customer_privacy_owner_outcomes|restriction\.release|legal_hold\.release|owner.*execute|crypto[_-]shred|tombstone|anonymi[sz]e'; then
+            echo "Customer Privacy directive packet introduced a forbidden later-step runtime effect"
             exit 1
           fi
           python - <<'PY'
@@ -178,16 +189,16 @@ jobs:
           data = json.loads(Path('contracts/production-route-classifications.json').read_text())
           coordinates = {(item['owner_module_id'], item['id'], item['version']) for item in data['non_runtime_contract_routes']}
           for capability in (
-              'customer_privacy.case.approve',
-              'customer_privacy.restriction.place',
+            'customer_privacy.case.approve',
+            'customer_privacy.restriction.place',
+            'customer_privacy.legal_hold.place',
           ):
-              assert ('crm.customer-privacy', capability, '1.0.0') not in coordinates
+            assert ('crm.customer-privacy', capability, '1.0.0') not in coordinates
           for capability in (
-              'customer_privacy.restriction.release',
-              'customer_privacy.legal_hold.place',
-              'customer_privacy.legal_hold.release',
+            'customer_privacy.restriction.release',
+            'customer_privacy.legal_hold.release',
           ):
-              assert ('crm.customer-privacy', capability, '1.0.0') in coordinates
+            assert ('crm.customer-privacy', capability, '1.0.0') in coordinates
           PY
       - name: Roll back authoritative schema
         shell: bash

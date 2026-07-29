@@ -25,31 +25,32 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(
-            packet["packet_id"],
-            "repository-step-6-lockfile-prerequisite-evidence-sync",
-        )
+        self.assertEqual(packet["packet_id"], "repository-step-6")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed",
+            "63cb6011f38e6869499c45c2fef4792b2cccc4d9",
         )
-        self.assertEqual(packet["tracking_issues"], [194, 231])
-        for path in (
-            "docs/ACTIVE_PACKET.md",
-            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-            "docs/IMPLEMENTATION_ROADMAP.md",
-            "docs/PHASE8_DELIVERY_PLAN.md",
-            "docs/PROJECT_STATUS.md",
-            "tests/test_architecture_documentation_consistency.py",
-            "tests/test_repository_navigation.py",
-        ):
-            self.assertIn(path, packet["allowed_paths"])
-        self.assertIn("Cargo.lock", packet["forbidden_paths"])
-        self.assertIn("Rust CI", packet["required_checks"])
+        self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertIn(
-            "repository step 6 remains the only next implementation packet",
+            "crates/crm-customer-privacy-application/src/retention.rs",
+            packet["allowed_paths"],
+        )
+        self.assertIn(
+            "services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs",
+            packet["allowed_paths"],
+        )
+        self.assertIn("tests/test_repository_navigation.py", packet["allowed_paths"])
+        self.assertIn("Cargo.lock", packet["forbidden_paths"])
+        self.assertIn("proto/**", packet["forbidden_paths"])
+        self.assertIn("services/crm-api/src/**", packet["forbidden_paths"])
+        self.assertIn(
+            "active matching legal hold overrides mandatory retention and approved action",
+            packet["acceptance"],
+        )
+        self.assertIn(
+            "no owner mutation, deletion, anonymization, export, outcome write or worker is introduced",
             packet["acceptance"],
         )
 
@@ -112,6 +113,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         }
         self.assertIn("customer_privacy.case.submit@1.0.0", coordinates)
         self.assertIn("customer_privacy.restriction.place@1.0.0", coordinates)
+        self.assertIn("customer_privacy.legal_hold.place@1.0.0", coordinates)
         self.assertTrue(explanation["references"])
 
     def test_capability_explanation_resolves_exact_binding_and_runtime(self) -> None:
@@ -161,32 +163,33 @@ class RepositoryNavigationTests(unittest.TestCase):
 
     def test_packet_check_reports_affected_scope_without_running_git_or_cargo(self) -> None:
         changed_paths = [
-            "docs/ACTIVE_PACKET.md",
-            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-            "docs/IMPLEMENTATION_ROADMAP.md",
-            "docs/PHASE8_DELIVERY_PLAN.md",
-            "docs/PROJECT_STATUS.md",
+            "crates/crm-customer-privacy-application/src/retention.rs",
             "repository-packet.json",
-            "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ]
         affected = {
             "head_sha": "b" * 40,
             "changed_paths": changed_paths,
-            "affected_packages": [],
+            "affected_packages": ["crm-customer-privacy-application"],
             "selected_workflows": [
                 {
                     "name": "Governance CI",
                     "path": ".github/workflows/governance.yml",
                     "selected": True,
                     "reasons": ["test fixture"],
-                }
+                },
+                {
+                    "name": "Customer Privacy Hold Retention CI",
+                    "path": ".github/workflows/customer-privacy-hold-retention.yml",
+                    "selected": True,
+                    "reasons": ["test fixture"],
+                },
             ],
         }
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed",
+                return_value="63cb6011f38e6869499c45c2fef4792b2cccc4d9",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
@@ -196,6 +199,24 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(report["changed_paths"], changed_paths)
         self.assertEqual(report["blockers"], [])
         self.assertEqual(report["selected_workflows"][0]["name"], "Governance CI")
+        self.assertEqual(
+            report["selected_workflows"][1]["name"],
+            "Customer Privacy Hold Retention CI",
+        )
+
+    def test_repo_parser_exposes_exact_step_5_commands(self) -> None:
+        parser = build_parser()
+        explain = parser.parse_args(
+            ["explain", "customer_privacy.legal_hold.place@1.0.0", "--json"]
+        )
+        self.assertEqual(explain.command, "explain")
+        self.assertTrue(explain.json)
+        packet = parser.parse_args(
+            ["packet-check", "--base", "origin/main", "--write-generated"]
+        )
+        self.assertEqual(packet.command, "packet-check")
+        self.assertEqual(packet.base, "origin/main")
+        self.assertTrue(packet.write_generated)
 
     def test_repo_parser_exposes_exact_step_5_commands(self) -> None:
         parser = build_parser()
