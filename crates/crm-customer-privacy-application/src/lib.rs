@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Stable application boundary for Customer Privacy commands, queries, internal discovery and planning.
+//! Stable application boundary for Customer Privacy commands, queries, internal discovery, planning and retention adjudication.
 //!
 //! Existing capability-specific crates remain behavior-owning transitional
 //! implementation details. New Customer Privacy behavior enters through this
@@ -10,6 +10,7 @@
 mod approval;
 mod discovery;
 mod planning;
+mod retention;
 mod reads {
     #[cfg(test)]
     use crm_customer_privacy::{ACTION_PLAN_GET_COORDINATE, OWNER_OUTCOMES_LIST_COORDINATE};
@@ -21,12 +22,15 @@ pub use approval::*;
 pub use discovery::*;
 pub use planning::*;
 pub use reads::*;
+pub use retention::*;
 
 use crm_capability_runtime::CapabilityDefinition;
 use crm_customer_privacy_cancel_capability_adapter::capability_definitions as cancel_definitions;
 use crm_customer_privacy_capability_adapter::capability_definitions as case_create_definitions;
 pub use crm_customer_privacy_capability_adapter::{
-    PLACE_PROCESSING_RESTRICTION_CAPABILITY, place_processing_restriction_capability_definition,
+    PLACE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY, PLACE_PROCESSING_RESTRICTION_CAPABILITY,
+    place_customer_data_legal_hold_capability_definition,
+    place_processing_restriction_capability_definition,
 };
 use crm_customer_privacy_query_adapter::query_capability_definitions as case_query_definitions;
 use crm_customer_privacy_subject_capability_adapter::capability_definitions as subject_definitions;
@@ -51,6 +55,14 @@ pub fn mutation_capability_definitions_with_restrictions()
     Ok(definitions)
 }
 
+/// Exact step-six production inventory with both deny directives.
+pub fn mutation_capability_definitions_with_restrictions_and_legal_holds()
+-> Result<Vec<CapabilityDefinition>, SdkError> {
+    let mut definitions = mutation_capability_definitions_with_restrictions()?;
+    definitions.insert(2, place_customer_data_legal_hold_capability_definition()?);
+    Ok(definitions)
+}
+
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = case_query_definitions()?;
     definitions.extend(plan_read_query_capability_definitions()?);
@@ -62,25 +74,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn inventories_preserve_legacy_five_and_enable_exact_step_four_six() {
+    fn inventories_preserve_legacy_and_add_directives_in_exact_order() {
         let legacy = mutation_capability_definitions().unwrap();
         let step_four = mutation_capability_definitions_with_restrictions().unwrap();
+        let step_six = mutation_capability_definitions_with_restrictions_and_legal_holds().unwrap();
         let queries = query_capability_definitions().unwrap();
         assert_eq!(legacy.len(), 5);
         assert_eq!(step_four.len(), 6);
+        assert_eq!(step_six.len(), 7);
         assert_eq!(queries.len(), 4);
+        assert_eq!(
+            step_six[1].capability_id.as_str(),
+            PLACE_PROCESSING_RESTRICTION_CAPABILITY
+        );
+        assert_eq!(
+            step_six[2].capability_id.as_str(),
+            PLACE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY
+        );
         assert!(!legacy.iter().any(|definition| {
-            definition.capability_id.as_str() == PLACE_PROCESSING_RESTRICTION_CAPABILITY
+            matches!(
+                definition.capability_id.as_str(),
+                PLACE_PROCESSING_RESTRICTION_CAPABILITY | PLACE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY
+            )
         }));
-        for capability in [
-            APPROVE_PRIVACY_CASE_CAPABILITY,
-            PLACE_PROCESSING_RESTRICTION_CAPABILITY,
-        ] {
-            assert!(
-                step_four
-                    .iter()
-                    .any(|definition| { definition.capability_id.as_str() == capability })
-            );
-        }
     }
 }

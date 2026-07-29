@@ -2,6 +2,9 @@
 
 //! Governed persisted-payload and snapshot boundary for Customer Privacy.
 
+mod retention;
+pub use retention::*;
+
 use crm_capability_plan_support::{self as support, PersistedPayloadContract};
 use crm_customer_privacy::{
     CustomerDataLegalHold, LEGAL_HOLD_RECORD_TYPE, LEGAL_HOLD_STATE_MAXIMUM_BYTES,

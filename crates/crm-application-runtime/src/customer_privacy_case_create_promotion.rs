@@ -16,8 +16,8 @@ use crm_contact_points_capability_composition::{
 use crm_core_data::{PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner};
 use crm_customer_privacy_production::{
     CustomerPrivacyProductionDependencies, PostgresCustomerPrivacySubjectPolicy,
-    build_contribution_with_restrictions as build_customer_privacy_contribution,
-    mutation_capability_definitions_with_restrictions,
+    build_contribution_with_holds as build_customer_privacy_contribution,
+    mutation_capability_definitions_with_restrictions_and_legal_holds,
 };
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
 use crm_party_reference_composition::PostgresPartyReferenceReader;
@@ -26,10 +26,10 @@ use std::sync::Arc;
 pub use base_runtime::PRODUCTION_REVIEW_POLICY_VERSION;
 
 /// Returns the accepted public mutation inventory plus the exact Customer
-/// Privacy step-four inventory contributed by the owner application package.
+/// Privacy step-six inventory contributed by the owner application package.
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_mutation_definitions()?;
-    definitions.extend(mutation_capability_definitions_with_restrictions()?);
+    definitions.extend(mutation_capability_definitions_with_restrictions_and_legal_holds()?);
     Ok(definitions)
 }
 
@@ -42,9 +42,9 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
 }
 
 /// Extends the accepted production composition through owner-owned boundaries:
-/// Customer Privacy contributes restriction placement, while Contact Points
-/// replaces only `contact-point.create` with a final transaction guard. Generic
-/// dispatch and every unrelated owner route remain unchanged.
+/// Customer Privacy contributes restriction and legal-hold placement, while
+/// Contact Points replaces only `contact-point.create` with a final transaction
+/// guard. Generic dispatch and every unrelated owner route remain unchanged.
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {

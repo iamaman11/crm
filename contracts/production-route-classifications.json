@@ -147,7 +147,7 @@
       "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.restriction.release",
       "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but restriction release remains non-runtime until the shared subject lock, legal-hold/retention precedence and real-process authorization acceptance are complete."
+      "reason": "FORCE RLS persistence is proven, but restriction release remains non-runtime until immutable release evidence and real-process authorization acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
@@ -157,15 +157,9 @@
     },
     {
       "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.legal_hold.place",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but legal-hold placement remains non-runtime until shared subject locking, retention precedence, live composition and real-process acceptance are complete."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
       "id": "customer_privacy.legal_hold.release",
       "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but legal-hold release remains non-runtime until immutable release evidence, retention precedence and real-process authorization acceptance are complete."
+      "reason": "FORCE RLS persistence is proven, but legal-hold release remains non-runtime until immutable release evidence and real-process authorization acceptance are complete."
     },
     {
       "owner_module_id": "crm.customer-privacy",
