@@ -25,18 +25,19 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-5")
+        self.assertEqual(packet["packet_id"], "repository-step-5-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "f7e6dc51cbe09add8025174640fca539b8327a25",
+            "727a244fcf174dc517dec6fdbb6b8997eb205f14",
         )
         self.assertEqual(packet["tracking_issues"], [194])
-        self.assertIn("scripts/repository_navigation.py", packet["allowed_paths"])
-        self.assertIn(".github/workflows/affected-scope.yml", packet["allowed_paths"])
+        self.assertIn("docs/PROJECT_STATUS.md", packet["allowed_paths"])
+        self.assertIn("docs/generated/REPOSITORY_MAP.md", packet["allowed_paths"])
+        self.assertIn("tests/test_repository_navigation.py", packet["allowed_paths"])
         self.assertIn("contracts/**", packet["forbidden_paths"])
         self.assertIn(
-            "Affected Scope CI executes packet-check against the real pull-request diff",
+            "repository step 6 is the only next implementation packet",
             packet["acceptance"],
         )
 
@@ -116,8 +117,8 @@ class RepositoryNavigationTests(unittest.TestCase):
 
     def test_packet_check_reports_affected_scope_without_running_git_or_cargo(self) -> None:
         changed_paths = [
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
-            "scripts/repository_navigation.py",
             "tests/test_repository_navigation.py",
         ]
         affected = {
@@ -136,7 +137,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="f7e6dc51cbe09add8025174640fca539b8327a25",
+                return_value="727a244fcf174dc517dec6fdbb6b8997eb205f14",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
