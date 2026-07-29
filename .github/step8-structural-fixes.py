@@ -41,6 +41,36 @@ text = replace_last(
     "                attempt: Box::new(attempt),\n                attempt_replayed,",
     "application scripted preparation",
 )
+text = replace_once(
+    text,
+    "        OwnerScopeRegistry, PlannedPrivacyAction, PrivacyActionPlan, PrivacyCaseKind,\n        PrivacyRetentionDecisionSet, RetentionDecisionReason, ScopeDiscoveryLineage, ScopeResource,",
+    "        OwnerScopeRegistry, PrivacyActionPlan, PrivacyCaseKind, PrivacyRetentionDecisionSet,\n        ScopeDiscoveryLineage, ScopeResource,",
+    "application test imports",
+)
+text = replace_once(
+    text,
+    "    use std::task::{Context, Poll, Wake, Waker};",
+    "    use std::task::{Context, Poll, Waker};",
+    "application test task imports",
+)
+text = replace_once(
+    text,
+    """    struct NoopWake;
+
+    impl Wake for NoopWake {
+        fn wake(self: Arc<Self>) {}
+    }
+
+""",
+    "",
+    "application manual no-op waker",
+)
+text = replace_once(
+    text,
+    "        let waker = Waker::from(Arc::new(NoopWake));\n        let mut context = Context::from_waker(&waker);",
+    "        let mut context = Context::from_waker(Waker::noop());",
+    "application standard no-op waker",
+)
 application.write_text(text)
 
 postgres = Path("crates/crm-customer-privacy-postgres/src/execution.rs")
