@@ -87,7 +87,7 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 | C — golden owner package and persistence model | **In progress** | Customer Privacy domain/application/postgres/production pilot, transaction-scoped final policy port, authoritative deny-only restriction decision, public restriction/legal-hold placement, legal-hold/mandatory-retention adjudication and first protected-owner integration are accepted; ordinary Customer Privacy capabilities add zero crates | generalize scaffolding, migration ownership and visibility policy; adopt the model for later owners without forced rewrites |
 | D — contribution aggregation | **In progress** | owner-owned contribution pattern proven; first bounded Customer Accounts registration-inventory aggregation accepted through the first-party bundle | migrate remaining owners, expand the first-party bundle and remove additional concrete domain imports from generic runtime |
 | E — affected-scope CI | **In progress** | changed paths, Rust reverse closure, structural preflight, explainable broadening and real-diff packet-check enforcement are accepted | complete contract, migration, process, product, frontend and operations scope selection with safe fallback |
-| F — generic conformance and contract lifecycle | **Foundation only** | native conformance, manifest/route parity and exact-head gates exist | reusable mutation/query/worker suites plus compatibility, deprecation and retirement enforcement |
+| F — generic conformance and contract lifecycle | **In progress** | native conformance, manifest/route parity and exact-head gates exist; reusable cross-owner mutation/query conformance is accepted through PR #235 | reusable worker suites plus compatibility, deprecation and retirement enforcement |
 | G — transitional consolidation | **Not started** | candidates and stop rules are defined | complete at least one behavior-neutral domain-cluster consolidation with measured improvement |
 | H — reproducible environment and navigation | **In progress** | stable docs index, `affected`, `check-affected`, deterministic `explain`, fail-closed `packet-check`, generated active packet and repository map are accepted through PR #228 | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` |
 | I — frontend and operations parity | **Not started as a complete stage** | existing product/process checks remain preserved | domain-oriented frontend proof, accessibility/browser evidence, restore/SLO/performance/security/supply-chain gates |
@@ -108,7 +108,9 @@ PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash me
 
 Repository step 6 is accepted through PR #230 / accepted source `131285e07ad7c36c00e399b65d55591db13f0948` / squash merge `18e6218a7e7495219ac9e8c71cafcda1be64a31b` / 32 of 32 permanent workflows on one unchanged source-authored head. It promotes `customer_privacy.legal_hold.place@1.0.0`, preserves the shared tenant + canonical Party lock, strictly rehydrates bounded FORCE-RLS legal-hold state and evaluates immutable plan items with precedence active legal hold → mandatory retention → approved privacy action. Public placement is activation-gated, live-authorized, tenant-bound, idempotent and atomic; malformed, unavailable, stale, over-bound and cross-tenant evidence fails closed. Clean PostgreSQL, real `crm-api`, rollback/reapply, replay and repeated acceptance are proven. The accepted inventory is 7 mutations / 4 permission-aware queries / 0 workers, with no owner execution, outcome persistence, export assembly, destructive action, dependency, `Cargo.lock`, manifest or workspace-package change.
 
-The next permitted implementation packet is repository step 7: reusable generic mutation and query conformance.
+Repository step 7 is accepted through PR #235 / accepted source `7a0cd34dc17085ecd1a8ee233171c0463d91ceba` / squash merge `43d194231fbce1cee28c44e89726929e450f3d18` / 17 of 17 applicable permanent workflows on one unchanged source-authored head. One business-neutral mutation/query conformance support boundary is reused by representative `customer_enrichment.request.create@1.0.0` and permission-aware paginated `customer_privacy.case.list@1.0.0` real-process acceptance. Mutation conformance proves activation, malformed input, tenant mismatch, live authorization denial, exact replay and incompatible replay conflict, safe error classification, rejected-call no-side-effects and atomic record/relationship/event/audit/idempotency/business evidence. Query conformance proves activation, live authorization denial, tenant mismatch and cross-tenant concealment, malformed cursor rejection, bounded keyset pagination, stable safe errors and zero query-side writes. Owner-specific fixture construction, response decoding and domain semantics remain outside the generic suite. Public coordinates and inventory, generic runtime algorithms, crates, dependencies, manifests, `Cargo.lock`, the 113-package workspace, migrations and workers are unchanged.
+
+The next permitted implementation packet is repository step 8: replay-safe resumable Customer Privacy owner execution and crash-window recovery.
 
 ### 2.4 Single repository execution order
 
@@ -125,7 +127,7 @@ Execution rules:
 7. Feature behavior, architecture governance, contribution refactoring, crate consolidation and evidence synchronization remain separate pull requests even when adjacent in the sequence.
 8. Stage labels A–I describe completion accounting. They do not authorize work outside this master order.
 
-The inserted repository step 4 prerequisite is complete through PR #224, repository step 4 is complete through PR #226, repository step 5 is complete through PR #228, the inserted lockfile-preservation prerequisite before repository step 6 is complete through PR #232, and repository step 6 is complete through PR #230. None changes the master numbering.
+The inserted repository step 4 prerequisite is complete through PR #224, repository step 4 is complete through PR #226, repository step 5 is complete through PR #228, the inserted lockfile-preservation prerequisite before repository step 6 is complete through PR #232, repository step 6 is complete through PR #230, and repository step 7 is complete through PR #235. None changes the master numbering.
 
 Current master sequence:
 
@@ -135,8 +137,8 @@ Current master sequence:
 4. immediate deny-only Customer Privacy processing restrictions using final subject locks — **Complete through PR #226**;
 5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map — **Complete through PR #228**;
 6. Customer Privacy legal-hold and mandatory-retention precedence — **Complete through PR #230**;
-7. reusable generic mutation and query conformance suites adopted by representative owners — **Next**;
-8. replay-safe resumable Customer Privacy owner execution and crash-window recovery;
+7. reusable generic mutation and query conformance suites adopted by representative owners — **Complete through PR #235**;
+8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — **Next**;
 9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks;
 10. governed Customer Privacy access/export assembly;
 11. owner-specific deletion, anonymization and supported crypto-shred execution;
@@ -474,7 +476,9 @@ Accepted through the current checkpoint:
 - authoritative deny-only restriction placement and final owner guard accepted through PR #226, with no allow-all fallback;
 - public legal-hold placement and authoritative legal-hold-over-mandatory-retention-over-approved-action adjudication accepted through PR #230.
 
-The next permitted repository packet is **repository step 7: reusable generic mutation and query conformance**. It must adopt reusable activation, authorization, tenant, idempotency/replay, safe-error, pagination and atomic-evidence guarantees for representative mutation/query owners without changing owner-specific semantics, public inventory, workers, dependencies or crate packaging.
+Repository step 7 is accepted through PR #235 / accepted source `7a0cd34dc17085ecd1a8ee233171c0463d91ceba` / squash merge `43d194231fbce1cee28c44e89726929e450f3d18` / 17 of 17 applicable permanent workflows on one unchanged source-authored head. One business-neutral mutation/query conformance support boundary is reused by representative `customer_enrichment.request.create@1.0.0` and permission-aware paginated `customer_privacy.case.list@1.0.0` real-process acceptance. Mutation conformance proves activation, malformed input, tenant mismatch, live authorization denial, exact replay and incompatible replay conflict, safe error classification, rejected-call no-side-effects and atomic record/relationship/event/audit/idempotency/business evidence. Query conformance proves activation, live authorization denial, tenant mismatch and cross-tenant concealment, malformed cursor rejection, bounded keyset pagination, stable safe errors and zero query-side writes. Owner-specific fixture construction, response decoding and domain semantics remain outside the generic suite. Public coordinates and inventory, generic runtime algorithms, crates, dependencies, manifests, `Cargo.lock`, the 113-package workspace, migrations and workers are unchanged.
+
+The next permitted repository packet is **repository step 8: replay-safe resumable Customer Privacy owner execution and crash-window recovery**. No repository step 9 or later work may begin before step 8 has unchanged exact-head acceptance and evidence synchronization.
 
 Issue #126 supplies product semantics. Issue #194 supplies architecture acceptance and the repository order. Their scopes remain separate, and section 2.4 determines exactly which packet may start.
 

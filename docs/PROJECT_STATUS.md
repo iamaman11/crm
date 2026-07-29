@@ -114,13 +114,17 @@ PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash me
 
 Repository step 6 is accepted through PR #230 / accepted source `131285e07ad7c36c00e399b65d55591db13f0948` / squash merge `18e6218a7e7495219ac9e8c71cafcda1be64a31b` / 32 of 32 permanent workflows on one unchanged source-authored head. It promotes `customer_privacy.legal_hold.place@1.0.0`, preserves the shared tenant + canonical Party lock, strictly rehydrates bounded FORCE-RLS legal-hold state and evaluates immutable plan items with precedence active legal hold → mandatory retention → approved privacy action. Public placement is activation-gated, live-authorized, tenant-bound, idempotent and atomic; malformed, unavailable, stale, over-bound and cross-tenant evidence fails closed. Clean PostgreSQL, real `crm-api`, rollback/reapply, replay and repeated acceptance are proven. The accepted inventory is 7 mutations / 4 permission-aware queries / 0 workers, with no owner execution, outcome persistence, export assembly, destructive action, dependency, `Cargo.lock`, manifest or workspace-package change.
 
+## Accepted reusable generic mutation/query conformance
+
+Repository step 7 is accepted through PR #235 / accepted source `7a0cd34dc17085ecd1a8ee233171c0463d91ceba` / squash merge `43d194231fbce1cee28c44e89726929e450f3d18` / 17 of 17 applicable permanent workflows on one unchanged source-authored head. One business-neutral mutation/query conformance support boundary is reused by representative `customer_enrichment.request.create@1.0.0` and permission-aware paginated `customer_privacy.case.list@1.0.0` real-process acceptance. Mutation conformance proves activation, malformed input, tenant mismatch, live authorization denial, exact replay and incompatible replay conflict, safe error classification, rejected-call no-side-effects and atomic record/relationship/event/audit/idempotency/business evidence. Query conformance proves activation, live authorization denial, tenant mismatch and cross-tenant concealment, malformed cursor rejection, bounded keyset pagination, stable safe errors and zero query-side writes. Owner-specific fixture construction, response decoding and domain semantics remain outside the generic suite. Public coordinates and inventory, generic runtime algorithms, crates, dependencies, manifests, `Cargo.lock`, the 113-package workspace, migrations and workers are unchanged.
+
 ## Next permitted repository packet
 
-Repository step 7 is reusable generic mutation and query conformance.
+Repository step 8 is replay-safe resumable Customer Privacy owner execution and crash-window recovery.
 
 ## Following permitted repository packet
 
-Repository step 8 is replay-safe resumable Customer Privacy owner execution and crash-window recovery.
+Repository step 9 is affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks.
 
 ## Architecture and developer-experience 10/10 checkpoint
 
@@ -132,7 +136,8 @@ Issue #194 remains open.
 - Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222, but the generic runtime still imports many other concrete owner adapters and remaining owners have not migrated.
 - Stage E has a working foundation but is incomplete: real-diff packet validation and Rust broadening are accepted, while database/process/product/frontend/operations selection remains incomplete.
 - Stage H is in progress: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands remain repository step 15.
-- Stages F, G and I remain foundation-only or unstarted; generic conformance/lifecycle, measured consolidation, frontend and operations parity are not complete.
+- Stage F is in progress: reusable generic mutation/query conformance is accepted through PR #235; generic worker conformance and contract lifecycle enforcement remain open.
+- Stages G and I remain unstarted; measured consolidation, frontend and operations parity are not complete.
 
 ## Repository continuation order
 
@@ -147,7 +152,8 @@ Only one implementation packet may be active. The current order begins:
 -> 5. explain / packet-check / generated active packet and repository map — complete through PR #228
 -> 5a. lockfile-preserving Rust workflow prerequisite — complete through PR #232
 -> 6. legal-hold and mandatory-retention precedence — complete through PR #230
--> 7. reusable generic mutation/query conformance — next
+-> 7. reusable generic mutation/query conformance — complete through PR #235
+-> 8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — next
 ```
 
 The complete binding order through Phase 8B entry is `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. No later item may start while an earlier item is unfinished.

@@ -56,11 +56,12 @@ Issue #194 remains **Open**.
 - Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222**.
 - Stage E — **In progress**: real-diff packet-check and broadened Rust closure are accepted; database/process/product/frontend/operations selection remains open.
 - Stage H — **In progress**: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands remain open.
-- Stages F, G and I — conformance/lifecycle, measured consolidation, frontend and operations parity remain open.
+- Stage F — **In progress**: reusable generic mutation/query conformance is accepted through PR #235; worker conformance and contract lifecycle enforcement remain open.
+- Stages G and I — measured consolidation, frontend and operations parity remain open.
 
-Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232 and PR #230. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232, PR #230 and PR #235. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
-The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–6 are complete through PR #218, PR #220, PR #222, PR #226, PR #228 and PR #230; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 7 — reusable generic mutation and query conformance — is the current next packet.
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–7 are complete through PR #218, PR #220, PR #222, PR #226, PR #228, PR #230 and PR #235; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 8 — replay-safe resumable Customer Privacy owner execution and crash-window recovery — is the current next packet.
 
 ## 4. Phase 8A completed foundation
 
@@ -162,6 +163,10 @@ PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash me
 
 Repository step 6 is accepted through PR #230 / accepted source `131285e07ad7c36c00e399b65d55591db13f0948` / squash merge `18e6218a7e7495219ac9e8c71cafcda1be64a31b` / 32 of 32 permanent workflows on one unchanged source-authored head. It promotes `customer_privacy.legal_hold.place@1.0.0`, preserves the shared tenant + canonical Party lock, strictly rehydrates bounded FORCE-RLS legal-hold state and evaluates immutable plan items with precedence active legal hold → mandatory retention → approved privacy action. Public placement is activation-gated, live-authorized, tenant-bound, idempotent and atomic; malformed, unavailable, stale, over-bound and cross-tenant evidence fails closed. Clean PostgreSQL, real `crm-api`, rollback/reapply, replay and repeated acceptance are proven. The accepted inventory is 7 mutations / 4 permission-aware queries / 0 workers, with no owner execution, outcome persistence, export assembly, destructive action, dependency, `Cargo.lock`, manifest or workspace-package change.
 
+### 5.12 Accepted reusable generic mutation/query conformance
+
+Repository step 7 is accepted through PR #235 / accepted source `7a0cd34dc17085ecd1a8ee233171c0463d91ceba` / squash merge `43d194231fbce1cee28c44e89726929e450f3d18` / 17 of 17 applicable permanent workflows on one unchanged source-authored head. One business-neutral mutation/query conformance support boundary is reused by representative `customer_enrichment.request.create@1.0.0` and permission-aware paginated `customer_privacy.case.list@1.0.0` real-process acceptance. Mutation conformance proves activation, malformed input, tenant mismatch, live authorization denial, exact replay and incompatible replay conflict, safe error classification, rejected-call no-side-effects and atomic record/relationship/event/audit/idempotency/business evidence. Query conformance proves activation, live authorization denial, tenant mismatch and cross-tenant concealment, malformed cursor rejection, bounded keyset pagination, stable safe errors and zero query-side writes. Owner-specific fixture construction, response decoding and domain semantics remain outside the generic suite. Public coordinates and inventory, generic runtime algorithms, crates, dependencies, manifests, `Cargo.lock`, the 113-package workspace, migrations and workers are unchanged.
+
 ## 6. Binding active sequence
 
 The only permitted current sequence is:
@@ -174,11 +179,12 @@ The only permitted current sequence is:
 5. **Repository step 5 — `explain`, `packet-check` and generated navigation — Complete through PR #228.**
 5a. **Inserted lockfile-preservation prerequisite before repository step 6 — Complete through PR #232.**
 6. **Repository step 6 — legal-hold and mandatory-retention precedence — Complete through PR #230.**
-7. **Repository step 7 — reusable generic mutation and query conformance — Next.**
-8–19. **Repository steps 8–19 — continue exactly as numbered in the architecture plan.**
+7. **Repository step 7 — reusable generic mutation and query conformance — Complete through PR #235.**
+8. **Repository step 8 — replay-safe resumable Customer Privacy owner execution and crash-window recovery — Next.**
+9–19. **Repository steps 9–19 — continue exactly as numbered in the architecture plan.**
 20. **Repository step 20 — first Phase 8B packet.**
 
-The inserted prerequisites did not renumber the master sequence. Repository step 7 is now the next permitted architecture/conformance packet.
+The inserted prerequisites did not renumber the master sequence. Repository step 8 is now the only next permitted implementation packet.
 
 ## 7. Phase 8B and later expert domains
 
