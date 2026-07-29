@@ -88,7 +88,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "f76fbefd375f90094c4eb2512ede0d7c9bcaee764ef59f5b99c33e80e01bf58d  .github/step8-structural-fixes.py" | sha256sum --check
+          echo "81229065890068d5d9eafde0284fc5f23ee198c83b325a78790c38d69cba4a4e  .github/step8-structural-fixes.py" | sha256sum --check
           python .github/step8-structural-fixes.py
           cargo fmt --all
       - name: Verify format, compile and Clippy
