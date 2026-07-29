@@ -493,10 +493,12 @@ fn validate_safe_failure(
     if let Some(code) = safe_failure_code
         && (code.is_empty()
             || code.len() > MAX_SAFE_CODE_BYTES
-            || !code.bytes().all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_'))
-        {
-            return Err(execution_invalid("safe failure code is not canonical"));
-        }
+            || !code
+                .bytes()
+                .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_'))
+    {
+        return Err(execution_invalid("safe failure code is not canonical"));
+    }
     Ok(())
 }
 
@@ -726,13 +728,203 @@ fn execution_invalid(reference: impl std::fmt::Display) -> SdkError {
 }
 
 #[cfg(test)]
-mod tests {
+mod execution_tests {
     use super::*;
+
+    fn decision_item(
+        owner_module_id: &str,
+        final_action: PlannedPrivacyAction,
+        reason: RetentionDecisionReason,
+    ) -> PrivacyRetentionDecisionItem {
+        let mut item = PrivacyRetentionDecisionItem {
+            sequence: 1,
+            owner_module_id: ModuleId::try_new(owner_module_id).unwrap(),
+            resource_type: "party.profile".to_owned(),
+            resource_id: RecordId::try_new("party-a").unwrap(),
+            resource_version: 7,
+            data_class: DataClass::Personal,
+            evidence_class: EvidenceClass::DestroyableSubjectData,
+            retention_policy_id: RetentionPolicyId::try_new("privacy-policy").unwrap(),
+            approved_action: final_action,
+            final_action,
+            reason,
+            legal_hold: None,
+            digest: [0; 32],
+        };
+        item.digest = retention_item_digest(&item);
+        item
+    }
+
+    fn attempt(
+        generation: u32,
+        planned_at_unix_nanos: i64,
+    ) -> PrivacyOwnerActionAttempt {
+        PrivacyOwnerActionAttempt::build(
+            TenantId::try_new("tenant-a").unwrap(),
+            RecordId::try_new("privacy-case-a").unwrap(),
+            RecordId::try_new("action-plan-a").unwrap(),
+            [11; 32],
+            RecordId::try_new("retention-decision-a").unwrap(),
+            [17; 32],
+            &decision_item(
+                "crm.parties",
+                PlannedPrivacyAction::Delete,
+                RetentionDecisionReason::ApprovedPrivacyAction,
+            ),
+            generation,
+            planned_at_unix_nanos,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn descriptors_and_coordinates_are_stable() {
-        assert_eq!(OWNER_ACTION_DISPATCH_COORDINATE, "customer_privacy.owner_action.dispatch@1.0.0");
-        assert_eq!(OWNER_OUTCOME_RECORD_COORDINATE, "customer_privacy.owner_outcome.record@1.0.0");
+        assert_eq!(
+            OWNER_ACTION_DISPATCH_COORDINATE,
+            "customer_privacy.owner_action.dispatch@1.0.0"
+        );
+        assert_eq!(
+            OWNER_OUTCOME_RECORD_COORDINATE,
+            "customer_privacy.owner_outcome.record@1.0.0"
+        );
         assert_ne!(owner_action_attempt_state_descriptor_hash(), [0; 32]);
         assert_ne!(owner_action_outcome_state_descriptor_hash(), [0; 32]);
+    }
+
+    #[test]
+    fn attempt_identity_is_deterministic_and_target_key_survives_retry_generation() {
+        let first = attempt(0, 100);
+        let exact_replay = attempt(0, 100);
+        let retry = attempt(1, 200);
+
+        assert_eq!(first, exact_replay);
+        assert_ne!(first.attempt_id(), retry.attempt_id());
+        assert_ne!(first.digest(), retry.digest());
+        assert_eq!(first.target_idempotency_key(), retry.target_idempotency_key());
+        assert_eq!(first.owner_capability_id(), "parties.privacy.action.apply");
+        assert_eq!(first.owner_capability_version(), "1.0.0");
+    }
+
+    #[test]
+    fn attempt_and_outcome_round_trip_strict_canonical_state() {
+        let attempt = attempt(0, 100);
+        let attempt_bytes = encode_owner_action_attempt_state(&attempt).unwrap();
+        assert_eq!(
+            decode_owner_action_attempt_state(&attempt_bytes).unwrap(),
+            attempt
+        );
+
+        let outcome = PrivacyOwnerActionOutcome::record(
+            &attempt,
+            PrivacyOwnerOutcomeStatus::Succeeded,
+            None,
+            101,
+        )
+        .unwrap();
+        let outcome_bytes = encode_owner_action_outcome_state(&outcome).unwrap();
+        assert_eq!(
+            decode_owner_action_outcome_state(&outcome_bytes).unwrap(),
+            outcome
+        );
+    }
+
+    #[test]
+    fn tampered_or_unknown_execution_evidence_is_rejected() {
+        let attempt = attempt(0, 100);
+        let bytes = encode_owner_action_attempt_state(&attempt).unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        value["attempt_digest"] = serde_json::Value::String("00".repeat(32));
+        let tampered = serde_json::to_vec(&value).unwrap();
+        assert!(decode_owner_action_attempt_state(&tampered).is_err());
+
+        let mut unknown: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        unknown["owner_private_payload"] = serde_json::json!({"secret": true});
+        let unknown = serde_json::to_vec(&unknown).unwrap();
+        assert!(decode_owner_action_attempt_state(&unknown).is_err());
+    }
+
+    #[test]
+    fn execution_evidence_bounds_and_failure_codes_fail_closed() {
+        let over_bound = vec![b'x'; OWNER_ACTION_ATTEMPT_STATE_MAXIMUM_BYTES as usize + 1];
+        assert!(decode_owner_action_attempt_state(&over_bound).is_err());
+
+        let attempt = attempt(0, 100);
+        assert!(
+            PrivacyOwnerActionOutcome::record(
+                &attempt,
+                PrivacyOwnerOutcomeStatus::Succeeded,
+                Some("UNEXPECTED".to_owned()),
+                101,
+            )
+            .is_err()
+        );
+        assert!(
+            PrivacyOwnerActionOutcome::record(
+                &attempt,
+                PrivacyOwnerOutcomeStatus::FailedRetryable,
+                None,
+                101,
+            )
+            .is_err()
+        );
+        assert!(
+            PrivacyOwnerActionOutcome::record(
+                &attempt,
+                PrivacyOwnerOutcomeStatus::FailedRetryable,
+                Some("not_canonical".to_owned()),
+                101,
+            )
+            .is_err()
+        );
+        assert!(
+            PrivacyOwnerActionOutcome::record(
+                &attempt,
+                PrivacyOwnerOutcomeStatus::FailedRetryable,
+                Some("OWNER_TEMPORARILY_UNAVAILABLE".to_owned()),
+                101,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn owner_coordinates_and_coordinator_only_outcomes_are_frozen() {
+        let unsupported = PrivacyOwnerActionAttempt::build(
+            TenantId::try_new("tenant-a").unwrap(),
+            RecordId::try_new("privacy-case-a").unwrap(),
+            RecordId::try_new("action-plan-a").unwrap(),
+            [11; 32],
+            RecordId::try_new("retention-decision-a").unwrap(),
+            [17; 32],
+            &decision_item(
+                "crm.unknown-owner",
+                PlannedPrivacyAction::Delete,
+                RetentionDecisionReason::ApprovedPrivacyAction,
+            ),
+            0,
+            100,
+        );
+        assert!(unsupported.is_err());
+
+        let retained = PrivacyOwnerActionAttempt::build(
+            TenantId::try_new("tenant-a").unwrap(),
+            RecordId::try_new("privacy-case-a").unwrap(),
+            RecordId::try_new("action-plan-a").unwrap(),
+            [11; 32],
+            RecordId::try_new("retention-decision-a").unwrap(),
+            [17; 32],
+            &decision_item(
+                "crm.parties",
+                PlannedPrivacyAction::Retain,
+                RetentionDecisionReason::MandatoryRetention,
+            ),
+            0,
+            100,
+        )
+        .unwrap();
+        assert_eq!(
+            retained.coordinator_outcome_status(),
+            Some(PrivacyOwnerOutcomeStatus::BlockedByRetention)
+        );
     }
 }
