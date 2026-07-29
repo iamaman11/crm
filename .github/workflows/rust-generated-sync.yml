@@ -22,6 +22,7 @@ on:
       - "scripts/generate_repository_navigation.py"
       - "scripts/repository_navigation.py"
       - "scripts/repo.py"
+      - "scripts/synchronize_repository_step_5_evidence.py"
       - "scripts/validate_module_manifests.py"
       - "tests/test_repository_navigation.py"
       - "contracts/module-contract-bindings.json"
@@ -62,6 +63,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: rustfmt, clippy
+      - name: Synchronize accepted repository step 5 evidence
+        run: python scripts/synchronize_repository_step_5_evidence.py
       - name: Synchronize lockfile and canonical formatting
         run: |
           cargo generate-lockfile
@@ -72,17 +75,17 @@ jobs:
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Commit generated Rust, contract and navigation artifacts when needed
+      - name: Commit generated Rust, contract, navigation and evidence artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if [ -z "$(git status --porcelain -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
-            echo "Rust, contract and repository navigation artifacts are already synchronized."
+          if [ -z "$(git status --porcelain -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md docs/IMPLEMENTATION_ROADMAP.md docs/PHASE8_DELIVERY_PLAN.md docs/PROJECT_STATUS.md repository-packet.json tests/test_architecture_documentation_consistency.py)" ]; then
+            echo "Rust, contract, repository navigation and evidence artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
-            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
+            git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md docs/IMPLEMENTATION_ROADMAP.md docs/PHASE8_DELIVERY_PLAN.md docs/PROJECT_STATUS.md repository-packet.json tests/test_architecture_documentation_consistency.py
+            git commit -m "Synchronize accepted repository step 5 evidence"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
