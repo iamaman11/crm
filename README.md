@@ -70,7 +70,7 @@ Use exact machine-generated navigation instead of repository archaeology:
 python scripts/repo.py explain crm.customer-privacy
 python scripts/repo.py explain customer_privacy.case.submit@1.0.0
 python scripts/repo.py packet-check --base origin/main
-python scripts/repo.py navigation --check
+python scripts/generate_repository_navigation.py --check
 ```
 
 - [`docs/ACTIVE_PACKET.md`](docs/ACTIVE_PACKET.md) describes the active bounded packet from `repository-packet.json`.
@@ -92,7 +92,7 @@ python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
 python scripts/repo.py explain <module-or-coordinate>
 python scripts/repo.py packet-check --base origin/main
-python scripts/repo.py navigation --check
+python scripts/generate_repository_navigation.py --check
 python scripts/repo.py format --check
 python scripts/repo.py test --package <package>
 python scripts/repo.py test-all
