@@ -10,6 +10,7 @@
   "tracking_issues": [194],
   "objective": "Provide deterministic repository explanation, packet validation and generated navigation without changing product runtime behavior.",
   "allowed_paths": [
+    ".github/workflows/affected-scope.yml",
     ".github/workflows/rust-generated-sync.yml",
     "AGENTS.md",
     "README.md",
@@ -50,6 +51,7 @@
   "acceptance": [
     "module and capability explanations are deterministic and fail closed for unknown targets",
     "packet-check validates baseline, changed paths, affected closure, workflow selection and generated freshness",
+    "Affected Scope CI executes packet-check against the real pull-request diff",
     "generated navigation uses deterministic ordering and source digests",
     "CI rejects stale generated navigation",
     "no runtime route, contract, persistence, migration, dependency or product behavior changes"
