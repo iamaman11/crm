@@ -7,6 +7,7 @@ on:
       - ".github/step8-reads-source.b64"
       - ".github/step8-pg-test-source.b64"
       - ".github/step8-structural-fixes.py"
+      - ".github/step8-runtime-evidence-fixes.py"
       - ".github/workflows/temporary-step8-postgres-verify.yml"
       - "crates/crm-customer-privacy-production/src/owner_execution.rs"
       - "crates/crm-customer-privacy-application/**"
@@ -84,12 +85,14 @@ jobs:
           test "$(wc -c < /tmp/step8-pg-test.rs.gz)" -eq 5622
           echo "ae73505cdde00bcf508cf0cdcd2befede6e29b7d6c82941c91f5cd11ff7f3e29  /tmp/step8-pg-test.rs.gz" | sha256sum --check
           gzip --decompress --stdout /tmp/step8-pg-test.rs.gz > crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
-      - name: Apply reviewed structural lint corrections
+      - name: Apply reviewed structural and transaction-evidence corrections
         shell: bash
         run: |
           set -euo pipefail
           echo "ca9bc33f6bcbb968480c22b5a8ff70582c1e424535f72c056b765983e1230fd2  .github/step8-structural-fixes.py" | sha256sum --check
+          echo "d604a9cfbbcca8f643f27a8010ed3206d72ad17c697efa09429cbc0e263a2499  .github/step8-runtime-evidence-fixes.py" | sha256sum --check
           python .github/step8-structural-fixes.py
+          python .github/step8-runtime-evidence-fixes.py
           cargo fmt --all
       - name: Verify format, compile and Clippy
         shell: bash
