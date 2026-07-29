@@ -1,0 +1,165 @@
+name: Generic Mutation Query Conformance CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-customer-enrichment-*/**"
+      - "crates/crm-customer-privacy-*/**"
+      - "crates/crm-query-runtime/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0016_customer_enrichment_worker.sql"
+      - "database/tests/0017_customer_enrichment_review.sql"
+      - "database/tests/0019_customer_enrichment_consent_policy.sql"
+      - "database/tests/0020_customer_enrichment_crm_api_process.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - "database/tests/0022_customer_privacy_submit_fixture.sql"
+      - "database/tests/0023_customer_privacy_subject_verify_fixture.sql"
+      - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
+      - "services/crm-api/**"
+      - "tests/test_generic_conformance_adoption.py"
+      - ".github/workflows/generic-conformance.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-capability-ingress/**"
+      - "crates/crm-capability-runtime/**"
+      - "crates/crm-customer-enrichment-*/**"
+      - "crates/crm-customer-privacy-*/**"
+      - "crates/crm-query-runtime/**"
+      - "database/migrations/**"
+      - "database/tests/0001_platform_foundation.sql"
+      - "database/tests/0016_customer_enrichment_worker.sql"
+      - "database/tests/0017_customer_enrichment_review.sql"
+      - "database/tests/0019_customer_enrichment_consent_policy.sql"
+      - "database/tests/0020_customer_enrichment_crm_api_process.sql"
+      - "database/tests/0020_customer_privacy_persistence_fixture.sql"
+      - "database/tests/0022_customer_privacy_submit_fixture.sql"
+      - "database/tests/0023_customer_privacy_subject_verify_fixture.sql"
+      - "scripts/prepare_customer_enrichment_worker_process_database.sh"
+      - "scripts/prepare_customer_enrichment_consent_policy_database.sh"
+      - "services/crm-api/**"
+      - "tests/test_generic_conformance_adoption.py"
+      - ".github/workflows/generic-conformance.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  generic-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_generic_conformance_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5437:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_generic_conformance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5437
+      PGDATABASE: crm_generic_conformance_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5437/crm_generic_conformance_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5437/crm_generic_conformance_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Prepare fresh Customer Enrichment process database
+        run: bash scripts/prepare_customer_enrichment_consent_policy_database.sh
+      - name: Register non-conflicting Customer Privacy representative fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
+          psql --set ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO crm.capability_registry (
+            capability_id,
+            capability_version,
+            owner_module_id,
+            owner_module_version,
+            service_name,
+            method_name,
+            input_descriptor_hash,
+            output_descriptor_hash,
+            risk_level,
+            idempotency_required,
+            audit_required,
+            approval_required,
+            ai_callable,
+            marketplace_callable,
+            bulk_allowed,
+            export_allowed,
+            data_classes_touched
+          )
+          VALUES (
+            'customer_privacy.case.subject.verify',
+            '1.0.0',
+            'crm.customer-privacy',
+            '0.2.0',
+            'crm.customer_privacy.v1.CustomerPrivacyCaseService',
+            'VerifyPrivacyCaseSubject',
+            decode(repeat('76', 32), 'hex'),
+            decode(repeat('77', 32), 'hex'),
+            'critical',
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            ARRAY['personal', 'confidential']::text[]
+          )
+          ON CONFLICT (capability_id, capability_version) DO NOTHING;
+          SQL
+      - name: Verify permanent adoption guard
+        run: python -m unittest tests.test_generic_conformance_adoption
+      - name: Verify representative mutation and query conformance
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p crm-api --test generic_conformance_process_e2e -- --nocapture \
+            2>&1 | tee database/generic-conformance-process.log
+      - name: Upload generic conformance diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: generic-conformance-diagnostics
+          path: |
+            services/crm-api/tests/generic_conformance_process_e2e.rs
+            services/crm-api/tests/support/generic_conformance.rs
+            database/generic-conformance-process.log
+          if-no-files-found: error
+          retention-days: 7
