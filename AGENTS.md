@@ -181,7 +181,7 @@ Implemented navigation:
 python scripts/repo.py explain crm.customer-privacy
 python scripts/repo.py explain customer_privacy.case.submit@1.0.0
 python scripts/repo.py packet-check --base origin/main
-python scripts/repo.py navigation --check
+python scripts/generate_repository_navigation.py --check
 ```
 
 Use `docs/generated/REPOSITORY_MAP.md` for deterministic workspace/module/route inventory. Unknown or ambiguous explain targets must fail closed.
