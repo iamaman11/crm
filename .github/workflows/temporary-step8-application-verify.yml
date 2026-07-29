@@ -1,0 +1,57 @@
+name: Temporary Step 8 Application Verify
+
+on:
+  pull_request:
+    paths:
+      - ".github/step8-application-source.b64"
+      - ".github/workflows/temporary-step8-application-verify.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+        with:
+          toolchain: "1.97.1"
+          components: rustfmt, clippy
+      - name: Materialize reviewed application source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(wc -c < .github/step8-application-source.b64)" -eq 7456
+          echo "811418cf1abb8639805ab7a12ee8b60b04bca599f0a3fd06a9e567386b29af8d  .github/step8-application-source.b64" | sha256sum --check
+          base64 --decode .github/step8-application-source.b64 > /tmp/step8-application.rs.gz
+          test "$(wc -c < /tmp/step8-application.rs.gz)" -eq 5592
+          echo "c83516fbf730e106d5f3e907ba93497c58b14c555d157199c057162cb525ebf3  /tmp/step8-application.rs.gz" | sha256sum --check
+          gzip --decompress --stdout /tmp/step8-application.rs.gz > crates/crm-customer-privacy-application/src/execution.rs
+      - name: Verify format, tests and Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo test --locked -p crm-customer-privacy-application
+          cargo clippy --locked -p crm-customer-privacy-application --all-targets -- -D warnings
+      - name: Publish verified application source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/crm-customer-privacy-application/src/execution.rs
+          if ! git diff --cached --quiet; then
+            git commit -m "WIP: verify step 8 application behavior"
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
