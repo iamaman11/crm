@@ -1,0 +1,120 @@
+name: Temporary Step 8 Compile
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/temporary-step8-compile.yml"
+      - ".github/step8-patch.part-*"
+      - ".github/step8-execution-fixed.part-*"
+      - ".github/step8-pg-execution-fixed.part-*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
+        with:
+          toolchain: "1.97.1"
+          components: rustfmt
+      - name: Reconstruct exact reviewed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .github/step8-patch.part-00 \
+            .github/step8-patch.part-01 \
+            .github/step8-patch.part-02 \
+            .github/step8-patch.part-03 \
+            .github/step8-patch.part-04-0 \
+            .github/step8-patch.part-04-1 \
+            .github/step8-patch.part-04-2 \
+            .github/step8-patch.part-05 \
+            > /tmp/step8-patch.b64
+          test "$(wc -c < /tmp/step8-patch.b64)" -eq 46532
+          echo "5cd05e87c99654ed48ab3aae2810ba58350dcecac446ebd6a9cbde17645c2e6e  /tmp/step8-patch.b64" | sha256sum --check
+          base64 --decode /tmp/step8-patch.b64 > /tmp/step8-patch.tar.gz
+          test "$(wc -c < /tmp/step8-patch.tar.gz)" -eq 34898
+          echo "fe9ba785d07cfa49e004b12a34beb679944a989a6de9bdd011d6e601ade018e9  /tmp/step8-patch.tar.gz" | sha256sum --check
+          tar --extract --gzip --file /tmp/step8-patch.tar.gz
+
+          cat .github/step8-execution-fixed.part-{0..2} > /tmp/execution.b64
+          test "$(wc -c < /tmp/execution.b64)" -eq 7232
+          echo "5ff3abfca5d8d822fd5ad73c9b957c6ec4ae2679fd8290761d1bbc86cab096bd  /tmp/execution.b64" | sha256sum --check
+          base64 --decode /tmp/execution.b64 > /tmp/execution.rs.gz
+          test "$(wc -c < /tmp/execution.rs.gz)" -eq 5424
+          echo "1589d8eeeeb3c9bc713e4f69939e96ba3599feb6989600e1d1e7537c74edf15c  /tmp/execution.rs.gz" | sha256sum --check
+          gzip --decompress --stdout /tmp/execution.rs.gz > modules/crm-customer-privacy/src/execution.rs
+
+          cat .github/step8-pg-execution-fixed.part-{0..4} > /tmp/pg-execution.b64
+          test "$(wc -c < /tmp/pg-execution.b64)" -eq 12228
+          echo "c7178934a3699e9dfb1fe83237d7461d69f805179dce5e306566f7af389bd045  /tmp/pg-execution.b64" | sha256sum --check
+          base64 --decode /tmp/pg-execution.b64 > /tmp/pg-execution.rs.gz
+          test "$(wc -c < /tmp/pg-execution.rs.gz)" -eq 9171
+          echo "dface5c5158489d12c7914f5bae7e5761a84cec0e74a360dca95dc9c2b13528b  /tmp/pg-execution.rs.gz" | sha256sum --check
+          gzip --decompress --stdout /tmp/pg-execution.rs.gz > crates/crm-customer-privacy-postgres/src/execution.rs
+      - name: Canonical formatting
+        run: cargo fmt --all
+      - name: Compile step 8 packages
+        run: >-
+          cargo check --locked
+          -p crm-customer-privacy
+          -p crm-customer-privacy-application
+          -p crm-customer-privacy-postgres
+          -p crm-customer-privacy-production
+      - name: Upload formatted step 8 source
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: step8-formatted-source
+          path: |
+            modules/crm-customer-privacy/src/execution.rs
+            modules/crm-customer-privacy/src/lib.rs
+            crates/crm-customer-privacy-application/src/execution.rs
+            crates/crm-customer-privacy-application/src/lib.rs
+            crates/crm-customer-privacy-application/src/reads.rs
+            crates/crm-customer-privacy-postgres/src/execution.rs
+            crates/crm-customer-privacy-postgres/src/lib.rs
+            crates/crm-customer-privacy-postgres/src/reads.rs
+            crates/crm-customer-privacy-production/src/lib.rs
+            crates/crm-customer-privacy-production/src/root.rs
+            crates/crm-customer-privacy-production/src/owner_execution.rs
+            database/migrations/0105_customer_privacy_owner_execution.up.sql
+            database/migrations/0105_customer_privacy_owner_execution.down.sql
+          if-no-files-found: error
+          retention-days: 1
+      - name: Publish compile-clean source to draft branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            modules/crm-customer-privacy/src/execution.rs \
+            modules/crm-customer-privacy/src/lib.rs \
+            crates/crm-customer-privacy-application/src/execution.rs \
+            crates/crm-customer-privacy-application/src/lib.rs \
+            crates/crm-customer-privacy-application/src/reads.rs \
+            crates/crm-customer-privacy-postgres/src/execution.rs \
+            crates/crm-customer-privacy-postgres/src/lib.rs \
+            crates/crm-customer-privacy-postgres/src/reads.rs \
+            crates/crm-customer-privacy-production/src/lib.rs \
+            crates/crm-customer-privacy-production/src/root.rs \
+            crates/crm-customer-privacy-production/src/owner_execution.rs \
+            database/migrations/0105_customer_privacy_owner_execution.up.sql \
+            database/migrations/0105_customer_privacy_owner_execution.down.sql
+          if ! git diff --cached --quiet; then
+            git commit -m "WIP: compile step 8 owner execution"
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
