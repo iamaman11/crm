@@ -33,7 +33,25 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
         self.assertEqual(packet["tracking_issues"], [194])
         self.assertIn("scripts/repository_navigation.py", packet["allowed_paths"])
+        self.assertIn(".github/workflows/affected-scope.yml", packet["allowed_paths"])
         self.assertIn("contracts/**", packet["forbidden_paths"])
+        self.assertIn(
+            "Affected Scope CI executes packet-check against the real pull-request diff",
+            packet["acceptance"],
+        )
+
+    def test_affected_scope_workflow_executes_real_packet_check(self) -> None:
+        workflow = (ROOT / ".github/workflows/affected-scope.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Validate active repository packet", workflow)
+        self.assertIn(
+            'python scripts/repo.py packet-check --base "${BASE_REF}"', workflow
+        )
+        self.assertLess(
+            workflow.index("Validate active repository packet"),
+            workflow.index("Run affected structural preflight"),
+        )
 
     def test_module_explanation_traces_customer_privacy_owner(self) -> None:
         explanation = explain_target(ROOT, "crm.customer-privacy")
