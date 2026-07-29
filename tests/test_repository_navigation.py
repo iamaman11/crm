@@ -25,29 +25,29 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-7")
+        self.assertEqual(packet["packet_id"], "repository-step-7-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "b053d9bc1c74a7a238aec4698f7f513a1834fefc",
+            "43d194231fbce1cee28c44e89726929e450f3d18",
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         for path in (
-            ".github/workflows/generic-conformance.yml",
             "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
-            "services/crm-api/tests/generic_conformance_process_e2e.rs",
-            "services/crm-api/tests/support/generic_conformance.rs",
             "tests/test_architecture_documentation_consistency.py",
-            "tests/test_generic_conformance_adoption.py",
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, packet["allowed_paths"])
         self.assertIn("Cargo.lock", packet["forbidden_paths"])
         self.assertIn("Rust CI", packet["required_checks"])
         self.assertIn(
-            "the same generic mutation/query suite source is reused by representative owners from two domains",
+            "repository step 8 is the only next implementation packet",
             packet["acceptance"],
         )
 
@@ -160,13 +160,13 @@ class RepositoryNavigationTests(unittest.TestCase):
 
     def test_packet_check_reports_affected_scope_without_running_git_or_cargo(self) -> None:
         changed_paths = [
-            ".github/workflows/generic-conformance.yml",
             "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
-            "services/crm-api/tests/generic_conformance_process_e2e.rs",
-            "services/crm-api/tests/support/generic_conformance.rs",
             "tests/test_architecture_documentation_consistency.py",
-            "tests/test_generic_conformance_adoption.py",
             "tests/test_repository_navigation.py",
         ]
         affected = {
@@ -185,7 +185,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="b053d9bc1c74a7a238aec4698f7f513a1834fefc",
+                return_value="43d194231fbce1cee28c44e89726929e450f3d18",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
