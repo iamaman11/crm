@@ -1,7 +1,7 @@
 {
   "schema_version": "crm.repository-packet/v1",
   "packet_id": "repository-step-6-generated-sync-prerequisite",
-  "title": "Keep Rust Generated Sync lockfile-preserving",
+  "title": "Keep Rust workflows lockfile-preserving",
   "status": "active",
   "baseline": {
     "ref": "main",
@@ -11,12 +11,13 @@
     194,
     231
   ],
-  "objective": "Accept the smallest architecture prerequisite required before repository step 6 can obtain unchanged exact-head evidence: make Rust Generated Sync verify the committed dependency graph without resolving or auto-committing Cargo.lock.",
+  "objective": "Accept the smallest architecture prerequisite required before repository step 6 can obtain unchanged exact-head evidence: make Rust Generated Sync and Rust CI verify the committed dependency graph without resolving or auto-committing Cargo.lock.",
   "allowed_paths": [
     ".github/workflows/rust-generated-sync.yml",
     ".github/workflows/rust.yml",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
+    "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
@@ -37,10 +38,10 @@
   "deliverables": [
     "replace automatic cargo generate-lockfile with locked dependency verification",
     "replace Rust CI lockfile regeneration with locked dependency verification",
-    "prove Cargo.lock remains byte-identical during formatting, generation and Clippy maintenance",
+    "prove Cargo.lock remains byte-identical during formatting, generation, Rust checks, tests and Clippy maintenance",
     "exclude Cargo.lock from generated-sync staging and commits",
     "preserve the explicit python scripts/repo.py lock command for intentional bounded lockfile refresh",
-    "add permanent repository-navigation governance coverage for the lockfile-preserving workflow"
+    "add permanent repository-navigation and documentation-consistency governance coverage"
   ],
   "required_checks": [
     "Governance CI",
@@ -50,7 +51,7 @@
   ],
   "acceptance": [
     "ordinary feature packets cannot receive generated or Rust-CI dependency drift",
-    "Cargo.lock remains byte-identical throughout Rust Generated Sync",
+    "Cargo.lock remains byte-identical throughout Rust Generated Sync and Rust CI",
     "locked Cargo metadata, Rust check/test/Clippy, generated contracts, generated navigation and formatting remain enforced",
     "intentional lockfile refresh remains explicit through python scripts/repo.py lock inside a bounded packet",
     "repository step 6 remains blocked and unchanged until this prerequisite is accepted and evidence-synchronized",
