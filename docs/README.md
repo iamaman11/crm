@@ -13,8 +13,10 @@ Read only what is required for the current task:
 1. `../AGENTS.md` — repository operating rules and change discipline.
 2. `SYSTEM_INVARIANTS.md` — rules that may not be violated.
 3. `PROJECT_STATUS.md` — exact current merged state and next permitted packet.
-4. The active GitHub issue — executable scope, acceptance boundary and current work state.
-5. The task-specific guide from the table below.
+4. [`ACTIVE_PACKET.md`](ACTIVE_PACKET.md) — generated active packet, baseline and allowed/forbidden paths.
+5. [`generated/REPOSITORY_MAP.md`](generated/REPOSITORY_MAP.md) — generated workspace/module/route inventory.
+6. The active GitHub issue — executable scope, acceptance boundary and current work state.
+7. The task-specific guide from the table below.
 
 Do not reconstruct current status from historical packet documents, old PR descriptions or directory names.
 
@@ -22,16 +24,16 @@ Do not reconstruct current status from historical packet documents, old PR descr
 
 | Task | Read first | Then inspect |
 |---|---|---|
-| Understand what is being built now | `PROJECT_STATUS.md` | `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, active issue |
+| Understand what is being built now | `PROJECT_STATUS.md`, `ACTIVE_PACKET.md` | `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, active issue |
 | Understand architecture boundaries | `SYSTEM_INVARIANTS.md` | `APPLICATION_ARCHITECTURE.md`, accepted ADRs |
-| Add or change a capability | `DEVELOPMENT_WORKFLOW.md` | `MODULE_DEVELOPMENT.md`, owner manifest, contracts, application/postgres/production packages |
+| Add or change a capability | `DEVELOPMENT_WORKFLOW.md` | `MODULE_DEVELOPMENT.md`, `repo.py explain`, owner manifest and generated map |
 | Add a new owner domain | `MODULE_DEVELOPMENT.md` | `MODULE_CATALOG.md`, architecture plan, relevant ADRs |
 | Add cross-domain behavior | `APPLICATION_ARCHITECTURE.md` | link-module rules in `AGENTS.md` and `MODULE_DEVELOPMENT.md` |
 | Change Protobuf or public contracts | `SYSTEM_INVARIANTS.md` | contract registry docs, module manifest bindings, Contract CI |
 | Change PostgreSQL schema or persistence | `SYSTEM_INVARIANTS.md` | owner migrations, Database CI, rollback/reapply acceptance |
 | Change composition, routes or workers | `APPLICATION_ARCHITECTURE.md` | contribution package, route classifications, application-runtime parity tests |
 | Improve architecture or developer experience | `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` | issue #194 and measured baseline |
-| Prepare or review a PR | `DEVELOPMENT_WORKFLOW.md` | `DELIVERY_GOVERNANCE.md`, PR template, affected-scope report |
+| Prepare or review a PR | `DEVELOPMENT_WORKFLOW.md` | `DELIVERY_GOVERNANCE.md`, `repo.py packet-check`, affected-scope report |
 | Coordinate multiple agents | `MULTI_AGENT_DEVELOPMENT.md` | `CODEX_AGENT_QUALIFICATION.md`, exact-SHA handoff |
 | Check product completeness | `MODULE_CATALOG.md` | `CRM_CAPABILITY_COVERAGE.md`, roadmap and status |
 
@@ -42,15 +44,17 @@ Do not reconstruct current status from historical packet documents, old PR descr
 | Absolute architecture and security rules | `SYSTEM_INVARIANTS.md` |
 | Published machine contracts | Protobuf, schemas, manifests and accepted contract registries |
 | Stable application layering and composition | `APPLICATION_ARCHITECTURE.md` and accepted ADRs |
+| Single repository implementation order | `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4 |
 | Product delivery order | `IMPLEMENTATION_ROADMAP.md` |
 | Active Phase 8 sequence | `PHASE8_DELIVERY_PLAN.md` |
 | Current merged state and next packet | `PROJECT_STATUS.md` |
+| Active packet declaration | `repository-packet.json` rendered as `ACTIVE_PACKET.md` |
 | Architecture/developer-experience execution program | `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` and issue #194 |
 | Business owner and completeness accounting | `MODULE_CATALOG.md` |
 | Work-in-progress scope | active GitHub issue and PR |
 | Historical acceptance boundary | accepted packet document and merged PR evidence |
 
-When two descriptive documents disagree, follow the higher source and treat the lower document as stale.
+When two descriptive documents disagree, follow the higher source and treat the lower document as stale. Generated navigation carries deterministic source digests but never overrides its authoritative inputs.
 
 ## 4. Normal feature navigation
 
@@ -66,9 +70,14 @@ owner manifest / published contract
 → affected CI and required specialized gates
 ```
 
-An ordinary capability must not require a new crate, a central business switch, direct edits to unrelated owners or copied platform test suites.
+Trace that path before changing code:
 
-Until `repo.py explain` is implemented, use this path manually and record any unclear hop as developer-experience debt under issue #194.
+```bash
+python scripts/repo.py explain crm.customer-privacy
+python scripts/repo.py explain customer_privacy.case.submit@1.0.0
+```
+
+An ordinary capability must not require a new crate, a central business switch, direct edits to unrelated owners or copied platform test suites. Record any unresolved explain hop as developer-experience debt under issue #194.
 
 ## 5. Repository command surface
 
@@ -84,10 +93,21 @@ python scripts/repo.py format --check
 python scripts/repo.py lock
 python scripts/repo.py test --package <package>
 python scripts/repo.py test-all
+python scripts/repo.py explain <module-or-capability@version>
+python scripts/repo.py packet-check --base origin/main
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
 python scripts/repo.py quality
 ```
+
+Generated navigation:
+
+```bash
+python scripts/generate_repository_navigation.py --check
+python scripts/generate_repository_navigation.py --write
+```
+
+`packet-check` validates the declared baseline, allowed/forbidden paths, affected packages, selected workflows, changed contracts/routes/workers/migrations and generated freshness. `conformance` rejects stale generated navigation.
 
 Planned and required for the 10/10 target:
 
@@ -98,28 +118,26 @@ python scripts/repo.py dev-up
 python scripts/repo.py dev-reset
 python scripts/repo.py seed-demo
 python scripts/repo.py smoke
-python scripts/repo.py explain <module-or-coordinate>
-python scripts/repo.py packet-check --base origin/main
 ```
 
 A command listed as planned must not be represented as implemented until it exists and is covered by permanent tests.
 
-## 6. Generated navigation target
+## 6. Generated navigation
 
-The architecture program requires:
+Implemented outputs:
 
-- `docs/ACTIVE_PACKET.md` generated from authoritative status/issue inputs;
-- `docs/generated/REPOSITORY_MAP.md` generated from manifests, Cargo metadata, contracts, route/worker inventories and migration ownership;
-- `repo.py explain` for module and coordinate tracing;
-- `repo.py packet-check` for changed-scope and acceptance reasoning.
+- [`ACTIVE_PACKET.md`](ACTIVE_PACKET.md), generated from `repository-packet.json`;
+- [`generated/REPOSITORY_MAP.md`](generated/REPOSITORY_MAP.md), generated from workspace members, all module manifests and production route classifications;
+- `repo.py explain`, which resolves exact modules and capability coordinates and groups repository references by architecture layer;
+- `repo.py packet-check`, which combines packet scope with the existing affected-scope analyzer.
 
-These generated outputs are navigation aids only. They must be reproducible, freshness-checked and forbidden from becoming a second manually maintained roadmap.
+Generated outputs use deterministic ordering and embedded SHA-256 source digests. Do not hand-edit them. Rust Generated Sync writes canonical output, and permanent conformance rejects stale output.
 
 ## 7. Documentation classes
 
 - **Normative:** invariants, accepted ADRs, architecture, delivery governance and workflow rules.
 - **Current state:** project status, active phase plan, module catalog and active issues.
-- **Generated navigation:** active packet, repository map and explain reports.
+- **Generated navigation:** active packet, repository map and explain/packet-check reports.
 - **Historical:** accepted packet documents and merged PR evidence.
 - **Orientation:** root README, `AGENTS.md` and this index.
 
