@@ -196,7 +196,7 @@ python scripts/repo.py packet-check --base origin/main
 python scripts/repo.py quality
 ```
 
-Local lifecycle commands `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain planned for repository step 15. Do not claim they exist before implementation and permanent acceptance.
+Local lifecycle commands `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain **future repository step 15** work. Do not claim they exist before implementation and permanent acceptance.
 
 ## 10. Required checks before completion
 
