@@ -52,15 +52,15 @@ Issue #194 remains **Open**.
 
 - Stage A documentation/navigation baseline — **Complete**.
 - Stage B dependency, crate and exception governance — **In progress; Rust toolchain/lint prerequisite accepted through PR #218 and lockfile-preserving Rust workflows accepted through PR #232**.
-- Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, and immediate deny-only restriction placement/final owner guard accepted through PR #226.
+- Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, immediate deny-only restriction placement/final owner guard accepted through PR #226, and legal-hold/mandatory-retention precedence accepted through PR #230.
 - Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222**.
 - Stage E — **In progress**: real-diff packet-check and broadened Rust closure are accepted; database/process/product/frontend/operations selection remains open.
 - Stage H — **In progress**: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands remain open.
 - Stages F, G and I — conformance/lifecycle, measured consolidation, frontend and operations parity remain open.
 
-Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228 and PR #232. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232 and PR #230. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
-The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–5 are complete through PR #218, PR #220, PR #222, PR #226 and PR #228; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 6 — legal-hold and mandatory-retention precedence — is the current next packet.
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–6 are complete through PR #218, PR #220, PR #222, PR #226, PR #228 and PR #230; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 7 — reusable generic mutation and query conformance — is the current next packet.
 
 ## 4. Phase 8A completed foundation
 
@@ -74,7 +74,7 @@ The architecture stage table is completion accounting, not a set of independent 
 
 Issue #126 is **In progress**.
 
-Latest accepted runtime inventory is six public mutations, four permission-aware public queries and zero Customer Privacy workers through PR #226. `customer_privacy.plan.build@1.0.0` remains accepted trusted-internal runtime without public ingress.
+Latest accepted runtime inventory is seven public mutations, four permission-aware public queries and zero Customer Privacy workers through PR #230. `customer_privacy.plan.build@1.0.0` remains accepted trusted-internal runtime without public ingress.
 
 All nine privacy owner-scope implementations are accepted:
 
@@ -158,6 +158,10 @@ The packet adds deterministic exact module/capability explanation, fail-closed p
 
 PR #232 / accepted source `3f09dcc595f79d633915e4a67117aedc59ed2499` / squash merge `3eab6dcd1d03a15ef0ce148d7f74137d2e1d10ed` / 5 of 5 applicable permanent workflows accepts the smallest repository-step-6 architecture prerequisite. Rust Generated Sync and Rust CI now verify the committed dependency graph with locked Cargo commands, preserve `Cargo.lock` byte-for-byte on ordinary packets and cannot auto-commit registry drift. Intentional lockfile refresh remains explicit through `python scripts/repo.py lock` inside a bounded packet. The six-file change adds no product behavior, contract, manifest, dependency, package, persistence or migration change.
 
+### 5.11 Accepted legal-hold and mandatory-retention precedence
+
+Repository step 6 is accepted through PR #230 / accepted source `131285e07ad7c36c00e399b65d55591db13f0948` / squash merge `18e6218a7e7495219ac9e8c71cafcda1be64a31b` / 32 of 32 permanent workflows on one unchanged source-authored head. It promotes `customer_privacy.legal_hold.place@1.0.0`, preserves the shared tenant + canonical Party lock, strictly rehydrates bounded FORCE-RLS legal-hold state and evaluates immutable plan items with precedence active legal hold → mandatory retention → approved privacy action. Public placement is activation-gated, live-authorized, tenant-bound, idempotent and atomic; malformed, unavailable, stale, over-bound and cross-tenant evidence fails closed. Clean PostgreSQL, real `crm-api`, rollback/reapply, replay and repeated acceptance are proven. The accepted inventory is 7 mutations / 4 permission-aware queries / 0 workers, with no owner execution, outcome persistence, export assembly, destructive action, dependency, `Cargo.lock`, manifest or workspace-package change.
+
 ## 6. Binding active sequence
 
 The only permitted current sequence is:
@@ -169,11 +173,12 @@ The only permitted current sequence is:
 4. **Repository step 4 — immediate deny-only processing restrictions with final subject locks — Complete through PR #226.**
 5. **Repository step 5 — `explain`, `packet-check` and generated navigation — Complete through PR #228.**
 5a. **Inserted lockfile-preservation prerequisite before repository step 6 — Complete through PR #232.**
-6. **Repository step 6 — legal-hold and mandatory-retention precedence — Next.**
-7–19. **Repository steps 7–19 — continue exactly as numbered in the architecture plan.**
+6. **Repository step 6 — legal-hold and mandatory-retention precedence — Complete through PR #230.**
+7. **Repository step 7 — reusable generic mutation and query conformance — Next.**
+8–19. **Repository steps 8–19 — continue exactly as numbered in the architecture plan.**
 20. **Repository step 20 — first Phase 8B packet.**
 
-The inserted prerequisite did not renumber the master sequence. Repository step 6 is now the next permitted Customer Privacy packet.
+The inserted prerequisites did not renumber the master sequence. Repository step 7 is now the next permitted architecture/conformance packet.
 
 ## 7. Phase 8B and later expert domains
 
