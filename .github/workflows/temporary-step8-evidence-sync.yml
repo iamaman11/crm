@@ -7,6 +7,10 @@ on:
     paths:
       - ".github/step8-evidence-sync.py"
       - ".github/workflows/temporary-step8-evidence-sync.yml"
+  pull_request:
+    paths:
+      - ".github/step8-evidence-sync.py"
+      - ".github/workflows/temporary-step8-evidence-sync.yml"
 
 concurrency:
   group: temporary-step8-evidence-sync
