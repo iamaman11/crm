@@ -40,7 +40,6 @@ class RepositoryNavigationTests(unittest.TestCase):
                 ".github/workflows/customer-privacy-approval.yml",
                 ".github/workflows/customer-privacy-owner-execution.yml",
                 "crates/crm-application-runtime/src/customer_privacy_access_export.rs",
-                "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
                 "crates/crm-application-runtime/src/lib.rs",
                 "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs",
                 "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
@@ -59,6 +58,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "modules/crm-customer-privacy/src/lib.rs",
                 "modules/crm-customer-privacy/tests/access_export.rs",
                 "repository-packet.json",
+                "services/crm-api/tests/generic_conformance_process_e2e.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             ],
@@ -72,7 +72,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             "packages/**",
             "proto/**",
             "schemas/**",
-            "services/**",
+            "services/crm-api/src/**",
         ):
             self.assertIn(path, packet["forbidden_paths"])
         self.assertEqual(
@@ -82,6 +82,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "Customer Privacy Access Export CI",
                 "Customer Privacy Approval CI",
                 "Customer Privacy Owner Execution CI",
+                "Generic Mutation Query Conformance CI",
                 "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",

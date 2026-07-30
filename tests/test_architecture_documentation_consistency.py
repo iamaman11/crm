@@ -288,6 +288,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "modules/crm-customer-privacy/src/access_export.rs",
             "modules/crm-customer-privacy/tests/access_export.rs",
             "repository-packet.json",
+            "services/crm-api/tests/generic_conformance_process_e2e.rs",
         ):
             self.assertIn(path, self.packet["allowed_paths"])
         for path in (
@@ -303,6 +304,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Customer Privacy Access Export CI",
             "Customer Privacy Approval CI",
             "Customer Privacy Owner Execution CI",
+            "Generic Mutation Query Conformance CI",
             "Governance CI",
             "Rust CI",
             "Rust Generated Sync",
