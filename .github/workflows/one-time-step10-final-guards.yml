@@ -1,0 +1,70 @@
+name: One-time Step 10 Final Guards
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: one-time-step10-final-guards-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: "1.97.1"
+          components: rustfmt, clippy
+      - name: Install validation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - name: Materialize exact permanent fixes
+        run: python scripts/one_time_step10_final_guards.py
+      - name: Verify permanent navigation and architecture guards
+        run: |
+          python scripts/generate_repository_navigation.py --check
+          python scripts/check_architecture.py
+          python -m unittest \
+            tests.test_repository_navigation \
+            tests.test_architecture_documentation_consistency
+      - name: Verify focused Rust target
+        run: |
+          cargo fmt --all --check
+          cargo test --locked -p crm-application-runtime \
+            --test customer_privacy_access_export_postgres --no-run
+      - name: Commit permanent fixes
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            .github/workflows/customer-privacy-access-export.yml \
+            .github/workflows/customer-privacy-approval.yml \
+            .github/workflows/customer-privacy-owner-execution.yml \
+            crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs \
+            docs/ACTIVE_PACKET.md \
+            docs/generated/REPOSITORY_MAP.md \
+            repository-packet.json \
+            tests/test_architecture_documentation_consistency.py \
+            tests/test_repository_navigation.py
+          git diff --cached --quiet && {
+            echo "Expected permanent step-10 guard changes were not produced" >&2
+            exit 1
+          }
+          git commit -m "Step 10: align evidence and historical guards"
+          git pull --rebase origin "${HEAD_BRANCH}"
+          git push origin "HEAD:${HEAD_BRANCH}"
