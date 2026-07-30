@@ -5,6 +5,7 @@
 //! The existing persistence and transaction-guard crates remain transitional
 //! implementation details. New owner persistence enters through this package.
 
+mod access_export;
 mod discovery;
 mod execution;
 mod planning;
@@ -12,6 +13,7 @@ mod reads;
 mod restrictions;
 mod retention;
 
+pub use access_export::*;
 pub use discovery::*;
 pub use execution::*;
 pub use planning::*;

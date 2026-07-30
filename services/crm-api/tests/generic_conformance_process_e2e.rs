@@ -22,6 +22,8 @@ use prost::Message;
 use reqwest::Client as HttpClient;
 use sqlx::{PgPool, Row};
 use std::collections::BTreeSet;
+use std::time::Duration;
+use tokio::time::{Instant, sleep};
 use tonic::Code;
 
 use process_support::{
@@ -259,6 +261,8 @@ async fn representative_owners_adopt_generic_mutation_and_query_conformance() {
         evidence_snapshot(&admin).await,
     );
 
+    wait_for_customer_enrichment_dispatch(&admin).await;
+
     set_module_status(&admin, CUSTOMER_ENRICHMENT_MODULE, "suspended").await;
     let before_inactive_mutation = evidence_snapshot(&admin).await;
     let inactive_mutation = mutate(
@@ -477,6 +481,31 @@ async fn representative_owners_adopt_generic_mutation_and_query_conformance() {
         evidence_snapshot(&admin).await,
     );
     stop_process(&mut denied_process).await;
+}
+
+async fn wait_for_customer_enrichment_dispatch(pool: &PgPool) {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let completed: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM crm.idempotency_records WHERE tenant_id = $1 AND idempotency_scope = 'capability:customer_enrichment.request.dispatch:1.0.0' AND status = 'completed'",
+        )
+        .bind(TENANT_A)
+        .fetch_one(pool)
+        .await
+        .expect("read Customer Enrichment dispatch completion evidence");
+        if completed == 1 {
+            return;
+        }
+        assert_eq!(
+            completed, 0,
+            "generic conformance created multiple dispatches"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "Customer Enrichment dispatch did not quiesce before query conformance"
+        );
+        sleep(Duration::from_millis(50)).await;
+    }
 }
 
 async fn evidence_snapshot(pool: &PgPool) -> EvidenceSnapshot {

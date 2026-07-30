@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
 
-//! Stable application boundary for Customer Privacy commands, queries, internal discovery, planning and retention adjudication.
+//! Stable application boundary for Customer Privacy commands, queries, internal discovery, planning,
+//! retention adjudication and governed access/export assembly.
 //!
 //! Existing capability-specific crates remain behavior-owning transitional
 //! implementation details. New Customer Privacy behavior enters through this
 //! package rather than adding another command/query crate or a generic-runtime
 //! dependency.
 
+mod access_export;
 mod approval;
 mod discovery;
 mod execution;
@@ -19,6 +21,7 @@ mod reads {
     include!("reads.rs");
 }
 
+pub use access_export::*;
 pub use approval::*;
 pub use discovery::*;
 pub use execution::*;

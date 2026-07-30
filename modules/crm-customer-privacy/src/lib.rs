@@ -3,7 +3,7 @@
 //! Authoritative customer-privacy case and orchestration owner foundation.
 //!
 //! This pure module core owns privacy case, restriction, legal-hold and
-//! owner-action evidence only. It contains no SQL, transport, scheduler,
+//! orchestration evidence only. It contains no SQL, transport, scheduler,
 //! secret-store or direct cross-owner storage access. Party, Consent,
 //! Identity Resolution, Customer Data Operations and all other customer-master
 //! values remain authoritative in their existing owner modules.
@@ -24,6 +24,47 @@ pub mod domain {
     include!("query_access.rs");
     include!("retention.rs");
     include!("execution.rs");
+
+    pub mod access_export {
+        #![allow(clippy::too_many_arguments)]
+
+        use super::*;
+
+        impl serde::Serialize for PrivacyCaseKind {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(match self {
+                    Self::Access => "access",
+                    Self::PortabilityExport => "portability_export",
+                    Self::RestrictProcessing => "restrict_processing",
+                    Self::Erasure => "erasure",
+                })
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for PrivacyCaseKind {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let value = <String as serde::Deserialize>::deserialize(deserializer)?;
+                match value.as_str() {
+                    "access" => Ok(Self::Access),
+                    "portability_export" => Ok(Self::PortabilityExport),
+                    "restrict_processing" => Ok(Self::RestrictProcessing),
+                    "erasure" => Ok(Self::Erasure),
+                    _ => Err(serde::de::Error::custom(
+                        "privacy case kind is not a canonical v1 value",
+                    )),
+                }
+            }
+        }
+
+        include!("access_export.rs");
+    }
+    pub use access_export::*;
 
     impl CustomerDataLegalHold {
         pub const fn effective_from_unix_nanos(&self) -> i64 {
@@ -70,6 +111,8 @@ pub const RETENTION_DECISION_RECORD_TYPE: &str = "customer-privacy.retention-dec
 pub const OWNER_ACTION_ATTEMPT_RECORD_TYPE: &str = "customer-privacy.owner-action-attempt";
 /// Append-once owner action outcome record type.
 pub const OWNER_ACTION_OUTCOME_RECORD_TYPE: &str = "customer-privacy.owner-action-outcome";
+/// Customer Privacy-owned immutable manifest and stable Customer Data Operations export references.
+pub const ACCESS_EXPORT_REFERENCE_RECORD_TYPE: &str = "customer-privacy.access-export-reference";
 
 #[cfg(test)]
 mod tests {
@@ -91,8 +134,9 @@ mod tests {
             RETENTION_DECISION_RECORD_TYPE,
             OWNER_ACTION_ATTEMPT_RECORD_TYPE,
             OWNER_ACTION_OUTCOME_RECORD_TYPE,
+            ACCESS_EXPORT_REFERENCE_RECORD_TYPE,
         ];
-        assert_eq!(record_types.len(), 9);
+        assert_eq!(record_types.len(), 10);
         assert!(
             record_types
                 .iter()
