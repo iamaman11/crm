@@ -3,28 +3,35 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def replace_once(text: str, old: str, new: str, label: str) -> str:
+def replace_exact(
+    text: str,
+    old: str,
+    new: str,
+    label: str,
+    *,
+    expected: int = 1,
+) -> str:
     count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{label} replacement count: {count}")
+    if count != expected:
+        raise SystemExit(f"{label} replacement count: {count}, expected: {expected}")
     return text.replace(old, new)
 
 
 architecture = Path("tests/test_architecture_documentation_consistency.py")
 text = architecture.read_text(encoding="utf-8")
-text = replace_once(
+text = replace_exact(
     text,
     '        self.assertEqual(self.packet["packet_id"], "repository-step-8-evidence-sync")',
     '        self.assertEqual(self.packet["packet_id"], "repository-step-9-affected-scope-expansion")',
     "architecture packet id",
 )
-text = replace_once(
+text = replace_exact(
     text,
     '        self.assertEqual(self.packet["baseline"]["sha"], "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90")',
     '        self.assertEqual(self.packet["baseline"]["sha"], "c9f5bd515b2104ea172ca3089b8a0cdd5f152d9c")',
     "architecture baseline",
 )
-text = replace_once(
+text = replace_exact(
     text,
     '''        for path in (
             "docs/ACTIVE_PACKET.md",
@@ -51,7 +58,7 @@ text = replace_once(
         ):''',
     "architecture allowed paths",
 )
-text = replace_once(
+text = replace_exact(
     text,
     '        for path in (".github/workflows/**", "Cargo.toml", "Cargo.lock", "crates/**", "database/**", "services/**"):\n',
     '''        for path in (
@@ -70,7 +77,7 @@ text = replace_once(
 ''',
     "architecture forbidden paths",
 )
-text = replace_once(
+text = replace_exact(
     text,
     '        self.assertIn("repository-step-8-evidence-sync", self.active_packet)',
     '        self.assertIn("repository-step-9-affected-scope-expansion", self.active_packet)',
@@ -80,7 +87,7 @@ architecture.write_text(text, encoding="utf-8")
 
 navigation = Path("tests/test_repository_navigation.py")
 text = navigation.read_text(encoding="utf-8")
-text = replace_once(
+text = replace_exact(
     text,
     '''        for path in (
             ".github/workflows/affected-scope.yml",
@@ -92,7 +99,7 @@ text = replace_once(
             "affected-scope-policy.json",''',
     "navigation workflows",
 )
-text = replace_once(
+text = replace_exact(
     text,
     '''            "tests/test_affected_scope.py",
             "tests/test_repository_navigation.py",''',
@@ -100,6 +107,7 @@ text = replace_once(
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",''',
     "navigation guards",
+    expected=2,
 )
 navigation.write_text(text, encoding="utf-8")
 
@@ -168,5 +176,5 @@ method = '''    def test_live_policy_representatives_are_covered_by_real_workflo
                     )
 
 '''
-text = replace_once(text, marker, method + marker, "live policy test")
+text = replace_exact(text, marker, method + marker, "live policy test")
 affected.write_text(text, encoding="utf-8")
