@@ -102,15 +102,13 @@ jobs:
             --test customer_privacy_owner_execution_postgres --no-run
           cargo clippy --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres -- -D warnings
-      - name: Prove bounded non-effects
+      - name: Prove active packet boundaries and owner-execution non-effects
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          changed="$(git diff --name-only "${BASE_SHA}" HEAD)"
-          forbidden="$(printf '%s\n' "${changed}" | grep -E '(^|/)Cargo\.(toml|lock)$|modules/.*/module\.yaml|^proto/|^services/crm-api/src/' || true)"
-          test -z "${forbidden}"
+          python scripts/repo.py packet-check --base "${BASE_SHA}"
       - name: Apply clean authoritative schema and fixtures
         shell: bash
         run: |
