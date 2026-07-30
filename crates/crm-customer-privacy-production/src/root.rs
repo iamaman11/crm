@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
+mod access_export;
 #[path = "lib.rs"]
 mod legacy;
-mod access_export;
 mod legal_hold;
 mod owner_execution;
 mod restriction;
