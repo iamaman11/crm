@@ -1,3 +1,7 @@
+use crate::{
+    RETENTION_APPROVAL_TRIGGER_CAPABILITY, RETENTION_LEGAL_HOLD_TRIGGER_CAPABILITY,
+    RETENTION_TRIGGER_CAPABILITY_VERSION,
+};
 use crm_application_composition::ModuleActivationPort;
 use crm_customer_privacy::{
     MODULE_ID, PrivacyOwnerActionAttempt, PrivacyOwnerActionOutcome, PrivacyOwnerOutcomeStatus,
@@ -140,7 +144,7 @@ pub enum ExecutionPreparation {
         durable_outcomes: u32,
     },
     Ready {
-        attempt: PrivacyOwnerActionAttempt,
+        attempt: Box<PrivacyOwnerActionAttempt>,
         attempt_replayed: bool,
     },
 }
@@ -232,7 +236,7 @@ impl PrivacyOwnerExecutionService {
             ExecutionPreparation::Ready {
                 attempt,
                 attempt_replayed,
-            } => (attempt, attempt_replayed),
+            } => (*attempt, attempt_replayed),
             ExecutionPreparation::Complete {
                 total_items,
                 durable_outcomes,
@@ -321,11 +325,14 @@ fn validate_invocation(invocation: &OwnerExecutionInvocation) -> Result<(), SdkE
     if !invocation.trusted_internal {
         return Err(execution_not_trusted());
     }
-    if invocation.initiating_capability_id.as_str() != OWNER_ACTION_DISPATCH_CAPABILITY
-        || invocation.initiating_capability_version.as_str() != OWNER_EXECUTION_CAPABILITY_VERSION
+    if invocation.initiating_capability_version.as_str() != RETENTION_TRIGGER_CAPABILITY_VERSION
+        || !matches!(
+            invocation.initiating_capability_id.as_str(),
+            RETENTION_APPROVAL_TRIGGER_CAPABILITY | RETENTION_LEGAL_HOLD_TRIGGER_CAPABILITY
+        )
     {
         return Err(execution_configuration_invalid(
-            "owner execution invocation uses an unexpected internal coordinate",
+            "owner execution has no registered initiating Customer Privacy capability",
         ));
     }
     if invocation.request_started_at_unix_nanos <= 0
@@ -374,4 +381,416 @@ fn execution_configuration_invalid(reference: impl std::fmt::Display) -> SdkErro
         "Customer Privacy owner execution is not configured correctly.",
     )
     .with_internal_reference(reference.to_string())
+}
+
+#[cfg(test)]
+mod execution_tests {
+    use super::*;
+    use crm_customer_privacy::{
+        ActionPlanningPolicy, ContributionCompletenessProof, DiscoveryOwnerScopeContribution,
+        DiscoveryScopeSnapshot, EvidenceClass, OwnerScopeContract, OwnerScopeContribution,
+        OwnerScopeRegistry, PrivacyActionPlan, PrivacyCaseKind, PrivacyRetentionDecisionSet,
+        ScopeDiscoveryLineage, ScopeResource,
+    };
+    use crm_module_sdk::{DataClass, RetentionPolicyId, SchemaVersion};
+    use std::future::Future;
+    use std::sync::Mutex;
+    use std::task::{Context, Poll, Waker};
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let mut context = Context::from_waker(Waker::noop());
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(output) => return output,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    struct Activation {
+        active: bool,
+    }
+
+    impl ModuleActivationPort for Activation {
+        fn is_active<'a>(
+            &'a self,
+            _tenant_id: &'a TenantId,
+            _module_id: &'a ModuleId,
+        ) -> PortFuture<'a, Result<bool, SdkError>> {
+            Box::pin(async move { Ok(self.active) })
+        }
+    }
+
+    #[derive(Debug)]
+    struct RecordingOwner {
+        result: OwnerActionResult,
+        order: Arc<Mutex<Vec<&'static str>>>,
+        requests: Mutex<Vec<OwnerActionRequest>>,
+    }
+
+    impl OwnerPrivacyActionPort for RecordingOwner {
+        fn apply<'a>(
+            &'a self,
+            request: OwnerActionRequest,
+        ) -> PortFuture<'a, Result<OwnerActionResult, SdkError>> {
+            Box::pin(async move {
+                self.order.lock().unwrap().push("owner");
+                self.requests.lock().unwrap().push(request);
+                Ok(self.result.clone())
+            })
+        }
+    }
+
+    #[derive(Debug)]
+    struct ScriptedPersistence {
+        preparation: ExecutionPreparation,
+        record_inserted: bool,
+        checkpoint: CheckpointAdvance,
+        order: Arc<Mutex<Vec<&'static str>>>,
+        recorded: Mutex<Vec<(PrivacyOwnerActionAttempt, PrivacyOwnerActionOutcome)>>,
+    }
+
+    impl OwnerExecutionPersistencePort for ScriptedPersistence {
+        fn prepare_next<'a>(
+            &'a self,
+            _invocation: &'a OwnerExecutionInvocation,
+        ) -> PortFuture<'a, Result<ExecutionPreparation, SdkError>> {
+            Box::pin(async move {
+                self.order.lock().unwrap().push("prepare");
+                Ok(self.preparation.clone())
+            })
+        }
+
+        fn record_outcome<'a>(
+            &'a self,
+            _invocation: &'a OwnerExecutionInvocation,
+            attempt: &'a PrivacyOwnerActionAttempt,
+            outcome: &'a PrivacyOwnerActionOutcome,
+        ) -> PortFuture<'a, Result<bool, SdkError>> {
+            Box::pin(async move {
+                self.order.lock().unwrap().push("record");
+                self.recorded
+                    .lock()
+                    .unwrap()
+                    .push((attempt.clone(), outcome.clone()));
+                Ok(self.record_inserted)
+            })
+        }
+
+        fn advance_checkpoint<'a>(
+            &'a self,
+            _invocation: &'a OwnerExecutionInvocation,
+        ) -> PortFuture<'a, Result<CheckpointAdvance, SdkError>> {
+            Box::pin(async move {
+                self.order.lock().unwrap().push("advance");
+                Ok(self.checkpoint.clone())
+            })
+        }
+    }
+
+    fn exact_endpoints(owner: Arc<RecordingOwner>) -> OwnerActionEndpoints {
+        OwnerActionEndpoints::exact_canonical(EXPECTED_OWNER_MODULES.iter().map(|module_id| {
+            OwnerActionEndpoint {
+                owner_module_id: ModuleId::try_new(*module_id).unwrap(),
+                executor: owner.clone(),
+            }
+        }))
+        .unwrap()
+    }
+
+    fn attempt(evidence_class: EvidenceClass, generation: u32) -> PrivacyOwnerActionAttempt {
+        let tenant_id = TenantId::try_new("tenant-a").unwrap();
+        let party_id = RecordId::try_new("party-a").unwrap();
+        let case_id = RecordId::try_new("privacy-case-a").unwrap();
+        let contract = OwnerScopeContract::new(
+            ModuleId::try_new("crm.parties").unwrap(),
+            CapabilityId::try_new("parties.privacy.scope.contribute").unwrap(),
+            CapabilityVersion::try_new("1.0.0").unwrap(),
+        );
+        let registry = OwnerScopeRegistry::new(
+            SchemaVersion::try_new("registry/1").unwrap(),
+            [contract.clone()],
+        )
+        .unwrap();
+        let lineage = ScopeDiscoveryLineage::new(
+            case_id.clone(),
+            tenant_id.clone(),
+            party_id.clone(),
+            1,
+            registry.registry_version().clone(),
+            *registry.digest(),
+            "ERASURE_DISCOVERY",
+            1,
+        )
+        .unwrap();
+        let resource = ScopeResource::new(
+            "party.profile",
+            party_id,
+            7,
+            DataClass::Personal,
+            evidence_class,
+            RetentionPolicyId::try_new("privacy-policy").unwrap(),
+        )
+        .unwrap();
+        let contribution = OwnerScopeContribution::new(
+            contract,
+            tenant_id.clone(),
+            RecordId::try_new("party-a").unwrap(),
+            1,
+            [resource],
+            ContributionCompletenessProof::new(true, 1, 1, 1, [3; 32]).unwrap(),
+        )
+        .unwrap();
+        let discovery =
+            DiscoveryOwnerScopeContribution::new(lineage.clone(), contribution).unwrap();
+        let snapshot =
+            DiscoveryScopeSnapshot::finalize(lineage, registry, 2_000_000, [discovery]).unwrap();
+        let plan = PrivacyActionPlan::build(
+            &snapshot,
+            5,
+            PrivacyCaseKind::Erasure,
+            ActionPlanningPolicy::new(
+                SchemaVersion::try_new("privacy-policy/1").unwrap(),
+                "EU",
+                false,
+                false,
+            )
+            .unwrap(),
+            3_000_000,
+        )
+        .unwrap();
+        let decision = PrivacyRetentionDecisionSet::build(&plan, &[], 4_000_000).unwrap();
+        PrivacyOwnerActionAttempt::build(
+            tenant_id,
+            case_id,
+            plan.plan_id().clone(),
+            *plan.digest(),
+            decision.decision_id().clone(),
+            *decision.digest(),
+            &decision.items()[0],
+            generation,
+            5_000_000 + i64::from(generation),
+        )
+        .unwrap()
+    }
+
+    fn invocation(attempt: &PrivacyOwnerActionAttempt) -> OwnerExecutionInvocation {
+        OwnerExecutionInvocation {
+            tenant_id: attempt.tenant_id().clone(),
+            privacy_case_id: attempt.privacy_case_id().clone(),
+            action_plan_id: attempt.action_plan_id().clone(),
+            retention_decision_id: attempt.retention_decision_id().clone(),
+            actor_id: ActorId::try_new("actor-a").unwrap(),
+            request_id: RequestId::try_new("request-a").unwrap(),
+            correlation_id: CorrelationId::try_new("correlation-a").unwrap(),
+            trace_id: TraceId::try_new("trace-a").unwrap(),
+            initiating_capability_id: CapabilityId::try_new(RETENTION_APPROVAL_TRIGGER_CAPABILITY)
+                .unwrap(),
+            initiating_capability_version: CapabilityVersion::try_new(
+                OWNER_EXECUTION_CAPABILITY_VERSION,
+            )
+            .unwrap(),
+            request_started_at_unix_nanos: 41,
+            planned_at_unix_nanos: attempt.planned_at_unix_nanos(),
+            trusted_internal: true,
+        }
+    }
+
+    struct Harness {
+        service: PrivacyOwnerExecutionService,
+        owner: Arc<RecordingOwner>,
+        persistence: Arc<ScriptedPersistence>,
+        order: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    fn harness(
+        attempt: PrivacyOwnerActionAttempt,
+        attempt_replayed: bool,
+        record_inserted: bool,
+        active: bool,
+    ) -> Harness {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let owner = Arc::new(RecordingOwner {
+            result: OwnerActionResult {
+                status: PrivacyOwnerOutcomeStatus::Succeeded,
+                safe_failure_code: None,
+            },
+            order: order.clone(),
+            requests: Mutex::new(Vec::new()),
+        });
+        let persistence = Arc::new(ScriptedPersistence {
+            preparation: ExecutionPreparation::Ready {
+                attempt: Box::new(attempt),
+                attempt_replayed,
+            },
+            record_inserted,
+            checkpoint: CheckpointAdvance {
+                next_sequence: 2,
+                total_items: 1,
+                complete: true,
+            },
+            order: order.clone(),
+            recorded: Mutex::new(Vec::new()),
+        });
+        let service = PrivacyOwnerExecutionService::new(
+            Arc::new(Activation { active }),
+            persistence.clone(),
+            exact_endpoints(owner.clone()),
+        );
+        Harness {
+            service,
+            owner,
+            persistence,
+            order,
+        }
+    }
+
+    #[test]
+    fn exact_owner_registry_rejects_missing_or_duplicate_owners() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let owner = Arc::new(RecordingOwner {
+            result: OwnerActionResult {
+                status: PrivacyOwnerOutcomeStatus::Succeeded,
+                safe_failure_code: None,
+            },
+            order,
+            requests: Mutex::new(Vec::new()),
+        });
+        let missing = EXPECTED_OWNER_MODULES[..8]
+            .iter()
+            .map(|module_id| OwnerActionEndpoint {
+                owner_module_id: ModuleId::try_new(*module_id).unwrap(),
+                executor: owner.clone(),
+            });
+        assert!(OwnerActionEndpoints::exact_canonical(missing).is_err());
+
+        let mut duplicate = EXPECTED_OWNER_MODULES
+            .iter()
+            .map(|module_id| OwnerActionEndpoint {
+                owner_module_id: ModuleId::try_new(*module_id).unwrap(),
+                executor: owner.clone(),
+            })
+            .collect::<Vec<_>>();
+        duplicate.push(OwnerActionEndpoint {
+            owner_module_id: ModuleId::try_new("crm.parties").unwrap(),
+            executor: owner,
+        });
+        assert!(OwnerActionEndpoints::exact_canonical(duplicate).is_err());
+    }
+
+    #[test]
+    fn execution_is_activation_and_trusted_internal_gated() {
+        let attempt = attempt(EvidenceClass::DestroyableSubjectData, 0);
+        let inactive = harness(attempt.clone(), false, true, false);
+        let error = block_on(inactive.service.execute_next(invocation(&attempt))).unwrap_err();
+        assert_eq!(
+            error.code.as_str(),
+            "CUSTOMER_PRIVACY_OWNER_EXECUTION_DISABLED"
+        );
+
+        let untrusted = harness(attempt.clone(), false, true, true);
+        let mut request = invocation(&attempt);
+        request.trusted_internal = false;
+        let error = block_on(untrusted.service.execute_next(request)).unwrap_err();
+        assert_eq!(
+            error.code.as_str(),
+            "CUSTOMER_PRIVACY_OWNER_EXECUTION_NOT_TRUSTED"
+        );
+    }
+
+    #[test]
+    fn durable_prepare_precedes_owner_and_outcome_checkpoint_writes() {
+        let attempt = attempt(EvidenceClass::DestroyableSubjectData, 0);
+        let permanent_key = attempt.target_idempotency_key().as_str().to_owned();
+        let harness = harness(attempt.clone(), true, false, true);
+        let result = block_on(harness.service.execute_next(invocation(&attempt))).unwrap();
+
+        assert_eq!(
+            &*harness.order.lock().unwrap(),
+            &["prepare", "owner", "record", "advance"]
+        );
+        assert!(result.attempt_replayed);
+        assert!(result.outcome_replayed);
+        assert!(result.owner_invoked);
+        assert!(result.complete);
+        let requests = harness.owner.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].target_idempotency_key, permanent_key);
+        assert_eq!(
+            requests[0].owner_capability_id,
+            "parties.privacy.action.apply"
+        );
+        assert_eq!(harness.persistence.recorded.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn retry_generation_keeps_permanent_owner_idempotency_identity() {
+        let first = attempt(EvidenceClass::DestroyableSubjectData, 0);
+        let retry = attempt(EvidenceClass::DestroyableSubjectData, 1);
+        assert_ne!(first.attempt_id(), retry.attempt_id());
+        assert_eq!(
+            first.target_idempotency_key(),
+            retry.target_idempotency_key()
+        );
+    }
+
+    #[test]
+    fn coordinator_only_retention_never_invokes_owner_capability() {
+        let attempt = attempt(EvidenceClass::ImmutableRequiredEvidence, 0);
+        assert_eq!(
+            attempt.coordinator_outcome_status(),
+            Some(PrivacyOwnerOutcomeStatus::BlockedByRetention)
+        );
+        let harness = harness(attempt.clone(), false, true, true);
+        let result = block_on(harness.service.execute_next(invocation(&attempt))).unwrap();
+        assert!(!result.owner_invoked);
+        assert!(harness.owner.requests.lock().unwrap().is_empty());
+        assert_eq!(
+            &*harness.order.lock().unwrap(),
+            &["prepare", "record", "advance"]
+        );
+    }
+
+    #[test]
+    fn completed_execution_is_terminal_and_has_no_owner_or_write_replay() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let owner = Arc::new(RecordingOwner {
+            result: OwnerActionResult {
+                status: PrivacyOwnerOutcomeStatus::Succeeded,
+                safe_failure_code: None,
+            },
+            order: order.clone(),
+            requests: Mutex::new(Vec::new()),
+        });
+        let persistence = Arc::new(ScriptedPersistence {
+            preparation: ExecutionPreparation::Complete {
+                total_items: 1,
+                durable_outcomes: 1,
+            },
+            record_inserted: false,
+            checkpoint: CheckpointAdvance {
+                next_sequence: 2,
+                total_items: 1,
+                complete: true,
+            },
+            order: order.clone(),
+            recorded: Mutex::new(Vec::new()),
+        });
+        let service = PrivacyOwnerExecutionService::new(
+            Arc::new(Activation { active: true }),
+            persistence.clone(),
+            exact_endpoints(owner.clone()),
+        );
+        let attempt = attempt(EvidenceClass::DestroyableSubjectData, 0);
+        let result = block_on(service.execute_next(invocation(&attempt))).unwrap();
+        assert!(result.complete);
+        assert!(!result.owner_invoked);
+        assert!(result.attempt.is_none());
+        assert!(result.outcome.is_none());
+        assert!(owner.requests.lock().unwrap().is_empty());
+        assert!(persistence.recorded.lock().unwrap().is_empty());
+        assert_eq!(&*order.lock().unwrap(), &["prepare"]);
+    }
 }

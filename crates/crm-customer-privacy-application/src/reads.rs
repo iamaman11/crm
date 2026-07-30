@@ -357,11 +357,13 @@ impl CustomerPrivacyPlanReadAdapter {
             String::new()
         };
         let page_digest = owner_outcome_page_digest_for_items(
-            &request.context.tenant_id,
-            &privacy_case_id,
-            source.action_plan.plan_id(),
-            owner_module_filter.as_ref(),
-            page_size,
+            &PrivacyOwnerOutcomePageDigestContext {
+                tenant_id: &request.context.tenant_id,
+                privacy_case_id: &privacy_case_id,
+                action_plan_id: source.action_plan.plan_id(),
+                owner_module_filter: owner_module_filter.as_ref(),
+                page_size,
+            },
             after.as_ref(),
             &page.outcomes,
             &next_cursor,
@@ -690,6 +692,15 @@ fn validate_source(
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct PrivacyOwnerOutcomePageDigestContext<'a> {
+    pub tenant_id: &'a TenantId,
+    pub privacy_case_id: &'a RecordId,
+    pub action_plan_id: &'a RecordId,
+    pub owner_module_filter: Option<&'a ModuleId>,
+    pub page_size: u32,
+}
+
 pub fn owner_outcome_page_digest(
     tenant_id: &TenantId,
     privacy_case_id: &RecordId,
@@ -698,11 +709,13 @@ pub fn owner_outcome_page_digest(
     page_size: u32,
 ) -> [u8; 32] {
     owner_outcome_page_digest_for_items(
-        tenant_id,
-        privacy_case_id,
-        plan_id,
-        owner_module_filter,
-        page_size,
+        &PrivacyOwnerOutcomePageDigestContext {
+            tenant_id,
+            privacy_case_id,
+            action_plan_id: plan_id,
+            owner_module_filter,
+            page_size,
+        },
         None,
         &[],
         "",
@@ -710,24 +723,23 @@ pub fn owner_outcome_page_digest(
 }
 
 pub fn owner_outcome_page_digest_for_items(
-    tenant_id: &TenantId,
-    privacy_case_id: &RecordId,
-    plan_id: &RecordId,
-    owner_module_filter: Option<&ModuleId>,
-    page_size: u32,
+    context: &PrivacyOwnerOutcomePageDigestContext<'_>,
     after: Option<&PrivacyOwnerOutcomePosition>,
     outcomes: &[PrivacyOwnerActionOutcome],
     next_cursor: &str,
 ) -> [u8; 32] {
-    let page_size = page_size.to_string();
-    let owner = owner_module_filter.map(ModuleId::as_str).unwrap_or("");
+    let page_size = context.page_size.to_string();
+    let owner = context
+        .owner_module_filter
+        .map(ModuleId::as_str)
+        .unwrap_or("");
     let item_count = outcomes.len().to_string();
     let mut bytes = Vec::new();
     for value in [
         b"crm.customer-privacy.owner-outcomes-page/v2".as_slice(),
-        tenant_id.as_str().as_bytes(),
-        privacy_case_id.as_str().as_bytes(),
-        plan_id.as_str().as_bytes(),
+        context.tenant_id.as_str().as_bytes(),
+        context.privacy_case_id.as_str().as_bytes(),
+        context.action_plan_id.as_str().as_bytes(),
         owner.as_bytes(),
         page_size.as_bytes(),
         item_count.as_bytes(),
@@ -1166,6 +1178,10 @@ mod tests {
             outcome_page_size(129).unwrap_err().code,
             "QUERY_PAGE_SIZE_EXCEEDS_LIMIT"
         );
+        assert_eq!(
+            outcome_page_size(-1).unwrap_err().code,
+            "QUERY_PAGE_SIZE_INVALID"
+        );
         assert!(validate_cursor_size("").is_ok());
         assert!(validate_cursor_size("continuation").is_ok());
         assert_eq!(
@@ -1173,6 +1189,184 @@ mod tests {
                 .unwrap_err()
                 .code,
             "QUERY_CURSOR_TOO_LARGE"
+        );
+    }
+
+    fn outcome_binding(
+        tenant_id: &str,
+        privacy_case_id: &str,
+        action_plan_id: &str,
+        owner_module_id: Option<&str>,
+        page_size: u32,
+    ) -> CursorBinding {
+        CursorBinding {
+            tenant_id: TenantId::try_new(tenant_id).unwrap(),
+            actor_id: Some(ActorId::try_new("actor-a").unwrap()),
+            capability_id: CapabilityId::try_new(LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY).unwrap(),
+            capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
+            resource_type: RecordType::try_new(OWNER_ACTION_OUTCOME_RECORD_TYPE).unwrap(),
+            normalized_filter_hash: normalized_filter_hash([
+                ("privacy_case_id", privacy_case_id.as_bytes()),
+                ("action_plan_id", action_plan_id.as_bytes()),
+                ("owner_module_id", owner_module_id.unwrap_or("").as_bytes()),
+            ]),
+            sort_id: "customer_privacy.owner_outcome.sequence_generation.v1".to_owned(),
+            page_size,
+        }
+    }
+
+    fn outcome_token(
+        codec: &CursorCodec,
+        binding: &CursorBinding,
+        sequence: u32,
+        generation: u32,
+    ) -> String {
+        let mut sort_key = Vec::with_capacity(8);
+        sort_key.extend_from_slice(&sequence.to_be_bytes());
+        sort_key.extend_from_slice(&generation.to_be_bytes());
+        codec
+            .encode(
+                binding,
+                &CursorContinuation {
+                    sort_key,
+                    record_id: RecordId::try_new("privacy-owner-outcome-a").unwrap(),
+                },
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn owner_outcome_cursor_round_trip_is_keyset_exact() {
+        let codec = CursorCodec::new([0x42; 32]).unwrap();
+        let binding = outcome_binding(
+            "tenant-a",
+            "privacy-case-a",
+            "action-plan-a",
+            Some("crm.parties"),
+            64,
+        );
+        let token = outcome_token(&codec, &binding, 7, 2);
+        let decoded = decode_outcome_cursor(&codec, &binding, &token)
+            .unwrap()
+            .unwrap();
+        assert_eq!(decoded.item_sequence, 7);
+        assert_eq!(decoded.attempt_generation, 2);
+        assert_eq!(decoded.outcome_id.as_str(), "privacy-owner-outcome-a");
+    }
+
+    #[test]
+    fn outcome_cursor_is_bound_to_tenant_case_plan_filter_actor_and_page_size() {
+        let codec = CursorCodec::new([0x42; 32]).unwrap();
+        let binding = outcome_binding(
+            "tenant-a",
+            "privacy-case-a",
+            "action-plan-a",
+            Some("crm.parties"),
+            64,
+        );
+        let token = outcome_token(&codec, &binding, 1, 0);
+        for wrong in [
+            outcome_binding(
+                "tenant-b",
+                "privacy-case-a",
+                "action-plan-a",
+                Some("crm.parties"),
+                64,
+            ),
+            outcome_binding(
+                "tenant-a",
+                "privacy-case-b",
+                "action-plan-a",
+                Some("crm.parties"),
+                64,
+            ),
+            outcome_binding(
+                "tenant-a",
+                "privacy-case-a",
+                "action-plan-b",
+                Some("crm.parties"),
+                64,
+            ),
+            outcome_binding(
+                "tenant-a",
+                "privacy-case-a",
+                "action-plan-a",
+                Some("crm.consents"),
+                64,
+            ),
+            outcome_binding(
+                "tenant-a",
+                "privacy-case-a",
+                "action-plan-a",
+                Some("crm.parties"),
+                128,
+            ),
+        ] {
+            assert_eq!(
+                decode_outcome_cursor(&codec, &wrong, &token)
+                    .unwrap_err()
+                    .code,
+                "QUERY_CURSOR_INVALID"
+            );
+        }
+
+        let mut wrong_actor = binding.clone();
+        wrong_actor.actor_id = Some(ActorId::try_new("actor-b").unwrap());
+        assert_eq!(
+            decode_outcome_cursor(&codec, &wrong_actor, &token)
+                .unwrap_err()
+                .code,
+            "QUERY_CURSOR_INVALID"
+        );
+    }
+
+    #[test]
+    fn malformed_tampered_and_out_of_bounds_outcome_cursors_fail_closed() {
+        let codec = CursorCodec::new([0x42; 32]).unwrap();
+        let binding = outcome_binding("tenant-a", "privacy-case-a", "action-plan-a", None, 64);
+        assert_eq!(
+            decode_outcome_cursor(&codec, &binding, "not-a-signed-cursor")
+                .unwrap_err()
+                .code,
+            "QUERY_CURSOR_INVALID"
+        );
+
+        let token = outcome_token(&codec, &binding, 1, 0);
+        let mut tampered = token.into_bytes();
+        let index = tampered.len() / 2;
+        tampered[index] = if tampered[index] == b'A' { b'B' } else { b'A' };
+        let tampered = String::from_utf8(tampered).unwrap();
+        assert_eq!(
+            decode_outcome_cursor(&codec, &binding, &tampered)
+                .unwrap_err()
+                .code,
+            "QUERY_CURSOR_INVALID"
+        );
+
+        for (sequence, generation) in [(0, 0), (1, 101)] {
+            let token = outcome_token(&codec, &binding, sequence, generation);
+            assert_eq!(
+                decode_outcome_cursor(&codec, &binding, &token)
+                    .unwrap_err()
+                    .code,
+                "QUERY_CURSOR_INVALID"
+            );
+        }
+
+        let invalid_sort = codec
+            .encode(
+                &binding,
+                &CursorContinuation {
+                    sort_key: vec![0; 7],
+                    record_id: RecordId::try_new("privacy-owner-outcome-a").unwrap(),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            decode_outcome_cursor(&codec, &binding, &invalid_sort)
+                .unwrap_err()
+                .code,
+            "QUERY_CURSOR_INVALID"
         );
     }
 }
