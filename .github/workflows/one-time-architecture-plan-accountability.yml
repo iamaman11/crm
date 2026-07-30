@@ -58,5 +58,6 @@ jobs:
             exit 1
           }
           git commit -m "Docs: clarify stage accountability and 10/10 completion"
+          git checkout -- scripts/one_time_architecture_plan_accountability.py
           git pull --rebase origin "${HEAD_BRANCH}"
           git push origin "HEAD:${HEAD_BRANCH}"
