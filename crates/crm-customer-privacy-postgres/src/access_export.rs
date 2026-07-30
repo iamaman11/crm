@@ -25,7 +25,6 @@ use crm_module_sdk::{
 };
 use std::sync::Arc;
 
-const ACCESS_EXPORT_AUDIT_DOMAIN: &[u8] = b"crm.customer-privacy.access-export-audit/v1";
 const ACCESS_EXPORT_TRANSACTION_DOMAIN: &[u8] =
     b"crm.customer-privacy.access-export-transaction/v1";
 const ACCESS_EXPORT_REQUEST_HASH_DOMAIN: &[u8] = b"crm.customer-privacy.access-export-request/v1";
@@ -109,14 +108,6 @@ impl AccessExportPersistencePort for PostgresAccessExportPersistence {
                 &business_transaction_id,
             )
             .await?;
-            append_access_export_audit(
-                &mut transaction,
-                invocation,
-                "access_export_prepared",
-                &prepared,
-                invocation.request_started_at_unix_nanos,
-            )
-            .await?;
             insert_access_export_transaction_evidence(
                 &mut transaction,
                 invocation,
@@ -196,14 +187,6 @@ impl AccessExportPersistencePort for PostgresAccessExportPersistence {
                 &completed,
                 invocation,
                 &business_transaction_id,
-            )
-            .await?;
-            append_access_export_audit(
-                &mut transaction,
-                invocation,
-                "access_export_completed",
-                &completed,
-                result.completed_at_unix_nanos,
             )
             .await?;
             insert_access_export_transaction_evidence(
@@ -796,69 +779,6 @@ async fn insert_access_export_transaction_evidence(
     .await
     .map_err(database_error)?;
     Ok(())
-}
-
-async fn append_access_export_audit(
-    transaction: &mut Transaction<'_, Postgres>,
-    invocation: &AccessExportInvocation,
-    event_type: &str,
-    reference: &PrivacyAccessExportReference,
-    occurred_at_unix_nanos: i64,
-) -> Result<(), SdkError> {
-    let digest =
-        access_export_audit_digest(invocation, event_type, reference, occurred_at_unix_nanos);
-    postgres_sqlx::query(
-        r#"
-        INSERT INTO crm.customer_privacy_owner_execution_audit (
-          tenant_id, audit_digest, event_type, privacy_case_id,
-          item_sequence, attempt_generation, attempt_id, outcome_id,
-          next_sequence, actor_id, request_id, correlation_id, trace_id,
-          occurred_at_unix_nanos
-        ) VALUES ($1,$2,$3,$4,NULL,NULL,NULL,NULL,NULL,$5,$6,$7,$8,$9)
-        ON CONFLICT DO NOTHING
-        "#,
-    )
-    .bind(invocation.tenant_id.as_str())
-    .bind(digest.as_slice())
-    .bind(event_type)
-    .bind(invocation.privacy_case_id.as_str())
-    .bind(invocation.actor_id.as_str())
-    .bind(invocation.request_id.as_str())
-    .bind(invocation.correlation_id.as_str())
-    .bind(invocation.trace_id.as_str())
-    .bind(occurred_at_unix_nanos)
-    .execute(&mut **transaction)
-    .await
-    .map_err(database_error)?;
-    Ok(())
-}
-
-fn access_export_audit_digest(
-    invocation: &AccessExportInvocation,
-    event_type: &str,
-    reference: &PrivacyAccessExportReference,
-    occurred_at_unix_nanos: i64,
-) -> [u8; 32] {
-    let mut bytes = Vec::new();
-    for field in [
-        ACCESS_EXPORT_AUDIT_DOMAIN,
-        invocation.tenant_id.as_str().as_bytes(),
-        invocation.privacy_case_id.as_str().as_bytes(),
-        invocation.action_plan_id.as_str().as_bytes(),
-        event_type.as_bytes(),
-        reference.reference_id().as_str().as_bytes(),
-        reference.digest().as_slice(),
-        invocation.actor_id.as_str().as_bytes(),
-        invocation.request_id.as_str().as_bytes(),
-        invocation.correlation_id.as_str().as_bytes(),
-        invocation.trace_id.as_str().as_bytes(),
-        invocation.initiating_capability_id.as_str().as_bytes(),
-        invocation.initiating_capability_version.as_str().as_bytes(),
-    ] {
-        append_digest_field(&mut bytes, field);
-    }
-    append_digest_field(&mut bytes, &occurred_at_unix_nanos.to_be_bytes());
-    discovery_sha256(&bytes)
 }
 
 fn access_export_transaction_id(
