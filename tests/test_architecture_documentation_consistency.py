@@ -276,6 +276,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(self.packet["tracking_issues"], [126, 194])
         for path in (
             ".github/workflows/customer-privacy-access-export.yml",
+            ".github/workflows/customer-privacy-approval.yml",
+            ".github/workflows/customer-privacy-owner-execution.yml",
             "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs",
             "crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs",
             "crates/crm-customer-privacy-application/src/access_export.rs",
@@ -299,6 +301,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for check in (
             "Affected Scope CI",
             "Customer Privacy Access Export CI",
+            "Customer Privacy Approval CI",
             "Customer Privacy Owner Execution CI",
             "Governance CI",
             "Rust CI",

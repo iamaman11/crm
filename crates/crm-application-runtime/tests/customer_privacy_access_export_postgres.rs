@@ -602,13 +602,13 @@ async fn customer_privacy_access_export_evidence_counts(
         SELECT
           (SELECT count(*) FROM crm.business_transactions
              WHERE tenant_id = $1
-               AND capability_id = 'customer_privacy.case.approve'),
+               AND business_transaction_id LIKE 'privacy-access-export-%'),
           (SELECT count(*) FROM crm.outbox_events
              WHERE tenant_id = $1
                AND event_type LIKE 'customer_privacy.access_export.internal.%'),
           (SELECT count(*) FROM crm.audit_records
              WHERE tenant_id = $1
-               AND capability_id = 'customer_privacy.case.approve'),
+               AND business_transaction_id LIKE 'privacy-access-export-%'),
           (SELECT count(*) FROM crm.idempotency_records
              WHERE tenant_id = $1
                AND idempotency_scope LIKE 'customer_privacy.access_export.reference.%')

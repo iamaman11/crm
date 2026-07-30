@@ -14,6 +14,8 @@
   "objective": "Implement repository step 10 only: trusted-internal, replay-safe Customer Privacy access/export assembly through customer_privacy.access_export.request@1.0.0 and the exact customer_data.export.privacy.request@1.0.0 owner boundary, persisting only immutable Customer Privacy manifest and stable Customer Data Operations job/artifact references while reusing the existing audited artifact disclosure path.",
   "allowed_paths": [
     ".github/workflows/customer-privacy-access-export.yml",
+    ".github/workflows/customer-privacy-approval.yml",
+    ".github/workflows/customer-privacy-owner-execution.yml",
     "crates/crm-application-runtime/src/customer_privacy_access_export.rs",
     "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
     "crates/crm-application-runtime/src/lib.rs",
@@ -61,6 +63,7 @@
   "required_checks": [
     "Affected Scope CI",
     "Customer Privacy Access Export CI",
+    "Customer Privacy Approval CI",
     "Customer Privacy Owner Execution CI",
     "Governance CI",
     "Rust CI",
