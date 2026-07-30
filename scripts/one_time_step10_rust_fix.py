@@ -13,12 +13,6 @@ def replace_once(path: str, old: str, new: str, label: str) -> None:
 
 
 replace_once(
-    "crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs",
-    "        expected_version: Option<i64>,\n",
-    "        expected_version: Option<u64>,\n",
-    "CDO expected version type",
-)
-replace_once(
     "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs",
     """            if command.chunk_index != artifact.metadata.next_chunk_index
                 || Sha256::digest(&command.bytes).as_slice() != command.chunk_sha256
