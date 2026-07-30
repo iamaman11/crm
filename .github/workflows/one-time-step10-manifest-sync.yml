@@ -52,6 +52,7 @@ jobs:
             crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs \
             repository-packet.json \
             docs/ACTIVE_PACKET.md \
+            docs/generated/REPOSITORY_MAP.md \
             tests/test_repository_navigation.py \
             tests/test_architecture_documentation_consistency.py
           git diff --cached --exit-code && { echo "Expected changes were not materialized."; exit 1; } || true
@@ -59,4 +60,4 @@ jobs:
           git restore scripts/one_time_step10_manifest_sync.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 6: restore temporary materializer before rebase.
+          # Revision 7: commit generated repository map with versioned manifests.
