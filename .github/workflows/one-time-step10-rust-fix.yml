@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: one-time-step10-rust-fix-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   patch:
@@ -51,4 +51,4 @@ jobs:
           git restore scripts/one_time_step10_rust_fix.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 4: include exact SdkError field checks.
+          # Revision 5: cancel stale patch runs and keep only the latest exact revision.
