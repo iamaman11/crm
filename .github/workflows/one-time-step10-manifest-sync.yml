@@ -56,6 +56,7 @@ jobs:
             tests/test_architecture_documentation_consistency.py
           git diff --cached --exit-code && { echo "Expected changes were not materialized."; exit 1; } || true
           git commit -m "Step 10: synchronize manifests and repository guards"
+          git restore scripts/one_time_step10_manifest_sync.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 5: synchronize permanent step-10 navigation guards.
+          # Revision 6: restore temporary materializer before rebase.
