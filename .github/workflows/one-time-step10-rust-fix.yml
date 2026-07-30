@@ -28,7 +28,7 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt
-      - name: Apply exact digest fixes
+      - name: Apply exact access execution and digest fixes
         run: |
           python scripts/one_time_step10_rust_fix.py
           cargo fmt --all
@@ -43,9 +43,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs
-          git diff --cached --exit-code && { echo "Expected digest fixes were not materialized."; exit 1; } || true
-          git commit -m "Step 10: use exact artifact digest types"
+          git diff --cached --exit-code && { echo "Expected test fixes were not materialized."; exit 1; } || true
+          git commit -m "Step 10: align access execution acceptance"
           git restore scripts/one_time_step10_rust_fix.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 2: preserve accepted i64 batch versions.
+          # Revision 3: execute coordinator-owned Access Retain outcomes.
