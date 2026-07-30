@@ -54,4 +54,4 @@ jobs:
           git restore scripts/one_time_step10_rust_fix.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 9: execute cardinality-safe fixture version conversion.
+          # Revision 10: scope u64-to-i64 conversion to record persistence only.
