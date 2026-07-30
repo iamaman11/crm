@@ -47,6 +47,8 @@ Phase 8A.11 / issue #126 remains **In progress**.
 
 Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241**. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, repository-step-8 owner execution and `customer_privacy.access_export.request@1.0.0` have no public ingress.
 
+Scope discovery and immutable snapshot execution remain accepted through PR #206 and are the authoritative foundation for the later planning, owner-execution and access/export evidence.
+
 Nine owner-scope contribution coordinates are published as non-public owner-owned reads. **All nine authoritative implementations are accepted:**
 
 - PR #156 — Parties;
