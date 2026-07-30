@@ -131,6 +131,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python -m pip install --requirement requirements-dev.txt
           echo "1a06dd428ea26c70af2c3e14878b37d1b1a881e7939aa809623972299eac37f4  .github/step8-finalize.py" | sha256sum --check
           python .github/step8-finalize.py
           python scripts/generate_repository_navigation.py --write
