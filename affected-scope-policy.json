@@ -7,9 +7,7 @@
       "path_patterns": [
         "contracts/**",
         "schemas/**",
-        "modules/*/module.yaml",
-        "scripts/contract_bindings.py",
-        "scripts/generate_contract_bindings.py"
+        "modules/*/module.yaml"
       ],
       "required_workflows": [
         "Governance CI"
@@ -24,7 +22,9 @@
         "buf.lock",
         "buf.gen*.yaml",
         "crates/crm-proto-contracts/**",
-        "packages/client/src/contract_hashes.ts"
+        "packages/client/src/contract_hashes.ts",
+        "scripts/contract_bindings.py",
+        "scripts/generate_contract_bindings.py"
       ],
       "required_workflows": [
         "Product Plane CI",
@@ -48,9 +48,7 @@
       "owner": "data-platform",
       "path_patterns": [
         "database/**",
-        "crates/*postgres*/**",
-        "crates/crm-core-data/**",
-        "scripts/prepare_*database*.sh"
+        "crates/crm-core-data/**"
       ],
       "required_workflows": [
         "Database CI"
@@ -60,12 +58,14 @@
       "id": "process_runtime_acceptance",
       "owner": "runtime-platform",
       "path_patterns": [
-        "services/**",
-        "crates/*runtime*/**",
-        "crates/*ingress*/**",
-        "crates/*worker*/**",
-        "scripts/run_e2e.sh",
-        "scripts/prepare_*process*.sh"
+        "services/crm-api/**",
+        "crates/crm-application-runtime/**",
+        "crates/crm-capability-ingress/**",
+        "crates/crm-capability-runtime/**",
+        "crates/crm-query-runtime/**",
+        "crates/crm-search-runtime/**",
+        "scripts/prepare_customer_enrichment_worker_process_database.sh",
+        "scripts/prepare_customer_enrichment_consent_policy_database.sh"
       ],
       "required_workflows": [
         "Application Runtime CI"
@@ -105,16 +105,14 @@
       "id": "operations",
       "owner": "platform-operations",
       "path_patterns": [
-        ".github/**",
-        "ops/**",
-        "deploy/**",
-        "infrastructure/**",
-        "docker/**",
-        "Dockerfile",
-        "Dockerfile.*",
-        "compose*.yml",
-        "compose*.yaml",
-        "scripts/prepare_*.sh"
+        ".github/workflows/**",
+        ".github/pull_request_template.md",
+        "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md",
+        "docs/CI_TELEMETRY_BASELINE.md",
+        "docs/DELIVERY_GOVERNANCE.md",
+        "docs/POSTGRESQL_PROCESS_ISOLATION_PILOT.md",
+        "docs/RUST_CI_CACHE_PILOT.md",
+        "scripts/prepare_isolated_process_database.sh"
       ],
       "required_workflows": [
         "Governance CI"
@@ -124,7 +122,6 @@
   "neutral_path_patterns": [
     "docs/**",
     "tests/**",
-    ".github/pull_request_template.md",
     "README.md",
     "LICENSE",
     "LICENSE.*"
