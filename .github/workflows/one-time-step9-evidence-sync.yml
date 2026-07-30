@@ -58,3 +58,4 @@ jobs:
           git restore scripts/one_time_step9_evidence_sync.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
+          # Revision 5: permanent guards and clean rebase path verified.
