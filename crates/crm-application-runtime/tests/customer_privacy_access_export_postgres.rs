@@ -144,6 +144,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         reference_version(&admin, TENANT_A, prepared.reference_id().as_str()).await,
         1
     );
+    assert_eq!(
+        customer_privacy_access_export_evidence_counts(&admin, TENANT_A).await,
+        (1, 1, 1, 1)
+    );
 
     let preparation_replay = persistence
         .prepare(&access_invocation(TENANT_A, "prepare-replay"))
@@ -161,6 +165,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
             panic!("prepared reference must not become complete without target evidence")
         }
     }
+    assert_eq!(
+        customer_privacy_access_export_evidence_counts(&admin, TENANT_A).await,
+        (1, 1, 1, 1)
+    );
 
     let file_store = Arc::new(MemoryFileStore::default());
     let publisher = PrivacyManifestExportPublisher::new((*store).clone(), file_store.clone());
@@ -221,6 +229,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         reference_version(&admin, TENANT_A, completed.reference_id().as_str()).await,
         2
     );
+    assert_eq!(
+        customer_privacy_access_export_evidence_counts(&admin, TENANT_A).await,
+        (2, 2, 2, 2)
+    );
 
     let (completion_replay, completed_now) = persistence
         .complete(
@@ -232,6 +244,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         .expect("exact completion replay must be immutable");
     assert!(!completed_now);
     assert_eq!(completion_replay, completed);
+    assert_eq!(
+        customer_privacy_access_export_evidence_counts(&admin, TENANT_A).await,
+        (2, 2, 2, 2)
+    );
 
     let final_replay = persistence
         .prepare(&access_invocation(TENANT_A, "final-replay"))
@@ -253,6 +269,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         "CUSTOMER_PRIVACY_CASE_NOT_FOUND"
     );
     assert_eq!(reference_count(&admin, TENANT_B).await, 0);
+    assert_eq!(
+        customer_privacy_access_export_evidence_counts(&admin, TENANT_B).await,
+        (0, 0, 0, 0)
+    );
 
     let mut conflicting = application_target;
     conflicting.content_sha256 = [8; 32];
@@ -528,6 +548,33 @@ async fn privacy_export_job_count(admin: &PgPool, tenant: &str) -> i64 {
     .fetch_one(admin)
     .await
     .expect("count privacy export jobs")
+}
+
+async fn customer_privacy_access_export_evidence_counts(
+    admin: &PgPool,
+    tenant: &str,
+) -> (i64, i64, i64, i64) {
+    sqlx::query_as(
+        r#"
+        SELECT
+          (SELECT count(*) FROM crm.business_transactions
+             WHERE tenant_id = $1
+               AND capability_id = 'customer_privacy.access_export.request'),
+          (SELECT count(*) FROM crm.outbox_events
+             WHERE tenant_id = $1
+               AND event_type LIKE 'customer_privacy.access_export.internal.%'),
+          (SELECT count(*) FROM crm.audit_records
+             WHERE tenant_id = $1
+               AND capability_id = 'customer_privacy.access_export.request'),
+          (SELECT count(*) FROM crm.idempotency_records
+             WHERE tenant_id = $1
+               AND idempotency_scope LIKE 'customer_privacy.access_export.reference.%')
+        "#,
+    )
+    .bind(tenant)
+    .fetch_one(admin)
+    .await
+    .expect("count Customer Privacy access-export transaction evidence")
 }
 
 async fn cleanup(admin: &PgPool) {

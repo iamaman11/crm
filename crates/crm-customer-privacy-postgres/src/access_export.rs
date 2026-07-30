@@ -26,6 +26,20 @@ use crm_module_sdk::{
 use std::sync::Arc;
 
 const ACCESS_EXPORT_AUDIT_DOMAIN: &[u8] = b"crm.customer-privacy.access-export-audit/v1";
+const ACCESS_EXPORT_TRANSACTION_DOMAIN: &[u8] =
+    b"crm.customer-privacy.access-export-transaction/v1";
+const ACCESS_EXPORT_REQUEST_HASH_DOMAIN: &[u8] = b"crm.customer-privacy.access-export-request/v1";
+const ACCESS_EXPORT_EVENT_SCHEMA_ID: &str = "crm.customer-privacy.access_export_reference.event";
+const ACCESS_EXPORT_EVENT_SCHEMA_VERSION: &str = "1.0.0";
+const ACCESS_EXPORT_EVENT_DESCRIPTOR: &[u8] =
+    b"crm.customer-privacy.access_export_reference.event/v1:reference_state";
+const ACCESS_EXPORT_PREPARED_EVENT_TYPE: &str =
+    "customer_privacy.access_export.internal.reference_prepared";
+const ACCESS_EXPORT_COMPLETED_EVENT_TYPE: &str =
+    "customer_privacy.access_export.internal.reference_completed";
+const ACCESS_EXPORT_IDEMPOTENCY_SCOPE_PREFIX: &str = "customer_privacy.access_export.reference";
+const AUDIT_CANONICALIZATION_PROFILE: &str = "crm.cjson/v1";
+const AUDIT_LOCK_NAMESPACE: i64 = 0x4352_4d41_5544_4954;
 
 #[derive(Debug, Clone)]
 pub struct PostgresAccessExportPersistence {
@@ -85,13 +99,33 @@ impl AccessExportPersistencePort for PostgresAccessExportPersistence {
                     })
                 };
             }
-            insert_reference(&mut transaction, &prepared, invocation).await?;
+            let business_transaction_id =
+                access_export_transaction_id(invocation, "prepared", &prepared);
+            bind_business_transaction(&mut transaction, &business_transaction_id).await?;
+            insert_reference(
+                &mut transaction,
+                &prepared,
+                invocation,
+                &business_transaction_id,
+            )
+            .await?;
             append_access_export_audit(
                 &mut transaction,
                 invocation,
                 "access_export_prepared",
                 &prepared,
                 invocation.request_started_at_unix_nanos,
+            )
+            .await?;
+            insert_access_export_transaction_evidence(
+                &mut transaction,
+                invocation,
+                "prepared",
+                ACCESS_EXPORT_PREPARED_EVENT_TYPE,
+                &prepared,
+                1,
+                invocation.request_started_at_unix_nanos,
+                &business_transaction_id,
             )
             .await?;
             transaction.commit().await.map_err(database_error)?;
@@ -153,13 +187,34 @@ impl AccessExportPersistencePort for PostgresAccessExportPersistence {
             }
             let mut completed = stored;
             apply_target_result(&mut completed, result)?;
-            update_reference(&mut transaction, prepared, &completed, invocation).await?;
+            let business_transaction_id =
+                access_export_transaction_id(invocation, "completed", &completed);
+            bind_business_transaction(&mut transaction, &business_transaction_id).await?;
+            update_reference(
+                &mut transaction,
+                prepared,
+                &completed,
+                invocation,
+                &business_transaction_id,
+            )
+            .await?;
             append_access_export_audit(
                 &mut transaction,
                 invocation,
                 "access_export_completed",
                 &completed,
                 result.completed_at_unix_nanos,
+            )
+            .await?;
+            insert_access_export_transaction_evidence(
+                &mut transaction,
+                invocation,
+                "completed",
+                ACCESS_EXPORT_COMPLETED_EVENT_TYPE,
+                &completed,
+                2,
+                result.completed_at_unix_nanos,
+                &business_transaction_id,
             )
             .await?;
             transaction.commit().await.map_err(database_error)?;
@@ -328,8 +383,7 @@ async fn bind_invocation(
                set_config('app.actor_id', $2, true),
                set_config('app.request_id', $3, true),
                set_config('app.capability_id', $4, true),
-               set_config('app.capability_version', $5, true),
-               set_config('app.business_transaction_id', $6, true)
+               set_config('app.capability_version', $5, true)
         "#,
     )
     .bind(invocation.tenant_id.as_str())
@@ -337,10 +391,21 @@ async fn bind_invocation(
     .bind(invocation.request_id.as_str())
     .bind(invocation.initiating_capability_id.as_str())
     .bind(invocation.initiating_capability_version.as_str())
-    .bind(transaction_id(invocation))
     .execute(&mut **transaction)
     .await
     .map_err(database_error)?;
+    Ok(())
+}
+
+async fn bind_business_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    business_transaction_id: &str,
+) -> Result<(), SdkError> {
+    postgres_sqlx::query("SELECT set_config('app.business_transaction_id', $1, true)")
+        .bind(business_transaction_id)
+        .execute(&mut **transaction)
+        .await
+        .map_err(database_error)?;
     Ok(())
 }
 
@@ -471,6 +536,7 @@ async fn insert_reference(
     transaction: &mut Transaction<'_, Postgres>,
     reference: &PrivacyAccessExportReference,
     invocation: &AccessExportInvocation,
+    business_transaction_id: &str,
 ) -> Result<(), SdkError> {
     let payload = encode_access_export_reference(reference)?;
     let result = postgres_sqlx::query(
@@ -497,7 +563,7 @@ async fn insert_reference(
     )?)
     .bind(ACCESS_EXPORT_STATE_RETENTION_POLICY_ID)
     .bind(payload)
-    .bind(transaction_id(invocation))
+    .bind(business_transaction_id)
     .execute(&mut **transaction)
     .await
     .map_err(database_error)?;
@@ -514,6 +580,7 @@ async fn update_reference(
     prepared: &PrivacyAccessExportReference,
     completed: &PrivacyAccessExportReference,
     invocation: &AccessExportInvocation,
+    business_transaction_id: &str,
 ) -> Result<(), SdkError> {
     let payload = encode_access_export_reference(completed)?;
     let result = postgres_sqlx::query(
@@ -542,7 +609,7 @@ async fn update_reference(
     )?)
     .bind(ACCESS_EXPORT_STATE_RETENTION_POLICY_ID)
     .bind(payload)
-    .bind(transaction_id(invocation))
+    .bind(business_transaction_id)
     .execute(&mut **transaction)
     .await
     .map_err(database_error)?;
@@ -551,6 +618,183 @@ async fn update_reference(
             "prepared access export reference changed before completion",
         ));
     }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_access_export_transaction_evidence(
+    transaction: &mut Transaction<'_, Postgres>,
+    invocation: &AccessExportInvocation,
+    phase: &str,
+    event_type: &str,
+    reference: &PrivacyAccessExportReference,
+    aggregate_version: i64,
+    occurred_at_unix_nanos: i64,
+    business_transaction_id: &str,
+) -> Result<(), SdkError> {
+    if aggregate_version <= 0 {
+        return Err(access_export_evidence_invalid(
+            "access export aggregate version must be positive",
+        ));
+    }
+    let payload = encode_access_export_reference(reference)?;
+    let request_hash = access_export_request_hash(
+        invocation,
+        phase,
+        reference,
+        business_transaction_id,
+        &payload,
+    );
+    let suffix = &hex(&discovery_sha256(business_transaction_id.as_bytes()))[..24];
+    let event_id = format!("privacy-access-export-event-{suffix}");
+    let audit_id = format!("privacy-access-export-audit-{suffix}");
+    let idempotency_scope = format!("{ACCESS_EXPORT_IDEMPOTENCY_SCOPE_PREFIX}.{phase}");
+
+    postgres_sqlx::query(
+        r#"
+        INSERT INTO crm.idempotency_records (
+          tenant_id, idempotency_scope, idempotency_key, request_hash,
+          status, business_transaction_id, expires_at
+        ) VALUES ($1,$2,$3,$4,'completed',$5,clock_timestamp() + INTERVAL '24 hours')
+        "#,
+    )
+    .bind(invocation.tenant_id.as_str())
+    .bind(&idempotency_scope)
+    .bind(business_transaction_id)
+    .bind(request_hash.as_slice())
+    .bind(business_transaction_id)
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+
+    postgres_sqlx::query(
+        r#"
+        INSERT INTO crm.outbox_events (
+          tenant_id, event_id, business_transaction_id,
+          aggregate_type, aggregate_id, aggregate_version, event_sequence,
+          event_type, deduplication_key, schema_id, schema_version, descriptor_hash,
+          data_class, payload_encoding, maximum_payload_size, retention_policy_id,
+          payload_bytes, occurred_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,
+          'confidential','json',$12,$13,$14,
+          TIMESTAMPTZ 'epoch' + ($15::bigint / 1000) * INTERVAL '1 microsecond'
+        )
+        "#,
+    )
+    .bind(invocation.tenant_id.as_str())
+    .bind(&event_id)
+    .bind(business_transaction_id)
+    .bind(ACCESS_EXPORT_REFERENCE_RECORD_TYPE)
+    .bind(reference.reference_id().as_str())
+    .bind(aggregate_version)
+    .bind(event_type)
+    .bind(&event_id)
+    .bind(ACCESS_EXPORT_EVENT_SCHEMA_ID)
+    .bind(ACCESS_EXPORT_EVENT_SCHEMA_VERSION)
+    .bind(discovery_sha256(ACCESS_EXPORT_EVENT_DESCRIPTOR).as_slice())
+    .bind(checked_i64(
+        ACCESS_EXPORT_STATE_MAXIMUM_BYTES,
+        "access export event maximum payload size",
+    )?)
+    .bind(ACCESS_EXPORT_STATE_RETENTION_POLICY_ID)
+    .bind(payload.as_slice())
+    .bind(occurred_at_unix_nanos)
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+
+    let _audit_lock =
+        postgres_sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, $2))")
+            .bind(invocation.tenant_id.as_str())
+            .bind(AUDIT_LOCK_NAMESPACE)
+            .fetch_one(&mut **transaction)
+            .await
+            .map_err(database_error)?;
+    let head = postgres_sqlx::query(
+        "SELECT next_sequence, last_hash FROM crm.audit_heads WHERE tenant_id = $1",
+    )
+    .bind(invocation.tenant_id.as_str())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    let (sequence, previous_hash) = match head {
+        Some(row) => {
+            let sequence: i64 = row.try_get("next_sequence").map_err(database_error)?;
+            if sequence <= 0 {
+                return Err(access_export_evidence_invalid(
+                    "tenant audit next sequence must be positive",
+                ));
+            }
+            let previous_hash = row
+                .try_get::<Vec<u8>, _>("last_hash")
+                .map_err(database_error)?
+                .try_into()
+                .map_err(|_| {
+                    access_export_evidence_invalid("tenant audit hash must contain 32 bytes")
+                })?;
+            (sequence, previous_hash)
+        }
+        None => (1, [0; 32]),
+    };
+    let occurred_at = (occurred_at_unix_nanos / 1_000) * 1_000;
+    let audit_hash = access_export_transaction_audit_hash(
+        invocation,
+        sequence,
+        previous_hash,
+        &audit_id,
+        business_transaction_id,
+        &payload,
+        occurred_at,
+    );
+    postgres_sqlx::query(
+        r#"
+        INSERT INTO crm.audit_records (
+          tenant_id, audit_sequence, audit_record_id, business_transaction_id,
+          actor_id, capability_id, capability_version, canonicalization_profile,
+          previous_hash, record_hash, canonical_envelope, occurred_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+          TIMESTAMPTZ 'epoch' + ($12::bigint / 1000) * INTERVAL '1 microsecond'
+        )
+        "#,
+    )
+    .bind(invocation.tenant_id.as_str())
+    .bind(sequence)
+    .bind(&audit_id)
+    .bind(business_transaction_id)
+    .bind(invocation.actor_id.as_str())
+    .bind(invocation.initiating_capability_id.as_str())
+    .bind(invocation.initiating_capability_version.as_str())
+    .bind(AUDIT_CANONICALIZATION_PROFILE)
+    .bind(previous_hash.as_slice())
+    .bind(audit_hash.as_slice())
+    .bind(payload.as_slice())
+    .bind(occurred_at)
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+
+    postgres_sqlx::query(
+        r#"
+        INSERT INTO crm.business_transactions (
+          tenant_id, business_transaction_id, actor_id, request_id,
+          correlation_id, trace_id, capability_id, capability_version,
+          expected_outbox_events, expected_audit_records, expected_idempotency_records
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,1,1)
+        "#,
+    )
+    .bind(invocation.tenant_id.as_str())
+    .bind(business_transaction_id)
+    .bind(invocation.actor_id.as_str())
+    .bind(invocation.request_id.as_str())
+    .bind(invocation.correlation_id.as_str())
+    .bind(invocation.trace_id.as_str())
+    .bind(invocation.initiating_capability_id.as_str())
+    .bind(invocation.initiating_capability_version.as_str())
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
     Ok(())
 }
 
@@ -617,9 +861,78 @@ fn access_export_audit_digest(
     discovery_sha256(&bytes)
 }
 
-fn transaction_id(invocation: &AccessExportInvocation) -> String {
-    let digest = discovery_sha256(invocation.request_id.as_str().as_bytes());
-    format!("privacy-access-export-{}", hex(&digest[..12]))
+fn access_export_transaction_id(
+    invocation: &AccessExportInvocation,
+    phase: &str,
+    reference: &PrivacyAccessExportReference,
+) -> String {
+    let mut bytes = Vec::new();
+    for field in [
+        ACCESS_EXPORT_TRANSACTION_DOMAIN,
+        invocation.tenant_id.as_str().as_bytes(),
+        invocation.privacy_case_id.as_str().as_bytes(),
+        invocation.action_plan_id.as_str().as_bytes(),
+        phase.as_bytes(),
+        reference.reference_id().as_str().as_bytes(),
+        reference.digest().as_slice(),
+    ] {
+        append_digest_field(&mut bytes, field);
+    }
+    let digest = discovery_sha256(&bytes);
+    format!("privacy-access-export-{phase}-{}", hex(&digest[..12]))
+}
+
+fn access_export_request_hash(
+    invocation: &AccessExportInvocation,
+    phase: &str,
+    reference: &PrivacyAccessExportReference,
+    business_transaction_id: &str,
+    payload: &[u8],
+) -> [u8; 32] {
+    let mut bytes = Vec::new();
+    for field in [
+        ACCESS_EXPORT_REQUEST_HASH_DOMAIN,
+        invocation.tenant_id.as_str().as_bytes(),
+        invocation.privacy_case_id.as_str().as_bytes(),
+        invocation.action_plan_id.as_str().as_bytes(),
+        phase.as_bytes(),
+        reference.reference_id().as_str().as_bytes(),
+        reference.digest().as_slice(),
+        business_transaction_id.as_bytes(),
+        payload,
+    ] {
+        append_digest_field(&mut bytes, field);
+    }
+    discovery_sha256(&bytes)
+}
+
+fn access_export_transaction_audit_hash(
+    invocation: &AccessExportInvocation,
+    sequence: i64,
+    previous_hash: [u8; 32],
+    audit_id: &str,
+    business_transaction_id: &str,
+    canonical_envelope: &[u8],
+    occurred_at_unix_nanos: i64,
+) -> [u8; 32] {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"crm.audit.record.sha256/v1");
+    append_digest_field(&mut bytes, invocation.tenant_id.as_str().as_bytes());
+    bytes.extend_from_slice(&sequence.to_be_bytes());
+    for field in [
+        audit_id.as_bytes(),
+        business_transaction_id.as_bytes(),
+        invocation.actor_id.as_str().as_bytes(),
+        invocation.initiating_capability_id.as_str().as_bytes(),
+        invocation.initiating_capability_version.as_str().as_bytes(),
+        AUDIT_CANONICALIZATION_PROFILE.as_bytes(),
+    ] {
+        append_digest_field(&mut bytes, field);
+    }
+    bytes.extend_from_slice(&previous_hash);
+    append_digest_field(&mut bytes, canonical_envelope);
+    bytes.extend_from_slice(&occurred_at_unix_nanos.to_be_bytes());
+    discovery_sha256(&bytes)
 }
 
 fn decode_record_snapshot(
