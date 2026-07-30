@@ -132,7 +132,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --requirement requirements-dev.txt
-          echo "1a06dd428ea26c70af2c3e14878b37d1b1a881e7939aa809623972299eac37f4  .github/step8-finalize.py" | sha256sum --check
+          echo "ccfe9662933d4ba10029e1e325faf05849ce256382efc069d2d519db6c9ac890  .github/step8-finalize.py" | sha256sum --check
           python .github/step8-finalize.py
           python scripts/generate_repository_navigation.py --write
           python scripts/repo.py packet-check --base origin/main
