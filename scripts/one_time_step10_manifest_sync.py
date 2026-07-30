@@ -67,10 +67,34 @@ security:
 )
 replace_once(
     "modules/crm-customer-data-operations/module.yaml",
-    """    - customer_data.export_execution_stage
+    """lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-customer-data-operations/migrations
+  retained_record_types:
+    - customer_data.import_job
+    - customer_data.import_row
+    - customer_data.export_job
+    - customer_data.export_selection_boundary
+    - customer_data.export_selection_progress
+    - customer_data.export_selection_item
+    - customer_data.export_execution_stage
     - customer_data.export_execution_outcome
 """,
-    """    - customer_data.export_execution_stage
+    """lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  migrations_path: modules/crm-customer-data-operations/migrations
+  retained_record_types:
+    - customer_data.import_job
+    - customer_data.import_row
+    - customer_data.export_job
+    - customer_data.export_selection_boundary
+    - customer_data.export_selection_progress
+    - customer_data.export_selection_item
+    - customer_data.export_execution_stage
     - customer_data.export_execution_outcome
     - customer_data.privacy_export_job
 """,
