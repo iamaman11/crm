@@ -41,7 +41,7 @@ Only merged `main` work may be represented as **Complete**.
 | 0.1–7 | #3–#10 | Governed platform, Sales/Activities proof, search, product shell and native composition | **Complete** |
 | 8 | #11 | Expert modules and product-quality CRM experience | **In progress** |
 | 8A | #28 | Canonical customer master, identity, consent and governed customer-data lifecycle | **In progress** |
-| 8B | #29 | Product Catalog, CPQ and quote-to-revenue lifecycle | **Planned; blocked on repository steps 1–19 and completed 8A** |
+| 8B | #29 | Product Catalog, CPQ and quote-to-revenue lifecycle | **Planned; blocked on repository steps 1–20 and completed 8A; first extension wave is step 21** |
 | 9 | #12 | AI-native governed actor/tool layer | **Planned** |
 | 10 | #13 | Signed marketplace and sandboxed untrusted extensions | **Planned** |
 | 11 | #14 | Enterprise security, resilience and production proof | **Planned / continuous** |
@@ -53,15 +53,36 @@ Issue #194 remains **Open**.
 - Stage A documentation/navigation baseline — **Complete**.
 - Stage B dependency, crate and exception governance — **In progress; Rust toolchain/lint prerequisite accepted through PR #218 and lockfile-preserving Rust workflows accepted through PR #232**.
 - Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, immediate deny-only restriction placement/final owner guard accepted through PR #226, legal-hold/mandatory-retention precedence accepted through PR #230, durable replay-safe owner execution/outcomes accepted through PR #237, and governed access/export assembly accepted through PR #241.
-- Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222**.
+- Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222; repository step 12 is the explicit completion step for all currently active first-party owners**.
 - Stage E — **Complete through PR #239**: deterministic Rust closure, exact eight-category repository ownership, contract/Protobuf/API/migration/PostgreSQL/process/product/frontend/operations selection, live workflow-filter compatibility, exact-head evidence and unknown-path fail-closed enforcement are accepted.
-- Stage H — **In progress**: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands remain open.
-- Stage F — **In progress**: reusable generic mutation/query conformance is accepted through PR #235; worker conformance and contract lifecycle enforcement remain open.
-- Stages G and I — measured consolidation, frontend and operations parity remain open.
+- Stage H — **In progress**: deterministic explain, packet-check and generated navigation are accepted through PR #228; repository step 16 owns local lifecycle completion.
+- Stage F — **In progress**: reusable generic mutation/query conformance is accepted through PR #235; repository step 15 owns worker conformance and step 17 proves real adoption.
+- Stage G — **Not started**: repository step 13 owns the first measured behavior-neutral consolidation.
+- Stage I — **Not started as a complete stage**: repository step 18 owns frontend/operations evidence and step 19 proves Phase 8A closure.
 
 Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232, PR #230, PR #235, PR #237, PR #239 and PR #241. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
 The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–10 are complete through PR #218, PR #220, PR #222, PR #226, PR #228, PR #230, PR #235, PR #237, PR #239 and PR #241; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — is the current next packet.
+
+
+### 3.1 Remaining stage-to-step ownership
+
+The stage labels are accounting only; the architecture master sequence remains authoritative.
+
+| Remaining step | Primary stage | Supporting stages |
+|---|---|---|
+| 11 — deletion/anonymization/crypto-shred | C | B, F |
+| 12 — complete contribution aggregation | D | B, E |
+| 13 — measured consolidation | G | B, D |
+| 14 — tombstone/no-orphan/convergence | C | F |
+| 15 — generic worker conformance | F | E |
+| 16 — local lifecycle commands | H | A |
+| 17 — Customer Privacy worker and full E2E | C, F | D, H |
+| 18 — frontend and operations evidence | I | E |
+| 19 — Phase 8A closure | C, F, I | A, E |
+| 20 — Phase 8A architecture remeasurement | all stages | measurement only; no automatic 10/10 claim |
+| 21–22 — contrasting later expert-domain waves | C, D | B, E, F, H, I |
+| 23 — final 10/10 closure review | all stages | succeeds only if every normative criterion is proven |
 
 ## 4. Phase 8A completed foundation
 
@@ -196,19 +217,31 @@ The only permitted current sequence is:
 9. **Repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — Complete through PR #239.**
 10. **Repository step 10 — governed Customer Privacy access/export assembly — Complete through PR #241.**
 11. **Repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — Next.**
-12–19. **Repository steps 12–19 — continue exactly as numbered in the architecture plan.**
-20. **Repository step 20 — first Phase 8B packet.**
+12. **Repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes.**
+13. **Repository step 13 — first measured behavior-neutral transitional domain-cluster consolidation.**
+14. **Repository step 14 — Party tombstone, no-orphan proof and projection/search/cache convergence.**
+15. **Repository step 15 — reusable generic worker conformance.**
+16. **Repository step 16 — deterministic local lifecycle commands.**
+17. **Repository step 17 — Customer Privacy worker, disable/uninstall fail-closed semantics and full process acceptance.**
+18. **Repository step 18 — Phase 8A frontend and operations evidence.**
+19. **Repository step 19 — Phase 8A closure.**
+20. **Repository step 20 — Phase 8A architecture remeasurement; not a final 10/10 declaration.**
+21. **Repository step 21 — first Phase 8B expert-domain wave.**
+22. **Repository step 22 — second contrasting expert-domain wave.**
+23. **Repository step 23 — final architecture 10/10 closure review only after every criterion is mechanically proven.**
 
 The inserted prerequisites did not renumber the master sequence. Repository step 11 is now the only next permitted implementation packet.
 
 ## 7. Phase 8B and later expert domains
 
-Phase 8B remains planned and blocked on repository steps 1–19 and completed Phase 8A. Independent owner domains include Product Catalog, Price Books/Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment boundaries. They must not be absorbed into Sales.
+Phase 8B remains planned and blocked on repository steps 1–20 and completed Phase 8A. Repository step 21 begins the first measured extension wave; step 22 must provide a contrasting second wave before the final step 23 architecture closure review. Independent owner domains include Product Catalog, Price Books/Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment boundaries. They must not be absorbed into Sales.
 
 Later planned work includes broader Sales/Activities, omnichannel, Marketing, Service/Knowledge/Field Service, Customer Success, projects/configurable work, documents/e-signature, analytics, workflow/collaboration, governed AI, marketplace and enterprise operational proof.
 
 ## 8. Completion rule
 
 Current product-complete expert modules: **0**.
+
+Repository step 20 remeasures the Phase 8A architecture but cannot itself claim architecture 10/10. Final closure is no earlier than step 23 and requires the two later expert-domain waves plus every architecture completion criterion.
 
 A module, phase or product is not complete merely because a crate, contract, migration or one backend path exists. Completion requires defined domain breadth, governed APIs, persistence, authorization, audit, product UX and production/operational evidence.

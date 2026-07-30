@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-30
+Status date: 2026-07-31
 
 This is the concise current-state snapshot. Normative product dependencies remain in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order is in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains in `MODULE_CATALOG.md`.
 
@@ -136,7 +136,14 @@ Repository step 11 is owner-specific deletion, anonymization and supported crypt
 
 ## Following permitted repository packet
 
-Repository step 12 is the first measured behavior-neutral transitional domain-cluster consolidation.
+Repository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes. Repository step 13 is the first measured behavior-neutral transitional domain-cluster consolidation.
+
+
+## Architecture 10/10 declaration boundary
+
+Repository step 20 is a measured Phase 8A checkpoint, not an automatic success declaration. Architecture 10/10 requires the completed Stage D packet at step 12, measured consolidation at step 13, worker/local/frontend/operations closure through step 19, two contrasting later expert-domain waves at steps 21 and 22, and a separate final review at step 23. Issue #194 remains open until every executable completion criterion is proven.
+
+An ordinary capability in an existing owner still creates zero new crates. That is not a blanket ban: a new authoritative owner normally creates three to five owner packages, and a real provider, secrets, KMS/HSM, trust, process, extraction or compiler-enforced visibility boundary may justify a dedicated crate after architecture preflight.
 
 ## Architecture and developer-experience 10/10 checkpoint
 
@@ -145,11 +152,11 @@ Issue #194 remains open.
 - Stage A documentation/source hierarchy and stable navigation are complete.
 - Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions are accepted; broader dependency/public-surface calibration and exception removal remain.
 - Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public restriction/legal-hold placement, retention adjudication, durable replay-safe owner execution/outcomes, governed access/export assembly and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
-- Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222, but the generic runtime still imports many other concrete owner adapters and remaining owners have not migrated.
+- Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222; repository step 12 now explicitly completes contribution entry points for all currently active first-party owners and removes remaining ordinary-registration concrete imports from generic runtime.
 - Stage E is complete through PR #239: deterministic Rust closure, exact repository-scope ownership, executable contract/Protobuf/API/migration/PostgreSQL/process/product/frontend/operations workflow coverage, exact-head evidence and unknown-path fail-closed enforcement are accepted.
-- Stage H is in progress: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands remain repository step 15.
-- Stage F is in progress: reusable generic mutation/query conformance is accepted through PR #235; generic worker conformance and contract lifecycle enforcement remain open.
-- Stages G and I remain unstarted; measured consolidation, frontend and operations parity are not complete.
+- Stage H is in progress: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands are repository step 16.
+- Stage F is in progress: reusable generic mutation/query conformance is accepted through PR #235; generic worker conformance is repository step 15 and real Customer Privacy worker adoption is step 17; contract lifecycle enforcement remains open.
+- Stage G remains unstarted and is owned by repository step 13. Stage I remains incomplete and is owned by steps 18–19.
 
 ## Repository continuation order
 
@@ -169,6 +176,17 @@ Only one implementation packet may be active. The current order begins:
 -> 9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — complete through PR #239
 -> 10. governed Customer Privacy access/export assembly — complete through PR #241
 -> 11. owner-specific deletion, anonymization and supported crypto-shred execution — next
+-> 12. complete first-party contribution aggregation for all currently active owners
+-> 13. first measured behavior-neutral transitional domain-cluster consolidation
+-> 14. Party tombstone, no-orphan proof and projection/search/cache convergence
+-> 15. reusable generic worker conformance
+-> 16. deterministic local lifecycle commands
+-> 17. Customer Privacy worker and complete process/end-to-end acceptance
+-> 18. Phase 8A frontend and operations evidence
+-> 19. Phase 8A closure
+-> 20. Phase 8A architecture remeasurement — checkpoint, not final 10/10
+-> 21–22. two contrasting later expert-domain waves
+-> 23. final architecture 10/10 closure review only if every criterion is mechanically proven
 ```
 
 The complete binding order through Phase 8B entry is `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4. No later item may start while an earlier item is unfinished.
