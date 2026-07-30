@@ -100,7 +100,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         ))
         .await
         .expect("complete zero-action Access owner execution");
-    assert!(matches!(owner_result, ExecutionPreparation::Complete { .. }));
+    assert!(matches!(
+        owner_result,
+        ExecutionPreparation::Complete { .. }
+    ));
 
     let persistence = PostgresAccessExportPersistence::new(store.clone());
     let invocation = access_invocation(TENANT_A, "first");
@@ -120,7 +123,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
             panic!("first access-export preparation cannot already be complete")
         }
     };
-    assert_eq!(reference_version(&admin, TENANT_A, prepared.reference_id().as_str()).await, 1);
+    assert_eq!(
+        reference_version(&admin, TENANT_A, prepared.reference_id().as_str()).await,
+        1
+    );
 
     let preparation_replay = persistence
         .prepare(&access_invocation(TENANT_A, "prepare-replay"))
@@ -160,7 +166,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         .expect("create the CDO-owned durable job and immutable artifact");
     assert!(!target.replayed);
     assert_eq!(file_store.artifact_count(), 1);
-    assert_eq!(reference_version(&admin, TENANT_A, prepared.reference_id().as_str()).await, 1);
+    assert_eq!(
+        reference_version(&admin, TENANT_A, prepared.reference_id().as_str()).await,
+        1
+    );
 
     let target_replay = publisher
         .request(target_request)
@@ -182,12 +191,19 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         replayed: target_replay.replayed,
     };
     let (completed, completed_now) = persistence
-        .complete(&access_invocation(TENANT_A, "complete"), &prepared, &application_target)
+        .complete(
+            &access_invocation(TENANT_A, "complete"),
+            &prepared,
+            &application_target,
+        )
         .await
         .expect("link finalized artifact to Customer Privacy");
     assert!(completed_now);
     assert_eq!(completed.artifact().unwrap().file_id(), &target.file_id);
-    assert_eq!(reference_version(&admin, TENANT_A, completed.reference_id().as_str()).await, 2);
+    assert_eq!(
+        reference_version(&admin, TENANT_A, completed.reference_id().as_str()).await,
+        2
+    );
 
     let (completion_replay, completed_now) = persistence
         .complete(
@@ -215,7 +231,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         .prepare(&access_invocation(TENANT_B, "cross-tenant"))
         .await
         .expect_err("cross-tenant access-export source must remain concealed");
-    assert_eq!(cross_tenant_error.code.as_str(), "CUSTOMER_PRIVACY_CASE_NOT_FOUND");
+    assert_eq!(
+        cross_tenant_error.code.as_str(),
+        "CUSTOMER_PRIVACY_CASE_NOT_FOUND"
+    );
     assert_eq!(reference_count(&admin, TENANT_B).await, 0);
 
     let mut conflicting = application_target;
@@ -228,7 +247,10 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         )
         .await
         .expect_err("conflicting artifact replay must fail closed");
-    assert_eq!(conflict.code.as_str(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");
+    assert_eq!(
+        conflict.code.as_str(),
+        "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT"
+    );
 
     assert_eq!(reference_count(&admin, TENANT_A).await, 1);
     assert_eq!(privacy_export_job_count(&admin, TENANT_A).await, 1);
@@ -354,20 +376,14 @@ fn access_invocation(tenant: &str, suffix: &str) -> AccessExportInvocation {
         privacy_case_id: RecordId::try_new(CASE_ID).unwrap(),
         action_plan_id: build_case_plan_and_decision().1.plan_id().clone(),
         actor_id: ActorId::try_new(if tenant == TENANT_A { ACTOR } else { "actor-b" }).unwrap(),
-        request_id: crm_module_sdk::RequestId::try_new(format!(
-            "access-export-request-{suffix}"
-        ))
-        .unwrap(),
-        correlation_id: CorrelationId::try_new(format!(
-            "access-export-correlation-{suffix}"
-        ))
-        .unwrap(),
+        request_id: crm_module_sdk::RequestId::try_new(format!("access-export-request-{suffix}"))
+            .unwrap(),
+        correlation_id: CorrelationId::try_new(format!("access-export-correlation-{suffix}"))
+            .unwrap(),
         trace_id: TraceId::try_new(format!("access-export-trace-{suffix}")).unwrap(),
         initiating_capability_id: CapabilityId::try_new(ACCESS_EXPORT_REQUEST_CAPABILITY).unwrap(),
-        initiating_capability_version: CapabilityVersion::try_new(
-            ACCESS_EXPORT_CAPABILITY_VERSION,
-        )
-        .unwrap(),
+        initiating_capability_version: CapabilityVersion::try_new(ACCESS_EXPORT_CAPABILITY_VERSION)
+            .unwrap(),
         request_started_at_unix_nanos: PREPARED_AT,
         trusted_internal: true,
     }
@@ -521,7 +537,10 @@ async fn cleanup(admin: &PgPool) {
             .await
             .unwrap_or_else(|error| panic!("cleanup {table}: {error}"));
     }
-    transaction.commit().await.expect("commit access-export cleanup");
+    transaction
+        .commit()
+        .await
+        .expect("commit access-export cleanup");
 }
 
 fn data_class_name(data_class: DataClass) -> &'static str {
@@ -666,8 +685,7 @@ impl ImmutableFileArtifactStore for MemoryFileStore {
                 return Ok(artifact.metadata.clone());
             }
             if artifact.bytes.len() as u64 != artifact.metadata.expected_size_bytes
-                || Sha256::digest(&artifact.bytes).as_slice()
-                    != artifact.metadata.expected_sha256
+                || Sha256::digest(&artifact.bytes).as_slice() != artifact.metadata.expected_sha256
             {
                 return Err(SdkError::new(
                     "FILE_ARTIFACT_FINALIZE_CONFLICT",
