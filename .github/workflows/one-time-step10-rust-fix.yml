@@ -30,7 +30,7 @@ jobs:
           components: rustfmt
       - name: Apply exact transactional evidence patch
         run: |
-          python scripts/one_time_step10_rust_fix.py
+          python scripts/one_time_step10_rust_fix_runner.py
           cargo fmt --all
       - name: Verify focused compilation
         run: |
@@ -47,6 +47,6 @@ jobs:
             crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs
           git diff --cached --exit-code && { echo "Expected transactional evidence changes were not materialized."; exit 1; } || true
           git commit -m "Step 10: persist access export transaction evidence"
-          git restore scripts/one_time_step10_rust_fix.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
+          # Revision 2: scope record transaction bindings without changing invocation setup.
