@@ -187,6 +187,7 @@ provides:
     - customer-privacy.action-plan
     - customer-privacy.owner-action-attempt
     - customer-privacy.owner-action-outcome
+    - customer-privacy.access-export-reference
   ui_extensions: []
 
 consumes:
@@ -201,6 +202,7 @@ storage:
     - customer-privacy.action-plan
     - customer-privacy.owner-action-attempt
     - customer-privacy.owner-action-outcome
+    - customer-privacy.access-export-reference
   private_state_namespaces:
     - crm.customer-privacy
 
@@ -224,3 +226,4 @@ lifecycle:
     - customer-privacy.action-plan
     - customer-privacy.owner-action-attempt
     - customer-privacy.owner-action-outcome
+    - customer-privacy.access-export-reference
