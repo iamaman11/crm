@@ -380,6 +380,67 @@ class AffectedScopeTests(unittest.TestCase):
                 "operations-owner",
             )
 
+    def test_live_policy_representatives_are_covered_by_real_workflows(self) -> None:
+        representatives = {
+            "contracts": (
+                "contracts/example.json",
+                "schemas/module.schema.json",
+                "modules/crm-sales/module.yaml",
+            ),
+            "protobuf_api_compatibility": (
+                "proto/crm/example/v1/example.proto",
+                "buf.yaml",
+                "buf.gen.web.yaml",
+                "crates/crm-proto-contracts/src/lib.rs",
+                "packages/client/src/contract_hashes.ts",
+                "scripts/contract_bindings.py",
+            ),
+            "database_migrations": ("database/migrations/9999_example.up.sql",),
+            "postgresql_acceptance": (
+                "database/tests/0001_platform_foundation.sql",
+                "crates/crm-core-data/src/lib.rs",
+            ),
+            "process_runtime_acceptance": (
+                "services/crm-api/src/main.rs",
+                "crates/crm-application-runtime/src/lib.rs",
+                "scripts/prepare_customer_enrichment_worker_process_database.sh",
+            ),
+            "product_plane": (
+                "package.json",
+                "apps/web/src/app.tsx",
+                "scripts/run_e2e.sh",
+            ),
+            "frontend": ("apps/web/src/app.tsx", "buf.gen.web.yaml"),
+            "operations": (
+                ".github/workflows/governance.yml",
+                "docs/CI_TELEMETRY_BASELINE.md",
+                "scripts/prepare_isolated_process_database.sh",
+            ),
+        }
+        empty_metadata = {"packages": [], "workspace_members": []}
+        for scope_id, paths in representatives.items():
+            for path in paths:
+                with self.subTest(scope=scope_id, path=path):
+                    report = build_report(
+                        Path(__file__).resolve().parents[1],
+                        "origin/main",
+                        paths=[path],
+                        metadata=empty_metadata,
+                        head_sha="representative",
+                    )
+                    selected = {
+                        scope["id"]: scope for scope in report["selected_scopes"]
+                    }
+                    self.assertIn(scope_id, selected)
+                    selected_workflows = {
+                        workflow["name"] for workflow in report["selected_workflows"]
+                    }
+                    self.assertTrue(
+                        set(selected[scope_id]["required_workflows"]).issubset(
+                            selected_workflows
+                        )
+                    )
+
     def test_glob_matching_handles_nested_paths(self) -> None:
         self.assertTrue(
             path_matches(

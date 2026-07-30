@@ -38,12 +38,15 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["tracking_issues"], [126, 194])
         for path in (
             ".github/workflows/affected-scope.yml",
+            ".github/workflows/product-plane.yml",
+            ".github/workflows/rust-generated-sync.yml",
             "affected-scope-policy.json",
             "docs/ACTIVE_PACKET.md",
             "docs/AFFECTED_SCOPE_CI.md",
             "repository-packet.json",
             "scripts/affected_scope.py",
             "tests/test_affected_scope.py",
+            "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, packet["allowed_paths"])
@@ -269,6 +272,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             "repository-packet.json",
             "scripts/affected_scope.py",
             "tests/test_affected_scope.py",
+            "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ]
         affected = {
