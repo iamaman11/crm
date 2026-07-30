@@ -1,4 +1,6 @@
-use crm_capability_plan_support::{PersistedPayloadContract, persisted_json_payload_with_data_class};
+use crm_capability_plan_support::{
+    PersistedPayloadContract, persisted_json_payload_with_data_class,
+};
 use crm_core_data::{
     AuditIntent, BatchError, BatchMutationPlan, EventEvidence, IdempotencyEvidence,
     PostgresDataStore, RecordGetQuery, RecordMutation,
@@ -31,7 +33,8 @@ pub const PRIVACY_EXPORT_MEDIA_TYPE: &str =
 const PRIVACY_EXPORT_JOB_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.privacy_export_job.state/v1:status,tenant_id,privacy_case_id,export_job_id,target_idempotency_key,manifest_id,manifest_digest,file_id,content_sha256,size_bytes,retention_policy_id,prepared_at_unix_nanos";
 const PRIVACY_EXPORT_EVENT_SCHEMA_ID: &str =
     "crm.customer-data-operations.privacy_export_job.event";
-const PRIVACY_EXPORT_EVENT_DESCRIPTOR: &[u8] = b"crm.customer-data-operations.privacy_export_job.event/v1:operation,job_state_sha256";
+const PRIVACY_EXPORT_EVENT_DESCRIPTOR: &[u8] =
+    b"crm.customer-data-operations.privacy_export_job.event/v1:operation,job_state_sha256";
 const PRIVACY_EXPORT_PREPARED_EVENT_TYPE: &str =
     "customer_data.export.privacy.internal.job_prepared";
 const PRIVACY_EXPORT_COMPLETED_EVENT_TYPE: &str =
@@ -83,10 +86,7 @@ impl std::fmt::Debug for PrivacyManifestExportPublisher {
 }
 
 impl PrivacyManifestExportPublisher {
-    pub fn new(
-        store: PostgresDataStore,
-        file_store: Arc<dyn ImmutableFileArtifactStore>,
-    ) -> Self {
+    pub fn new(store: PostgresDataStore, file_store: Arc<dyn ImmutableFileArtifactStore>) -> Self {
         Self { store, file_store }
     }
 
@@ -110,7 +110,11 @@ impl PrivacyManifestExportPublisher {
                 validate_job_snapshot(record, &blueprint, JobStatus::Completed)?;
                 job_replayed = true;
             }
-            Some(_) => return Err(job_state_invalid("privacy export job version is unsupported")),
+            Some(_) => {
+                return Err(job_state_invalid(
+                    "privacy export job version is unsupported",
+                ));
+            }
         }
 
         let context = execution_context(&request, "artifact")?;
@@ -143,12 +147,10 @@ impl PrivacyManifestExportPublisher {
                     .map_err(|_| job_state_invalid("artifact chunk index exceeds usize"))?;
                 if start > chunks.len()
                     || metadata.received_size_bytes
-                        != chunks[..start]
-                            .iter()
-                            .try_fold(0_u64, |size, chunk| {
-                                size.checked_add(chunk.len() as u64)
-                                    .ok_or_else(|| job_state_invalid("artifact size overflowed"))
-                            })?
+                        != chunks[..start].iter().try_fold(0_u64, |size, chunk| {
+                            size.checked_add(chunk.len() as u64)
+                                .ok_or_else(|| job_state_invalid("artifact size overflowed"))
+                        })?
                 {
                     return Err(job_state_invalid(
                         "artifact upload checkpoint differs from deterministic chunks",
@@ -178,10 +180,9 @@ impl PrivacyManifestExportPublisher {
         };
         validate_finalized_artifact(&finalized, &blueprint)?;
 
-        let latest = self
-            .load_job(&request)
-            .await?
-            .ok_or_else(|| job_state_invalid("privacy export job disappeared after artifact I/O"))?;
+        let latest = self.load_job(&request).await?.ok_or_else(|| {
+            job_state_invalid("privacy export job disappeared after artifact I/O")
+        })?;
         let completion_replayed = if latest.version == 2 {
             validate_job_snapshot(&latest, &blueprint, JobStatus::Completed)?;
             true
@@ -191,7 +192,9 @@ impl PrivacyManifestExportPublisher {
                 .await?;
             false
         } else {
-            return Err(job_state_invalid("privacy export job version is unsupported"));
+            return Err(job_state_invalid(
+                "privacy export job version is unsupported",
+            ));
         };
 
         Ok(PrivacyManifestExportResult {
@@ -357,11 +360,8 @@ impl PrivacyExportBlueprint {
         }
         IdempotencyKey::try_new(request.target_idempotency_key.clone())
             .map_err(configuration_error)?;
-        let file_id = FileId::try_new(format!(
-            "{FILE_ID_PREFIX}{}",
-            hex(&request.manifest_digest)
-        ))
-        .map_err(configuration_error)?;
+        let file_id = FileId::try_new(format!("{FILE_ID_PREFIX}{}", hex(&request.manifest_digest)))
+            .map_err(configuration_error)?;
         Ok(Self {
             file_id,
             content_sha256: sha256(&request.manifest_bytes),
@@ -627,7 +627,10 @@ mod tests {
             format!("{PRIVACY_EXPORT_REQUEST_CAPABILITY}@{PRIVACY_EXPORT_REQUEST_VERSION}"),
             "customer_data.export.privacy.request@1.0.0"
         );
-        assert_eq!(PRIVACY_EXPORT_JOB_RECORD_TYPE, "customer_data.privacy_export_job");
+        assert_eq!(
+            PRIVACY_EXPORT_JOB_RECORD_TYPE,
+            "customer_data.privacy_export_job"
+        );
         assert_ne!(sha256(PRIVACY_EXPORT_JOB_DESCRIPTOR), [0; 32]);
     }
 }
