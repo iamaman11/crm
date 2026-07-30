@@ -14,12 +14,15 @@
   "objective": "Implement repository step 9 only: deterministic fail-closed affected-scope ownership and workflow selection for contracts, Protobuf/API compatibility, migrations, PostgreSQL/process acceptance, product plane, frontend and operations, with full-workspace Rust fallback for shared impact and a hard fail when unknown non-Rust workflow closure cannot be proven.",
   "allowed_paths": [
     ".github/workflows/affected-scope.yml",
+    ".github/workflows/product-plane.yml",
+    ".github/workflows/rust-generated-sync.yml",
     "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
     "docs/AFFECTED_SCOPE_CI.md",
     "repository-packet.json",
     "scripts/affected_scope.py",
     "tests/test_affected_scope.py",
+    "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
@@ -39,20 +42,23 @@
     "publish one authoritative affected-scope policy with exact owners for eight repository-step-9 categories",
     "select cumulative contract, Protobuf/API, migration, PostgreSQL, process/runtime, product, frontend and operations scopes deterministically",
     "require permanent workflows for every selected non-Rust scope and fail closed on missing workflow inventory",
+    "align Product Plane and Rust Generated Sync path filters with every governed Protobuf/API compatibility input",
     "broaden shared impact to the full Rust workspace; fail closed for unknown ownership or a known scope under-covered by real workflow path filters",
     "emit deterministic machine-readable and Markdown explanations with safe skip reasons",
     "integrate the same analyzer into packet-check and permanent read-only Affected Scope CI",
-    "add permanent unit coverage for ownership, workflow gaps, cumulative scopes and broad fallback"
+    "add permanent fixture and live-repository coverage for ownership, workflow gaps, cumulative scopes and broad fallback"
   ],
   "required_checks": [
     "Affected Scope CI",
     "Governance CI",
+    "Product Plane CI",
     "Rust CI",
     "Rust Generated Sync"
   ],
   "acceptance": [
     "all eight repository-step-9 scope categories have one explicit policy owner and non-empty path/workflow rules",
     "known category changes retain every mandatory permanent workflow; missing or under-covered workflow selection fails closed",
+    "representative paths from every policy category pass against the repository's actual permanent pull-request filters",
     "missing mandatory workflow inventory fails before packet acceptance",
     "shared CI-policy changes broaden Rust validation; unknown non-package ownership blocks until explicitly classified",
     "Rust reverse closure remains deterministic and unchanged for ordinary package-owned paths",
