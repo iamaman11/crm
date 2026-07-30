@@ -26,6 +26,8 @@ pub mod domain {
     include!("execution.rs");
 
     pub mod access_export {
+        #![allow(clippy::too_many_arguments)]
+
         use super::*;
 
         impl serde::Serialize for PrivacyCaseKind {
