@@ -104,7 +104,7 @@ replace_exact(
 )
 
 subprocess.run(
-    ["python", "scripts/generate_repository_navigation.py"],
+    ["python", "scripts/generate_repository_navigation.py", "--write"],
     cwd=ROOT,
     check=True,
 )
