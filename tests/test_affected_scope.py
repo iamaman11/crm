@@ -128,31 +128,24 @@ class AffectedScopeTests(unittest.TestCase):
                 ["Docs CI"],
             )
 
-    def test_unknown_path_broadens_packages_and_workflows(self) -> None:
+    def test_unknown_path_fails_closed_until_policy_classifies_it(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             workflow(root, "owner.yml", "Owner CI", ["crates/owner/**"])
             workflow(root, "docs.yml", "Docs CI", ["docs/**"])
             workflow(root, "always.yml", "Always CI", None)
             policy(root)
-            report = build_report(
-                root,
-                "origin/main",
-                paths=["mystery/input.bin"],
-                metadata=metadata(root),
-                head_sha="abc",
-            )
-            self.assertTrue(report["broadened"])
-            self.assertEqual(report["affected_packages"], ["app", "core", "owner"])
-            self.assertEqual(
-                [entry["name"] for entry in report["selected_workflows"]],
-                ["Always CI", "Docs CI", "Owner CI"],
-            )
-            self.assertFalse(report["skipped_workflows"])
-            self.assertIn(
-                "has no workspace-package owner or governed non-package scope",
-                report["broadening_reasons"][0],
-            )
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "unknown affected scope cannot prove a safe non-Rust workflow closure",
+            ):
+                build_report(
+                    root,
+                    "origin/main",
+                    paths=["mystery/input.bin"],
+                    metadata=metadata(root),
+                    head_sha="abc",
+                )
 
     def test_docs_only_change_selects_no_rust_or_non_rust_scope(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
