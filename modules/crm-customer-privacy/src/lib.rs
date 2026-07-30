@@ -23,6 +23,7 @@ pub mod domain {
 
     include!("query_access.rs");
     include!("retention.rs");
+    include!("execution.rs");
 
     impl CustomerDataLegalHold {
         pub const fn effective_from_unix_nanos(&self) -> i64 {

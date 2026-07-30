@@ -9,6 +9,7 @@
 
 mod approval;
 mod discovery;
+mod execution;
 mod planning;
 mod retention;
 mod reads {
@@ -20,6 +21,7 @@ mod reads {
 
 pub use approval::*;
 pub use discovery::*;
+pub use execution::*;
 pub use planning::*;
 pub use reads::*;
 pub use retention::*;

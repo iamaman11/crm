@@ -257,12 +257,14 @@ pub fn build_contribution(
         .add_queries(case_queries, case_query_validator, case_query_executor)
         .map_err(composition_error)?;
 
+    let plan_cursor = cursor(dependencies.cursor_key)?;
     let plan_query_adapter = Arc::new(CustomerPrivacyPlanReadAdapter::new(
         dependencies.activation,
         Arc::new(PostgresPrivacyReadPersistence::new(Arc::new(
             dependencies.store,
         ))),
         dependencies.visibility_authorizer,
+        plan_cursor,
     ));
     let plan_query_validator: Arc<dyn QuerySemanticValidator> = plan_query_adapter.clone();
     let plan_query_executor: Arc<dyn QueryExecutor> = plan_query_adapter;

@@ -1,3 +1,4 @@
+use crate::execution::outcome_from_row;
 use crm_core_data::{
     PostgresDataStore,
     postgres_sqlx::{self, Postgres, Row, Transaction},
@@ -14,8 +15,8 @@ use crm_customer_privacy::{
     discovery_sha256,
 };
 use crm_customer_privacy_application::{
-    PrivacyPlanReadSource, PrivacyPlanReplayLink, PrivacyReadAuditRecord, PrivacyReadContext,
-    PrivacyReadPersistencePort,
+    PrivacyOwnerOutcomePage, PrivacyOwnerOutcomePosition, PrivacyPlanReadSource,
+    PrivacyPlanReplayLink, PrivacyReadAuditRecord, PrivacyReadContext, PrivacyReadPersistencePort,
 };
 use crm_customer_privacy_persistence_adapter::privacy_case_from_snapshot;
 use crm_module_sdk::{
@@ -80,6 +81,78 @@ impl PrivacyReadPersistencePort for PostgresPrivacyReadPersistence {
                 action_plan,
                 replay_link,
             }))
+        })
+    }
+
+    fn load_owner_outcomes<'a>(
+        &'a self,
+        context: &'a PrivacyReadContext,
+        privacy_case_id: &'a RecordId,
+        action_plan_id: &'a RecordId,
+        owner_module_filter: Option<&'a ModuleId>,
+        after: Option<&'a PrivacyOwnerOutcomePosition>,
+        page_size: u32,
+    ) -> PortFuture<'a, Result<PrivacyOwnerOutcomePage, SdkError>> {
+        Box::pin(async move {
+            let mut transaction = self.store.pool().begin().await.map_err(database_error)?;
+            bind_context(&mut transaction, context).await?;
+            let after_sequence = after
+                .map(|value| i32::try_from(value.item_sequence))
+                .transpose()
+                .map_err(|_| {
+                    evidence_invalid("outcome cursor sequence exceeds PostgreSQL range")
+                })?;
+            let after_generation = after
+                .map(|value| i32::try_from(value.attempt_generation))
+                .transpose()
+                .map_err(|_| {
+                    evidence_invalid("outcome cursor generation exceeds PostgreSQL range")
+                })?;
+            let limit = page_size
+                .checked_add(1)
+                .ok_or_else(|| evidence_invalid("outcome page size overflowed"))?;
+            let rows = postgres_sqlx::query(
+                r#"
+                SELECT outcome_id, payload_bytes AS outcome_payload,
+                       schema_id AS outcome_schema_id,
+                       schema_version AS outcome_schema_version,
+                       descriptor_hash AS outcome_descriptor_hash,
+                       maximum_payload_size AS outcome_maximum,
+                       retention_policy_id AS outcome_retention
+                FROM crm.customer_privacy_owner_action_outcomes
+                WHERE tenant_id = $1 AND privacy_case_id = $2
+                  AND action_plan_id = $3
+                  AND ($4::text IS NULL OR owner_module_id = $4)
+                  AND (
+                    $5::integer IS NULL
+                    OR (item_sequence, attempt_generation, outcome_id)
+                       > ($5, $6, $7)
+                  )
+                ORDER BY item_sequence, attempt_generation, outcome_id
+                LIMIT $8
+                "#,
+            )
+            .bind(context.tenant_id.as_str())
+            .bind(privacy_case_id.as_str())
+            .bind(action_plan_id.as_str())
+            .bind(owner_module_filter.map(ModuleId::as_str))
+            .bind(after_sequence)
+            .bind(after_generation)
+            .bind(after.map(|value| value.outcome_id.as_str()))
+            .bind(i64::from(limit))
+            .fetch_all(&mut *transaction)
+            .await
+            .map_err(database_error)?;
+            let page_size_usize = usize::try_from(page_size)
+                .map_err(|_| evidence_invalid("outcome page size exceeds usize"))?;
+            let has_more = rows.len() > page_size_usize;
+            let outcomes = rows
+                .into_iter()
+                .take(page_size_usize)
+                .map(|row| outcome_from_row(&row))
+                .collect::<Result<Vec<_>, _>>()?;
+            transaction.commit().await.map_err(database_error)?;
+            Ok(PrivacyOwnerOutcomePage { outcomes, has_more })
         })
     }
 
