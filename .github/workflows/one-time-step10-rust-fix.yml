@@ -54,4 +54,4 @@ jobs:
           git restore scripts/one_time_step10_rust_fix.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 7: test through existing production-owned package boundaries.
+          # Revision 8: use literal cleanup SQL and checked fixture versions.
