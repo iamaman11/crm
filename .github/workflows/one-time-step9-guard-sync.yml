@@ -1,9 +1,9 @@
 name: One-time Step 9 Guard Sync
 
 on:
-  push:
+  pull_request:
     branches:
-      - repository-step-9-affected-scope-expansion
+      - main
     paths:
       - ".github/workflows/one-time-step9-guard-sync.yml"
 
@@ -11,17 +11,18 @@ permissions:
   contents: write
 
 concurrency:
-  group: one-time-step9-guard-sync
+  group: one-time-step9-guard-sync-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   sync:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: repository-step-9-affected-scope-expansion
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -202,4 +203,4 @@ jobs:
           git add docs/ACTIVE_PACKET.md tests/test_affected_scope.py tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
           git diff --cached --exit-code && { echo "Expected guard changes were not materialized."; exit 1; } || true
           git commit -m "Repository tooling: synchronize permanent step 9 guards"
-          git push origin HEAD:repository-step-9-affected-scope-expansion
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
