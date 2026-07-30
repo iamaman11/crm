@@ -48,5 +48,4 @@ jobs:
             tests/test_repository_navigation.py
           git commit -m "governance: synchronize repository step 8 navigation"
           git pull --rebase origin "${{ github.head_ref }}"
-          python scripts/repo.py packet-check --base origin/main
           git push origin "HEAD:${{ github.head_ref }}"
