@@ -136,7 +136,7 @@ Repository step 11 is owner-specific deletion, anonymization and supported crypt
 
 ## Following permitted repository packet
 
-Repository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes. Repository step 13 completes calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions. Repository step 14 is the first measured behavior-neutral transitional domain-cluster consolidation.
+Repository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes.
 
 
 ## Architecture 10/10 declaration boundary
@@ -150,7 +150,7 @@ An ordinary capability in an existing owner still creates zero new crates. That 
 Issue #194 remains open.
 
 - Stage A documentation/source hierarchy and stable navigation are complete.
-- Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions are accepted; broader dependency/public-surface calibration and exception removal remain.
+- Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions are accepted; repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration and removal of those three direct lint exceptions.
 - Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public restriction/legal-hold placement, retention adjudication, durable replay-safe owner execution/outcomes, governed access/export assembly and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
 - Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222; repository step 12 now explicitly completes contribution entry points for all currently active first-party owners and removes remaining ordinary-registration concrete imports from generic runtime.
 - Stage E is complete through PR #239: deterministic Rust closure, exact repository-scope ownership, executable contract/Protobuf/API/migration/PostgreSQL/process/product/frontend/operations workflow coverage, exact-head evidence and unknown-path fail-closed enforcement are accepted.

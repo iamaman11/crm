@@ -103,7 +103,7 @@ Workspace packages remain 113. Current product-complete expert modules remain **
 
 ## 7. Planned commercial and expert domains
 
-Phase 8B / issue #29 remains planned and blocked on completed Phase 8A. Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment remain independent owner domains.
+Phase 8B / issue #29 remains planned and blocked on completed Phase 8A plus the repository-step-22 measurement checkpoint. Repository step 23 is the first later expert-domain wave. Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment remain independent owner domains.
 
 Broader Sales/Activities, omnichannel, Service/Knowledge/Field Service, Marketing, Customer Success, projects/configurable work, documents/e-signature, analytics, workflow/collaboration, AI governance, marketplace and enterprise operational proof remain incomplete or planned.
 
