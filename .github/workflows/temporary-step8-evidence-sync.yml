@@ -1,0 +1,58 @@
+name: Temporary Step 8 Evidence Sync
+
+on:
+  push:
+    branches:
+      - repository-step-8-evidence-sync
+    paths:
+      - ".github/step8-evidence-sync.py"
+      - ".github/workflows/temporary-step8-evidence-sync.yml"
+
+concurrency:
+  group: temporary-step8-evidence-sync
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  synchronize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-8-evidence-sync
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - name: Apply and verify accepted evidence synchronization
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --requirement requirements-dev.txt
+          python -m py_compile .github/step8-evidence-sync.py
+          python .github/step8-evidence-sync.py
+          python scripts/generate_repository_navigation.py --write
+          python -m py_compile \
+            tests/test_architecture_documentation_consistency.py \
+            tests/test_repository_navigation.py
+          python -m unittest \
+            tests.test_architecture_documentation_consistency \
+            tests.test_repository_navigation
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/ACTIVE_PACKET.md \
+            docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md \
+            docs/IMPLEMENTATION_ROADMAP.md \
+            docs/PHASE8_DELIVERY_PLAN.md \
+            docs/PROJECT_STATUS.md \
+            repository-packet.json \
+            tests/test_architecture_documentation_consistency.py \
+            tests/test_repository_navigation.py
+          git commit -m "Docs: synchronize accepted repository step 8 evidence"
+          git pull --rebase origin repository-step-8-evidence-sync
+          git push origin HEAD:repository-step-8-evidence-sync
