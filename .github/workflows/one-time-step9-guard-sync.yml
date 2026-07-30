@@ -1,0 +1,205 @@
+name: One-time Step 9 Guard Sync
+
+on:
+  push:
+    branches:
+      - repository-step-9-affected-scope-expansion
+    paths:
+      - ".github/workflows/one-time-step9-guard-sync.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-time-step9-guard-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-9-affected-scope-expansion
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install repository tooling dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - name: Synchronize permanent step 9 guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          architecture = Path("tests/test_architecture_documentation_consistency.py")
+          text = architecture.read_text(encoding="utf-8")
+          replacements = {
+              '        self.assertEqual(self.packet["packet_id"], "repository-step-8-evidence-sync")':
+                  '        self.assertEqual(self.packet["packet_id"], "repository-step-9-affected-scope-expansion")',
+              '        self.assertEqual(self.packet["baseline"]["sha"], "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90")':
+                  '        self.assertEqual(self.packet["baseline"]["sha"], "c9f5bd515b2104ea172ca3089b8a0cdd5f152d9c")',
+              '''        for path in (
+              "docs/ACTIVE_PACKET.md",
+              "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+              "docs/IMPLEMENTATION_ROADMAP.md",
+              "docs/PHASE8_DELIVERY_PLAN.md",
+              "docs/PROJECT_STATUS.md",
+              "repository-packet.json",
+              "tests/test_architecture_documentation_consistency.py",
+              "tests/test_repository_navigation.py",
+          ):''':
+                  '''        for path in (
+              ".github/workflows/affected-scope.yml",
+              ".github/workflows/product-plane.yml",
+              ".github/workflows/rust-generated-sync.yml",
+              "affected-scope-policy.json",
+              "docs/ACTIVE_PACKET.md",
+              "docs/AFFECTED_SCOPE_CI.md",
+              "repository-packet.json",
+              "scripts/affected_scope.py",
+              "tests/test_affected_scope.py",
+              "tests/test_architecture_documentation_consistency.py",
+              "tests/test_repository_navigation.py",
+          ):''',
+              '        for path in (".github/workflows/**", "Cargo.toml", "Cargo.lock", "crates/**", "database/**", "services/**"):\n':
+                  '''        for path in (
+              "Cargo.lock",
+              "Cargo.toml",
+              "apps/**",
+              "contracts/**",
+              "crates/**",
+              "database/**",
+              "modules/**",
+              "packages/**",
+              "proto/**",
+              "schemas/**",
+              "services/**",
+          ):
+''',
+              '        self.assertIn("repository-step-8-evidence-sync", self.active_packet)':
+                  '        self.assertIn("repository-step-9-affected-scope-expansion", self.active_packet)',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"architecture guard replacement count for {old!r}: {text.count(old)}")
+              text = text.replace(old, new)
+          architecture.write_text(text, encoding="utf-8")
+
+          navigation = Path("tests/test_repository_navigation.py")
+          text = navigation.read_text(encoding="utf-8")
+          old = '''        for path in (
+              ".github/workflows/affected-scope.yml",
+              "affected-scope-policy.json",'''
+          new = '''        for path in (
+              ".github/workflows/affected-scope.yml",
+              ".github/workflows/product-plane.yml",
+              ".github/workflows/rust-generated-sync.yml",
+              "affected-scope-policy.json",'''
+          if text.count(old) != 1:
+              raise SystemExit(f"navigation workflow insertion count: {text.count(old)}")
+          text = text.replace(old, new)
+          old = '''            "tests/test_affected_scope.py",
+              "tests/test_repository_navigation.py",'''
+          new = '''            "tests/test_affected_scope.py",
+              "tests/test_architecture_documentation_consistency.py",
+              "tests/test_repository_navigation.py",'''
+          if text.count(old) != 1:
+              raise SystemExit(f"navigation guard insertion count: {text.count(old)}")
+          navigation.write_text(text.replace(old, new), encoding="utf-8")
+
+          affected = Path("tests/test_affected_scope.py")
+          text = affected.read_text(encoding="utf-8")
+          marker = '''    def test_glob_matching_handles_nested_paths(self) -> None:
+'''
+          method = '''    def test_live_policy_representatives_are_covered_by_real_workflows(self) -> None:
+          representatives = {
+              "contracts": (
+                  "contracts/example.json",
+                  "schemas/module.schema.json",
+                  "modules/crm-sales/module.yaml",
+              ),
+              "protobuf_api_compatibility": (
+                  "proto/crm/example/v1/example.proto",
+                  "buf.yaml",
+                  "buf.gen.web.yaml",
+                  "crates/crm-proto-contracts/src/lib.rs",
+                  "packages/client/src/contract_hashes.ts",
+                  "scripts/contract_bindings.py",
+              ),
+              "database_migrations": (
+                  "database/migrations/9999_example.up.sql",
+              ),
+              "postgresql_acceptance": (
+                  "database/tests/0001_platform_foundation.sql",
+                  "crates/crm-core-data/src/lib.rs",
+              ),
+              "process_runtime_acceptance": (
+                  "services/crm-api/src/main.rs",
+                  "crates/crm-application-runtime/src/lib.rs",
+                  "scripts/prepare_customer_enrichment_worker_process_database.sh",
+              ),
+              "product_plane": (
+                  "package.json",
+                  "apps/web/src/app.tsx",
+                  "scripts/run_e2e.sh",
+              ),
+              "frontend": (
+                  "apps/web/src/app.tsx",
+                  "buf.gen.web.yaml",
+              ),
+              "operations": (
+                  ".github/workflows/governance.yml",
+                  "docs/CI_TELEMETRY_BASELINE.md",
+                  "scripts/prepare_isolated_process_database.sh",
+              ),
+          }
+          empty_metadata = {"packages": [], "workspace_members": []}
+          for scope_id, paths in representatives.items():
+              for path in paths:
+                  with self.subTest(scope=scope_id, path=path):
+                      report = build_report(
+                          Path(__file__).resolve().parents[1],
+                          "origin/main",
+                          paths=[path],
+                          metadata=empty_metadata,
+                          head_sha="representative",
+                      )
+                      selected = {
+                          scope["id"]: scope
+                          for scope in report["selected_scopes"]
+                      }
+                      self.assertIn(scope_id, selected)
+                      selected_workflows = {
+                          workflow["name"]
+                          for workflow in report["selected_workflows"]
+                      }
+                      self.assertTrue(
+                          set(selected[scope_id]["required_workflows"]).issubset(
+                              selected_workflows
+                          )
+                      )
+
+'''
+          if text.count(marker) != 1:
+              raise SystemExit(f"affected live-test insertion count: {text.count(marker)}")
+          affected.write_text(text.replace(marker, method + marker), encoding="utf-8")
+          PY
+          python scripts/generate_repository_navigation.py --write
+      - name: Verify synchronized permanent guards
+        run: python -m unittest -v tests.test_affected_scope tests.test_repository_navigation tests.test_architecture_documentation_consistency
+      - name: Commit synchronized permanent guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/ACTIVE_PACKET.md tests/test_affected_scope.py tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
+          git diff --cached --exit-code && { echo "Expected guard changes were not materialized."; exit 1; } || true
+          git commit -m "Repository tooling: synchronize permanent step 9 guards"
+          git push origin HEAD:repository-step-9-affected-scope-expansion
