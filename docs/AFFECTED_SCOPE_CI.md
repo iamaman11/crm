@@ -18,9 +18,9 @@ python scripts/repo.py check-affected --base origin/main
 - directly affected workspace packages;
 - transitive reverse-dependent Rust packages;
 - selected non-Rust repository scopes and their authoritative owners;
-- required pull-request workflows and the exact matching or broadening reason;
+- required pull-request workflows and the exact path-filter reason;
 - safely skipped workflows and why their governed path filters do not match;
-- uncertainty that widened selection to the full workspace and every permanent pull-request workflow; known workflow under-coverage fails closed.
+- shared uncertainty that widens Rust validation to the full workspace; unknown non-Rust ownership and known workflow under-coverage fail closed.
 
 `check-affected` first runs the permanent structural conformance preflight and formatting check. It then runs Clippy and tests for the affected Rust package closure. Shared workspace/check-graph changes and unknown impact widen to workspace-wide Clippy and tests.
 
@@ -51,8 +51,8 @@ A path may select more than one scope. That is cumulative coverage, not an owner
 
 ## Fail-closed rules
 
-- Unknown non-package ownership widens the package and workflow selection.
-- Root workspace, lockfile, workflow, affected-scope policy and shared-tooling changes widen to the full workspace and all permanent pull-request workflows.
+- Unknown non-package ownership blocks the packet until the path is classified; it may not be represented as safely skipped.
+- Root workspace, lockfile, workflow, affected-scope policy and shared-tooling changes widen Rust validation to the full workspace while real workflow path filters remain authoritative and mechanically checked.
 - A selected scope whose mandatory workflow exists but is not selected by its current path filter is a configuration error and fails immediately.
 - A selected scope that names a missing permanent pull-request workflow is a configuration error and fails immediately.
 - A workflow without pull-request path filters remains selected.
