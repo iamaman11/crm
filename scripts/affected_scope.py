@@ -214,18 +214,26 @@ def scope_paths(paths: list[str], rules: tuple[ScopeRule, ...]) -> dict[str, tup
     }
 
 
-def broadening_reasons(
-    paths: list[str], unowned: list[str], rules: tuple[ScopeRule, ...], neutral: tuple[str, ...]
+def unknown_impact_paths(
+    unowned: list[str], rules: tuple[ScopeRule, ...], neutral: tuple[str, ...]
 ) -> list[str]:
-    reasons: list[str] = []
     governed = tuple(pattern for rule in rules for pattern in rule.path_patterns)
+    return sorted(
+        path for path in unowned
+        if not any(
+            path_matches(path, pattern)
+            for pattern in (*governed, *neutral, *BROAD_PATH_PATTERNS)
+        )
+    )
+
+
+def broadening_reasons(paths: list[str], unknown: list[str]) -> list[str]:
+    reasons: list[str] = []
     for path in paths:
         if any(path_matches(path, pattern) for pattern in BROAD_PATH_PATTERNS):
             reasons.append(f"{path} changes the workspace, check graph, workflow graph, or shared policy")
-    for path in unowned:
-        known = any(path_matches(path, pattern) for pattern in (*governed, *neutral))
-        if not known:
-            reasons.append(f"{path} has no workspace-package owner or governed non-package scope")
+    for path in unknown:
+        reasons.append(f"{path} has no workspace-package owner or governed non-package scope")
     return sorted(set(reasons))
 
 
@@ -233,7 +241,7 @@ def _workflow_events(document: dict[str, Any]) -> Any:
     return document["on"] if "on" in document else document.get(True)
 
 
-def workflow_decisions(root: Path, paths: list[str], broadened: bool) -> list[WorkflowDecision]:
+def workflow_decisions(root: Path, paths: list[str]) -> list[WorkflowDecision]:
     yaml, decisions = YAML(typ="safe"), []
     for workflow_path in sorted((root / ".github/workflows").iterdir()):
         if not workflow_path.is_file() or workflow_path.suffix not in WORKFLOW_SUFFIXES or workflow_path.name.startswith("one-time-"):
@@ -247,9 +255,6 @@ def workflow_decisions(root: Path, paths: list[str], broadened: bool) -> list[Wo
         if not isinstance(events, dict) or "pull_request" not in events:
             continue
         relative = workflow_path.relative_to(root).as_posix()
-        if broadened:
-            decisions.append(WorkflowDecision(name, relative, True, ("uncertain or shared impact widened selection to all PR workflows",)))
-            continue
         pull_request = events["pull_request"]
         if pull_request is None:
             decisions.append(WorkflowDecision(name, relative, True, ("workflow has no pull-request path filter",)))
@@ -309,10 +314,16 @@ def build_report(
     selected_scope_paths = scope_paths(selected_paths, rules)
     direct, direct_reasons, unowned = direct_packages_for_paths(selected_paths, packages)
     affected, reverse_reasons = reverse_dependency_closure(direct, packages)
-    widen_reasons = broadening_reasons(selected_paths, unowned, rules, neutral)
+    unknown = unknown_impact_paths(unowned, rules, neutral)
+    widen_reasons = broadening_reasons(selected_paths, unknown)
     broadened = bool(widen_reasons)
-    workflows = workflow_decisions(root, selected_paths, broadened)
+    workflows = workflow_decisions(root, selected_paths)
     enforce_scope_workflow_coverage(rules, selected_scope_paths, workflows)
+    if unknown:
+        raise RuntimeError(
+            "unknown affected scope cannot prove a safe non-Rust workflow closure; "
+            f"classify these paths in {POLICY_PATH}: {unknown}"
+        )
     if broadened:
         affected = set(packages)
     package_reasons: dict[str, list[str]] = defaultdict(list)
