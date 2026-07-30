@@ -49,6 +49,8 @@ It does not maintain a second module ID or capability-coordinate catalog.
 
 A path may select more than one scope. That is cumulative coverage, not an owner conflict: all matched scopes and all of their mandatory workflows are retained.
 
+Policy patterns describe the currently executable permanent workflow closure, not speculative future directories. A new path that is not yet governed blocks until its owner and required workflow coverage are declared. The permanent test suite checks representative paths from every category against the repository's actual workflow files, including root Buf inputs and generated contract inputs.
+
 ## Fail-closed rules
 
 - Unknown non-package ownership blocks the packet until the path is classified; it may not be represented as safely skipped.
@@ -62,6 +64,8 @@ A path may select more than one scope. That is cumulative coverage, not an owner
 
 ## Permanent CI
 
-`Affected Scope CI` runs on every pull request, tests the policy and analyzer, materializes a deterministic JSON report, executes the real packet check, and then runs structural, Clippy and test phases. The report is uploaded as a read-only diagnostic artifact.
+`Affected Scope CI` runs on every pull request, tests fixture-level analyzer behavior and live policy/workflow compatibility, materializes a deterministic JSON report, executes the real packet check, and then runs structural, Clippy and test phases. The report is uploaded as a read-only diagnostic artifact.
+
+`Product Plane CI` and `Rust Generated Sync` include the complete governed root Buf configuration and `crm-proto-contracts` generation inputs, so Protobuf/API compatibility selection corresponds to workflows that GitHub will actually execute.
 
 Superseded runs are cancelled by pull-request number. Gate review still requires every applicable permanent workflow to pass on one unchanged candidate SHA. Affected-scope selection never weakens that rule.
