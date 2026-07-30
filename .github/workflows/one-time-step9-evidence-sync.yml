@@ -55,5 +55,6 @@ jobs:
           git add "${paths[@]}"
           git diff --cached --exit-code && { echo "Expected evidence changes were not materialized."; exit 1; } || true
           git commit -m "Docs: synchronize accepted repository step 9 evidence"
+          git restore scripts/one_time_step9_evidence_sync.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
