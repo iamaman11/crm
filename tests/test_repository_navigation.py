@@ -51,8 +51,16 @@ class RepositoryNavigationTests(unittest.TestCase):
         ):
             self.assertIn(path, packet["allowed_paths"])
         self.assertIn("Cargo.lock", packet["forbidden_paths"])
-        self.assertIn("Affected Scope CI", packet["required_checks"])
-        self.assertIn("Governance CI", packet["required_checks"])
+        self.assertEqual(
+            packet["required_checks"],
+            [
+                "Affected Scope CI",
+                "Governance CI",
+                "Product Plane CI",
+                "Rust CI",
+                "Rust Generated Sync",
+            ],
+        )
         self.assertIn(
             "repository step 10 is not started",
             packet["acceptance"],
@@ -69,6 +77,10 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("Explain and enforce affected scope", workflow)
         self.assertIn(
             "Upload deterministic affected-scope report",
+            workflow,
+        )
+        self.assertIn(
+            "ref: ${{ github.event.pull_request.head.sha }}",
             workflow,
         )
         self.assertIn("Validate active repository packet", workflow)
@@ -266,6 +278,8 @@ class RepositoryNavigationTests(unittest.TestCase):
     ) -> None:
         changed_paths = [
             ".github/workflows/affected-scope.yml",
+            ".github/workflows/product-plane.yml",
+            ".github/workflows/rust-generated-sync.yml",
             "affected-scope-policy.json",
             "docs/ACTIVE_PACKET.md",
             "docs/AFFECTED_SCOPE_CI.md",
