@@ -1,0 +1,47 @@
+name: One-time Step 10 Tenant Fixture
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/one-time-step10-tenant-fixture.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-time-step10-tenant-fixture-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt
+      - name: Apply exact tenant fixture patch
+        run: |
+          python scripts/one_time_step10_tenant_fixture.py
+          cargo fmt --all
+      - name: Verify PostgreSQL acceptance target compilation
+        run: cargo test --locked -p crm-application-runtime --test customer_privacy_access_export_postgres --no-run
+      - name: Commit tenant fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs
+          git diff --cached --exit-code && { echo "Expected tenant fixture was not materialized."; exit 1; } || true
+          git commit -m "Step 10: seed access export tenant fixture"
+          git pull --rebase origin "${GITHUB_HEAD_REF}"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
