@@ -3,7 +3,7 @@
 Status: **Normative cross-cutting execution plan**  
 Tracking issue: #194  
 Original audit baseline: **2026-07-27**  
-Current execution checkpoint: **2026-07-29**
+Current execution checkpoint: **2026-07-30**
 
 Applies to repository structure, Rust workspace packaging, module composition, dependency governance, contracts, persistence ownership, CI/test selection, developer tooling, documentation navigation, local development, frontend architecture and production operations.
 
@@ -42,7 +42,7 @@ The remaining risk is accidental complexity:
 - copied acceptance wiring and expanding workflow fan-out;
 - too many files and packages touched by a normal vertical change;
 - incomplete local-environment lifecycle automation;
-- remaining affected-scope coverage outside the accepted real-diff Rust/tooling closure;
+- affected-scope ownership and workflow filters that can drift without permanent live compatibility guards;
 - uncontrolled public Rust surface, contract retirement and migration ownership;
 - descriptive documents that can drift from authoritative current state.
 
@@ -86,7 +86,7 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 | B — dependency, crate and exception governance | **In progress** | reproducible baseline, crate justification, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1` toolchain/workspace `rust-version`, measured zero-warning Rust/Clippy baseline, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions | additional homogeneous dependency cohorts, removal of the three direct-lint exceptions, public-surface/fan-out calibration |
 | C — golden owner package and persistence model | **In progress** | Customer Privacy domain/application/postgres/production pilot, transaction-scoped final policy port, authoritative deny-only restriction decision, public restriction/legal-hold placement, legal-hold/mandatory-retention adjudication, durable replay-safe owner execution/outcomes and first protected-owner integration are accepted; ordinary Customer Privacy capabilities add zero crates | generalize scaffolding, migration ownership and visibility policy; adopt the model for later owners without forced rewrites |
 | D — contribution aggregation | **In progress** | owner-owned contribution pattern proven; first bounded Customer Accounts registration-inventory aggregation accepted through the first-party bundle | migrate remaining owners, expand the first-party bundle and remove additional concrete domain imports from generic runtime |
-| E — affected-scope CI | **In progress** | changed paths, Rust reverse closure, structural preflight, explainable broadening and real-diff packet-check enforcement are accepted | complete contract, migration, process, product, frontend and operations scope selection with safe fallback |
+| E — affected-scope CI | **Complete** | deterministic Rust closure plus declarative contract, Protobuf/API, migration, PostgreSQL, process/runtime, product, frontend and operations ownership; real workflow-filter compatibility; exact-head evidence; unknown-path fail-closed enforcement accepted through PR #239 | preserve policy/workflow compatibility and classify every new repository path before it can be represented as safely skipped |
 | F — generic conformance and contract lifecycle | **In progress** | native conformance, manifest/route parity and exact-head gates exist; reusable cross-owner mutation/query conformance is accepted through PR #235 | reusable worker suites plus compatibility, deprecation and retirement enforcement |
 | G — transitional consolidation | **Not started** | candidates and stop rules are defined | complete at least one behavior-neutral domain-cluster consolidation with measured improvement |
 | H — reproducible environment and navigation | **In progress** | stable docs index, `affected`, `check-affected`, deterministic `explain`, fail-closed `packet-check`, generated active packet and repository map are accepted through PR #228 | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` |
@@ -112,7 +112,9 @@ Repository step 7 is accepted through PR #235 / accepted source `7a0cd34dc17085e
 
 Repository step 8 is accepted through PR #237 / accepted source `f926ece93dc2b24683f982828e72bf9170dc123a` / squash merge `9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90` / 33 of 33 applicable permanent workflows on one unchanged source-authored head. It persists deterministic tenant-bound owner execution attempts, checkpoints and safe outcomes with immutable action-plan and retention-decision lineage; composes exactly nine canonical owner endpoints through trusted-internal production wiring; recovers from pre-invocation, post-owner-result and post-outcome/pre-checkpoint crash windows without duplicate owner invocation; and makes `customer_privacy.case.owner_outcomes.list@1.0.0` paginate real persisted payload-safe outcomes. Activation, registered initiating-capability attribution, FORCE RLS, strict rehydration, idempotency, audit, clean apply, rollback, reapply and repeated PostgreSQL acceptance are proven. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no public route, worker, access/export assembly, destructive owner execution, crate, dependency, `Cargo.lock`, workspace-package or generic-runtime algorithm change was introduced.
 
-The next permitted implementation packet is repository step 9: affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks.
+Repository step 9 is accepted through PR #239 / accepted source `e7ed45a7da5f14fa79e1ca4d23fc808004b6a642` / squash merge `e40832ae21118dd7f033e2811ca466d1242a19f0` / 8 of 8 applicable permanent workflows on one unchanged exact head. It establishes one declarative affected-scope policy for contracts, Protobuf/API compatibility, database migrations, PostgreSQL acceptance, process/runtime acceptance, product-plane checks, frontend checks and operations checks; preserves deterministic Rust ownership and reverse closure; requires the real permanent workflow filters for every selected scope; blocks unknown non-Rust paths until classified; and records exact pull-request-head evidence. Shared workflow or policy changes widen validation to all 113 Rust workspace packages. The final 12-file packet changes no product behavior, Customer Privacy public inventory, runtime route, worker, contract, Protobuf message, schema, migration, crate, dependency, `Cargo.lock`, workspace package or generic-runtime business algorithm.
+
+The next permitted implementation packet is repository step 10: governed Customer Privacy access/export assembly.
 
 ### 2.4 Single repository execution order
 
@@ -129,7 +131,7 @@ Execution rules:
 7. Feature behavior, architecture governance, contribution refactoring, crate consolidation and evidence synchronization remain separate pull requests even when adjacent in the sequence.
 8. Stage labels A–I describe completion accounting. They do not authorize work outside this master order.
 
-The inserted repository step 4 prerequisite is complete through PR #224, repository step 4 is complete through PR #226, repository step 5 is complete through PR #228, the inserted lockfile-preservation prerequisite before repository step 6 is complete through PR #232, repository step 6 is complete through PR #230, repository step 7 is complete through PR #235, and repository step 8 is complete through PR #237. None changes the master numbering.
+The inserted repository step 4 prerequisite is complete through PR #224, repository step 4 is complete through PR #226, repository step 5 is complete through PR #228, the inserted lockfile-preservation prerequisite before repository step 6 is complete through PR #232, repository step 6 is complete through PR #230, repository step 7 is complete through PR #235, repository step 8 is complete through PR #237, and repository step 9 is complete through PR #239. None changes the master numbering.
 
 Current master sequence:
 
@@ -141,8 +143,8 @@ Current master sequence:
 6. Customer Privacy legal-hold and mandatory-retention precedence — **Complete through PR #230**;
 7. reusable generic mutation and query conformance suites adopted by representative owners — **Complete through PR #235**;
 8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — **Complete through PR #237**;
-9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Next**;
-10. governed Customer Privacy access/export assembly;
+9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Complete through PR #239**;
+10. governed Customer Privacy access/export assembly — **Next**;
 11. owner-specific deletion, anonymization and supported crypto-shred execution;
 12. first measured behavior-neutral transitional domain-cluster consolidation;
 13. Party tombstone, no-orphan proof and projection/search/cache convergence;
@@ -483,7 +485,9 @@ Repository step 7 is accepted through PR #235 / accepted source `7a0cd34dc17085e
 
 Repository step 8 is accepted through PR #237 / accepted source `f926ece93dc2b24683f982828e72bf9170dc123a` / squash merge `9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90` / 33 of 33 applicable permanent workflows on one unchanged source-authored head. It persists deterministic tenant-bound owner execution attempts, checkpoints and safe outcomes with immutable action-plan and retention-decision lineage; composes exactly nine canonical owner endpoints through trusted-internal production wiring; recovers from pre-invocation, post-owner-result and post-outcome/pre-checkpoint crash windows without duplicate owner invocation; and makes `customer_privacy.case.owner_outcomes.list@1.0.0` paginate real persisted payload-safe outcomes. Activation, registered initiating-capability attribution, FORCE RLS, strict rehydration, idempotency, audit, clean apply, rollback, reapply and repeated PostgreSQL acceptance are proven. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no public route, worker, access/export assembly, destructive owner execution, crate, dependency, `Cargo.lock`, workspace-package or generic-runtime algorithm change was introduced.
 
-The next permitted repository packet is **repository step 9: affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks**. No repository step 10 or later work may begin before step 9 has unchanged exact-head acceptance and evidence synchronization.
+Repository step 9 is accepted through PR #239 / accepted source `e7ed45a7da5f14fa79e1ca4d23fc808004b6a642` / squash merge `e40832ae21118dd7f033e2811ca466d1242a19f0` / 8 of 8 applicable permanent workflows on one unchanged exact head. It establishes one declarative affected-scope policy for contracts, Protobuf/API compatibility, database migrations, PostgreSQL acceptance, process/runtime acceptance, product-plane checks, frontend checks and operations checks; preserves deterministic Rust ownership and reverse closure; requires the real permanent workflow filters for every selected scope; blocks unknown non-Rust paths until classified; and records exact pull-request-head evidence. Shared workflow or policy changes widen validation to all 113 Rust workspace packages. The final 12-file packet changes no product behavior, Customer Privacy public inventory, runtime route, worker, contract, Protobuf message, schema, migration, crate, dependency, `Cargo.lock`, workspace package or generic-runtime business algorithm.
+
+The next permitted repository packet is **repository step 10: governed Customer Privacy access/export assembly**. No repository step 11 or later work may begin before step 10 has unchanged exact-head acceptance and evidence synchronization.
 
 Issue #126 supplies product semantics. Issue #194 supplies architecture acceptance and the repository order. Their scopes remain separate, and section 2.4 determines exactly which packet may start.
 

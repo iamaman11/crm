@@ -54,14 +54,14 @@ Issue #194 remains **Open**.
 - Stage B dependency, crate and exception governance — **In progress; Rust toolchain/lint prerequisite accepted through PR #218 and lockfile-preserving Rust workflows accepted through PR #232**.
 - Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, immediate deny-only restriction placement/final owner guard accepted through PR #226, legal-hold/mandatory-retention precedence accepted through PR #230, and durable replay-safe owner execution/outcomes accepted through PR #237.
 - Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222**.
-- Stage E — **In progress**: real-diff packet-check and broadened Rust closure are accepted; database/process/product/frontend/operations selection remains open.
+- Stage E — **Complete through PR #239**: deterministic Rust closure, exact eight-category repository ownership, contract/Protobuf/API/migration/PostgreSQL/process/product/frontend/operations selection, live workflow-filter compatibility, exact-head evidence and unknown-path fail-closed enforcement are accepted.
 - Stage H — **In progress**: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands remain open.
 - Stage F — **In progress**: reusable generic mutation/query conformance is accepted through PR #235; worker conformance and contract lifecycle enforcement remain open.
 - Stages G and I — measured consolidation, frontend and operations parity remain open.
 
-Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232, PR #230, PR #235 and PR #237. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232, PR #230, PR #235, PR #237 and PR #239. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
-The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–8 are complete through PR #218, PR #220, PR #222, PR #226, PR #228, PR #230, PR #235 and PR #237; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — is the current next packet.
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–9 are complete through PR #218, PR #220, PR #222, PR #226, PR #228, PR #230, PR #235, PR #237 and PR #239; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 10 — governed Customer Privacy access/export assembly — is the current next packet.
 
 ## 4. Phase 8A completed foundation
 
@@ -171,6 +171,10 @@ Repository step 7 is accepted through PR #235 / accepted source `7a0cd34dc17085e
 
 Repository step 8 is accepted through PR #237 / accepted source `f926ece93dc2b24683f982828e72bf9170dc123a` / squash merge `9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90` / 33 of 33 applicable permanent workflows on one unchanged source-authored head. It persists deterministic tenant-bound owner execution attempts, checkpoints and safe outcomes with immutable action-plan and retention-decision lineage; composes exactly nine canonical owner endpoints through trusted-internal production wiring; recovers from pre-invocation, post-owner-result and post-outcome/pre-checkpoint crash windows without duplicate owner invocation; and makes `customer_privacy.case.owner_outcomes.list@1.0.0` paginate real persisted payload-safe outcomes. Activation, registered initiating-capability attribution, FORCE RLS, strict rehydration, idempotency, audit, clean apply, rollback, reapply and repeated PostgreSQL acceptance are proven. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no public route, worker, access/export assembly, destructive owner execution, crate, dependency, `Cargo.lock`, workspace-package or generic-runtime algorithm change was introduced.
 
+### 5.14 Accepted multi-plane affected-scope enforcement
+
+Repository step 9 is accepted through PR #239 / accepted source `e7ed45a7da5f14fa79e1ca4d23fc808004b6a642` / squash merge `e40832ae21118dd7f033e2811ca466d1242a19f0` / 8 of 8 applicable permanent workflows on one unchanged exact head. It establishes one declarative affected-scope policy for contracts, Protobuf/API compatibility, database migrations, PostgreSQL acceptance, process/runtime acceptance, product-plane checks, frontend checks and operations checks; preserves deterministic Rust ownership and reverse closure; requires the real permanent workflow filters for every selected scope; blocks unknown non-Rust paths until classified; and records exact pull-request-head evidence. Shared workflow or policy changes widen validation to all 113 Rust workspace packages. The final 12-file packet changes no product behavior, Customer Privacy public inventory, runtime route, worker, contract, Protobuf message, schema, migration, crate, dependency, `Cargo.lock`, workspace package or generic-runtime business algorithm.
+
 ## 6. Binding active sequence
 
 The only permitted current sequence is:
@@ -185,11 +189,12 @@ The only permitted current sequence is:
 6. **Repository step 6 — legal-hold and mandatory-retention precedence — Complete through PR #230.**
 7. **Repository step 7 — reusable generic mutation and query conformance — Complete through PR #235.**
 8. **Repository step 8 — replay-safe resumable Customer Privacy owner execution and crash-window recovery — Complete through PR #237.**
-9. **Repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — Next.**
-10–19. **Repository steps 10–19 — continue exactly as numbered in the architecture plan.**
+9. **Repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — Complete through PR #239.**
+10. **Repository step 10 — governed Customer Privacy access/export assembly — Next.**
+11–19. **Repository steps 11–19 — continue exactly as numbered in the architecture plan.**
 20. **Repository step 20 — first Phase 8B packet.**
 
-The inserted prerequisites did not renumber the master sequence. Repository step 9 is now the only next permitted implementation packet.
+The inserted prerequisites did not renumber the master sequence. Repository step 10 is now the only next permitted implementation packet.
 
 ## 7. Phase 8B and later expert domains
 
