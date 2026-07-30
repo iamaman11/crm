@@ -14,6 +14,8 @@ A business module is an independently governed runtime unit under `modules/` wit
 
 Readiness states are Planned, Foundation, Vertical slice, Production integration slice, Expert expansion, Gate review and Product complete. Only merged `main` affects totals.
 
+Architecture and governance steps 12–25 may reduce extension cost or prove platform quality, but they do not by themselves advance a module readiness state. Readiness changes only when separate product evidence proves additional domain breadth, governed runtime behavior, UX and operations acceptance.
+
 ## 2. Implemented authoritative owner and coordination modules
 
 | Module | Ownership | Current merged readiness | Implemented production slice | Still required |
