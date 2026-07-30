@@ -36,6 +36,41 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --requirement requirements-dev.txt
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/step8-evidence-sync.py')
+          source = path.read_text(encoding='utf-8')
+          old = '''replace_once(
+              "docs/PROJECT_STATUS.md",
+              "Repository step 8 is replay-safe resumable Customer Privacy owner execution and crash-window recovery.",
+              "Repository step 9 is affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks.",
+          )
+          replace_once(
+              "docs/PROJECT_STATUS.md",
+              "Repository step 9 is affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks.",
+              "Repository step 10 is governed Customer Privacy access/export assembly.",
+          )
+          # The preceding two replacements target adjacent sections; restore the first section explicitly.
+          replace_once(
+              "docs/PROJECT_STATUS.md",
+              "## Next permitted repository packet\\n\\nRepository step 10 is governed Customer Privacy access/export assembly.",
+              "## Next permitted repository packet\\n\\nRepository step 9 is affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks.",
+          )
+          replace_once(
+              "docs/PROJECT_STATUS.md",
+              "## Following permitted repository packet\\n\\nRepository step 9 is affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks.",
+              "## Following permitted repository packet\\n\\nRepository step 10 is governed Customer Privacy access/export assembly.",
+          )'''
+          new = '''replace_once(
+              "docs/PROJECT_STATUS.md",
+              "## Next permitted repository packet\\n\\nRepository step 8 is replay-safe resumable Customer Privacy owner execution and crash-window recovery.\\n\\n## Following permitted repository packet\\n\\nRepository step 9 is affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks.",
+              "## Next permitted repository packet\\n\\nRepository step 9 is affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks.\\n\\n## Following permitted repository packet\\n\\nRepository step 10 is governed Customer Privacy access/export assembly.",
+          )'''
+          if source.count(old) != 1:
+              raise SystemExit(f'project status patch count: {source.count(old)}')
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
           python -m py_compile .github/step8-evidence-sync.py
           python .github/step8-evidence-sync.py
           python scripts/generate_repository_navigation.py --write
