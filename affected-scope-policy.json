@@ -10,6 +10,7 @@
         "modules/*/module.yaml"
       ],
       "required_workflows": [
+        "Contract CI",
         "Governance CI"
       ]
     },
@@ -27,6 +28,7 @@
         "scripts/generate_contract_bindings.py"
       ],
       "required_workflows": [
+        "Contract CI",
         "Product Plane CI",
         "Rust Generated Sync"
       ]
