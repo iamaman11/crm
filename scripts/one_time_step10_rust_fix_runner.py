@@ -4,28 +4,31 @@ from pathlib import Path
 
 path = Path("scripts/one_time_step10_rust_fix.py")
 text = path.read_text(encoding="utf-8")
-old = '''replace_exact(
-    postgres_test_path,
-    "        privacy_case.version(),\\n",
-    "        i64::try_from(privacy_case.version()).expect(\\\"privacy case version fits i64\\\"),\\n",
-    "privacy case fixture version conversion",
+insert_call = '''replace_exact(
+    source,
+    '    .bind(transaction_id(invocation))\\n    .execute(&mut **transaction)\\n',
+    '    .bind(business_transaction_id)\\n    .execute(&mut **transaction)\\n',
+    "insert reference business transaction binding",
 )
 '''
-new = '''replace_exact(
-    postgres_test_path,
-    """        CASE_ID,
-        privacy_case.version(),
-        privacy_case_persisted_payload(&privacy_case).expect("encode access case"),
-""",
-    """        CASE_ID,
-        i64::try_from(privacy_case.version()).expect("privacy case version fits i64"),
-        privacy_case_persisted_payload(&privacy_case).expect("encode access case"),
-""",
-    "privacy case persistence version conversion",
+update_call = '''replace_exact(
+    source,
+    '    .bind(transaction_id(invocation))\\n    .execute(&mut **transaction)\\n',
+    '    .bind(business_transaction_id)\\n    .execute(&mut **transaction)\\n',
+    "update reference business transaction binding",
 )
 '''
-if text.count(old) != 1:
-    raise SystemExit(f"fixture version scope patch count: {text.count(old)}")
-text = text.replace(old, new)
-path.write_text(text, encoding="utf-8")
+replacement = '''replace_exact(
+    source,
+    '    .bind(payload)\\n    .bind(transaction_id(invocation))\\n    .execute(&mut **transaction)\\n',
+    '    .bind(payload)\\n    .bind(business_transaction_id)\\n    .execute(&mut **transaction)\\n',
+    "record mutation business transaction bindings",
+    expected=2,
+)
+'''
+if text.count(insert_call) != 1 or text.count(update_call) != 1:
+    raise SystemExit(
+        "transaction binding materializer calls differ from the exact expected revision"
+    )
+text = text.replace(insert_call, replacement).replace(update_call, "")
 exec(compile(text, str(path), "exec"), {"__name__": "__main__", "__file__": str(path)})
