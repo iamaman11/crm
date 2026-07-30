@@ -51,7 +51,7 @@ pub struct PrivacyExportTargetRequest {
     pub actor_id: ActorId,
     pub correlation_id: CorrelationId,
     pub trace_id: TraceId,
-    pub requested_at_unix_nanos: i64,
+    pub prepared_at_unix_nanos: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -171,7 +171,7 @@ impl PrivacyAccessExportService {
                 actor_id: invocation.actor_id.clone(),
                 correlation_id: invocation.correlation_id.clone(),
                 trace_id: invocation.trace_id.clone(),
-                requested_at_unix_nanos: invocation.request_started_at_unix_nanos,
+                prepared_at_unix_nanos: prepared.prepared_at_unix_nanos(),
             })
             .await?;
         let (reference, completed_now) = self
