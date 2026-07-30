@@ -135,7 +135,6 @@ jobs:
           python -m py_compile .github/step8-finalize.py
           python .github/step8-finalize.py
           python scripts/generate_repository_navigation.py --write
-          python scripts/repo.py packet-check --base origin/main
           python -m unittest \
             tests.test_customer_privacy_plan_reads_implementation \
             tests.test_generic_conformance_adoption
@@ -144,6 +143,7 @@ jobs:
           git add -A
           git commit -m "Customer Privacy: finalize resumable owner execution"
           git pull --rebase origin "${{ github.head_ref }}"
+          python scripts/repo.py packet-check --base origin/main
           git push origin "HEAD:${{ github.head_ref }}"
       - name: Upload diagnostics
         if: failure()
