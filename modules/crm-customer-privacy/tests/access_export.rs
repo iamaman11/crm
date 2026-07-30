@@ -8,6 +8,11 @@ use crm_customer_privacy::{
 };
 use crm_module_sdk::{DataClass, FileId, RecordId, RetentionPolicyId, SchemaVersion, TenantId};
 
+const EFFECTIVE_REQUEST_AT_UNIX_MS: i64 = 100;
+const CAPTURED_AT_UNIX_NANOS: i64 = 100_000_000;
+const PLANNED_AT_UNIX_NANOS: i64 = 200_000_000;
+const PREPARED_AT_UNIX_NANOS: i64 = 300_000_000;
+
 fn tenant_id() -> TenantId {
     TenantId::try_new("tenant-access-export").unwrap()
 }
@@ -34,7 +39,7 @@ fn discovery_snapshot() -> DiscoveryScopeSnapshot {
         registry.registry_version().clone(),
         *registry.digest(),
         "ACCESS_EXPORT",
-        100,
+        EFFECTIVE_REQUEST_AT_UNIX_MS,
     )
     .unwrap();
     let contributions = registry
@@ -71,11 +76,24 @@ fn discovery_snapshot() -> DiscoveryScopeSnapshot {
             DiscoveryOwnerScopeContribution::new(lineage.clone(), contribution).unwrap()
         })
         .collect::<Vec<_>>();
-    DiscoveryScopeSnapshot::finalize(lineage, registry, 200, contributions).unwrap()
+    DiscoveryScopeSnapshot::finalize(
+        lineage,
+        registry,
+        CAPTURED_AT_UNIX_NANOS,
+        contributions,
+    )
+    .unwrap()
 }
 
 fn access_plan(kind: PrivacyCaseKind) -> PrivacyActionPlan {
-    PrivacyActionPlan::build(&discovery_snapshot(), 4, kind, policy(), 300).unwrap()
+    PrivacyActionPlan::build(
+        &discovery_snapshot(),
+        4,
+        kind,
+        policy(),
+        PLANNED_AT_UNIX_NANOS,
+    )
+    .unwrap()
 }
 
 #[test]
@@ -103,7 +121,8 @@ fn prepared_completed_and_replayed_reference_is_immutable() {
     let manifest =
         PrivacyAccessExportManifest::build(&access_plan(PrivacyCaseKind::PortabilityExport))
             .unwrap();
-    let mut reference = PrivacyAccessExportReference::prepare(manifest, 400).unwrap();
+    let mut reference =
+        PrivacyAccessExportReference::prepare(manifest, PREPARED_AT_UNIX_NANOS).unwrap();
     let prepared = reference.clone();
     assert_eq!(
         decode_access_export_reference(&encode_access_export_reference(&prepared).unwrap())
@@ -121,7 +140,7 @@ fn prepared_completed_and_replayed_reference_is_immutable() {
             [9; 32],
             123,
             retention.clone(),
-            400,
+            PREPARED_AT_UNIX_NANOS,
         )
         .unwrap();
     let completed = reference.clone();
@@ -133,7 +152,7 @@ fn prepared_completed_and_replayed_reference_is_immutable() {
             [9; 32],
             123,
             retention,
-            400,
+            PREPARED_AT_UNIX_NANOS,
         )
         .unwrap();
     assert_eq!(reference, completed);
@@ -151,7 +170,7 @@ fn prepared_completed_and_replayed_reference_is_immutable() {
             [8; 32],
             124,
             RetentionPolicyId::try_new("customer_privacy_access_export").unwrap(),
-            400,
+            PREPARED_AT_UNIX_NANOS,
         )
         .unwrap_err();
     assert_eq!(
@@ -168,7 +187,7 @@ fn erasure_plan_cannot_be_represented_as_access_export() {
         PrivacyCaseKind::Erasure,
         ActionPlanningPolicy::new(SchemaVersion::try_new("1.0.0").unwrap(), "EU", true, true)
             .unwrap(),
-        300,
+        PLANNED_AT_UNIX_NANOS,
     )
     .unwrap();
     let error = PrivacyAccessExportManifest::build(&plan).unwrap_err();
