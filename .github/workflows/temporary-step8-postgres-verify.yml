@@ -3,17 +3,12 @@ name: Temporary Step 8 PostgreSQL Verify
 on:
   pull_request:
     paths:
-      - ".github/step8-application-source.b64"
-      - ".github/step8-reads-source.b64"
-      - ".github/step8-pg-test-source.b64"
-      - ".github/step8-structural-fixes.py"
-      - ".github/step8-runtime-evidence-fixes.py"
-      - ".github/step8-trigger-attribution-fixes.py"
       - ".github/step8-finalize.py"
       - ".github/workflows/temporary-step8-postgres-verify.yml"
-      - "crates/crm-customer-privacy-production/src/owner_execution.rs"
+      - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs"
       - "crates/crm-customer-privacy-application/**"
       - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
       - "modules/crm-customer-privacy/**"
       - "database/migrations/**"
 
@@ -63,42 +58,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Materialize reviewed step 8 sources
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(wc -c < .github/step8-application-source.b64)" -eq 7376
-          echo "313228caa3ce27a8b5512baf3f2bb9a6be3454b2da340b36ee5b84cd90b21559  .github/step8-application-source.b64" | sha256sum --check
-          base64 --decode .github/step8-application-source.b64 > /tmp/step8-application.rs.gz
-          test "$(wc -c < /tmp/step8-application.rs.gz)" -eq 5532
-          echo "0ba1db0003c521afdc113421ce194e2e1cc398f607011d23c5c91d714ee3c158  /tmp/step8-application.rs.gz" | sha256sum --check
-          gzip --decompress --stdout /tmp/step8-application.rs.gz > crates/crm-customer-privacy-application/src/execution.rs
-
-          test "$(wc -c < .github/step8-reads-source.b64)" -eq 11796
-          echo "e72fc31055df57da5e5f922c843d7ebb4e170855ec081dd6b8af05aa1a06d551  .github/step8-reads-source.b64" | sha256sum --check
-          base64 --decode .github/step8-reads-source.b64 > /tmp/step8-reads.rs.gz
-          test "$(wc -c < /tmp/step8-reads.rs.gz)" -eq 8847
-          echo "6623588dda27edaacd2ece295120bc581613fb726875dd35e142a39e3ff57784  /tmp/step8-reads.rs.gz" | sha256sum --check
-          gzip --decompress --stdout /tmp/step8-reads.rs.gz > crates/crm-customer-privacy-application/src/reads.rs
-
-          test "$(wc -c < .github/step8-pg-test-source.b64)" -eq 7496
-          echo "14f2e2ab71a6feedf858fb0f68c6861a364605214a937acaa28571ce99a20cd7  .github/step8-pg-test-source.b64" | sha256sum --check
-          base64 --decode .github/step8-pg-test-source.b64 > /tmp/step8-pg-test.rs.gz
-          test "$(wc -c < /tmp/step8-pg-test.rs.gz)" -eq 5622
-          echo "ae73505cdde00bcf508cf0cdcd2befede6e29b7d6c82941c91f5cd11ff7f3e29  /tmp/step8-pg-test.rs.gz" | sha256sum --check
-          gzip --decompress --stdout /tmp/step8-pg-test.rs.gz > crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
-      - name: Apply reviewed structural and transaction-evidence corrections
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "ca9bc33f6bcbb968480c22b5a8ff70582c1e424535f72c056b765983e1230fd2  .github/step8-structural-fixes.py" | sha256sum --check
-          echo "d604a9cfbbcca8f643f27a8010ed3206d72ad17c697efa09429cbc0e263a2499  .github/step8-runtime-evidence-fixes.py" | sha256sum --check
-          echo "5865335b93b6976d98e3a1b4a49330335fd07bf2880c87771c5368d34e6608ed  .github/step8-trigger-attribution-fixes.py" | sha256sum --check
-          python .github/step8-structural-fixes.py
-          python .github/step8-runtime-evidence-fixes.py
-          python .github/step8-trigger-attribution-fixes.py
-          cargo fmt --all
-      - name: Verify format, compile and Clippy
+      - name: Verify current source format, tests and Clippy
         shell: bash
         run: |
           set -euo pipefail
