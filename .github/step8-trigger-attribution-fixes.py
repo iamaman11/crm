@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -48,19 +49,18 @@ test_marker = "\n#[cfg(test)]\n"
 if application.count(test_marker) != 1:
     raise SystemExit("application execution test module marker is not unique")
 production, tests = application.split(test_marker, 1)
-fixture_patterns = (
-    "CapabilityId::try_new(OWNER_ACTION_DISPATCH_CAPABILITY)",
-    'CapabilityId::try_new("customer_privacy.owner_action.dispatch")',
+fixture_pattern = re.compile(
+    r"(initiating_capability_id\s*:\s*CapabilityId::try_new\(\s*)"
+    r"(?:OWNER_ACTION_DISPATCH_CAPABILITY|\"customer_privacy\.owner_action\.dispatch\")"
+    r"(\s*\))"
 )
-fixture_matches = sum(tests.count(pattern) for pattern in fixture_patterns)
+tests, fixture_matches = fixture_pattern.subn(
+    r"\1RETENTION_APPROVAL_TRIGGER_CAPABILITY\2",
+    tests,
+)
 if fixture_matches != 1:
     raise SystemExit(
         f"registered application test trigger: expected one fixture match, found {fixture_matches}"
-    )
-for pattern in fixture_patterns:
-    tests = tests.replace(
-        pattern,
-        "CapabilityId::try_new(RETENTION_APPROVAL_TRIGGER_CAPABILITY)",
     )
 application_path.write_text(production + test_marker + tests)
 
