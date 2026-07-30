@@ -30,7 +30,7 @@ jobs:
           components: rustfmt
       - name: Apply exact production-boundary and acceptance fixes
         run: |
-          python scripts/one_time_step10_rust_fix.py
+          python scripts/one_time_step10_rust_fix_runner.py
           cargo fmt --all
       - name: Verify focused compilation
         run: |
@@ -54,4 +54,4 @@ jobs:
           git restore scripts/one_time_step10_rust_fix.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 8: use literal cleanup SQL and checked fixture versions.
+          # Revision 9: execute cardinality-safe fixture version conversion.
