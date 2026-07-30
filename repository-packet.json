@@ -1,64 +1,81 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-8-evidence-sync",
-  "title": "Synchronize accepted repository step 8 evidence",
+  "packet_id": "repository-step-9-affected-scope-expansion",
+  "title": "Expand affected-scope selection beyond the Rust closure",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90"
+    "sha": "c9f5bd515b2104ea172ca3089b8a0cdd5f152d9c"
   },
   "tracking_issues": [
     126,
     194
   ],
-  "objective": "Synchronize accepted PR #237 resumable Customer Privacy owner-execution evidence across the normative repository plans, mark repository step 8 complete, and expose repository step 9 as the only next implementation packet.",
+  "objective": "Implement repository step 9 only: deterministic fail-closed affected-scope ownership and workflow selection for contracts, Protobuf/API compatibility, migrations, PostgreSQL/process acceptance, product plane, frontend and operations, with full-workspace Rust fallback for shared impact and a hard fail when unknown non-Rust workflow closure cannot be proven.",
   "allowed_paths": [
+    ".github/workflows/affected-scope.yml",
+    ".github/workflows/contracts.yml",
+    ".github/workflows/product-plane.yml",
+    ".github/workflows/rust-generated-sync.yml",
+    "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
+    "docs/AFFECTED_SCOPE_CI.md",
     "repository-packet.json",
+    "scripts/affected_scope.py",
+    "tests/test_affected_scope.py",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
     "Cargo.lock",
     "Cargo.toml",
+    "apps/**",
     "contracts/**",
     "crates/**",
     "database/**",
     "modules/**",
     "packages/**",
     "proto/**",
-    "scripts/**",
+    "schemas/**",
     "services/**"
   ],
   "deliverables": [
-    "record PR #237 accepted source, squash merge and 33-of-33 permanent workflow evidence",
-    "mark repository step 8 complete and repository step 9 next",
-    "record durable replay-safe owner execution and real persisted outcome reads",
-    "record unchanged public inventory, worker count, generic runtime, package and dependency budgets",
-    "regenerate docs/ACTIVE_PACKET.md and synchronize permanent documentation guards"
+    "publish one authoritative affected-scope policy with exact owners for eight repository-step-9 categories",
+    "select cumulative contract, Protobuf/API, migration, PostgreSQL, process/runtime, product, frontend and operations scopes deterministically",
+    "require permanent workflows for every selected non-Rust scope and fail closed on missing workflow inventory",
+    "align Contract CI, Product Plane CI and Rust Generated Sync path filters with every governed contract and Protobuf/API compatibility input",
+    "broaden shared impact to the full Rust workspace; fail closed for unknown ownership or a known scope under-covered by real workflow path filters",
+    "emit deterministic machine-readable and Markdown explanations with safe skip reasons bound to the exact pull-request head",
+    "integrate the same analyzer into packet-check and permanent read-only Affected Scope CI",
+    "add permanent fixture and live-repository coverage for ownership, workflow gaps, cumulative scopes and broad fallback"
   ],
   "required_checks": [
-    "Governance CI",
     "Affected Scope CI",
+    "Contract CI",
+    "Governance CI",
+    "Product Plane CI",
     "Rust CI",
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "all authoritative status documents agree on PR #237 accepted evidence",
-    "repository step 9 is the only next implementation packet",
-    "generated active-packet navigation is fresh",
-    "no runtime, contract, manifest, dependency, Cargo.lock, persistence, migration, public inventory or product behavior changes"
+    "all eight repository-step-9 scope categories have one explicit policy owner and non-empty path/workflow rules",
+    "contract and Protobuf/API changes retain the authoritative Contract CI compatibility gate",
+    "known category changes retain every mandatory permanent workflow; missing or under-covered workflow selection fails closed",
+    "representative paths from every policy category pass against the repository's actual permanent pull-request filters",
+    "missing mandatory workflow inventory fails before packet acceptance",
+    "shared CI-policy changes broaden Rust validation; unknown non-package ownership blocks until explicitly classified",
+    "affected-scope evidence records the exact pull-request head rather than a synthetic merge commit",
+    "Rust reverse closure remains deterministic and unchanged for ordinary package-owned paths",
+    "packet-check consumes the same fail-closed affected-scope report",
+    "no product behavior, runtime route, worker, contract, migration, crate, dependency, Cargo.lock or workspace-package change",
+    "repository step 10 is not started"
   ],
   "non_goals": [
-    "implement repository step 9 affected-scope expansion",
-    "change Customer Privacy runtime, public coordinates or inventory",
-    "change generic runtime algorithms, owner-specific product semantics or worker inventory",
-    "change Cargo.lock, manifests, dependencies or workspace packages",
-    "change persistence, migrations or unrelated documentation"
+    "change Customer Privacy runtime or public inventory",
+    "implement access/export assembly or owner-specific destructive behavior",
+    "change generic runtime business algorithms",
+    "add crates, dependencies, manifests, contracts, migrations or Cargo.lock changes",
+    "implement local lifecycle commands, worker conformance, frontend features or operations product evidence",
+    "start repository step 10 or later work"
   ]
 }

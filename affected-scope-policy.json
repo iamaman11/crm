@@ -1,0 +1,131 @@
+{
+  "schema_version": "crm.affected-scope-policy/v1",
+  "scopes": [
+    {
+      "id": "contracts",
+      "owner": "architecture-governance",
+      "path_patterns": [
+        "contracts/**",
+        "schemas/**",
+        "modules/*/module.yaml"
+      ],
+      "required_workflows": [
+        "Contract CI",
+        "Governance CI"
+      ]
+    },
+    {
+      "id": "protobuf_api_compatibility",
+      "owner": "contract-platform",
+      "path_patterns": [
+        "proto/**",
+        "buf.yaml",
+        "buf.lock",
+        "buf.gen*.yaml",
+        "crates/crm-proto-contracts/**",
+        "packages/client/src/contract_hashes.ts",
+        "scripts/contract_bindings.py",
+        "scripts/generate_contract_bindings.py"
+      ],
+      "required_workflows": [
+        "Contract CI",
+        "Product Plane CI",
+        "Rust Generated Sync"
+      ]
+    },
+    {
+      "id": "database_migrations",
+      "owner": "data-platform",
+      "path_patterns": [
+        "database/migrations/**"
+      ],
+      "required_workflows": [
+        "Application Runtime CI",
+        "Database CI",
+        "Product Plane CI"
+      ]
+    },
+    {
+      "id": "postgresql_acceptance",
+      "owner": "data-platform",
+      "path_patterns": [
+        "database/**",
+        "crates/crm-core-data/**"
+      ],
+      "required_workflows": [
+        "Database CI"
+      ]
+    },
+    {
+      "id": "process_runtime_acceptance",
+      "owner": "runtime-platform",
+      "path_patterns": [
+        "services/crm-api/**",
+        "crates/crm-application-runtime/**",
+        "crates/crm-capability-ingress/**",
+        "crates/crm-capability-runtime/**",
+        "crates/crm-query-runtime/**",
+        "crates/crm-search-runtime/**",
+        "scripts/prepare_customer_enrichment_worker_process_database.sh",
+        "scripts/prepare_customer_enrichment_consent_policy_database.sh"
+      ],
+      "required_workflows": [
+        "Application Runtime CI"
+      ]
+    },
+    {
+      "id": "product_plane",
+      "owner": "product-platform",
+      "path_patterns": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "tsconfig.base.json",
+        "apps/web/**",
+        "packages/client/**",
+        "packages/ui/**",
+        "scripts/run_e2e.sh"
+      ],
+      "required_workflows": [
+        "Product Plane CI"
+      ]
+    },
+    {
+      "id": "frontend",
+      "owner": "product-platform",
+      "path_patterns": [
+        "apps/web/**",
+        "packages/client/**",
+        "packages/ui/**",
+        "buf.gen.web.yaml"
+      ],
+      "required_workflows": [
+        "Product Plane CI"
+      ]
+    },
+    {
+      "id": "operations",
+      "owner": "platform-operations",
+      "path_patterns": [
+        ".github/workflows/**",
+        ".github/pull_request_template.md",
+        "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md",
+        "docs/CI_TELEMETRY_BASELINE.md",
+        "docs/DELIVERY_GOVERNANCE.md",
+        "docs/POSTGRESQL_PROCESS_ISOLATION_PILOT.md",
+        "docs/RUST_CI_CACHE_PILOT.md",
+        "scripts/prepare_isolated_process_database.sh"
+      ],
+      "required_workflows": [
+        "Governance CI"
+      ]
+    }
+  ],
+  "neutral_path_patterns": [
+    "docs/**",
+    "tests/**",
+    "README.md",
+    "LICENSE",
+    "LICENSE.*"
+  ]
+}
