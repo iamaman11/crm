@@ -25,12 +25,12 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-10-evidence-sync")
+        self.assertEqual(packet["packet_id"], "architecture-plan-stage-accountability")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "19232f6f3e2ae87aabeb080257c1aac5477a6616",
+            "dad639c7d269bc802d053f1d99cf0fbf466ce4fb",
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
@@ -39,6 +39,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "docs/ACTIVE_PACKET.md",
                 "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
                 "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
                 "docs/PHASE8_DELIVERY_PLAN.md",
                 "docs/PROJECT_STATUS.md",
                 "repository-packet.json",
@@ -73,7 +74,15 @@ class RepositoryNavigationTests(unittest.TestCase):
             ],
         )
         self.assertIn(
-            "repository step 11 is the only next implementation packet",
+            "repository step 11 remains the only next implementation packet",
+            packet["acceptance"],
+        )
+        self.assertIn(
+            "Stage D has an explicit bounded completion packet before transitional consolidation",
+            packet["acceptance"],
+        )
+        self.assertIn(
+            "repository step 22 is a measurement checkpoint rather than an automatic 10/10 declaration",
             packet["acceptance"],
         )
 
@@ -311,7 +320,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "19232f6f3e2ae87aabeb080257c1aac5477a6616"
+                    "dad639c7d269bc802d053f1d99cf0fbf466ce4fb"
                 ),
             ),
             patch(

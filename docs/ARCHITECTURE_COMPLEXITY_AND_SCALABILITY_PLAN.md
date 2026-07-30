@@ -3,7 +3,7 @@
 Status: **Normative cross-cutting execution plan**  
 Tracking issue: #194  
 Original audit baseline: **2026-07-27**  
-Current execution checkpoint: **2026-07-30**
+Current execution checkpoint: **2026-07-31**
 
 Applies to repository structure, Rust workspace packaging, module composition, dependency governance, contracts, persistence ownership, CI/test selection, developer tooling, documentation navigation, local development, frontend architecture and production operations.
 
@@ -83,14 +83,44 @@ That increase is explicit and bounded. An ordinary capability added to an existi
 | Stage | Current state | Accepted progress | Remaining exit work |
 |---|---|---|---|
 | A — documentation and policy baseline | **Complete** | one plan, stable `docs/README.md`, source hierarchy and permanent consistency guard | preserve freshness and avoid duplicate live roadmaps |
-| B — dependency, crate and exception governance | **In progress** | reproducible baseline, crate justification, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1` toolchain/workspace `rust-version`, measured zero-warning Rust/Clippy baseline, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions | additional homogeneous dependency cohorts, removal of the three direct-lint exceptions, public-surface/fan-out calibration |
-| C — golden owner package and persistence model | **In progress** | Customer Privacy domain/application/postgres/production pilot, transaction-scoped final policy port, authoritative deny-only restriction decision, public restriction/legal-hold placement, legal-hold/mandatory-retention adjudication, durable replay-safe owner execution/outcomes and first protected-owner integration are accepted; ordinary Customer Privacy capabilities add zero crates | generalize scaffolding, migration ownership and visibility policy; adopt the model for later owners without forced rewrites |
-| D — contribution aggregation | **In progress** | owner-owned contribution pattern proven; first bounded Customer Accounts registration-inventory aggregation accepted through the first-party bundle | migrate remaining owners, expand the first-party bundle and remove additional concrete domain imports from generic runtime |
+| B — dependency, crate and exception governance | **In progress** | reproducible baseline, crate justification, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1` toolchain/workspace `rust-version`, measured zero-warning Rust/Clippy baseline, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions | additional homogeneous dependency cohorts, public-surface/fan-out calibration and removal of the three direct lint exceptions at step 13, measured consolidation at step 14, and remeasurement at steps 22 and 25 |
+| C — golden owner package and persistence model | **In progress** | Customer Privacy domain/application/postgres/production pilot, transaction-scoped final policy port, authoritative deny-only restriction decision, public restriction/legal-hold placement, legal-hold/mandatory-retention adjudication, durable replay-safe owner execution/outcomes, governed access/export assembly and first protected-owner integration are accepted; ordinary Customer Privacy capabilities add zero crates | destructive owner execution at step 11, Party tombstone/convergence at step 15, complete worker lifecycle at step 19, Phase 8A closure at step 21, and later-owner adoption without forced rewrites |
+| D — contribution aggregation | **In progress** | owner-owned contribution pattern proven; first bounded Customer Accounts registration-inventory aggregation accepted through the first-party bundle | repository step 12 completes current first-party owner contribution entry points, expands the mechanically checked bundle and removes remaining ordinary-registration concrete domain imports from generic runtime |
 | E — affected-scope CI | **Complete** | deterministic Rust closure plus declarative contract, Protobuf/API, migration, PostgreSQL, process/runtime, product, frontend and operations ownership; real workflow-filter compatibility; exact-head evidence; unknown-path fail-closed enforcement accepted through PR #239 | preserve policy/workflow compatibility and classify every new repository path before it can be represented as safely skipped |
-| F — generic conformance and contract lifecycle | **In progress** | native conformance, manifest/route parity and exact-head gates exist; reusable cross-owner mutation/query conformance is accepted through PR #235 | reusable worker suites plus compatibility, deprecation and retirement enforcement |
-| G — transitional consolidation | **Not started** | candidates and stop rules are defined | complete at least one behavior-neutral domain-cluster consolidation with measured improvement |
-| H — reproducible environment and navigation | **In progress** | stable docs index, `affected`, `check-affected`, deterministic `explain`, fail-closed `packet-check`, generated active packet and repository map are accepted through PR #228 | `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` |
-| I — frontend and operations parity | **Not started as a complete stage** | existing product/process checks remain preserved | domain-oriented frontend proof, accessibility/browser evidence, restore/SLO/performance/security/supply-chain gates |
+| F — generic conformance and contract lifecycle | **In progress** | native conformance, manifest/route parity and exact-head gates exist; reusable cross-owner mutation/query conformance is accepted through PR #235 | reusable worker conformance at step 16, contract compatibility/deprecation/retirement enforcement at step 17, real worker adoption at step 19 and Phase 8A process proof at step 21 |
+| G — transitional consolidation | **Not started** | candidates and stop rules are defined | repository step 14 completes at least one behavior-neutral domain-cluster consolidation with measured improvement |
+| H — reproducible environment and navigation | **In progress** | stable docs index, `affected`, `check-affected`, deterministic `explain`, fail-closed `packet-check`, generated active packet and repository map are accepted through PR #228 | repository step 18 implements and proves `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` |
+| I — frontend and operations parity | **Not started as a complete stage** | existing product/process checks remain preserved | repository step 20 adds domain-oriented frontend proof, accessibility/browser evidence and restore/SLO/performance/security/supply-chain gates; step 21 proves Phase 8A closure |
+
+
+### 2.3.1 Stage-to-step accountability
+
+Stages A–I are completion ledgers, not parallel queues. Repository steps are the only executable order. A step may advance more than one stage, while completed stages A and E remain mandatory invariants for every later packet.
+
+| Stage | Remaining numbered accountability | Exit evidence |
+|---|---|---|
+| A — documentation and policy baseline | preserved by every packet and its evidence synchronization | one live source hierarchy; stale phase, owner, next-packet and completion claims fail permanent guards |
+| B — dependency, crate and exception governance | steps 12, 13, 14, 22 and 25, plus every structural preflight | step 13 completes calibrated dependency/public-surface/fan-out governance and removes the three direct lint exceptions; no unjustified package growth; expired exceptions zero; measured before/after reports |
+| C — golden owner package and persistence model | steps 11, 15, 19 and 21 | destructive execution, tombstone/convergence, worker lifecycle and Phase 8A closure preserve owner, tenant, RLS, audit and rollback boundaries |
+| D — contribution aggregation | **step 12** | every currently active first-party owner exposes a stable contribution entry point; ordinary capability/worker registration changes no generic runtime algorithm or source |
+| E — affected-scope CI | preserved by every packet; rechecked at steps 22 and 25 | every changed path has explainable ownership and executable checks; unknown impact broadens fail closed |
+| F — generic conformance and contract lifecycle | steps 16, 17, 19 and 21 | reusable worker conformance is adopted by a real worker; published-version compatibility, deprecation telemetry, consumer migration and retirement gates are permanently enforced |
+| G — transitional consolidation | **step 14** | at least one domain cluster is consolidated behavior-neutrally with measured package, fan-out, public-surface or build/test improvement |
+| H — reproducible environment and navigation | **step 18** | clean-machine `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` are deterministic, repeatable and production-aligned |
+| I — frontend and operations parity | steps 20 and 21 | critical journeys have component/browser/accessibility proof and executable restore/SLO/performance/security/supply-chain evidence |
+
+### 2.3.2 Score-recovery accountability
+
+The program does not raise scores by declaration. Each weak dimension has explicit evidence:
+
+| Dimension | Primary correcting steps | Evidence required before 10/10 |
+|---|---|---|
+| Extensibility cost | 12, 14, 16, 19, 23 and 24 | ordinary capabilities touch one owner closure, zero generic-runtime files, zero new crates and no unrelated workflows; two contrasting later expert-domain waves keep that cost bounded as module count grows |
+| Developer comprehension | 18 plus permanent Stage A guards | one supported command path from clean machine to running/demo/smoke state; `explain` and packet navigation resolve owner, contract, persistence, composition and required checks without stale live trackers |
+| Build and CI scalability | 12, 13, 14, 16, 22, 23 and 24 | representative leaf changes avoid unrelated full-workspace closure; every broadening has a machine-readable reason; duration and fan-out budgets are measured and enforced |
+| Local development reproducibility | 18 | pinned-tool diagnostics, deterministic bootstrap/database/demo state, safe reset, production-aligned ingress and repeatable smoke proof on a clean environment |
+
+Repository step 22 is a Phase 8A architecture measurement checkpoint. It cannot by itself declare architecture 10/10 or close issue #194. The earliest final claim is repository step 25, after two contrasting later expert-domain waves at steps 23 and 24 and only if every completion criterion in section 12 is mechanically proven.
 
 Repository step 1 is accepted through PR #218 / accepted source `71c88f3e894f1fd943f373d8509e7569cf9aa291` / squash merge `e8fea1645fe108aa8334c40a445299dde8b444f0` / 30 of 30 permanent workflows. The exact supported compiler and workspace `rust-version` are `1.97.1`; Rust and Clippy warning/error budgets are zero; the 113-package workspace and `Cargo.lock` are unchanged; three pre-existing direct `too_many_arguments` lint tables are exact, expiring, no-growth exceptions.
 
@@ -148,15 +178,22 @@ Current master sequence:
 9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Complete through PR #239**;
 10. governed Customer Privacy access/export assembly — **Complete through PR #241**;
 11. owner-specific deletion, anonymization and supported crypto-shred execution — **Next**;
-12. first measured behavior-neutral transitional domain-cluster consolidation;
-13. Party tombstone, no-orphan proof and projection/search/cache convergence;
-14. reusable generic worker conformance suite;
-15. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;
-16. Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
-17. Phase 8A frontend, accessibility, browser, restore, SLO, performance, security and supply-chain evidence;
-18. Phase 8A closure;
-19. architecture remeasurement, remaining-gate review and publication of the next numbered sequence;
-20. first Phase 8B packet only after step 19 is accepted.
+12. complete first-party contribution aggregation for all currently active owners without behavior changes;
+13. complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;
+14. first measured behavior-neutral transitional domain-cluster consolidation;
+15. Party tombstone, no-orphan proof and projection/search/cache convergence;
+16. reusable generic worker conformance suite;
+17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;
+18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;
+19. Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
+20. Phase 8A frontend, accessibility, browser, restore, SLO, performance, security and supply-chain evidence;
+21. Phase 8A closure;
+22. Phase 8A architecture remeasurement, remaining-gate review and publication of the measured Phase 8B extension baseline — **not a final 10/10 declaration**;
+23. first Phase 8B expert-domain wave proving bounded extension cost;
+24. second contrasting expert-domain wave proving bounded extension cost as module count grows;
+25. final architecture 10/10 closure review only when every section 12 criterion is mechanically proven.
+
+Repository step 12 may be delivered as sequential bounded behavior-neutral owner batches, but it remains one unfinished master step until every currently active first-party owner satisfies section 6 completion evidence. Repository step 13 is a separate behavior-neutral governance packet and must close the currently named dependency/public-surface/fan-out and direct-lint-exception debt rather than defer it to measurement. Repository step 17 separately enforces the published contract lifecycle. Repository step 22 publishes measurements and remaining blockers; it cannot waive the two later-wave requirement or close issue #194.
 
 No item may be described as “next” when an earlier unfinished item exists. Any change to this order requires the change-control evidence in section 13 and synchronized updates to the normative roadmap, Phase 8 plan, project status and active issues before implementation starts.
 
@@ -178,6 +215,8 @@ Architecture and developer experience reach 10/10 only when the conditions below
 - A normal owner targets **three to five technical packages**: pure domain, application, PostgreSQL/infrastructure, production contribution and one optional real provider/trust/process/extraction boundary.
 - Crates exist for dependency, trust, reuse, lifecycle, process or extraction boundaries—not for every handler.
 - Transitional capability-specific packages are consolidated gradually through behavior-neutral packets with measured benefit.
+
+Zero new crates is the default for an ordinary capability inside an existing owner, not an absolute ban. A genuinely new authoritative owner normally introduces three to five owner packages. A provider, secret, trust, process, extraction or compiler-enforced visibility boundary may justify an additional package when an internal module cannot protect that boundary. The accepted Customer Privacy capability packets through repository step 10 correctly reused existing owner packages because they introduced no new independent dependency, trust, process or ownership boundary. Repository step 11 must repeat that preflight; a real crypto/KMS boundary may justify a dedicated adapter, but one crate per action remains forbidden.
 
 ### 3.3 Layering
 
@@ -369,6 +408,14 @@ A new crate is accepted only when it protects at least one real boundary:
 - credible extraction seam documented by ADR;
 - visibility that package boundaries must enforce.
 
+Decision matrix:
+
+- ordinary command/query/worker in an existing owner → internal module in the existing application/adapter/production packages; zero new crates;
+- new authoritative mutable domain → a new owner module with the target three-to-five package layout;
+- provider SDK, arbitrary HTTP, secrets, broker, object storage, KMS/HSM or independent process → optional dedicated boundary crate when isolation is compiler-enforced and review-visible;
+- reusable abstraction → shared crate only after at least two contrasting real consumers prove common semantics;
+- handler, planner, thin re-export, copied validation or capability-specific composition fragment → reject the crate and keep it internal.
+
 A crate is rejected when it contains only one handler, planner, thin re-export, copied validation or capability-specific composition function.
 
 Required review note:
@@ -395,8 +442,11 @@ For every first-party owner:
 5. remove corresponding concrete imports from generic runtime;
 6. retain startup rejection for duplicate coordinates, owner mismatch, route-kind mismatch and incomplete handlers.
 
+Repository step 12 is the bounded completion step for this program. It may use sequential owner batches, but feature behavior and consolidation remain excluded.
+
 Completion evidence:
 
+- every currently active first-party owner exposes one stable contribution entry point;
 - adding a capability changes no generic runtime source;
 - adding a worker changes no generic worker algorithm;
 - adding a module changes its package/manifest and generated/mechanically checked bundle only;
@@ -531,6 +581,8 @@ Initial budgets:
 Budgets move from measurement to warning to blocking only after representative baselines are collected.
 
 ## 12. 10/10 completion criteria
+
+Repository step 22 performs the first full remeasurement after Phase 8A, but it cannot close issue #194 because the program also requires two later contrasting expert-domain waves. Repository step 25 is the earliest final closure review and succeeds only when every item below is executable, measured and difficult to bypass.
 
 Issue #194 closes only when:
 

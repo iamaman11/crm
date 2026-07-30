@@ -14,6 +14,8 @@ A business module is an independently governed runtime unit under `modules/` wit
 
 Readiness states are Planned, Foundation, Vertical slice, Production integration slice, Expert expansion, Gate review and Product complete. Only merged `main` affects totals.
 
+Architecture and governance steps 12–25 may reduce extension cost or prove platform quality, but they do not by themselves advance a module readiness state. Readiness changes only when separate product evidence proves additional domain breadth, governed runtime behavior, UX and operations acceptance.
+
 ## 2. Implemented authoritative owner and coordination modules
 
 | Module | Ownership | Current merged readiness | Implemented production slice | Still required |
@@ -29,7 +31,7 @@ Readiness states are Planned, Foundation, Vertical slice, Production integration
 | `crm.customer-data-operations` | Governed import/export coordination | **Expert expansion** | Resumable import, deterministic export and recovery | More profiles and privacy execution integration |
 | `crm.data-quality` | Customer-data quality coordinator | **Vertical slice** | Evaluation, findings/completeness, stewardship and remediation | Additional owner-resource profiles |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Provider boundary, provenance, review and deterministic owner application | Additional providers, fields, UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, approval, permission-aware get/list/plan/outcome reads, trusted-internal exact-nine discovery/immutable snapshots and deterministic planning, public deny-only restriction placement and first protected-owner enforcement | Restriction release/reads, holds/retention, owner execution, export/deletion/convergence and workers |
+| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, approval, permission-aware get/list/plan/outcome reads, trusted-internal exact-nine discovery/immutable snapshots and deterministic planning, public deny-only restriction/legal-hold placement, retention adjudication, durable owner execution/outcomes and governed access/export assembly | Restriction/legal-hold release and reads where required, owner-specific deletion/anonymization/crypto-shred, tombstone/convergence, workers, frontend and operations proof |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -43,7 +45,9 @@ Current merged business-module total: **13** — twelve authoritative/coordinati
 
 Phase 8A.11 / issue #126 remains **In progress**.
 
-Latest accepted public inventory is six mutations, four permission-aware public queries and zero Customer Privacy workers through PR #226. Trusted-internal `customer_privacy.plan.build@1.0.0` still has no public ingress.
+Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241**. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, repository-step-8 owner execution and `customer_privacy.access_export.request@1.0.0` have no public ingress.
+
+Scope discovery and immutable snapshot execution remain accepted through PR #206 and are the authoritative foundation for the later planning, owner-execution and access/export evidence. At that historical PR #206 boundary, planning and action execution remain not started; PR #209 and later accepted runtime packets subsequently implemented those capabilities without rewriting the historical claim.
 
 Nine owner-scope contribution coordinates are published as non-public owner-owned reads. **All nine authoritative implementations are accepted:**
 
@@ -57,21 +61,22 @@ Nine owner-scope contribution coordinates are published as non-public owner-owne
 - PR #190 — Data Quality / accepted source `dcfe8faebc7462b888f8fc1721cb379a40fea88a` / merge `deac197c97cddc15bb9916092ca87f6e767ce1de` / 27 of 27 permanent workflows;
 - PR #192 — Customer Enrichment / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
 
-PR #206 / source `086b17a95058eee285fcb67a903bd21d9263d357` / merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe` passed 31 of 31 permanent workflows and accepted production scope discovery and immutable snapshot behavior. At that historical PR #206 boundary, **planning and action execution remain not started**.
+Accepted Customer Privacy architecture/runtime evidence now includes:
 
-PR #208 later froze deterministic planning and read semantics. PR #209 / source `b97fd9bb4537c14df4497ad7b737d0f0a64c4f3b` / merge `30621ffff5c1e07e1275cc80fee3f1297a91f49e` / 29 of 29 permanent workflows accepted trusted-internal planning runtime without changing its historical public 4/2/0 boundary.
+- PR #206 — exact-nine discovery and immutable snapshots;
+- PR #209 — deterministic planning runtime;
+- PR #211 — permission-aware plan/outcome reads;
+- PR #220 — public approval;
+- PR #222 / source `b5651e784a156758b39eaa04abc1124c7c0832f9` / merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 — first bounded contribution aggregation;
+- PR #224 / source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 — final customer-subject policy prerequisite;
+- PR #226 / source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 — public `customer_privacy.restriction.place@1.0.0` and first protected-owner enforcement;
+- PR #230 — public legal hold and mandatory-retention precedence;
+- PR #235 — reusable mutation/query conformance;
+- PR #237 — durable replay-safe owner execution, checkpoints and real owner outcomes;
+- PR #239 — multi-plane affected-scope enforcement;
+- PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 — governed access/export assembly with Customer Data Operations artifact ownership and crash recovery.
 
-PR #211 / source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1f3a60a6d8e8bba7bda50f936c57a61bc3521f7` / 32 of 32 permanent workflows accepted permission-aware `case.plan.get` and an empty future-safe `case.owner_outcomes.list` through existing packages. It adds strict case/snapshot/plan/replay validation, payload-safe summary output, bounded terminal outcomes semantics and append-only FORCE-RLS read audit. It adds no outcome persistence, synthetic outcomes, mutation, worker, approval, restriction, hold/retention decision or destructive action.
-
-PR #220 / source `98000b0c1c2c15e14c7ee0cd2a366020040567e6` / merge `01118df3b6349b6d854c4182c17f7eb9a6316b9c` / 21 of 21 permanent workflows accepted public `case.approve`. It adds activation and live authorization gates, tenant-bound expected-version enforcement, `AwaitingApproval → Planned`, strict locked case/snapshot/plan lineage, immutable actor/time evidence, atomic status/event/audit/idempotency/business persistence, exact replay and fail-closed conflict/corruption behavior.
-
-PR #222 / source `b5651e784a156758b39eaa04abc1124c7c0832f9` / merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows accepted the first behavior-neutral contribution-aggregation packet. Customer Accounts data-only mutation/query factories are now re-exported through `crm-first-party-modules`, and generic application runtime consumes those selected inventories through the first-party facade with unchanged ordering and activation behavior. No Customer Privacy inventory or product behavior changed; workspace packages remain 113.
-
-PR #224 / source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows accepted the final customer-subject policy prerequisite. The shared platform exposes a transaction-scoped live policy port and deterministic final guard chain; this prerequisite itself changed no Customer Privacy restriction behavior.
-
-PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / squash merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows accepted public `customer_privacy.restriction.place@1.0.0`, the authoritative bounded FORCE-RLS final decision and the first complete protected-owner integration on Contact Point creation. Placement and owner execution share the tenant + canonical Party lock. Real-process acceptance proves active denial without side effects, unrelated-Party isolation, rollback/reapply and repeated acceptance.
-
-Repository step 5 — `repo.py explain`, `repo.py packet-check`, generated active packet and repository map — is the next repository packet. Legal-hold/retention adjudication, restriction release/reads, owner execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+Repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — is the only next implementation packet. Access/export assembly is accepted and must not be described as incomplete.
 
 ## 5. Phase 8A packet accounting
 
@@ -85,7 +90,9 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Scope discovery, immutable snapshot, trusted-internal deterministic planning, permission-aware plan/outcome reads, approval, final-policy architecture prerequisite, immediate deny-only restriction placement and first protected-owner enforcement are accepted. Restriction release/reads, legal holds, execution, access/export, deletion/anonymization/crypto-shred and convergence remain incomplete.
+- 8A.11 / #126 — Customer Privacy. Discovery, immutable snapshots, deterministic planning, permission-aware reads, approval, restriction placement/final enforcement, legal-hold placement, mandatory-retention adjudication, durable owner execution/outcomes and governed access/export assembly are accepted. Remaining product work includes restriction and legal-hold release/read lifecycle where required, deletion/anonymization/supported crypto-shred, Party tombstone/no-orphan and convergence, Customer Privacy worker lifecycle, frontend/accessibility/browser proof and production operations evidence.
+
+Workspace packages remain 113. Current product-complete expert modules remain **0**.
 
 ## 6. Customer-master ownership baseline
 
@@ -100,7 +107,7 @@ In progress:
 
 ## 7. Planned commercial and expert domains
 
-Phase 8B / issue #29 remains planned and blocked on completed Phase 8A. Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment remain independent owner domains.
+Phase 8B / issue #29 remains planned and blocked on completed Phase 8A plus the repository-step-22 measurement checkpoint. Repository step 23 is the first later expert-domain wave. Product Catalog, Pricing, CPQ, Quotes, Orders, Contracts, Subscriptions/Entitlements/Usage and governed billing/ERP/payment/tax/fulfillment remain independent owner domains.
 
 Broader Sales/Activities, omnichannel, Service/Knowledge/Field Service, Marketing, Customer Success, projects/configurable work, documents/e-signature, analytics, workflow/collaboration, AI governance, marketplace and enterprise operational proof remain incomplete or planned.
 

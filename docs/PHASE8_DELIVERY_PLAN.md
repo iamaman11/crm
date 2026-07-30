@@ -184,17 +184,44 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **complete through PR #239**;
 10. repository step 10 — governed access/export assembly — **complete through PR #241**;
 11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **next**;
-12. repository step 12 — first measured behavior-neutral consolidation;
-13. repository step 13 — Party tombstone, no-orphan proof and projection/search/cache convergence;
-14. repository step 14 — reusable generic worker conformance;
-15. repository step 15 — deterministic local lifecycle commands;
-16. repository step 16 — Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
-17. repository step 17 — Phase 8A frontend and operations evidence;
-18. repository step 18 — Phase 8A closure;
-19. repository step 19 — architecture remeasurement and publication of the next numbered order;
-20. repository step 20 — first Phase 8B packet.
+12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes;
+13. repository step 13 — complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;
+14. repository step 14 — first measured behavior-neutral consolidation;
+15. repository step 15 — Party tombstone, no-orphan proof and projection/search/cache convergence;
+16. repository step 16 — reusable generic worker conformance;
+17. repository step 17 — contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;
+18. repository step 18 — deterministic local lifecycle commands;
+19. repository step 19 — Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
+20. repository step 20 — Phase 8A frontend and operations evidence;
+21. repository step 21 — Phase 8A closure;
+22. repository step 22 — Phase 8A architecture remeasurement and remaining-gate review, not a final 10/10 declaration;
+23. repository step 23 — first Phase 8B expert-domain wave;
+24. repository step 24 — second contrasting expert-domain wave;
+25. repository step 25 — final architecture 10/10 closure review only after every criterion is mechanically proven.
 
 The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 11 is unfinished.
+
+
+### 9.1 Stage accountability for the remaining Phase 8 sequence
+
+| Step | Primary stage responsibility |
+|---|---|
+| 11 | C — destructive owner execution inside the golden owner model |
+| 12 | D — complete contribution aggregation for current first-party owners |
+| 13 | B — dependency/public-surface/fan-out/exception governance completion |
+| 14 | G — measured behavior-neutral consolidation |
+| 15 | C — tombstone, no-orphan and convergence persistence model |
+| 16 | F — reusable worker conformance |
+| 17 | F — contract compatibility/deprecation/retirement enforcement |
+| 18 | H — reproducible local lifecycle |
+| 19 | C + F — real Customer Privacy worker and lifecycle proof |
+| 20 | I — frontend and operations parity |
+| 21 | C + F + I — Phase 8A closure |
+| 22 | all stages — measurement checkpoint only |
+| 23–24 | later-domain proof that extension cost remains bounded |
+| 25 | final architecture closure review |
+
+Step 12 is architecture refactoring only and must not change Customer Privacy product behavior. Step 13 is a separate governance packet that closes the currently named dependency/public-surface/fan-out and lint-exception debt. Step 14 is physical consolidation only and remains separate from feature behavior. Step 17 separately enforces contract lifecycle. Step 22 cannot close issue #194 or declare 10/10 before steps 23 and 24 provide contrasting later-domain evidence.
 
 ## 10. Frozen ownership
 
@@ -212,6 +239,6 @@ It closes only after restrictions and legal holds are extended with release/read
 
 ## 12. Phase 8B and completion rule
 
-Product Catalog, Pricing, CPQ, Orders, Contracts, Subscriptions and Billing remain blocked until the repository order and Phase 8A closure permit them.
+Product Catalog, Pricing, CPQ, Orders, Contracts, Subscriptions and Billing remain blocked until repository step 22 and Phase 8A closure permit step 23. Two contrasting later expert-domain waves at steps 23 and 24 are required before the step 25 final architecture 10/10 review.
 
 Current product-complete expert modules: **0**.
