@@ -82,7 +82,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             packet["acceptance"],
         )
         self.assertIn(
-            "repository step 20 is a measurement checkpoint rather than an automatic 10/10 declaration",
+            "repository step 22 is a measurement checkpoint rather than an automatic 10/10 declaration",
             packet["acceptance"],
         )
 

@@ -133,12 +133,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "10. governed Customer Privacy access/export assembly — **Complete through PR #241**;",
             "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Next**;",
             "12. complete first-party contribution aggregation for all currently active owners without behavior changes;",
-            "13. first measured behavior-neutral transitional domain-cluster consolidation;",
-            "16. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;",
-            "20. Phase 8A architecture remeasurement, remaining-gate review and publication of the measured Phase 8B extension baseline — **not a final 10/10 declaration**;",
-            "21. first Phase 8B expert-domain wave proving bounded extension cost;",
-            "22. second contrasting expert-domain wave proving bounded extension cost as module count grows;",
-            "23. final architecture 10/10 closure review only when every section 12 criterion is mechanically proven.",
+            "13. complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;",
+            "14. first measured behavior-neutral transitional domain-cluster consolidation;",
+            "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;",
+            "18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;",
+            "22. Phase 8A architecture remeasurement, remaining-gate review and publication of the measured Phase 8B extension baseline — **not a final 10/10 declaration**;",
+            "23. first Phase 8B expert-domain wave proving bounded extension cost;",
+            "24. second contrasting expert-domain wave proving bounded extension cost as module count grows;",
+            "25. final architecture 10/10 closure review only when every section 12 criterion is mechanically proven.",
         )
         positions = []
         for step in steps:
@@ -166,7 +168,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.phase8,
         )
         self.assertIn(
-            "20. repository step 20 — Phase 8A architecture remeasurement and remaining-gate review, not a final 10/10 declaration;",
+            "22. repository step 22 — Phase 8A architecture remeasurement and remaining-gate review, not a final 10/10 declaration;",
             self.phase8,
         )
         self.assertNotIn(
@@ -339,7 +341,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.packet["acceptance"],
         )
         self.assertIn(
-            "repository step 20 is a measurement checkpoint rather than an automatic 10/10 declaration",
+            "repository step 22 is a measurement checkpoint rather than an automatic 10/10 declaration",
             self.packet["acceptance"],
         )
 
@@ -372,8 +374,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(stage, self.plan)
 
         self.assertIn("repository step 12", self.plan.lower())
-        self.assertIn("repository step 20 is a phase 8a architecture measurement checkpoint", self.plan.lower())
-        self.assertIn("repository step 23", self.plan.lower())
+        self.assertIn("repository step 22 is a phase 8a architecture measurement checkpoint", self.plan.lower())
+        self.assertIn("repository step 25", self.plan.lower())
         self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241", self.catalog)
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
         self.assertIn("Repository step 11", self.catalog)
@@ -430,7 +432,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "repository step 12 is the bounded completion step",
             "not an absolute ban",
             "two contrasting later expert-domain waves",
-            "step 23",
+            "contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement",
+            "removal of the three direct lint exceptions",
+            "step 25",
         )
         plan_lower = self.plan.lower()
         for statement in required:

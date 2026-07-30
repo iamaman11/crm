@@ -185,17 +185,19 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 10. repository step 10 — governed access/export assembly — **complete through PR #241**;
 11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **next**;
 12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes;
-13. repository step 13 — first measured behavior-neutral consolidation;
-14. repository step 14 — Party tombstone, no-orphan proof and projection/search/cache convergence;
-15. repository step 15 — reusable generic worker conformance;
-16. repository step 16 — deterministic local lifecycle commands;
-17. repository step 17 — Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
-18. repository step 18 — Phase 8A frontend and operations evidence;
-19. repository step 19 — Phase 8A closure;
-20. repository step 20 — Phase 8A architecture remeasurement and remaining-gate review, not a final 10/10 declaration;
-21. repository step 21 — first Phase 8B expert-domain wave;
-22. repository step 22 — second contrasting expert-domain wave;
-23. repository step 23 — final architecture 10/10 closure review only after every criterion is mechanically proven.
+13. repository step 13 — complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;
+14. repository step 14 — first measured behavior-neutral consolidation;
+15. repository step 15 — Party tombstone, no-orphan proof and projection/search/cache convergence;
+16. repository step 16 — reusable generic worker conformance;
+17. repository step 17 — contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;
+18. repository step 18 — deterministic local lifecycle commands;
+19. repository step 19 — Customer Privacy worker, disable/uninstall fail-closed semantics and complete process/end-to-end acceptance;
+20. repository step 20 — Phase 8A frontend and operations evidence;
+21. repository step 21 — Phase 8A closure;
+22. repository step 22 — Phase 8A architecture remeasurement and remaining-gate review, not a final 10/10 declaration;
+23. repository step 23 — first Phase 8B expert-domain wave;
+24. repository step 24 — second contrasting expert-domain wave;
+25. repository step 25 — final architecture 10/10 closure review only after every criterion is mechanically proven.
 
 The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 11 is unfinished.
 
@@ -206,18 +208,20 @@ The inserted prerequisites did not renumber the normative master sequence. A lat
 |---|---|
 | 11 | C — destructive owner execution inside the golden owner model |
 | 12 | D — complete contribution aggregation for current first-party owners |
-| 13 | G — measured behavior-neutral consolidation |
-| 14 | C — tombstone, no-orphan and convergence persistence model |
-| 15 | F — reusable worker conformance |
-| 16 | H — reproducible local lifecycle |
-| 17 | C + F — real Customer Privacy worker and lifecycle proof |
-| 18 | I — frontend and operations parity |
-| 19 | C + F + I — Phase 8A closure |
-| 20 | all stages — measurement checkpoint only |
-| 21–22 | later-domain proof that extension cost remains bounded |
-| 23 | final architecture closure review |
+| 13 | B — dependency/public-surface/fan-out/exception governance completion |
+| 14 | G — measured behavior-neutral consolidation |
+| 15 | C — tombstone, no-orphan and convergence persistence model |
+| 16 | F — reusable worker conformance |
+| 17 | F — contract compatibility/deprecation/retirement enforcement |
+| 18 | H — reproducible local lifecycle |
+| 19 | C + F — real Customer Privacy worker and lifecycle proof |
+| 20 | I — frontend and operations parity |
+| 21 | C + F + I — Phase 8A closure |
+| 22 | all stages — measurement checkpoint only |
+| 23–24 | later-domain proof that extension cost remains bounded |
+| 25 | final architecture closure review |
 
-Step 12 is architecture refactoring only and must not change Customer Privacy product behavior. Step 13 is physical consolidation only and remains separate from feature behavior. Step 20 cannot close issue #194 or declare 10/10 before steps 21 and 22 provide contrasting later-domain evidence.
+Step 12 is architecture refactoring only and must not change Customer Privacy product behavior. Step 13 is a separate governance packet that closes the currently named dependency/public-surface/fan-out and lint-exception debt. Step 14 is physical consolidation only and remains separate from feature behavior. Step 17 separately enforces contract lifecycle. Step 22 cannot close issue #194 or declare 10/10 before steps 23 and 24 provide contrasting later-domain evidence.
 
 ## 10. Frozen ownership
 
@@ -235,6 +239,6 @@ It closes only after restrictions and legal holds are extended with release/read
 
 ## 12. Phase 8B and completion rule
 
-Product Catalog, Pricing, CPQ, Orders, Contracts, Subscriptions and Billing remain blocked until repository step 20 and Phase 8A closure permit step 21. Two contrasting later expert-domain waves at steps 21 and 22 are required before the step 23 final architecture 10/10 review.
+Product Catalog, Pricing, CPQ, Orders, Contracts, Subscriptions and Billing remain blocked until repository step 22 and Phase 8A closure permit step 23. Two contrasting later expert-domain waves at steps 23 and 24 are required before the step 25 final architecture 10/10 review.
 
 Current product-complete expert modules: **0**.
