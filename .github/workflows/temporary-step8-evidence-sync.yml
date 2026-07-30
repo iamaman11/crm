@@ -12,10 +12,6 @@ on:
       - ".github/step8-evidence-sync.py"
       - ".github/workflows/temporary-step8-evidence-sync.yml"
 
-concurrency:
-  group: temporary-step8-evidence-sync
-  cancel-in-progress: true
-
 permissions:
   contents: write
 
@@ -84,32 +80,32 @@ jobs:
           if source.count(old_step) != 1:
               raise SystemExit(f'execution-order step patch count: {source.count(old_step)}')
           source = source.replace(old_step, new_steps, 1)
-          old_evidence = '''            (
+          marker = '''            (
               self.authoritative_status_documents,
               "PR #235",
               "7a0cd34dc17085ecd1a8ee233171c0463d91ceba",
               "43d194231fbce1cee28c44e89726929e450f3d18",
               "17 of 17",
-          ),
-          )'''
-          new_evidence = '''            (
-              self.authoritative_status_documents,
-              "PR #235",
-              "7a0cd34dc17085ecd1a8ee233171c0463d91ceba",
-              "43d194231fbce1cee28c44e89726929e450f3d18",
-              "17 of 17",
-          ),
+          ),'''
+          if source.count(marker) != 1:
+              marker = '''            (
+                  self.authoritative_status_documents,
+                  "PR #235",
+                  "7a0cd34dc17085ecd1a8ee233171c0463d91ceba",
+                  "43d194231fbce1cee28c44e89726929e450f3d18",
+                  "17 of 17",
+              ),'''
+          if source.count(marker) != 1:
+              raise SystemExit(f'accepted-evidence marker count: {source.count(marker)}')
+          addition = '''
               (
                   self.authoritative_status_documents,
                   "PR #237",
                   "f926ece93dc2b24683f982828e72bf9170dc123a",
                   "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90",
                   "33 of 33",
-              ),
-          )'''
-          if source.count(old_evidence) != 1:
-              raise SystemExit(f'accepted-evidence patch count: {source.count(old_evidence)}')
-          path.write_text(source.replace(old_evidence, new_evidence, 1), encoding='utf-8')
+              ),'''
+          path.write_text(source.replace(marker, marker + addition, 1), encoding='utf-8')
           PY
           python scripts/generate_repository_navigation.py --write
           python -m py_compile \
