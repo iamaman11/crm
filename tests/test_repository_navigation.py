@@ -25,70 +25,57 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-10-access-export-assembly")
+        self.assertEqual(packet["packet_id"], "repository-step-10-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "4e0077fbf09d94e5fd7e4c69e238d6d3878252b0",
+            "19232f6f3e2ae87aabeb080257c1aac5477a6616",
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
             packet["allowed_paths"],
             [
-                ".github/workflows/customer-privacy-access-export.yml",
-                ".github/workflows/customer-privacy-approval.yml",
-                ".github/workflows/customer-privacy-owner-execution.yml",
-                "crates/crm-application-runtime/src/customer_privacy_access_export.rs",
-                "crates/crm-application-runtime/src/lib.rs",
-                "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs",
-                "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
-                "crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs",
-                "crates/crm-customer-privacy-application/src/access_export.rs",
-                "crates/crm-customer-privacy-application/src/lib.rs",
-                "crates/crm-customer-privacy-postgres/src/access_export.rs",
-                "crates/crm-customer-privacy-postgres/src/lib.rs",
-                "crates/crm-customer-privacy-production/src/access_export.rs",
-                "crates/crm-customer-privacy-production/src/root.rs",
                 "docs/ACTIVE_PACKET.md",
-                "docs/generated/REPOSITORY_MAP.md",
-                "modules/crm-customer-data-operations/module.yaml",
-                "modules/crm-customer-privacy/module.yaml",
-                "modules/crm-customer-privacy/src/access_export.rs",
-                "modules/crm-customer-privacy/src/lib.rs",
-                "modules/crm-customer-privacy/tests/access_export.rs",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
                 "repository-packet.json",
-                "services/crm-api/tests/generic_conformance_process_e2e.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             ],
         )
         for path in (
+            ".github/workflows/**",
             "Cargo.lock",
             "Cargo.toml",
             "affected-scope-policy.json",
+            "apps/**",
             "contracts/**",
-            "database/migrations/**",
+            "crates/**",
+            "database/**",
+            "modules/**",
             "packages/**",
             "proto/**",
             "schemas/**",
-            "services/crm-api/src/**",
+            "scripts/**",
+            "services/**",
         ):
             self.assertIn(path, packet["forbidden_paths"])
         self.assertEqual(
             packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Approval CI",
-                "Customer Privacy Owner Execution CI",
-                "Generic Mutation Query Conformance CI",
                 "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
-        self.assertIn("repository step 11 is not started", packet["acceptance"])
+        self.assertIn(
+            "repository step 11 is the only next implementation packet",
+            packet["acceptance"],
+        )
 
     def test_affected_scope_workflow_executes_real_packet_check(self) -> None:
         workflow = (
@@ -307,18 +294,24 @@ class RepositoryNavigationTests(unittest.TestCase):
             "affected_packages": [],
             "selected_workflows": [
                 {
-                    "name": "Affected Scope CI",
-                    "path": ".github/workflows/affected-scope.yml",
+                    "name": name,
+                    "path": path,
                     "selected": True,
                     "reasons": ["test fixture"],
                 }
+                for name, path in (
+                    ("Affected Scope CI", ".github/workflows/affected-scope.yml"),
+                    ("Governance CI", ".github/workflows/governance.yml"),
+                    ("Rust CI", ".github/workflows/rust.yml"),
+                    ("Rust Generated Sync", ".github/workflows/rust-generated-sync.yml"),
+                )
             ],
         }
         with (
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "4e0077fbf09d94e5fd7e4c69e238d6d3878252b0"
+                    "19232f6f3e2ae87aabeb080257c1aac5477a6616"
                 ),
             ),
             patch(

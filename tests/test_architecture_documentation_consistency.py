@@ -130,7 +130,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "7. reusable generic mutation and query conformance suites adopted by representative owners — **Complete through PR #235**;",
             "8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — **Complete through PR #237**;",
             "9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Complete through PR #239**;",
-            "10. governed Customer Privacy access/export assembly — **Next**;",
+            "10. governed Customer Privacy access/export assembly — **Complete through PR #241**;",
+            "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Next**;",
         )
         positions = []
         for step in steps:
@@ -146,15 +147,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.phase8,
         )
         self.assertIn(
-            "10. repository step 10 — governed access/export assembly — **next**;",
-            self.phase8,
-        )
-        self.assertNotIn(
-            "9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **next**;",
+            "10. repository step 10 — governed access/export assembly — **complete through PR #241**;",
             self.phase8,
         )
         self.assertIn(
-            "A later step must not start while repository step 10 is unfinished.",
+            "11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **next**;",
+            self.phase8,
+        )
+        self.assertNotIn(
+            "10. repository step 10 — governed access/export assembly — **next**;",
+            self.phase8,
+        )
+        self.assertIn(
+            "A later step must not start while repository step 11 is unfinished.",
             self.phase8,
         )
         for step in range(1, 6):
@@ -270,60 +275,62 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-10-access-export-assembly")
+        self.assertEqual(self.packet["packet_id"], "repository-step-10-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
-        self.assertEqual(self.packet["baseline"]["sha"], "4e0077fbf09d94e5fd7e4c69e238d6d3878252b0")
+        self.assertEqual(self.packet["baseline"]["sha"], "19232f6f3e2ae87aabeb080257c1aac5477a6616")
         self.assertEqual(self.packet["tracking_issues"], [126, 194])
         for path in (
-            ".github/workflows/customer-privacy-access-export.yml",
-            ".github/workflows/customer-privacy-approval.yml",
-            ".github/workflows/customer-privacy-owner-execution.yml",
-            "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs",
-            "crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs",
-            "crates/crm-customer-privacy-application/src/access_export.rs",
-            "crates/crm-customer-privacy-postgres/src/access_export.rs",
-            "crates/crm-customer-privacy-production/src/access_export.rs",
-            "docs/generated/REPOSITORY_MAP.md",
-            "modules/crm-customer-data-operations/module.yaml",
-            "modules/crm-customer-privacy/src/access_export.rs",
-            "modules/crm-customer-privacy/tests/access_export.rs",
+            "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
-            "services/crm-api/tests/generic_conformance_process_e2e.rs",
+            "tests/test_architecture_documentation_consistency.py",
+            "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, self.packet["allowed_paths"])
         for path in (
+            ".github/workflows/**",
             "Cargo.lock",
             "Cargo.toml",
+            "affected-scope-policy.json",
+            "apps/**",
             "contracts/**",
-            "database/migrations/**",
+            "crates/**",
+            "database/**",
+            "modules/**",
+            "packages/**",
             "proto/**",
+            "schemas/**",
+            "scripts/**",
+            "services/**",
         ):
             self.assertIn(path, self.packet["forbidden_paths"])
         for check in (
             "Affected Scope CI",
-            "Customer Privacy Access Export CI",
-            "Customer Privacy Approval CI",
-            "Customer Privacy Owner Execution CI",
-            "Generic Mutation Query Conformance CI",
             "Governance CI",
             "Rust CI",
             "Rust Generated Sync",
         ):
             self.assertIn(check, self.packet["required_checks"])
-        self.assertIn("repository step 11 is not started", self.packet["acceptance"])
+        self.assertIn(
+            "repository step 11 is the only next implementation packet",
+            self.packet["acceptance"],
+        )
 
         self.assertIn("Generated by scripts/generate_repository_navigation.py", self.active_packet)
-        self.assertIn("repository-step-10-access-export-assembly", self.active_packet)
+        self.assertIn("repository-step-10-evidence-sync", self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertRegex(self.active_packet, r"sha256:[0-9a-f]{64}")
         self.assertIn("orientation only", self.active_packet)
 
         for document in self.authoritative_status_documents:
-            self.assertIn("PR #239", document)
-            self.assertIn("e7ed45a7da5f14fa79e1ca4d23fc808004b6a642", document)
-            self.assertIn("e40832ae21118dd7f033e2811ca466d1242a19f0", document)
-            self.assertIn("8 of 8", document)
-            self.assertIn("repository step 10", document.lower())
+            self.assertIn("PR #241", document)
+            self.assertIn("2bb3a671deb18a6ae3bcea228ed01ed287b9de6a", document)
+            self.assertIn("19232f6f3e2ae87aabeb080257c1aac5477a6616", document)
+            self.assertIn("34 of 34", document)
+            self.assertIn("repository step 11", document.lower())
 
     def test_repository_map_matches_authoritative_inventory(self) -> None:
         members = self.workspace["workspace"]["members"]
