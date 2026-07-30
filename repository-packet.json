@@ -11,7 +11,7 @@
     126,
     194
   ],
-  "objective": "Correct the live architecture and delivery plans so every remaining repository step has explicit Stage A-I accountability, Stage D contribution aggregation has a dedicated completion packet, new-crate decisions remain boundary-driven rather than absolute, and architecture 10/10 cannot be claimed before measured later-domain proof.",
+  "objective": "Correct the live architecture and delivery plans so every remaining repository step has explicit Stage A-I accountability, Stages B, D and F have dedicated completion packets, new-crate decisions remain boundary-driven rather than absolute, and architecture 10/10 cannot be claimed before measured later-domain proof.",
   "allowed_paths": [
     "docs/ACTIVE_PACKET.md",
     "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
@@ -44,7 +44,7 @@
     "add a dedicated repository step 12 for completing first-party contribution aggregation before consolidation and worker expansion",
     "add explicit Stage B dependency/public-surface/fan-out/exception governance and Stage F contract-lifecycle enforcement packets",
     "renumber the later sequence through a measured Phase 8A checkpoint, two contrasting expert-domain waves and a final 10/10 closure review",
-    "state that repository step 20 is a measurement checkpoint and cannot itself declare architecture 10/10",
+    "state that repository step 22 is a measurement checkpoint and cannot itself declare architecture 10/10",
     "clarify that ordinary capabilities create zero crates while new owner, provider, trust, process, reuse or enforced-visibility boundaries may justify new packages",
     "synchronize Customer Privacy readiness and PR #241 access-export evidence in the module catalog",
     "regenerate docs/ACTIVE_PACKET.md and strengthen permanent documentation/navigation guards"
