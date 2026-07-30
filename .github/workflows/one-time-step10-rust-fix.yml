@@ -51,4 +51,4 @@ jobs:
           git restore scripts/one_time_step10_rust_fix.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 5: cancel stale patch runs and keep only the latest exact revision.
+          # Revision 6: enforce exact duplicate error-code cardinality.
