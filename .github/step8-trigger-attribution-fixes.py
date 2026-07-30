@@ -50,17 +50,19 @@ if application.count(test_marker) != 1:
     raise SystemExit("application execution test module marker is not unique")
 production, tests = application.split(test_marker, 1)
 fixture_pattern = re.compile(
-    r"(initiating_capability_id\s*:\s*CapabilityId::try_new\(\s*)"
-    r"(?:OWNER_ACTION_DISPATCH_CAPABILITY|\"customer_privacy\.owner_action\.dispatch\")"
-    r"(\s*\))"
+    r"(initiating_capability_id\s*:\s*)"
+    r".*?"
+    r"(,\s*\n\s*initiating_capability_version\s*:)",
+    re.DOTALL,
 )
 tests, fixture_matches = fixture_pattern.subn(
-    r"\1RETENTION_APPROVAL_TRIGGER_CAPABILITY\2",
+    r"\1CapabilityId::try_new(RETENTION_APPROVAL_TRIGGER_CAPABILITY).unwrap()\2",
     tests,
+    count=1,
 )
 if fixture_matches != 1:
     raise SystemExit(
-        f"registered application test trigger: expected one fixture match, found {fixture_matches}"
+        f"registered application test trigger: expected one fixture field, found {fixture_matches}"
     )
 application_path.write_text(production + test_marker + tests)
 
