@@ -8,6 +8,8 @@ use crm_customer_privacy::{
 };
 use crm_module_sdk::{DataClass, FileId, RecordId, RetentionPolicyId, SchemaVersion, TenantId};
 
+// Discovery lineage records the effective request in milliseconds, while snapshots and plans use
+// nanoseconds. Keep the fixture boundary explicit so temporal validation remains fail-closed.
 const EFFECTIVE_REQUEST_AT_UNIX_MS: i64 = 100;
 const CAPTURED_AT_UNIX_NANOS: i64 = 100_000_000;
 const PLANNED_AT_UNIX_NANOS: i64 = 200_000_000;
