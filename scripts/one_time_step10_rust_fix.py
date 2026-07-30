@@ -3,17 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def replace_once(path: str, old: str, new: str, label: str) -> None:
+def replace_exact(path: str, old: str, new: str, label: str, expected: int = 1) -> None:
     target = Path(path)
     text = target.read_text(encoding="utf-8")
     count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{label}: found {count}, expected 1")
+    if count != expected:
+        raise SystemExit(f"{label}: found {count}, expected {expected}")
     target.write_text(text.replace(old, new), encoding="utf-8")
 
 
 postgres_test_path = "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs"
-replace_once(
+replace_exact(
     postgres_test_path,
     """    PostgresOwnerExecutionPersistence, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
     PrivacyRetentionDecisionSet, ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
@@ -24,7 +24,7 @@ replace_once(
 """,
     "owner outcome import",
 )
-replace_once(
+replace_exact(
     postgres_test_path,
     """    let owner_execution = PostgresOwnerExecutionPersistence::new(store.clone());
     let owner_result = owner_execution
@@ -75,7 +75,7 @@ replace_once(
 """,
     "Access retained execution protocol",
 )
-replace_once(
+replace_exact(
     postgres_test_path,
     """            if command.chunk_index != artifact.metadata.next_chunk_index
                 || Sha256::digest(&command.bytes).as_slice() != command.chunk_sha256
@@ -88,7 +88,7 @@ replace_once(
 """,
     "test chunk digest comparison",
 )
-replace_once(
+replace_exact(
     postgres_test_path,
     """            if artifact.bytes.len() as u64 != artifact.metadata.expected_size_bytes
                 || Sha256::digest(&artifact.bytes).as_slice() != artifact.metadata.expected_sha256
@@ -102,16 +102,10 @@ replace_once(
     "test artifact digest comparison",
 )
 
-pure_test_path = "modules/crm-customer-privacy/tests/access_export.rs"
-replace_once(
-    pure_test_path,
+replace_exact(
+    "modules/crm-customer-privacy/tests/access_export.rs",
     '    assert_eq!(error.code(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");\n',
     '    assert_eq!(error.code.as_str(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");\n',
-    "completed reference conflict code",
-)
-replace_once(
-    pure_test_path,
-    '    assert_eq!(error.code(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");\n',
-    '    assert_eq!(error.code.as_str(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");\n',
-    "erasure rejection code",
+    "access export error codes",
+    expected=2,
 )
