@@ -6,8 +6,8 @@ from pathlib import Path
 path = Path("scripts/one_time_step9_evidence_sync.py")
 text = path.read_text(encoding="utf-8")
 
-old = "return re.subn(pattern, replacement, text, flags=re.MULTILINE)"
-new = "return re.subn(pattern, replacement, text, flags=re.MULTILINE | re.DOTALL)"
+old = "flags=re.MULTILINE)"
+new = "flags=re.MULTILINE | re.DOTALL)"
 if text.count(old) != 1:
     raise SystemExit(f"replace_regex flags patch count: {text.count(old)}")
 text = text.replace(old, new)
