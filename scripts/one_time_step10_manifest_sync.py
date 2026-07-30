@@ -19,7 +19,6 @@ replace_once(
     'version: "0.3.0"',
     "Customer Privacy version bump",
 )
-
 replace_once(
     "modules/crm-customer-data-operations/module.yaml",
     "version: 0.3.0",
@@ -99,6 +98,18 @@ replace_once(
     - customer_data.privacy_export_job
 """,
     "CDO retained private job",
+)
+replace_once(
+    "modules/crm-customer-privacy/src/access_export.rs",
+    "use sha2::Digest as _;\n",
+    "",
+    "unused Digest import",
+)
+replace_once(
+    "crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs",
+    '    format!("{domain}-{}", hex(&hasher.finalize().into()))\n',
+    '    let digest: [u8; 32] = hasher.finalize().into();\n    format!("{domain}-{}", hex(&digest))\n',
+    "stable id digest conversion",
 )
 
 packet_path = Path("repository-packet.json")
