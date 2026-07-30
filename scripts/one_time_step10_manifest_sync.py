@@ -125,6 +125,7 @@ replace_once(
 packet_path = Path("repository-packet.json")
 packet = json.loads(packet_path.read_text(encoding="utf-8"))
 for path in (
+    "docs/generated/REPOSITORY_MAP.md",
     "modules/crm-customer-data-operations/module.yaml",
     "modules/crm-customer-privacy/tests/access_export.rs",
 ):
@@ -160,6 +161,7 @@ navigation_active = '''    def test_active_packet_declaration_is_valid_and_exact
                 "crates/crm-customer-privacy-production/src/access_export.rs",
                 "crates/crm-customer-privacy-production/src/root.rs",
                 "docs/ACTIVE_PACKET.md",
+                "docs/generated/REPOSITORY_MAP.md",
                 "modules/crm-customer-data-operations/module.yaml",
                 "modules/crm-customer-privacy/module.yaml",
                 "modules/crm-customer-privacy/src/access_export.rs",
@@ -235,6 +237,7 @@ architecture_active = '''    def test_active_packet_is_machine_declared_and_gene
             "crates/crm-customer-privacy-application/src/access_export.rs",
             "crates/crm-customer-privacy-postgres/src/access_export.rs",
             "crates/crm-customer-privacy-production/src/access_export.rs",
+            "docs/generated/REPOSITORY_MAP.md",
             "modules/crm-customer-data-operations/module.yaml",
             "modules/crm-customer-privacy/src/access_export.rs",
             "modules/crm-customer-privacy/tests/access_export.rs",
