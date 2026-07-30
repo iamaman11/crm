@@ -37,24 +37,29 @@ env:
 jobs:
   access-export:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: crm
+          POSTGRES_DB: crm_privacy_access_export_test
         ports:
-          - 5432:5432
+          - 5462:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d crm"
+          --health-cmd "pg_isready -U postgres -d crm_privacy_access_export_test"
           --health-interval 5s
           --health-timeout 5s
-          --health-retries 20
+          --health-retries 10
     env:
-      DATABASE_URL: postgres://crm_app:crm_app@localhost:5432/crm
-      ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/crm
+      PGHOST: 127.0.0.1
+      PGPORT: 5462
+      PGDATABASE: crm_privacy_access_export_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5462/crm_privacy_access_export_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5462/crm_privacy_access_export_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -102,13 +107,42 @@ jobs:
           --all-targets -- -D warnings
       - name: Compile PostgreSQL acceptance target
         run: cargo test --locked -p crm-application-runtime --test customer_privacy_access_export_postgres --no-run
-      - name: Apply clean authoritative schema
-        run: bash scripts/apply_migrations.sh "$ADMIN_DATABASE_URL"
+      - name: Apply clean authoritative schema and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Run PostgreSQL crash-window acceptance
         run: cargo test --locked -p crm-application-runtime --test customer_privacy_access_export_postgres -- --nocapture
       - name: Roll back authoritative schema
-        run: bash scripts/rollback_migrations.sh "$ADMIN_DATABASE_URL"
-      - name: Reapply authoritative schema
-        run: bash scripts/apply_migrations.sh "$ADMIN_DATABASE_URL"
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+      - name: Reapply authoritative schema and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0005_party_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
       - name: Repeat PostgreSQL acceptance after reapply
         run: cargo test --locked -p crm-application-runtime --test customer_privacy_access_export_postgres -- --nocapture
