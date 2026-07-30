@@ -117,5 +117,4 @@ jobs:
             tests/test_architecture_documentation_consistency.py \
             tests/test_repository_navigation.py
           git commit -m "Docs: synchronize accepted repository step 8 evidence"
-          git pull --rebase origin repository-step-8-evidence-sync
           git push origin HEAD:repository-step-8-evidence-sync
