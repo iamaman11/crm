@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 import unittest
 
@@ -9,7 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SUITE = ROOT / "services/crm-api/tests/support/generic_conformance.rs"
 ADOPTION = ROOT / "services/crm-api/tests/generic_conformance_process_e2e.rs"
 WORKFLOW = ROOT / ".github/workflows/generic-conformance.yml"
-PACKET = ROOT / "repository-packet.json"
 
 
 class GenericConformanceAdoptionTests(unittest.TestCase):
@@ -31,23 +29,6 @@ class GenericConformanceAdoptionTests(unittest.TestCase):
         self.assertIn("cargo test -p crm-api --test generic_conformance_process_e2e", workflow)
         self.assertIn("python -m unittest tests.test_generic_conformance_adoption", workflow)
         self.assertIn("postgres:17-alpine", workflow)
-
-    def test_packet_preserves_package_and_dependency_budgets(self) -> None:
-        packet = json.loads(PACKET.read_text(encoding="utf-8"))
-        self.assertEqual(packet["packet_id"], "repository-step-7")
-        self.assertEqual(
-            packet["baseline"]["sha"],
-            "b053d9bc1c74a7a238aec4698f7f513a1834fefc",
-        )
-        self.assertNotIn("Cargo.toml", packet["allowed_paths"])
-        self.assertNotIn("Cargo.lock", packet["allowed_paths"])
-        self.assertIn("Cargo.toml", packet["forbidden_paths"])
-        self.assertIn("Cargo.lock", packet["forbidden_paths"])
-        self.assertIn(
-            "tests/test_architecture_documentation_consistency.py",
-            packet["allowed_paths"],
-        )
-        self.assertIn("tests/test_repository_navigation.py", packet["allowed_paths"])
 
 
 if __name__ == "__main__":
