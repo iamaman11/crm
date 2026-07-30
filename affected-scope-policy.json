@@ -1,0 +1,132 @@
+{
+  "schema_version": "crm.affected-scope-policy/v1",
+  "scopes": [
+    {
+      "id": "contracts",
+      "owner": "architecture-governance",
+      "path_patterns": [
+        "contracts/**",
+        "schemas/**",
+        "modules/*/module.yaml",
+        "scripts/contract_bindings.py",
+        "scripts/generate_contract_bindings.py"
+      ],
+      "required_workflows": [
+        "Governance CI"
+      ]
+    },
+    {
+      "id": "protobuf_api_compatibility",
+      "owner": "contract-platform",
+      "path_patterns": [
+        "proto/**",
+        "buf.yaml",
+        "buf.lock",
+        "buf.gen*.yaml",
+        "crates/crm-proto-contracts/**",
+        "packages/client/src/contract_hashes.ts"
+      ],
+      "required_workflows": [
+        "Product Plane CI",
+        "Rust Generated Sync"
+      ]
+    },
+    {
+      "id": "database_migrations",
+      "owner": "data-platform",
+      "path_patterns": [
+        "database/migrations/**"
+      ],
+      "required_workflows": [
+        "Application Runtime CI",
+        "Database CI",
+        "Product Plane CI"
+      ]
+    },
+    {
+      "id": "postgresql_acceptance",
+      "owner": "data-platform",
+      "path_patterns": [
+        "database/**",
+        "crates/*postgres*/**",
+        "crates/crm-core-data/**",
+        "scripts/prepare_*database*.sh"
+      ],
+      "required_workflows": [
+        "Database CI"
+      ]
+    },
+    {
+      "id": "process_runtime_acceptance",
+      "owner": "runtime-platform",
+      "path_patterns": [
+        "services/**",
+        "crates/*runtime*/**",
+        "crates/*ingress*/**",
+        "crates/*worker*/**",
+        "scripts/run_e2e.sh",
+        "scripts/prepare_*process*.sh"
+      ],
+      "required_workflows": [
+        "Application Runtime CI"
+      ]
+    },
+    {
+      "id": "product_plane",
+      "owner": "product-platform",
+      "path_patterns": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "tsconfig.base.json",
+        "apps/web/**",
+        "packages/client/**",
+        "packages/ui/**",
+        "scripts/run_e2e.sh"
+      ],
+      "required_workflows": [
+        "Product Plane CI"
+      ]
+    },
+    {
+      "id": "frontend",
+      "owner": "product-platform",
+      "path_patterns": [
+        "apps/web/**",
+        "packages/client/**",
+        "packages/ui/**",
+        "buf.gen.web.yaml"
+      ],
+      "required_workflows": [
+        "Product Plane CI"
+      ]
+    },
+    {
+      "id": "operations",
+      "owner": "platform-operations",
+      "path_patterns": [
+        ".github/**",
+        "ops/**",
+        "deploy/**",
+        "infrastructure/**",
+        "docker/**",
+        "Dockerfile",
+        "Dockerfile.*",
+        "compose*.yml",
+        "compose*.yaml",
+        "scripts/prepare_*.sh"
+      ],
+      "required_workflows": [
+        "Governance CI"
+      ]
+    }
+  ],
+  "neutral_path_patterns": [
+    "docs/**",
+    "tests/**",
+    ".github/pull_request_template.md",
+    "README.md",
+    "LICENSE",
+    "LICENSE.*"
+  ]
+}
