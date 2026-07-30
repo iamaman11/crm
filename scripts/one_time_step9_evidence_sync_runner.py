@@ -47,5 +47,21 @@ if text.count(old) != 1:
     raise SystemExit(f"phase8 cardinality patch count: {text.count(old)}")
 text = text.replace(old, new)
 
+old = '''def architecture_test(text: str) -> str:
+    pattern = (
+'''
+new = '''def architecture_test(text: str) -> str:
+    text = replace_exact(
+        text,
+        '    "9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Next**;",',
+        '            "9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Complete through PR #239**;",\\n            "10. governed Customer Privacy access/export assembly — **Next**;",',
+        "architecture execution-order guard",
+    )
+    pattern = (
+'''
+if text.count(old) != 1:
+    raise SystemExit(f"architecture execution-order patch count: {text.count(old)}")
+text = text.replace(old, new)
+
 path.write_text(text, encoding="utf-8")
 exec(compile(text, str(path), "exec"), {"__name__": "__main__", "__file__": str(path)})
