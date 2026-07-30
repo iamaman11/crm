@@ -179,8 +179,8 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 6. repository step 6 — legal-hold and mandatory-retention precedence — **complete through PR #230**;
 7. repository step 7 — reusable generic mutation/query conformance — **complete through PR #235**;
 8. repository step 8 — replay-safe resumable owner execution and crash-window recovery — **complete through PR #237**;
-9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **next**;
-10. repository step 10 — governed access/export assembly;
+9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **complete through PR #239**;
+10. repository step 10 — governed access/export assembly — **next**;
 11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution;
 12. repository step 12 — first measured behavior-neutral consolidation;
 13. repository step 13 — Party tombstone, no-orphan proof and projection/search/cache convergence;
@@ -192,7 +192,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 19. repository step 19 — architecture remeasurement and publication of the next numbered order;
 20. repository step 20 — first Phase 8B packet.
 
-The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 9 is unfinished.
+The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 10 is unfinished.
 
 ## 10. Frozen ownership
 

@@ -141,6 +141,22 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("## Next permitted repository packet", self.status)
         self.assertIn("## Following permitted repository packet", self.status)
         self.assertIn("## 9. Binding repository continuation", self.phase8)
+        self.assertIn(
+            "9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **complete through PR #239**;",
+            self.phase8,
+        )
+        self.assertIn(
+            "10. repository step 10 — governed access/export assembly — **next**;",
+            self.phase8,
+        )
+        self.assertNotIn(
+            "9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **next**;",
+            self.phase8,
+        )
+        self.assertIn(
+            "A later step must not start while repository step 10 is unfinished.",
+            self.phase8,
+        )
         for step in range(1, 6):
             self.assertIn(f"Repository step {step}", self.roadmap)
 
