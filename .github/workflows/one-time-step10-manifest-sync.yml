@@ -51,9 +51,11 @@ jobs:
             modules/crm-customer-privacy/src/access_export.rs \
             crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs \
             repository-packet.json \
-            docs/ACTIVE_PACKET.md
+            docs/ACTIVE_PACKET.md \
+            tests/test_repository_navigation.py \
+            tests/test_architecture_documentation_consistency.py
           git diff --cached --exit-code && { echo "Expected changes were not materialized."; exit 1; } || true
-          git commit -m "Step 10: synchronize manifests and canonical diagnostics"
+          git commit -m "Step 10: synchronize manifests and repository guards"
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 4: install canonical repository tooling dependencies.
+          # Revision 5: synchronize permanent step-10 navigation guards.
