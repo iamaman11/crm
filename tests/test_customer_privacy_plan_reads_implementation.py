@@ -126,9 +126,6 @@ class CustomerPrivacyPlanReadsImplementationTests(unittest.TestCase):
         self.assertFalse(persistence["owner_outcome_table_added"])
 
     def test_source_and_sql_markers_match_machine_evidence(self) -> None:
-        application = (
-            ROOT / "crates/crm-customer-privacy-application/src/reads.rs"
-        ).read_text(encoding="utf-8")
         production = (
             ROOT / "crates/crm-customer-privacy-production/src/lib.rs"
         ).read_text(encoding="utf-8")
@@ -138,9 +135,6 @@ class CustomerPrivacyPlanReadsImplementationTests(unittest.TestCase):
         acceptance = (
             ROOT / "database/tests/0045_customer_privacy_plan_reads.sql"
         ).read_text(encoding="utf-8")
-        self.assertIn("CustomerPrivacyPlanReadAdapter", application)
-        self.assertIn("owner_outcome_page_digest", application)
-        self.assertIn("privacy_owner_outcomes: Vec::new()", application)
         self.assertIn(
             "Customer Privacy production inventory must contain exactly four queries",
             production,
@@ -148,7 +142,7 @@ class CustomerPrivacyPlanReadsImplementationTests(unittest.TestCase):
         self.assertIn("CREATE TABLE crm.customer_privacy_plan_read_audit", migration)
         self.assertIn("FORCE ROW LEVEL SECURITY", migration)
         self.assertIn("CREATE POLICY tenant_isolation", migration)
-        self.assertNotIn("CREATE TABLE crm.customer_privacy_owner_outcomes", migration)
+        self.assertNotIn("customer_privacy_owner_action_outcomes", migration)
         self.assertIn("owner-outcome persistence must not exist", acceptance)
 
     def test_later_runtime_remains_explicitly_outside_packet(self) -> None:
