@@ -1,69 +1,84 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-9-evidence-sync",
-  "title": "Synchronize accepted repository step 9 evidence",
+  "packet_id": "repository-step-10-access-export-assembly",
+  "title": "Assemble governed Customer Privacy access exports",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "e40832ae21118dd7f033e2811ca466d1242a19f0"
+    "sha": "4e0077fbf09d94e5fd7e4c69e238d6d3878252b0"
   },
   "tracking_issues": [
     126,
     194
   ],
-  "objective": "Synchronize accepted PR #239 affected-scope expansion evidence across the normative repository plans, mark repository step 9 complete, and expose repository step 10 as the only next implementation packet.",
+  "objective": "Implement repository step 10 only: trusted-internal, replay-safe Customer Privacy access/export assembly through customer_privacy.access_export.request@1.0.0 and the exact customer_data.export.privacy.request@1.0.0 owner boundary, persisting only immutable Customer Privacy manifest and stable Customer Data Operations job/artifact references while reusing the existing audited artifact disclosure path.",
   "allowed_paths": [
+    ".github/workflows/customer-privacy-access-export.yml",
+    "crates/crm-application-runtime/src/customer_privacy_access_export.rs",
+    "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+    "crates/crm-application-runtime/src/lib.rs",
+    "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs",
+    "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
+    "crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs",
+    "crates/crm-customer-privacy-application/src/access_export.rs",
+    "crates/crm-customer-privacy-application/src/lib.rs",
+    "crates/crm-customer-privacy-postgres/src/access_export.rs",
+    "crates/crm-customer-privacy-postgres/src/lib.rs",
+    "crates/crm-customer-privacy-production/src/access_export.rs",
+    "crates/crm-customer-privacy-production/src/root.rs",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
+    "modules/crm-customer-privacy/module.yaml",
+    "modules/crm-customer-privacy/src/access_export.rs",
+    "modules/crm-customer-privacy/src/lib.rs",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
     "Cargo.lock",
     "Cargo.toml",
     "affected-scope-policy.json",
-    "apps/**",
     "contracts/**",
-    "crates/**",
-    "database/**",
-    "modules/**",
+    "database/migrations/**",
     "packages/**",
     "proto/**",
     "schemas/**",
-    "scripts/**",
     "services/**"
   ],
   "deliverables": [
-    "record PR #239 accepted source, squash merge and 8-of-8 applicable permanent workflow evidence",
-    "mark repository step 9 complete and repository step 10 next",
-    "record deterministic multi-plane affected-scope ownership, executable workflow coverage, exact-head evidence and unknown-path fail-closed behavior",
-    "record unchanged product runtime, Customer Privacy inventory, contracts, migrations, crates, dependencies, Cargo.lock and workspace package count",
-    "regenerate docs/ACTIVE_PACKET.md and synchronize permanent documentation guards"
+    "implement the frozen trusted-internal customer_privacy.access_export.request@1.0.0 coordinate with no public ingress or Customer Privacy worker",
+    "assemble a deterministic immutable access/export manifest from exact privacy case, scope snapshot, action plan, retention decision and durable owner-outcome lineage",
+    "persist a tenant-bound strictly rehydrated Customer Privacy export-reference aggregate before artifact I/O",
+    "invoke only customer_data.export.privacy.request@1.0.0 for Customer Data Operations-owned job and artifact creation",
+    "reuse the existing immutable file artifact and authenticated audited download boundary without an alternate file endpoint",
+    "recover the artifact-finalized before Customer Privacy case-link crash window by reusing the same deterministic target idempotency and artifact identity",
+    "preserve FORCE RLS, shared canonical-Party locking, activation gating, exact initiating-capability attribution and safe errors",
+    "add permanent Rust, PostgreSQL and process-level acceptance for exact replay, conflicting replay, cross-tenant concealment and bounded non-effects"
   ],
   "required_checks": [
     "Affected Scope CI",
+    "Customer Privacy Access Export CI",
+    "Customer Privacy Owner Execution CI",
     "Governance CI",
     "Rust CI",
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "all authoritative status documents agree on PR #239 accepted evidence",
-    "repository step 10 is the only next implementation packet",
-    "generated active-packet navigation is fresh",
-    "no runtime, contract, manifest, dependency, Cargo.lock, persistence, migration, public inventory, affected-scope policy or product behavior changes"
+    "Access and PortabilityExport cases only can assemble an export after exact immutable lineage and final durable owner outcomes are proven",
+    "Customer Privacy stores only manifest and stable export job/artifact references; Customer Data Operations remains job/artifact owner",
+    "attempt/reference evidence is durable before artifact I/O and exact replay never creates a second logical job or artifact",
+    "artifact-finalized/case-link-missing recovery links the existing artifact",
+    "unknown, missing, malformed, stale, cross-tenant or conflicting evidence fails closed",
+    "no public mutation/query coordinate, route, worker, owner outcome v1 schema, destructive owner action, crate, dependency, Cargo.lock or workspace-package change",
+    "repository step 11 is not started"
   ],
   "non_goals": [
-    "implement repository step 10 access/export assembly",
-    "change affected-scope policy, analyzer or permanent workflow path filters",
-    "change Customer Privacy runtime, public coordinates or inventory",
-    "change generic runtime algorithms, owner-specific product semantics or worker inventory",
-    "change Cargo.lock, manifests, dependencies or workspace packages",
-    "change persistence, migrations or unrelated documentation",
+    "add a Customer Privacy public export query or download endpoint",
+    "change the existing Customer Data Operations public Party export contracts",
+    "implement owner-specific deletion, anonymization or crypto-shred",
+    "finalize privacy cases or implement convergence verification",
+    "add a Customer Privacy worker or generic runtime business switch",
+    "add crates, dependencies, manifests, Protobuf contracts or migrations",
     "start repository step 11 or later work"
   ]
 }
