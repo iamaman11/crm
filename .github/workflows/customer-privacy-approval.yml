@@ -107,10 +107,11 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt, clippy
-      - name: Install PostgreSQL client
+      - name: Install verification dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
+          python -m pip install --requirement requirements-dev.txt
       - name: Run architecture preflight
         run: python scripts/check_architecture.py
       - name: Apply clean authoritative schema and fixtures
