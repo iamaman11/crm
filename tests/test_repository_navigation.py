@@ -25,30 +25,26 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-8")
+        self.assertEqual(packet["packet_id"], "repository-step-8-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
-        self.assertEqual(
-            packet["baseline"]["sha"],
-            "3849e046e45dbf7e398db7cd58e0aeaca508c045",
-        )
+        self.assertEqual(packet["baseline"]["sha"], "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90")
         self.assertEqual(packet["tracking_issues"], [126, 194])
         for path in (
-            ".github/workflows/customer-privacy-owner-execution.yml",
-            "crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs",
-            "database/migrations/0105_customer_privacy_owner_execution.up.sql",
             "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, packet["allowed_paths"])
+        self.assertIn(".github/workflows/**", packet["forbidden_paths"])
         self.assertIn("Cargo.lock", packet["forbidden_paths"])
-        self.assertIn("Customer Privacy Owner Execution CI", packet["required_checks"])
-        self.assertIn(
-            "all applicable permanent workflows pass on one unchanged exact head",
-            packet["acceptance"],
-        )
+        self.assertIn("Governance CI", packet["required_checks"])
+        self.assertIn("repository step 9 is the only next implementation packet", packet["acceptance"])
 
     def test_affected_scope_workflow_executes_real_packet_check(self) -> None:
         workflow = (ROOT / ".github/workflows/affected-scope.yml").read_text(
@@ -159,8 +155,11 @@ class RepositoryNavigationTests(unittest.TestCase):
 
     def test_packet_check_reports_affected_scope_without_running_git_or_cargo(self) -> None:
         changed_paths = [
-            ".github/workflows/customer-privacy-owner-execution.yml",
             "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
@@ -179,10 +178,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             ],
         }
         with (
-            patch(
-                "scripts.repository_navigation._git",
-                return_value="3849e046e45dbf7e398db7cd58e0aeaca508c045",
-            ),
+            patch("scripts.repository_navigation._git", return_value="9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90"),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
         ):
