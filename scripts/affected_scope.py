@@ -26,7 +26,7 @@ REQUIRED_SCOPE_IDS = {
 }
 BROAD_PATH_PATTERNS = (
     "Cargo.toml", "Cargo.lock", ".github/workflows/**",
-    "affected-scope-policy.json", "architecture-policy.json",
+    "affected-scope-policy.json", "repository-packet.json", "architecture-policy.json",
     "architecture-governance.json", "workspace-dependency-policy.json",
     "requirements-dev.txt", "scripts/affected_scope.py", "scripts/repo.py",
     "scripts/repository_navigation.py", "scripts/check_architecture.py",
