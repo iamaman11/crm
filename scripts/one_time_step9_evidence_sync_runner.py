@@ -36,5 +36,16 @@ if text.count(old) != 1:
     raise SystemExit(f"status packet patch count: {text.count(old)}")
 text = text.replace(old, new)
 
+old = '''        "phase8 accepted step 9",
+    )
+'''
+new = '''        "phase8 accepted step 9",
+        expected=2,
+    )
+'''
+if text.count(old) != 1:
+    raise SystemExit(f"phase8 cardinality patch count: {text.count(old)}")
+text = text.replace(old, new)
+
 path.write_text(text, encoding="utf-8")
 exec(compile(text, str(path), "exec"), {"__name__": "__main__", "__file__": str(path)})
