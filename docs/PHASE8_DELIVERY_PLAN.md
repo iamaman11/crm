@@ -33,7 +33,7 @@ Repository implementation is strictly sequential. Only the first unfinished item
 
 Issue #126 is **In progress**.
 
-Latest accepted public runtime inventory is seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #237. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0` and repository-step-8 owner execution have no public ingress.
+Latest accepted public runtime inventory is seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, repository-step-8 owner execution and `customer_privacy.access_export.request@1.0.0` have no public ingress.
 
 All nine authoritative owner implementations are accepted:
 
@@ -77,7 +77,9 @@ Repository step 8 is accepted through PR #237 / accepted source `f926ece93dc2b24
 
 Repository step 9 is accepted through PR #239 / accepted source `e7ed45a7da5f14fa79e1ca4d23fc808004b6a642` / squash merge `e40832ae21118dd7f033e2811ca466d1242a19f0` / 8 of 8 applicable permanent workflows on one unchanged exact head. It establishes one declarative affected-scope policy for contracts, Protobuf/API compatibility, database migrations, PostgreSQL acceptance, process/runtime acceptance, product-plane checks, frontend checks and operations checks; preserves deterministic Rust ownership and reverse closure; requires the real permanent workflow filters for every selected scope; blocks unknown non-Rust paths until classified; and records exact pull-request-head evidence. Shared workflow or policy changes widen validation to all 113 Rust workspace packages. The final 12-file packet changes no product behavior, Customer Privacy public inventory, runtime route, worker, contract, Protobuf message, schema, migration, crate, dependency, `Cargo.lock`, workspace package or generic-runtime business algorithm.
 
-Repository step 10 — governed Customer Privacy access/export assembly — is now the next permitted implementation packet. Repository step 11 or later work remains blocked until step 10 is accepted and its evidence is synchronized.
+Repository step 10 is accepted through PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head. It implements trusted-internal, replay-safe Customer Privacy access/export assembly through `customer_privacy.access_export.request@1.0.0` and the exact `customer_data.export.privacy.request@1.0.0` Customer Data Operations boundary. Customer Privacy persists an immutable strictly rehydrated manifest and stable job/artifact references before I/O; Customer Data Operations remains the durable job and immutable artifact owner. Deterministic identities recover pre-target and finalized-artifact/pre-link crash windows without a second logical job or artifact. Activation, exact case/snapshot/plan/checkpoint lineage, tenant and canonical-Party locking, registered initiating-capability provenance, FORCE RLS, transaction/outbox/audit/idempotency evidence, clean PostgreSQL, rollback/reapply and repeated acceptance are proven. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no public route or alternate download endpoint, destructive action, crate, dependency, `Cargo.lock`, Protobuf contract, migration, workspace package or generic-runtime business switch was introduced.
+
+Repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — is now the next permitted implementation packet. Repository step 12 or later work remains blocked until step 11 is accepted and its evidence is synchronized.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -180,8 +182,8 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 7. repository step 7 — reusable generic mutation/query conformance — **complete through PR #235**;
 8. repository step 8 — replay-safe resumable owner execution and crash-window recovery — **complete through PR #237**;
 9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **complete through PR #239**;
-10. repository step 10 — governed access/export assembly — **next**;
-11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution;
+10. repository step 10 — governed access/export assembly — **complete through PR #241**;
+11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **next**;
 12. repository step 12 — first measured behavior-neutral consolidation;
 13. repository step 13 — Party tombstone, no-orphan proof and projection/search/cache convergence;
 14. repository step 14 — reusable generic worker conformance;
@@ -192,7 +194,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 19. repository step 19 — architecture remeasurement and publication of the next numbered order;
 20. repository step 20 — first Phase 8B packet.
 
-The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 10 is unfinished.
+The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 11 is unfinished.
 
 ## 10. Frozen ownership
 
@@ -206,7 +208,7 @@ legal hold > mandatory retention > approved privacy action > ordinary retention
 
 Phase 8A remains **In progress**.
 
-It closes only after restrictions and legal holds are extended with release/read lifecycle where required, access/export, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
+It closes only after restrictions and legal holds are extended with release/read lifecycle where required, deletion/anonymization/crypto-shred, tombstone/no-orphan behavior, convergence, worker lifecycle, frontend/operations evidence and full process acceptance are merged in the binding repository order.
 
 ## 12. Phase 8B and completion rule
 
