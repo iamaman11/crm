@@ -25,30 +25,23 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(
-            packet["packet_id"],
-            "repository-step-9-affected-scope-expansion",
-        )
+        self.assertEqual(packet["packet_id"], "repository-step-9-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "c9f5bd515b2104ea172ca3089b8a0cdd5f152d9c",
+            "e40832ae21118dd7f033e2811ca466d1242a19f0",
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
             packet["allowed_paths"],
             [
-                ".github/workflows/affected-scope.yml",
-                ".github/workflows/contracts.yml",
-                ".github/workflows/product-plane.yml",
-                ".github/workflows/rust-generated-sync.yml",
-                "affected-scope-policy.json",
                 "docs/ACTIVE_PACKET.md",
-                "docs/AFFECTED_SCOPE_CI.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
                 "repository-packet.json",
-                "scripts/affected_scope.py",
-                "tests/test_affected_scope.py",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             ],
@@ -58,15 +51,13 @@ class RepositoryNavigationTests(unittest.TestCase):
             packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Contract CI",
                 "Governance CI",
-                "Product Plane CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
         self.assertIn(
-            "repository step 10 is not started",
+            "repository step 10 is the only next implementation packet",
             packet["acceptance"],
         )
 
@@ -281,16 +272,12 @@ class RepositoryNavigationTests(unittest.TestCase):
         self,
     ) -> None:
         changed_paths = [
-            ".github/workflows/affected-scope.yml",
-            ".github/workflows/contracts.yml",
-            ".github/workflows/product-plane.yml",
-            ".github/workflows/rust-generated-sync.yml",
-            "affected-scope-policy.json",
             "docs/ACTIVE_PACKET.md",
-            "docs/AFFECTED_SCOPE_CI.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
-            "scripts/affected_scope.py",
-            "tests/test_affected_scope.py",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ]
@@ -311,7 +298,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "c9f5bd515b2104ea172ca3089b8a0cdd5f152d9c"
+                    "e40832ae21118dd7f033e2811ca466d1242a19f0"
                 ),
             ),
             patch(
