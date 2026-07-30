@@ -18,6 +18,7 @@ mod customer_enrichment_provider_source;
 mod customer_enrichment_provider_worker;
 mod customer_enrichment_reject_promotion;
 mod customer_enrichment_suggestion_list_promotion;
+mod customer_privacy_access_export;
 mod customer_privacy_case_create_promotion;
 mod data_quality_capability_execution;
 mod data_quality_registration;
@@ -59,6 +60,9 @@ pub use customer_enrichment_provider_registry::{
 pub use customer_enrichment_provider_source::GovernedCustomerEnrichmentProviderSource;
 pub use customer_enrichment_provider_worker::{
     CustomerEnrichmentProviderWorkerDependencies, build_customer_enrichment_provider_worker,
+};
+pub use customer_privacy_access_export::{
+    CustomerDataPrivacyExportTarget, build_customer_privacy_access_export,
 };
 pub use customer_privacy_case_create_promotion::{
     PRODUCTION_REVIEW_POLICY_VERSION, application_mutation_definitions,
