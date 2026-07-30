@@ -12,9 +12,9 @@ def replace_once(path: str, old: str, new: str, label: str) -> None:
     target.write_text(text.replace(old, new), encoding="utf-8")
 
 
-test_path = "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs"
+postgres_test_path = "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs"
 replace_once(
-    test_path,
+    postgres_test_path,
     """    PostgresOwnerExecutionPersistence, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
     PrivacyRetentionDecisionSet, ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
 """,
@@ -25,7 +25,7 @@ replace_once(
     "owner outcome import",
 )
 replace_once(
-    test_path,
+    postgres_test_path,
     """    let owner_execution = PostgresOwnerExecutionPersistence::new(store.clone());
     let owner_result = owner_execution
         .prepare_next(&owner_invocation(
@@ -76,7 +76,7 @@ replace_once(
     "Access retained execution protocol",
 )
 replace_once(
-    test_path,
+    postgres_test_path,
     """            if command.chunk_index != artifact.metadata.next_chunk_index
                 || Sha256::digest(&command.bytes).as_slice() != command.chunk_sha256
             {
@@ -89,7 +89,7 @@ replace_once(
     "test chunk digest comparison",
 )
 replace_once(
-    test_path,
+    postgres_test_path,
     """            if artifact.bytes.len() as u64 != artifact.metadata.expected_size_bytes
                 || Sha256::digest(&artifact.bytes).as_slice() != artifact.metadata.expected_sha256
             {
@@ -100,4 +100,18 @@ replace_once(
             {
 """,
     "test artifact digest comparison",
+)
+
+pure_test_path = "modules/crm-customer-privacy/tests/access_export.rs"
+replace_once(
+    pure_test_path,
+    '    assert_eq!(error.code(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");\n',
+    '    assert_eq!(error.code.as_str(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");\n',
+    "completed reference conflict code",
+)
+replace_once(
+    pure_test_path,
+    '    assert_eq!(error.code(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");\n',
+    '    assert_eq!(error.code.as_str(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");\n',
+    "erasure rejection code",
 )
