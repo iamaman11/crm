@@ -80,23 +80,12 @@ jobs:
           if source.count(old_step) != 1:
               raise SystemExit(f'execution-order step patch count: {source.count(old_step)}')
           source = source.replace(old_step, new_steps, 1)
-          marker = '''            (
-              self.authoritative_status_documents,
-              "PR #235",
-              "7a0cd34dc17085ecd1a8ee233171c0463d91ceba",
-              "43d194231fbce1cee28c44e89726929e450f3d18",
-              "17 of 17",
-          ),'''
-          if source.count(marker) != 1:
-              marker = '''            (
-                  self.authoritative_status_documents,
-                  "PR #235",
-                  "7a0cd34dc17085ecd1a8ee233171c0463d91ceba",
-                  "43d194231fbce1cee28c44e89726929e450f3d18",
-                  "17 of 17",
-              ),'''
-          if source.count(marker) != 1:
-              raise SystemExit(f'accepted-evidence marker count: {source.count(marker)}')
+
+          anchor = '                "PR #235",'
+          if source.count(anchor) != 1:
+              raise SystemExit(f'accepted-evidence anchor count: {source.count(anchor)}')
+          anchor_pos = source.index(anchor)
+          tuple_end = source.index('            ),', anchor_pos) + len('            ),')
           addition = '''
               (
                   self.authoritative_status_documents,
@@ -105,7 +94,8 @@ jobs:
                   "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90",
                   "33 of 33",
               ),'''
-          path.write_text(source.replace(marker, marker + addition, 1), encoding='utf-8')
+          source = source[:tuple_end] + addition + source[tuple_end:]
+          path.write_text(source, encoding='utf-8')
           PY
           python scripts/generate_repository_navigation.py --write
           python -m py_compile \
