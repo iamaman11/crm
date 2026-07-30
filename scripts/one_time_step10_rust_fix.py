@@ -12,17 +12,95 @@ def replace_exact(path: str, old: str, new: str, label: str, expected: int = 1) 
     target.write_text(text.replace(old, new), encoding="utf-8")
 
 
+replace_exact(
+    "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
+    """//! reconciliation evidence. No direct cross-owner storage path exists here.
+
+pub mod export_execution_reader;
+""",
+    """//! reconciliation evidence. No direct cross-owner storage path exists here.
+
+pub use crm_core_files::{
+    AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactAppendResult,
+    FileArtifactMetadata, FileArtifactStatus, FinalizedFileArtifact, ImmutableFileArtifactStore,
+};
+
+pub mod export_execution_reader;
+""",
+    "CDO file-store boundary re-export",
+)
+
+replace_exact(
+    "crates/crm-customer-privacy-production/src/access_export.rs",
+    """use crate::legacy::CustomerPrivacyProductionDependencies;
+pub use crm_customer_privacy_application::{
+    AccessExportInvocation, AccessExportResult, PrivacyAccessExportService,
+    PrivacyExportTargetPort, PrivacyExportTargetRequest, PrivacyExportTargetResult,
+};
+""",
+    """use crate::legacy::CustomerPrivacyProductionDependencies;
+pub use crm_customer_privacy::encode_access_export_manifest;
+pub use crm_customer_privacy_application::{
+    ACCESS_EXPORT_CAPABILITY_VERSION, ACCESS_EXPORT_REQUEST_CAPABILITY, AccessExportInvocation,
+    AccessExportPersistencePort, AccessExportPreparation, AccessExportResult,
+    PrivacyAccessExportService, PrivacyExportTargetPort, PrivacyExportTargetRequest,
+    PrivacyExportTargetResult,
+};
+""",
+    "Customer Privacy production access-export re-exports",
+)
+
 postgres_test_path = "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs"
 replace_exact(
     postgres_test_path,
-    """    PostgresOwnerExecutionPersistence, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
+    """use crm_core_data::PostgresDataStore;
+use crm_core_files::{
+    AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactAppendResult,
+    FileArtifactMetadata, FileArtifactStatus, FinalizedFileArtifact, ImmutableFileArtifactStore,
+};
+use crm_customer_data_operations_execution_composition::{
+    PrivacyManifestExportPublisher, PrivacyManifestExportRequest,
+};
+use crm_customer_privacy_application::{
+    ACCESS_EXPORT_CAPABILITY_VERSION, ACCESS_EXPORT_REQUEST_CAPABILITY, AccessExportInvocation,
+    AccessExportPersistencePort, AccessExportPreparation,
+};
+use crm_customer_privacy_production::{
+    ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
+    ACTION_PLAN_STATE_RETENTION_POLICY_ID, ACTION_PLAN_STATE_SCHEMA_ID,
+    ACTION_PLAN_STATE_SCHEMA_VERSION, ActionPlanningPolicy, ContributionCompletenessProof,
+    DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot, EvidenceClass, ExecutionPreparation,
+    OwnerExecutionInvocation, OwnerExecutionPersistencePort, OwnerScopeContract,
+    OwnerScopeContribution, OwnerScopeRegistry, PostgresAccessExportPersistence,
+    PostgresOwnerExecutionPersistence, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
     PrivacyRetentionDecisionSet, ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
+    action_plan_state_descriptor_hash, encode_access_export_manifest, encode_action_plan_state,
+    privacy_case_persisted_payload, retention_decision_persisted_payload,
+};
 """,
-    """    PostgresOwnerExecutionPersistence, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
-    PrivacyOwnerActionOutcome, PrivacyRetentionDecisionSet, ScopeDiscoveryLineage, ScopeResource,
-    SubjectVerificationMethod,
+    """use crm_core_data::PostgresDataStore;
+use crm_customer_data_operations_execution_composition::{
+    AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactAppendResult,
+    FileArtifactMetadata, FileArtifactStatus, FinalizedFileArtifact, ImmutableFileArtifactStore,
+    PrivacyManifestExportPublisher, PrivacyManifestExportRequest,
+};
+use crm_customer_privacy_production::{
+    ACCESS_EXPORT_CAPABILITY_VERSION, ACCESS_EXPORT_REQUEST_CAPABILITY, ACTION_PLAN_RECORD_TYPE,
+    ACTION_PLAN_STATE_MAXIMUM_BYTES, ACTION_PLAN_STATE_RETENTION_POLICY_ID,
+    ACTION_PLAN_STATE_SCHEMA_ID, ACTION_PLAN_STATE_SCHEMA_VERSION, AccessExportInvocation,
+    AccessExportPersistencePort, AccessExportPreparation, ActionPlanningPolicy,
+    ContributionCompletenessProof, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
+    EvidenceClass, ExecutionPreparation, OwnerExecutionInvocation, OwnerExecutionPersistencePort,
+    OwnerScopeContract, OwnerScopeContribution, OwnerScopeRegistry,
+    PostgresAccessExportPersistence, PostgresOwnerExecutionPersistence, PrivacyActionPlan,
+    PrivacyCase, PrivacyCaseKind, PrivacyExportTargetResult, PrivacyOwnerActionOutcome,
+    PrivacyRetentionDecisionSet, ScopeDiscoveryLineage, ScopeResource,
+    SubjectVerificationMethod, action_plan_state_descriptor_hash,
+    encode_access_export_manifest, encode_action_plan_state, privacy_case_persisted_payload,
+    retention_decision_persisted_payload,
+};
 """,
-    "owner outcome import",
+    "integration test production-owned imports",
 )
 replace_exact(
     postgres_test_path,
@@ -74,6 +152,12 @@ replace_exact(
     assert!(matches!(owner_result, ExecutionPreparation::Complete { .. }));
 """,
     "Access retained execution protocol",
+)
+replace_exact(
+    postgres_test_path,
+    "    let application_target = crm_customer_privacy_application::PrivacyExportTargetResult {\n",
+    "    let application_target = PrivacyExportTargetResult {\n",
+    "production target result type",
 )
 replace_exact(
     postgres_test_path,
