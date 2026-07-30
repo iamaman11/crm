@@ -40,8 +40,8 @@ It does not maintain a second module ID or capability-coordinate catalog.
 
 `affected-scope-policy.json` owns exactly these categories:
 
-- `contracts` — architecture governance;
-- `protobuf_api_compatibility` — contract platform;
+- `contracts` — architecture governance, enforced by `Contract CI` and `Governance CI`;
+- `protobuf_api_compatibility` — contract platform, enforced by `Contract CI`, `Product Plane CI` and `Rust Generated Sync`;
 - `database_migrations` and `postgresql_acceptance` — data platform;
 - `process_runtime_acceptance` — runtime platform;
 - `product_plane` and `frontend` — product platform;
@@ -49,7 +49,7 @@ It does not maintain a second module ID or capability-coordinate catalog.
 
 A path may select more than one scope. That is cumulative coverage, not an owner conflict: all matched scopes and all of their mandatory workflows are retained.
 
-Policy patterns describe the currently executable permanent workflow closure, not speculative future directories. A new path that is not yet governed blocks until its owner and required workflow coverage are declared. The permanent test suite checks representative paths from every category against the repository's actual workflow files, including root Buf inputs and generated contract inputs.
+Policy patterns describe the currently executable permanent workflow closure, not speculative future directories. A new path that is not yet governed blocks until its owner and required workflow coverage are declared. The permanent test suite checks representative paths from every category against the repository's actual workflow files, including root Buf inputs, generated contract artifacts and the authoritative compatibility gate.
 
 ## Fail-closed rules
 
@@ -64,8 +64,8 @@ Policy patterns describe the currently executable permanent workflow closure, no
 
 ## Permanent CI
 
-`Affected Scope CI` runs on every pull request, tests fixture-level analyzer behavior and live policy/workflow compatibility, materializes a deterministic JSON report, executes the real packet check, and then runs structural, Clippy and test phases. The report is uploaded as a read-only diagnostic artifact.
+`Affected Scope CI` runs on every pull request, checks out the exact pull-request head, tests fixture-level analyzer behavior and live policy/workflow compatibility, materializes a deterministic JSON report, executes the real packet check, and then runs structural, Clippy and test phases. The report is uploaded as a read-only diagnostic artifact and records the exact candidate SHA rather than GitHub's synthetic merge commit.
 
-`Product Plane CI` and `Rust Generated Sync` include the complete governed root Buf configuration and `crm-proto-contracts` generation inputs, so Protobuf/API compatibility selection corresponds to workflows that GitHub will actually execute.
+`Contract CI`, `Product Plane CI` and `Rust Generated Sync` include the complete governed root Buf configuration, `crm-proto-contracts` inputs and generated client contract artifacts, so contract and Protobuf/API compatibility selection corresponds to workflows that GitHub will actually execute.
 
 Superseded runs are cancelled by pull-request number. Gate review still requires every applicable permanent workflow to pass on one unchanged candidate SHA. Affected-scope selection never weakens that rule.
