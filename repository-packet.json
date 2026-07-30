@@ -1,64 +1,78 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-7-evidence-sync",
-  "title": "Synchronize accepted repository step 7 evidence",
+  "packet_id": "repository-step-8",
+  "title": "Add replay-safe resumable Customer Privacy owner execution",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "43d194231fbce1cee28c44e89726929e450f3d18"
+    "sha": "3849e046e45dbf7e398db7cd58e0aeaca508c045"
   },
   "tracking_issues": [
     126,
     194
   ],
-  "objective": "Synchronize accepted PR #235 generic mutation/query conformance evidence across the normative repository plans, mark repository step 7 complete, and expose repository step 8 as the only next implementation packet.",
+  "objective": "Persist tenant-bound Customer Privacy owner execution attempts, checkpoints and outcomes, recover safely across defined crash windows, and expose real persisted outcomes through the existing permission-aware query without adding a worker, public route or destructive owner behavior.",
   "allowed_paths": [
+    ".github/workflows/customer-privacy-owner-execution.yml",
+    "crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs",
+    "crates/crm-customer-privacy-application/src/execution.rs",
+    "crates/crm-customer-privacy-application/src/lib.rs",
+    "crates/crm-customer-privacy-application/src/reads.rs",
+    "crates/crm-customer-privacy-postgres/src/execution.rs",
+    "crates/crm-customer-privacy-postgres/src/lib.rs",
+    "crates/crm-customer-privacy-postgres/src/reads.rs",
+    "crates/crm-customer-privacy-production/src/lib.rs",
+    "crates/crm-customer-privacy-production/src/owner_execution.rs",
+    "crates/crm-customer-privacy-production/src/root.rs",
+    "database/migrations/0105_customer_privacy_owner_execution.down.sql",
+    "database/migrations/0105_customer_privacy_owner_execution.up.sql",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
+    "modules/crm-customer-privacy/src/execution.rs",
+    "modules/crm-customer-privacy/src/lib.rs",
     "repository-packet.json",
-    "tests/test_architecture_documentation_consistency.py",
-    "tests/test_repository_navigation.py"
+    "tests/test_customer_privacy_plan_reads_implementation.py",
+    "tests/test_generic_conformance_adoption.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
     "Cargo.lock",
     "Cargo.toml",
     "contracts/**",
-    "crates/**",
-    "database/**",
-    "modules/**",
+    "crates/crm-application-runtime/src/**",
+    "database/tests/**",
+    "modules/*/module.yaml",
     "packages/**",
     "proto/**",
-    "scripts/**",
     "services/**"
   ],
   "deliverables": [
-    "record PR #235 accepted source, squash merge and 17-of-17 permanent workflow evidence",
-    "mark repository step 7 complete and repository step 8 next",
-    "record cross-owner reuse of generic mutation and permission-aware paginated query conformance",
-    "record unchanged public inventory, runtime algorithms, package and dependency budgets",
-    "regenerate docs/ACTIVE_PACKET.md and synchronize permanent documentation guards"
+    "durable deterministic owner execution checkpoints, attempts and outcomes with immutable plan and retention-decision lineage",
+    "trusted-internal execution through the exact nine canonical owner endpoints without a new public route or worker",
+    "replay-safe pre-invocation, post-owner-result and post-outcome/pre-checkpoint recovery",
+    "real permission-aware bounded owner-outcome pagination",
+    "clean PostgreSQL apply, runtime acceptance, full rollback, reapply and repeated acceptance",
+    "permanent read-only Customer Privacy owner-execution gate"
   ],
   "required_checks": [
+    "Customer Privacy Owner Execution CI",
     "Governance CI",
     "Affected Scope CI",
     "Rust CI",
-    "Rust Generated Sync"
+    "Rust Generated Sync",
+    "Database CI"
   ],
   "acceptance": [
-    "all authoritative status documents agree on PR #235 accepted evidence",
-    "repository step 8 is the only next implementation packet",
-    "generated active-packet navigation is fresh",
-    "no runtime, contract, manifest, dependency, Cargo.lock, persistence, migration, public inventory or product behavior changes"
+    "all applicable permanent workflows pass on one unchanged exact head",
+    "tenant isolation, activation and trusted-internal boundaries fail closed",
+    "attempt, outcome and checkpoint replay never duplicate an owner side effect",
+    "clean schema, rollback, reapply and repeated PostgreSQL acceptance all pass",
+    "public inventory remains 7 mutations, 4 permission-aware queries and 0 Customer Privacy workers",
+    "workspace package count, dependencies and Cargo.lock remain unchanged"
   ],
   "non_goals": [
-    "implement repository step 8 owner execution or crash-window recovery",
-    "change Customer Privacy runtime, public coordinates or inventory",
-    "change generic runtime algorithms, owner-specific product semantics or worker inventory",
-    "change Cargo.lock, manifests, dependencies or workspace packages",
-    "change persistence, migrations or unrelated documentation"
+    "add a Customer Privacy worker or public route",
+    "assemble access or export payloads",
+    "perform owner-specific deletion, anonymization or crypto-shred",
+    "start repository step 9 or later work",
+    "change generic runtime algorithms, manifests, dependencies, Cargo.lock or workspace packages"
   ]
 }
