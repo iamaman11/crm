@@ -27,9 +27,12 @@
     "crates/crm-customer-privacy-production/src/access_export.rs",
     "crates/crm-customer-privacy-production/src/root.rs",
     "docs/ACTIVE_PACKET.md",
+    "docs/generated/REPOSITORY_MAP.md",
+    "modules/crm-customer-data-operations/module.yaml",
     "modules/crm-customer-privacy/module.yaml",
     "modules/crm-customer-privacy/src/access_export.rs",
     "modules/crm-customer-privacy/src/lib.rs",
+    "modules/crm-customer-privacy/tests/access_export.rs",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"

@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.customer-data-operations
-version: 0.3.0
+version: 0.4.0
 display_name: CRM Customer Data Operations
 description: Governed customer import and export jobs, immutable source/specification evidence, resumable execution, derived artifacts and reconciliation without owning customer-master records.
 owner:
@@ -269,6 +269,7 @@ provides:
     - customer_data.export_selection_item
     - customer_data.export_execution_stage
     - customer_data.export_execution_outcome
+    - customer_data.privacy_export_job
   ui_extensions: []
 consumes:
   capabilities:
@@ -289,6 +290,7 @@ storage:
     - customer_data.export_selection_item
     - customer_data.export_execution_stage
     - customer_data.export_execution_outcome
+    - customer_data.privacy_export_job
   private_state_namespaces:
     - crm.customer-data-operations.import_job
     - crm.customer-data-operations.import_row
@@ -299,6 +301,7 @@ storage:
     - crm.customer-data-operations.export_selection_item
     - crm.customer-data-operations.export_execution_stage
     - crm.customer-data-operations.export_execution_outcome
+    - crm.customer-data-operations.privacy_export_job
 security:
   data_classes:
     - internal
@@ -320,3 +323,4 @@ lifecycle:
     - customer_data.export_selection_item
     - customer_data.export_execution_stage
     - customer_data.export_execution_outcome
+    - customer_data.privacy_export_job

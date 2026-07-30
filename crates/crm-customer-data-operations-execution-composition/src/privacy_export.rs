@@ -532,7 +532,8 @@ fn stable_id(domain: &str, request: &PrivacyManifestExportRequest, operation: &s
     hash_field(&mut hasher, request.tenant_id.as_str().as_bytes());
     hash_field(&mut hasher, request.export_job_id.as_str().as_bytes());
     hash_field(&mut hasher, operation.as_bytes());
-    format!("{domain}-{}", hex(&hasher.finalize().into()))
+    let digest: [u8; 32] = hasher.finalize().into();
+    format!("{domain}-{}", hex(&digest))
 }
 
 fn hash_field(hasher: &mut Sha256, field: &[u8]) {

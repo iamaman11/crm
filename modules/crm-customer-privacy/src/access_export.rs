@@ -1,6 +1,5 @@
 use crate::canonicalization::persisted_state_json as access_export_state_json;
 use crm_module_sdk::{FileId as ExportFileId, IdempotencyKey as ExportIdempotencyKey};
-use sha2::Digest as _;
 
 pub const ACCESS_EXPORT_REQUEST_COORDINATE: &str =
     "customer_privacy.access_export.request@1.0.0";

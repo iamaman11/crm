@@ -25,41 +25,66 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-9-evidence-sync")
+        self.assertEqual(packet["packet_id"], "repository-step-10-access-export-assembly")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "e40832ae21118dd7f033e2811ca466d1242a19f0",
+            "4e0077fbf09d94e5fd7e4c69e238d6d3878252b0",
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
             packet["allowed_paths"],
             [
+                ".github/workflows/customer-privacy-access-export.yml",
+                "crates/crm-application-runtime/src/customer_privacy_access_export.rs",
+                "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+                "crates/crm-application-runtime/src/lib.rs",
+                "crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs",
+                "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
+                "crates/crm-customer-data-operations-execution-composition/src/privacy_export.rs",
+                "crates/crm-customer-privacy-application/src/access_export.rs",
+                "crates/crm-customer-privacy-application/src/lib.rs",
+                "crates/crm-customer-privacy-postgres/src/access_export.rs",
+                "crates/crm-customer-privacy-postgres/src/lib.rs",
+                "crates/crm-customer-privacy-production/src/access_export.rs",
+                "crates/crm-customer-privacy-production/src/root.rs",
                 "docs/ACTIVE_PACKET.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PROJECT_STATUS.md",
+                "docs/generated/REPOSITORY_MAP.md",
+                "modules/crm-customer-data-operations/module.yaml",
+                "modules/crm-customer-privacy/module.yaml",
+                "modules/crm-customer-privacy/src/access_export.rs",
+                "modules/crm-customer-privacy/src/lib.rs",
+                "modules/crm-customer-privacy/tests/access_export.rs",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             ],
         )
-        self.assertIn("Cargo.lock", packet["forbidden_paths"])
+        for path in (
+            "Cargo.lock",
+            "Cargo.toml",
+            "affected-scope-policy.json",
+            "contracts/**",
+            "database/migrations/**",
+            "packages/**",
+            "proto/**",
+            "schemas/**",
+            "services/**",
+        ):
+            self.assertIn(path, packet["forbidden_paths"])
         self.assertEqual(
             packet["required_checks"],
             [
                 "Affected Scope CI",
+                "Customer Privacy Access Export CI",
+                "Customer Privacy Owner Execution CI",
                 "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
-        self.assertIn(
-            "repository step 10 is the only next implementation packet",
-            packet["acceptance"],
-        )
+        self.assertIn("repository step 11 is not started", packet["acceptance"])
 
     def test_affected_scope_workflow_executes_real_packet_check(self) -> None:
         workflow = (
@@ -160,7 +185,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             NAVIGATION_SCHEMA,
         )
         self.assertEqual(explanation["kind"], "module")
-        self.assertEqual(explanation["version"], "0.2.0")
+        self.assertEqual(explanation["version"], "0.3.0")
         self.assertEqual(
             explanation["owner"]["team"],
             "customer-platform",
@@ -271,16 +296,7 @@ class RepositoryNavigationTests(unittest.TestCase):
     def test_packet_check_reports_affected_scope_without_running_git_or_cargo(
         self,
     ) -> None:
-        changed_paths = [
-            "docs/ACTIVE_PACKET.md",
-            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-            "docs/IMPLEMENTATION_ROADMAP.md",
-            "docs/PHASE8_DELIVERY_PLAN.md",
-            "docs/PROJECT_STATUS.md",
-            "repository-packet.json",
-            "tests/test_architecture_documentation_consistency.py",
-            "tests/test_repository_navigation.py",
-        ]
+        changed_paths = load_packet(ROOT)["allowed_paths"]
         affected = {
             "head_sha": "b" * 40,
             "changed_paths": changed_paths,
@@ -298,7 +314,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "e40832ae21118dd7f033e2811ca466d1242a19f0"
+                    "4e0077fbf09d94e5fd7e4c69e238d6d3878252b0"
                 ),
             ),
             patch(
