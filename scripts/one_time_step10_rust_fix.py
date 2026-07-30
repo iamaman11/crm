@@ -104,6 +104,12 @@ use crm_customer_privacy_production::{
 )
 replace_exact(
     postgres_test_path,
+    "        privacy_case.version(),\n",
+    "        i64::try_from(privacy_case.version()).expect(\"privacy case version fits i64\"),\n",
+    "privacy case fixture version conversion",
+)
+replace_exact(
+    postgres_test_path,
     """    let owner_execution = PostgresOwnerExecutionPersistence::new(store.clone());
     let owner_result = owner_execution
         .prepare_next(&owner_invocation(
@@ -158,6 +164,48 @@ replace_exact(
     "    let application_target = crm_customer_privacy_application::PrivacyExportTargetResult {\n",
     "    let application_target = PrivacyExportTargetResult {\n",
     "production target result type",
+)
+replace_exact(
+    postgres_test_path,
+    """    for table in [
+        "crm.customer_privacy_owner_execution_audit",
+        "crm.customer_privacy_owner_action_outcomes",
+        "crm.customer_privacy_owner_action_attempts",
+        "crm.customer_privacy_owner_execution_checkpoints",
+        "crm.outbox_events",
+        "crm.audit_records",
+        "crm.idempotency_records",
+        "crm.records",
+        "crm.business_transactions",
+    ] {
+        sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id IN ($1, $2)"))
+            .bind(TENANT_A)
+            .bind(TENANT_B)
+            .execute(&mut *transaction)
+            .await
+            .unwrap_or_else(|error| panic!("cleanup {table}: {error}"));
+    }
+""",
+    """    for statement in [
+        "DELETE FROM crm.customer_privacy_owner_execution_audit WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.customer_privacy_owner_action_outcomes WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.customer_privacy_owner_action_attempts WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.customer_privacy_owner_execution_checkpoints WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.outbox_events WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.audit_records WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.idempotency_records WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.records WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.business_transactions WHERE tenant_id IN ($1, $2)",
+    ] {
+        sqlx::query(statement)
+            .bind(TENANT_A)
+            .bind(TENANT_B)
+            .execute(&mut *transaction)
+            .await
+            .unwrap_or_else(|error| panic!("cleanup statement failed: {error}"));
+    }
+""",
+    "literal SQL cleanup",
 )
 replace_exact(
     postgres_test_path,
