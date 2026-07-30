@@ -1,0 +1,114 @@
+name: Customer Privacy Access Export CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/customer-privacy-access-export.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/crm-application-runtime/**"
+      - "crates/crm-core-data/**"
+      - "crates/crm-core-files/**"
+      - "crates/crm-customer-data-operations-execution-composition/**"
+      - "crates/crm-customer-privacy-application/**"
+      - "crates/crm-customer-privacy-postgres/**"
+      - "crates/crm-customer-privacy-production/**"
+      - "database/migrations/**"
+      - "modules/crm-customer-data-operations/module.yaml"
+      - "modules/crm-customer-privacy/**"
+      - "repository-packet.json"
+      - "tests/test_architecture_documentation_consistency.py"
+      - "tests/test_repository_navigation.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: customer-privacy-access-export-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  access-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: crm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://crm_app:crm_app@localhost:5432/crm
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/crm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --requirement requirements-dev.txt
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Architecture and historical-evidence preflight
+        run: |
+          python scripts/check_module_compatibility.py --base-ref origin/main
+          python -m unittest -v tests.test_repository_navigation tests.test_architecture_documentation_consistency
+      - name: Verify exact pull-request head
+        if: github.event_name == 'pull_request'
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Test focused access-export packages
+        run: |
+          cargo test --locked -p crm-customer-privacy --test access_export
+          cargo test --locked -p crm-customer-privacy-application
+          cargo test --locked -p crm-customer-privacy-postgres
+          cargo test --locked -p crm-customer-privacy-production
+          cargo test --locked -p crm-customer-data-operations-execution-composition privacy_export
+      - name: Clippy focused access-export closure
+        run: >-
+          cargo clippy --locked
+          -p crm-customer-privacy
+          -p crm-customer-privacy-application
+          -p crm-customer-privacy-postgres
+          -p crm-customer-privacy-production
+          -p crm-customer-data-operations-execution-composition
+          -p crm-application-runtime
+          --all-targets -- -D warnings
+      - name: Compile PostgreSQL acceptance target
+        run: cargo test --locked -p crm-application-runtime --test customer_privacy_access_export_postgres --no-run
+      - name: Apply clean authoritative schema
+        run: bash scripts/apply_migrations.sh "$ADMIN_DATABASE_URL"
+      - name: Run PostgreSQL crash-window acceptance
+        run: cargo test --locked -p crm-application-runtime --test customer_privacy_access_export_postgres -- --nocapture
+      - name: Roll back authoritative schema
+        run: bash scripts/rollback_migrations.sh "$ADMIN_DATABASE_URL"
+      - name: Reapply authoritative schema
+        run: bash scripts/apply_migrations.sh "$ADMIN_DATABASE_URL"
+      - name: Repeat PostgreSQL acceptance after reapply
+        run: cargo test --locked -p crm-application-runtime --test customer_privacy_access_export_postgres -- --nocapture
