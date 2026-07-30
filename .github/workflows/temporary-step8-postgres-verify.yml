@@ -9,6 +9,7 @@ on:
       - ".github/step8-structural-fixes.py"
       - ".github/step8-runtime-evidence-fixes.py"
       - ".github/step8-trigger-attribution-fixes.py"
+      - ".github/step8-finalize.py"
       - ".github/workflows/temporary-step8-postgres-verify.yml"
       - "crates/crm-customer-privacy-production/src/owner_execution.rs"
       - "crates/crm-customer-privacy-application/**"
@@ -166,22 +167,23 @@ jobs:
           cargo test --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres -- --nocapture \
             2>&1 | tee database/customer-privacy-owner-execution-reapplied.log
-      - name: Publish verified step 8 source
+      - name: Finalize verified step 8 packet
         shell: bash
         run: |
           set -euo pipefail
+          echo "1a06dd428ea26c70af2c3e14878b37d1b1a881e7939aa809623972299eac37f4  .github/step8-finalize.py" | sha256sum --check
+          python .github/step8-finalize.py
+          python scripts/generate_repository_navigation.py --write
+          python scripts/repo.py packet-check --base origin/main
+          python -m unittest \
+            tests.test_customer_privacy_plan_reads_implementation \
+            tests.test_generic_conformance_adoption
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            crates/crm-customer-privacy-application/src/execution.rs \
-            crates/crm-customer-privacy-application/src/reads.rs \
-            crates/crm-customer-privacy-postgres/src/execution.rs \
-            crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
-          if ! git diff --cached --quiet; then
-            git commit -m "WIP: verify step 8 replay and PostgreSQL recovery"
-            git pull --rebase origin "${{ github.head_ref }}"
-            git push origin "HEAD:${{ github.head_ref }}"
-          fi
+          git add -A
+          git commit -m "Customer Privacy: finalize resumable owner execution"
+          git pull --rebase origin "${{ github.head_ref }}"
+          git push origin "HEAD:${{ github.head_ref }}"
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
