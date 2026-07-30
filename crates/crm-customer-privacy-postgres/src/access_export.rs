@@ -7,11 +7,11 @@ use crm_customer_privacy::{
     ACCESS_EXPORT_STATE_RETENTION_POLICY_ID, ACCESS_EXPORT_STATE_SCHEMA_ID,
     ACCESS_EXPORT_STATE_SCHEMA_VERSION, ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
     ACTION_PLAN_STATE_RETENTION_POLICY_ID, ACTION_PLAN_STATE_SCHEMA_ID,
-    ACTION_PLAN_STATE_SCHEMA_VERSION, MODULE_ID, PRIVACY_CASE_RECORD_TYPE, PrivacyAccessExportManifest,
-    PrivacyAccessExportReference, PrivacyAccessExportStatus, PrivacyActionPlan, PrivacyCase,
-    PrivacyCaseStatus, access_export_state_descriptor_hash, action_plan_state_descriptor_hash,
-    decode_access_export_reference, decode_action_plan_state, discovery_sha256,
-    encode_access_export_reference,
+    ACTION_PLAN_STATE_SCHEMA_VERSION, MODULE_ID, PRIVACY_CASE_RECORD_TYPE,
+    PrivacyAccessExportManifest, PrivacyAccessExportReference, PrivacyAccessExportStatus,
+    PrivacyActionPlan, PrivacyCase, PrivacyCaseStatus, access_export_state_descriptor_hash,
+    action_plan_state_descriptor_hash, decode_access_export_reference, decode_action_plan_state,
+    discovery_sha256, encode_access_export_reference,
 };
 use crm_customer_privacy_application::{
     AccessExportInvocation, AccessExportPersistencePort, AccessExportPreparation,
@@ -75,7 +75,9 @@ impl AccessExportPersistencePort for PostgresAccessExportPersistence {
                 let complete = existing.status() == PrivacyAccessExportStatus::Completed;
                 transaction.commit().await.map_err(database_error)?;
                 return if complete {
-                    Ok(AccessExportPreparation::Complete { reference: existing })
+                    Ok(AccessExportPreparation::Complete {
+                        reference: existing,
+                    })
                 } else {
                     Ok(AccessExportPreparation::Ready {
                         reference: existing,
@@ -250,12 +252,11 @@ fn validate_case_plan_lineage(
         || plan.lineage().privacy_case_id() != &invocation.privacy_case_id
         || plan.lineage().case_kind() != privacy_case.kind()
         || plan.lineage().scope_snapshot_id()
-            != privacy_case
-                .scope_snapshot_id()
-                .ok_or_else(|| access_export_evidence_invalid("case snapshot reference is missing"))?
+            != privacy_case.scope_snapshot_id().ok_or_else(|| {
+                access_export_evidence_invalid("case snapshot reference is missing")
+            })?
         || plan.lineage().canonical_party_id() != &binding.canonical_party_id
-        || plan.lineage().identity_resolution_generation()
-            != binding.identity_resolution_generation
+        || plan.lineage().identity_resolution_generation() != binding.identity_resolution_generation
     {
         return Err(access_export_evidence_invalid(
             "case and action-plan lineage do not match exactly",
@@ -454,7 +455,9 @@ async fn load_reference(
                 ACCESS_EXPORT_STATE_RETENTION_POLICY_ID,
             )?;
             let reference = decode_access_export_reference(&snapshot.payload.bytes)?;
-            if reference.reference_id() != reference_id || reference.manifest().tenant_id() != tenant_id {
+            if reference.reference_id() != reference_id
+                || reference.manifest().tenant_id() != tenant_id
+            {
                 return Err(access_export_evidence_invalid(
                     "access export reference differs from its persistence envelope",
                 ));
@@ -558,12 +561,8 @@ async fn append_access_export_audit(
     reference: &PrivacyAccessExportReference,
     occurred_at_unix_nanos: i64,
 ) -> Result<(), SdkError> {
-    let digest = access_export_audit_digest(
-        invocation,
-        event_type,
-        reference,
-        occurred_at_unix_nanos,
-    );
+    let digest =
+        access_export_audit_digest(invocation, event_type, reference, occurred_at_unix_nanos);
     postgres_sqlx::query(
         r#"
         INSERT INTO crm.customer_privacy_owner_execution_audit (
@@ -637,15 +636,16 @@ fn decode_record_snapshot(
         ));
     }
     let descriptor: Vec<u8> = row.try_get("descriptor_hash").map_err(database_error)?;
-    let descriptor_hash: [u8; 32] = descriptor
-        .try_into()
-        .map_err(|_| access_export_evidence_invalid("record descriptor hash must contain 32 bytes"))?;
+    let descriptor_hash: [u8; 32] = descriptor.try_into().map_err(|_| {
+        access_export_evidence_invalid("record descriptor hash must contain 32 bytes")
+    })?;
     let maximum: i64 = row
         .try_get("maximum_payload_size")
         .map_err(database_error)?;
     Ok(RecordSnapshot {
         reference: RecordRef {
-            record_type: RecordType::try_new(record_type).map_err(access_export_evidence_invalid)?,
+            record_type: RecordType::try_new(record_type)
+                .map_err(access_export_evidence_invalid)?,
             record_id,
         },
         version,
@@ -703,10 +703,7 @@ fn validate_contract(
     Ok(())
 }
 
-fn digest_column(
-    row: &postgres_sqlx::postgres::PgRow,
-    column: &str,
-) -> Result<[u8; 32], SdkError> {
+fn digest_column(row: &postgres_sqlx::postgres::PgRow, column: &str) -> Result<[u8; 32], SdkError> {
     row.try_get::<Vec<u8>, _>(column)
         .map_err(database_error)?
         .try_into()
