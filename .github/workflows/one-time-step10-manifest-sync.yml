@@ -50,3 +50,4 @@ jobs:
           git commit -m "Step 10: synchronize versioned private ownership"
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
+          # Revision 2: retained-record cardinality narrowed to lifecycle scope.
