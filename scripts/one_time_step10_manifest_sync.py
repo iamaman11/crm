@@ -114,8 +114,11 @@ replace_once(
 
 packet_path = Path("repository-packet.json")
 packet = json.loads(packet_path.read_text(encoding="utf-8"))
-path = "modules/crm-customer-data-operations/module.yaml"
-if path not in packet["allowed_paths"]:
-    packet["allowed_paths"].append(path)
-    packet["allowed_paths"].sort()
+for path in (
+    "modules/crm-customer-data-operations/module.yaml",
+    "modules/crm-customer-privacy/tests/access_export.rs",
+):
+    if path not in packet["allowed_paths"]:
+        packet["allowed_paths"].append(path)
+packet["allowed_paths"].sort()
 packet_path.write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
