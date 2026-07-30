@@ -26,6 +26,7 @@ on:
       - "scripts/generate_repository_navigation.py"
       - "scripts/repository_navigation.py"
       - "scripts/repo.py"
+      - "scripts/one_time_step9_guard_sync.py"
       - "scripts/validate_module_manifests.py"
       - "tests/test_repository_navigation.py"
       - "contracts/module-contract-bindings.json"
@@ -58,6 +59,8 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install generation dependencies
         run: python -m pip install --requirement requirements-dev.txt
+      - name: Materialize permanent step 9 guards
+        run: python scripts/one_time_step9_guard_sync.py
       - name: Install Buf
         uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0
         with:
@@ -82,17 +85,20 @@ jobs:
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
+      - name: Verify permanent step 9 guards
+        run: python -m unittest -v tests.test_affected_scope tests.test_repository_navigation tests.test_architecture_documentation_consistency
       - name: Commit generated Rust, contract and navigation artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
+          paths=(crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md tests/test_affected_scope.py tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py)
+          if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then
             echo "Rust, contract and repository navigation artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
-            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
+            git add "${paths[@]}"
+            git commit -m "Repository tooling: synchronize permanent step 9 guards"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
