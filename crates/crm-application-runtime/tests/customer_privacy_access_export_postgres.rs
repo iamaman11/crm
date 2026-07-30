@@ -497,6 +497,31 @@ async fn seed_transaction(
     business_transaction_id: &str,
     request_id: &str,
 ) {
+    let correlation_id = format!("{business_transaction_id}-correlation");
+    let trace_id = format!("{business_transaction_id}-trace");
+    sqlx::query(
+        r#"
+        SELECT set_config('app.tenant_id', $1, true),
+               set_config('app.actor_id', $2, true),
+               set_config('app.request_id', $3, true),
+               set_config('app.correlation_id', $4, true),
+               set_config('app.trace_id', $5, true),
+               set_config('app.capability_id', $6, true),
+               set_config('app.capability_version', $7, true),
+               set_config('app.business_transaction_id', $8, true)
+        "#,
+    )
+    .bind(tenant)
+    .bind(ACTOR)
+    .bind(request_id)
+    .bind(&correlation_id)
+    .bind(&trace_id)
+    .bind("customer_privacy.test.fixture")
+    .bind("1.0.0")
+    .bind(business_transaction_id)
+    .execute(&mut **transaction)
+    .await
+    .expect("bind access-export fixture transaction context");
     sqlx::query(
         r#"
         INSERT INTO crm.business_transactions (
@@ -510,8 +535,8 @@ async fn seed_transaction(
     .bind(business_transaction_id)
     .bind(ACTOR)
     .bind(request_id)
-    .bind(format!("{business_transaction_id}-correlation"))
-    .bind(format!("{business_transaction_id}-trace"))
+    .bind(correlation_id)
+    .bind(trace_id)
     .bind("customer_privacy.test.fixture")
     .bind("1.0.0")
     .execute(&mut **transaction)
