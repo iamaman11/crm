@@ -52,16 +52,16 @@ Issue #194 remains **Open**.
 
 - Stage A documentation/navigation baseline — **Complete**.
 - Stage B dependency, crate and exception governance — **In progress; Rust toolchain/lint prerequisite accepted through PR #218 and lockfile-preserving Rust workflows accepted through PR #232**.
-- Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, immediate deny-only restriction placement/final owner guard accepted through PR #226, and legal-hold/mandatory-retention precedence accepted through PR #230.
+- Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, immediate deny-only restriction placement/final owner guard accepted through PR #226, legal-hold/mandatory-retention precedence accepted through PR #230, and durable replay-safe owner execution/outcomes accepted through PR #237.
 - Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222**.
 - Stage E — **In progress**: real-diff packet-check and broadened Rust closure are accepted; database/process/product/frontend/operations selection remains open.
 - Stage H — **In progress**: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands remain open.
 - Stage F — **In progress**: reusable generic mutation/query conformance is accepted through PR #235; worker conformance and contract lifecycle enforcement remain open.
 - Stages G and I — measured consolidation, frontend and operations parity remain open.
 
-Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232, PR #230 and PR #235. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232, PR #230, PR #235 and PR #237. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
-The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–7 are complete through PR #218, PR #220, PR #222, PR #226, PR #228, PR #230 and PR #235; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 8 — replay-safe resumable Customer Privacy owner execution and crash-window recovery — is the current next packet.
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–8 are complete through PR #218, PR #220, PR #222, PR #226, PR #228, PR #230, PR #235 and PR #237; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — is the current next packet.
 
 ## 4. Phase 8A completed foundation
 
@@ -75,7 +75,7 @@ The architecture stage table is completion accounting, not a set of independent 
 
 Issue #126 is **In progress**.
 
-Latest accepted runtime inventory is seven public mutations, four permission-aware public queries and zero Customer Privacy workers through PR #230. `customer_privacy.plan.build@1.0.0` remains accepted trusted-internal runtime without public ingress.
+Latest accepted runtime inventory is seven public mutations, four permission-aware public queries and zero Customer Privacy workers through PR #237. `customer_privacy.plan.build@1.0.0` and `customer_privacy.retention.evaluate@1.0.0` remain accepted trusted-internal runtime without public ingress; repository-step-8 owner execution is also trusted-internal and registers no public route or worker.
 
 All nine privacy owner-scope implementations are accepted:
 
@@ -107,7 +107,7 @@ It verifies the exact case, immutable scope snapshot, Party/Identity Resolution 
 
 PR #211 / accepted source `933fa4b502d60a23b83de9ccee279cc6517b5cba` / merge `a1f3a60a6d8e8bba7bda50f936c57a61bc3521f7` / 32 of 32 permanent workflows promotes only `customer_privacy.case.plan.get@1.0.0` and `customer_privacy.case.owner_outcomes.list@1.0.0` through existing Customer Privacy packages.
 
-The packet requires module activation, live visibility, tenant-bound reads, strict case↔snapshot↔plan↔replay evidence, payload-safe plan summaries, append-only safe read audit and concealed unauthorized/cross-tenant existence. Owner outcomes remain an empty deterministic terminal page with bounded request validation, stable page/terminal digests, no synthetic records and no outcome persistence.
+The packet requires module activation, live visibility, tenant-bound reads, strict case↔snapshot↔plan↔replay evidence, payload-safe plan summaries, append-only safe read audit and concealed unauthorized/cross-tenant existence. Owner outcomes remained an empty deterministic terminal page at the historical PR #211 boundary. PR #237 later accepted durable owner outcomes and real permission-aware bounded pagination without changing the public query coordinate.
 
 It adds no crate, dependency family, mutation, worker, owner mutation, approval, restriction, hold/retention adjudication or destructive execution.
 
@@ -167,6 +167,10 @@ Repository step 6 is accepted through PR #230 / accepted source `131285e07ad7c36
 
 Repository step 7 is accepted through PR #235 / accepted source `7a0cd34dc17085ecd1a8ee233171c0463d91ceba` / squash merge `43d194231fbce1cee28c44e89726929e450f3d18` / 17 of 17 applicable permanent workflows on one unchanged source-authored head. One business-neutral mutation/query conformance support boundary is reused by representative `customer_enrichment.request.create@1.0.0` and permission-aware paginated `customer_privacy.case.list@1.0.0` real-process acceptance. Mutation conformance proves activation, malformed input, tenant mismatch, live authorization denial, exact replay and incompatible replay conflict, safe error classification, rejected-call no-side-effects and atomic record/relationship/event/audit/idempotency/business evidence. Query conformance proves activation, live authorization denial, tenant mismatch and cross-tenant concealment, malformed cursor rejection, bounded keyset pagination, stable safe errors and zero query-side writes. Owner-specific fixture construction, response decoding and domain semantics remain outside the generic suite. Public coordinates and inventory, generic runtime algorithms, crates, dependencies, manifests, `Cargo.lock`, the 113-package workspace, migrations and workers are unchanged.
 
+### 5.13 Accepted replay-safe resumable owner execution
+
+Repository step 8 is accepted through PR #237 / accepted source `f926ece93dc2b24683f982828e72bf9170dc123a` / squash merge `9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90` / 33 of 33 applicable permanent workflows on one unchanged source-authored head. It persists deterministic tenant-bound owner execution attempts, checkpoints and safe outcomes with immutable action-plan and retention-decision lineage; composes exactly nine canonical owner endpoints through trusted-internal production wiring; recovers from pre-invocation, post-owner-result and post-outcome/pre-checkpoint crash windows without duplicate owner invocation; and makes `customer_privacy.case.owner_outcomes.list@1.0.0` paginate real persisted payload-safe outcomes. Activation, registered initiating-capability attribution, FORCE RLS, strict rehydration, idempotency, audit, clean apply, rollback, reapply and repeated PostgreSQL acceptance are proven. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no public route, worker, access/export assembly, destructive owner execution, crate, dependency, `Cargo.lock`, workspace-package or generic-runtime algorithm change was introduced.
+
 ## 6. Binding active sequence
 
 The only permitted current sequence is:
@@ -180,11 +184,12 @@ The only permitted current sequence is:
 5a. **Inserted lockfile-preservation prerequisite before repository step 6 — Complete through PR #232.**
 6. **Repository step 6 — legal-hold and mandatory-retention precedence — Complete through PR #230.**
 7. **Repository step 7 — reusable generic mutation and query conformance — Complete through PR #235.**
-8. **Repository step 8 — replay-safe resumable Customer Privacy owner execution and crash-window recovery — Next.**
-9–19. **Repository steps 9–19 — continue exactly as numbered in the architecture plan.**
+8. **Repository step 8 — replay-safe resumable Customer Privacy owner execution and crash-window recovery — Complete through PR #237.**
+9. **Repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — Next.**
+10–19. **Repository steps 10–19 — continue exactly as numbered in the architecture plan.**
 20. **Repository step 20 — first Phase 8B packet.**
 
-The inserted prerequisites did not renumber the master sequence. Repository step 8 is now the only next permitted implementation packet.
+The inserted prerequisites did not renumber the master sequence. Repository step 9 is now the only next permitted implementation packet.
 
 ## 7. Phase 8B and later expert domains
 
