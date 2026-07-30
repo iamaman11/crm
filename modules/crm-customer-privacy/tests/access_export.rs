@@ -76,13 +76,8 @@ fn discovery_snapshot() -> DiscoveryScopeSnapshot {
             DiscoveryOwnerScopeContribution::new(lineage.clone(), contribution).unwrap()
         })
         .collect::<Vec<_>>();
-    DiscoveryScopeSnapshot::finalize(
-        lineage,
-        registry,
-        CAPTURED_AT_UNIX_NANOS,
-        contributions,
-    )
-    .unwrap()
+    DiscoveryScopeSnapshot::finalize(lineage, registry, CAPTURED_AT_UNIX_NANOS, contributions)
+        .unwrap()
 }
 
 fn access_plan(kind: PrivacyCaseKind) -> PrivacyActionPlan {
