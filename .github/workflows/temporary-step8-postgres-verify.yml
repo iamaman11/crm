@@ -92,7 +92,7 @@ jobs:
           set -euo pipefail
           echo "ca9bc33f6bcbb968480c22b5a8ff70582c1e424535f72c056b765983e1230fd2  .github/step8-structural-fixes.py" | sha256sum --check
           echo "d604a9cfbbcca8f643f27a8010ed3206d72ad17c697efa09429cbc0e263a2499  .github/step8-runtime-evidence-fixes.py" | sha256sum --check
-          echo "6ac55be356cb1f17de642410cd60a1057e02888e0adfc28936ab2d1e115c6182  .github/step8-trigger-attribution-fixes.py" | sha256sum --check
+          echo "eaf194dad908be8b29a7bf028fc0b4ff80b189afe457048982b8f90bcc399e71  .github/step8-trigger-attribution-fixes.py" | sha256sum --check
           python .github/step8-structural-fixes.py
           python .github/step8-runtime-evidence-fixes.py
           python .github/step8-trigger-attribution-fixes.py
