@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import re
 import subprocess
 
 
@@ -18,13 +17,10 @@ def replace_exact(path: str, old: str, new: str, *, expected: int = 1) -> None:
     target.write_text(text.replace(old, new), encoding="utf-8")
 
 
-def replace_regex(path: str, pattern: str, replacement: str, *, expected: int = 1) -> None:
-    target = ROOT / path
-    text = target.read_text(encoding="utf-8")
-    updated, count = re.subn(pattern, replacement, text, flags=re.DOTALL)
-    if count != expected:
-        raise SystemExit(f"{path}: expected {expected} regex matches, found {count}")
-    target.write_text(updated, encoding="utf-8")
+def require_state(path: str, required: str, forbidden: str) -> None:
+    text = (ROOT / path).read_text(encoding="utf-8")
+    if required not in text or forbidden in text:
+        raise SystemExit(f"{path}: connector-applied permanent guard state is invalid")
 
 
 # Isolate Customer Privacy access-export ledger evidence from the approval and
@@ -36,29 +32,15 @@ replace_exact(
     expected=2,
 )
 
-# Historical approval CI must validate its frozen approval behavior and the
-# currently active packet, not reject every later runtime file forever.
-replace_exact(
+require_state(
     ".github/workflows/customer-privacy-approval.yml",
-    "      - name: Verify approval and directive invariants\n",
-    "      - name: Verify approval invariants and active packet boundaries\n",
+    'python scripts/repo.py packet-check --base "origin/${BASE_REF}"',
+    'unexpected_runtime_changes=',
 )
-replace_regex(
-    ".github/workflows/customer-privacy-approval.yml",
-    r'''          runtime_changes=.*?          python - <<'PY'\n''',
-    '''          python scripts/repo.py packet-check --base "origin/${BASE_REF}"\n          python - <<'PY'\n''',
-)
-
-# The authoritative packet checker supersedes the old step-8 path blacklist.
-replace_exact(
+require_state(
     ".github/workflows/customer-privacy-owner-execution.yml",
-    "      - name: Prove bounded non-effects\n",
-    "      - name: Prove active packet boundaries and owner-execution non-effects\n",
-)
-replace_exact(
-    ".github/workflows/customer-privacy-owner-execution.yml",
-    '''          changed="$(git diff --name-only "${BASE_SHA}" HEAD)"\n          forbidden="$(printf '%s\\n' "${changed}" | grep -E '(^|/)Cargo\\.(toml|lock)$|modules/.*/module\\.yaml|^proto/|^services/crm-api/src/' || true)"\n          test -z "${forbidden}"\n''',
-    '''          python scripts/repo.py packet-check --base "${BASE_SHA}"\n''',
+    'python scripts/repo.py packet-check --base "${BASE_SHA}"',
+    'forbidden="$(printf',
 )
 
 packet_path = ROOT / "repository-packet.json"
