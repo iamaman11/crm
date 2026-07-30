@@ -22,7 +22,7 @@ python scripts/repo.py check-affected --base origin/main
 - safely skipped workflows and why their governed path filters do not match;
 - shared uncertainty that widens Rust validation to the full workspace; unknown non-Rust ownership and known workflow under-coverage fail closed.
 
-`check-affected` first runs the permanent structural conformance preflight and formatting check. It then runs Clippy and tests for the affected Rust package closure. Shared workspace/check-graph changes and unknown impact widen to workspace-wide Clippy and tests.
+`check-affected` first runs the permanent structural conformance preflight and formatting check. It then runs Clippy and tests for the affected Rust package closure. Shared workspace/check-graph changes widen to workspace-wide Clippy and tests. Unknown non-Rust impact blocks before execution until it is classified.
 
 ## Sources of truth
 
