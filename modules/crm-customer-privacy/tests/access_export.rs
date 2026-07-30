@@ -1,13 +1,12 @@
 use crm_customer_privacy::{
     ACCESS_EXPORT_MANIFEST_MEDIA_TYPE, ActionPlanningPolicy, ContributionCompletenessProof,
     DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot, EvidenceClass, OwnerScopeContribution,
-    OwnerScopeRegistry, PrivacyAccessExportManifest, PrivacyAccessExportReference, PrivacyCaseKind,
-    PrivacyActionPlan, ScopeDiscoveryLineage, ScopeResource, decode_access_export_manifest,
-    decode_access_export_reference, encode_access_export_manifest, encode_access_export_reference,
+    OwnerScopeRegistry, PrivacyAccessExportManifest, PrivacyAccessExportReference,
+    PrivacyActionPlan, PrivacyCaseKind, ScopeDiscoveryLineage, ScopeResource,
+    decode_access_export_manifest, decode_access_export_reference, encode_access_export_manifest,
+    encode_access_export_reference,
 };
-use crm_module_sdk::{
-    DataClass, FileId, RecordId, RetentionPolicyId, SchemaVersion, TenantId,
-};
+use crm_module_sdk::{DataClass, FileId, RecordId, RetentionPolicyId, SchemaVersion, TenantId};
 
 fn tenant_id() -> TenantId {
     TenantId::try_new("tenant-access-export").unwrap()
@@ -22,13 +21,7 @@ fn retention_policy() -> RetentionPolicyId {
 }
 
 fn policy() -> ActionPlanningPolicy {
-    ActionPlanningPolicy::new(
-        SchemaVersion::try_new("1.0.0").unwrap(),
-        "EU",
-        false,
-        false,
-    )
-    .unwrap()
+    ActionPlanningPolicy::new(SchemaVersion::try_new("1.0.0").unwrap(), "EU", false, false).unwrap()
 }
 
 fn discovery_snapshot() -> DiscoveryScopeSnapshot {
@@ -71,14 +64,8 @@ fn discovery_snapshot() -> DiscoveryScopeSnapshot {
                 record_id("party-access-export"),
                 17,
                 resources,
-                ContributionCompletenessProof::new(
-                    true,
-                    1,
-                    count,
-                    count,
-                    [(index + 1) as u8; 32],
-                )
-                .unwrap(),
+                ContributionCompletenessProof::new(true, 1, count, count, [(index + 1) as u8; 32])
+                    .unwrap(),
             )
             .unwrap();
             DiscoveryOwnerScopeContribution::new(lineage.clone(), contribution).unwrap()
@@ -113,14 +100,14 @@ fn access_manifest_identity_and_strict_state_are_deterministic() {
 
 #[test]
 fn prepared_completed_and_replayed_reference_is_immutable() {
-    let manifest = PrivacyAccessExportManifest::build(&access_plan(
-        PrivacyCaseKind::PortabilityExport,
-    ))
-    .unwrap();
+    let manifest =
+        PrivacyAccessExportManifest::build(&access_plan(PrivacyCaseKind::PortabilityExport))
+            .unwrap();
     let mut reference = PrivacyAccessExportReference::prepare(manifest, 400).unwrap();
     let prepared = reference.clone();
     assert_eq!(
-        decode_access_export_reference(&encode_access_export_reference(&prepared).unwrap()).unwrap(),
+        decode_access_export_reference(&encode_access_export_reference(&prepared).unwrap())
+            .unwrap(),
         prepared
     );
 
@@ -176,13 +163,8 @@ fn erasure_plan_cannot_be_represented_as_access_export() {
         &discovery_snapshot(),
         4,
         PrivacyCaseKind::Erasure,
-        ActionPlanningPolicy::new(
-            SchemaVersion::try_new("1.0.0").unwrap(),
-            "EU",
-            true,
-            true,
-        )
-        .unwrap(),
+        ActionPlanningPolicy::new(SchemaVersion::try_new("1.0.0").unwrap(), "EU", true, true)
+            .unwrap(),
         300,
     )
     .unwrap();
