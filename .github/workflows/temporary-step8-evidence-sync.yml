@@ -73,6 +73,44 @@ jobs:
           PY
           python -m py_compile .github/step8-evidence-sync.py
           python .github/step8-evidence-sync.py
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/test_architecture_documentation_consistency.py')
+          source = path.read_text(encoding='utf-8')
+          old_step = '            "8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — **Next**;",'
+          new_steps = '''            "8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — **Complete through PR #237**;",
+              "9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Next**;",'''
+          if source.count(old_step) != 1:
+              raise SystemExit(f'execution-order step patch count: {source.count(old_step)}')
+          source = source.replace(old_step, new_steps, 1)
+          old_evidence = '''            (
+              self.authoritative_status_documents,
+              "PR #235",
+              "7a0cd34dc17085ecd1a8ee233171c0463d91ceba",
+              "43d194231fbce1cee28c44e89726929e450f3d18",
+              "17 of 17",
+          ),
+          )'''
+          new_evidence = '''            (
+              self.authoritative_status_documents,
+              "PR #235",
+              "7a0cd34dc17085ecd1a8ee233171c0463d91ceba",
+              "43d194231fbce1cee28c44e89726929e450f3d18",
+              "17 of 17",
+          ),
+              (
+                  self.authoritative_status_documents,
+                  "PR #237",
+                  "f926ece93dc2b24683f982828e72bf9170dc123a",
+                  "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90",
+                  "33 of 33",
+              ),
+          )'''
+          if source.count(old_evidence) != 1:
+              raise SystemExit(f'accepted-evidence patch count: {source.count(old_evidence)}')
+          path.write_text(source.replace(old_evidence, new_evidence, 1), encoding='utf-8')
+          PY
           python scripts/generate_repository_navigation.py --write
           python -m py_compile \
             tests/test_architecture_documentation_consistency.py \
