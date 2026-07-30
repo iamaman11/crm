@@ -28,12 +28,13 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt
-      - name: Apply exact access execution and digest fixes
+      - name: Apply exact access execution, error and digest fixes
         run: |
           python scripts/one_time_step10_rust_fix.py
           cargo fmt --all
       - name: Verify focused compilation
         run: |
+          cargo test --locked -p crm-customer-privacy --test access_export --no-run
           cargo check --locked -p crm-customer-data-operations-execution-composition
           cargo test --locked -p crm-application-runtime --test customer_privacy_access_export_postgres --no-run
       - name: Commit focused fixes
@@ -42,10 +43,12 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs
+          git add \
+            modules/crm-customer-privacy/tests/access_export.rs \
+            crates/crm-application-runtime/tests/customer_privacy_access_export_postgres.rs
           git diff --cached --exit-code && { echo "Expected test fixes were not materialized."; exit 1; } || true
-          git commit -m "Step 10: align access execution acceptance"
+          git commit -m "Step 10: align access export acceptance tests"
           git restore scripts/one_time_step10_rust_fix.py
           git pull --rebase origin "${GITHUB_HEAD_REF}"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
-          # Revision 3: execute coordinator-owned Access Retain outcomes.
+          # Revision 4: include exact SdkError field checks.
