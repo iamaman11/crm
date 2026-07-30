@@ -44,7 +44,10 @@ replace_exact(
         if completed == 1 {
             return;
         }
-        assert_eq!(completed, 0, "generic conformance created multiple dispatches");
+        assert_eq!(
+            completed, 0,
+            "generic conformance created multiple dispatches"
+        );
         assert!(
             Instant::now() < deadline,
             "Customer Enrichment dispatch did not quiesce before query conformance"
