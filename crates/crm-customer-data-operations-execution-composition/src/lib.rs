@@ -7,6 +7,11 @@
 //! governed owner boundaries and owns only operation jobs, immutable artifacts, outcomes and
 //! reconciliation evidence. No direct cross-owner storage path exists here.
 
+pub use crm_core_files::{
+    AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactAppendResult,
+    FileArtifactMetadata, FileArtifactStatus, FinalizedFileArtifact, ImmutableFileArtifactStore,
+};
+
 pub mod export_execution_reader;
 pub use export_execution_reader::*;
 pub mod export_execution_sink;

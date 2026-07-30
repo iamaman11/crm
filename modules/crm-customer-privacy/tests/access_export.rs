@@ -154,7 +154,10 @@ fn prepared_completed_and_replayed_reference_is_immutable() {
             400,
         )
         .unwrap_err();
-    assert_eq!(error.code(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");
+    assert_eq!(
+        error.code.as_str(),
+        "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT"
+    );
 }
 
 #[test]
@@ -169,5 +172,8 @@ fn erasure_plan_cannot_be_represented_as_access_export() {
     )
     .unwrap();
     let error = PrivacyAccessExportManifest::build(&plan).unwrap_err();
-    assert_eq!(error.code(), "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT");
+    assert_eq!(
+        error.code.as_str(),
+        "CUSTOMER_PRIVACY_ACCESS_EXPORT_CONFLICT"
+    );
 }

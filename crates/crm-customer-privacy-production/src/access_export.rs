@@ -1,7 +1,10 @@
 use crate::legacy::CustomerPrivacyProductionDependencies;
+pub use crm_customer_privacy::encode_access_export_manifest;
 pub use crm_customer_privacy_application::{
-    AccessExportInvocation, AccessExportResult, PrivacyAccessExportService,
-    PrivacyExportTargetPort, PrivacyExportTargetRequest, PrivacyExportTargetResult,
+    ACCESS_EXPORT_CAPABILITY_VERSION, ACCESS_EXPORT_REQUEST_CAPABILITY, AccessExportInvocation,
+    AccessExportPersistencePort, AccessExportPreparation, AccessExportResult,
+    PrivacyAccessExportService, PrivacyExportTargetPort, PrivacyExportTargetRequest,
+    PrivacyExportTargetResult,
 };
 pub use crm_customer_privacy_postgres::PostgresAccessExportPersistence;
 use std::sync::Arc;

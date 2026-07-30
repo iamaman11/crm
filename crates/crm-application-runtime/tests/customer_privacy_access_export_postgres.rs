@@ -1,23 +1,19 @@
 use crm_core_data::PostgresDataStore;
-use crm_core_files::{
+use crm_customer_data_operations_execution_composition::{
     AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactAppendResult,
     FileArtifactMetadata, FileArtifactStatus, FinalizedFileArtifact, ImmutableFileArtifactStore,
-};
-use crm_customer_data_operations_execution_composition::{
     PrivacyManifestExportPublisher, PrivacyManifestExportRequest,
 };
-use crm_customer_privacy_application::{
-    ACCESS_EXPORT_CAPABILITY_VERSION, ACCESS_EXPORT_REQUEST_CAPABILITY, AccessExportInvocation,
-    AccessExportPersistencePort, AccessExportPreparation,
-};
 use crm_customer_privacy_production::{
-    ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
-    ACTION_PLAN_STATE_RETENTION_POLICY_ID, ACTION_PLAN_STATE_SCHEMA_ID,
-    ACTION_PLAN_STATE_SCHEMA_VERSION, ActionPlanningPolicy, ContributionCompletenessProof,
-    DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot, EvidenceClass, ExecutionPreparation,
-    OwnerExecutionInvocation, OwnerExecutionPersistencePort, OwnerScopeContract,
-    OwnerScopeContribution, OwnerScopeRegistry, PostgresAccessExportPersistence,
-    PostgresOwnerExecutionPersistence, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
+    ACCESS_EXPORT_CAPABILITY_VERSION, ACCESS_EXPORT_REQUEST_CAPABILITY, ACTION_PLAN_RECORD_TYPE,
+    ACTION_PLAN_STATE_MAXIMUM_BYTES, ACTION_PLAN_STATE_RETENTION_POLICY_ID,
+    ACTION_PLAN_STATE_SCHEMA_ID, ACTION_PLAN_STATE_SCHEMA_VERSION, AccessExportInvocation,
+    AccessExportPersistencePort, AccessExportPreparation, ActionPlanningPolicy,
+    ContributionCompletenessProof, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
+    EvidenceClass, ExecutionPreparation, OwnerExecutionInvocation, OwnerExecutionPersistencePort,
+    OwnerScopeContract, OwnerScopeContribution, OwnerScopeRegistry,
+    PostgresAccessExportPersistence, PostgresOwnerExecutionPersistence, PrivacyActionPlan,
+    PrivacyCase, PrivacyCaseKind, PrivacyExportTargetResult, PrivacyOwnerActionOutcome,
     PrivacyRetentionDecisionSet, ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
     action_plan_state_descriptor_hash, encode_access_export_manifest, encode_action_plan_state,
     privacy_case_persisted_payload, retention_decision_persisted_payload,
@@ -62,7 +58,7 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         TENANT_A,
         "customer-privacy.case",
         CASE_ID,
-        privacy_case.version(),
+        i64::try_from(privacy_case.version()).expect("privacy case version fits i64"),
         privacy_case_persisted_payload(&privacy_case).expect("encode access case"),
         "access-export-fixture-case",
     )
@@ -93,13 +89,34 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         .expect("connect access-export app pool");
     let store = Arc::new(PostgresDataStore::from_pool(app));
     let owner_execution = PostgresOwnerExecutionPersistence::new(store.clone());
-    let owner_result = owner_execution
-        .prepare_next(&owner_invocation(
-            plan.plan_id().clone(),
-            decision.decision_id().clone(),
-        ))
+    let owner_invocation = owner_invocation(plan.plan_id().clone(), decision.decision_id().clone());
+    let retained_attempt = match owner_execution
+        .prepare_next(&owner_invocation)
         .await
-        .expect("complete zero-action Access owner execution");
+        .expect("prepare Access retain outcome")
+    {
+        ExecutionPreparation::Ready { attempt, .. } => attempt,
+        other => panic!("expected Access retain attempt, got {other:?}"),
+    };
+    let retained_outcome = PrivacyOwnerActionOutcome::record(
+        &retained_attempt,
+        retained_attempt
+            .coordinator_outcome_status()
+            .expect("Access Retain is coordinator-owned"),
+        None,
+        EXECUTED_AT,
+    )
+    .unwrap();
+    assert!(
+        owner_execution
+            .record_outcome(&owner_invocation, &retained_attempt, &retained_outcome)
+            .await
+            .expect("record Access retained outcome")
+    );
+    let owner_result = owner_execution
+        .prepare_next(&owner_invocation)
+        .await
+        .expect("complete Access owner execution after retained outcome");
     assert!(matches!(
         owner_result,
         ExecutionPreparation::Complete { .. }
@@ -180,7 +197,7 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
     assert_eq!(target_replay.content_sha256, target.content_sha256);
     assert_eq!(file_store.artifact_count(), 1);
 
-    let application_target = crm_customer_privacy_application::PrivacyExportTargetResult {
+    let application_target = PrivacyExportTargetResult {
         export_job_id: target_replay.export_job_id.clone(),
         file_id: target_replay.file_id.clone(),
         media_type: target_replay.media_type.clone(),
@@ -519,23 +536,23 @@ async fn cleanup(admin: &PgPool) {
         .execute(&mut *transaction)
         .await
         .expect("disable cleanup verification");
-    for table in [
-        "crm.customer_privacy_owner_execution_audit",
-        "crm.customer_privacy_owner_action_outcomes",
-        "crm.customer_privacy_owner_action_attempts",
-        "crm.customer_privacy_owner_execution_checkpoints",
-        "crm.outbox_events",
-        "crm.audit_records",
-        "crm.idempotency_records",
-        "crm.records",
-        "crm.business_transactions",
+    for statement in [
+        "DELETE FROM crm.customer_privacy_owner_execution_audit WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.customer_privacy_owner_action_outcomes WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.customer_privacy_owner_action_attempts WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.customer_privacy_owner_execution_checkpoints WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.outbox_events WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.audit_records WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.idempotency_records WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.records WHERE tenant_id IN ($1, $2)",
+        "DELETE FROM crm.business_transactions WHERE tenant_id IN ($1, $2)",
     ] {
-        sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id IN ($1, $2)"))
+        sqlx::query(statement)
             .bind(TENANT_A)
             .bind(TENANT_B)
             .execute(&mut *transaction)
             .await
-            .unwrap_or_else(|error| panic!("cleanup {table}: {error}"));
+            .unwrap_or_else(|error| panic!("cleanup statement failed: {error}"));
     }
     transaction
         .commit()
@@ -646,8 +663,9 @@ impl ImmutableFileArtifactStore for MemoryFileStore {
                     replayed: true,
                 });
             }
+            let chunk_sha256: [u8; 32] = Sha256::digest(&command.bytes).into();
             if command.chunk_index != artifact.metadata.next_chunk_index
-                || Sha256::digest(&command.bytes).as_slice() != command.chunk_sha256
+                || chunk_sha256 != command.chunk_sha256
             {
                 return Err(SdkError::new(
                     "FILE_ARTIFACT_CHUNK_CONFLICT",
@@ -684,8 +702,9 @@ impl ImmutableFileArtifactStore for MemoryFileStore {
             if artifact.metadata.status == FileArtifactStatus::Finalized {
                 return Ok(artifact.metadata.clone());
             }
+            let artifact_sha256: [u8; 32] = Sha256::digest(&artifact.bytes).into();
             if artifact.bytes.len() as u64 != artifact.metadata.expected_size_bytes
-                || Sha256::digest(&artifact.bytes).as_slice() != artifact.metadata.expected_sha256
+                || artifact_sha256 != artifact.metadata.expected_sha256
             {
                 return Err(SdkError::new(
                     "FILE_ARTIFACT_FINALIZE_CONFLICT",
