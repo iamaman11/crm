@@ -38,6 +38,8 @@ impl PrivacyExportTargetPort for CustomerDataPrivacyExportTarget {
                     actor_id: request.actor_id,
                     correlation_id: request.correlation_id,
                     trace_id: request.trace_id,
+                    initiating_capability_id: request.initiating_capability_id,
+                    initiating_capability_version: request.initiating_capability_version,
                     prepared_at_unix_nanos: request.prepared_at_unix_nanos,
                 })
                 .await?;

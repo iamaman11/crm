@@ -21,7 +21,9 @@ pub struct AccessExportInvocation {
     pub request_id: RequestId,
     pub correlation_id: CorrelationId,
     pub trace_id: TraceId,
+    /// Registered public capability that initiated the trusted internal orchestration.
     pub initiating_capability_id: CapabilityId,
+    /// Registered public capability version preserved for audit provenance.
     pub initiating_capability_version: CapabilityVersion,
     pub request_started_at_unix_nanos: i64,
     pub trusted_internal: bool,
@@ -51,6 +53,8 @@ pub struct PrivacyExportTargetRequest {
     pub actor_id: ActorId,
     pub correlation_id: CorrelationId,
     pub trace_id: TraceId,
+    pub initiating_capability_id: CapabilityId,
+    pub initiating_capability_version: CapabilityVersion,
     pub prepared_at_unix_nanos: i64,
 }
 
@@ -171,6 +175,8 @@ impl PrivacyAccessExportService {
                 actor_id: invocation.actor_id.clone(),
                 correlation_id: invocation.correlation_id.clone(),
                 trace_id: invocation.trace_id.clone(),
+                initiating_capability_id: invocation.initiating_capability_id.clone(),
+                initiating_capability_version: invocation.initiating_capability_version.clone(),
                 prepared_at_unix_nanos: prepared.prepared_at_unix_nanos(),
             })
             .await?;
@@ -197,16 +203,16 @@ fn validate_invocation(invocation: &AccessExportInvocation) -> Result<(), SdkErr
             "Customer Privacy access export is available only through trusted internal orchestration.",
         ));
     }
-    if invocation.initiating_capability_id.as_str() != ACCESS_EXPORT_REQUEST_CAPABILITY
-        || invocation.initiating_capability_version.as_str() != ACCESS_EXPORT_CAPABILITY_VERSION
-        || ACCESS_EXPORT_REQUEST_COORDINATE
-            != format!(
-                "{}@{}",
-                invocation.initiating_capability_id, invocation.initiating_capability_version
-            )
+    if ACCESS_EXPORT_REQUEST_COORDINATE
+        != format!("{ACCESS_EXPORT_REQUEST_CAPABILITY}@{ACCESS_EXPORT_CAPABILITY_VERSION}")
     {
         return Err(configuration_invalid(
-            "access export invocation does not use the frozen internal coordinate",
+            "access export service does not use the frozen internal coordinate",
+        ));
+    }
+    if invocation.initiating_capability_id.as_str() == ACCESS_EXPORT_REQUEST_CAPABILITY {
+        return Err(configuration_invalid(
+            "the private access export coordinate cannot replace registered audit provenance",
         ));
     }
     if invocation.request_started_at_unix_nanos <= 0 {

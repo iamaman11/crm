@@ -54,6 +54,8 @@ pub struct PrivacyManifestExportRequest {
     pub actor_id: ActorId,
     pub correlation_id: CorrelationId,
     pub trace_id: TraceId,
+    pub initiating_capability_id: CapabilityId,
+    pub initiating_capability_version: CapabilityVersion,
     pub prepared_at_unix_nanos: i64,
 }
 
@@ -360,6 +362,11 @@ impl PrivacyExportBlueprint {
         }
         IdempotencyKey::try_new(request.target_idempotency_key.clone())
             .map_err(configuration_error)?;
+        if request.initiating_capability_id.as_str() == PRIVACY_EXPORT_REQUEST_CAPABILITY {
+            return Err(configuration_error(
+                "the private privacy-export coordinate cannot replace registered audit provenance",
+            ));
+        }
         let file_id = FileId::try_new(format!("{FILE_ID_PREFIX}{}", hex(&request.manifest_digest)))
             .map_err(configuration_error)?;
         Ok(Self {
@@ -391,10 +398,8 @@ fn execution_context(
             causation_id: CausationId::try_new(request.manifest_id.as_str().to_owned())
                 .map_err(configuration_error)?,
             trace_id: request.trace_id.clone(),
-            capability_id: CapabilityId::try_new(PRIVACY_EXPORT_REQUEST_CAPABILITY)
-                .map_err(configuration_error)?,
-            capability_version: CapabilityVersion::try_new(PRIVACY_EXPORT_REQUEST_VERSION)
-                .map_err(configuration_error)?,
+            capability_id: request.initiating_capability_id.clone(),
+            capability_version: request.initiating_capability_version.clone(),
             business_transaction_id: BusinessTransactionId::try_new(identity.clone())
                 .map_err(configuration_error)?,
             idempotency_key: IdempotencyKey::try_new(identity).map_err(configuration_error)?,

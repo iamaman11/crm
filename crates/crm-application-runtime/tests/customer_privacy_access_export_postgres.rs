@@ -5,16 +5,16 @@ use crm_customer_data_operations_execution_composition::{
     PrivacyManifestExportPublisher, PrivacyManifestExportRequest,
 };
 use crm_customer_privacy_production::{
-    ACCESS_EXPORT_CAPABILITY_VERSION, ACCESS_EXPORT_REQUEST_CAPABILITY, ACTION_PLAN_RECORD_TYPE,
-    ACTION_PLAN_STATE_MAXIMUM_BYTES, ACTION_PLAN_STATE_RETENTION_POLICY_ID,
-    ACTION_PLAN_STATE_SCHEMA_ID, ACTION_PLAN_STATE_SCHEMA_VERSION, AccessExportInvocation,
-    AccessExportPersistencePort, AccessExportPreparation, ActionPlanningPolicy,
-    ContributionCompletenessProof, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
-    EvidenceClass, ExecutionPreparation, OwnerExecutionInvocation, OwnerExecutionPersistencePort,
-    OwnerScopeContract, OwnerScopeContribution, OwnerScopeRegistry,
-    PostgresAccessExportPersistence, PostgresOwnerExecutionPersistence, PrivacyActionPlan,
-    PrivacyCase, PrivacyCaseKind, PrivacyExportTargetResult, PrivacyOwnerActionOutcome,
-    PrivacyRetentionDecisionSet, ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
+    ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
+    ACTION_PLAN_STATE_RETENTION_POLICY_ID, ACTION_PLAN_STATE_SCHEMA_ID,
+    ACTION_PLAN_STATE_SCHEMA_VERSION, AccessExportInvocation, AccessExportPersistencePort,
+    AccessExportPreparation, ActionPlanningPolicy, ContributionCompletenessProof,
+    DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot, EvidenceClass, ExecutionPreparation,
+    OwnerExecutionInvocation, OwnerExecutionPersistencePort, OwnerScopeContract,
+    OwnerScopeContribution, OwnerScopeRegistry, PostgresAccessExportPersistence,
+    PostgresOwnerExecutionPersistence, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
+    PrivacyExportTargetResult, PrivacyOwnerActionOutcome, PrivacyRetentionDecisionSet,
+    ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
     action_plan_state_descriptor_hash, encode_access_export_manifest, encode_action_plan_state,
     privacy_case_persisted_payload, retention_decision_persisted_payload,
 };
@@ -184,6 +184,8 @@ async fn repository_step_10_access_export_recovers_finalized_artifact_before_cas
         actor_id: ActorId::try_new(ACTOR).unwrap(),
         correlation_id: CorrelationId::try_new("access-export-cdo-correlation").unwrap(),
         trace_id: TraceId::try_new("access-export-cdo-trace").unwrap(),
+        initiating_capability_id: CapabilityId::try_new("customer_privacy.case.approve").unwrap(),
+        initiating_capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
         prepared_at_unix_nanos: prepared.prepared_at_unix_nanos(),
     };
     let target = publisher
@@ -419,9 +421,8 @@ fn access_invocation(tenant: &str, suffix: &str) -> AccessExportInvocation {
         correlation_id: CorrelationId::try_new(format!("access-export-correlation-{suffix}"))
             .unwrap(),
         trace_id: TraceId::try_new(format!("access-export-trace-{suffix}")).unwrap(),
-        initiating_capability_id: CapabilityId::try_new(ACCESS_EXPORT_REQUEST_CAPABILITY).unwrap(),
-        initiating_capability_version: CapabilityVersion::try_new(ACCESS_EXPORT_CAPABILITY_VERSION)
-            .unwrap(),
+        initiating_capability_id: CapabilityId::try_new("customer_privacy.case.approve").unwrap(),
+        initiating_capability_version: CapabilityVersion::try_new("1.0.0").unwrap(),
         request_started_at_unix_nanos: PREPARED_AT,
         trusted_internal: true,
     }
@@ -601,13 +602,13 @@ async fn customer_privacy_access_export_evidence_counts(
         SELECT
           (SELECT count(*) FROM crm.business_transactions
              WHERE tenant_id = $1
-               AND capability_id = 'customer_privacy.access_export.request'),
+               AND capability_id = 'customer_privacy.case.approve'),
           (SELECT count(*) FROM crm.outbox_events
              WHERE tenant_id = $1
                AND event_type LIKE 'customer_privacy.access_export.internal.%'),
           (SELECT count(*) FROM crm.audit_records
              WHERE tenant_id = $1
-               AND capability_id = 'customer_privacy.access_export.request'),
+               AND capability_id = 'customer_privacy.case.approve'),
           (SELECT count(*) FROM crm.idempotency_records
              WHERE tenant_id = $1
                AND idempotency_scope LIKE 'customer_privacy.access_export.reference.%')
