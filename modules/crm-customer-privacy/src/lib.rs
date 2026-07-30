@@ -24,7 +24,45 @@ pub mod domain {
     include!("query_access.rs");
     include!("retention.rs");
     include!("execution.rs");
-    include!("access_export.rs");
+
+    pub mod access_export {
+        use super::*;
+
+        impl serde::Serialize for PrivacyCaseKind {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(match self {
+                    Self::Access => "access",
+                    Self::PortabilityExport => "portability_export",
+                    Self::RestrictProcessing => "restrict_processing",
+                    Self::Erasure => "erasure",
+                })
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for PrivacyCaseKind {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let value = <String as serde::Deserialize>::deserialize(deserializer)?;
+                match value.as_str() {
+                    "access" => Ok(Self::Access),
+                    "portability_export" => Ok(Self::PortabilityExport),
+                    "restrict_processing" => Ok(Self::RestrictProcessing),
+                    "erasure" => Ok(Self::Erasure),
+                    _ => Err(serde::de::Error::custom(
+                        "privacy case kind is not a canonical v1 value",
+                    )),
+                }
+            }
+        }
+
+        include!("access_export.rs");
+    }
+    pub use access_export::*;
 
     impl CustomerDataLegalHold {
         pub const fn effective_from_unix_nanos(&self) -> i64 {
