@@ -1,0 +1,102 @@
+name: One-time Step 10 Generic Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: one-time-step10-generic-diagnostic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_generic_conformance_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5437:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_generic_conformance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5437
+      PGDATABASE: crm_generic_conformance_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5437/crm_generic_conformance_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5437/crm_generic_conformance_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: "1.97.1"
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Prepare representative database
+        run: |
+          bash scripts/prepare_customer_enrichment_consent_policy_database.sh
+          psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0022_customer_privacy_submit_fixture.sql
+          psql --set ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO crm.capability_registry (
+            capability_id, capability_version, owner_module_id, owner_module_version,
+            service_name, method_name, input_descriptor_hash, output_descriptor_hash,
+            risk_level, idempotency_required, audit_required, approval_required,
+            ai_callable, marketplace_callable, bulk_allowed, export_allowed,
+            data_classes_touched
+          ) VALUES (
+            'customer_privacy.case.subject.verify', '1.0.0',
+            'crm.customer-privacy', '0.2.0',
+            'crm.customer_privacy.v1.CustomerPrivacyCaseService',
+            'VerifyPrivacyCaseSubject', decode(repeat('76', 32), 'hex'),
+            decode(repeat('77', 32), 'hex'), 'critical', true, true, false,
+            false, false, false, false,
+            ARRAY['personal', 'confidential']::text[]
+          ) ON CONFLICT (capability_id, capability_version) DO NOTHING;
+          SQL
+      - name: Run conformance and capture exact late evidence
+        shell: bash
+        run: |
+          set +e
+          cargo test -p crm-api --test generic_conformance_process_e2e -- --nocapture \
+            > database/generic-conformance-diagnostic-test.log 2>&1
+          status=$?
+          {
+            echo '=== business_transactions ==='
+            psql --set ON_ERROR_STOP=1 --expanded --command \
+              "SELECT * FROM crm.business_transactions ORDER BY created_at NULLS LAST, business_transaction_id"
+            echo '=== idempotency_records ==='
+            psql --set ON_ERROR_STOP=1 --expanded --command \
+              "SELECT * FROM crm.idempotency_records ORDER BY created_at NULLS LAST, idempotency_scope, idempotency_key"
+            echo '=== capability_registry customer privacy ==='
+            psql --set ON_ERROR_STOP=1 --expanded --command \
+              "SELECT capability_id, capability_version, owner_module_version FROM crm.capability_registry WHERE owner_module_id = 'crm.customer-privacy' ORDER BY capability_id"
+          } > database/generic-conformance-late-evidence.log 2>&1
+          exit "${status}"
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: step10-generic-late-evidence
+          path: |
+            database/generic-conformance-diagnostic-test.log
+            database/generic-conformance-late-evidence.log
+          if-no-files-found: error
+          retention-days: 1
