@@ -6,10 +6,14 @@ publish = false
 
 [dependencies]
 crm-application-composition = { path = "../crm-application-composition" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-accounts-capability-composition = { path = "../crm-customer-accounts-capability-composition" }
 crm-consents-capability-composition = { path = "../crm-consents-capability-composition" }
 crm-contact-points-capability-composition = { path = "../crm-contact-points-capability-composition" }
+crm-customer-data-operations-execution-composition = { path = "../crm-customer-data-operations-execution-composition" }
+crm-data-quality-source-composition = { path = "../crm-data-quality-source-composition" }
+crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-party-reference-composition = { path = "../crm-party-reference-composition" }
 crm-party-relationships-capability-composition = { path = "../crm-party-relationships-capability-composition" }

@@ -10,6 +10,9 @@
 mod production_contribution;
 pub use production_contribution::*;
 
+mod production_contribution;
+pub use production_contribution::*;
+
 pub use crm_core_files::{
     AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactAppendResult,
     FileArtifactMetadata, FileArtifactStatus, FinalizedFileArtifact, ImmutableFileArtifactStore,

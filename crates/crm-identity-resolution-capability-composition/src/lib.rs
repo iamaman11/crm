@@ -11,6 +11,9 @@
 mod production_contribution;
 pub use production_contribution::*;
 
+mod production_contribution;
+pub use production_contribution::*;
+
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,

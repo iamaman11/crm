@@ -10,6 +10,7 @@ publish = false
 too_many_arguments = "allow"
 
 [dependencies]
+crm-application-composition = { path = "../crm-application-composition" }
 crm-capability-adapters = { path = "../crm-capability-adapters" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
@@ -17,9 +18,12 @@ crm-core-data = { path = "../crm-core-data" }
 crm-core-files = { path = "../crm-core-files" }
 crm-customer-data-operations = { path = "../../modules/crm-customer-data-operations" }
 crm-customer-data-operations-capability-adapter = { path = "../crm-customer-data-operations-capability-adapter" }
+crm-customer-data-operations-query-adapter = { path = "../crm-customer-data-operations-query-adapter" }
+crm-customer-data-operations-source-composition = { path = "../crm-customer-data-operations-source-composition" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-query-runtime = { path = "../crm-query-runtime" }
 prost = "0.14"
 sha2 = "0.10"
 
