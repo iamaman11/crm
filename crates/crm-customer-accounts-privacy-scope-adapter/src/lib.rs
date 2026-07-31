@@ -25,8 +25,8 @@ pub use contract::{
     OUTPUT_SCHEMA_ID, customer_accounts_privacy_scope_definition,
 };
 pub use owner_action::{
-    OWNER_ACTION_CAPABILITY_ID, CustomerAccountsPrivacyActionPlanner,
-    CustomerAccountsPrivacyActionPolicy, customer_accounts_privacy_action_definition,
+    CustomerAccountsPrivacyActionPlanner, CustomerAccountsPrivacyActionPolicy,
+    OWNER_ACTION_CAPABILITY_ID, customer_accounts_privacy_action_definition,
     customer_accounts_privacy_action_planner,
 };
 pub use postgres::CustomerAccountsPrivacyScopeQueryAdapter;

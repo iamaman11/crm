@@ -18,10 +18,7 @@ pub type CustomerAccountsPrivacyActionPlanner =
 pub struct CustomerAccountsPrivacyActionPolicy;
 
 pub fn customer_accounts_privacy_action_definition() -> Result<CapabilityDefinition, SdkError> {
-    owner_action_definition(
-        crm_customer_accounts::MODULE_ID,
-        OWNER_ACTION_CAPABILITY_ID,
-    )
+    owner_action_definition(crm_customer_accounts::MODULE_ID, OWNER_ACTION_CAPABILITY_ID)
 }
 
 pub const fn customer_accounts_privacy_action_planner() -> CustomerAccountsPrivacyActionPlanner {
@@ -144,12 +141,8 @@ mod tests {
     #[test]
     fn minimized_name_is_deterministic_and_non_identifying() {
         let value = account("Northwind");
-        let name = minimized_account_name(
-            &value,
-            &[0xabu8; 32],
-            "minimized",
-            AccountStatus::Active,
-        );
+        let name =
+            minimized_account_name(&value, &[0xabu8; 32], "minimized", AccountStatus::Active);
         assert_eq!(name, "minimized account abababababababababababab");
         assert!(!name.contains("Northwind"));
     }
@@ -158,12 +151,8 @@ mod tests {
     fn delete_changes_lifecycle_even_when_name_is_already_minimized() {
         let current = "deleted account 111111111111111111111111";
         let value = account(current);
-        let name = minimized_account_name(
-            &value,
-            &[0x11u8; 32],
-            "deleted",
-            AccountStatus::Inactive,
-        );
+        let name =
+            minimized_account_name(&value, &[0x11u8; 32], "deleted", AccountStatus::Inactive);
         assert_eq!(name, current);
         assert_ne!(value.status(), AccountStatus::Inactive);
     }
