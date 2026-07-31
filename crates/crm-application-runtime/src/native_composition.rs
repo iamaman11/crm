@@ -374,7 +374,7 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let party_queries = Arc::new(PartyQueryAdapter::new(
+    let _party_queries = Arc::new(PartyQueryAdapter::new(
         store.clone(),
         cursor(cursor_key)?,
         visibility_authorizer.clone(),
