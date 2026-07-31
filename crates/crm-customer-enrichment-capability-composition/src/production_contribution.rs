@@ -32,8 +32,7 @@ use crm_customer_enrichment_suggestion_query_adapter::{
 use crm_module_sdk::{ErrorCategory, SdkError};
 use crm_parties_query_adapter::PartyQueryAdapter;
 use crm_query_runtime::{
-    CursorCodec, QueryAuthorizer, QueryExecutor, QuerySemanticValidator,
-    QueryVisibilityAuthorizer,
+    CursorCodec, QueryAuthorizer, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -92,22 +91,20 @@ pub fn build_contribution(
         cursor(cursor_key)?,
         visibility_authorizer.clone(),
     )?);
-    let mutation_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
-        CustomerEnrichmentCapabilityExecutor::new(
+    let mutation_executor: Arc<dyn TransactionalCapabilityExecutor> =
+        Arc::new(CustomerEnrichmentCapabilityExecutor::new(
             store.clone(),
             fallback,
             request_create,
             party_queries,
             consent_queries,
             query_authorizer,
-        ),
-    );
-    let mutation_validator: Arc<dyn CapabilitySemanticValidator> = Arc::new(
-        ActivationGatedMutationValidator::new(
+        ));
+    let mutation_validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ActivationGatedMutationValidator::new(
             activation.clone(),
             Arc::new(NoopMutationSemanticValidator),
-        ),
-    );
+        ));
     contributions
         .add_mutations(
             mutation_capability_definitions()?,
@@ -162,9 +159,10 @@ fn add_queries<T>(
 where
     T: QuerySemanticValidator + QueryExecutor + 'static,
 {
-    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(
-        ActivationGatedQueryValidator::new(activation, adapter.clone()),
-    );
+    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(ActivationGatedQueryValidator::new(
+        activation,
+        adapter.clone(),
+    ));
     let executor: Arc<dyn QueryExecutor> = adapter;
     contributions
         .add_queries(definitions, validator, executor)

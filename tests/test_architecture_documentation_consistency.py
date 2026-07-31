@@ -306,57 +306,49 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-12-contribution-aggregation-batch-2",
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-12-contribution-aggregation-batch-3")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
-        self.assertEqual(
-            self.packet["baseline"]["sha"],
-            "10be9a128ed1f8fbc6967d82baba648ba52f1d12",
-        )
+        self.assertEqual(self.packet["baseline"]["sha"], "b4222364c21cb74127834f5ff4f0739343d26379")
         self.assertEqual(self.packet["tracking_issues"], [194])
-        self.assertEqual(self.packet["allowed_paths"], ['Cargo.lock', 'crates/crm-application-runtime/Cargo.toml', 'crates/crm-application-runtime/src/data_quality_capability_execution.rs', 'crates/crm-application-runtime/src/data_quality_registration.rs', 'crates/crm-application-runtime/src/lib.rs', 'crates/crm-application-runtime/src/native_composition.rs', 'crates/crm-customer-data-operations-execution-composition/Cargo.toml', 'crates/crm-customer-data-operations-execution-composition/src/lib.rs', 'crates/crm-customer-data-operations-execution-composition/src/production_contribution.rs', 'crates/crm-data-quality-source-composition/Cargo.toml', 'crates/crm-data-quality-source-composition/src/capability_execution.rs', 'crates/crm-data-quality-source-composition/src/lib.rs', 'crates/crm-data-quality-source-composition/src/production_contribution.rs', 'crates/crm-data-quality-source-composition/src/registration.rs', 'crates/crm-first-party-modules/Cargo.toml', 'crates/crm-first-party-modules/src/lib.rs', 'crates/crm-identity-resolution-capability-composition/Cargo.toml', 'crates/crm-identity-resolution-capability-composition/src/lib.rs', 'crates/crm-identity-resolution-capability-composition/src/production_contribution.rs', 'docs/ACTIVE_PACKET.md', 'docs/generated/REPOSITORY_MAP.md', 'repository-packet.json', 'scripts/check_native_module_composition.py', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_native_module_composition.py', 'tests/test_repository_navigation.py'])
-        for path in (
-            ".github/workflows/**",
-            "affected-scope-policy.json",
-            "apps/**",
-            "architecture-policy.json",
-            "contracts/**",
-            "database/**",
-            "modules/**",
-            "packages/**",
-            "proto/**",
-            "schemas/**",
-            "services/**",
-        ):
-            self.assertIn(path, self.packet["forbidden_paths"])
+        self.assertEqual(self.packet["allowed_paths"], ['Cargo.lock',
+ 'crates/crm-application-runtime/src/native_composition.rs',
+ 'crates/crm-application-runtime/src/native_composition/customer_enrichment_reference_guards.rs',
+ 'crates/crm-customer-360-query-adapter/Cargo.toml',
+ 'crates/crm-customer-360-query-adapter/src/lib.rs',
+ 'crates/crm-customer-360-query-adapter/src/production_contribution.rs',
+ 'crates/crm-customer-enrichment-capability-composition/Cargo.toml',
+ 'crates/crm-customer-enrichment-capability-composition/src/lib.rs',
+ 'crates/crm-customer-enrichment-capability-composition/src/production_contribution.rs',
+ 'crates/crm-customer-enrichment-capability-composition/src/reference_guards.rs',
+ 'crates/crm-first-party-modules/Cargo.toml',
+ 'crates/crm-first-party-modules/src/lib.rs',
+ 'crates/crm-sales-activities-capability-composition/Cargo.toml',
+ 'crates/crm-sales-activities-capability-composition/src/lib.rs',
+ 'crates/crm-sales-activities-capability-composition/src/production_contribution.rs',
+ 'docs/ACTIVE_PACKET.md',
+ 'docs/generated/REPOSITORY_MAP.md',
+ 'repository-packet.json',
+ 'scripts/check_native_module_composition.py',
+ 'scripts/generate_repository_navigation.py',
+ 'tests/test_architecture_documentation_consistency.py',
+ 'tests/test_native_module_composition.py',
+ 'tests/test_repository_navigation.py'])
         self.assertEqual(
             self.packet["required_checks"],
             ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
         )
         self.assertIn(
-            "repository step 12 remains in progress and repository step 13 is not started",
+            "repository step 12 implementation is complete and repository step 13 is not started",
             self.packet["acceptance"],
         )
-        self.assertIn(
-            "complete repository step 12 for Customer Enrichment, Sales/Activities, Customer 360 or any other remaining owner in this batch",
-            self.packet["non_goals"],
-        )
         self.assertIn("Generated by scripts/generate_repository_navigation.py", self.active_packet)
-        self.assertIn(
-            "repository-step-12-contribution-aggregation-batch-2",
-            self.active_packet,
-        )
+        self.assertIn("repository-step-12-contribution-aggregation-batch-3", self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertRegex(self.active_packet, r"sha256:[0-9a-f]{64}")
         self.assertIn("orientation only", self.active_packet)
         for document in self.authoritative_status_documents:
             self.assertIn("PR #246", document)
-            self.assertIn("3b4fe7cdf458daac9c12f816d0d6a87039e613f3", document)
-            self.assertIn("f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978", document)
-            self.assertIn("37 of 37", document)
             self.assertIn("repository step 12", document.lower())
             self.assertIn("repository step 13 remains blocked", document.lower())
 

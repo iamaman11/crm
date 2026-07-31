@@ -238,6 +238,46 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
         "DataQualityProductionDependencies",
         "Data Quality owner contribution bypassed the first-party aggregate",
     ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "SalesActivitiesCapabilityPlannerRouter",
+        "Sales/Activities mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "SalesActivitiesQueryAdapter::new",
+        "Sales/Activities query construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "Customer360QueryAdapter::new",
+        "Customer 360 query construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "CustomerEnrichmentCapabilityExecutor::new",
+        "Customer Enrichment mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "CustomerEnrichmentQueryAdapter::new",
+        "Customer Enrichment query construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "SalesActivitiesProductionDependencies",
+        "Sales/Activities contribution bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "Customer360ProductionDependencies",
+        "Customer 360 contribution bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "CustomerEnrichmentProductionDependencies",
+        "Customer Enrichment contribution bypassed the first-party aggregate",
+    ),
 )
 
 

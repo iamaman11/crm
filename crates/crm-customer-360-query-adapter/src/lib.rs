@@ -2,6 +2,9 @@
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
+mod production_contribution;
+pub use production_contribution::*;
+
 use crm_core_data::PostgresDataStore;
 use crm_customer_360_composition::{
     AccountContributionSnapshot, CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE,

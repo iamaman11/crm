@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-application-composition = { path = "../crm-application-composition" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-consents-capability-adapter = { path = "../crm-consents-capability-adapter" }
@@ -12,8 +13,12 @@ crm-consents-query-adapter = { path = "../crm-consents-query-adapter" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
 crm-customer-enrichment-capability-adapter = { path = "../crm-customer-enrichment-capability-adapter" }
+crm-customer-enrichment-query-adapter = { path = "../crm-customer-enrichment-query-adapter" }
+crm-customer-enrichment-request-list-query-adapter = { path = "../crm-customer-enrichment-request-list-query-adapter" }
+crm-customer-enrichment-suggestion-query-adapter = { path = "../crm-customer-enrichment-suggestion-query-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-query-runtime = { path = "../crm-query-runtime" }
 prost = "0.14"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }

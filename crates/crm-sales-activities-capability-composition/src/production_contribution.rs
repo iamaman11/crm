@@ -52,12 +52,11 @@ pub fn build_contribution(
             store.clone(),
             Arc::new(SalesActivitiesCapabilityPlannerRouter),
         ));
-    let mutation_validator: Arc<dyn CapabilitySemanticValidator> = Arc::new(
-        ActivationGatedMutationValidator::new(
+    let mutation_validator: Arc<dyn CapabilitySemanticValidator> =
+        Arc::new(ActivationGatedMutationValidator::new(
             activation.clone(),
             Arc::new(NoopMutationSemanticValidator),
-        ),
-    );
+        ));
     contributions
         .add_mutations(
             mutation_capability_definitions()?,

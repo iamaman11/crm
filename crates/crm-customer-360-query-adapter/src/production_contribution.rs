@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
-use crate::{Customer360QueryAdapter, query_capability_definitions as adapter_query_capability_definitions};
+use crate::{
+    Customer360QueryAdapter, query_capability_definitions as adapter_query_capability_definitions,
+};
 use crm_application_composition::{
     ActivationGatedQueryValidator, ModuleActivationPort, ModuleContributionSet,
 };
@@ -32,12 +34,17 @@ pub fn build_contribution(
     } = dependencies;
     let mut contributions = ModuleContributionSet::new();
     let queries = Arc::new(Customer360QueryAdapter::new(store, visibility_authorizer));
-    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(
-        ActivationGatedQueryValidator::new(activation, queries.clone()),
-    );
+    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(ActivationGatedQueryValidator::new(
+        activation,
+        queries.clone(),
+    ));
     let executor: Arc<dyn QueryExecutor> = queries;
     contributions
-        .add_queries(production_query_capability_definitions()?, validator, executor)
+        .add_queries(
+            production_query_capability_definitions()?,
+            validator,
+            executor,
+        )
         .map_err(production_composition_error)?;
     Ok(contributions)
 }
