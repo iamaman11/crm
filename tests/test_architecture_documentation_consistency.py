@@ -198,6 +198,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Repository step 13 is the current next permitted implementation step and is not started.",
             self.status,
         )
+        self.assertIn(
+            "Repository step 14 follows only after repository step 13 is accepted and synchronized.",
+            self.status,
+        )
 
         for statement in ("run in parallel", "separate parallel lane", "runs alongside Phase 8A"):
             for document in self.authoritative_status_documents:

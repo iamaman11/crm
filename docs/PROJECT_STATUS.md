@@ -142,7 +142,7 @@ Repository step 13 is the current next permitted implementation step and is not 
 
 ## Following permitted repository packet
 
-repository step 13 is the next permitted implementation step and is not started until every repository step 12 owner batch and final Stage D exit evidence are accepted and synchronized. It will then complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions.
+Repository step 14 follows only after repository step 13 is accepted and synchronized. It will perform the first measured behavior-neutral transitional domain-cluster consolidation.
 
 
 ## Architecture 10/10 declaration boundary
