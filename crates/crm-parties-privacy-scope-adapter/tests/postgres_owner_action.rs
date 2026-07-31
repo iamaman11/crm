@@ -13,8 +13,8 @@ use crm_module_sdk::{
     DataClass, ExecutionContext, ModuleExecutionContext, ModuleId, RecordId, RequestId,
     RetentionPolicyId, SchemaVersion, TenantId, TraceId,
 };
-use crm_parties::decode_party_state;
-use crm_parties_capability_adapter::{RECORD_TYPE, persisted_contract};
+use crm_parties::{CreateParty, Party, PartyId, PartyKind, decode_party_state};
+use crm_parties_capability_adapter::{RECORD_TYPE, persisted_contract, persisted_payload};
 use crm_parties_privacy_scope_adapter::{
     CAPABILITY_ID as SCOPE_CAPABILITY_ID, CAPABILITY_VERSION as SCOPE_CAPABILITY_VERSION,
     OWNER_ACTION_CAPABILITY_ID, parties_privacy_action_definition, parties_privacy_action_planner,
@@ -26,6 +26,7 @@ const TENANT_A: &str = "tenant-parties-owner-action-a";
 const TENANT_B: &str = "tenant-parties-owner-action-b";
 const PARTY_ID: &str = "party-owner-action-postgres-1";
 const ORIGINAL_NAME: &str = "Ada Owner Action";
+const BASE_TIME_NANOS: i64 = 1_800_000_000_000_000_000;
 
 #[tokio::test]
 async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
@@ -39,8 +40,10 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     let application = PgPool::connect(&database_url).await.unwrap();
     let store = PostgresDataStore::from_pool(application);
     let definition = parties_privacy_action_definition().unwrap();
-    let executor =
-        PostgresPrivacyOwnerActionExecutor::new(store, Arc::new(parties_privacy_action_planner()));
+    let executor = PostgresPrivacyOwnerActionExecutor::new(
+        store,
+        Arc::new(parties_privacy_action_planner()),
+    );
 
     let applied_attempt = attempt(
         TENANT_A,
@@ -63,16 +66,14 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     assert_eq!(first.affected_resources.len(), 1);
     assert_eq!(first.affected_resources[0].version, Some(2));
 
-    let replay = executor
-        .execute(&definition, applied_request)
-        .await
-        .unwrap();
+    let replay = executor.execute(&definition, applied_request).await.unwrap();
     assert!(replay.replayed);
     assert_eq!(replay.affected_resources[0].version, Some(2));
 
     let stored = sqlx::query(
         r#"
-        SELECT version, payload_bytes, deleted_at, last_business_transaction_id
+        SELECT version, payload_bytes, deleted_at IS NULL AS not_deleted,
+               last_business_transaction_id
         FROM crm.records
         WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3
         "#,
@@ -85,19 +86,24 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     .unwrap();
     let version: i64 = stored.try_get("version").unwrap();
     let payload: Vec<u8> = stored.try_get("payload_bytes").unwrap();
-    let deleted_at: Option<chrono::DateTime<chrono::Utc>> = stored.try_get("deleted_at").unwrap();
+    let not_deleted: bool = stored.try_get("not_deleted").unwrap();
     let last_transaction: String = stored.try_get("last_business_transaction_id").unwrap();
     let party = decode_party_state(&payload).unwrap();
     assert_eq!(version, 2);
     assert_eq!(party.version(), 2);
     assert!(party.display_name().starts_with("minimized person "));
     assert!(!party.display_name().contains(ORIGINAL_NAME));
-    assert!(deleted_at.is_none());
+    assert!(not_deleted);
     assert_eq!(last_transaction, applied_transaction);
 
     assert_evidence_counts(&admin, TENANT_A, &applied_transaction, 1, 1, 1, 1).await;
 
-    let stale = attempt(TENANT_A, "stale", 1, EvidenceClass::RetainMinimizedEvidence);
+    let stale = attempt(
+        TENANT_A,
+        "stale",
+        1,
+        EvidenceClass::RetainMinimizedEvidence,
+    );
     let stale_transaction = transaction_id(&stale);
     let error = executor
         .execute(&definition, capability_request(&definition, &stale))
@@ -114,7 +120,10 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     );
     let cross_transaction = transaction_id(&cross_tenant);
     let error = executor
-        .execute(&definition, capability_request(&definition, &cross_tenant))
+        .execute(
+            &definition,
+            capability_request(&definition, &cross_tenant),
+        )
         .await
         .unwrap_err();
     assert_eq!(error.code, "PRIVACY_OWNER_RECORD_NOT_FOUND");
@@ -173,12 +182,12 @@ fn attempt(
         registry.registry_version().clone(),
         *registry.digest(),
         "ERASURE_DISCOVERY".to_owned(),
-        1,
+        BASE_TIME_NANOS / 1_000_000,
     )
     .unwrap();
     let resource = ScopeResource::new(
         RECORD_TYPE.to_owned(),
-        party_id,
+        party_id.clone(),
         resource_version,
         DataClass::Personal,
         evidence_class,
@@ -187,16 +196,20 @@ fn attempt(
     .unwrap();
     let contribution = OwnerScopeContribution::new(
         contract,
-        lineage.clone(),
+        tenant_id.clone(),
+        party_id,
+        1,
         vec![resource],
         ContributionCompletenessProof::new(true, 1, 1, 1, [0x71; 32]).unwrap(),
     )
     .unwrap();
+    let discovery_contribution =
+        DiscoveryOwnerScopeContribution::new(lineage.clone(), contribution).unwrap();
     let snapshot = DiscoveryScopeSnapshot::finalize(
         lineage,
         registry,
-        vec![DiscoveryOwnerScopeContribution::Complete(contribution)],
-        1_000,
+        BASE_TIME_NANOS,
+        [discovery_contribution],
     )
     .unwrap();
     let plan = PrivacyActionPlan::build(
@@ -210,10 +223,11 @@ fn attempt(
             false,
         )
         .unwrap(),
-        2_000,
+        BASE_TIME_NANOS + 1,
     )
     .unwrap();
-    let decision = PrivacyRetentionDecisionSet::build(&plan, &[], 3_000).unwrap();
+    let decision =
+        PrivacyRetentionDecisionSet::build(&plan, &[], BASE_TIME_NANOS + 2).unwrap();
     PrivacyOwnerActionAttempt::build(
         tenant_id,
         privacy_case_id,
@@ -223,7 +237,7 @@ fn attempt(
         *decision.digest(),
         &decision.items()[0],
         0,
-        4_000,
+        BASE_TIME_NANOS + 3,
     )
     .unwrap()
 }
@@ -241,11 +255,9 @@ fn capability_request(
             execution: ExecutionContext {
                 tenant_id: attempt.tenant_id().clone(),
                 actor_id: ActorId::try_new("privacy-owner-action-test").unwrap(),
-                request_id: RequestId::try_new(format!("request-{}", attempt.attempt_id()))
-                    .unwrap(),
+                request_id: RequestId::try_new(format!("request-{}", attempt.attempt_id())).unwrap(),
                 correlation_id: CorrelationId::try_new("privacy-owner-action-correlation").unwrap(),
-                causation_id: CausationId::try_new(format!("cause-{}", attempt.attempt_id()))
-                    .unwrap(),
+                causation_id: CausationId::try_new(format!("cause-{}", attempt.attempt_id())).unwrap(),
                 trace_id: TraceId::try_new("privacy-owner-action-trace").unwrap(),
                 capability_id: definition.capability_id.clone(),
                 capability_version: definition.capability_version.clone(),
@@ -291,15 +303,14 @@ async fn seed_owner_action_capability(admin: &PgPool) {
 
 async fn seed_party(admin: &PgPool) {
     let contract = persisted_contract();
-    let payload = serde_json::to_vec(&serde_json::json!({
-        "party_id": PARTY_ID,
-        "kind": "person",
-        "display_name": ORIGINAL_NAME,
-        "created_at_unix_nanos": 10,
-        "updated_at_unix_nanos": 10,
-        "version": 1
-    }))
+    let party = Party::create(CreateParty {
+        party_id: PartyId::try_new(PARTY_ID).unwrap(),
+        kind: PartyKind::Person,
+        display_name: ORIGINAL_NAME.to_owned(),
+        occurred_at_unix_nanos: 10,
+    })
     .unwrap();
+    let payload = persisted_payload(&party).unwrap().bytes;
     let mut transaction = admin.begin().await.unwrap();
     sqlx::query("SET LOCAL session_replication_role = 'replica'")
         .execute(&mut *transaction)
