@@ -158,7 +158,7 @@ Issue #194 remains open.
 - Stage A documentation/source hierarchy and stable navigation are complete.
 - Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions are accepted; repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration and removal of those three direct lint exceptions.
 - Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public restriction/legal-hold placement, retention adjudication, durable replay-safe owner execution/outcomes, governed access/export assembly, authoritative exact-nine owner-specific anonymization/deletion execution and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
-- Stage D is in progress: Customer Accounts aggregation is accepted through PR #222 and repository step 12 batch 1 for Parties, Consents, Contact Points and Party Relationships is accepted through PR #246; remaining owner contribution entry points and ordinary-registration concrete imports still belong to later bounded step-12 batches.
+- Stage D is complete: all currently active first-party owners expose owner-owned production contribution boundaries aggregated through `crm-first-party-modules`; generic native composition retains platform-level composition only, accepted through PRs #246, #248 and #249.
 - Stage E is complete through PR #239: deterministic Rust closure, exact repository-scope ownership, executable contract/Protobuf/API/migration/PostgreSQL/process/product/frontend/operations workflow coverage, exact-head evidence and unknown-path fail-closed enforcement are accepted.
 - Stage H is in progress: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands are repository step 18.
 - Stage F is in progress: reusable generic mutation/query conformance is accepted through PR #235; generic worker conformance is repository step 16, contract lifecycle enforcement is step 17 and real Customer Privacy worker adoption is step 19.
@@ -182,7 +182,7 @@ Only one implementation packet may be active. The current order begins:
 -> 9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — complete through PR #239
 -> 10. governed Customer Privacy access/export assembly — complete through PR #241
 -> 11. owner-specific deletion, anonymization and supported crypto-shred execution — complete through PR #244
--> 12. complete first-party contribution aggregation for all currently active owners — in progress; batch 1 complete through PR #246
+-> 12. complete first-party contribution aggregation for all currently active owners — complete through PR #249
 -> 13. complete dependency/public-surface/reverse-fan-out/exception governance
 -> 14. first measured behavior-neutral transitional domain-cluster consolidation
 -> 15. Party tombstone, no-orphan proof and projection/search/cache convergence

@@ -202,6 +202,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Repository step 14 follows only after repository step 13 is accepted and synchronized.",
             self.status,
         )
+        self.assertIn("- Stage D is complete:", self.status)
+        self.assertIn(
+            "-> 12. complete first-party contribution aggregation for all currently active owners — complete through PR #249",
+            self.status,
+        )
+        self.assertNotIn("Stage D is in progress", self.status)
+        self.assertNotIn("step 12 batch 1 complete through PR #246", self.status.lower())
 
         for statement in ("run in parallel", "separate parallel lane", "runs alongside Phase 8A"):
             for document in self.authoritative_status_documents:
@@ -375,8 +382,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("repository step 22 is a phase 8a architecture measurement checkpoint", self.plan.lower())
         self.assertIn("repository step 25", self.plan.lower())
         self.assertIn("repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration", self.status.lower())
-        self.assertIn("## Next permitted repository packet\n\nRepository step 12 remains the current permitted implementation step", self.status)
-        self.assertNotIn("## Following permitted repository packet\n\nRepository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes. Repository step 13", self.status)
+        self.assertIn("## Next permitted repository packet\n\nRepository step 13 is the current next permitted implementation step and is not started", self.status)
+        self.assertIn("## Following permitted repository packet\n\nRepository step 14 follows only after repository step 13 is accepted and synchronized", self.status)
         self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241", self.catalog)
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
         self.assertIn(
