@@ -1,7 +1,7 @@
 {
   "schema_version": "crm.repository-packet/v1",
   "packet_id": "repository-step-12-contribution-aggregation-batch-1",
-  "title": "Aggregate Parties, Contact Points and Party Relationships contributions",
+  "title": "Aggregate Parties, Consents, Contact Points and Party Relationships contributions",
   "status": "active",
   "baseline": {
     "ref": "main",
@@ -10,11 +10,12 @@
   "tracking_issues": [
     194
   ],
-  "objective": "Advance repository step 12 with one behavior-neutral owner batch: expose stable owner-owned production contribution entry points for Parties, Contact Points and Party Relationships, merge them through crm-first-party-modules, and remove their ordinary registration wiring and definition imports from generic application runtime while preserving exact inventory, ordering and activation behavior.",
+  "objective": "Advance repository step 12 with one behavior-neutral owner batch: expose stable owner-owned production contribution entry points and exact inventory factories for Parties, Consents, Contact Points and Party Relationships, merge them through crm-first-party-modules, and remove their ordinary registration or inventory bypasses from generic application runtime while preserving exact inventory, ordering and activation behavior.",
   "allowed_paths": [
     "Cargo.lock",
     "crates/crm-application-runtime/Cargo.toml",
     "crates/crm-application-runtime/src/native_composition.rs",
+    "crates/crm-consents-capability-composition/src/lib.rs",
     "crates/crm-contact-points-capability-composition/Cargo.toml",
     "crates/crm-contact-points-capability-composition/src/lib.rs",
     "crates/crm-first-party-modules/Cargo.toml",
@@ -44,11 +45,12 @@
   ],
   "deliverables": [
     "Parties exposes exact mutation/query definition factories and one activation-gated production contribution builder from an existing owner composition package",
+    "Consents exposes its exact mutation/query definition factories through its existing owner production composition and the first-party aggregate",
     "Contact Points exposes exact mutation/query definition factories and one activation-gated production contribution builder preserving Party reference validation",
     "Party Relationships exposes exact mutation/query definition factories and one activation-gated production contribution builder preserving Party reference validation",
     "crm-first-party-modules creates shared Party references internally and merges Parties, Customer Accounts, Consents, Contact Points and Party Relationships in the accepted contribution order",
-    "generic application runtime consumes the three owners only through crm-first-party-modules for ordinary inventory and registration",
-    "native composition guards reject renewed direct definition/registration bypasses",
+    "generic application runtime consumes the four owners only through crm-first-party-modules for ordinary inventory and registration",
+    "native composition guards reject renewed direct definition or registration bypasses",
     "Cargo.lock records only intentional internal path-edge changes and no package or external dependency version change"
   ],
   "required_checks": [
@@ -60,7 +62,7 @@
   "acceptance": [
     "public mutation/query coordinates, inventory contents and compatibility APIs are byte-for-byte equivalent in meaning and preserve their existing order",
     "tenant activation, semantic reference validation, visibility authorization and transactional execution behavior are unchanged",
-    "Parties, Contact Points and Party Relationships ordinary registration no longer appears in generic native composition",
+    "Parties, Consents, Contact Points and Party Relationships ordinary registration or inventory bypasses no longer appear in generic native composition",
     "first-party aggregate contains no repeated module identifiers or capability coordinates",
     "workspace package count and external dependency families and versions are unchanged",
     "repository step 12 remains in progress and repository step 13 is not started"
@@ -70,7 +72,7 @@
     "change product behavior, routes, coordinates, contracts, schemas, migrations, persistence or workers",
     "create, remove, rename or consolidate crates",
     "change external dependency versions or add a dependency family",
-    "change generic runtime algorithms beyond removing migrated owner registration wiring",
+    "change generic runtime algorithms beyond removing migrated owner registration or inventory wiring",
     "start repository step 13 or later work"
   ]
 }
