@@ -22,9 +22,6 @@ use crm_customer_data_operations_privacy_scope_adapter::{
 use crm_customer_enrichment_privacy_scope_adapter::{
     customer_enrichment_privacy_action_definition, customer_enrichment_privacy_action_planner,
 };
-pub use crm_customer_privacy::{
-    PrivacyOwnerActionAttempt, PrivacyOwnerActionOutcome, PrivacyOwnerOutcomeStatus,
-};
 use crm_customer_privacy::{
     MODULE_ID as CUSTOMER_PRIVACY_MODULE_ID, OWNER_ACTION_ATTEMPT_STATE_MAXIMUM_BYTES,
     OWNER_ACTION_ATTEMPT_STATE_RETENTION_POLICY_ID, OWNER_ACTION_ATTEMPT_STATE_SCHEMA_ID,
@@ -33,6 +30,9 @@ use crm_customer_privacy::{
     OWNER_ACTION_COMMAND_SCHEMA_VERSION, PrivacyOwnerActionCommand,
     decode_owner_action_attempt_state, discovery_sha256, encode_owner_action_command,
     owner_action_attempt_state_descriptor_hash, owner_action_command_descriptor_hash,
+};
+pub use crm_customer_privacy::{
+    PrivacyOwnerActionAttempt, PrivacyOwnerActionOutcome, PrivacyOwnerOutcomeStatus,
 };
 pub use crm_customer_privacy_application::{
     CheckpointAdvance, ExecutionPreparation, OwnerActionEndpoint, OwnerActionEndpoints,
@@ -269,8 +269,8 @@ fn attempt_from_row(
         .map_err(database_error)?;
     let maximum: i64 = row.try_get("attempt_maximum").map_err(database_error)?;
     let retention: String = row.try_get("attempt_retention").map_err(database_error)?;
-    let expected_maximum = i64::try_from(OWNER_ACTION_ATTEMPT_STATE_MAXIMUM_BYTES)
-        .map_err(configuration_error)?;
+    let expected_maximum =
+        i64::try_from(OWNER_ACTION_ATTEMPT_STATE_MAXIMUM_BYTES).map_err(configuration_error)?;
     if schema_id != OWNER_ACTION_ATTEMPT_STATE_SCHEMA_ID
         || schema_version != OWNER_ACTION_ATTEMPT_STATE_SCHEMA_VERSION
         || descriptor_hash.as_slice() != owner_action_attempt_state_descriptor_hash()
@@ -350,10 +350,8 @@ fn capability_request(
         data_class: DataClass::Restricted,
         encoding: PayloadEncoding::Json,
         maximum_size_bytes: OWNER_ACTION_COMMAND_MAXIMUM_BYTES,
-        retention_policy_id: RetentionPolicyId::try_new(
-            OWNER_ACTION_COMMAND_RETENTION_POLICY_ID,
-        )
-        .map_err(configuration_error)?,
+        retention_policy_id: RetentionPolicyId::try_new(OWNER_ACTION_COMMAND_RETENTION_POLICY_ID)
+            .map_err(configuration_error)?,
         bytes,
     };
     input.validate()?;
@@ -408,13 +406,10 @@ fn canonical_failure_code(code: &str) -> String {
 }
 
 fn derived_request_id(attempt_id: &crm_module_sdk::RecordId) -> Result<RequestId, SdkError> {
-    RequestId::try_new(format!("privacy-owner-request-{attempt_id}"))
-        .map_err(configuration_error)
+    RequestId::try_new(format!("privacy-owner-request-{attempt_id}")).map_err(configuration_error)
 }
 
-fn derived_causation_id(
-    attempt_id: &crm_module_sdk::RecordId,
-) -> Result<CausationId, SdkError> {
+fn derived_causation_id(attempt_id: &crm_module_sdk::RecordId) -> Result<CausationId, SdkError> {
     CausationId::try_new(format!("privacy-owner-causation-{attempt_id}"))
         .map_err(configuration_error)
 }
@@ -515,6 +510,9 @@ mod tests {
             "PRIVACY_OWNER_ACTION_UNSUPPORTED"
         );
         assert_eq!(canonical_failure_code("not-safe"), FALLBACK_FAILURE_CODE);
-        assert_eq!(canonical_failure_code(&"A".repeat(97)), FALLBACK_FAILURE_CODE);
+        assert_eq!(
+            canonical_failure_code(&"A".repeat(97)),
+            FALLBACK_FAILURE_CODE
+        );
     }
 }
