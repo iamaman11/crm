@@ -131,8 +131,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — **Complete through PR #237**;",
             "9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Complete through PR #239**;",
             "10. governed Customer Privacy access/export assembly — **Complete through PR #241**;",
-            "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Next**;",
-            "12. complete first-party contribution aggregation for all currently active owners without behavior changes;",
+            "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Complete through PR #244**;",
+            "12. complete first-party contribution aggregation for all currently active owners without behavior changes — **Next**;",
             "13. complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;",
             "14. first measured behavior-neutral transitional domain-cluster consolidation;",
             "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;",
@@ -160,11 +160,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.phase8,
         )
         self.assertIn(
-            "11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **next**;",
+            "11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **complete through PR #244**;",
             self.phase8,
         )
         self.assertIn(
-            "12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes;",
+            "12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **next**;",
             self.phase8,
         )
         self.assertIn(
@@ -176,7 +176,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.phase8,
         )
         self.assertIn(
-            "A later step must not start while repository step 11 is unfinished.",
+            "A later step must not start while repository step 12 is unfinished.",
             self.phase8,
         )
         for step in range(1, 6):
@@ -251,6 +251,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90",
                 "33 of 33",
             ),
+            (
+                self.authoritative_status_documents,
+                "PR #244",
+                "405d2dbb97bb371b51cfb1d4ffb5549a57262878",
+                "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db",
+                "34 of 34",
+            ),
         )
         for documents, pr, source, merge, workflows in evidence:
             self.assert_evidence_in_documents(
@@ -294,76 +301,72 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-11-owner-privacy-actions",
+            "repository-step-11-evidence-sync",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
         self.assertEqual(
             self.packet["baseline"]["sha"],
-            "240a451634f75752a80b20c2ccb2a114a3e00a04",
+            "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db",
         )
         self.assertEqual(self.packet["tracking_issues"], [126, 194])
         for path in (
-            ".github/workflows/customer-privacy-owner-execution.yml",
-            "crates/crm-core-data/src/privacy_owner_action.rs",
-            "crates/crm-customer-privacy-production/src/owner_execution.rs",
-            "crates/crm-parties-privacy-scope-adapter/tests/postgres_owner_action.rs",
-            "modules/crm-customer-privacy/src/owner_action_command.rs",
             "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, self.packet["allowed_paths"])
         for path in (
+            ".github/workflows/**",
             "Cargo.lock",
             "Cargo.toml",
-            "affected-scope-policy.json",
-            "architecture-policy.json",
+            "apps/**",
             "contracts/**",
-            "database/migrations/**",
-            "modules/**/module.yaml",
+            "crates/**",
+            "database/**",
+            "modules/**",
             "packages/**",
             "proto/**",
             "schemas/**",
-            "services/crm-api/src/**",
+            "scripts/**",
+            "services/**",
         ):
             self.assertIn(path, self.packet["forbidden_paths"])
         self.assertEqual(
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Customer Privacy Owner Execution CI",
                 "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
         self.assertIn(
-            "owner mutation and standard idempotency, business transaction, audit and outbox evidence commit atomically under tenant FORCE RLS",
+            "repository step 12 is the only next implementation packet",
             self.packet["acceptance"],
         )
         self.assertIn(
-            "repository step 12 is not started",
-            self.packet["acceptance"],
-        )
-        self.assertIn(
-            "add crates, dependencies, contracts, migrations or workspace packages",
+            "implement repository step 12 contribution aggregation",
             self.packet["non_goals"],
         )
 
         self.assertIn("Generated by scripts/generate_repository_navigation.py", self.active_packet)
-        self.assertIn("repository-step-11-owner-privacy-actions", self.active_packet)
+        self.assertIn("repository-step-11-evidence-sync", self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertRegex(self.active_packet, r"sha256:[0-9a-f]{64}")
         self.assertIn("orientation only", self.active_packet)
 
         for document in self.authoritative_status_documents:
-            self.assertIn("PR #241", document)
-            self.assertIn("2bb3a671deb18a6ae3bcea228ed01ed287b9de6a", document)
-            self.assertIn("19232f6f3e2ae87aabeb080257c1aac5477a6616", document)
+            self.assertIn("PR #244", document)
+            self.assertIn("405d2dbb97bb371b51cfb1d4ffb5549a57262878", document)
+            self.assertIn("4b08202fe9dd0c0df83567e24e6b9d86fb79c9db", document)
             self.assertIn("34 of 34", document)
-            self.assertIn("repository step 11", document.lower())
+            self.assertIn("repository step 12", document.lower())
 
     def test_stage_accountability_and_live_catalog_are_current(self) -> None:
         for stage in (
@@ -383,7 +386,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("repository step 22 is a phase 8a architecture measurement checkpoint", self.plan.lower())
         self.assertIn("repository step 25", self.plan.lower())
         self.assertIn("repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration", self.status.lower())
-        self.assertIn("## Following permitted repository packet\n\nRepository step 12 completes first-party contribution aggregation", self.status)
+        self.assertIn("## Next permitted repository packet\n\nRepository step 12 completes first-party contribution aggregation", self.status)
         self.assertNotIn("## Following permitted repository packet\n\nRepository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes. Repository step 13", self.status)
         self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241", self.catalog)
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)

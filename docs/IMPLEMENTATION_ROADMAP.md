@@ -52,7 +52,7 @@ Issue #194 remains **Open**.
 
 - Stage A documentation/navigation baseline — **Complete**.
 - Stage B dependency, crate and exception governance — **In progress; Rust toolchain/lint prerequisite accepted through PR #218 and lockfile-preserving Rust workflows accepted through PR #232**.
-- Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, immediate deny-only restriction placement/final owner guard accepted through PR #226, legal-hold/mandatory-retention precedence accepted through PR #230, durable replay-safe owner execution/outcomes accepted through PR #237, and governed access/export assembly accepted through PR #241.
+- Stage C Customer Privacy golden owner packages — **In progress**: package baseline complete through PR #205, final customer-subject policy prerequisite accepted through PR #224, immediate deny-only restriction placement/final owner guard accepted through PR #226, legal-hold/mandatory-retention precedence accepted through PR #230, durable replay-safe owner execution/outcomes accepted through PR #237, and governed access/export assembly accepted through PR #241, and authoritative exact-nine owner-specific anonymization/deletion execution accepted through PR #244.
 - Stage D contribution aggregation — **In progress; first bounded Customer Accounts registration-inventory aggregation accepted through PR #222; repository step 12 is the explicit completion step for all currently active first-party owners**.
 - Stage E — **Complete through PR #239**: deterministic Rust closure, exact eight-category repository ownership, contract/Protobuf/API/migration/PostgreSQL/process/product/frontend/operations selection, live workflow-filter compatibility, exact-head evidence and unknown-path fail-closed enforcement are accepted.
 - Stage H — **In progress**: deterministic explain, packet-check and generated navigation are accepted through PR #228; repository step 18 owns local lifecycle completion.
@@ -60,9 +60,11 @@ Issue #194 remains **Open**.
 - Stage G — **Not started**: repository step 14 owns the first measured behavior-neutral consolidation.
 - Stage I — **Not started as a complete stage**: repository step 20 owns frontend/operations evidence and step 21 proves Phase 8A closure.
 
-Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232, PR #230, PR #235, PR #237, PR #239 and PR #241. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
+Accepted architecture evidence includes PR #197, PR #199, PR #200, PR #203, PR #204, PR #205, PR #218, PR #222, PR #224, PR #226, PR #228, PR #232, PR #230, PR #235, PR #237, PR #239, PR #241 and PR #244. Current workspace package count remains `113`; root dependencies remain `prost`, `serde`, `serde_json`, `sha2`; exact Rust `1.97.1`, workspace `rust-version = "1.97.1"` and zero-warning Rust/Clippy budgets are enforced. Three historical direct `too_many_arguments` lint tables remain exact, expiring, no-growth exceptions.
 
-The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–10 are complete through PR #218, PR #220, PR #222, PR #226, PR #228, PR #230, PR #235, PR #237, PR #239 and PR #241; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — is the current next packet.
+The architecture stage table is completion accounting, not a set of independent work queues. The binding repository order is section 2.4 of the architecture plan. Repository steps 1–11 are complete through PR #218, PR #220, PR #222, PR #226, PR #228, PR #230, PR #235, PR #237, PR #239, PR #241 and PR #244; PR #224 accepted the smallest inserted prerequisite required by step 4, and PR #232 accepted the smallest lockfile-preservation prerequisite required before step 6. Repository step 11 is accepted through PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / squash merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 applicable permanent workflows on one unchanged exact head. It executes approved owner-specific anonymization and supported deletion through the exact nine authoritative owner boundaries, binds every call to canonical immutable case/snapshot/plan/retention/attempt lineage, and persists replay-safe tenant-bound mutation, idempotency, business transaction, audit and outbox evidence atomically under FORCE RLS. Real Parties acceptance proves mutation, exact replay, stale and cross-tenant rejection, clean PostgreSQL, rollback/reapply and repeated execution. Unsupported owner/action combinations and unavailable crypto-shred fail closed before mutation. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no crate, dependency, contract, migration, Cargo.lock, workspace-package or generic-runtime business-switch change was introduced.
+
+Repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — is the current next packet.
 
 
 ### 3.1 Remaining stage-to-step ownership
@@ -71,8 +73,7 @@ The stage labels are accounting only; the architecture master sequence remains a
 
 | Remaining step | Primary stage | Supporting stages |
 |---|---|---|
-| 11 — deletion/anonymization/crypto-shred | C | B, F |
-| 12 — complete contribution aggregation | D | B, E |
+| 12 — complete contribution aggregation — **Next** | D | B, E |
 | 13 — dependency/public-surface/fan-out/exception governance completion | B | A, E |
 | 14 — measured consolidation | G | B, D |
 | 15 — tombstone/no-orphan/convergence | C | F |
@@ -98,7 +99,7 @@ The stage labels are accounting only; the architecture master sequence remains a
 
 Issue #126 is **In progress**.
 
-Latest accepted runtime inventory is seven public mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241. `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, repository-step-8 owner execution and `customer_privacy.access_export.request@1.0.0` remain accepted trusted-internal runtime without public ingress or a Customer Privacy worker.
+Latest accepted runtime inventory is seven public mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244. `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution remain accepted trusted-internal runtime without public ingress or a Customer Privacy worker.
 
 All nine privacy owner-scope implementations are accepted:
 

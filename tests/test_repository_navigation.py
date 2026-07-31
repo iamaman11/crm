@@ -25,57 +25,56 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-11-owner-privacy-actions")
+        self.assertEqual(packet["packet_id"], "repository-step-11-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "240a451634f75752a80b20c2ccb2a114a3e00a04",
+            "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db",
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         for path in (
-            ".github/workflows/customer-privacy-owner-execution.yml",
-            "crates/crm-core-data/src/privacy_owner_action.rs",
-            "crates/crm-customer-privacy-production/src/owner_execution.rs",
-            "crates/crm-parties-privacy-scope-adapter/tests/postgres_owner_action.rs",
-            "modules/crm-customer-privacy/src/owner_action_command.rs",
             "docs/ACTIVE_PACKET.md",
+            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+            "docs/IMPLEMENTATION_ROADMAP.md",
+            "docs/PHASE8_DELIVERY_PLAN.md",
+            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, packet["allowed_paths"])
         for path in (
+            ".github/workflows/**",
             "Cargo.lock",
             "Cargo.toml",
-            "affected-scope-policy.json",
-            "architecture-policy.json",
+            "apps/**",
             "contracts/**",
-            "database/migrations/**",
-            "modules/**/module.yaml",
+            "crates/**",
+            "database/**",
+            "modules/**",
             "packages/**",
             "proto/**",
             "schemas/**",
-            "services/crm-api/src/**",
+            "scripts/**",
+            "services/**",
         ):
             self.assertIn(path, packet["forbidden_paths"])
         self.assertEqual(
             packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Customer Privacy Owner Execution CI",
                 "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
         self.assertIn(
-            "owner mutation and standard idempotency, business transaction, audit and outbox evidence commit atomically under tenant FORCE RLS",
+            "repository step 12 is the only next implementation packet",
             packet["acceptance"],
         )
-        self.assertIn("repository step 12 is not started", packet["acceptance"])
         self.assertIn(
-            "add crates, dependencies, contracts, migrations or workspace packages",
+            "implement repository step 12 contribution aggregation",
             packet["non_goals"],
         )
 
@@ -303,10 +302,6 @@ class RepositoryNavigationTests(unittest.TestCase):
                 }
                 for name, path in (
                     ("Affected Scope CI", ".github/workflows/affected-scope.yml"),
-                    (
-                        "Customer Privacy Owner Execution CI",
-                        ".github/workflows/customer-privacy-owner-execution.yml",
-                    ),
                     ("Governance CI", ".github/workflows/governance.yml"),
                     ("Rust CI", ".github/workflows/rust.yml"),
                     ("Rust Generated Sync", ".github/workflows/rust-generated-sync.yml"),
@@ -317,7 +312,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "240a451634f75752a80b20c2ccb2a114a3e00a04"
+                    "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db"
                 ),
             ),
             patch(
