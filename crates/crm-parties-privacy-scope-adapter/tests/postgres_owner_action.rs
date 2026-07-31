@@ -51,7 +51,8 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
         "applied",
         1,
         EvidenceClass::RetainMinimizedEvidence,
-    );
+    )
+    .unwrap();
     let applied_request = capability_request(&definition, &applied_attempt);
     let applied_transaction = applied_request
         .context
@@ -102,7 +103,7 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
 
     assert_evidence_counts(&admin, TENANT_A, &applied_transaction, 1, 1, 1, 1).await;
 
-    let stale = attempt(TENANT_A, "stale", 1, EvidenceClass::RetainMinimizedEvidence);
+    let stale = attempt(TENANT_A, "stale", 1, EvidenceClass::RetainMinimizedEvidence).unwrap();
     let stale_transaction = transaction_id(&stale);
     let error = executor
         .execute(&definition, capability_request(&definition, &stale))
@@ -116,7 +117,8 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
         "cross-tenant",
         1,
         EvidenceClass::RetainMinimizedEvidence,
-    );
+    )
+    .unwrap();
     let cross_transaction = transaction_id(&cross_tenant);
     let error = executor
         .execute(&definition, capability_request(&definition, &cross_tenant))
@@ -125,19 +127,14 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     assert_eq!(error.code, "PRIVACY_OWNER_RECORD_NOT_FOUND");
     assert_evidence_counts(&admin, TENANT_B, &cross_transaction, 0, 0, 0, 0).await;
 
-    let crypto = attempt(
+    let crypto_error = attempt(
         TENANT_A,
         "crypto-shred",
         2,
         EvidenceClass::CryptoShreddableData,
-    );
-    let crypto_transaction = transaction_id(&crypto);
-    let error = executor
-        .execute(&definition, capability_request(&definition, &crypto))
-        .await
-        .unwrap_err();
-    assert_eq!(error.code, "PRIVACY_OWNER_CRYPTO_SHRED_UNAVAILABLE");
-    assert_evidence_counts(&admin, TENANT_A, &crypto_transaction, 0, 0, 0, 0).await;
+    )
+    .unwrap_err();
+    assert!(crypto_error.contains("UnsupportedCryptoShred"));
 
     let final_version: i64 = sqlx::query_scalar(
         "SELECT version FROM crm.records WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
@@ -156,7 +153,7 @@ fn attempt(
     suffix: &str,
     resource_version: u64,
     evidence_class: EvidenceClass,
-) -> PrivacyOwnerActionAttempt {
+) -> Result<PrivacyOwnerActionAttempt, String> {
     let tenant_id = TenantId::try_new(tenant).unwrap();
     let privacy_case_id = RecordId::try_new(format!("privacy-case-{suffix}")).unwrap();
     let party_id = RecordId::try_new(PARTY_ID).unwrap();
@@ -234,7 +231,7 @@ fn attempt(
         0,
         BASE_TIME_NANOS + 3,
     )
-    .unwrap()
+    .map_err(|error| format!("{error:?}"))
 }
 
 fn capability_request(
