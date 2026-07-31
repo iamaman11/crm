@@ -59,12 +59,26 @@ resolution_after = '''    subprocess.run(
         check=True,
     )
 '''
+identity_candidate_before = (
+    "select_definitions(&definitions, CANDIDATE_MUTATION_CAPABILITY_IDS),"
+)
+identity_candidate_after = (
+    "select_definitions(&definitions, &CANDIDATE_MUTATION_CAPABILITY_IDS),"
+)
+identity_merge_before = (
+    "select_definitions(&definitions, MERGE_MUTATION_CAPABILITY_IDS),"
+)
+identity_merge_after = (
+    "select_definitions(&definitions, &MERGE_MUTATION_CAPABILITY_IDS),"
+)
 
 for before, after, label in (
     (identity_insertion, "", "Identity Resolution repeated module insertion"),
     (customer_data_insertion, "", "Customer Data Operations repeated module insertion"),
     (materialize_anchor, materialize_replacement, "idempotent declaration normalization"),
     (resolution_before, resolution_after, "all-target lockfile and compilation resolution"),
+    (identity_candidate_before, identity_candidate_after, "candidate capability selection borrowing"),
+    (identity_merge_before, identity_merge_after, "merge capability selection borrowing"),
 ):
     if source.count(before) != 1:
         raise RuntimeError(f"temporary {label} anchor is not unique")
