@@ -21,47 +21,27 @@ from scripts.repo import build_parser
 
 ROOT = Path(__file__).resolve().parents[1]
 
+ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/IMPLEMENTATION_ROADMAP.md', 'docs/PHASE8_DELIVERY_PLAN.md', 'docs/PROJECT_STATUS.md', 'docs/generated/REPOSITORY_MAP.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
+
+
 
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-12-contribution-aggregation-batch-3")
+        self.assertEqual(packet["packet_id"], "repository-step-12-completion-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
-        self.assertEqual(packet["baseline"]["sha"], "b4222364c21cb74127834f5ff4f0739343d26379")
-        self.assertEqual(packet["tracking_issues"], [194])
-        self.assertEqual(packet["allowed_paths"], ['Cargo.lock',
- 'crates/crm-application-runtime/src/native_composition.rs',
- 'crates/crm-application-runtime/src/native_composition/customer_enrichment_reference_guards.rs',
- 'crates/crm-customer-360-query-adapter/Cargo.toml',
- 'crates/crm-customer-360-query-adapter/src/lib.rs',
- 'crates/crm-customer-360-query-adapter/src/production_contribution.rs',
- 'crates/crm-customer-enrichment-capability-composition/Cargo.toml',
- 'crates/crm-customer-enrichment-capability-composition/src/lib.rs',
- 'crates/crm-customer-enrichment-capability-composition/src/production_contribution.rs',
- 'crates/crm-customer-enrichment-capability-composition/src/reference_guards.rs',
- 'crates/crm-first-party-modules/Cargo.toml',
- 'crates/crm-first-party-modules/src/lib.rs',
- 'crates/crm-sales-activities-capability-composition/Cargo.toml',
- 'crates/crm-sales-activities-capability-composition/src/lib.rs',
- 'crates/crm-sales-activities-capability-composition/src/production_contribution.rs',
- 'docs/ACTIVE_PACKET.md',
- 'docs/generated/REPOSITORY_MAP.md',
- 'repository-packet.json',
- 'scripts/check_native_module_composition.py',
- 'scripts/generate_repository_navigation.py',
- 'tests/test_architecture_documentation_consistency.py',
- 'tests/test_native_module_composition.py',
- 'tests/test_repository_navigation.py'])
+        self.assertEqual(packet["baseline"]["sha"], "f36592211bed3e0df7cf3771164b4bc24026eff3")
+        self.assertEqual(packet["tracking_issues"], [194, 126])
+        self.assertEqual(packet["allowed_paths"], ALLOWED_PACKET_PATHS)
         self.assertEqual(
             packet["required_checks"],
             ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
         )
         self.assertIn(
-            "repository step 12 implementation is complete and repository step 13 is not started",
+            "documentation no longer describes repository step 12 or Stage D as in progress",
             packet["acceptance"],
         )
-
     def test_affected_scope_workflow_executes_real_packet_check(self) -> None:
         workflow = (
             ROOT / ".github/workflows/affected-scope.yml"
@@ -296,7 +276,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "b4222364c21cb74127834f5ff4f0739343d26379"
+                    "f36592211bed3e0df7cf3771164b4bc24026eff3"
                 ),
             ),
             patch(
