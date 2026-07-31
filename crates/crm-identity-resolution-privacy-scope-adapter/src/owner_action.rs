@@ -30,8 +30,7 @@ pub fn identity_resolution_privacy_action_definition() -> Result<CapabilityDefin
     )
 }
 
-pub const fn identity_resolution_privacy_action_planner() ->
-    IdentityResolutionPrivacyActionPlanner
+pub const fn identity_resolution_privacy_action_planner() -> IdentityResolutionPrivacyActionPlanner
 {
     OwnerPrivacyActionPlanner::new(IdentityResolutionPrivacyActionPolicy)
 }
@@ -91,11 +90,8 @@ fn minimize_candidate_case(
     current: &RecordSnapshot,
 ) -> Result<TypedPayload, SdkError> {
     let case = duplicate_candidate_case_from_snapshot(current)?;
-    let minimized = candidate_privacy_transition(
-        case,
-        command.item_digest(),
-        command.planned_at_unix_nanos(),
-    )?;
+    let minimized =
+        candidate_privacy_transition(case, command.item_digest(), command.planned_at_unix_nanos())?;
     persisted_payload(&minimized)
 }
 
@@ -153,12 +149,7 @@ fn minimized_evidence(
     digest: &[u8; 32],
     index: usize,
 ) -> Result<MatchEvidenceSnapshot, SdkError> {
-    minimized_evidence_at(
-        evidence,
-        digest,
-        index,
-        evidence.generated_at_unix_nanos(),
-    )
+    minimized_evidence_at(evidence, digest, index, evidence.generated_at_unix_nanos())
 }
 
 fn minimized_evidence_at(
@@ -236,10 +227,7 @@ mod tests {
     #[test]
     fn privacy_evidence_reference_is_deterministic_and_bounded() {
         let reference = format!("privacy-minimized-{}-63", hex_prefix(&[0xabu8; 32]));
-        assert_eq!(
-            reference,
-            "privacy-minimized-abababababababababababab-63"
-        );
+        assert_eq!(reference, "privacy-minimized-abababababababababababab-63");
         assert!(reference.len() < 512);
     }
 }

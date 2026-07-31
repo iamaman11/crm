@@ -29,8 +29,8 @@ pub use contract::{
     OUTPUT_SCHEMA_ID, identity_resolution_privacy_scope_definition,
 };
 pub use owner_action::{
-    OWNER_ACTION_CAPABILITY_ID, IdentityResolutionPrivacyActionPlanner,
-    IdentityResolutionPrivacyActionPolicy, identity_resolution_privacy_action_definition,
+    IdentityResolutionPrivacyActionPlanner, IdentityResolutionPrivacyActionPolicy,
+    OWNER_ACTION_CAPABILITY_ID, identity_resolution_privacy_action_definition,
     identity_resolution_privacy_action_planner,
 };
 pub use postgres::IdentityResolutionPrivacyScopeQueryAdapter;
