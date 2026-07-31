@@ -7,8 +7,10 @@ from pathlib import Path
 import subprocess
 
 
+CANONICAL_INTERFACE_MARKERS = ("--write", "--check")
+
 source = subprocess.check_output(
-    ["git", "show", "HEAD^:scripts/generate_repository_navigation.py"],
+    ["git", "show", "HEAD~2:scripts/generate_repository_navigation.py"],
     text=True,
 )
 source = source.replace(
