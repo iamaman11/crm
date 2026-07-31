@@ -21,33 +21,35 @@ source = subprocess.check_output(
     text=True,
 )
 
-identity_before = '''    replace_once(
+identity_insertion = '''    replace_once(
         root,
         "crates/crm-identity-resolution-capability-composition/src/lib.rs",
         "#![forbid(unsafe_code)]\\n",
         "#![forbid(unsafe_code)]\\n\\nmod production_contribution;\\npub use production_contribution::*;\\n",
     )
 '''
-identity_after = '''    replace_once(
-        root,
-        "crates/crm-identity-resolution-capability-composition/src/lib.rs",
-        "use crm_capability_plan_support as support;\\n",
-        "mod production_contribution;\\npub use production_contribution::*;\\n\\nuse crm_capability_plan_support as support;\\n",
-    )
-'''
-customer_data_before = '''    replace_once(
+customer_data_insertion = '''    replace_once(
         root,
         "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
         "#![forbid(unsafe_code)]\\n",
         "#![forbid(unsafe_code)]\\n\\nmod production_contribution;\\npub use production_contribution::*;\\n",
     )
 '''
-customer_data_after = '''    replace_once(
-        root,
-        "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
-        "pub use crm_core_files::{\\n",
-        "mod production_contribution;\\npub use production_contribution::*;\\n\\npub use crm_core_files::{\\n",
+materialize_anchor = "def materialize(root: Path) -> None:\n"
+materialize_replacement = '''def materialize(root: Path) -> None:
+    contribution_declaration = "mod production_contribution;\\npub use production_contribution::*;"
+    duplicate_declaration = (
+        contribution_declaration + "\\n\\n" + contribution_declaration
     )
+    for relative in (
+        "crates/crm-identity-resolution-capability-composition/src/lib.rs",
+        "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
+    ):
+        path = root / relative
+        content = path.read_text(encoding="utf-8")
+        while duplicate_declaration in content:
+            content = content.replace(duplicate_declaration, contribution_declaration, 1)
+        path.write_text(content, encoding="utf-8")
 '''
 resolution_before = '''    subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=root, check=True, stdout=subprocess.DEVNULL)
 '''
@@ -59,12 +61,13 @@ resolution_after = '''    subprocess.run(
 '''
 
 for before, after, label in (
-    (identity_before, identity_after, "Identity Resolution"),
-    (customer_data_before, customer_data_after, "Customer Data Operations"),
+    (identity_insertion, "", "Identity Resolution repeated module insertion"),
+    (customer_data_insertion, "", "Customer Data Operations repeated module insertion"),
+    (materialize_anchor, materialize_replacement, "idempotent declaration normalization"),
     (resolution_before, resolution_after, "all-target lockfile and compilation resolution"),
 ):
     if source.count(before) != 1:
-        raise RuntimeError(f"temporary {label} insertion anchor is not unique")
+        raise RuntimeError(f"temporary {label} anchor is not unique")
     source = source.replace(before, after, 1)
 
 namespace = {"__name__": "__main__", "__file__": str(Path(__file__).resolve())}
