@@ -185,6 +185,20 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for step in range(1, 6):
             self.assertIn(f"Repository step {step}", self.roadmap)
 
+        for document in self.authoritative_status_documents:
+            self.assertNotIn(
+                "Repository step 12 remains the current permitted implementation step.",
+                document,
+            )
+        self.assertIn(
+            "Latest accepted repository implementation packet is PR #249",
+            self.status,
+        )
+        self.assertIn(
+            "Repository step 13 is the current next permitted implementation step and is not started.",
+            self.status,
+        )
+
         for statement in ("run in parallel", "separate parallel lane", "runs alongside Phase 8A"):
             for document in self.authoritative_status_documents:
                 self.assertNotIn(statement, document)
