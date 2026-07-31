@@ -1,7 +1,7 @@
 use crm_capability_runtime::CapabilityDefinition;
-use crm_customer_privacy::PrivacyOwnerActionCommand;
 use crm_customer_privacy_owner_scope_support::{
-    OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, owner_action_definition,
+    OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, PrivacyOwnerActionCommand,
+    owner_action_definition,
 };
 use crm_module_sdk::{ErrorCategory, RecordSnapshot, SdkError, TypedPayload};
 use crm_party_relationships::{PartyRelationship, PartyRelationshipStatus};
