@@ -77,7 +77,7 @@ pub fn build_all(
         activation: activation.clone(),
         visibility_authorizer: visibility_authorizer.clone(),
         cursor_key,
-    })?)?;
+    })?);
     contributions.merge(build_customer_accounts_contribution(
         CustomerAccountsProductionDependencies {
             store: store.clone(),
@@ -86,7 +86,7 @@ pub fn build_all(
             visibility_authorizer: visibility_authorizer.clone(),
             cursor_key,
         },
-    )?)?;
+    )?);
     contributions.merge(build_consents_contribution(
         ConsentsProductionDependencies {
             store: store.clone(),
@@ -94,7 +94,7 @@ pub fn build_all(
             visibility_authorizer: visibility_authorizer.clone(),
             cursor_key,
         },
-    )?)?;
+    )?);
     contributions.merge(build_contact_points_contribution(
         ContactPointsProductionDependencies {
             store: store.clone(),
@@ -103,7 +103,7 @@ pub fn build_all(
             visibility_authorizer: visibility_authorizer.clone(),
             cursor_key,
         },
-    )?)?;
+    )?);
     contributions.merge(build_party_relationships_contribution(
         PartyRelationshipsProductionDependencies {
             store,
@@ -112,7 +112,7 @@ pub fn build_all(
             visibility_authorizer,
             cursor_key,
         },
-    )?)?;
+    )?);
 
     Ok(contributions)
 }
