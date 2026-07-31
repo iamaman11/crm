@@ -20,6 +20,7 @@ mod postgres_file_artifact_evidence;
 mod postgres_projection;
 mod postgres_query;
 mod postgres_related_query;
+mod privacy_owner_action;
 mod projection_store;
 mod search_generation_store;
 mod search_store;
@@ -58,6 +59,7 @@ pub use postgres_query::{
 pub use postgres_related_query::{
     MAXIMUM_RELATED_RECORD_QUERY_PAGE_SIZE, RelatedRecordListQuery, RelatedRecordQueryPage,
 };
+pub use privacy_owner_action::*;
 pub use subject_policy::{CustomerSubjectOperationClass, TransactionalCustomerSubjectPolicyPort};
 
 /// Governed implementation dependency for owner PostgreSQL packages. This keeps the

@@ -10,6 +10,7 @@
 
 mod canonical_json;
 mod canonicalization;
+mod owner_action_command;
 
 pub mod domain {
     include!("domain.rs");
@@ -84,6 +85,7 @@ pub mod domain {
 
 pub use domain::persistence::*;
 pub use domain::*;
+pub use owner_action_command::*;
 
 /// Stable crate identity for repository tooling.
 pub const CRATE_NAME: &str = "crm-customer-privacy";

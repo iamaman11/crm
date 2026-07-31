@@ -8,6 +8,7 @@
 
 mod contract;
 mod errors;
+mod owner_action;
 mod postgres;
 mod request;
 mod response;
@@ -20,5 +21,9 @@ pub use contract::{
     INPUT_MAXIMUM_BYTES, INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, MAXIMUM_PAGE_SIZE,
     OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID,
     parties_privacy_scope_definition,
+};
+pub use owner_action::{
+    OWNER_ACTION_CAPABILITY_ID, PartiesPrivacyActionPlanner, PartiesPrivacyActionPolicy,
+    parties_privacy_action_definition, parties_privacy_action_planner,
 };
 pub use postgres::PartiesPrivacyScopeQueryAdapter;

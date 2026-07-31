@@ -11,6 +11,7 @@
 mod contract;
 mod digest;
 mod errors;
+mod owner_action;
 mod postgres;
 mod request;
 mod response;
@@ -22,5 +23,10 @@ pub use contract::{
     CAPABILITY_ID, CAPABILITY_VERSION, CONTRACT_SCHEMA_VERSION, INPUT_MAXIMUM_BYTES,
     INPUT_RETENTION_POLICY_ID, INPUT_SCHEMA_ID, OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID,
     OUTPUT_SCHEMA_ID, customer_accounts_privacy_scope_definition,
+};
+pub use owner_action::{
+    CustomerAccountsPrivacyActionPlanner, CustomerAccountsPrivacyActionPolicy,
+    OWNER_ACTION_CAPABILITY_ID, customer_accounts_privacy_action_definition,
+    customer_accounts_privacy_action_planner,
 };
 pub use postgres::CustomerAccountsPrivacyScopeQueryAdapter;

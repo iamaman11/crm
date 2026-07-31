@@ -10,6 +10,7 @@
 mod contract;
 mod digest;
 mod errors;
+mod owner_action;
 mod postgres;
 mod request;
 mod response;
@@ -25,5 +26,10 @@ pub use contract::{
     MAX_PRIVACY_OWNER_RECORDS_SCANNED, MAXIMUM_CURSOR_BYTES, MAXIMUM_PAGE_SIZE,
     OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID,
     customer_data_privacy_scope_definition,
+};
+pub use owner_action::{
+    CustomerDataOperationsPrivacyActionPlanner, CustomerDataOperationsPrivacyActionPolicy,
+    OWNER_ACTION_CAPABILITY_ID, customer_data_operations_privacy_action_definition,
+    customer_data_operations_privacy_action_planner,
 };
 pub use postgres::CustomerDataOperationsPrivacyScopeQueryAdapter;

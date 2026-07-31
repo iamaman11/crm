@@ -10,6 +10,7 @@
 mod contract;
 mod digest;
 mod errors;
+mod owner_action;
 #[allow(dead_code)]
 mod postgres;
 mod request;
@@ -31,5 +32,10 @@ pub use contract::{
     MAXIMUM_PAGE_SIZE, OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID, OUTPUT_SCHEMA_ID,
     PRIVACY_OWNER_SCAN_BATCH_SIZE, PRIVACY_RELATIONSHIP_SCAN_BATCH_SIZE,
     customer_enrichment_privacy_scope_definition,
+};
+pub use owner_action::{
+    CustomerEnrichmentPrivacyActionPlanner, CustomerEnrichmentPrivacyActionPolicy,
+    OWNER_ACTION_CAPABILITY_ID, customer_enrichment_privacy_action_definition,
+    customer_enrichment_privacy_action_planner,
 };
 pub use postgres::CustomerEnrichmentPrivacyScopeQueryAdapter;
