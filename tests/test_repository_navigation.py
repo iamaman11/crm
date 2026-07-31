@@ -25,39 +25,29 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-12-batch-1-evidence-sync")
+        self.assertEqual(
+            packet["packet_id"],
+            "repository-step-12-contribution-aggregation-batch-2",
+        )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
-        self.assertEqual(packet["baseline"]["sha"], "f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978")
-        self.assertEqual(packet["tracking_issues"], [194])
         self.assertEqual(
-            packet["allowed_paths"],
-            [
-                "docs/ACTIVE_PACKET.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PROJECT_STATUS.md",
-                "repository-packet.json",
-                "tests/test_architecture_documentation_consistency.py",
-                "tests/test_repository_navigation.py",
-            ],
+            packet["baseline"]["sha"],
+            "10be9a128ed1f8fbc6967d82baba648ba52f1d12",
         )
+        self.assertEqual(packet["tracking_issues"], [194])
+        self.assertEqual(packet["allowed_paths"], ['Cargo.lock', 'crates/crm-application-runtime/Cargo.toml', 'crates/crm-application-runtime/src/data_quality_capability_execution.rs', 'crates/crm-application-runtime/src/data_quality_registration.rs', 'crates/crm-application-runtime/src/lib.rs', 'crates/crm-application-runtime/src/native_composition.rs', 'crates/crm-customer-data-operations-execution-composition/Cargo.toml', 'crates/crm-customer-data-operations-execution-composition/src/lib.rs', 'crates/crm-customer-data-operations-execution-composition/src/production_contribution.rs', 'crates/crm-data-quality-source-composition/Cargo.toml', 'crates/crm-data-quality-source-composition/src/capability_execution.rs', 'crates/crm-data-quality-source-composition/src/lib.rs', 'crates/crm-data-quality-source-composition/src/production_contribution.rs', 'crates/crm-data-quality-source-composition/src/registration.rs', 'crates/crm-first-party-modules/Cargo.toml', 'crates/crm-first-party-modules/src/lib.rs', 'crates/crm-identity-resolution-capability-composition/Cargo.toml', 'crates/crm-identity-resolution-capability-composition/src/lib.rs', 'crates/crm-identity-resolution-capability-composition/src/production_contribution.rs', 'docs/ACTIVE_PACKET.md', 'docs/generated/REPOSITORY_MAP.md', 'repository-packet.json', 'scripts/check_native_module_composition.py', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_native_module_composition.py', 'tests/test_repository_navigation.py'])
         for path in (
             ".github/workflows/**",
-            "Cargo.lock",
-            "Cargo.toml",
             "affected-scope-policy.json",
             "apps/**",
             "architecture-policy.json",
             "contracts/**",
-            "crates/**",
             "database/**",
             "modules/**",
             "packages/**",
             "proto/**",
             "schemas/**",
-            "scripts/**",
             "services/**",
         ):
             self.assertIn(path, packet["forbidden_paths"])
@@ -66,11 +56,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
         )
         self.assertIn(
-            "repository step 12 remains in progress and repository step 13 remains blocked",
+            "repository step 12 remains in progress and repository step 13 is not started",
             packet["acceptance"],
         )
         self.assertIn(
-            "complete repository step 12 or claim Stage D exit evidence",
+            "complete repository step 12 for Customer Enrichment, Sales/Activities, Customer 360 or any other remaining owner in this batch",
             packet["non_goals"],
         )
 
@@ -308,7 +298,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978"
+                    "10be9a128ed1f8fbc6967d82baba648ba52f1d12"
                 ),
             ),
             patch(
