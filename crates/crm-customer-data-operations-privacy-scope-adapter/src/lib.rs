@@ -28,8 +28,8 @@ pub use contract::{
     customer_data_privacy_scope_definition,
 };
 pub use owner_action::{
-    OWNER_ACTION_CAPABILITY_ID, CustomerDataOperationsPrivacyActionPlanner,
-    CustomerDataOperationsPrivacyActionPolicy, customer_data_operations_privacy_action_definition,
+    CustomerDataOperationsPrivacyActionPlanner, CustomerDataOperationsPrivacyActionPolicy,
+    OWNER_ACTION_CAPABILITY_ID, customer_data_operations_privacy_action_definition,
     customer_data_operations_privacy_action_planner,
 };
 pub use postgres::CustomerDataOperationsPrivacyScopeQueryAdapter;

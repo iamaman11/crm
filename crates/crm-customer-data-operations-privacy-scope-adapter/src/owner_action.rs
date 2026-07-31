@@ -8,16 +8,16 @@ use crm_customer_data_operations::{
     EXPORT_EXECUTION_STAGE_STATE_SCHEMA_VERSION, EXPORT_SELECTION_ITEM_STATE_MAXIMUM_BYTES,
     EXPORT_SELECTION_ITEM_STATE_RETENTION_POLICY_ID, EXPORT_SELECTION_ITEM_STATE_SCHEMA_ID,
     EXPORT_SELECTION_ITEM_STATE_SCHEMA_VERSION, IMPORT_ROW_STATE_MAXIMUM_BYTES,
-    IMPORT_ROW_STATE_RETENTION_POLICY_ID, IMPORT_ROW_STATE_SCHEMA_ID, IMPORT_ROW_STATE_SCHEMA_VERSION,
-    ImportRow, PartyImportKind, PreparedPartyRow, decode_export_execution_outcome_state,
-    decode_export_execution_stage_state, decode_export_selection_item_state, decode_import_row_state,
-    encode_import_row_state, export_execution_outcome_state_descriptor_hash,
-    export_execution_stage_state_descriptor_hash, export_selection_item_state_descriptor_hash,
-    import_row_state_descriptor_hash,
+    IMPORT_ROW_STATE_RETENTION_POLICY_ID, IMPORT_ROW_STATE_SCHEMA_ID,
+    IMPORT_ROW_STATE_SCHEMA_VERSION, ImportRow, PartyImportKind, PreparedPartyRow,
+    decode_export_execution_outcome_state, decode_export_execution_stage_state,
+    decode_export_selection_item_state, decode_import_row_state, encode_import_row_state,
+    export_execution_outcome_state_descriptor_hash, export_execution_stage_state_descriptor_hash,
+    export_selection_item_state_descriptor_hash, import_row_state_descriptor_hash,
 };
 use crm_customer_data_operations_capability_adapter::{
-    EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE, IMPORT_ROW_RECORD_TYPE,
-    MODULE_ID,
+    EXPORT_EXECUTION_OUTCOME_RECORD_TYPE, EXPORT_EXECUTION_STAGE_RECORD_TYPE,
+    IMPORT_ROW_RECORD_TYPE, MODULE_ID,
 };
 use crm_customer_privacy_owner_scope_support::{
     OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, PrivacyOwnerActionCommand,
@@ -37,8 +37,8 @@ pub type CustomerDataOperationsPrivacyActionPlanner =
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CustomerDataOperationsPrivacyActionPolicy;
 
-pub fn customer_data_operations_privacy_action_definition()
--> Result<CapabilityDefinition, SdkError> {
+pub fn customer_data_operations_privacy_action_definition() -> Result<CapabilityDefinition, SdkError>
+{
     owner_action_definition(MODULE_ID, OWNER_ACTION_CAPABILITY_ID)
 }
 
@@ -310,8 +310,9 @@ fn hex_prefix(bytes: &[u8; 32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crm_customer_data_operations::{ImportJobId, ImportRowSnapshot, ImportRowStatus, ImportRowId,
-        RowIdentitySource};
+    use crm_customer_data_operations::{
+        ImportJobId, ImportRowId, ImportRowSnapshot, ImportRowStatus, RowIdentitySource,
+    };
 
     #[test]
     fn publishes_the_frozen_owner_action_coordinate() {
@@ -353,7 +354,10 @@ mod tests {
             updated_at_unix_nanos: 10,
             version: 1,
         });
-        assert!(row.is_err(), "deterministic row identity must still be enforced");
+        assert!(
+            row.is_err(),
+            "deterministic row identity must still be enforced"
+        );
     }
 
     #[test]
