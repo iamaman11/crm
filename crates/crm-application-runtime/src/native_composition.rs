@@ -374,12 +374,6 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let _party_queries = Arc::new(PartyQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-
     let customer_360_queries = Arc::new(Customer360QueryAdapter::new(
         store.clone(),
         visibility_authorizer.clone(),
