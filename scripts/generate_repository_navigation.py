@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from scripts.repository_navigation import generated_documents, stale_generated_documents
+from repository_navigation import generated_documents, stale_generated_documents
 
 
 ROOT = Path(__file__).resolve().parents[1]
