@@ -34,8 +34,8 @@ pub use contract::{
     customer_enrichment_privacy_scope_definition,
 };
 pub use owner_action::{
-    OWNER_ACTION_CAPABILITY_ID, CustomerEnrichmentPrivacyActionPlanner,
-    CustomerEnrichmentPrivacyActionPolicy, customer_enrichment_privacy_action_definition,
+    CustomerEnrichmentPrivacyActionPlanner, CustomerEnrichmentPrivacyActionPolicy,
+    OWNER_ACTION_CAPABILITY_ID, customer_enrichment_privacy_action_definition,
     customer_enrichment_privacy_action_planner,
 };
 pub use postgres::CustomerEnrichmentPrivacyScopeQueryAdapter;

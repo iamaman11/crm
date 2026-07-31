@@ -13,9 +13,7 @@ use crm_customer_enrichment::{
     provider_usage_entry_state_descriptor_hash,
 };
 use crm_customer_enrichment_application_adapter::application_attempt_from_snapshot;
-use crm_customer_enrichment_capability_adapter::{
-    MODULE_ID, enrichment_request_from_snapshot,
-};
+use crm_customer_enrichment_capability_adapter::{MODULE_ID, enrichment_request_from_snapshot};
 use crm_customer_enrichment_provider_process_composition::provider_response_conflict_persisted_contract;
 use crm_customer_enrichment_review_adapter::{
     review_decision_from_snapshot, suggestion_from_snapshot,
@@ -256,8 +254,6 @@ mod tests {
         ] {
             assert!(policy.supports_resource_type(resource_type));
         }
-        assert!(!policy.supports_resource_type(
-            "customer_enrichment.provider_profile_version"
-        ));
+        assert!(!policy.supports_resource_type("customer_enrichment.provider_profile_version"));
     }
 }
