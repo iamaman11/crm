@@ -32,7 +32,7 @@ pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, Sd
     capability_definitions()
 }
 
-pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+pub fn production_query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     adapter_query_capability_definitions()
 }
 
@@ -77,7 +77,7 @@ pub fn build_contribution(
     let query_executor: Arc<dyn QueryExecutor> = queries;
     contributions
         .add_queries(
-            query_capability_definitions()?,
+            production_query_capability_definitions()?,
             query_validator,
             query_executor,
         )
