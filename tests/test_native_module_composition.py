@@ -113,6 +113,94 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
         self.assertIn("ActivationGatedMutationValidator::new", owner)
         self.assertIn("ActivationGatedQueryValidator::new", owner)
 
+    def test_relationship_owner_batch_is_aggregated_without_behavior_reordering(self) -> None:
+        parties = (ROOT / "crates/crm-party-reference-composition/src/lib.rs").read_text(
+            encoding="utf-8"
+        )
+        consents = (
+            ROOT / "crates/crm-consents-capability-composition/src/lib.rs"
+        ).read_text(encoding="utf-8")
+        contact_points = (
+            ROOT / "crates/crm-contact-points-capability-composition/src/lib.rs"
+        ).read_text(encoding="utf-8")
+        relationships = (
+            ROOT / "crates/crm-party-relationships-capability-composition/src/lib.rs"
+        ).read_text(encoding="utf-8")
+        aggregate = (ROOT / "crates/crm-first-party-modules/src/lib.rs").read_text(
+            encoding="utf-8"
+        )
+        runtime = (
+            ROOT / "crates/crm-application-runtime/src/native_composition.rs"
+        ).read_text(encoding="utf-8")
+        runtime_cargo = (ROOT / "crates/crm-application-runtime/Cargo.toml").read_text(
+            encoding="utf-8"
+        )
+
+        for owner in (parties, consents, contact_points, relationships):
+            self.assertIn("pub fn mutation_capability_definitions()", owner)
+            self.assertIn("pub fn query_capability_definitions()", owner)
+            self.assertIn("pub fn build_contribution(", owner)
+            self.assertIn("ActivationGatedMutationValidator::new", owner)
+            self.assertIn("ActivationGatedQueryValidator::new", owner)
+
+        order = [
+            "build_parties_contribution(",
+            "build_customer_accounts_contribution(",
+            "build_consents_contribution(",
+            "build_contact_points_contribution(",
+            "build_party_relationships_contribution(",
+        ]
+        positions = [aggregate.index(marker) for marker in order]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("PostgresPartyReferenceReader::new(store.clone())", aggregate)
+        self.assertNotIn("@1.0.0", aggregate)
+        self.assertNotIn("crm.parties", aggregate)
+        self.assertNotIn("crm.contact-points", aggregate)
+        self.assertNotIn("crm.party-relationships", aggregate)
+
+        self.assertNotIn("ContactPointCapabilityPlanner", runtime)
+        self.assertNotIn("ContactPointPartyReferenceSemanticValidator", runtime)
+        self.assertNotIn("ContactPointQueryAdapter::new", runtime)
+        self.assertNotIn("PartyRelationshipCapabilityPlanner", runtime)
+        self.assertNotIn("PartyRelationshipReferenceSemanticValidator", runtime)
+        self.assertNotIn("PartyRelationshipQueryAdapter::new", runtime)
+        self.assertNotIn("use crm_consents_capability_adapter", runtime)
+        self.assertNotIn("PostgresPartyReferenceReader::new", runtime)
+        self.assertIn(
+            "parties_mutation_capability_definitions as party_capability_definitions",
+            runtime,
+        )
+        self.assertIn(
+            "contact_points_mutation_capability_definitions as contact_point_capability_definitions",
+            runtime,
+        )
+        self.assertIn(
+            "party_relationships_query_capability_definitions as party_relationship_query_capability_definitions",
+            runtime,
+        )
+
+        for dependency in (
+            "crm-contact-points-query-adapter =",
+            "crm-customer-accounts-query-adapter =",
+            "crm-party-relationships-capability-composition =",
+            "crm-party-relationships-query-adapter =",
+        ):
+            self.assertNotIn(dependency, runtime_cargo)
+
+        for dependency in (
+            "crm-consents-capability-adapter =",
+            "crm-consents-query-adapter =",
+            "crm-contact-points-capability-adapter =",
+            "crm-contact-points-capability-composition =",
+            "crm-customer-accounts-capability-adapter =",
+            "crm-parties-capability-adapter =",
+            "crm-parties-query-adapter =",
+            "crm-party-reference-composition =",
+            "crm-party-relationships-capability-adapter =",
+            "crm-party-relationships-projection =",
+        ):
+            self.assertIn(dependency, runtime_cargo)
+
 
 if __name__ == "__main__":
     unittest.main()

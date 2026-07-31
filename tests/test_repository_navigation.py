@@ -25,38 +25,49 @@ ROOT = Path(__file__).resolve().parents[1]
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-11-evidence-sync")
+        self.assertEqual(
+            packet["packet_id"],
+            "repository-step-12-contribution-aggregation-batch-1",
+        )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db",
+            "043de0298ea9b3415e9894b4c5d69952856fd377",
         )
-        self.assertEqual(packet["tracking_issues"], [126, 194])
+        self.assertEqual(packet["tracking_issues"], [194])
         for path in (
+            "Cargo.lock",
+            "affected-scope-policy.json",
+            "crates/crm-application-runtime/Cargo.toml",
+            "crates/crm-application-runtime/src/native_composition.rs",
+            "crates/crm-consents-capability-composition/src/lib.rs",
+            "crates/crm-contact-points-capability-composition/Cargo.toml",
+            "crates/crm-contact-points-capability-composition/src/lib.rs",
+            "crates/crm-first-party-modules/Cargo.toml",
+            "crates/crm-first-party-modules/src/lib.rs",
+            "crates/crm-party-reference-composition/Cargo.toml",
+            "crates/crm-party-reference-composition/src/lib.rs",
+            "crates/crm-party-relationships-capability-composition/Cargo.toml",
+            "crates/crm-party-relationships-capability-composition/src/lib.rs",
             "docs/ACTIVE_PACKET.md",
-            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-            "docs/IMPLEMENTATION_ROADMAP.md",
-            "docs/PHASE8_DELIVERY_PLAN.md",
-            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
+            "scripts/check_native_module_composition.py",
+            "tests/test_affected_scope.py",
             "tests/test_architecture_documentation_consistency.py",
+            "tests/test_native_module_composition.py",
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, packet["allowed_paths"])
         for path in (
             ".github/workflows/**",
-            "Cargo.lock",
-            "Cargo.toml",
             "apps/**",
             "contracts/**",
-            "crates/**",
             "database/**",
             "modules/**",
             "packages/**",
             "proto/**",
             "schemas/**",
-            "scripts/**",
             "services/**",
         ):
             self.assertIn(path, packet["forbidden_paths"])
@@ -70,11 +81,13 @@ class RepositoryNavigationTests(unittest.TestCase):
             ],
         )
         self.assertIn(
-            "repository step 12 is the only next implementation packet",
+            "repository step 12 remains in progress and repository step 13 is not started",
             packet["acceptance"],
         )
         self.assertIn(
-            "implement repository step 12 contribution aggregation",
+            "complete repository step 12 for Identity Resolution, Customer Data Operations, "
+            "Data Quality, Customer Enrichment, Sales/Activities, Customer 360 or other "
+            "remaining owners in this batch",
             packet["non_goals"],
         )
 
@@ -312,7 +325,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db"
+                    "043de0298ea9b3415e9894b4c5d69952856fd377"
                 ),
             ),
             patch(

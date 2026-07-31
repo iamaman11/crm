@@ -10,18 +10,7 @@ use crm_capability_runtime::{
     CapabilityAuthorizer, CapabilityDefinition, CapabilitySemanticValidator,
     TransactionalCapabilityExecutor,
 };
-use crm_consents_capability_adapter::capability_definitions as consent_capability_definitions;
-use crm_consents_query_adapter::{
-    ConsentQueryAdapter, query_capability_definitions as consent_query_capability_definitions,
-};
-use crm_contact_points_capability_adapter::{
-    ContactPointCapabilityPlanner, capability_definitions as contact_point_capability_definitions,
-};
-use crm_contact_points_capability_composition::ContactPointPartyReferenceSemanticValidator;
-use crm_contact_points_query_adapter::{
-    ContactPointQueryAdapter,
-    query_capability_definitions as contact_point_query_capability_definitions,
-};
+use crm_consents_query_adapter::ConsentQueryAdapter;
 use crm_core_data::{
     PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,
     PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,
@@ -68,8 +57,16 @@ use crm_data_quality_query_adapter::{
 };
 use crm_first_party_modules::{
     FirstPartyProductionDependencies, build_all as build_first_party_modules,
+    consents_mutation_capability_definitions as consent_capability_definitions,
+    consents_query_capability_definitions as consent_query_capability_definitions,
+    contact_points_mutation_capability_definitions as contact_point_capability_definitions,
+    contact_points_query_capability_definitions as contact_point_query_capability_definitions,
     customer_accounts_mutation_capability_definitions as account_capability_definitions,
     customer_accounts_query_capability_definitions as account_query_capability_definitions,
+    parties_mutation_capability_definitions as party_capability_definitions,
+    parties_query_capability_definitions as party_query_capability_definitions,
+    party_relationships_mutation_capability_definitions as party_relationship_capability_definitions,
+    party_relationships_query_capability_definitions as party_relationship_query_capability_definitions,
 };
 use crm_global_search_composition::GLOBAL_SEARCH_INDEX_ID;
 use crm_identity_resolution_capability_adapter::{
@@ -98,22 +95,8 @@ use crm_metadata_api_adapter::{
 };
 use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_sdk::{ErrorCategory, ModuleId, PortFuture, SdkError, TenantId};
-use crm_parties_capability_adapter::{
-    PartyCapabilityPlanner, capability_definitions as party_capability_definitions,
-};
-use crm_parties_query_adapter::{
-    PartyQueryAdapter, query_capability_definitions as party_query_capability_definitions,
-};
-use crm_party_reference_composition::PostgresPartyReferenceReader;
-use crm_party_relationships_capability_adapter::{
-    PartyRelationshipCapabilityPlanner,
-    capability_definitions as party_relationship_capability_definitions,
-};
-use crm_party_relationships_capability_composition::PartyRelationshipReferenceSemanticValidator;
-use crm_party_relationships_query_adapter::{
-    PartyRelationshipQueryAdapter,
-    query_capability_definitions as party_relationship_query_capability_definitions,
-};
+use crm_parties_capability_adapter::PartyCapabilityPlanner;
+use crm_parties_query_adapter::PartyQueryAdapter;
 use crm_query_runtime::{
     CursorCodec, QueryAuthorizer, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer,
 };
@@ -231,7 +214,6 @@ pub fn build_production_composition(
         cursor_key,
     } = dependencies;
     let mut contributions = ModuleContributionSet::new();
-    let parties = Arc::new(PostgresPartyReferenceReader::new(store.clone()));
 
     let sales_activities_executor =
         aggregate_executor(store.clone(), SalesActivitiesCapabilityPlannerRouter);
@@ -244,46 +226,15 @@ pub fn build_production_composition(
     )?;
 
     let party_executor = aggregate_executor(store.clone(), PartyCapabilityPlanner);
-    add_activated_mutations(
-        &mut contributions,
-        party_capability_definitions()?,
-        Arc::new(NoopMutationSemanticValidator),
-        party_executor.clone(),
-        activation.clone(),
-    )?;
 
     contributions.merge(build_first_party_modules(
         FirstPartyProductionDependencies {
             store: store.clone(),
-            parties: parties.clone(),
             activation: activation.clone(),
             visibility_authorizer: visibility_authorizer.clone(),
             cursor_key,
         },
     )?);
-
-    let contact_point_executor = aggregate_executor(store.clone(), ContactPointCapabilityPlanner);
-    add_activated_mutations(
-        &mut contributions,
-        contact_point_capability_definitions()?,
-        Arc::new(ContactPointPartyReferenceSemanticValidator::new(
-            parties.clone(),
-        )),
-        contact_point_executor,
-        activation.clone(),
-    )?;
-
-    let party_relationship_executor =
-        aggregate_executor(store.clone(), PartyRelationshipCapabilityPlanner);
-    add_activated_mutations(
-        &mut contributions,
-        party_relationship_capability_definitions()?,
-        Arc::new(PartyRelationshipReferenceSemanticValidator::new(
-            parties.clone(),
-        )),
-        party_relationship_executor,
-        activation.clone(),
-    )?;
 
     let identity_aggregate = aggregate_executor(store.clone(), IdentityResolutionCapabilityPlanner);
     let identity_definitions = identity_resolution_capability_definitions()?;
@@ -420,42 +371,6 @@ pub fn build_production_composition(
         &mut contributions,
         sales_activities_query_capability_definitions()?,
         sales_activities_queries,
-        activation.clone(),
-    )?;
-
-    let party_queries = Arc::new(PartyQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        party_query_capability_definitions()?,
-        party_queries,
-        activation.clone(),
-    )?;
-
-    let contact_point_queries = Arc::new(ContactPointQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        contact_point_query_capability_definitions()?,
-        contact_point_queries,
-        activation.clone(),
-    )?;
-
-    let relationship_queries = Arc::new(PartyRelationshipQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        party_relationship_query_capability_definitions()?,
-        relationship_queries,
         activation.clone(),
     )?;
 

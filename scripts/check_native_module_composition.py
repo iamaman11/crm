@@ -144,6 +144,55 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
         "use crm_customer_accounts_query_adapter",
         "Customer Accounts query inventory bypassed the first-party aggregate",
     ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "use crm_consents_capability_adapter",
+        "Consents inventory bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "ContactPointCapabilityPlanner",
+        "Contact Points mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "ContactPointPartyReferenceSemanticValidator",
+        "Contact Points semantic validation returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "ContactPointQueryAdapter::new",
+        "Contact Points query construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "PartyRelationshipCapabilityPlanner",
+        "Party Relationships mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "PartyRelationshipReferenceSemanticValidator",
+        "Party Relationships semantic validation returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "PartyRelationshipQueryAdapter::new",
+        "Party Relationships query construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "add_activated_mutations(\n"
+        "        &mut contributions,\n"
+        "        party_capability_definitions()?",
+        "Parties mutation registration returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "add_activated_queries(\n"
+        "        &mut contributions,\n"
+        "        party_query_capability_definitions()?",
+        "Parties query registration returned to the generic process host",
+    ),
 )
 
 

@@ -1,51 +1,59 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-11-evidence-sync",
-  "title": "Synchronize accepted repository step 11 evidence",
+  "packet_id": "repository-step-12-contribution-aggregation-batch-1",
+  "title": "Aggregate Parties, Consents, Contact Points and Party Relationships contributions",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db"
+    "sha": "043de0298ea9b3415e9894b4c5d69952856fd377"
   },
   "tracking_issues": [
-    126,
     194
   ],
-  "objective": "Synchronize accepted PR #244 authoritative owner-action execution evidence across the normative repository plans, mark repository step 11 complete, and expose repository step 12 as the only next implementation packet.",
+  "objective": "Advance repository step 12 with one behavior-neutral owner batch: expose stable owner-owned production contribution entry points and exact inventory factories for Parties, Consents, Contact Points and Party Relationships, merge them through crm-first-party-modules, and remove their ordinary registration or inventory bypasses from generic application runtime while preserving exact inventory, ordering and activation behavior.",
   "allowed_paths": [
+    "Cargo.lock",
+    "affected-scope-policy.json",
+    "crates/crm-application-runtime/Cargo.toml",
+    "crates/crm-application-runtime/src/native_composition.rs",
+    "crates/crm-consents-capability-composition/src/lib.rs",
+    "crates/crm-contact-points-capability-composition/Cargo.toml",
+    "crates/crm-contact-points-capability-composition/src/lib.rs",
+    "crates/crm-first-party-modules/Cargo.toml",
+    "crates/crm-first-party-modules/src/lib.rs",
+    "crates/crm-party-reference-composition/Cargo.toml",
+    "crates/crm-party-reference-composition/src/lib.rs",
+    "crates/crm-party-relationships-capability-composition/Cargo.toml",
+    "crates/crm-party-relationships-capability-composition/src/lib.rs",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
     "repository-packet.json",
+    "scripts/check_native_module_composition.py",
+    "tests/test_affected_scope.py",
     "tests/test_architecture_documentation_consistency.py",
+    "tests/test_native_module_composition.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
     ".github/workflows/**",
-    "Cargo.lock",
-    "Cargo.toml",
-    "affected-scope-policy.json",
     "apps/**",
-    "architecture-policy.json",
     "contracts/**",
-    "crates/**",
     "database/**",
     "modules/**",
     "packages/**",
     "proto/**",
     "schemas/**",
-    "scripts/**",
     "services/**"
   ],
   "deliverables": [
-    "record PR #244 accepted source, squash merge and 34-of-34 applicable permanent workflow evidence",
-    "mark repository step 11 complete and repository step 12 as the only next implementation packet",
-    "record exact nine-owner action execution, canonical immutable attempt lineage, replay safety, tenant isolation and PostgreSQL transaction evidence",
-    "record supported owner anonymization and deletion boundaries plus fail-closed unsupported and crypto-shred outcomes",
-    "record unchanged public routes, workers, contracts, migrations, crates, dependencies, Cargo.lock and workspace package count",
-    "regenerate docs/ACTIVE_PACKET.md and synchronize permanent documentation guards"
+    "Parties exposes exact mutation/query definition factories and one activation-gated production contribution builder from an existing owner composition package",
+    "Consents exposes its exact mutation/query definition factories through its existing owner production composition and the first-party aggregate",
+    "Contact Points exposes exact mutation/query definition factories and one activation-gated production contribution builder preserving Party reference validation",
+    "Party Relationships exposes exact mutation/query definition factories and one activation-gated production contribution builder preserving Party reference validation",
+    "crm-first-party-modules creates shared Party references internally and merges Parties, Customer Accounts, Consents, Contact Points and Party Relationships in the accepted contribution order",
+    "generic application runtime consumes the four owners only through crm-first-party-modules for ordinary inventory and registration",
+    "native composition guards reject renewed direct definition or registration bypasses",
+    "the exact native-composition guard path is classified under the existing operations scope without classifying scripts broadly",
+    "Cargo.lock records only intentional internal path-edge changes and no package or external dependency version change"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -54,17 +62,21 @@
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "all authoritative status documents agree on PR #244 accepted evidence",
-    "repository step 12 is the only next implementation packet",
-    "generated active-packet navigation is fresh",
-    "no runtime, workflow, contract, manifest, dependency, Cargo.lock, persistence, migration, public inventory, affected-scope policy or product behavior changes"
+    "public mutation/query coordinates, inventory contents and compatibility APIs are byte-for-byte equivalent in meaning and preserve their existing order",
+    "tenant activation, semantic reference validation, visibility authorization and transactional execution behavior are unchanged",
+    "Parties, Consents, Contact Points and Party Relationships ordinary registration or inventory bypasses no longer appear in generic native composition",
+    "first-party aggregate contains no repeated module identifiers or capability coordinates",
+    "scripts/check_native_module_composition.py selects the existing operations scope and Governance CI while an unclassified sibling script still fails closed",
+    "workspace package count and external dependency families and versions are unchanged",
+    "repository step 12 remains in progress and repository step 13 is not started"
   ],
   "non_goals": [
-    "implement repository step 12 contribution aggregation",
-    "change owner-action runtime, action semantics, public coordinates or inventory",
-    "change generic runtime algorithms, owner-specific product semantics or worker inventory",
-    "change Cargo.lock, manifests, dependencies or workspace packages",
-    "change persistence, migrations or unrelated documentation",
+    "complete repository step 12 for Identity Resolution, Customer Data Operations, Data Quality, Customer Enrichment, Sales/Activities, Customer 360 or other remaining owners in this batch",
+    "change product behavior, routes, coordinates, contracts, schemas, migrations, persistence or workers",
+    "create, remove, rename or consolidate crates",
+    "classify scripts/** or any broader script family as a safe affected scope",
+    "change external dependency versions or add a dependency family",
+    "change generic runtime algorithms beyond removing migrated owner registration or inventory wiring",
     "start repository step 13 or later work"
   ]
 }
