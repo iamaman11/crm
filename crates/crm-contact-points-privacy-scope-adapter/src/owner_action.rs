@@ -1,7 +1,5 @@
 use crm_capability_runtime::CapabilityDefinition;
-use crm_contact_points::{
-    ContactPoint, ContactPointKind, ContactPointStatus, UpdateContactPoint,
-};
+use crm_contact_points::{ContactPoint, ContactPointKind, ContactPointStatus, UpdateContactPoint};
 use crm_contact_points_capability_adapter::{
     RECORD_TYPE, contact_point_from_snapshot, persisted_payload,
 };
@@ -121,7 +119,9 @@ fn redacted_phone(digest: &[u8; 32], alternate: bool) -> String {
     if alternate {
         let last = output.pop().unwrap_or('0');
         let digit = last.to_digit(10).unwrap_or(0);
-        output.push(char::from(b'0' + u8::try_from((digit + 1) % 10).unwrap_or(0)));
+        output.push(char::from(
+            b'0' + u8::try_from((digit + 1) % 10).unwrap_or(0),
+        ));
     }
     output
 }

@@ -25,8 +25,8 @@ pub use contract::{
     OUTPUT_SCHEMA_ID, contact_points_privacy_scope_definition,
 };
 pub use owner_action::{
-    OWNER_ACTION_CAPABILITY_ID, ContactPointsPrivacyActionPlanner,
-    ContactPointsPrivacyActionPolicy, contact_points_privacy_action_definition,
+    ContactPointsPrivacyActionPlanner, ContactPointsPrivacyActionPolicy,
+    OWNER_ACTION_CAPABILITY_ID, contact_points_privacy_action_definition,
     contact_points_privacy_action_planner,
 };
 pub use postgres::ContactPointsPrivacyScopeQueryAdapter;
