@@ -10,7 +10,7 @@ pub const OWNER_ACTION_COMMAND_MAXIMUM_BYTES: u64 = 32 * 1024;
 pub const OWNER_ACTION_COMMAND_RETENTION_POLICY_ID: &str =
     "crm.customer_privacy.owner_action_command";
 
-const COMMAND_DESCRIPTOR: &[u8] = b"crm.customer-privacy.owner_action.command/v1:tenant_id,privacy_case_id,action_plan_id,action_plan_digest,retention_decision_id,retention_decision_digest,attempt_id,attempt_digest,item_sequence,attempt_generation,item_digest,owner_module_id,owner_capability_id,owner_capability_version,target_idempotency_key,resource_type,resource_id,resource_version,action_code,planned_at_unix_nanos";
+const COMMAND_DESCRIPTOR: &[u8] = b"crm.customer-privacy.owner_action.command/v1:tenant_id,privacy_case_id,action_plan_id,action_plan_digest,retention_decision_id,retention_decision_digest,attempt_id,attempt_digest,item_sequence,attempt_generation,item_digest,owner_module_id,owner_capability_id,owner_capability_version,target_idempotency_key,resource_type,resource_id,resource_version_decimal_string,action_code,planned_at_unix_nanos_decimal_string";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrivacyOwnerActionCommand {
@@ -195,9 +195,9 @@ struct CommandStateV1 {
     target_idempotency_key: String,
     resource_type: String,
     resource_id: String,
-    resource_version: u64,
+    resource_version: String,
     action_code: String,
-    planned_at_unix_nanos: i64,
+    planned_at_unix_nanos: String,
 }
 
 impl From<&PrivacyOwnerActionCommand> for CommandStateV1 {
@@ -220,9 +220,9 @@ impl From<&PrivacyOwnerActionCommand> for CommandStateV1 {
             target_idempotency_key: command.target_idempotency_key.to_string(),
             resource_type: command.resource_type.clone(),
             resource_id: command.resource_id.to_string(),
-            resource_version: command.resource_version,
+            resource_version: command.resource_version.to_string(),
             action_code: command.action_code.clone(),
-            planned_at_unix_nanos: command.planned_at_unix_nanos,
+            planned_at_unix_nanos: command.planned_at_unix_nanos.to_string(),
         }
     }
 }
@@ -249,13 +249,56 @@ impl CommandStateV1 {
                 .map_err(command_invalid)?,
             resource_type: self.resource_type,
             resource_id: RecordId::try_new(self.resource_id).map_err(command_invalid)?,
-            resource_version: self.resource_version,
+            resource_version: parse_canonical_u64(self.resource_version, "resource_version")?,
             action_code: self.action_code,
-            planned_at_unix_nanos: self.planned_at_unix_nanos,
+            planned_at_unix_nanos: parse_canonical_positive_i64(
+                self.planned_at_unix_nanos,
+                "planned_at_unix_nanos",
+            )?,
         };
         command.validate()?;
         Ok(command)
     }
+}
+
+fn parse_canonical_u64(value: String, field: &str) -> Result<u64, SdkError> {
+    if !is_canonical_unsigned_decimal(&value) {
+        return Err(command_invalid(format!(
+            "{field} is not a canonical unsigned decimal string"
+        )));
+    }
+    let parsed = value
+        .parse::<u64>()
+        .map_err(|error| command_invalid(format!("{field} is outside u64 range: {error}")))?;
+    if parsed.to_string() != value {
+        return Err(command_invalid(format!(
+            "{field} is not a canonical unsigned decimal string"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn parse_canonical_positive_i64(value: String, field: &str) -> Result<i64, SdkError> {
+    if !is_canonical_unsigned_decimal(&value) {
+        return Err(command_invalid(format!(
+            "{field} is not a canonical positive decimal string"
+        )));
+    }
+    let parsed = value
+        .parse::<i64>()
+        .map_err(|error| command_invalid(format!("{field} is outside i64 range: {error}")))?;
+    if parsed <= 0 || parsed.to_string() != value {
+        return Err(command_invalid(format!(
+            "{field} is not a canonical positive decimal string"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn is_canonical_unsigned_decimal(value: &str) -> bool {
+    !value.is_empty()
+        && (value == "0" || !value.starts_with('0'))
+        && value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn validate_size(bytes: &[u8]) -> Result<(), SdkError> {
@@ -288,5 +331,56 @@ mod tests {
             owner_action_command_descriptor_hash()
         );
         assert_ne!(owner_action_command_descriptor_hash(), [0; 32]);
+    }
+
+    #[test]
+    fn large_versions_and_real_nanoseconds_round_trip_as_decimal_strings() {
+        let command = PrivacyOwnerActionCommand {
+            tenant_id: TenantId::try_new("tenant-owner-command-test").unwrap(),
+            privacy_case_id: RecordId::try_new("privacy-case-owner-command-test").unwrap(),
+            action_plan_id: RecordId::try_new("action-plan-owner-command-test").unwrap(),
+            action_plan_digest: [1; 32],
+            retention_decision_id: RecordId::try_new("retention-owner-command-test").unwrap(),
+            retention_decision_digest: [2; 32],
+            attempt_id: RecordId::try_new("attempt-owner-command-test").unwrap(),
+            attempt_digest: [3; 32],
+            item_sequence: 1,
+            attempt_generation: 0,
+            item_digest: [4; 32],
+            owner_module_id: ModuleId::try_new("crm.parties").unwrap(),
+            owner_capability_id: "parties.privacy.action.apply".to_owned(),
+            owner_capability_version: "1.0.0".to_owned(),
+            target_idempotency_key: IdempotencyKey::try_new(
+                "privacy-owner-command-idempotency-test",
+            )
+            .unwrap(),
+            resource_type: "party.party".to_owned(),
+            resource_id: RecordId::try_new("party-owner-command-test").unwrap(),
+            resource_version: 9_007_199_254_740_993,
+            action_code: "anonymize".to_owned(),
+            planned_at_unix_nanos: 1_800_000_000_000_000_003,
+        };
+
+        let encoded = encode_owner_action_command(&command).unwrap();
+        let text = std::str::from_utf8(&encoded).unwrap();
+        assert!(text.contains("\"resource_version\":\"9007199254740993\""));
+        assert!(text.contains(
+            "\"planned_at_unix_nanos\":\"1800000000000000003\""
+        ));
+        assert_eq!(decode_owner_action_command(&encoded).unwrap(), command);
+    }
+
+    #[test]
+    fn decimal_strings_are_strictly_canonical() {
+        assert_eq!(parse_canonical_u64("0".to_owned(), "value").unwrap(), 0);
+        assert_eq!(
+            parse_canonical_positive_i64("1".to_owned(), "value").unwrap(),
+            1
+        );
+        for value in ["", "00", "01", "+1", "-1", "1.0", " 1"] {
+            assert!(parse_canonical_u64(value.to_owned(), "value").is_err());
+            assert!(parse_canonical_positive_i64(value.to_owned(), "value").is_err());
+        }
+        assert!(parse_canonical_positive_i64("0".to_owned(), "value").is_err());
     }
 }
