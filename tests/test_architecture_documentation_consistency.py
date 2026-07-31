@@ -71,7 +71,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("explain", lowered)
             self.assertIn("packet-check", lowered)
             self.assertIn("generated", lowered)
-            for pr in ("PR #218", "PR #220", "PR #222", "PR #224", "PR #226", "PR #230", "PR #235"): 
+            for pr in ("PR #218", "PR #220", "PR #222", "PR #224", "PR #226", "PR #230", "PR #235"):
                 self.assertIn(pr, document)
 
         self.assertIn("Phases 0.1–7 are complete", self.status)
@@ -244,13 +244,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "43d194231fbce1cee28c44e89726929e450f3d18",
                 "17 of 17",
             ),
-    (
-        self.authoritative_status_documents,
-        "PR #237",
-        "f926ece93dc2b24683f982828e72bf9170dc123a",
-        "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90",
-        "33 of 33",
-    ),
+            (
+                self.authoritative_status_documents,
+                "PR #237",
+                "f926ece93dc2b24683f982828e72bf9170dc123a",
+                "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90",
+                "33 of 33",
+            ),
         )
         for documents, pr, source, merge, workflows in evidence:
             self.assert_evidence_in_documents(
@@ -292,61 +292,68 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "architecture-plan-stage-accountability")
+        self.assertEqual(
+            self.packet["packet_id"],
+            "repository-step-11-owner-privacy-actions",
+        )
         self.assertEqual(self.packet["status"], "active")
-        self.assertEqual(self.packet["baseline"]["sha"], "dad639c7d269bc802d053f1d99cf0fbf466ce4fb")
+        self.assertEqual(self.packet["baseline"]["ref"], "main")
+        self.assertEqual(
+            self.packet["baseline"]["sha"],
+            "240a451634f75752a80b20c2ccb2a114a3e00a04",
+        )
         self.assertEqual(self.packet["tracking_issues"], [126, 194])
         for path in (
+            ".github/workflows/customer-privacy-owner-execution.yml",
+            "crates/crm-core-data/src/privacy_owner_action.rs",
+            "crates/crm-customer-privacy-production/src/owner_execution.rs",
+            "crates/crm-parties-privacy-scope-adapter/tests/postgres_owner_action.rs",
+            "modules/crm-customer-privacy/src/owner_action_command.rs",
             "docs/ACTIVE_PACKET.md",
-            "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-            "docs/IMPLEMENTATION_ROADMAP.md",
-            "docs/MODULE_CATALOG.md",
-            "docs/PHASE8_DELIVERY_PLAN.md",
-            "docs/PROJECT_STATUS.md",
             "repository-packet.json",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, self.packet["allowed_paths"])
         for path in (
-            ".github/workflows/**",
             "Cargo.lock",
             "Cargo.toml",
             "affected-scope-policy.json",
-            "apps/**",
+            "architecture-policy.json",
             "contracts/**",
-            "crates/**",
-            "database/**",
-            "modules/**",
+            "database/migrations/**",
+            "modules/**/module.yaml",
             "packages/**",
             "proto/**",
             "schemas/**",
-            "scripts/**",
-            "services/**",
+            "services/crm-api/src/**",
         ):
             self.assertIn(path, self.packet["forbidden_paths"])
-        for check in (
-            "Affected Scope CI",
-            "Governance CI",
-            "Rust CI",
-            "Rust Generated Sync",
-        ):
-            self.assertIn(check, self.packet["required_checks"])
+        self.assertEqual(
+            self.packet["required_checks"],
+            [
+                "Affected Scope CI",
+                "Customer Privacy Owner Execution CI",
+                "Governance CI",
+                "Rust CI",
+                "Rust Generated Sync",
+            ],
+        )
         self.assertIn(
-            "repository step 11 remains the only next implementation packet",
+            "owner mutation and standard idempotency, business transaction, audit and outbox evidence commit atomically under tenant FORCE RLS",
             self.packet["acceptance"],
         )
         self.assertIn(
-            "Stage D has an explicit bounded completion packet before transitional consolidation",
+            "repository step 12 is not started",
             self.packet["acceptance"],
         )
         self.assertIn(
-            "repository step 22 is a measurement checkpoint rather than an automatic 10/10 declaration",
-            self.packet["acceptance"],
+            "add crates, dependencies, contracts, migrations or workspace packages",
+            self.packet["non_goals"],
         )
 
         self.assertIn("Generated by scripts/generate_repository_navigation.py", self.active_packet)
-        self.assertIn("architecture-plan-stage-accountability", self.active_packet)
+        self.assertIn("repository-step-11-owner-privacy-actions", self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertRegex(self.active_packet, r"sha256:[0-9a-f]{64}")
         self.assertIn("orientation only", self.active_packet)
@@ -357,7 +364,6 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("19232f6f3e2ae87aabeb080257c1aac5477a6616", document)
             self.assertIn("34 of 34", document)
             self.assertIn("repository step 11", document.lower())
-
 
     def test_stage_accountability_and_live_catalog_are_current(self) -> None:
         for stage in (
