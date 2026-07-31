@@ -34,6 +34,7 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     let admin_database_url =
         std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL must be configured");
     let admin = PgPool::connect(&admin_database_url).await.unwrap();
+    seed_tenants(&admin).await;
     seed_owner_action_capability(&admin).await;
     seed_party(&admin).await;
 
@@ -269,6 +270,23 @@ fn capability_request(
 
 fn transaction_id(attempt: &PrivacyOwnerActionAttempt) -> String {
     format!("privacy-owner-test-{}", attempt.attempt_id())
+}
+
+async fn seed_tenants(admin: &PgPool) {
+    sqlx::query(
+        r#"
+        INSERT INTO crm.tenants (tenant_id, status, data_region)
+        VALUES ($1, 'active', 'eu-central'), ($2, 'active', 'eu-central')
+        ON CONFLICT (tenant_id) DO UPDATE
+        SET status = EXCLUDED.status,
+            data_region = EXCLUDED.data_region
+        "#,
+    )
+    .bind(TENANT_A)
+    .bind(TENANT_B)
+    .execute(admin)
+    .await
+    .unwrap();
 }
 
 async fn seed_owner_action_capability(admin: &PgPool) {
