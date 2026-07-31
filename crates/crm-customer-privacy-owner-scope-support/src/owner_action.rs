@@ -8,8 +8,8 @@ use crm_core_data::{
 use crm_customer_privacy::{
     MODULE_ID as CUSTOMER_PRIVACY_MODULE_ID, OWNER_ACTION_COMMAND_MAXIMUM_BYTES,
     OWNER_ACTION_COMMAND_RETENTION_POLICY_ID, OWNER_ACTION_COMMAND_SCHEMA_ID,
-    OWNER_ACTION_COMMAND_SCHEMA_VERSION, PrivacyOwnerActionCommand,
-    decode_owner_action_command, owner_action_command_descriptor_hash,
+    OWNER_ACTION_COMMAND_SCHEMA_VERSION, PrivacyOwnerActionCommand, decode_owner_action_command,
+    owner_action_command_descriptor_hash,
 };
 use crm_module_sdk::{
     CapabilityId, CapabilityVersion, DataClass, DomainEvent, ErrorCategory, EventType, ModuleId,
@@ -159,10 +159,8 @@ pub fn owner_action_input_payload(bytes: Vec<u8>) -> Result<TypedPayload, SdkErr
         data_class: DataClass::Restricted,
         encoding: PayloadEncoding::Json,
         maximum_size_bytes: OWNER_ACTION_COMMAND_MAXIMUM_BYTES,
-        retention_policy_id: RetentionPolicyId::try_new(
-            OWNER_ACTION_COMMAND_RETENTION_POLICY_ID,
-        )
-        .map_err(action_configuration_invalid)?,
+        retention_policy_id: RetentionPolicyId::try_new(OWNER_ACTION_COMMAND_RETENTION_POLICY_ID)
+            .map_err(action_configuration_invalid)?,
         bytes,
     };
     payload.validate()?;
@@ -263,10 +261,8 @@ fn owner_event(
         data_class: DataClass::Restricted,
         encoding: PayloadEncoding::Json,
         maximum_size_bytes: OWNER_ACTION_COMMAND_MAXIMUM_BYTES,
-        retention_policy_id: RetentionPolicyId::try_new(
-            OWNER_ACTION_COMMAND_RETENTION_POLICY_ID,
-        )
-        .map_err(action_configuration_invalid)?,
+        retention_policy_id: RetentionPolicyId::try_new(OWNER_ACTION_COMMAND_RETENTION_POLICY_ID)
+            .map_err(action_configuration_invalid)?,
         bytes: request.input.bytes.clone(),
     };
     event_payload.validate()?;
@@ -274,11 +270,8 @@ fn owner_event(
     Ok(EventEvidence {
         event_id: deterministic_id("event", command),
         event: DomainEvent {
-            event_type: EventType::try_new(format!(
-                "{}.completed",
-                definition.capability_id
-            ))
-            .map_err(action_configuration_invalid)?,
+            event_type: EventType::try_new(format!("{}.completed", definition.capability_id))
+                .map_err(action_configuration_invalid)?,
             aggregate: current.reference.clone(),
             expected_aggregate_version: Some(current.version),
             deduplication_key: command.target_idempotency_key().to_string(),
