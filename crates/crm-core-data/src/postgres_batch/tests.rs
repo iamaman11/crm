@@ -109,6 +109,31 @@ mod tests {
     }
 
     #[test]
+    fn accepts_optimistic_delete_with_bounded_tombstone() {
+        let mut value = plan();
+        value.records = vec![RecordMutation::Delete {
+            reference: reference(),
+            expected_version: 1,
+            tombstone: payload(),
+        }];
+
+        value.validate().unwrap();
+        value.validate_transactional_aggregate().unwrap();
+    }
+
+    #[test]
+    fn rejects_non_positive_delete_version() {
+        let mut value = plan();
+        value.records = vec![RecordMutation::Delete {
+            reference: reference(),
+            expected_version: 0,
+            tombstone: payload(),
+        }];
+
+        assert!(matches!(value.validate(), Err(BatchError::InvalidPlan(_))));
+    }
+
+    #[test]
     fn rejects_duplicate_audit_record_identity() {
         let mut value = plan();
         value.audits.push(audit("audit-1", 12));

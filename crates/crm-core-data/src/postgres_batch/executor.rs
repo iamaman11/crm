@@ -179,9 +179,9 @@ fn validate_target_mutation(
         ));
     }
     let mut matching = plan.batch.records.iter().filter(|mutation| match mutation {
-        RecordMutation::Create { reference, .. } | RecordMutation::Update { reference, .. } => {
-            reference == &target.reference
-        }
+        RecordMutation::Create { reference, .. }
+        | RecordMutation::Update { reference, .. }
+        | RecordMutation::Delete { reference, .. } => reference == &target.reference,
     });
     let mutation = matching.next().ok_or_else(|| {
         BatchError::InvalidPlan("aggregate plan does not mutate its resolved target".to_owned())
@@ -198,6 +198,9 @@ fn validate_target_mutation(
             AggregatePresence::MustExist,
             Some(snapshot),
             RecordMutation::Update {
+                expected_version, ..
+            }
+            | RecordMutation::Delete {
                 expected_version, ..
             },
         ) if *expected_version == snapshot.version => Ok(()),
