@@ -98,14 +98,14 @@ impl TransactionalCapabilityExecutor for PostgresPrivacyOwnerActionExecutor {
             validate_request_identity(definition, &request)?;
             let target = self.planner.target(definition, &request)?;
             if target.expected_version <= 0 {
-                return Err(invalid_plan("expected owner record version must be positive"));
+                return Err(invalid_plan(
+                    "expected owner record version must be positive",
+                ));
             }
 
-            let idempotency = capability_idempotency(
-                &request,
-                crate::capability_idempotency_scope(definition),
-            )
-            .map_err(capability_batch_error_to_sdk)?;
+            let idempotency =
+                capability_idempotency(&request, crate::capability_idempotency_scope(definition))
+                    .map_err(capability_batch_error_to_sdk)?;
             let mut transaction = self
                 .store
                 .pool()
@@ -117,13 +117,10 @@ impl TransactionalCapabilityExecutor for PostgresPrivacyOwnerActionExecutor {
                 .await
                 .map_err(capability_batch_error_to_sdk)?;
 
-            if let Some(result) = load_capability_replay(
-                &mut transaction,
-                &request.context,
-                &idempotency,
-            )
-            .await
-            .map_err(capability_batch_error_to_sdk)?
+            if let Some(result) =
+                load_capability_replay(&mut transaction, &request.context, &idempotency)
+                    .await
+                    .map_err(capability_batch_error_to_sdk)?
             {
                 transaction
                     .commit()
@@ -136,25 +133,18 @@ impl TransactionalCapabilityExecutor for PostgresPrivacyOwnerActionExecutor {
             insert_idempotency_claim(&mut transaction, &request.context, &idempotency)
                 .await
                 .map_err(capability_batch_error_to_sdk)?;
-            let current = load_record_for_update(
-                &mut transaction,
-                &request.context,
-                &target.reference,
-            )
-            .await
-            .map_err(capability_batch_error_to_sdk)?
-            .ok_or_else(owner_record_not_found)?;
+            let current =
+                load_record_for_update(&mut transaction, &request.context, &target.reference)
+                    .await
+                    .map_err(capability_batch_error_to_sdk)?
+                    .ok_or_else(owner_record_not_found)?;
             if current.version != target.expected_version {
                 return Err(owner_record_stale());
             }
 
             let plan = self.planner.plan(definition, &request, &current)?;
             let evidence_plan = evidence_plan(&request, &target, &plan, idempotency)?;
-            validate_transactional_aggregate_execution_plan(
-                definition,
-                &request,
-                &evidence_plan,
-            )?;
+            validate_transactional_aggregate_execution_plan(definition, &request, &evidence_plan)?;
             validate_owner_plan(&target, &current, &plan)?;
 
             let new_version = apply_owner_record_action(
@@ -190,13 +180,9 @@ impl TransactionalCapabilityExecutor for PostgresPrivacyOwnerActionExecutor {
                 }],
                 replayed: false,
             };
-            complete_capability_idempotency(
-                &mut transaction,
-                &evidence_plan.batch,
-                &result,
-            )
-            .await
-            .map_err(capability_batch_error_to_sdk)?;
+            complete_capability_idempotency(&mut transaction, &evidence_plan.batch, &result)
+                .await
+                .map_err(capability_batch_error_to_sdk)?;
             insert_completion_marker(&mut transaction, &evidence_plan.batch)
                 .await
                 .map_err(capability_batch_error_to_sdk)?;
@@ -314,13 +300,7 @@ async fn apply_owner_record_action(
     .bind(maximum_size)
     .bind(payload.retention_policy_id.as_str())
     .bind(payload.bytes.as_slice())
-    .bind(
-        request
-            .context
-            .execution
-            .business_transaction_id
-            .as_str(),
-    )
+    .bind(request.context.execution.business_transaction_id.as_str())
     .bind(request.context.module_id.as_str())
     .bind(target.expected_version)
     .bind(delete)
@@ -360,13 +340,7 @@ async fn insert_owner_outbox_event(
     )
     .bind(request.context.execution.tenant_id.as_str())
     .bind(&evidence.event_id)
-    .bind(
-        request
-            .context
-            .execution
-            .business_transaction_id
-            .as_str(),
-    )
+    .bind(request.context.execution.business_transaction_id.as_str())
     .bind(evidence.event.aggregate.record_type.as_str())
     .bind(evidence.event.aggregate.record_id.as_str())
     .bind(evidence.aggregate_version)
