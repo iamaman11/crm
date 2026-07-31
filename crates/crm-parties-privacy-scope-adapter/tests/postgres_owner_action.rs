@@ -292,6 +292,11 @@ async fn seed_tenants(admin: &PgPool) {
 }
 
 async fn seed_actors(admin: &PgPool) {
+    let mut transaction = admin.begin().await.unwrap();
+    sqlx::query("SET LOCAL session_replication_role = 'replica'")
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
     sqlx::query(
         r#"
         INSERT INTO crm.actors (
@@ -310,9 +315,10 @@ async fn seed_actors(admin: &PgPool) {
     .bind(TENANT_A)
     .bind(TENANT_B)
     .bind(ACTOR_ID)
-    .execute(admin)
+    .execute(&mut *transaction)
     .await
     .unwrap();
+    transaction.commit().await.unwrap();
 }
 
 async fn seed_owner_action_capability(admin: &PgPool) {
