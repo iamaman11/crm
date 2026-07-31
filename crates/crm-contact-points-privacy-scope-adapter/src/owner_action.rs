@@ -3,9 +3,9 @@ use crm_contact_points::{ContactPoint, ContactPointKind, ContactPointStatus, Upd
 use crm_contact_points_capability_adapter::{
     RECORD_TYPE, contact_point_from_snapshot, persisted_payload,
 };
-use crm_customer_privacy::PrivacyOwnerActionCommand;
 use crm_customer_privacy_owner_scope_support::{
-    OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, owner_action_definition,
+    OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, PrivacyOwnerActionCommand,
+    owner_action_definition,
 };
 use crm_module_sdk::{RecordSnapshot, SdkError, TypedPayload};
 
