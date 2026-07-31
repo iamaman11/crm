@@ -84,7 +84,9 @@ class RepositoryNavigationTests(unittest.TestCase):
             packet["acceptance"],
         )
         self.assertIn(
-            "complete repository step 12 for Identity Resolution",
+            "complete repository step 12 for Identity Resolution, Customer Data Operations, "
+            "Data Quality, Customer Enrichment, Sales/Activities, Customer 360 or other "
+            "remaining owners in this batch",
             packet["non_goals"],
         )
 
