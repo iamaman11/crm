@@ -7,6 +7,7 @@
 //! their contribution entry points for the generic process host.
 
 use crm_application_composition::{ModuleActivationPort, ModuleContributionSet};
+use crm_capability_runtime::CapabilityAuthorizer;
 use crm_consents_capability_composition::{
     ConsentsProductionDependencies, build_contribution as build_consents_contribution,
 };
@@ -30,6 +31,29 @@ pub use crm_customer_accounts_capability_composition::{
     mutation_capability_definitions as customer_accounts_mutation_capability_definitions,
     query_capability_definitions as customer_accounts_query_capability_definitions,
 };
+use crm_customer_data_operations_execution_composition::{
+    CustomerDataOperationsProductionDependencies,
+    build_contribution as build_customer_data_operations_contribution,
+};
+pub use crm_customer_data_operations_execution_composition::{
+    mutation_capability_definitions as customer_data_operations_mutation_capability_definitions,
+    query_capability_definitions as customer_data_operations_query_capability_definitions,
+};
+use crm_data_quality_source_composition::{
+    DataQualityProductionDependencies, build_contribution as build_data_quality_contribution,
+};
+pub use crm_data_quality_source_composition::{
+    mutation_capability_definitions as data_quality_mutation_capability_definitions,
+    query_capability_definitions as data_quality_query_capability_definitions,
+};
+use crm_identity_resolution_capability_composition::{
+    IdentityResolutionProductionDependencies,
+    build_contribution as build_identity_resolution_contribution,
+};
+pub use crm_identity_resolution_capability_composition::{
+    mutation_capability_definitions as identity_resolution_mutation_capability_definitions,
+    query_capability_definitions as identity_resolution_query_capability_definitions,
+};
 use crm_module_sdk::SdkError;
 use crm_party_reference_composition::{
     PartiesProductionDependencies, PostgresPartyReferenceReader,
@@ -47,13 +71,15 @@ pub use crm_party_relationships_capability_composition::{
     mutation_capability_definitions as party_relationships_mutation_capability_definitions,
     query_capability_definitions as party_relationships_query_capability_definitions,
 };
-use crm_query_runtime::QueryVisibilityAuthorizer;
+use crm_query_runtime::{QueryAuthorizer, QueryVisibilityAuthorizer};
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct FirstPartyProductionDependencies {
     pub store: PostgresDataStore,
     pub activation: Arc<dyn ModuleActivationPort>,
+    pub capability_authorizer: Arc<dyn CapabilityAuthorizer>,
+    pub query_authorizer: Arc<dyn QueryAuthorizer>,
     pub visibility_authorizer: Arc<dyn QueryVisibilityAuthorizer>,
     pub cursor_key: [u8; 32],
 }
@@ -66,6 +92,8 @@ pub fn build_all(
     let FirstPartyProductionDependencies {
         store,
         activation,
+        capability_authorizer,
+        query_authorizer,
         visibility_authorizer,
         cursor_key,
     } = dependencies;
@@ -106,11 +134,37 @@ pub fn build_all(
     )?);
     contributions.merge(build_party_relationships_contribution(
         PartyRelationshipsProductionDependencies {
-            store,
-            parties,
-            activation,
-            visibility_authorizer,
+            store: store.clone(),
+            parties: parties.clone(),
+            activation: activation.clone(),
+            visibility_authorizer: visibility_authorizer.clone(),
             cursor_key,
+        },
+    )?);
+    contributions.merge(build_identity_resolution_contribution(
+        IdentityResolutionProductionDependencies {
+            store: store.clone(),
+            activation: activation.clone(),
+            visibility_authorizer: visibility_authorizer.clone(),
+            cursor_key,
+        },
+    )?);
+    contributions.merge(build_customer_data_operations_contribution(
+        CustomerDataOperationsProductionDependencies {
+            store: store.clone(),
+            activation: activation.clone(),
+            capability_authorizer: capability_authorizer.clone(),
+            visibility_authorizer: visibility_authorizer.clone(),
+            cursor_key,
+        },
+    )?);
+    contributions.merge(build_data_quality_contribution(
+        DataQualityProductionDependencies {
+            store,
+            activation,
+            capability_authorizer,
+            query_authorizer,
+            visibility_authorizer,
         },
     )?);
 

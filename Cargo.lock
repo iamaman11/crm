@@ -797,6 +797,7 @@ dependencies = [
 name = "crm-customer-data-operations-execution-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-adapters",
  "crm-capability-plan-support",
  "crm-capability-runtime",
@@ -804,9 +805,12 @@ dependencies = [
  "crm-core-files",
  "crm-customer-data-operations",
  "crm-customer-data-operations-capability-adapter",
+ "crm-customer-data-operations-query-adapter",
+ "crm-customer-data-operations-source-composition",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
+ "crm-query-runtime",
  "prost",
  "sha2 0.10.9",
  "tokio",
@@ -1441,13 +1445,16 @@ dependencies = [
 name = "crm-data-quality-source-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-adapters",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
  "crm-data-quality",
  "crm-data-quality-capability-adapter",
+ "crm-data-quality-query-adapter",
  "crm-module-sdk",
+ "crm-parties-capability-adapter",
  "crm-parties-query-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
@@ -1459,10 +1466,14 @@ name = "crm-first-party-modules"
 version = "0.1.0"
 dependencies = [
  "crm-application-composition",
+ "crm-capability-runtime",
  "crm-consents-capability-composition",
  "crm-contact-points-capability-composition",
  "crm-core-data",
  "crm-customer-accounts-capability-composition",
+ "crm-customer-data-operations-execution-composition",
+ "crm-data-quality-source-composition",
+ "crm-identity-resolution-capability-composition",
  "crm-module-sdk",
  "crm-party-reference-composition",
  "crm-party-relationships-capability-composition",
@@ -1508,14 +1519,19 @@ dependencies = [
 name = "crm-identity-resolution-capability-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
  "crm-identity-resolution",
  "crm-identity-resolution-capability-adapter",
+ "crm-identity-resolution-merge-composition",
+ "crm-identity-resolution-merge-query-adapter",
+ "crm-identity-resolution-query-adapter",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-proto-contracts",
+ "crm-query-runtime",
  "tokio",
 ]
 

@@ -7,6 +7,9 @@
 //! governed owner boundaries and owns only operation jobs, immutable artifacts, outcomes and
 //! reconciliation evidence. No direct cross-owner storage path exists here.
 
+mod production_contribution;
+pub use production_contribution::*;
+
 pub use crm_core_files::{
     AppendImmutableFileChunk, CreateImmutableFileArtifact, FileArtifactAppendResult,
     FileArtifactMetadata, FileArtifactStatus, FinalizedFileArtifact, ImmutableFileArtifactStore,

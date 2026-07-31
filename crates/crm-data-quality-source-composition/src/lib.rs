@@ -6,6 +6,13 @@
 //! then executes the normal Party query adapter. Tenant/RLS and live resource and
 //! field visibility therefore remain owned by the Party query boundary.
 
+mod capability_execution;
+mod production_contribution;
+mod registration;
+pub use capability_execution::DataQualityCapabilityExecutor;
+pub use production_contribution::*;
+pub use registration::DataQualityAggregatePlanner;
+
 mod materialization_sink;
 mod staging_command;
 mod staging_context;
