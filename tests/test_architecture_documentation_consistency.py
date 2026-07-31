@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
+ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/PROJECT_STATUS.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
 
 
 
@@ -349,12 +349,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-13-plan-hardening")
+        self.assertEqual(self.packet["packet_id"], "repository-step-13-plan-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
         self.assertEqual(
             self.packet["baseline"]["sha"],
-            "dfd1478dcfc084cf855fcc409c9b8faec8eaa5cf",
+            "be1411136fd36397b22e26737b441351894fdb66",
         )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(self.packet["allowed_paths"], ALLOWED_PACKET_PATHS)
@@ -364,25 +364,31 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "Affected Scope CI",
                 "Customer Privacy Access Export CI",
                 "Customer Privacy Owner Execution CI",
+                "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
         self.assertIn(
-            "the plan cannot treat the previous 110-package baseline as current 113-package completion evidence",
+            "the phrase declaring repository step 12 as the next permitted repository packet is absent from live authoritative documents",
             self.packet["acceptance"],
         )
-        self.assertIn(
-            "unregistered source-level lint suppressions and equivalent bypasses are explicitly inside step-13 governance scope",
-            self.packet["acceptance"],
+        self.assertIn("repository-step-13-plan-evidence-sync", self.active_packet)
+        self.assertIn("be1411136fd36397b22e26737b441351894fdb66", self.active_packet)
+        for document in (self.plan, self.status):
+            self.assertIn("PR #251", document)
+            self.assertIn("22e515453e3ed66d0f059bd3c0fe926cee524620", document)
+            self.assertIn("be1411136fd36397b22e26737b441351894fdb66", document)
+            self.assertIn("5 of 5 applicable permanent workflows", document)
+        self.assertNotIn(
+            "the next permitted repository packet is **repository step 12",
+            self.plan.lower(),
         )
-        self.assertIn("repository-step-13-plan-hardening", self.active_packet)
-        self.assertIn("dfd1478dcfc084cf855fcc409c9b8faec8eaa5cf", self.active_packet)
+        self.assertIn("## Repository step 13 plan-hardening evidence", self.plan)
+        self.assertIn("first bounded repository-step-13 packet is therefore limited to measurement and governance calibration", self.plan)
+        self.assertIn("The next permitted packet is repository-step-13 measurement and governance calibration only", self.status)
+        self.assertIn("Repository step 14 remains blocked", self.status)
         self.assertIn("Repository step 13 remains the next permitted implementation step", self.adr31)
-        self.assertIn("current accepted workspace contains 113 packages", self.adr31)
-        self.assertIn("#[allow(...)]", self.adr31)
-        self.assertIn("representative ordinary-capability and new-owner change-cost reports", self.adr31)
-        self.assertIn("Step 14 remains blocked", self.adr31)
 
     def test_stage_accountability_and_live_catalog_are_current(self) -> None:
         for stage in (

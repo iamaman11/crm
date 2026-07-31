@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-07-31
+Status date: 2026-08-01
 
 This is the concise current-state snapshot. Normative product dependencies remain in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order is in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains in `MODULE_CATALOG.md`.
 
@@ -8,6 +8,7 @@ This is the concise current-state snapshot. Normative product dependencies remai
 
 - `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `DELIVERY_GOVERNANCE.md`;
 - `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4 for the only permitted repository packet order;
+- `adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md` for the binding step-13 entry and exit evidence;
 - `RUST_TOOLCHAIN_AND_LINT_BASELINE.md` and `rust-governance-policy.json` for the accepted Rust boundary and measured lint cohorts;
 - `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, `MODULE_CATALOG.md`;
 - `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_FREEZE.md` and `CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md`;
@@ -23,6 +24,8 @@ This is the concise current-state snapshot. Normative product dependencies remai
 Latest accepted Customer Privacy runtime baseline is PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / squash merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 applicable permanent workflows on one unchanged exact head.
 
 Latest accepted repository implementation packet is PR #249 / accepted source `7876945586e5a6cc94f8d3b0f6ba2b57316484d2` / squash merge `f36592211bed3e0df7cf3771164b4bc24026eff3` / 37 of 37 applicable permanent workflows on one unchanged exact head. Repository step 12 and Stage D are complete; repository step 13 is the next permitted implementation step and is not started.
+
+Latest accepted architecture plan correction is ADR-031 through PR #251 / accepted source `22e515453e3ed66d0f059bd3c0fe926cee524620` / squash merge `be1411136fd36397b22e26737b441351894fdb66` / 5 of 5 applicable permanent workflows on one unchanged exact head. The first step-13 packet performs current-main 113-package measurement and governance calibration only; it does not perform dependency, crate, exception or runtime remediation.
 
 The accepted inventory is seven public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`, `legal_hold.place`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution remain trusted-internal with no public route.
 
@@ -183,7 +186,7 @@ Only one implementation packet may be active. The current order begins:
 -> 10. governed Customer Privacy access/export assembly — complete through PR #241
 -> 11. owner-specific deletion, anonymization and supported crypto-shred execution — complete through PR #244
 -> 12. complete first-party contribution aggregation for all currently active owners — complete through PR #249
--> 13. complete dependency/public-surface/reverse-fan-out/exception governance
+-> 13. current-main 113-package remeasurement and anti-circumvention calibration, then bounded dependency/public-surface/reverse-fan-out/exception remediation
 -> 14. first measured behavior-neutral transitional domain-cluster consolidation
 -> 15. Party tombstone, no-orphan proof and projection/search/cache convergence
 -> 16. reusable generic worker conformance
@@ -203,6 +206,14 @@ Phase 8A closure does not make the universal CRM complete. Product Catalog/Prici
 
 Current product-complete expert modules: **0**.
 
+## Repository step 13 plan-hardening evidence
+
+ADR-031 is accepted through PR #251 / accepted source `22e515453e3ed66d0f059bd3c0fe926cee524620` / squash merge `be1411136fd36397b22e26737b441351894fdb66` / 5 of 5 applicable permanent workflows on one unchanged exact head.
+
+The next permitted packet is repository-step-13 measurement and governance calibration only. It must regenerate the exact 113-package complexity baseline, inventory equivalent manifest/source bypass forms, classify central systems by role, measure ordinary-capability and new-owner change cost, and calibrate budgets before any structural remediation. It must not centralize dependency features, consolidate crates, remove exceptions or change runtime/product behavior.
+
+Repository step 13 remains **not started**. Repository step 14 remains blocked. Customer Privacy and Phase 8A remain incomplete.
+
 ## Repository step 12 completion evidence
 
 Repository step 12 and Stage D — contribution aggregation are **complete**. All currently active first-party owners now expose owner-owned production contribution boundaries aggregated through `crm-first-party-modules`; generic native composition retains platform-level composition only.
@@ -215,4 +226,4 @@ Accepted implementation evidence:
 
 The accepted batches are behavior-neutral: public coordinates and ordering, tenant activation, authorization, governed Party/Consent reads, persistence, projections and workers remain unchanged; workspace package count and external dependency versions remain unchanged.
 
-Repository step 13 is the **next permitted implementation step** and is **not started**. No later repository step may start before step 13 is accepted and synchronized. This architecture completion does not change Customer Privacy or Phase 8A product readiness; current product-complete expert modules remain **0**.
+Repository step 13 is the **next permitted repository step** and is **not started**. Its first bounded packet is measurement and governance calibration only; dependency, crate, exception and runtime remediation remain later step-13 work after accepted evidence. Repository step 14 remains blocked. Customer Privacy and Phase 8A product readiness remain unchanged; current product-complete expert modules remain **0**.
