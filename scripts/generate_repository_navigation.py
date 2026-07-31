@@ -35,6 +35,13 @@ customer_data_insertion = '''    replace_once(
         "#![forbid(unsafe_code)]\\n\\nmod production_contribution;\\npub use production_contribution::*;\\n",
     )
 '''
+data_quality_insertion = '''    replace_once(
+        root,
+        "crates/crm-data-quality-source-composition/src/lib.rs",
+        "mod materialization_sink;\\n",
+        "mod capability_execution;\\nmod registration;\\nmod production_contribution;\\npub use capability_execution::DataQualityCapabilityExecutor;\\npub use production_contribution::*;\\npub use registration::DataQualityAggregatePlanner;\\n\\nmod materialization_sink;\\n",
+    )
+'''
 materialize_anchor = "def materialize(root: Path) -> None:\n"
 materialize_replacement = '''def materialize(root: Path) -> None:
     contribution_declaration = "mod production_contribution;\\npub use production_contribution::*;"
@@ -50,6 +57,38 @@ materialize_replacement = '''def materialize(root: Path) -> None:
         while duplicate_declaration in content:
             content = content.replace(duplicate_declaration, contribution_declaration, 1)
         path.write_text(content, encoding="utf-8")
+
+    data_quality_path = root / "crates/crm-data-quality-source-composition/src/lib.rs"
+    data_quality_content = data_quality_path.read_text(encoding="utf-8")
+    data_quality_lines = (
+        "mod capability_execution;",
+        "mod production_contribution;",
+        "mod registration;",
+        "pub use capability_execution::DataQualityCapabilityExecutor;",
+        "pub use production_contribution::*;",
+        "pub use registration::DataQualityAggregatePlanner;",
+    )
+    retained_lines = [
+        line
+        for line in data_quality_content.splitlines()
+        if line not in data_quality_lines
+    ]
+    data_quality_content = "\\n".join(retained_lines) + "\\n"
+    data_quality_block = (
+        "mod capability_execution;\\n"
+        "mod production_contribution;\\n"
+        "mod registration;\\n"
+        "pub use capability_execution::DataQualityCapabilityExecutor;\\n"
+        "pub use production_contribution::*;\\n"
+        "pub use registration::DataQualityAggregatePlanner;\\n\\n"
+    )
+    anchor = "mod materialization_sink;\\n"
+    if data_quality_content.count(anchor) != 1:
+        raise RuntimeError("Data Quality materialization sink anchor is not unique")
+    data_quality_path.write_text(
+        data_quality_content.replace(anchor, data_quality_block + anchor, 1),
+        encoding="utf-8",
+    )
 '''
 resolution_before = '''    subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=root, check=True, stdout=subprocess.DEVNULL)
 '''
@@ -75,6 +114,7 @@ identity_merge_after = (
 for before, after, label in (
     (identity_insertion, "", "Identity Resolution repeated module insertion"),
     (customer_data_insertion, "", "Customer Data Operations repeated module insertion"),
+    (data_quality_insertion, "", "Data Quality repeated module insertion"),
     (materialize_anchor, materialize_replacement, "idempotent declaration normalization"),
     (resolution_before, resolution_after, "all-target lockfile and compilation resolution"),
     (identity_candidate_before, identity_candidate_after, "candidate capability selection borrowing"),
