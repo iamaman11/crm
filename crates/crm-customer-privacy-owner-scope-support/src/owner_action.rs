@@ -184,6 +184,7 @@ fn validate_request<P: OwnerPrivacyActionPolicy>(
 ) -> Result<PrivacyOwnerActionCommand, SdkError> {
     request.context.validate()?;
     request.input.validate()?;
+    let input_hash: [u8; 32] = Sha256::digest(&request.input.bytes).into();
     if definition.owner_module_id.as_str() != policy.owner_module_id()
         || definition.capability_id.as_str() != policy.capability_id()
         || definition.capability_version.as_str() != OWNER_ACTION_VERSION
@@ -191,7 +192,7 @@ fn validate_request<P: OwnerPrivacyActionPolicy>(
         || request.context.execution.capability_id != definition.capability_id
         || request.context.execution.capability_version != definition.capability_version
         || !definition.input_contract.matches(&request.input)
-        || request.input_hash != Sha256::digest(&request.input.bytes).into()
+        || request.input_hash != input_hash
     {
         return Err(action_invalid(
             "definition, execution context or typed input binding is invalid",
