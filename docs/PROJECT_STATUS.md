@@ -20,11 +20,11 @@ This is the concise current-state snapshot. Normative product dependencies remai
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is in progress.**
 
-Latest accepted Customer Privacy runtime baseline is PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head.
+Latest accepted Customer Privacy runtime baseline is PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / squash merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 applicable permanent workflows on one unchanged exact head.
 
-Latest accepted repository implementation packet is PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head.
+Latest accepted repository implementation packet is PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / squash merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 applicable permanent workflows on one unchanged exact head.
 
-The accepted inventory is seven public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`, `legal_hold.place`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, repository-step-8 owner execution and `customer_privacy.access_export.request@1.0.0` remain trusted-internal with no public route.
+The accepted inventory is seven public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`, `legal_hold.place`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution remain trusted-internal with no public route.
 
 **All nine authoritative owner implementations are accepted:**
 
@@ -130,13 +130,15 @@ Repository step 9 is accepted through PR #239 / accepted source `e7ed45a7da5f14f
 
 Repository step 10 is accepted through PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head. It implements trusted-internal, replay-safe Customer Privacy access/export assembly through `customer_privacy.access_export.request@1.0.0` and the exact `customer_data.export.privacy.request@1.0.0` Customer Data Operations boundary. Customer Privacy persists an immutable strictly rehydrated manifest and stable job/artifact references before I/O; Customer Data Operations remains the durable job and immutable artifact owner. Deterministic identities recover pre-target and finalized-artifact/pre-link crash windows without a second logical job or artifact. Activation, exact case/snapshot/plan/checkpoint lineage, tenant and canonical-Party locking, registered initiating-capability provenance, FORCE RLS, transaction/outbox/audit/idempotency evidence, clean PostgreSQL, rollback/reapply and repeated acceptance are proven. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no public route or alternate download endpoint, destructive action, crate, dependency, `Cargo.lock`, Protobuf contract, migration, workspace package or generic-runtime business switch was introduced.
 
+Repository step 11 is accepted through PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / squash merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 applicable permanent workflows on one unchanged exact head. It executes approved owner-specific anonymization and supported deletion through the exact nine authoritative owner boundaries, binds every call to canonical immutable case/snapshot/plan/retention/attempt lineage, and persists replay-safe tenant-bound mutation, idempotency, business transaction, audit and outbox evidence atomically under FORCE RLS. Real Parties acceptance proves mutation, exact replay, stale and cross-tenant rejection, clean PostgreSQL, rollback/reapply and repeated execution. Unsupported owner/action combinations and unavailable crypto-shred fail closed before mutation. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no crate, dependency, contract, migration, Cargo.lock, workspace-package or generic-runtime business-switch change was introduced.
+
 ## Next permitted repository packet
 
-Repository step 11 is owner-specific deletion, anonymization and supported crypto-shred execution.
+Repository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes.
 
 ## Following permitted repository packet
 
-Repository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes.
+Repository step 13 completes calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions.
 
 
 ## Architecture 10/10 declaration boundary
@@ -151,7 +153,7 @@ Issue #194 remains open.
 
 - Stage A documentation/source hierarchy and stable navigation are complete.
 - Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions are accepted; repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration and removal of those three direct lint exceptions.
-- Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public restriction/legal-hold placement, retention adjudication, durable replay-safe owner execution/outcomes, governed access/export assembly and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
+- Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public restriction/legal-hold placement, retention adjudication, durable replay-safe owner execution/outcomes, governed access/export assembly, authoritative exact-nine owner-specific anonymization/deletion execution and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
 - Stage D is in progress: the first bounded Customer Accounts registration-inventory aggregation is accepted through PR #222; repository step 12 now explicitly completes contribution entry points for all currently active first-party owners and removes remaining ordinary-registration concrete imports from generic runtime.
 - Stage E is complete through PR #239: deterministic Rust closure, exact repository-scope ownership, executable contract/Protobuf/API/migration/PostgreSQL/process/product/frontend/operations workflow coverage, exact-head evidence and unknown-path fail-closed enforcement are accepted.
 - Stage H is in progress: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands are repository step 18.
@@ -175,8 +177,8 @@ Only one implementation packet may be active. The current order begins:
 -> 8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — complete through PR #237
 -> 9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — complete through PR #239
 -> 10. governed Customer Privacy access/export assembly — complete through PR #241
--> 11. owner-specific deletion, anonymization and supported crypto-shred execution — next
--> 12. complete first-party contribution aggregation for all currently active owners
+-> 11. owner-specific deletion, anonymization and supported crypto-shred execution — complete through PR #244
+-> 12. complete first-party contribution aggregation for all currently active owners — next
 -> 13. complete dependency/public-surface/reverse-fan-out/exception governance
 -> 14. first measured behavior-neutral transitional domain-cluster consolidation
 -> 15. Party tombstone, no-orphan proof and projection/search/cache convergence

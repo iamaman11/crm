@@ -33,7 +33,7 @@ Repository implementation is strictly sequential. Only the first unfinished item
 
 Issue #126 is **In progress**.
 
-Latest accepted public runtime inventory is seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, repository-step-8 owner execution and `customer_privacy.access_export.request@1.0.0` have no public ingress.
+Latest accepted public runtime inventory is seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution have no public ingress.
 
 All nine authoritative owner implementations are accepted:
 
@@ -79,7 +79,9 @@ Repository step 9 is accepted through PR #239 / accepted source `e7ed45a7da5f14f
 
 Repository step 10 is accepted through PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head. It implements trusted-internal, replay-safe Customer Privacy access/export assembly through `customer_privacy.access_export.request@1.0.0` and the exact `customer_data.export.privacy.request@1.0.0` Customer Data Operations boundary. Customer Privacy persists an immutable strictly rehydrated manifest and stable job/artifact references before I/O; Customer Data Operations remains the durable job and immutable artifact owner. Deterministic identities recover pre-target and finalized-artifact/pre-link crash windows without a second logical job or artifact. Activation, exact case/snapshot/plan/checkpoint lineage, tenant and canonical-Party locking, registered initiating-capability provenance, FORCE RLS, transaction/outbox/audit/idempotency evidence, clean PostgreSQL, rollback/reapply and repeated acceptance are proven. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no public route or alternate download endpoint, destructive action, crate, dependency, `Cargo.lock`, Protobuf contract, migration, workspace package or generic-runtime business switch was introduced.
 
-Repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — is now the next permitted implementation packet. Repository step 12 or later work remains blocked until step 11 is accepted and its evidence is synchronized.
+Repository step 11 is accepted through PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / squash merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 applicable permanent workflows on one unchanged exact head. It executes approved owner-specific anonymization and supported deletion through the exact nine authoritative owner boundaries, binds every call to canonical immutable case/snapshot/plan/retention/attempt lineage, and persists replay-safe tenant-bound mutation, idempotency, business transaction, audit and outbox evidence atomically under FORCE RLS. Real Parties acceptance proves mutation, exact replay, stale and cross-tenant rejection, clean PostgreSQL, rollback/reapply and repeated execution. Unsupported owner/action combinations and unavailable crypto-shred fail closed before mutation. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no crate, dependency, contract, migration, Cargo.lock, workspace-package or generic-runtime business-switch change was introduced.
+
+Repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — is now the next permitted implementation packet. Repository step 13 or later work remains blocked until step 12 is accepted and its evidence is synchronized.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -183,8 +185,8 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 8. repository step 8 — replay-safe resumable owner execution and crash-window recovery — **complete through PR #237**;
 9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **complete through PR #239**;
 10. repository step 10 — governed access/export assembly — **complete through PR #241**;
-11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **next**;
-12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes;
+11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **complete through PR #244**;
+12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **next**;
 13. repository step 13 — complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;
 14. repository step 14 — first measured behavior-neutral consolidation;
 15. repository step 15 — Party tombstone, no-orphan proof and projection/search/cache convergence;
@@ -199,7 +201,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 24. repository step 24 — second contrasting expert-domain wave;
 25. repository step 25 — final architecture 10/10 closure review only after every criterion is mechanically proven.
 
-The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 11 is unfinished.
+The inserted prerequisites did not renumber the normative master sequence. A later step must not start while repository step 12 is unfinished.
 
 
 ### 9.1 Stage accountability for the remaining Phase 8 sequence
