@@ -132,7 +132,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Complete through PR #239**;",
             "10. governed Customer Privacy access/export assembly — **Complete through PR #241**;",
             "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Complete through PR #244**;",
-            "12. complete first-party contribution aggregation for all currently active owners without behavior changes — **Next**;",
+            "12. complete first-party contribution aggregation for all currently active owners without behavior changes — **In progress; batch 1 complete through PR #246**;",
             "13. complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;",
             "14. first measured behavior-neutral transitional domain-cluster consolidation;",
             "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;",
@@ -164,7 +164,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.phase8,
         )
         self.assertIn(
-            "12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **next**;",
+            "12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **in progress; batch 1 complete through PR #246**;",
             self.phase8,
         )
         self.assertIn(
@@ -258,6 +258,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db",
                 "34 of 34",
             ),
+            (
+                self.authoritative_status_documents,
+                "PR #246",
+                "3b4fe7cdf458daac9c12f816d0d6a87039e613f3",
+                "f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978",
+                "37 of 37",
+            ),
         )
         for documents, pr, source, merge, workflows in evidence:
             self.assert_evidence_in_documents(
@@ -299,87 +306,66 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-12-contribution-aggregation-batch-1",
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-12-batch-1-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
-        self.assertEqual(
-            self.packet["baseline"]["sha"],
-            "043de0298ea9b3415e9894b4c5d69952856fd377",
-        )
+        self.assertEqual(self.packet["baseline"]["sha"], "f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978")
         self.assertEqual(self.packet["tracking_issues"], [194])
-        for path in (
-            "Cargo.lock",
-            "affected-scope-policy.json",
-            "crates/crm-application-runtime/Cargo.toml",
-            "crates/crm-application-runtime/src/native_composition.rs",
-            "crates/crm-consents-capability-composition/src/lib.rs",
-            "crates/crm-contact-points-capability-composition/Cargo.toml",
-            "crates/crm-contact-points-capability-composition/src/lib.rs",
-            "crates/crm-first-party-modules/Cargo.toml",
-            "crates/crm-first-party-modules/src/lib.rs",
-            "crates/crm-party-reference-composition/Cargo.toml",
-            "crates/crm-party-reference-composition/src/lib.rs",
-            "crates/crm-party-relationships-capability-composition/Cargo.toml",
-            "crates/crm-party-relationships-capability-composition/src/lib.rs",
-            "docs/ACTIVE_PACKET.md",
-            "repository-packet.json",
-            "scripts/check_native_module_composition.py",
-            "tests/test_affected_scope.py",
-            "tests/test_architecture_documentation_consistency.py",
-            "tests/test_native_module_composition.py",
-            "tests/test_repository_navigation.py",
-        ):
-            self.assertIn(path, self.packet["allowed_paths"])
+        self.assertEqual(
+            self.packet["allowed_paths"],
+            [
+                "docs/ACTIVE_PACKET.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
+                "repository-packet.json",
+                "tests/test_architecture_documentation_consistency.py",
+                "tests/test_repository_navigation.py",
+            ],
+        )
         for path in (
             ".github/workflows/**",
+            "Cargo.lock",
+            "Cargo.toml",
+            "affected-scope-policy.json",
             "apps/**",
+            "architecture-policy.json",
             "contracts/**",
+            "crates/**",
             "database/**",
             "modules/**",
             "packages/**",
             "proto/**",
             "schemas/**",
+            "scripts/**",
             "services/**",
         ):
             self.assertIn(path, self.packet["forbidden_paths"])
         self.assertEqual(
             self.packet["required_checks"],
-            [
-                "Affected Scope CI",
-                "Governance CI",
-                "Rust CI",
-                "Rust Generated Sync",
-            ],
+            ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
         )
         self.assertIn(
-            "repository step 12 remains in progress and repository step 13 is not started",
+            "repository step 12 remains in progress and repository step 13 remains blocked",
             self.packet["acceptance"],
         )
         self.assertIn(
-            "complete repository step 12 for Identity Resolution, Customer Data Operations, "
-            "Data Quality, Customer Enrichment, Sales/Activities, Customer 360 or other "
-            "remaining owners in this batch",
+            "complete repository step 12 or claim Stage D exit evidence",
             self.packet["non_goals"],
         )
-
         self.assertIn("Generated by scripts/generate_repository_navigation.py", self.active_packet)
-        self.assertIn(
-            "repository-step-12-contribution-aggregation-batch-1",
-            self.active_packet,
-        )
+        self.assertIn("repository-step-12-batch-1-evidence-sync", self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertRegex(self.active_packet, r"sha256:[0-9a-f]{64}")
         self.assertIn("orientation only", self.active_packet)
-
         for document in self.authoritative_status_documents:
-            self.assertIn("PR #244", document)
-            self.assertIn("405d2dbb97bb371b51cfb1d4ffb5549a57262878", document)
-            self.assertIn("4b08202fe9dd0c0df83567e24e6b9d86fb79c9db", document)
-            self.assertIn("34 of 34", document)
+            self.assertIn("PR #246", document)
+            self.assertIn("3b4fe7cdf458daac9c12f816d0d6a87039e613f3", document)
+            self.assertIn("f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978", document)
+            self.assertIn("37 of 37", document)
             self.assertIn("repository step 12", document.lower())
+            self.assertIn("repository step 13 remains blocked", document.lower())
 
     def test_stage_accountability_and_live_catalog_are_current(self) -> None:
         for stage in (
@@ -399,7 +385,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("repository step 22 is a phase 8a architecture measurement checkpoint", self.plan.lower())
         self.assertIn("repository step 25", self.plan.lower())
         self.assertIn("repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration", self.status.lower())
-        self.assertIn("## Next permitted repository packet\n\nRepository step 12 completes first-party contribution aggregation", self.status)
+        self.assertIn("## Next permitted repository packet\n\nRepository step 12 remains the current permitted implementation step", self.status)
         self.assertNotIn("## Following permitted repository packet\n\nRepository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes. Repository step 13", self.status)
         self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241", self.catalog)
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
