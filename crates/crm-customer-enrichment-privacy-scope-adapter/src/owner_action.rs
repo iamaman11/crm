@@ -100,15 +100,7 @@ fn validate_resource(
         PROVIDER_RESPONSE_CONFLICT_RECORD_TYPE => validate_response_conflict(command, current),
         SUGGESTION_RECORD_TYPE => suggestion_from_snapshot(current).map(|_| ()),
         REVIEW_DECISION_RECORD_TYPE => review_decision_from_snapshot(current).map(|_| ()),
-        APPLICATION_ATTEMPT_RECORD_TYPE => {
-            let attempt = application_attempt_from_snapshot(current)?;
-            if attempt.tenant_id() != command.tenant_id() {
-                return Err(stored_state_invalid(
-                    "application attempt tenant differs from the owner action command",
-                ));
-            }
-            Ok(())
-        }
+        APPLICATION_ATTEMPT_RECORD_TYPE => application_attempt_from_snapshot(current).map(|_| ()),
         PROVIDER_USAGE_ENTRY_RECORD_TYPE => validate_provider_usage(current),
         _ => Err(stored_state_invalid(
             "unsupported Customer Enrichment resource type reached the owner policy",
