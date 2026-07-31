@@ -5,9 +5,7 @@ use crm_customer_privacy_owner_scope_support::{
 };
 use crm_module_sdk::{RecordSnapshot, SdkError, TypedPayload};
 use crm_parties::{Party, PartyKind, UpdateParty};
-use crm_parties_capability_adapter::{
-    RECORD_TYPE, party_from_snapshot, persisted_payload,
-};
+use crm_parties_capability_adapter::{RECORD_TYPE, party_from_snapshot, persisted_payload};
 
 pub const OWNER_ACTION_CAPABILITY_ID: &str = "parties.privacy.action.apply";
 
@@ -131,7 +129,10 @@ mod tests {
         );
 
         assert_eq!(person, "minimized person abababababababababababab");
-        assert_eq!(organization, "deleted organization abababababababababababab");
+        assert_eq!(
+            organization,
+            "deleted organization abababababababababababab"
+        );
         assert!(!person.contains("Ada"));
         assert!(!organization.contains("Northwind"));
     }
@@ -140,7 +141,8 @@ mod tests {
     fn minimized_label_cannot_be_a_semantic_no_op() {
         let digest = [0x11u8; 32];
         let current = "minimized person 111111111111111111111111";
-        let label = minimized_display_name(&party(PartyKind::Person, current), &digest, "minimized");
+        let label =
+            minimized_display_name(&party(PartyKind::Person, current), &digest, "minimized");
         assert_eq!(label, "minimized person 111111111111111111111111-v");
     }
 }
