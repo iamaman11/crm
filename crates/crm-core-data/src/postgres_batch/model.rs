@@ -15,26 +15,18 @@ pub enum RecordMutation {
         expected_version: i64,
         payload: TypedPayload,
     },
-    Delete {
-        reference: RecordRef,
-        expected_version: i64,
-        tombstone: TypedPayload,
-    },
 }
 
 impl RecordMutation {
     fn reference(&self) -> &RecordRef {
         match self {
-            Self::Create { reference, .. }
-            | Self::Update { reference, .. }
-            | Self::Delete { reference, .. } => reference,
+            Self::Create { reference, .. } | Self::Update { reference, .. } => reference,
         }
     }
 
     fn payload(&self) -> &TypedPayload {
         match self {
             Self::Create { payload, .. } | Self::Update { payload, .. } => payload,
-            Self::Delete { tombstone, .. } => tombstone,
         }
     }
 }
@@ -155,13 +147,10 @@ impl BatchMutationPlan {
                 RecordMutation::Update {
                     expected_version,
                     ..
-                } | RecordMutation::Delete {
-                    expected_version,
-                    ..
                 } if *expected_version <= 0
             ) {
                 return Err(BatchError::InvalidPlan(
-                    "record update/delete expected_version must be positive".to_owned(),
+                    "record update expected_version must be positive".to_owned(),
                 ));
             }
             let key = format!(
