@@ -92,7 +92,27 @@ materialize_replacement = '''def materialize(root: Path) -> None:
 '''
 resolution_before = '''    subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=root, check=True, stdout=subprocess.DEVNULL)
 '''
-resolution_after = '''    subprocess.run(
+resolution_after = '''    native_path = root / "crates/crm-application-runtime/src/native_composition.rs"
+    native_content = native_path.read_text(encoding="utf-8")
+    residual_data_quality_queries = """    let data_quality_queries = Arc::new(DataQualityQueryAdapter::new(
+        store.clone(),
+        visibility_authorizer.clone(),
+    ));
+    add_activated_queries(
+        &mut contributions,
+        data_quality_query_capability_definitions()?,
+        data_quality_queries,
+        activation,
+    )?;
+
+"""
+    if residual_data_quality_queries in native_content:
+        native_content = native_content.replace(residual_data_quality_queries, "", 1)
+        native_path.write_text(native_content, encoding="utf-8")
+    elif "DataQualityQueryAdapter::new" in native_content:
+        raise RuntimeError("residual Data Quality query bypass changed shape")
+
+    subprocess.run(
         ["cargo", "check", "--workspace", "--all-targets", "--all-features"],
         cwd=root,
         check=True,
