@@ -181,16 +181,16 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
     ),
     LegacyMarker(
         "crates/crm-application-runtime/src/native_composition.rs",
-        "add_activated_mutations(
-        &mut contributions,
-        party_capability_definitions()?",
+        "add_activated_mutations(\n"
+        "        &mut contributions,\n"
+        "        party_capability_definitions()?",
         "Parties mutation registration returned to the generic process host",
     ),
     LegacyMarker(
         "crates/crm-application-runtime/src/native_composition.rs",
-        "add_activated_queries(
-        &mut contributions,
-        party_query_capability_definitions()?",
+        "add_activated_queries(\n"
+        "        &mut contributions,\n"
+        "        party_query_capability_definitions()?",
         "Parties query registration returned to the generic process host",
     ),
 )
