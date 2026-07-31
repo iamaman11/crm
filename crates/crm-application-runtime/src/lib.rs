@@ -20,8 +20,6 @@ mod customer_enrichment_reject_promotion;
 mod customer_enrichment_suggestion_list_promotion;
 mod customer_privacy_access_export;
 mod customer_privacy_case_create_promotion;
-mod data_quality_capability_execution;
-mod data_quality_registration;
 mod export_artifact_download;
 mod export_artifact_download_http;
 mod export_execution_source;
@@ -40,6 +38,9 @@ pub(crate) use bootstrap_visibility::{
     BootstrapVisibilityResource, build_bootstrap_visibility_registry,
 };
 pub use config::*;
+pub use crm_data_quality_source_composition::{
+    DataQualityAggregatePlanner, DataQualityCapabilityExecutor,
+};
 pub use customer_enrichment_application_worker::{
     CustomerEnrichmentApplicationWorkerDependencies, OWNER_APPLICATION_POLICY_VERSION,
     build_customer_enrichment_application_worker,
@@ -68,8 +69,6 @@ pub use customer_privacy_case_create_promotion::{
     PRODUCTION_REVIEW_POLICY_VERSION, application_mutation_definitions,
     application_query_definitions, build_production_composition,
 };
-pub use data_quality_capability_execution::DataQualityCapabilityExecutor;
-pub use data_quality_registration::*;
 pub use export_artifact_download::*;
 pub(crate) use export_artifact_download_http::export_artifact_download_router;
 pub use export_execution_source::*;

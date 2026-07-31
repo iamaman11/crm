@@ -1,6 +1,5 @@
 mod customer_enrichment_reference_guards;
 
-use crate::{DataQualityAggregatePlanner, DataQualityCapabilityExecutor};
 use crm_application_composition::{
     ActivationGatedMutationValidator, ActivationGatedQueryValidator, ApplicationComposition,
     ModuleActivationPort, ModuleContributionSet, NoopMutationSemanticValidator,
@@ -12,26 +11,12 @@ use crm_capability_runtime::{
 };
 use crm_consents_query_adapter::ConsentQueryAdapter;
 use crm_core_data::{
-    PostgresDataStore, PostgresImmutableFileArtifactStore, PostgresMetadataCapabilityExecutor,
-    PostgresMetadataQueryStore, PostgresTransactionalAggregateExecutor,
-    TransactionalAggregatePlanner,
+    PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,
+    PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner,
 };
 use crm_customer_360_query_adapter::{
     Customer360QueryAdapter,
     query_capability_definitions as customer_360_query_capability_definitions,
-};
-use crm_customer_data_operations_capability_adapter::{
-    CREATE_PARTY_IMPORT_JOB_CAPABILITY, CustomerDataOperationsCapabilityPlanner,
-    VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY,
-    capability_definitions as customer_data_operations_capability_definitions,
-};
-use crm_customer_data_operations_query_adapter::{
-    CustomerDataOperationsQueryAdapter,
-    query_capability_definitions as customer_data_operations_query_capability_definitions,
-};
-use crm_customer_data_operations_source_composition::{
-    CustomerDataOperationsSourceExecutor,
-    source_capability_definitions as customer_data_operations_source_capability_definitions,
 };
 use crm_customer_enrichment_capability_adapter::{
     CustomerEnrichmentProviderProfileCapabilityPlanner,
@@ -50,11 +35,6 @@ use crm_customer_enrichment_request_list_query_adapter::{
 use crm_customer_enrichment_suggestion_query_adapter::{
     CustomerEnrichmentSuggestionQueryAdapter, get_suggestion_capability_definition,
 };
-use crm_data_quality_capability_adapter::capability_definitions as data_quality_capability_definitions;
-use crm_data_quality_query_adapter::{
-    DataQualityQueryAdapter,
-    query_capability_definitions as data_quality_query_capability_definitions,
-};
 use crm_first_party_modules::{
     FirstPartyProductionDependencies, build_all as build_first_party_modules,
     consents_mutation_capability_definitions as consent_capability_definitions,
@@ -63,39 +43,23 @@ use crm_first_party_modules::{
     contact_points_query_capability_definitions as contact_point_query_capability_definitions,
     customer_accounts_mutation_capability_definitions as account_capability_definitions,
     customer_accounts_query_capability_definitions as account_query_capability_definitions,
+    customer_data_operations_mutation_capability_definitions as customer_data_operations_capability_definitions,
+    customer_data_operations_query_capability_definitions,
+    data_quality_mutation_capability_definitions as data_quality_capability_definitions,
+    data_quality_query_capability_definitions,
+    identity_resolution_mutation_capability_definitions as identity_resolution_capability_definitions,
+    identity_resolution_query_capability_definitions,
     parties_mutation_capability_definitions as party_capability_definitions,
     parties_query_capability_definitions as party_query_capability_definitions,
     party_relationships_mutation_capability_definitions as party_relationship_capability_definitions,
     party_relationships_query_capability_definitions as party_relationship_query_capability_definitions,
 };
 use crm_global_search_composition::GLOBAL_SEARCH_INDEX_ID;
-use crm_identity_resolution_capability_adapter::{
-    CANDIDATE_MUTATION_CAPABILITY_IDS, IdentityResolutionCapabilityPlanner,
-    MERGE_MUTATION_CAPABILITY_IDS,
-    capability_definitions as identity_resolution_capability_definitions,
-};
-use crm_identity_resolution_capability_composition::{
-    IdentityResolutionCapabilityExecutor, IdentityResolutionCapabilitySemanticValidator,
-    PostgresIdentityResolutionReferenceReader,
-};
-use crm_identity_resolution_merge_composition::{
-    MergeLineageCapabilityExecutor, MergeLineageCapabilitySemanticValidator,
-    PostgresMergeLineageReferenceReader,
-};
-use crm_identity_resolution_merge_query_adapter::{
-    IdentityResolutionMergeQueryAdapter,
-    query_capability_definitions as identity_resolution_merge_query_capability_definitions,
-};
-use crm_identity_resolution_query_adapter::{
-    IdentityResolutionQueryAdapter,
-    query_capability_definitions as identity_resolution_query_capability_definitions,
-};
 use crm_metadata_api_adapter::{
     metadata_mutation_capability_definitions, metadata_query_capability_definitions,
 };
 use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_sdk::{ErrorCategory, ModuleId, PortFuture, SdkError, TenantId};
-use crm_parties_capability_adapter::PartyCapabilityPlanner;
 use crm_parties_query_adapter::PartyQueryAdapter;
 use crm_query_runtime::{
     CursorCodec, QueryAuthorizer, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer,
@@ -158,17 +122,7 @@ pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, S
     definitions.extend(party_relationship_capability_definitions()?);
     definitions.extend(consent_capability_definitions()?);
     definitions.extend(identity_resolution_capability_definitions()?);
-    definitions.extend(
-        customer_data_operations_capability_definitions()?
-            .into_iter()
-            .filter(|definition| {
-                !matches!(
-                    definition.capability_id.as_str(),
-                    CREATE_PARTY_IMPORT_JOB_CAPABILITY | VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY
-                )
-            }),
-    );
-    definitions.extend(customer_data_operations_source_capability_definitions()?);
+    definitions.extend(customer_data_operations_capability_definitions()?);
     definitions.extend(data_quality_capability_definitions()?);
     definitions.extend(customer_enrichment_capability_definitions()?);
     definitions.extend(metadata_mutation_capability_definitions()?);
@@ -191,7 +145,6 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(customer_360_query_capability_definitions()?);
     definitions.extend(consent_query_capability_definitions()?);
     definitions.extend(identity_resolution_query_capability_definitions()?);
-    definitions.extend(identity_resolution_merge_query_capability_definitions()?);
     definitions.extend(customer_data_operations_query_capability_definitions()?);
     definitions.extend(customer_enrichment_query_capability_definitions()?);
     definitions.push(customer_enrichment_request_list_query_capability_definition()?);
@@ -225,95 +178,16 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let party_executor = aggregate_executor(store.clone(), PartyCapabilityPlanner);
-
     contributions.merge(build_first_party_modules(
         FirstPartyProductionDependencies {
             store: store.clone(),
             activation: activation.clone(),
+            capability_authorizer: capability_authorizer.clone(),
+            query_authorizer: query_authorizer.clone(),
             visibility_authorizer: visibility_authorizer.clone(),
             cursor_key,
         },
     )?);
-
-    let identity_aggregate = aggregate_executor(store.clone(), IdentityResolutionCapabilityPlanner);
-    let identity_definitions = identity_resolution_capability_definitions()?;
-    let candidate_definitions =
-        select_definitions(&identity_definitions, &CANDIDATE_MUTATION_CAPABILITY_IDS);
-    let merge_definitions =
-        select_definitions(&identity_definitions, &MERGE_MUTATION_CAPABILITY_IDS);
-    add_activated_mutations(
-        &mut contributions,
-        candidate_definitions,
-        Arc::new(IdentityResolutionCapabilitySemanticValidator::new(
-            Arc::new(PostgresIdentityResolutionReferenceReader::new(
-                store.clone(),
-            )),
-        )),
-        Arc::new(IdentityResolutionCapabilityExecutor::new(
-            identity_aggregate.clone(),
-        )),
-        activation.clone(),
-    )?;
-    add_activated_mutations(
-        &mut contributions,
-        merge_definitions,
-        Arc::new(MergeLineageCapabilitySemanticValidator::new(Arc::new(
-            PostgresMergeLineageReferenceReader::new(store.clone()),
-        ))),
-        Arc::new(MergeLineageCapabilityExecutor::new(identity_aggregate)),
-        activation.clone(),
-    )?;
-
-    let customer_data_operations_executor =
-        aggregate_executor(store.clone(), CustomerDataOperationsCapabilityPlanner);
-    let customer_data_operations_definitions = customer_data_operations_capability_definitions()?
-        .into_iter()
-        .filter(|definition| {
-            !matches!(
-                definition.capability_id.as_str(),
-                CREATE_PARTY_IMPORT_JOB_CAPABILITY | VALIDATE_PARTY_IMPORT_ROWS_CAPABILITY
-            )
-        })
-        .collect::<Vec<_>>();
-    add_activated_mutations(
-        &mut contributions,
-        customer_data_operations_definitions,
-        Arc::new(NoopMutationSemanticValidator),
-        customer_data_operations_executor,
-        activation.clone(),
-    )?;
-    let source_executor: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(CustomerDataOperationsSourceExecutor::new(
-            store.clone(),
-            Arc::new(PostgresImmutableFileArtifactStore::new(store.clone())),
-            capability_authorizer.clone(),
-        ));
-    add_activated_mutations(
-        &mut contributions,
-        customer_data_operations_source_capability_definitions()?,
-        Arc::new(NoopMutationSemanticValidator),
-        source_executor,
-        activation.clone(),
-    )?;
-
-    let data_quality_fallback = aggregate_executor(store.clone(), DataQualityAggregatePlanner);
-    let data_quality_executor: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(DataQualityCapabilityExecutor::new(
-            store.clone(),
-            data_quality_fallback,
-            party_executor,
-            activation.clone(),
-            capability_authorizer.clone(),
-            query_authorizer.clone(),
-        ));
-    add_activated_mutations(
-        &mut contributions,
-        data_quality_capability_definitions()?,
-        Arc::new(NoopMutationSemanticValidator),
-        data_quality_executor,
-        activation.clone(),
-    )?;
 
     let customer_enrichment_fallback: Arc<dyn TransactionalCapabilityExecutor> =
         Arc::new(PostgresTransactionalAggregateExecutor::guarded(
@@ -382,42 +256,6 @@ pub fn build_production_composition(
         &mut contributions,
         customer_360_query_capability_definitions()?,
         customer_360_queries,
-        activation.clone(),
-    )?;
-
-    let identity_queries = Arc::new(IdentityResolutionQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        identity_resolution_query_capability_definitions()?,
-        identity_queries,
-        activation.clone(),
-    )?;
-
-    let identity_merge_queries = Arc::new(IdentityResolutionMergeQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        identity_resolution_merge_query_capability_definitions()?,
-        identity_merge_queries,
-        activation.clone(),
-    )?;
-
-    let customer_data_queries = Arc::new(CustomerDataOperationsQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        customer_data_operations_query_capability_definitions()?,
-        customer_data_queries,
         activation.clone(),
     )?;
 
@@ -545,17 +383,6 @@ where
         .add_queries(definitions, validator, executor)
         .map(|_| ())
         .map_err(composition_error)
-}
-
-fn select_definitions(
-    definitions: &[CapabilityDefinition],
-    capability_ids: &[&str],
-) -> Vec<CapabilityDefinition> {
-    definitions
-        .iter()
-        .filter(|definition| capability_ids.contains(&definition.capability_id.as_str()))
-        .cloned()
-        .collect()
 }
 
 fn cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {

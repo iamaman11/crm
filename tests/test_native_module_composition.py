@@ -202,5 +202,64 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
             self.assertIn(dependency, runtime_cargo)
 
 
+    def test_identity_data_operations_and_quality_batch_is_owner_aggregated(self) -> None:
+        identity = (
+            ROOT
+            / "crates/crm-identity-resolution-capability-composition/src/production_contribution.rs"
+        ).read_text(encoding="utf-8")
+        data_operations = (
+            ROOT
+            / "crates/crm-customer-data-operations-execution-composition/src/production_contribution.rs"
+        ).read_text(encoding="utf-8")
+        data_quality = (
+            ROOT
+            / "crates/crm-data-quality-source-composition/src/production_contribution.rs"
+        ).read_text(encoding="utf-8")
+        aggregate = (ROOT / "crates/crm-first-party-modules/src/lib.rs").read_text(
+            encoding="utf-8"
+        )
+        runtime = (
+            ROOT / "crates/crm-application-runtime/src/native_composition.rs"
+        ).read_text(encoding="utf-8")
+
+        for owner in (identity, data_operations, data_quality):
+            self.assertIn("pub fn mutation_capability_definitions()", owner)
+            self.assertIn("pub fn query_capability_definitions()", owner)
+            self.assertIn("pub fn build_contribution(", owner)
+            self.assertIn("ActivationGatedMutationValidator::new", owner)
+            self.assertIn("ActivationGatedQueryValidator::new", owner)
+
+        order = [
+            "build_party_relationships_contribution(",
+            "build_identity_resolution_contribution(",
+            "build_customer_data_operations_contribution(",
+            "build_data_quality_contribution(",
+        ]
+        positions = [aggregate.index(marker) for marker in order]
+        self.assertEqual(positions, sorted(positions))
+
+        for marker in (
+            "IdentityResolutionCapabilityPlanner",
+            "IdentityResolutionQueryAdapter::new",
+            "CustomerDataOperationsCapabilityPlanner",
+            "CustomerDataOperationsQueryAdapter::new",
+            "DataQualityCapabilityExecutor::new",
+            "DataQualityQueryAdapter::new",
+        ):
+            self.assertNotIn(marker, runtime)
+
+        self.assertFalse(
+            (ROOT / "crates/crm-application-runtime/src/data_quality_capability_execution.rs").exists()
+        )
+        self.assertFalse(
+            (ROOT / "crates/crm-application-runtime/src/data_quality_registration.rs").exists()
+        )
+        self.assertTrue(
+            (ROOT / "crates/crm-data-quality-source-composition/src/capability_execution.rs").exists()
+        )
+        self.assertTrue(
+            (ROOT / "crates/crm-data-quality-source-composition/src/registration.rs").exists()
+        )
+
 if __name__ == "__main__":
     unittest.main()

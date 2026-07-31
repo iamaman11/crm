@@ -193,6 +193,51 @@ LEGACY_MARKERS: tuple[LegacyMarker, ...] = (
         "        party_query_capability_definitions()?",
         "Parties query registration returned to the generic process host",
     ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "IdentityResolutionCapabilityPlanner",
+        "Identity Resolution mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "IdentityResolutionQueryAdapter::new",
+        "Identity Resolution query construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "CustomerDataOperationsCapabilityPlanner",
+        "Customer Data Operations mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "CustomerDataOperationsQueryAdapter::new",
+        "Customer Data Operations query construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "DataQualityCapabilityExecutor::new",
+        "Data Quality mutation construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "DataQualityQueryAdapter::new",
+        "Data Quality query construction returned to the generic process host",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "IdentityResolutionProductionDependencies",
+        "Identity Resolution owner contribution bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "CustomerDataOperationsProductionDependencies",
+        "Customer Data Operations owner contribution bypassed the first-party aggregate",
+    ),
+    LegacyMarker(
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "DataQualityProductionDependencies",
+        "Data Quality owner contribution bypassed the first-party aggregate",
+    ),
 )
 
 

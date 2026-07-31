@@ -8,6 +8,9 @@
 //! reviewer decisions also re-check the current evidence snapshot against live
 //! Party versions, so stale evidence cannot silently become a durable decision.
 
+mod production_contribution;
+pub use production_contribution::*;
+
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,

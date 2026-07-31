@@ -1,3 +1,4 @@
+use crate::{GovernedPartyQualitySource, PartyQualitySource, PartyQualitySourceRequest};
 use crm_application_composition::ModuleActivationPort;
 use crm_capability_adapters::semantic_input_hash;
 use crm_capability_plan_support as support;
@@ -18,9 +19,6 @@ use crm_data_quality_capability_adapter::{
     party_finding_from_snapshot, party_rule_set_from_snapshot,
 };
 use crm_data_quality_query_adapter::registered_party_quality_query_adapter;
-use crm_data_quality_source_composition::{
-    GovernedPartyQualitySource, PartyQualitySource, PartyQualitySourceRequest,
-};
 use crm_module_sdk::{
     BusinessTransactionId, DataClass, ErrorCategory, ModuleId, PortFuture, RecordId, RecordType,
     SchemaVersion, SdkError,
