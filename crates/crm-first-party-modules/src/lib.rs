@@ -90,7 +90,7 @@ use crm_sales_activities_capability_composition::{
 };
 pub use crm_sales_activities_capability_composition::{
     mutation_capability_definitions as sales_activities_mutation_capability_definitions,
-    query_capability_definitions as sales_activities_query_capability_definitions,
+    production_query_capability_definitions as sales_activities_query_capability_definitions,
 };
 use std::sync::Arc;
 
