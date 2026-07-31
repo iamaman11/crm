@@ -180,17 +180,26 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
         )
 
         for dependency in (
-            "crm-contact-points-capability-adapter",
-            "crm-contact-points-capability-composition",
-            "crm-contact-points-query-adapter",
-            "crm-customer-accounts-capability-adapter",
-            "crm-customer-accounts-query-adapter",
-            "crm-party-reference-composition",
-            "crm-party-relationships-capability-adapter",
-            "crm-party-relationships-capability-composition",
-            "crm-party-relationships-query-adapter",
+            "crm-contact-points-query-adapter =",
+            "crm-customer-accounts-query-adapter =",
+            "crm-party-relationships-capability-composition =",
+            "crm-party-relationships-query-adapter =",
         ):
             self.assertNotIn(dependency, runtime_cargo)
+
+        for dependency in (
+            "crm-consents-capability-adapter =",
+            "crm-consents-query-adapter =",
+            "crm-contact-points-capability-adapter =",
+            "crm-contact-points-capability-composition =",
+            "crm-customer-accounts-capability-adapter =",
+            "crm-parties-capability-adapter =",
+            "crm-parties-query-adapter =",
+            "crm-party-reference-composition =",
+            "crm-party-relationships-capability-adapter =",
+            "crm-party-relationships-projection =",
+        ):
+            self.assertIn(dependency, runtime_cargo)
 
 
 if __name__ == "__main__":
