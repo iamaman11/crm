@@ -295,17 +295,6 @@ pub fn build_production_composition(
         activation.clone(),
     )?;
 
-    let data_quality_queries = Arc::new(DataQualityQueryAdapter::new(
-        store.clone(),
-        visibility_authorizer.clone(),
-    ));
-    add_activated_queries(
-        &mut contributions,
-        data_quality_query_capability_definitions()?,
-        data_quality_queries,
-        activation,
-    )?;
-
     let search_queries = Arc::new(SearchQueryAdapter::new(
         SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID).map_err(configuration_error)?,
         Arc::new(store.clone()),

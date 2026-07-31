@@ -82,7 +82,7 @@ pub fn build_contribution(
         ));
     contributions
         .add_mutations(
-            select_definitions(&definitions, CANDIDATE_MUTATION_CAPABILITY_IDS),
+            select_definitions(&definitions, &CANDIDATE_MUTATION_CAPABILITY_IDS),
             candidate_validator,
             Arc::new(IdentityResolutionCapabilityExecutor::new(
                 identity_aggregate.clone(),
@@ -99,7 +99,7 @@ pub fn build_contribution(
         ));
     contributions
         .add_mutations(
-            select_definitions(&definitions, MERGE_MUTATION_CAPABILITY_IDS),
+            select_definitions(&definitions, &MERGE_MUTATION_CAPABILITY_IDS),
             merge_validator,
             Arc::new(MergeLineageCapabilityExecutor::new(identity_aggregate)),
         )
