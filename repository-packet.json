@@ -7,17 +7,15 @@
     "ref": "main",
     "sha": "b4222364c21cb74127834f5ff4f0739343d26379"
   },
-  "tracking_issues": [
-    194
-  ],
+  "tracking_issues": [194],
   "objective": "Complete repository step 12 with the final behavior-neutral owner batch: expose stable owner-owned production contribution entry points and exact inventory factories for Sales/Activities, Customer 360 and Customer Enrichment, merge them through crm-first-party-modules, relocate Customer Enrichment transactional reference guards out of the generic process host, and remove the remaining ordinary owner construction and registration bypasses from native composition while preserving exact inventories, activation, authorization, governed reads, persistence and worker behavior.",
   "allowed_paths": [
     "Cargo.lock",
     "crates/crm-application-runtime/src/native_composition.rs",
     "crates/crm-application-runtime/src/native_composition/customer_enrichment_reference_guards.rs",
-    "crates/crm-customer-360-composition/Cargo.toml",
-    "crates/crm-customer-360-composition/src/lib.rs",
-    "crates/crm-customer-360-composition/src/production_contribution.rs",
+    "crates/crm-customer-360-query-adapter/Cargo.toml",
+    "crates/crm-customer-360-query-adapter/src/lib.rs",
+    "crates/crm-customer-360-query-adapter/src/production_contribution.rs",
     "crates/crm-customer-enrichment-capability-composition/Cargo.toml",
     "crates/crm-customer-enrichment-capability-composition/src/lib.rs",
     "crates/crm-customer-enrichment-capability-composition/src/production_contribution.rs",
@@ -51,7 +49,7 @@
   ],
   "deliverables": [
     "Sales/Activities exposes exact mutation/query factories and one activation-gated production contribution builder preserving the planner router and query cursor behavior",
-    "Customer 360 exposes its exact query factory and one activation-gated query-only production contribution builder without changing projection ownership or workers",
+    "Customer 360 exposes its exact query factory and one activation-gated query-only production contribution builder from the existing query-owner boundary without changing projection ownership or workers",
     "Customer Enrichment transactional mapping and Party reference guards move from crm-application-runtime into the existing owner composition crate without behavior changes",
     "Customer Enrichment exposes exact mutation/query factories and one activation-gated production contribution builder preserving Party and Consent governed reads, immutable definition validation and three query adapter groups",
     "crm-first-party-modules merges all remaining production owner contributions without repeated module identifiers or coordinates",
@@ -59,12 +57,7 @@
     "native composition guards reject renewed Sales/Activities, Customer 360 or Customer Enrichment direct wiring",
     "Cargo.lock records only intentional internal path-edge changes and no package or external dependency version change"
   ],
-  "required_checks": [
-    "Affected Scope CI",
-    "Governance CI",
-    "Rust CI",
-    "Rust Generated Sync"
-  ],
+  "required_checks": ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
   "acceptance": [
     "public mutation/query coordinates, inventory contents and compatibility APIs preserve their existing order and meaning",
     "tenant activation, visibility authorization, governed Party and Consent reads, transactional reference validation, persistence and worker behavior are unchanged",
