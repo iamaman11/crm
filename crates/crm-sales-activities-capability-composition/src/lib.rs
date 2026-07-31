@@ -10,6 +10,7 @@
 mod production_contribution;
 pub use production_contribution::{
     SalesActivitiesProductionDependencies, build_contribution, mutation_capability_definitions,
+    production_query_capability_definitions,
 };
 
 mod link_event_processor;
