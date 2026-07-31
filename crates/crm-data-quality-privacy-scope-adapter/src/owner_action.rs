@@ -7,10 +7,10 @@ use crm_customer_privacy_owner_scope_support::{
 use crm_data_quality::{
     FINDING_OBSERVATION_RECORD_TYPE, FINDING_RECORD_TYPE, PARTY_COMPLETENESS_RESULT_RECORD_TYPE,
     PARTY_EVALUATION_INPUT_RECORD_TYPE, PARTY_EVALUATION_JOB_RECORD_TYPE,
-    REMEDIATION_ATTEMPT_RECORD_TYPE, RULE_OUTCOME_RECORD_TYPE,
-    decode_finding_observation_state, decode_finding_state,
-    decode_party_completeness_result_state, decode_party_evaluation_input_state,
-    decode_party_evaluation_job_state, decode_remediation_attempt_state, decode_rule_outcome_state,
+    REMEDIATION_ATTEMPT_RECORD_TYPE, RULE_OUTCOME_RECORD_TYPE, decode_finding_observation_state,
+    decode_finding_state, decode_party_completeness_result_state,
+    decode_party_evaluation_input_state, decode_party_evaluation_job_state,
+    decode_remediation_attempt_state, decode_rule_outcome_state,
 };
 use crm_data_quality_capability_adapter::{
     MODULE_ID, party_completeness_result_persisted_contract,
@@ -18,7 +18,9 @@ use crm_data_quality_capability_adapter::{
     party_finding_observation_persisted_contract, party_finding_persisted_contract,
     party_rule_outcome_persisted_contract, remediation_attempt_persisted_contract,
 };
-use crm_module_sdk::{DataClass, ErrorCategory, PayloadEncoding, RecordSnapshot, SdkError, TypedPayload};
+use crm_module_sdk::{
+    DataClass, ErrorCategory, PayloadEncoding, RecordSnapshot, SdkError, TypedPayload,
+};
 
 pub const OWNER_ACTION_CAPABILITY_ID: &str = "data_quality.privacy.action.apply";
 
@@ -85,12 +87,20 @@ fn validate_resource(
         PARTY_EVALUATION_JOB_RECORD_TYPE => {
             validate_payload(current, party_evaluation_job_persisted_contract())?;
             let value = decode_party_evaluation_job_state(&current.payload.bytes)?;
-            validate_identity(current, PARTY_EVALUATION_JOB_RECORD_TYPE, value.job_id().as_str())
+            validate_identity(
+                current,
+                PARTY_EVALUATION_JOB_RECORD_TYPE,
+                value.job_id().as_str(),
+            )
         }
         PARTY_EVALUATION_INPUT_RECORD_TYPE => {
             validate_payload(current, party_evaluation_input_persisted_contract())?;
             let value = decode_party_evaluation_input_state(&current.payload.bytes)?;
-            validate_identity(current, PARTY_EVALUATION_INPUT_RECORD_TYPE, value.job_id().as_str())
+            validate_identity(
+                current,
+                PARTY_EVALUATION_INPUT_RECORD_TYPE,
+                value.job_id().as_str(),
+            )
         }
         RULE_OUTCOME_RECORD_TYPE => {
             validate_payload(current, party_rule_outcome_persisted_contract())?;
@@ -101,7 +111,9 @@ fn validate_resource(
             validate_payload(current, party_finding_persisted_contract())?;
             let value = decode_finding_state(&current.payload.bytes)?;
             if value.tenant_id() != command.tenant_id() {
-                return Err(stored_state_invalid("finding tenant differs from the command"));
+                return Err(stored_state_invalid(
+                    "finding tenant differs from the command",
+                ));
             }
             validate_identity(current, FINDING_RECORD_TYPE, value.finding_id())
         }

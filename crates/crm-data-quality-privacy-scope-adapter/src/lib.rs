@@ -32,7 +32,7 @@ pub use contract::{
     PRIVACY_OWNER_SCAN_BATCH_SIZE, data_quality_privacy_scope_definition,
 };
 pub use owner_action::{
-    OWNER_ACTION_CAPABILITY_ID, DataQualityPrivacyActionPlanner, DataQualityPrivacyActionPolicy,
+    DataQualityPrivacyActionPlanner, DataQualityPrivacyActionPolicy, OWNER_ACTION_CAPABILITY_ID,
     data_quality_privacy_action_definition, data_quality_privacy_action_planner,
 };
 pub use postgres::DataQualityPrivacyScopeQueryAdapter;
