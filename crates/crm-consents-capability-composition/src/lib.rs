@@ -18,9 +18,12 @@ use crm_capability_runtime::{
 use crm_consents::{CommunicationChannel, PartyReference};
 use crm_consents_capability_adapter::{
     CREATE_CAPABILITY, ConsentCapabilityPlanner, CreateConsentReferenceScope,
-    MUTATION_CAPABILITY_IDS, capability_definitions, referenced_scope_from_create,
+    MUTATION_CAPABILITY_IDS, capability_definitions as adapter_mutation_capability_definitions,
+    referenced_scope_from_create,
 };
-use crm_consents_query_adapter::{ConsentQueryAdapter, query_capability_definitions};
+use crm_consents_query_adapter::{
+    ConsentQueryAdapter, query_capability_definitions as adapter_query_capability_definitions,
+};
 use crm_contact_points::ContactPointKind;
 use crm_contact_points_capability_adapter::{
     MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
@@ -248,6 +251,18 @@ pub struct ConsentsProductionDependencies {
     pub cursor_key: [u8; 32],
 }
 
+/// Returns the exact Consents mutation inventory owned by this production
+/// composition package.
+pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    adapter_mutation_capability_definitions()
+}
+
+/// Returns the exact Consents query inventory owned by this production
+/// composition package.
+pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    adapter_query_capability_definitions()
+}
+
 /// Builds the complete Consents mutation/query contribution inside the owner
 /// composition package while preserving the module's richer reference checks.
 pub fn build_contribution(
@@ -277,7 +292,7 @@ pub fn build_contribution(
         ));
     contributions
         .add_mutations(
-            capability_definitions()?,
+            mutation_capability_definitions()?,
             mutation_validator,
             mutation_executor,
         )

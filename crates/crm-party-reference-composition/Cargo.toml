@@ -5,7 +5,11 @@ edition = "2024"
 publish = false
 
 [dependencies]
+crm-application-composition = { path = "../crm-application-composition" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-parties-capability-adapter = { path = "../crm-parties-capability-adapter" }
+crm-parties-query-adapter = { path = "../crm-parties-query-adapter" }
+crm-query-runtime = { path = "../crm-query-runtime" }
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }

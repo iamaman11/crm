@@ -310,17 +310,11 @@ dependencies = [
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-consents",
- "crm-consents-capability-adapter",
  "crm-consents-query-adapter",
- "crm-contact-points-capability-adapter",
- "crm-contact-points-capability-composition",
- "crm-contact-points-query-adapter",
  "crm-core-data",
  "crm-core-events",
  "crm-customer-360-composition",
  "crm-customer-360-query-adapter",
- "crm-customer-accounts-capability-adapter",
- "crm-customer-accounts-query-adapter",
  "crm-customer-data-operations-capability-adapter",
  "crm-customer-data-operations-execution-composition",
  "crm-customer-data-operations-query-adapter",
@@ -359,11 +353,7 @@ dependencies = [
  "crm-module-sdk",
  "crm-parties-capability-adapter",
  "crm-parties-query-adapter",
- "crm-party-reference-composition",
- "crm-party-relationships-capability-adapter",
- "crm-party-relationships-capability-composition",
  "crm-party-relationships-projection",
- "crm-party-relationships-query-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
  "crm-sales-activities-capability-composition",
@@ -550,12 +540,15 @@ dependencies = [
 name = "crm-contact-points-capability-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-runtime",
  "crm-contact-points-capability-adapter",
+ "crm-contact-points-query-adapter",
  "crm-core-data",
  "crm-identity-resolution-topology-composition",
  "crm-module-sdk",
  "crm-party-reference-composition",
+ "crm-query-runtime",
 ]
 
 [[package]]
@@ -1461,10 +1454,12 @@ version = "0.1.0"
 dependencies = [
  "crm-application-composition",
  "crm-consents-capability-composition",
+ "crm-contact-points-capability-composition",
  "crm-core-data",
  "crm-customer-accounts-capability-composition",
  "crm-module-sdk",
  "crm-party-reference-composition",
+ "crm-party-relationships-capability-composition",
  "crm-query-runtime",
 ]
 
@@ -1738,9 +1733,13 @@ dependencies = [
 name = "crm-party-reference-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
+ "crm-capability-runtime",
  "crm-core-data",
  "crm-module-sdk",
  "crm-parties-capability-adapter",
+ "crm-parties-query-adapter",
+ "crm-query-runtime",
  "sqlx",
 ]
 
@@ -1771,10 +1770,14 @@ dependencies = [
 name = "crm-party-relationships-capability-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-runtime",
+ "crm-core-data",
  "crm-module-sdk",
  "crm-party-reference-composition",
  "crm-party-relationships-capability-adapter",
+ "crm-party-relationships-query-adapter",
+ "crm-query-runtime",
 ]
 
 [[package]]
@@ -2399,9 +2402,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6970f50e31d6fc17d3fa27329444bfa74e196cf62e95052a3f6fee181dba6425"
+checksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"
 dependencies = [
  "bytes",
  "itoa",
@@ -2444,9 +2447,9 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hybrid-array"
-version = "0.4.13"
+version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "818356c5132c1fede50f837ca96afbe78ff42413047f4abb886217845e1b6c8c"
+checksum = "707114b52a152fa7bdb290cd7cd5912d9467273b6d74e21b8d81aca1f8533f6b"
 dependencies = [
  "typenum",
 ]
@@ -3233,9 +3236,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.42"
+version = "0.23.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c54fcab019b409d04215d3a17cb438fd7fbf192ee61461f20f4fe18704bc138"
+checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
 dependencies = [
  "once_cell",
  "ring",
@@ -3750,13 +3753,13 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6328af13490e73a9b4694030fafd93f8c8c6a9dede33e821c3fc63eddf8042ba"
+checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.3",
 ]
 
 [[package]]
