@@ -219,7 +219,8 @@ fn attempt(
         BASE_TIME_NANOS + 1,
     )
     .unwrap();
-    let decision = PrivacyRetentionDecisionSet::build(&plan, &[], BASE_TIME_NANOS + 2).unwrap();
+    let decision = PrivacyRetentionDecisionSet::build(&plan, &[], BASE_TIME_NANOS + 2)
+        .map_err(|error| format!("{error:?}"))?;
     PrivacyOwnerActionAttempt::build(
         tenant_id,
         privacy_case_id,
