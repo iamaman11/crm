@@ -1,36 +1,32 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-12-contribution-aggregation-batch-2",
-  "title": "Aggregate Identity Resolution, Customer Data Operations and Data Quality contributions",
+  "packet_id": "repository-step-12-contribution-aggregation-batch-3",
+  "title": "Aggregate Sales Activities, Customer 360 and Customer Enrichment contributions",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "10be9a128ed1f8fbc6967d82baba648ba52f1d12"
+    "sha": "b4222364c21cb74127834f5ff4f0739343d26379"
   },
   "tracking_issues": [
     194
   ],
-  "objective": "Advance repository step 12 with one behavior-neutral owner batch: expose stable owner-owned production contribution entry points and exact inventory factories for Identity Resolution, Customer Data Operations and Data Quality, merge them through crm-first-party-modules, relocate Data Quality owner-specific composition out of the generic process host, and remove the three owners' ordinary registration or inventory bypasses from generic runtime while preserving exact inventory, ordering, activation, authorization and execution behavior.",
+  "objective": "Complete repository step 12 with the final behavior-neutral owner batch: expose stable owner-owned production contribution entry points and exact inventory factories for Sales/Activities, Customer 360 and Customer Enrichment, merge them through crm-first-party-modules, relocate Customer Enrichment transactional reference guards out of the generic process host, and remove the remaining ordinary owner construction and registration bypasses from native composition while preserving exact inventories, activation, authorization, governed reads, persistence and worker behavior.",
   "allowed_paths": [
     "Cargo.lock",
-    "crates/crm-application-runtime/Cargo.toml",
-    "crates/crm-application-runtime/src/data_quality_capability_execution.rs",
-    "crates/crm-application-runtime/src/data_quality_registration.rs",
-    "crates/crm-application-runtime/src/lib.rs",
     "crates/crm-application-runtime/src/native_composition.rs",
-    "crates/crm-customer-data-operations-execution-composition/Cargo.toml",
-    "crates/crm-customer-data-operations-execution-composition/src/lib.rs",
-    "crates/crm-customer-data-operations-execution-composition/src/production_contribution.rs",
-    "crates/crm-data-quality-source-composition/Cargo.toml",
-    "crates/crm-data-quality-source-composition/src/capability_execution.rs",
-    "crates/crm-data-quality-source-composition/src/lib.rs",
-    "crates/crm-data-quality-source-composition/src/production_contribution.rs",
-    "crates/crm-data-quality-source-composition/src/registration.rs",
+    "crates/crm-application-runtime/src/native_composition/customer_enrichment_reference_guards.rs",
+    "crates/crm-customer-360-composition/Cargo.toml",
+    "crates/crm-customer-360-composition/src/lib.rs",
+    "crates/crm-customer-360-composition/src/production_contribution.rs",
+    "crates/crm-customer-enrichment-capability-composition/Cargo.toml",
+    "crates/crm-customer-enrichment-capability-composition/src/lib.rs",
+    "crates/crm-customer-enrichment-capability-composition/src/production_contribution.rs",
+    "crates/crm-customer-enrichment-capability-composition/src/reference_guards.rs",
     "crates/crm-first-party-modules/Cargo.toml",
     "crates/crm-first-party-modules/src/lib.rs",
-    "crates/crm-identity-resolution-capability-composition/Cargo.toml",
-    "crates/crm-identity-resolution-capability-composition/src/lib.rs",
-    "crates/crm-identity-resolution-capability-composition/src/production_contribution.rs",
+    "crates/crm-sales-activities-capability-composition/Cargo.toml",
+    "crates/crm-sales-activities-capability-composition/src/lib.rs",
+    "crates/crm-sales-activities-capability-composition/src/production_contribution.rs",
     "docs/ACTIVE_PACKET.md",
     "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
@@ -54,13 +50,13 @@
     "services/**"
   ],
   "deliverables": [
-    "Identity Resolution exposes exact mutation/query definition factories and one activation-gated production contribution builder preserving candidate and merge-lineage semantic validation",
-    "Customer Data Operations exposes exact mutation/query definition factories and one activation-gated production contribution builder preserving immutable source artifacts and capability authorization",
-    "Data Quality owner-specific planner and executor composition move from crm-application-runtime into the existing owner composition crate without behavior changes",
-    "Data Quality exposes exact mutation/query definition factories and one activation-gated production contribution builder preserving governed Party reads and remediation authorization",
-    "crm-first-party-modules merges the three owners after the accepted relationship-owner sequence and preserves exact application inventory order",
-    "generic application runtime no longer constructs or registers the three owners directly",
-    "native composition guards reject renewed direct definition or registration bypasses",
+    "Sales/Activities exposes exact mutation/query factories and one activation-gated production contribution builder preserving the planner router and query cursor behavior",
+    "Customer 360 exposes its exact query factory and one activation-gated query-only production contribution builder without changing projection ownership or workers",
+    "Customer Enrichment transactional mapping and Party reference guards move from crm-application-runtime into the existing owner composition crate without behavior changes",
+    "Customer Enrichment exposes exact mutation/query factories and one activation-gated production contribution builder preserving Party and Consent governed reads, immutable definition validation and three query adapter groups",
+    "crm-first-party-modules merges all remaining production owner contributions without repeated module identifiers or coordinates",
+    "generic application runtime retains only platform-level metadata, search and link-shell composition and no ordinary first-party owner construction",
+    "native composition guards reject renewed Sales/Activities, Customer 360 or Customer Enrichment direct wiring",
     "Cargo.lock records only intentional internal path-edge changes and no package or external dependency version change"
   ],
   "required_checks": [
@@ -71,19 +67,19 @@
   ],
   "acceptance": [
     "public mutation/query coordinates, inventory contents and compatibility APIs preserve their existing order and meaning",
-    "tenant activation, semantic validation, visibility authorization, capability authorization and transactional execution behavior are unchanged",
-    "Identity Resolution, Customer Data Operations and Data Quality ordinary registration or inventory bypasses no longer appear in generic native composition",
-    "Data Quality owner-specific planner and executor no longer live in crm-application-runtime",
-    "first-party aggregate contains no repeated module identifiers or capability coordinates",
+    "tenant activation, visibility authorization, governed Party and Consent reads, transactional reference validation, persistence and worker behavior are unchanged",
+    "Sales/Activities, Customer 360 and Customer Enrichment ordinary construction or registration bypasses no longer appear in generic native composition",
+    "Customer Enrichment transactional reference guards no longer live in crm-application-runtime",
+    "first-party aggregate contains every active production owner contribution exactly once",
     "workspace package count and external dependency families and versions are unchanged",
-    "repository step 12 remains in progress and repository step 13 is not started"
+    "repository step 12 implementation is complete and repository step 13 is not started"
   ],
   "non_goals": [
-    "complete repository step 12 for Customer Enrichment, Sales/Activities, Customer 360 or any other remaining owner in this batch",
-    "change product behavior, routes, coordinates, contracts, schemas, migrations, persistence or workers",
+    "start repository step 13 or any later architecture work",
+    "change product behavior, routes, coordinates, contracts, schemas, migrations, persistence, projections or workers",
     "create, remove, rename or consolidate crates",
     "change affected-scope policy or permanent workflows",
     "change external dependency versions or add a dependency family",
-    "start repository step 13 or later work"
+    "claim documentation evidence synchronization before this implementation batch is accepted and merged"
   ]
 }
