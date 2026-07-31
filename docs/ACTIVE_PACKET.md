@@ -16,7 +16,7 @@ Implement repository step 11 only: execute approved owner-specific deletion, ano
 ## Deliverables
 
 - `add authoritative owner-local action planners/endpoints for the exact nine accepted Customer Privacy owners without public routes or workers`
-- `execute only the action encoded by exact case, subject, immutable discovery snapshot, action plan, retention decision, attempt and checkpoint/outcome lineage`
+- `execute only the action encoded by exact case, subject, immutable discovery snapshot, action plan, retention decision, attempt and checkpoint lineage`
 - `rehydrate and lock the canonical tenant-bound owner record before any mutation and reject missing, malformed, stale, over-bound, cross-tenant or conflicting state`
 - `apply owner-specific canonical anonymization and supported deletion while preserving immutable Customer Privacy evidence`
 - `reject unsupported action/resource combinations and every crypto-shred request unless a real configured KMS/HSM trust boundary proves key destruction`
