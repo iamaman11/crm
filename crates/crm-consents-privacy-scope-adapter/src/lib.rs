@@ -25,7 +25,7 @@ pub use contract::{
     consents_privacy_scope_definition,
 };
 pub use owner_action::{
-    OWNER_ACTION_CAPABILITY_ID, ConsentsPrivacyActionPlanner, ConsentsPrivacyActionPolicy,
+    ConsentsPrivacyActionPlanner, ConsentsPrivacyActionPolicy, OWNER_ACTION_CAPABILITY_ID,
     consents_privacy_action_definition, consents_privacy_action_planner,
 };
 pub use postgres::ConsentsPrivacyScopeQueryAdapter;

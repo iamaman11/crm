@@ -1,7 +1,5 @@
 use crm_capability_runtime::CapabilityDefinition;
-use crm_consents_capability_adapter::{
-    RECORD_TYPE, consent_authorization_from_snapshot,
-};
+use crm_consents_capability_adapter::{RECORD_TYPE, consent_authorization_from_snapshot};
 use crm_customer_privacy::PrivacyOwnerActionCommand;
 use crm_customer_privacy_owner_scope_support::{
     OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, owner_action_definition,
