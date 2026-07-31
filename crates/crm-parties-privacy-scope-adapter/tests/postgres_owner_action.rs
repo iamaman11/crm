@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 const TENANT_A: &str = "tenant-parties-owner-action-a";
 const TENANT_B: &str = "tenant-parties-owner-action-b";
+const ACTOR_ID: &str = "privacy-owner-action-test";
 const PARTY_ID: &str = "party-owner-action-postgres-1";
 const ORIGINAL_NAME: &str = "Ada Owner Action";
 const BASE_TIME_NANOS: i64 = 1_800_000_000_000_000_000;
@@ -35,6 +36,7 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
         std::env::var("ADMIN_DATABASE_URL").expect("ADMIN_DATABASE_URL must be configured");
     let admin = PgPool::connect(&admin_database_url).await.unwrap();
     seed_tenants(&admin).await;
+    seed_actors(&admin).await;
     seed_owner_action_capability(&admin).await;
     seed_party(&admin).await;
 
@@ -247,7 +249,7 @@ fn capability_request(
             module_id: definition.owner_module_id.clone(),
             execution: ExecutionContext {
                 tenant_id: attempt.tenant_id().clone(),
-                actor_id: ActorId::try_new("privacy-owner-action-test").unwrap(),
+                actor_id: ActorId::try_new(ACTOR_ID).unwrap(),
                 request_id: RequestId::try_new(format!("request-{}", attempt.attempt_id()))
                     .unwrap(),
                 correlation_id: CorrelationId::try_new("privacy-owner-action-correlation").unwrap(),
@@ -284,6 +286,31 @@ async fn seed_tenants(admin: &PgPool) {
     )
     .bind(TENANT_A)
     .bind(TENANT_B)
+    .execute(admin)
+    .await
+    .unwrap();
+}
+
+async fn seed_actors(admin: &PgPool) {
+    sqlx::query(
+        r#"
+        INSERT INTO crm.actors (
+          tenant_id, actor_id, actor_type, status, display_name,
+          attributes, version, last_business_transaction_id
+        )
+        VALUES
+          ($1, $3, 'service', 'active', 'Privacy Owner Action Test', '{}', 1, 'fixture-actor'),
+          ($2, $3, 'service', 'active', 'Privacy Owner Action Test', '{}', 1, 'fixture-actor')
+        ON CONFLICT (tenant_id, actor_id) DO UPDATE
+        SET actor_type = EXCLUDED.actor_type,
+            status = EXCLUDED.status,
+            display_name = EXCLUDED.display_name,
+            attributes = EXCLUDED.attributes
+        "#,
+    )
+    .bind(TENANT_A)
+    .bind(TENANT_B)
+    .bind(ACTOR_ID)
     .execute(admin)
     .await
     .unwrap();
