@@ -79,11 +79,11 @@ Implement repository step 11 only: execute approved owner-specific deletion, ano
 
 ## Required checks
 
-- `Affected Scope CI`
-- `Customer Privacy Owner Execution CI`
-- `Governance CI`
-- `Rust CI`
-- `Rust Generated Sync`
+- Affected Scope CI
+- Customer Privacy Owner Execution CI
+- Governance CI
+- Rust CI
+- Rust Generated Sync
 
 ## Acceptance
 
