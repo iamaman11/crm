@@ -296,16 +296,15 @@ async fn seed_actors(admin: &PgPool) {
         r#"
         INSERT INTO crm.actors (
           tenant_id, actor_id, actor_type, status, display_name,
-          attributes, version, last_business_transaction_id
+          version, last_business_transaction_id
         )
         VALUES
-          ($1, $3, 'service', 'active', 'Privacy Owner Action Test', '{}', 1, 'fixture-actor'),
-          ($2, $3, 'service', 'active', 'Privacy Owner Action Test', '{}', 1, 'fixture-actor')
+          ($1, $3, 'service', 'active', 'Privacy Owner Action Test', 1, 'fixture-actor'),
+          ($2, $3, 'service', 'active', 'Privacy Owner Action Test', 1, 'fixture-actor')
         ON CONFLICT (tenant_id, actor_id) DO UPDATE
         SET actor_type = EXCLUDED.actor_type,
             status = EXCLUDED.status,
-            display_name = EXCLUDED.display_name,
-            attributes = EXCLUDED.attributes
+            display_name = EXCLUDED.display_name
         "#,
     )
     .bind(TENANT_A)
