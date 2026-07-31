@@ -49,10 +49,20 @@ customer_data_after = '''    replace_once(
         "mod production_contribution;\\npub use production_contribution::*;\\n\\npub use crm_core_files::{\\n",
     )
 '''
+metadata_before = '''    subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=root, check=True, stdout=subprocess.DEVNULL)
+'''
+metadata_after = '''    subprocess.run(
+        ["cargo", "metadata", "--all-features", "--format-version", "1", "--no-deps"],
+        cwd=root,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+'''
 
 for before, after, label in (
     (identity_before, identity_after, "Identity Resolution"),
     (customer_data_before, customer_data_after, "Customer Data Operations"),
+    (metadata_before, metadata_after, "all-features lockfile resolution"),
 ):
     if source.count(before) != 1:
         raise RuntimeError(f"temporary {label} insertion anchor is not unique")
