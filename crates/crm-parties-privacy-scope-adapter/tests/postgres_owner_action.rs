@@ -40,8 +40,10 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     let application = PgPool::connect(&database_url).await.unwrap();
     let store = PostgresDataStore::from_pool(application);
     let definition = parties_privacy_action_definition().unwrap();
-    let executor =
-        PostgresPrivacyOwnerActionExecutor::new(store, Arc::new(parties_privacy_action_planner()));
+    let executor = PostgresPrivacyOwnerActionExecutor::new(
+        store,
+        Arc::new(parties_privacy_action_planner()),
+    );
 
     let applied_attempt = attempt(
         TENANT_A,
@@ -64,10 +66,7 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     assert_eq!(first.affected_resources.len(), 1);
     assert_eq!(first.affected_resources[0].version, Some(2));
 
-    let replay = executor
-        .execute(&definition, applied_request)
-        .await
-        .unwrap();
+    let replay = executor.execute(&definition, applied_request).await.unwrap();
     assert!(replay.replayed);
     assert_eq!(replay.affected_resources[0].version, Some(2));
 
@@ -99,7 +98,12 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
 
     assert_evidence_counts(&admin, TENANT_A, &applied_transaction, 1, 1, 1, 1).await;
 
-    let stale = attempt(TENANT_A, "stale", 1, EvidenceClass::RetainMinimizedEvidence);
+    let stale = attempt(
+        TENANT_A,
+        "stale",
+        1,
+        EvidenceClass::RetainMinimizedEvidence,
+    );
     let stale_transaction = transaction_id(&stale);
     let error = executor
         .execute(&definition, capability_request(&definition, &stale))
@@ -116,7 +120,10 @@ async fn postgres_owner_action_is_replay_safe_tenant_bound_and_fail_closed() {
     );
     let cross_transaction = transaction_id(&cross_tenant);
     let error = executor
-        .execute(&definition, capability_request(&definition, &cross_tenant))
+        .execute(
+            &definition,
+            capability_request(&definition, &cross_tenant),
+        )
         .await
         .unwrap_err();
     assert_eq!(error.code, "PRIVACY_OWNER_RECORD_NOT_FOUND");
@@ -247,11 +254,9 @@ fn capability_request(
             execution: ExecutionContext {
                 tenant_id: attempt.tenant_id().clone(),
                 actor_id: ActorId::try_new("privacy-owner-action-test").unwrap(),
-                request_id: RequestId::try_new(format!("request-{}", attempt.attempt_id()))
-                    .unwrap(),
+                request_id: RequestId::try_new(format!("request-{}", attempt.attempt_id())).unwrap(),
                 correlation_id: CorrelationId::try_new("privacy-owner-action-correlation").unwrap(),
-                causation_id: CausationId::try_new(format!("cause-{}", attempt.attempt_id()))
-                    .unwrap(),
+                causation_id: CausationId::try_new(format!("cause-{}", attempt.attempt_id())).unwrap(),
                 trace_id: TraceId::try_new("privacy-owner-action-trace").unwrap(),
                 capability_id: definition.capability_id.clone(),
                 capability_version: definition.capability_version.clone(),
@@ -282,7 +287,7 @@ async fn seed_owner_action_capability(admin: &PgPool) {
           data_classes_touched
         )
         VALUES ($1, '1.0.0', 'crm.parties', '0.3.0',
-                'crm.parties.internal.PrivacyOwnerAction', 'Apply', $2, NULL,
+                'crm.parties.internal.PrivacyOwnerAction', 'Apply', $2, $2,
                 'critical', true, true, false, false, false, false, false,
                 ARRAY['personal', 'restricted']::text[])
         ON CONFLICT (capability_id, capability_version) DO NOTHING
