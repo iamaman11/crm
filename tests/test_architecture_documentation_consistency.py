@@ -390,6 +390,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertNotIn("## Following permitted repository packet\n\nRepository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes. Repository step 13", self.status)
         self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241", self.catalog)
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
+        self.assertIn(
+            "Repository step 10 is accepted through PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head.",
+            self.status,
+        )
+        self.assertNotIn("Repository step 10 is accepted through PR #244", self.status)
         self.assertIn("Repository step 11", self.catalog)
         self.assertNotIn("Repository step 5 — `repo.py explain`, `repo.py packet-check`, generated active packet and repository map — is the next repository packet", self.catalog)
 
