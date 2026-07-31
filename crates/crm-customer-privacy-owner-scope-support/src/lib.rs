@@ -18,6 +18,7 @@ mod request;
 #[cfg(test)]
 mod tests;
 
+pub use crm_customer_privacy::PrivacyOwnerActionCommand;
 pub use digest::{append_frame, framed_digest};
 pub use owner_action::{
     OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, owner_action_definition,
