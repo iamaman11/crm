@@ -21,19 +21,19 @@ from scripts.repo import build_parser
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
+ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/PROJECT_STATUS.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
 
 
 
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-13-plan-hardening")
+        self.assertEqual(packet["packet_id"], "repository-step-13-plan-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "dfd1478dcfc084cf855fcc409c9b8faec8eaa5cf",
+            "be1411136fd36397b22e26737b441351894fdb66",
         )
         self.assertEqual(packet["tracking_issues"], [194, 126])
         self.assertEqual(packet["allowed_paths"], ALLOWED_PACKET_PATHS)
@@ -43,12 +43,13 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "Affected Scope CI",
                 "Customer Privacy Access Export CI",
                 "Customer Privacy Owner Execution CI",
+                "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
         self.assertIn(
-            "permanent tests reject stale packet identity, baseline, checks or missing ADR anti-complexity requirements",
+            "the live normative plan and project status agree with ADR-031 and accepted PR #251 evidence",
             packet["acceptance"],
         )
 
@@ -278,6 +279,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     ("Affected Scope CI", ".github/workflows/affected-scope.yml"),
                     ("Customer Privacy Access Export CI", ".github/workflows/customer-privacy-access-export.yml"),
                     ("Customer Privacy Owner Execution CI", ".github/workflows/customer-privacy-owner-execution.yml"),
+                    ("Governance CI", ".github/workflows/governance.yml"),
                     ("Rust CI", ".github/workflows/rust.yml"),
                     ("Rust Generated Sync", ".github/workflows/rust-generated-sync.yml"),
                 )
@@ -287,7 +289,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "dfd1478dcfc084cf855fcc409c9b8faec8eaa5cf"
+                    "be1411136fd36397b22e26737b441351894fdb66"
                 ),
             ),
             patch(

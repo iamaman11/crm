@@ -3,7 +3,7 @@
 Status: **Normative cross-cutting execution plan**  
 Tracking issue: #194  
 Original audit baseline: **2026-07-27**  
-Current execution checkpoint: **2026-07-31**
+Current execution checkpoint: **2026-08-01**
 
 Applies to repository structure, Rust workspace packaging, module composition, dependency governance, contracts, persistence ownership, CI/test selection, developer tooling, documentation navigation, local development, frontend architecture and production operations.
 
@@ -545,7 +545,7 @@ Repository step 8 is accepted through PR #237 / accepted source `f926ece93dc2b24
 
 Repository step 9 is accepted through PR #239 / accepted source `e7ed45a7da5f14fa79e1ca4d23fc808004b6a642` / squash merge `e40832ae21118dd7f033e2811ca466d1242a19f0` / 8 of 8 applicable permanent workflows on one unchanged exact head. It establishes one declarative affected-scope policy for contracts, Protobuf/API compatibility, database migrations, PostgreSQL acceptance, process/runtime acceptance, product-plane checks, frontend checks and operations checks; preserves deterministic Rust ownership and reverse closure; requires the real permanent workflow filters for every selected scope; blocks unknown non-Rust paths until classified; and records exact pull-request-head evidence. Shared workflow or policy changes widen validation to all 113 Rust workspace packages. The final 12-file packet changes no product behavior, Customer Privacy public inventory, runtime route, worker, contract, Protobuf message, schema, migration, crate, dependency, `Cargo.lock`, workspace package or generic-runtime business algorithm.
 
-The next permitted repository packet is **repository step 12: complete first-party contribution aggregation for all currently active owners without behavior changes**. No repository step 13 or later work may begin before step 12 has unchanged exact-head acceptance and evidence synchronization.
+Repository steps 1–12 are complete. ADR-031 governs the next permitted repository step: repository step 13 remains not started, and its first bounded packet is current-main 113-package complexity remeasurement plus anti-circumvention governance calibration. Dependency centralization, crate consolidation, public-surface remediation and exception removal may begin only in later bounded step-13 packets after that measurement is accepted and synchronized. Repository step 14 remains blocked.
 
 Issue #126 supplies product semantics. Issue #194 supplies architecture acceptance and the repository order. Their scopes remain separate, and section 2.4 determines exactly which packet may start.
 
@@ -558,6 +558,8 @@ Workspace members
 Business modules
 Packages by category
 Maximum dependency depth and reverse fan-out
+Direct fan-in of composition, infrastructure and process-host packages
+Role classification for high fan-out packages
 Duplicate dependency versions/features
 Public Rust symbols
 Manual composition LOC and registration points
@@ -568,6 +570,8 @@ Clean and incremental build duration
 Local bootstrap and smoke duration
 Generic versus owner-specific test ratio
 Navigation freshness and unresolved explain gaps
+Manifest-level and source-level policy suppression inventory
+Ordinary-capability and new-owner files/packages/central-touch cost
 ```
 
 Initial budgets:
@@ -582,7 +586,10 @@ Initial budgets:
 - more than 15% build/test/bootstrap regression requires explanation;
 - more than 25% regression blocks unless explicitly accepted;
 - leaf-domain affected closure does not grow without dependency rationale;
-- expired architecture exceptions: zero.
+- expired architecture exceptions: zero;
+- new unregistered manifest-level or source-level suppressions: zero after the accepted inventory baseline;
+- implementation/composition reverse impact and process-host direct owner fan-in do not grow without measured rationale;
+- the first step-13 packet performs measurement and calibration only, not structural remediation.
 
 Budgets move from measurement to warning to blocking only after representative baselines are collected.
 
@@ -615,6 +622,20 @@ This plan, including the numbered repository order, may change only with explici
 
 An optimization is accepted only when it makes the correct architecture easier to extend, easier to understand, easier to verify and harder to bypass.
 
+## Repository step 13 plan-hardening evidence
+
+ADR-031 is accepted through PR #251 / accepted source `22e515453e3ed66d0f059bd3c0fe926cee524620` / squash merge `be1411136fd36397b22e26737b441351894fdb66` / 5 of 5 applicable permanent workflows on one unchanged exact head.
+
+The decision closes a governance gap in the earlier step-13 wording. Passing existing repository rules remains necessary but is not sufficient evidence that the rules themselves minimize complexity. The first bounded repository-step-13 packet is therefore limited to measurement and governance calibration:
+
+1. regenerate the exact current-main 113-package dependency, fan-in, fan-out, public-surface, central-LOC, affected-closure and CI-cost baseline;
+2. inventory manifest-level and source-level suppressions and equivalent bypass forms, including `#[allow(...)]`, `#![allow(...)]` and `#[expect(...)]`;
+3. classify shared boundaries by role so stable SDK/contract fan-out is not confused with mutable implementation/composition fan-out;
+4. establish representative ordinary-capability and new-owner change-cost evidence;
+5. calibrate warning and blocking budgets before structural remediation.
+
+That first packet MUST NOT centralize dependency features, consolidate crates, remove exceptions, change runtime composition or modify product behavior. Those changes remain later bounded step-13 work and require before/after evidence. Repository step 13 is still **not started** by PR #251 or this documentation synchronization; repository step 14 remains blocked.
+
 ## Repository step 12 completion evidence
 
 Repository step 12 and Stage D — contribution aggregation are **complete**. All currently active first-party owners now expose owner-owned production contribution boundaries aggregated through `crm-first-party-modules`; generic native composition retains platform-level composition only.
@@ -627,4 +648,4 @@ Accepted implementation evidence:
 
 The accepted batches are behavior-neutral: public coordinates and ordering, tenant activation, authorization, governed Party/Consent reads, persistence, projections and workers remain unchanged; workspace package count and external dependency versions remain unchanged.
 
-Repository step 13 is the **next permitted implementation step** and is **not started**. No later repository step may start before step 13 is accepted and synchronized. This architecture completion does not change Customer Privacy or Phase 8A product readiness; current product-complete expert modules remain **0**.
+Repository step 13 is the **next permitted repository step** and is **not started**. Its first packet is the ADR-031 current-main remeasurement and governance-calibration packet described above; structural remediation follows only after that evidence is accepted and synchronized. No later repository step may start before step 13 is complete. Customer Privacy and Phase 8A product readiness remain unchanged; current product-complete expert modules remain **0**.
