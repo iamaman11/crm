@@ -22,7 +22,7 @@ This is the concise current-state snapshot. Normative product dependencies remai
 
 Latest accepted Customer Privacy runtime baseline is PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / squash merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 applicable permanent workflows on one unchanged exact head.
 
-Latest accepted repository implementation packet is PR #246 / accepted source `3b4fe7cdf458daac9c12f816d0d6a87039e613f3` / squash merge `f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978` / 37 of 37 applicable permanent workflows on one unchanged exact head. Repository step 12 remains in progress.
+Latest accepted repository implementation packet is PR #249 / accepted source `7876945586e5a6cc94f8d3b0f6ba2b57316484d2` / squash merge `f36592211bed3e0df7cf3771164b4bc24026eff3` / 37 of 37 applicable permanent workflows on one unchanged exact head. Repository step 12 and Stage D are complete; repository step 13 is the next permitted implementation step and is not started.
 
 The accepted inventory is seven public mutations (`case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`, `legal_hold.place`), four permission-aware public queries (`case.get`, `case.list`, `case.plan.get`, `case.owner_outcomes.list`) and zero Customer Privacy workers. `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution remain trusted-internal with no public route.
 
@@ -134,15 +134,15 @@ Repository step 11 is accepted through PR #244 / accepted source `405d2dbb97bb37
 
 ## Accepted repository step 12 batch 1
 
-Repository step 12 batch 1 is accepted through PR #246 / accepted source `3b4fe7cdf458daac9c12f816d0d6a87039e613f3` / squash merge `f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978` / 37 of 37 applicable permanent workflows on one unchanged exact head. It moves Parties, Consents, Contact Points and Party Relationships exact mutation/query inventories and activation-gated contribution builders behind `crm-first-party-modules`, preserves the already aggregated Customer Accounts contribution, exact public coordinates and ordering, activation, authorization, Party-reference validation, persistence, workers, package count and external dependency versions, and removes their ordinary registration/inventory bypasses from generic native composition. The exact native-composition guard path is classified under the existing operations scope while unknown sibling scripts remain fail closed. Repository step 12 remains in progress; repository step 13 remains blocked.
+Repository step 12 batch 1 is accepted through PR #246 / accepted source `3b4fe7cdf458daac9c12f816d0d6a87039e613f3` / squash merge `f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978` / 37 of 37 applicable permanent workflows on one unchanged exact head. It moves Parties, Consents, Contact Points and Party Relationships exact mutation/query inventories and activation-gated contribution builders behind `crm-first-party-modules`, preserves the already aggregated Customer Accounts contribution, exact public coordinates and ordering, activation, authorization, Party-reference validation, persistence, workers, package count and external dependency versions, and removes their ordinary registration/inventory bypasses from generic native composition. The exact native-composition guard path is classified under the existing operations scope while unknown sibling scripts remain fail closed. Repository step 12 is complete; repository step 13 is the next permitted implementation step and is not started.
 
 ## Next permitted repository packet
 
-Repository step 12 remains the current permitted implementation step. The next bounded packet must continue owner contribution aggregation after factual inventory review for Identity Resolution, Customer Data Operations, Data Quality, Customer Enrichment, Sales/Activities, Customer 360 and any other remaining active first-party owners.
+Repository step 13 is the current next permitted implementation step and is not started. Its bounded packet must complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions.
 
 ## Following permitted repository packet
 
-Repository step 13 remains blocked until every repository step 12 owner batch and final Stage D exit evidence are accepted and synchronized. It will then complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions.
+Repository step 14 follows only after repository step 13 is accepted and synchronized. It will perform the first measured behavior-neutral transitional domain-cluster consolidation.
 
 
 ## Architecture 10/10 declaration boundary
@@ -158,7 +158,7 @@ Issue #194 remains open.
 - Stage A documentation/source hierarchy and stable navigation are complete.
 - Stage B dependency/crate/exception governance is in progress: reproducible metrics, calibrated inheritance cohorts, root-family no-growth, exact Rust `1.97.1`, root `rust-version`, measured zero-warning Rust/Clippy governance, lockfile-preserving Rust workflows and three exact expiring legacy lint exceptions are accepted; repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration and removal of those three direct lint exceptions.
 - Stage C is in progress: the Customer Privacy golden package model, final customer-subject policy prerequisite, authoritative restriction decision, public restriction/legal-hold placement, retention adjudication, durable replay-safe owner execution/outcomes, governed access/export assembly, authoritative exact-nine owner-specific anonymization/deletion execution and first protected-owner integration are accepted; broader owner adoption and migration/visibility generalization remain.
-- Stage D is in progress: Customer Accounts aggregation is accepted through PR #222 and repository step 12 batch 1 for Parties, Consents, Contact Points and Party Relationships is accepted through PR #246; remaining owner contribution entry points and ordinary-registration concrete imports still belong to later bounded step-12 batches.
+- Stage D is complete: all currently active first-party owners expose owner-owned production contribution boundaries aggregated through `crm-first-party-modules`; generic native composition retains platform-level composition only, accepted through PRs #246, #248 and #249.
 - Stage E is complete through PR #239: deterministic Rust closure, exact repository-scope ownership, executable contract/Protobuf/API/migration/PostgreSQL/process/product/frontend/operations workflow coverage, exact-head evidence and unknown-path fail-closed enforcement are accepted.
 - Stage H is in progress: deterministic explain, packet-check and generated navigation are accepted through PR #228; local lifecycle commands are repository step 18.
 - Stage F is in progress: reusable generic mutation/query conformance is accepted through PR #235; generic worker conformance is repository step 16, contract lifecycle enforcement is step 17 and real Customer Privacy worker adoption is step 19.
@@ -182,7 +182,7 @@ Only one implementation packet may be active. The current order begins:
 -> 9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — complete through PR #239
 -> 10. governed Customer Privacy access/export assembly — complete through PR #241
 -> 11. owner-specific deletion, anonymization and supported crypto-shred execution — complete through PR #244
--> 12. complete first-party contribution aggregation for all currently active owners — in progress; batch 1 complete through PR #246
+-> 12. complete first-party contribution aggregation for all currently active owners — complete through PR #249
 -> 13. complete dependency/public-surface/reverse-fan-out/exception governance
 -> 14. first measured behavior-neutral transitional domain-cluster consolidation
 -> 15. Party tombstone, no-orphan proof and projection/search/cache convergence
@@ -202,3 +202,17 @@ The complete binding order through Phase 8B entry is `ARCHITECTURE_COMPLEXITY_AN
 Phase 8A closure does not make the universal CRM complete. Product Catalog/Pricing/CPQ/Orders/Contracts/Subscriptions/Billing and the wider expert CRM domains remain planned or incomplete.
 
 Current product-complete expert modules: **0**.
+
+## Repository step 12 completion evidence
+
+Repository step 12 and Stage D — contribution aggregation are **complete**. All currently active first-party owners now expose owner-owned production contribution boundaries aggregated through `crm-first-party-modules`; generic native composition retains platform-level composition only.
+
+Accepted implementation evidence:
+
+- PR #246 / accepted source `3b4fe7cdf458daac9c12f816d0d6a87039e613f3` / squash merge `f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978` / 37 of 37 applicable permanent workflows — Parties, Consents, Contact Points and Party Relationships, preserving the already aggregated Customer Accounts owner;
+- PR #248 / accepted source `b15482361ab2b322591d488843ab9b46ff676dba` / squash merge `b4222364c21cb74127834f5ff4f0739343d26379` / 37 of 37 applicable permanent workflows — Identity Resolution, Customer Data Operations and Data Quality;
+- PR #249 / accepted source `7876945586e5a6cc94f8d3b0f6ba2b57316484d2` / squash merge `f36592211bed3e0df7cf3771164b4bc24026eff3` / 37 of 37 applicable permanent workflows — Sales/Activities, Customer 360 and Customer Enrichment.
+
+The accepted batches are behavior-neutral: public coordinates and ordering, tenant activation, authorization, governed Party/Consent reads, persistence, projections and workers remain unchanged; workspace package count and external dependency versions remain unchanged.
+
+Repository step 13 is the **next permitted implementation step** and is **not started**. No later repository step may start before step 13 is accepted and synchronized. This architecture completion does not change Customer Privacy or Phase 8A product readiness; current product-complete expert modules remain **0**.

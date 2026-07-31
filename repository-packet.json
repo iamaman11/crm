@@ -1,45 +1,35 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-12-contribution-aggregation-batch-3",
-  "title": "Aggregate Sales Activities, Customer 360 and Customer Enrichment contributions",
+  "packet_id": "repository-step-12-completion-evidence-sync",
+  "title": "Synchronize repository step 12 completion evidence",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "b4222364c21cb74127834f5ff4f0739343d26379"
+    "sha": "f36592211bed3e0df7cf3771164b4bc24026eff3"
   },
-  "tracking_issues": [194],
-  "objective": "Complete repository step 12 with the final behavior-neutral owner batch: expose stable owner-owned production contribution entry points and exact inventory factories for Sales/Activities, Customer 360 and Customer Enrichment, merge them through crm-first-party-modules, relocate Customer Enrichment transactional reference guards out of the generic process host, and remove the remaining ordinary owner construction and registration bypasses from native composition while preserving exact inventories, activation, authorization, governed reads, persistence and worker behavior.",
+  "tracking_issues": [194, 126],
+  "objective": "Synchronize the accepted evidence for all three repository-step-12 contribution-aggregation batches, declare Stage D and repository step 12 complete, and identify repository step 13 as the next permitted but not started implementation step without changing product behavior or architecture implementation.",
   "allowed_paths": [
-    "Cargo.lock",
-    "crates/crm-application-runtime/src/native_composition.rs",
-    "crates/crm-application-runtime/src/native_composition/customer_enrichment_reference_guards.rs",
-    "crates/crm-customer-360-query-adapter/Cargo.toml",
-    "crates/crm-customer-360-query-adapter/src/lib.rs",
-    "crates/crm-customer-360-query-adapter/src/production_contribution.rs",
-    "crates/crm-customer-enrichment-capability-composition/Cargo.toml",
-    "crates/crm-customer-enrichment-capability-composition/src/lib.rs",
-    "crates/crm-customer-enrichment-capability-composition/src/production_contribution.rs",
-    "crates/crm-customer-enrichment-capability-composition/src/reference_guards.rs",
-    "crates/crm-first-party-modules/Cargo.toml",
-    "crates/crm-first-party-modules/src/lib.rs",
-    "crates/crm-sales-activities-capability-composition/Cargo.toml",
-    "crates/crm-sales-activities-capability-composition/src/lib.rs",
-    "crates/crm-sales-activities-capability-composition/src/production_contribution.rs",
     "docs/ACTIVE_PACKET.md",
+    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+    "docs/IMPLEMENTATION_ROADMAP.md",
+    "docs/PHASE8_DELIVERY_PLAN.md",
+    "docs/PROJECT_STATUS.md",
     "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
-    "scripts/check_native_module_composition.py",
     "scripts/generate_repository_navigation.py",
     "tests/test_architecture_documentation_consistency.py",
-    "tests/test_native_module_composition.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
     ".github/workflows/**",
+    "Cargo.lock",
+    "Cargo.toml",
     "affected-scope-policy.json",
     "apps/**",
     "architecture-policy.json",
     "contracts/**",
+    "crates/**",
     "database/**",
     "modules/**",
     "packages/**",
@@ -48,31 +38,27 @@
     "services/**"
   ],
   "deliverables": [
-    "Sales/Activities exposes exact mutation/query factories and one activation-gated production contribution builder preserving the planner router and query cursor behavior",
-    "Customer 360 exposes its exact query factory and one activation-gated query-only production contribution builder from the existing query-owner boundary without changing projection ownership or workers",
-    "Customer Enrichment transactional mapping and Party reference guards move from crm-application-runtime into the existing owner composition crate without behavior changes",
-    "Customer Enrichment exposes exact mutation/query factories and one activation-gated production contribution builder preserving Party and Consent governed reads, immutable definition validation and three query adapter groups",
-    "crm-first-party-modules merges all remaining production owner contributions without repeated module identifiers or coordinates",
-    "generic application runtime retains only platform-level metadata, search and link-shell composition and no ordinary first-party owner construction",
-    "native composition guards reject renewed Sales/Activities, Customer 360 or Customer Enrichment direct wiring",
-    "Cargo.lock records only intentional internal path-edge changes and no package or external dependency version change"
+    "normative architecture and delivery plans record PR #248 and PR #249 exact accepted sources, merge commits and 37-of-37 permanent workflow evidence",
+    "repository step 12 is consistently marked complete across active status documents",
+    "Stage D contribution aggregation is consistently marked complete",
+    "all active first-party owners are recorded as aggregated through owner-owned production contribution boundaries",
+    "repository step 13 is recorded only as the next permitted implementation step and remains not started",
+    "active packet and permanent documentation guards encode the same completion boundary"
   ],
   "required_checks": ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
   "acceptance": [
-    "public mutation/query coordinates, inventory contents and compatibility APIs preserve their existing order and meaning",
-    "tenant activation, visibility authorization, governed Party and Consent reads, transactional reference validation, persistence and worker behavior are unchanged",
-    "Sales/Activities, Customer 360 and Customer Enrichment ordinary construction or registration bypasses no longer appear in generic native composition",
-    "Customer Enrichment transactional reference guards no longer live in crm-application-runtime",
-    "first-party aggregate contains every active production owner contribution exactly once",
-    "workspace package count and external dependency families and versions are unchanged",
-    "repository step 12 implementation is complete and repository step 13 is not started"
+    "all repository-step-12 implementation evidence is attributed to the exact accepted heads and merge commits",
+    "documentation no longer describes repository step 12 or Stage D as in progress",
+    "documentation does not claim repository step 13 has started",
+    "Customer Privacy product readiness remains unchanged and incomplete",
+    "the final diff is documentation, packet and documentation-guard only",
+    "generated repository navigation is synchronized from the canonical generator"
   ],
   "non_goals": [
-    "start repository step 13 or any later architecture work",
+    "start repository step 13 or any later repository implementation step",
     "change product behavior, routes, coordinates, contracts, schemas, migrations, persistence, projections or workers",
-    "create, remove, rename or consolidate crates",
-    "change affected-scope policy or permanent workflows",
-    "change external dependency versions or add a dependency family",
-    "claim documentation evidence synchronization before this implementation batch is accepted and merged"
+    "change Rust code, manifests, lockfile, workflows or affected-scope policy",
+    "claim Customer Privacy or Phase 8A product completion",
+    "alter workspace package count, dependency families or external dependency versions"
   ]
 }

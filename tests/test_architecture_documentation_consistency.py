@@ -9,6 +9,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/IMPLEMENTATION_ROADMAP.md', 'docs/PHASE8_DELIVERY_PLAN.md', 'docs/PROJECT_STATUS.md', 'docs/generated/REPOSITORY_MAP.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
+
+
 
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
@@ -132,7 +135,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Complete through PR #239**;",
             "10. governed Customer Privacy access/export assembly — **Complete through PR #241**;",
             "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Complete through PR #244**;",
-            "12. complete first-party contribution aggregation for all currently active owners without behavior changes — **In progress; batch 1 complete through PR #246**;",
+            "12. complete first-party contribution aggregation for all currently active owners without behavior changes — **Complete through PR #249**;",
             "13. complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;",
             "14. first measured behavior-neutral transitional domain-cluster consolidation;",
             "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;",
@@ -164,7 +167,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.phase8,
         )
         self.assertIn(
-            "12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **in progress; batch 1 complete through PR #246**;",
+            "12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **complete through PR #249**;",
             self.phase8,
         )
         self.assertIn(
@@ -176,11 +179,36 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.phase8,
         )
         self.assertIn(
-            "A later step must not start while repository step 12 is unfinished.",
+            "Repository step 13 is the next permitted implementation step and is not started.",
             self.phase8,
         )
         for step in range(1, 6):
             self.assertIn(f"Repository step {step}", self.roadmap)
+
+        for document in self.authoritative_status_documents:
+            self.assertNotIn(
+                "Repository step 12 remains the current permitted implementation step.",
+                document,
+            )
+        self.assertIn(
+            "Latest accepted repository implementation packet is PR #249",
+            self.status,
+        )
+        self.assertIn(
+            "Repository step 13 is the current next permitted implementation step and is not started.",
+            self.status,
+        )
+        self.assertIn(
+            "Repository step 14 follows only after repository step 13 is accepted and synchronized.",
+            self.status,
+        )
+        self.assertIn("- Stage D is complete:", self.status)
+        self.assertIn(
+            "-> 12. complete first-party contribution aggregation for all currently active owners — complete through PR #249",
+            self.status,
+        )
+        self.assertNotIn("Stage D is in progress", self.status)
+        self.assertNotIn("step 12 batch 1 complete through PR #246", self.status.lower())
 
         for statement in ("run in parallel", "separate parallel lane", "runs alongside Phase 8A"):
             for document in self.authoritative_status_documents:
@@ -265,6 +293,20 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978",
                 "37 of 37",
             ),
+            (
+                self.authoritative_status_documents,
+                "PR #248",
+                "b15482361ab2b322591d488843ab9b46ff676dba",
+                "b4222364c21cb74127834f5ff4f0739343d26379",
+                "37 of 37",
+            ),
+            (
+                self.authoritative_status_documents,
+                "PR #249",
+                "7876945586e5a6cc94f8d3b0f6ba2b57316484d2",
+                "f36592211bed3e0df7cf3771164b4bc24026eff3",
+                "37 of 37",
+            ),
         )
         for documents, pr, source, merge, workflows in evidence:
             self.assert_evidence_in_documents(
@@ -306,52 +348,22 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-12-contribution-aggregation-batch-3")
+        self.assertEqual(self.packet["packet_id"], "repository-step-12-completion-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
-        self.assertEqual(self.packet["baseline"]["sha"], "b4222364c21cb74127834f5ff4f0739343d26379")
-        self.assertEqual(self.packet["tracking_issues"], [194])
-        self.assertEqual(self.packet["allowed_paths"], ['Cargo.lock',
- 'crates/crm-application-runtime/src/native_composition.rs',
- 'crates/crm-application-runtime/src/native_composition/customer_enrichment_reference_guards.rs',
- 'crates/crm-customer-360-query-adapter/Cargo.toml',
- 'crates/crm-customer-360-query-adapter/src/lib.rs',
- 'crates/crm-customer-360-query-adapter/src/production_contribution.rs',
- 'crates/crm-customer-enrichment-capability-composition/Cargo.toml',
- 'crates/crm-customer-enrichment-capability-composition/src/lib.rs',
- 'crates/crm-customer-enrichment-capability-composition/src/production_contribution.rs',
- 'crates/crm-customer-enrichment-capability-composition/src/reference_guards.rs',
- 'crates/crm-first-party-modules/Cargo.toml',
- 'crates/crm-first-party-modules/src/lib.rs',
- 'crates/crm-sales-activities-capability-composition/Cargo.toml',
- 'crates/crm-sales-activities-capability-composition/src/lib.rs',
- 'crates/crm-sales-activities-capability-composition/src/production_contribution.rs',
- 'docs/ACTIVE_PACKET.md',
- 'docs/generated/REPOSITORY_MAP.md',
- 'repository-packet.json',
- 'scripts/check_native_module_composition.py',
- 'scripts/generate_repository_navigation.py',
- 'tests/test_architecture_documentation_consistency.py',
- 'tests/test_native_module_composition.py',
- 'tests/test_repository_navigation.py'])
+        self.assertEqual(self.packet["baseline"]["sha"], "f36592211bed3e0df7cf3771164b4bc24026eff3")
+        self.assertEqual(self.packet["tracking_issues"], [194, 126])
+        self.assertEqual(self.packet["allowed_paths"], ALLOWED_PACKET_PATHS)
         self.assertEqual(
             self.packet["required_checks"],
             ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
         )
         self.assertIn(
-            "repository step 12 implementation is complete and repository step 13 is not started",
+            "documentation no longer describes repository step 12 or Stage D as in progress",
             self.packet["acceptance"],
         )
-        self.assertIn("Generated by scripts/generate_repository_navigation.py", self.active_packet)
-        self.assertIn("repository-step-12-contribution-aggregation-batch-3", self.active_packet)
-        self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
-        self.assertRegex(self.active_packet, r"sha256:[0-9a-f]{64}")
-        self.assertIn("orientation only", self.active_packet)
-        for document in self.authoritative_status_documents:
-            self.assertIn("PR #246", document)
-            self.assertIn("repository step 12", document.lower())
-            self.assertIn("repository step 13 remains blocked", document.lower())
-
+        self.assertIn("repository-step-12-completion-evidence-sync", self.active_packet)
+        self.assertIn("f36592211bed3e0df7cf3771164b4bc24026eff3", self.active_packet)
     def test_stage_accountability_and_live_catalog_are_current(self) -> None:
         for stage in (
             "A — documentation and policy baseline",
@@ -370,8 +382,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("repository step 22 is a phase 8a architecture measurement checkpoint", self.plan.lower())
         self.assertIn("repository step 25", self.plan.lower())
         self.assertIn("repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration", self.status.lower())
-        self.assertIn("## Next permitted repository packet\n\nRepository step 12 remains the current permitted implementation step", self.status)
-        self.assertNotIn("## Following permitted repository packet\n\nRepository step 12 completes first-party contribution aggregation for all currently active owners without behavior changes. Repository step 13", self.status)
+        self.assertIn("## Next permitted repository packet\n\nRepository step 13 is the current next permitted implementation step and is not started", self.status)
+        self.assertIn("## Following permitted repository packet\n\nRepository step 14 follows only after repository step 13 is accepted and synchronized", self.status)
         self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241", self.catalog)
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
         self.assertIn(
