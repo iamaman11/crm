@@ -21,27 +21,37 @@ from scripts.repo import build_parser
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/IMPLEMENTATION_ROADMAP.md', 'docs/PHASE8_DELIVERY_PLAN.md', 'docs/PROJECT_STATUS.md', 'docs/generated/REPOSITORY_MAP.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
+ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
 
 
 
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-12-completion-evidence-sync")
+        self.assertEqual(packet["packet_id"], "repository-step-13-plan-hardening")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
-        self.assertEqual(packet["baseline"]["sha"], "f36592211bed3e0df7cf3771164b4bc24026eff3")
+        self.assertEqual(
+            packet["baseline"]["sha"],
+            "dfd1478dcfc084cf855fcc409c9b8faec8eaa5cf",
+        )
         self.assertEqual(packet["tracking_issues"], [194, 126])
         self.assertEqual(packet["allowed_paths"], ALLOWED_PACKET_PATHS)
         self.assertEqual(
             packet["required_checks"],
-            ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
+            [
+                "Affected Scope CI",
+                "Customer Privacy Access Export CI",
+                "Customer Privacy Owner Execution CI",
+                "Rust CI",
+                "Rust Generated Sync",
+            ],
         )
         self.assertIn(
-            "documentation no longer describes repository step 12 or Stage D as in progress",
+            "permanent tests reject stale packet identity, baseline, checks or missing ADR anti-complexity requirements",
             packet["acceptance"],
         )
+
     def test_affected_scope_workflow_executes_real_packet_check(self) -> None:
         workflow = (
             ROOT / ".github/workflows/affected-scope.yml"
@@ -266,7 +276,8 @@ class RepositoryNavigationTests(unittest.TestCase):
                 }
                 for name, path in (
                     ("Affected Scope CI", ".github/workflows/affected-scope.yml"),
-                    ("Governance CI", ".github/workflows/governance.yml"),
+                    ("Customer Privacy Access Export CI", ".github/workflows/customer-privacy-access-export.yml"),
+                    ("Customer Privacy Owner Execution CI", ".github/workflows/customer-privacy-owner-execution.yml"),
                     ("Rust CI", ".github/workflows/rust.yml"),
                     ("Rust Generated Sync", ".github/workflows/rust-generated-sync.yml"),
                 )
@@ -276,7 +287,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "f36592211bed3e0df7cf3771164b4bc24026eff3"
+                    "dfd1478dcfc084cf855fcc409c9b8faec8eaa5cf"
                 ),
             ),
             patch(
