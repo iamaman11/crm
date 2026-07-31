@@ -3,9 +3,9 @@ use crm_customer_accounts::{Account, AccountStatus, UpdateAccount};
 use crm_customer_accounts_capability_adapter::{
     RECORD_TYPE, account_from_snapshot, persisted_payload,
 };
-use crm_customer_privacy::PrivacyOwnerActionCommand;
 use crm_customer_privacy_owner_scope_support::{
-    OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, owner_action_definition,
+    OwnerPrivacyActionPlanner, OwnerPrivacyActionPolicy, PrivacyOwnerActionCommand,
+    owner_action_definition,
 };
 use crm_module_sdk::{RecordSnapshot, SdkError, TypedPayload};
 
