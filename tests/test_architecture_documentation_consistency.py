@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/IMPLEMENTATION_ROADMAP.md', 'docs/PHASE8_DELIVERY_PLAN.md', 'docs/PROJECT_STATUS.md', 'docs/generated/REPOSITORY_MAP.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
+ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
 
 
 
@@ -32,6 +32,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.catalog = read("docs/MODULE_CATALOG.md")
         cls.workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
         cls.module_development = read("docs/MODULE_DEVELOPMENT.md")
+        cls.adr31 = read("docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md")
         cls.repo_runner = read("scripts/repo.py")
         cls.generator = read("scripts/generate_repository_navigation.py")
         cls.packet = json.loads(read("repository-packet.json"))
@@ -348,22 +349,41 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-12-completion-evidence-sync")
+        self.assertEqual(self.packet["packet_id"], "repository-step-13-plan-hardening")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
-        self.assertEqual(self.packet["baseline"]["sha"], "f36592211bed3e0df7cf3771164b4bc24026eff3")
+        self.assertEqual(
+            self.packet["baseline"]["sha"],
+            "dfd1478dcfc084cf855fcc409c9b8faec8eaa5cf",
+        )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(self.packet["allowed_paths"], ALLOWED_PACKET_PATHS)
         self.assertEqual(
             self.packet["required_checks"],
-            ["Affected Scope CI", "Governance CI", "Rust CI", "Rust Generated Sync"],
+            [
+                "Affected Scope CI",
+                "Customer Privacy Access Export CI",
+                "Customer Privacy Owner Execution CI",
+                "Rust CI",
+                "Rust Generated Sync",
+            ],
         )
         self.assertIn(
-            "documentation no longer describes repository step 12 or Stage D as in progress",
+            "the plan cannot treat the previous 110-package baseline as current 113-package completion evidence",
             self.packet["acceptance"],
         )
-        self.assertIn("repository-step-12-completion-evidence-sync", self.active_packet)
-        self.assertIn("f36592211bed3e0df7cf3771164b4bc24026eff3", self.active_packet)
+        self.assertIn(
+            "unregistered source-level lint suppressions and equivalent bypasses are explicitly inside step-13 governance scope",
+            self.packet["acceptance"],
+        )
+        self.assertIn("repository-step-13-plan-hardening", self.active_packet)
+        self.assertIn("dfd1478dcfc084cf855fcc409c9b8faec8eaa5cf", self.active_packet)
+        self.assertIn("Repository step 13 remains the next permitted implementation step", self.adr31)
+        self.assertIn("current accepted workspace contains 113 packages", self.adr31)
+        self.assertIn("#[allow(...)]", self.adr31)
+        self.assertIn("representative ordinary-capability and new-owner change-cost reports", self.adr31)
+        self.assertIn("Step 14 remains blocked", self.adr31)
+
     def test_stage_accountability_and_live_catalog_are_current(self) -> None:
         for stage in (
             "A — documentation and policy baseline",
