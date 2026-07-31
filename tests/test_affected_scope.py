@@ -414,6 +414,7 @@ class AffectedScopeTests(unittest.TestCase):
             "operations": (
                 ".github/workflows/governance.yml",
                 "docs/CI_TELEMETRY_BASELINE.md",
+                "scripts/check_native_module_composition.py",
                 "scripts/prepare_isolated_process_database.sh",
             ),
         }
@@ -440,6 +441,36 @@ class AffectedScopeTests(unittest.TestCase):
                             selected_workflows
                         )
                     )
+
+    def test_native_composition_guard_has_exact_operations_scope(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        empty_metadata = {"packages": [], "workspace_members": []}
+        report = build_report(
+            root,
+            "origin/main",
+            paths=["scripts/check_native_module_composition.py"],
+            metadata=empty_metadata,
+            head_sha="native-composition-guard",
+        )
+        self.assertEqual(
+            [scope["id"] for scope in report["selected_scopes"]],
+            ["operations"],
+        )
+        self.assertIn(
+            "Governance CI",
+            [workflow["name"] for workflow in report["selected_workflows"]],
+        )
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "unknown affected scope cannot prove a safe non-Rust workflow closure",
+        ):
+            build_report(
+                root,
+                "origin/main",
+                paths=["scripts/check_unclassified_native_guard.py"],
+                metadata=empty_metadata,
+                head_sha="unclassified-native-guard",
+            )
 
     def test_glob_matching_handles_nested_paths(self) -> None:
         self.assertTrue(

@@ -38,6 +38,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["tracking_issues"], [194])
         for path in (
             "Cargo.lock",
+            "affected-scope-policy.json",
             "crates/crm-application-runtime/Cargo.toml",
             "crates/crm-application-runtime/src/native_composition.rs",
             "crates/crm-consents-capability-composition/src/lib.rs",
@@ -52,6 +53,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             "docs/ACTIVE_PACKET.md",
             "repository-packet.json",
             "scripts/check_native_module_composition.py",
+            "tests/test_affected_scope.py",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_native_module_composition.py",
             "tests/test_repository_navigation.py",
@@ -59,7 +61,6 @@ class RepositoryNavigationTests(unittest.TestCase):
             self.assertIn(path, packet["allowed_paths"])
         for path in (
             ".github/workflows/**",
-            "affected-scope-policy.json",
             "apps/**",
             "contracts/**",
             "database/**",
