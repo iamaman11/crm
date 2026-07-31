@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-run materializer restoring repository-step-12 lockfile neutrality."""
+"""One-run materializer restoring repository-step-12 behavior neutrality."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import sys
 from repository_navigation import NavigationError, stale_generated_documents, write_generated_documents
 
 
-REPLACEMENTS = (
+LOCK_REPLACEMENTS = (
     (
         '''name = "http"\nversion = "1.5.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"''',
         '''name = "http"\nversion = "1.4.2"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "6970f50e31d6fc17d3fa27329444bfa74e196cf62e95052a3f6fee181dba6425"''',
@@ -35,6 +35,8 @@ REPLACEMENTS = (
     ),
 )
 
+DUPLICATE_PARTY_QUERY_CONSTRUCTION = '''    let _party_queries = Arc::new(PartyQueryAdapter::new(\n        store.clone(),\n        cursor(cursor_key)?,\n        visibility_authorizer.clone(),\n    )?);\n\n'''
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
@@ -49,7 +51,7 @@ def restore_lockfile(root: Path) -> bool:
     path = root / "Cargo.lock"
     text = path.read_text(encoding="utf-8")
     changed = False
-    for current, baseline, label in REPLACEMENTS:
+    for current, baseline, label in LOCK_REPLACEMENTS:
         if baseline in text:
             continue
         count = text.count(current)
@@ -64,25 +66,47 @@ def restore_lockfile(root: Path) -> bool:
     return changed
 
 
+def remove_duplicate_party_query_construction(root: Path) -> bool:
+    path = root / "crates/crm-application-runtime/src/native_composition.rs"
+    text = path.read_text(encoding="utf-8")
+    count = text.count(DUPLICATE_PARTY_QUERY_CONSTRUCTION)
+    if count == 0:
+        return False
+    if count != 1:
+        raise NavigationError(
+            f"runtime materializer expected one duplicate Party query constructor, found {count}"
+        )
+    path.write_text(
+        text.replace(DUPLICATE_PARTY_QUERY_CONSTRUCTION, "", 1),
+        encoding="utf-8",
+    )
+    return True
+
+
 def commit(root: Path) -> None:
     branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME")
     if not branch:
-        raise NavigationError("lockfile materializer requires a branch ref")
+        raise NavigationError("behavior-neutrality materializer requires a branch ref")
     subprocess.run(
         ["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
         cwd=root,
         check=True,
         stdout=subprocess.DEVNULL,
     )
+    subprocess.run(["cargo", "fmt", "--all", "--", "--check"], cwd=root, check=True)
     subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=root, check=True)
     subprocess.run(
         ["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"],
         cwd=root,
         check=True,
     )
-    subprocess.run(["git", "add", "Cargo.lock"], cwd=root, check=True)
     subprocess.run(
-        ["git", "commit", "-m", "Restore repository-step-12 lockfile neutrality"],
+        ["git", "add", "Cargo.lock", "crates/crm-application-runtime/src/native_composition.rs"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "Restore repository-step-12 behavior neutrality"],
         cwd=root,
         check=True,
     )
@@ -94,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.write:
             changed = restore_lockfile(args.root)
+            changed = remove_duplicate_party_query_construction(args.root) or changed
             write_generated_documents(args.root)
             if changed:
                 commit(args.root)
