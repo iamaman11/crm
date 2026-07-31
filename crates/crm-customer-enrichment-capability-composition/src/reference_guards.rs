@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use crm_capability_plan_support as support;
 use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::TransactionalAggregateGuard;

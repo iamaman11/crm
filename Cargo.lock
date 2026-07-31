@@ -680,6 +680,7 @@ dependencies = [
 name = "crm-customer-360-query-adapter"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
@@ -941,6 +942,7 @@ dependencies = [
 name = "crm-customer-enrichment-capability-composition"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-consents-capability-adapter",
@@ -948,11 +950,15 @@ dependencies = [
  "crm-core-data",
  "crm-customer-enrichment",
  "crm-customer-enrichment-capability-adapter",
+ "crm-customer-enrichment-query-adapter",
+ "crm-customer-enrichment-request-list-query-adapter",
+ "crm-customer-enrichment-suggestion-query-adapter",
  "crm-module-sdk",
  "crm-parties-query-adapter",
  "crm-proto-contracts",
  "crm-query-runtime",
  "prost",
+ "sqlx",
 ]
 
 [[package]]
@@ -1470,14 +1476,17 @@ dependencies = [
  "crm-consents-capability-composition",
  "crm-contact-points-capability-composition",
  "crm-core-data",
+ "crm-customer-360-query-adapter",
  "crm-customer-accounts-capability-composition",
  "crm-customer-data-operations-execution-composition",
+ "crm-customer-enrichment-capability-composition",
  "crm-data-quality-source-composition",
  "crm-identity-resolution-capability-composition",
  "crm-module-sdk",
  "crm-party-reference-composition",
  "crm-party-relationships-capability-composition",
  "crm-query-runtime",
+ "crm-sales-activities-capability-composition",
 ]
 
 [[package]]
@@ -1903,6 +1912,7 @@ name = "crm-sales-activities-capability-composition"
 version = "0.1.0"
 dependencies = [
  "crm-activities-capability-adapter",
+ "crm-application-composition",
  "crm-capability-adapters",
  "crm-capability-runtime",
  "crm-core-data",

@@ -7,6 +7,11 @@
 //! revalidates live Party visibility before the exact request row is locked and transitioned. This
 //! crate owns no authoritative Party or Consent state and never bypasses their query boundaries.
 
+mod production_contribution;
+mod reference_guards;
+pub use production_contribution::*;
+pub use reference_guards::*;
+
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityExecutionResult, CapabilityRequest,

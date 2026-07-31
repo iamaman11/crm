@@ -23,6 +23,10 @@ pub use crm_contact_points_capability_composition::{
     query_capability_definitions as contact_points_query_capability_definitions,
 };
 use crm_core_data::PostgresDataStore;
+pub use crm_customer_360_query_adapter::query_capability_definitions as customer_360_query_capability_definitions;
+use crm_customer_360_query_adapter::{
+    Customer360ProductionDependencies, build_contribution as build_customer_360_contribution,
+};
 use crm_customer_accounts_capability_composition::{
     CustomerAccountsProductionDependencies,
     build_contribution as build_customer_accounts_contribution,
@@ -38,6 +42,14 @@ use crm_customer_data_operations_execution_composition::{
 pub use crm_customer_data_operations_execution_composition::{
     mutation_capability_definitions as customer_data_operations_mutation_capability_definitions,
     query_capability_definitions as customer_data_operations_query_capability_definitions,
+};
+use crm_customer_enrichment_capability_composition::{
+    CustomerEnrichmentProductionDependencies,
+    build_contribution as build_customer_enrichment_contribution,
+};
+pub use crm_customer_enrichment_capability_composition::{
+    mutation_capability_definitions as customer_enrichment_mutation_capability_definitions,
+    query_capability_definitions as customer_enrichment_query_capability_definitions,
 };
 use crm_data_quality_source_composition::{
     DataQualityProductionDependencies, build_contribution as build_data_quality_contribution,
@@ -72,6 +84,14 @@ pub use crm_party_relationships_capability_composition::{
     query_capability_definitions as party_relationships_query_capability_definitions,
 };
 use crm_query_runtime::{QueryAuthorizer, QueryVisibilityAuthorizer};
+use crm_sales_activities_capability_composition::{
+    SalesActivitiesProductionDependencies,
+    build_contribution as build_sales_activities_contribution,
+};
+pub use crm_sales_activities_capability_composition::{
+    mutation_capability_definitions as sales_activities_mutation_capability_definitions,
+    production_query_capability_definitions as sales_activities_query_capability_definitions,
+};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -99,6 +119,15 @@ pub fn build_all(
     } = dependencies;
     let parties = Arc::new(PostgresPartyReferenceReader::new(store.clone()));
     let mut contributions = ModuleContributionSet::new();
+
+    contributions.merge(build_sales_activities_contribution(
+        SalesActivitiesProductionDependencies {
+            store: store.clone(),
+            activation: activation.clone(),
+            visibility_authorizer: visibility_authorizer.clone(),
+            cursor_key,
+        },
+    )?);
 
     contributions.merge(build_parties_contribution(PartiesProductionDependencies {
         store: store.clone(),
@@ -141,6 +170,13 @@ pub fn build_all(
             cursor_key,
         },
     )?);
+    contributions.merge(build_customer_360_contribution(
+        Customer360ProductionDependencies {
+            store: store.clone(),
+            activation: activation.clone(),
+            visibility_authorizer: visibility_authorizer.clone(),
+        },
+    )?);
     contributions.merge(build_identity_resolution_contribution(
         IdentityResolutionProductionDependencies {
             store: store.clone(),
@@ -160,11 +196,20 @@ pub fn build_all(
     )?);
     contributions.merge(build_data_quality_contribution(
         DataQualityProductionDependencies {
+            store: store.clone(),
+            activation: activation.clone(),
+            capability_authorizer,
+            query_authorizer: query_authorizer.clone(),
+            visibility_authorizer: visibility_authorizer.clone(),
+        },
+    )?);
+    contributions.merge(build_customer_enrichment_contribution(
+        CustomerEnrichmentProductionDependencies {
             store,
             activation,
-            capability_authorizer,
             query_authorizer,
             visibility_authorizer,
+            cursor_key,
         },
     )?);
 

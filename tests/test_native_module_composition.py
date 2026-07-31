@@ -261,5 +261,66 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
             (ROOT / "crates/crm-data-quality-source-composition/src/registration.rs").exists()
         )
 
+    def test_final_owner_batch_is_aggregated(self) -> None:
+        sales = (
+            ROOT
+            / "crates/crm-sales-activities-capability-composition/src/production_contribution.rs"
+        ).read_text(encoding="utf-8")
+        customer_360 = (
+            ROOT / "crates/crm-customer-360-query-adapter/src/production_contribution.rs"
+        ).read_text(encoding="utf-8")
+        enrichment = (
+            ROOT
+            / "crates/crm-customer-enrichment-capability-composition/src/production_contribution.rs"
+        ).read_text(encoding="utf-8")
+        aggregate = (ROOT / "crates/crm-first-party-modules/src/lib.rs").read_text(
+            encoding="utf-8"
+        )
+        runtime = (
+            ROOT / "crates/crm-application-runtime/src/native_composition.rs"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("pub fn mutation_capability_definitions()", sales)
+        self.assertIn("pub fn production_query_capability_definitions()", sales)
+        self.assertIn("pub fn build_contribution(", sales)
+        self.assertIn("ActivationGatedMutationValidator::new", sales)
+        self.assertIn("ActivationGatedQueryValidator::new", sales)
+        self.assertIn("pub fn mutation_capability_definitions()", enrichment)
+        self.assertIn("pub fn query_capability_definitions()", enrichment)
+        self.assertIn("pub fn build_contribution(", enrichment)
+        self.assertIn("ActivationGatedMutationValidator::new", enrichment)
+        self.assertIn("ActivationGatedQueryValidator::new", enrichment)
+        self.assertIn("pub fn production_query_capability_definitions()", customer_360)
+        self.assertIn("pub fn build_contribution(", customer_360)
+        self.assertIn("ActivationGatedQueryValidator::new", customer_360)
+
+        for marker in (
+            "build_sales_activities_contribution(",
+            "build_customer_360_contribution(",
+            "build_customer_enrichment_contribution(",
+        ):
+            self.assertIn(marker, aggregate)
+        for marker in (
+            "SalesActivitiesCapabilityPlannerRouter",
+            "SalesActivitiesQueryAdapter::new",
+            "Customer360QueryAdapter::new",
+            "CustomerEnrichmentCapabilityExecutor::new",
+            "CustomerEnrichmentQueryAdapter::new",
+        ):
+            self.assertNotIn(marker, runtime)
+
+        self.assertFalse(
+            (
+                ROOT
+                / "crates/crm-application-runtime/src/native_composition/customer_enrichment_reference_guards.rs"
+            ).exists()
+        )
+        self.assertTrue(
+            (
+                ROOT
+                / "crates/crm-customer-enrichment-capability-composition/src/reference_guards.rs"
+            ).exists()
+        )
+
 if __name__ == "__main__":
     unittest.main()

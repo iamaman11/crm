@@ -9,6 +9,7 @@ default = []
 postgres-integration = []
 
 [dependencies]
+crm-application-composition = { path = "../crm-application-composition" }
 crm-activities-capability-adapter = { path = "../crm-activities-capability-adapter" }
 crm-capability-adapters = { path = "../crm-capability-adapters" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }

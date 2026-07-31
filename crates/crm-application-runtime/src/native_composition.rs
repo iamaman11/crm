@@ -1,39 +1,11 @@
-mod customer_enrichment_reference_guards;
-
 use crm_application_composition::{
-    ActivationGatedMutationValidator, ActivationGatedQueryValidator, ApplicationComposition,
-    ModuleActivationPort, ModuleContributionSet, NoopMutationSemanticValidator,
+    ApplicationComposition, ModuleActivationPort, ModuleContributionSet,
+    NoopMutationSemanticValidator,
 };
 use crm_capability_adapters::CapabilityCatalog;
-use crm_capability_runtime::{
-    CapabilityAuthorizer, CapabilityDefinition, CapabilitySemanticValidator,
-    TransactionalCapabilityExecutor,
-};
-use crm_consents_query_adapter::ConsentQueryAdapter;
+use crm_capability_runtime::{CapabilityAuthorizer, CapabilityDefinition};
 use crm_core_data::{
     PostgresDataStore, PostgresMetadataCapabilityExecutor, PostgresMetadataQueryStore,
-    PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner,
-};
-use crm_customer_360_query_adapter::{
-    Customer360QueryAdapter,
-    query_capability_definitions as customer_360_query_capability_definitions,
-};
-use crm_customer_enrichment_capability_adapter::{
-    CustomerEnrichmentProviderProfileCapabilityPlanner,
-    CustomerEnrichmentRequestCreateCapabilityPlanner,
-    capability_definitions as customer_enrichment_capability_definitions,
-};
-use crm_customer_enrichment_capability_composition::CustomerEnrichmentCapabilityExecutor;
-use crm_customer_enrichment_query_adapter::{
-    CustomerEnrichmentQueryAdapter,
-    query_capability_definitions as customer_enrichment_query_capability_definitions,
-};
-use crm_customer_enrichment_request_list_query_adapter::{
-    CustomerEnrichmentRequestListQueryAdapter,
-    query_capability_definition as customer_enrichment_request_list_query_capability_definition,
-};
-use crm_customer_enrichment_suggestion_query_adapter::{
-    CustomerEnrichmentSuggestionQueryAdapter, get_suggestion_capability_definition,
 };
 use crm_first_party_modules::{
     FirstPartyProductionDependencies, build_all as build_first_party_modules,
@@ -41,10 +13,13 @@ use crm_first_party_modules::{
     consents_query_capability_definitions as consent_query_capability_definitions,
     contact_points_mutation_capability_definitions as contact_point_capability_definitions,
     contact_points_query_capability_definitions as contact_point_query_capability_definitions,
+    customer_360_query_capability_definitions,
     customer_accounts_mutation_capability_definitions as account_capability_definitions,
     customer_accounts_query_capability_definitions as account_query_capability_definitions,
     customer_data_operations_mutation_capability_definitions as customer_data_operations_capability_definitions,
     customer_data_operations_query_capability_definitions,
+    customer_enrichment_mutation_capability_definitions as customer_enrichment_capability_definitions,
+    customer_enrichment_query_capability_definitions,
     data_quality_mutation_capability_definitions as data_quality_capability_definitions,
     data_quality_query_capability_definitions,
     identity_resolution_mutation_capability_definitions as identity_resolution_capability_definitions,
@@ -53,6 +28,8 @@ use crm_first_party_modules::{
     parties_query_capability_definitions as party_query_capability_definitions,
     party_relationships_mutation_capability_definitions as party_relationship_capability_definitions,
     party_relationships_query_capability_definitions as party_relationship_query_capability_definitions,
+    sales_activities_mutation_capability_definitions as sales_activities_capability_definitions,
+    sales_activities_query_capability_definitions,
 };
 use crm_global_search_composition::GLOBAL_SEARCH_INDEX_ID;
 use crm_metadata_api_adapter::{
@@ -60,24 +37,10 @@ use crm_metadata_api_adapter::{
 };
 use crm_metadata_query_adapter::MetadataQueryAdapter;
 use crm_module_sdk::{ErrorCategory, ModuleId, PortFuture, SdkError, TenantId};
-use crm_parties_query_adapter::PartyQueryAdapter;
-use crm_query_runtime::{
-    CursorCodec, QueryAuthorizer, QueryExecutor, QuerySemanticValidator, QueryVisibilityAuthorizer,
-};
-use crm_sales_activities_capability_composition::{
-    SalesActivitiesCapabilityPlannerRouter,
-    capability_definitions as sales_activities_capability_definitions,
-};
+use crm_query_runtime::{CursorCodec, QueryAuthorizer, QueryVisibilityAuthorizer};
 use crm_sales_activities_link::MODULE_ID as LINK_MODULE_ID;
-use crm_sales_activities_query_adapter::{
-    SalesActivitiesQueryAdapter,
-    query_capability_definitions as sales_activities_query_capability_definitions,
-};
 use crm_search_query_adapter::{SearchQueryAdapter, search_query_capability_definition};
 use crm_search_runtime::SearchIndexId;
-use customer_enrichment_reference_guards::{
-    PostgresCustomerEnrichmentMappingReferenceGuard, PostgresCustomerEnrichmentRequestPartyGuard,
-};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -147,8 +110,6 @@ pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkE
     definitions.extend(identity_resolution_query_capability_definitions()?);
     definitions.extend(customer_data_operations_query_capability_definitions()?);
     definitions.extend(customer_enrichment_query_capability_definitions()?);
-    definitions.push(customer_enrichment_request_list_query_capability_definition()?);
-    definitions.push(get_suggestion_capability_definition()?);
     definitions.extend(data_quality_query_capability_definitions()?);
     definitions.push(search_query_capability_definition()?);
     definitions.extend(metadata_query_capability_definitions()?);
@@ -168,16 +129,6 @@ pub fn build_production_composition(
     } = dependencies;
     let mut contributions = ModuleContributionSet::new();
 
-    let sales_activities_executor =
-        aggregate_executor(store.clone(), SalesActivitiesCapabilityPlannerRouter);
-    add_activated_mutations(
-        &mut contributions,
-        sales_activities_capability_definitions()?,
-        Arc::new(NoopMutationSemanticValidator),
-        sales_activities_executor,
-        activation.clone(),
-    )?;
-
     contributions.merge(build_first_party_modules(
         FirstPartyProductionDependencies {
             store: store.clone(),
@@ -189,45 +140,6 @@ pub fn build_production_composition(
         },
     )?);
 
-    let customer_enrichment_fallback: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(PostgresTransactionalAggregateExecutor::guarded(
-            store.clone(),
-            Arc::new(CustomerEnrichmentProviderProfileCapabilityPlanner),
-            Arc::new(PostgresCustomerEnrichmentMappingReferenceGuard),
-        ));
-    let customer_enrichment_request: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(PostgresTransactionalAggregateExecutor::guarded(
-            store.clone(),
-            Arc::new(CustomerEnrichmentRequestCreateCapabilityPlanner),
-            Arc::new(PostgresCustomerEnrichmentRequestPartyGuard),
-        ));
-    let customer_enrichment_party_queries = Arc::new(PartyQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    let customer_enrichment_consent_queries = Arc::new(ConsentQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    let customer_enrichment_executor: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(CustomerEnrichmentCapabilityExecutor::new(
-            store.clone(),
-            customer_enrichment_fallback,
-            customer_enrichment_request,
-            customer_enrichment_party_queries,
-            customer_enrichment_consent_queries,
-            query_authorizer.clone(),
-        ));
-    add_activated_mutations(
-        &mut contributions,
-        customer_enrichment_capability_definitions()?,
-        Arc::new(NoopMutationSemanticValidator),
-        customer_enrichment_executor,
-        activation.clone(),
-    )?;
-
     contributions
         .add_mutations(
             metadata_mutation_capability_definitions()?,
@@ -235,65 +147,6 @@ pub fn build_production_composition(
             Arc::new(PostgresMetadataCapabilityExecutor::new(store.clone())),
         )
         .map_err(composition_error)?;
-
-    let sales_activities_queries = Arc::new(SalesActivitiesQueryAdapter::new(
-        store.clone(),
-        cursor(cursor_key)?,
-        visibility_authorizer.clone(),
-    )?);
-    add_activated_queries(
-        &mut contributions,
-        sales_activities_query_capability_definitions()?,
-        sales_activities_queries,
-        activation.clone(),
-    )?;
-
-    let customer_360_queries = Arc::new(Customer360QueryAdapter::new(
-        store.clone(),
-        visibility_authorizer.clone(),
-    ));
-    add_activated_queries(
-        &mut contributions,
-        customer_360_query_capability_definitions()?,
-        customer_360_queries,
-        activation.clone(),
-    )?;
-
-    let customer_enrichment_queries = Arc::new(CustomerEnrichmentQueryAdapter::new(
-        store.clone(),
-        visibility_authorizer.clone(),
-    ));
-    add_activated_queries(
-        &mut contributions,
-        customer_enrichment_query_capability_definitions()?,
-        customer_enrichment_queries,
-        activation.clone(),
-    )?;
-
-    let customer_enrichment_request_list_queries =
-        Arc::new(CustomerEnrichmentRequestListQueryAdapter::new(
-            store.clone(),
-            cursor(cursor_key)?,
-            visibility_authorizer.clone(),
-        ));
-    add_activated_queries(
-        &mut contributions,
-        vec![customer_enrichment_request_list_query_capability_definition()?],
-        customer_enrichment_request_list_queries,
-        activation.clone(),
-    )?;
-
-    let customer_enrichment_suggestion_get_queries =
-        Arc::new(CustomerEnrichmentSuggestionQueryAdapter::new_get_only(
-            store.clone(),
-            visibility_authorizer.clone(),
-        ));
-    add_activated_queries(
-        &mut contributions,
-        vec![get_suggestion_capability_definition()?],
-        customer_enrichment_suggestion_get_queries,
-        activation.clone(),
-    )?;
 
     let search_queries = Arc::new(SearchQueryAdapter::new(
         SearchIndexId::try_new(GLOBAL_SEARCH_INDEX_ID).map_err(configuration_error)?,
@@ -324,54 +177,6 @@ pub fn build_production_composition(
         .add_empty_module(ModuleId::try_new(LINK_MODULE_ID).map_err(configuration_error)?)
         .map_err(composition_error)?;
     contributions.build().map_err(composition_error)
-}
-
-fn aggregate_executor<P>(
-    store: PostgresDataStore,
-    planner: P,
-) -> Arc<dyn TransactionalCapabilityExecutor>
-where
-    P: TransactionalAggregatePlanner + 'static,
-{
-    Arc::new(PostgresTransactionalAggregateExecutor::new(
-        store,
-        Arc::new(planner),
-    ))
-}
-
-fn add_activated_mutations(
-    contributions: &mut ModuleContributionSet,
-    definitions: Vec<CapabilityDefinition>,
-    validator: Arc<dyn CapabilitySemanticValidator>,
-    executor: Arc<dyn TransactionalCapabilityExecutor>,
-    activation: Arc<dyn ModuleActivationPort>,
-) -> Result<(), SdkError> {
-    let validator: Arc<dyn CapabilitySemanticValidator> =
-        Arc::new(ActivationGatedMutationValidator::new(activation, validator));
-    contributions
-        .add_mutations(definitions, validator, executor)
-        .map(|_| ())
-        .map_err(composition_error)
-}
-
-fn add_activated_queries<T>(
-    contributions: &mut ModuleContributionSet,
-    definitions: Vec<CapabilityDefinition>,
-    adapter: Arc<T>,
-    activation: Arc<dyn ModuleActivationPort>,
-) -> Result<(), SdkError>
-where
-    T: QuerySemanticValidator + QueryExecutor + 'static,
-{
-    let validator: Arc<dyn QuerySemanticValidator> = Arc::new(ActivationGatedQueryValidator::new(
-        activation,
-        adapter.clone(),
-    ));
-    let executor: Arc<dyn QueryExecutor> = adapter;
-    contributions
-        .add_queries(definitions, validator, executor)
-        .map(|_| ())
-        .map_err(composition_error)
 }
 
 fn cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {
