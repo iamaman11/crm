@@ -36,7 +36,9 @@
     "repository-packet.json",
     "scripts/check_native_module_composition.py",
     "scripts/generate_repository_navigation.py",
-    "tests/test_native_module_composition.py"
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_native_module_composition.py",
+    "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
     ".github/workflows/**",
