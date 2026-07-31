@@ -364,9 +364,7 @@ mod tests {
         let encoded = encode_owner_action_command(&command).unwrap();
         let text = std::str::from_utf8(&encoded).unwrap();
         assert!(text.contains("\"resource_version\":\"9007199254740993\""));
-        assert!(text.contains(
-            "\"planned_at_unix_nanos\":\"1800000000000000003\""
-        ));
+        assert!(text.contains("\"planned_at_unix_nanos\":\"1800000000000000003\""));
         assert_eq!(decode_owner_action_command(&encoded).unwrap(), command);
     }
 
