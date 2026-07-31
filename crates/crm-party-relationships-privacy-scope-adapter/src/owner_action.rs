@@ -24,8 +24,7 @@ pub fn party_relationships_privacy_action_definition() -> Result<CapabilityDefin
     )
 }
 
-pub const fn party_relationships_privacy_action_planner() ->
-    PartyRelationshipsPrivacyActionPlanner
+pub const fn party_relationships_privacy_action_planner() -> PartyRelationshipsPrivacyActionPlanner
 {
     OwnerPrivacyActionPlanner::new(PartyRelationshipsPrivacyActionPolicy)
 }
@@ -167,9 +166,6 @@ mod tests {
     #[test]
     fn privacy_transition_rejects_time_regression() {
         let error = privacy_transition(relationship(), 9).unwrap_err();
-        assert_eq!(
-            error.code,
-            "PARTY_RELATIONSHIPS_PRIVACY_TRANSITION_INVALID"
-        );
+        assert_eq!(error.code, "PARTY_RELATIONSHIPS_PRIVACY_TRANSITION_INVALID");
     }
 }
