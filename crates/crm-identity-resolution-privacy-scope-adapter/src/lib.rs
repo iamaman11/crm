@@ -12,6 +12,7 @@
 mod contract;
 mod digest;
 mod errors;
+mod owner_action;
 mod postgres;
 mod request;
 mod response;
@@ -26,5 +27,10 @@ pub use contract::{
     MAX_PRIVACY_MERGE_RECORDS_REHYDRATED, MAX_PRIVACY_OWNER_RECORDS_SCANNED,
     MAX_PRIVACY_RELATIONSHIP_CANDIDATES, OUTPUT_MAXIMUM_BYTES, OUTPUT_RETENTION_POLICY_ID,
     OUTPUT_SCHEMA_ID, identity_resolution_privacy_scope_definition,
+};
+pub use owner_action::{
+    OWNER_ACTION_CAPABILITY_ID, IdentityResolutionPrivacyActionPlanner,
+    IdentityResolutionPrivacyActionPolicy, identity_resolution_privacy_action_definition,
+    identity_resolution_privacy_action_planner,
 };
 pub use postgres::IdentityResolutionPrivacyScopeQueryAdapter;
