@@ -992,7 +992,11 @@ fn bootstrap_customer_enrichment_provider_process_access(
             )
         })?;
     for tenant_id in &config.tenant_ids {
-        for definition in [access.dispatch_definition, access.response_definition, party_get] {
+        for definition in [
+            access.dispatch_definition,
+            access.response_definition,
+            party_get,
+        ] {
             authorization_store
                 .upsert(AuthorizationGrant {
                     tenant_id: tenant_id.clone(),
