@@ -19,6 +19,8 @@
     "repository-packet.json",
     "scripts/check_step13_exit_evidence.py",
     "step13-complexity-policy.json",
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_repository_navigation.py",
     "tests/test_step13_exit_evidence.py"
   ],
   "forbidden_paths": [
@@ -51,7 +53,7 @@
     "ordinary capability, new owner and contribution-aggregation exemplars have machine-readable file, package, central-file and workflow-file budgets",
     "new dependency requirement or feature divergence, heavy-feature growth, dependency-declaration growth and unmeasured workspace centralization are blocking",
     "the permanent Complexity Baseline workflow runs the exit-evidence checker on the exact pull-request head and publishes diagnostics",
-    "operations affected-scope ownership and focused regression tests cover the new blocking checker"
+    "operations affected-scope ownership and stable repository regression tests cover the new blocking checker and active packet"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -64,7 +66,7 @@
     "the checker passes the unchanged exact head and reports the accepted 113-package, 841-edge, aggregate process-host and section-aware manifest baseline",
     "synthetic tests prove reductions are permitted while dependency, central-surface, change-cost and feature/version growth are rejected",
     "the workflow invokes the checker with --check and uploads both JSON and Markdown evidence",
-    "the final diff contains only the seven allowed governance, workflow, packet and test files",
+    "the final diff contains only the nine allowed governance, workflow, packet and test files",
     "no product behavior, dependency declaration, package, route, contract, schema, migration, persistence or worker behavior changes",
     "repository step 13 remains in progress until a separate accepted evidence-synchronization packet; repository step 14 remains blocked"
   ],
