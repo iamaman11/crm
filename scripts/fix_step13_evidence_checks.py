@@ -26,7 +26,12 @@ def replace_once(text: str, pattern: str, replacement: str, label: str) -> str:
     return updated
 
 
-def synchronize_common(path: Path, allowed: list[str], checks: list[str]) -> str:
+def synchronize_common(
+    path: Path,
+    allowed: list[str],
+    checks: list[str],
+    packet_expression: str,
+) -> str:
     text = path.read_text(encoding="utf-8")
     text = replace_once(
         text,
@@ -36,13 +41,14 @@ def synchronize_common(path: Path, allowed: list[str], checks: list[str]) -> str
     )
     required_assertion = (
         'self.assertEqual(\n'
-        '            packet["required_checks"],\n'
+        f'            {packet_expression}["required_checks"],\n'
         '            ' + python_list(checks, 12) + ',\n'
         '        )'
     )
+    escaped_expression = re.escape(packet_expression)
     text = replace_once(
         text,
-        r'self\.assertEqual\(\n\s*packet\["required_checks"\],\n\s*\[.*?\],\n\s*\)',
+        rf'self\.assertEqual\(\n\s*{escaped_expression}\["required_checks"\],\n\s*\[.*?\],\n\s*\)',
         required_assertion,
         f"required checks in {path}",
     )
@@ -51,7 +57,7 @@ def synchronize_common(path: Path, allowed: list[str], checks: list[str]) -> str
 
 def synchronize_navigation(allowed: list[str], checks: list[str]) -> None:
     path = ROOT / "tests/test_repository_navigation.py"
-    text = synchronize_common(path, allowed, checks)
+    text = synchronize_common(path, allowed, checks, "packet")
     workflow_paths = {
         "Affected Scope CI": ".github/workflows/affected-scope.yml",
         "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
@@ -78,7 +84,7 @@ def synchronize_navigation(allowed: list[str], checks: list[str]) -> None:
 
 def synchronize_consistency(allowed: list[str], checks: list[str]) -> None:
     path = ROOT / "tests/test_architecture_documentation_consistency.py"
-    text = synchronize_common(path, allowed, checks)
+    text = synchronize_common(path, allowed, checks, "self.packet")
     path.write_text(text, encoding="utf-8")
 
 
