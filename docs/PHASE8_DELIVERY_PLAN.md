@@ -14,7 +14,7 @@ Phase 8 is split into:
 - **Phase 8A** — canonical customer master, identity, consent, governed customer-data operations, enrichment and privacy;
 - **Phase 8B** — Product Catalog, Pricing, CPQ and quote-to-revenue, followed by later expert domains.
 
-Phase 8A must close before Phase 8B implementation begins. Repository Step 22 then remeasures architecture; it does not automatically declare 10/10.
+Phase 8A remains **In progress**. It must close before Phase 8B implementation begins. Repository Step 22 then remeasures architecture; it does not automatically declare 10/10.
 
 ## 2. Delivery rules
 
@@ -46,7 +46,7 @@ Phase 8A must close before Phase 8B implementation begins. Repository Step 22 th
 
 ## 4. Accepted Customer Privacy foundation
 
-All nine authoritative privacy-owner scope implementations are accepted:
+Nine-owner set complete. All nine authoritative privacy-owner scope implementations are accepted:
 
 1. Parties;
 2. Consents;
@@ -58,9 +58,13 @@ All nine authoritative privacy-owner scope implementations are accepted:
 8. Data Quality;
 9. Customer Enrichment.
 
+Customer Enrichment owner-scope evidence is accepted through PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / squash merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
+
+Scope discovery and immutable snapshot execution is Accepted through PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / squash merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`.
+
 Accepted Customer Privacy evidence includes:
 
-- exact-nine discovery and immutable scope snapshots;
+- scope discovery and immutable snapshot execution;
 - deterministic action planning and immutable lineage;
 - permission-aware plan and owner-outcome reads;
 - public approval;
@@ -98,7 +102,7 @@ Exact measured result:
 
 Approval, Discovery and Planning permanent workflows were synchronized to the accepted 112-package workspace while retaining their existing clean-database, E2E, frozen-non-effect, rollback, reapply and repeated-acceptance checks.
 
-This result completes an architecture stage only. Phase 8A.11 remains in progress, Customer Privacy remains incomplete and current product-complete expert modules remain **0**.
+This result completes an architecture stage only. Phase 8A.11 remains in progress, Customer Privacy remains incomplete and Current product-complete expert modules: **0**.
 
 ## 6. Remaining Phase 8A.11 product work
 
@@ -185,7 +189,8 @@ Repository Steps 1–14 are complete.
 20. Repository Step 20 — frontend and operations evidence;
 21. Repository Step 21 — Phase 8A closure;
 22. Repository Step 22 — architecture remeasurement, not final 10/10;
-23–24. contrasting Phase 8B expert-domain waves;
-25. final architecture 10/10 review only if every normative criterion is mechanically proven.
+23. Repository Step 23 — first contrasting Phase 8B expert-domain wave;
+24. Repository Step 24 — second contrasting Phase 8B expert-domain wave;
+25. Repository Step 25 — final architecture 10/10 review only if every normative criterion is mechanically proven.
 
-Architecture 10/10 remains unclaimed. Issue #194 and issue #126 remain open. Current product-complete expert modules remain **0**.
+Architecture 10/10 remains unclaimed. Issue #194 and issue #126 remain open. Current product-complete expert modules: **0**.
