@@ -143,7 +143,7 @@ jobs:
           fi
           package_count="$(cargo metadata --no-deps --format-version 1 | python -c 'import json, sys; print(len(json.load(sys.stdin)["workspace_members"]))')"
           printf 'verified internal planning and bounded reads; workspace packages: %s\n' "${package_count}"
-          test "${package_count}" = "113"
+          test "${package_count}" = "112"
       - name: Roll back authoritative schema
         shell: bash
         run: |
