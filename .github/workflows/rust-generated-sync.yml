@@ -82,40 +82,17 @@ jobs:
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Restore explicit central process-host criterion
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
-          text = path.read_text(encoding="utf-8")
-          old = "PRs #253, #255 and #257 accept all ADR-031 exit evidence: no unjustified package growth, expired exceptions zero, process-host non-growth and representative change-cost/dependency-version-feature budgets are blocking"
-          new = "PRs #253, #255 and #257 accept all ADR-031 exit evidence: no unjustified package growth, expired exceptions zero, central process-host dependency non-growth and representative change-cost/dependency-version-feature budgets are blocking"
-          if old not in text:
-            raise SystemExit("missing accepted Stage B closure criterion")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
-      - name: Commit generated Rust, contract, navigation and criterion evidence when needed
+      - name: Commit generated Rust, contract and navigation artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          TRACKED_PATHS=(
-            crates
-            modules
-            services
-            packages/client/src/contract_hashes.ts
-            contracts/module-contract-bindings.json
-            docs/ACTIVE_PACKET.md
-            docs/generated/REPOSITORY_MAP.md
-            docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md
-          )
-          if [ -z "$(git status --porcelain -- "${TRACKED_PATHS[@]}")" ]; then
-            echo "Rust, contract, repository navigation and criterion evidence are already synchronized."
+          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
+            echo "Rust, contract and repository navigation artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add "${TRACKED_PATHS[@]}"
-            git commit -m "Synchronize Rust, contract, repository navigation and step 13 criterion evidence"
+            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
+            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
