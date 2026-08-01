@@ -28,6 +28,7 @@
     "services/crm-api/tests/**",
     "step13-complexity-policy.json",
     "step13-suppression-baseline.json",
+    "tests/test_repository_navigation.py",
     "tests/test_rust_governance.py",
     "tests/test_step13_suppression_baseline.py"
   ],
