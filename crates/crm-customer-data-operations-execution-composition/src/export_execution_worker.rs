@@ -1,3 +1,4 @@
+use crate::export_execution_sink::PartyExportEmittedOutcome;
 use crate::{
     PartyExportExecutionSource, PartyExportExecutionSourceKind, PartyExportExecutionSourceRequest,
     PartyExportExecutionSourceResult, PostgresPartyExportExecutionReader,
@@ -332,11 +333,13 @@ impl PartyExportExecutionWorker {
                                 .commit_emitted(
                                     &outcome_context,
                                     &job,
-                                    position,
-                                    chunk_index,
-                                    chunk_sha256,
-                                    chunk_size_bytes,
-                                    *redacted_fields,
+                                    PartyExportEmittedOutcome {
+                                        manifest_position: position,
+                                        artifact_chunk_index: chunk_index,
+                                        chunk_sha256,
+                                        chunk_size_bytes,
+                                        redacted_fields: *redacted_fields,
+                                    },
                                 )
                                 .await?;
                         }
