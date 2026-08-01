@@ -3,6 +3,7 @@
 Status: **Normative Phase 8 delivery sequence**  
 Parent roadmap: `IMPLEMENTATION_ROADMAP.md`  
 Architecture order: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4  
+Step 22 decision: `adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md`  
 Current state: `PROJECT_STATUS.md`
 
 ## 1. Phase 8 objective
@@ -14,7 +15,7 @@ Phase 8 is split into:
 - **Phase 8A** — canonical customer master, identity, consent, governed customer-data operations, enrichment and privacy;
 - **Phase 8B** — Product Catalog, Pricing, CPQ and quote-to-revenue, followed by later expert domains.
 
-Phase 8A remains **In progress**. It must close before Phase 8B implementation begins. Repository Step 22 then remeasures architecture; it does not automatically declare 10/10.
+Phase 8A remains **In progress**. It must close before Phase 8B implementation begins. Repository Step 22 then remeasures architecture, resolves `crm-application-runtime` fan-in and reviews permanent-gate value/cost; it does not automatically declare 10/10.
 
 ## 2. Delivery rules
 
@@ -27,6 +28,7 @@ Phase 8A remains **In progress**. It must close before Phase 8B implementation b
 7. Repository packets follow the single order in the architecture plan; later steps cannot start early.
 8. Product behavior, physical package consolidation and evidence synchronization remain separate when packet discipline requires it.
 9. Architecture reductions do not advance module product readiness without separate product/UX/operations evidence.
+10. Step 22 cannot close through non-growth alone; ADR-032 requires dependency-by-dependency and gate-by-gate decisions.
 
 ## 3. Phase 8A delivery map
 
@@ -169,19 +171,54 @@ Phase 8A is complete only when:
 - roadmap, status, catalog, issues and generated packet agree;
 - product-complete readiness is justified by product evidence, not by architecture structure alone.
 
-## 8. Phase 8B entry
+Phase 8A closure remains a product ledger result. It does not by itself resolve architecture Step 22.
+
+## 8. Repository Step 22 mandatory review
+
+After Step 21, Step 22 must complete all ADR-032 obligations before Phase 8B entry.
+
+### 8.1 `crm-application-runtime` fan-in
+
+Step 22 must inventory every internal direct dependency and classify it as:
+
+- removed;
+- platform-generic;
+- owner-specific-unavoidable;
+- test-only.
+
+Every safely removable owner-specific dependency must be removed. Every retained owner-specific dependency must prove an unavoidable stable process-composition boundary, a named owner and a removal/review condition.
+
+Mere non-growth against the current direct-dependency budget is insufficient. Ordinary existing-owner capability changes must not modify `crm-application-runtime/Cargo.toml` or owner-specific runtime composition. Steps 23 and 24 must validate that conclusion under contrasting expert-domain waves.
+
+### 8.2 Permanent-gate value and cost
+
+Every permanent workflow, job and repository gate must record:
+
+- concrete prevented failure mode;
+- real defects previously detected or a specific preventive rationale;
+- overlap and duplication;
+- execution duration, runner/fan-out and expensive environment cost;
+- owner;
+- retain, simplify, merge or remove decision;
+- retirement/re-review condition.
+
+Duplicate or low-value gates must be simplified, merged or removed unless independent value is proven. Every new permanent gate must declare the same information before acceptance.
+
+Step 22 closes only with zero unresolved runtime-fan-in classifications and zero unresolved permanent-gate value decisions.
+
+## 9. Phase 8B entry
 
 Phase 8B / issue #29 remains planned. Entry requires:
 
 1. completed Phase 8A through Repository Step 21;
-2. Repository Step 22 architecture remeasurement with no hidden regression;
+2. Repository Step 22 architecture remeasurement, runtime fan-in decision and permanent-gate value/cost review with no hidden regression or unresolved decision;
 3. a bounded Step 23 first expert-domain wave.
 
 Planned independent owner domains include Product Catalog, Pricing, Promotions, CPQ, Quotes, Orders, Contracts, Subscriptions, Entitlements, Usage and governed Billing/ERP/payment/tax/fulfillment integration.
 
-Step 24 must add a contrasting expert-domain wave and prove that extension cost remains bounded as module count grows.
+Step 23 must avoid owner-specific `crm-application-runtime` edits and unjustified permanent-gate growth. Step 24 must add a contrasting expert-domain wave and prove that the same extension cost and governance properties remain bounded as module count grows.
 
-## 9. Binding repository continuation
+## 10. Binding repository continuation
 
 Repository Steps 1–14 are complete.
 
@@ -192,9 +229,9 @@ Repository Steps 1–14 are complete.
 19. Repository Step 19 — Customer Privacy worker and full E2E;
 20. Repository Step 20 — frontend and operations evidence;
 21. Repository Step 21 — Phase 8A closure;
-22. Repository Step 22 — architecture remeasurement, not final 10/10;
-23. Repository Step 23 — first contrasting Phase 8B expert-domain wave;
-24. Repository Step 24 — second contrasting Phase 8B expert-domain wave;
+22. Repository Step 22 — architecture remeasurement, `crm-application-runtime` fan-in decision and permanent-gate value/cost review, not final 10/10;
+23. Repository Step 23 — first contrasting Phase 8B expert-domain wave validating Step 22;
+24. Repository Step 24 — second contrasting Phase 8B expert-domain wave validating Step 22;
 25. Repository Step 25 — final architecture 10/10 review only if every normative criterion is mechanically proven.
 
 Architecture 10/10 remains unclaimed. Issue #194 and issue #126 remain open. Current product-complete expert modules: **0**.
