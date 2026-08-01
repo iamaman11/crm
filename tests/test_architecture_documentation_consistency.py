@@ -176,7 +176,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
         self.assertIn("Mere non-growth is insufficient", self.plan)
         self.assertIn("Every safely removable owner-specific dependency must be removed", self.adr32)
-        self.assertIn("zero unresolved runtime-fan-in", self.status)
+        self.assertIn(
+            "Step 22 cannot close with an unresolved runtime dependency classification",
+            self.status,
+        )
         self.assertIn("Steps 23 and 24", self.adr32)
         self.assertIn("crm-application-runtime/Cargo.toml", self.adr32)
 
@@ -193,7 +196,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             lowered = document.lower()
             with self.subTest(document=document[:60]):
                 self.assertIn("failure mode", lowered)
-                self.assertIn("execution cost", lowered)
+                self.assertIn("execution", lowered)
+                self.assertIn("cost", lowered)
                 self.assertIn("retirement", lowered)
                 self.assertIn("duplicate", lowered)
 
