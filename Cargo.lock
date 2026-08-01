@@ -719,20 +719,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crm-customer-accounts-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-accounts-capability-adapter",
- "crm-customer-accounts-query-adapter",
- "crm-module-sdk",
- "crm-party-reference-composition",
- "crm-query-runtime",
-]
-
-[[package]]
 name = "crm-customer-accounts-privacy-scope-adapter"
 version = "0.1.0"
 dependencies = [
@@ -759,12 +745,14 @@ dependencies = [
 name = "crm-customer-accounts-query-adapter"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-accounts",
  "crm-customer-accounts-capability-adapter",
  "crm-module-sdk",
+ "crm-party-reference-composition",
  "crm-proto-contracts",
  "crm-query-runtime",
  "prost",
@@ -1477,7 +1465,7 @@ dependencies = [
  "crm-contact-points-capability-composition",
  "crm-core-data",
  "crm-customer-360-query-adapter",
- "crm-customer-accounts-capability-composition",
+ "crm-customer-accounts-query-adapter",
  "crm-customer-data-operations-execution-composition",
  "crm-customer-enrichment-capability-composition",
  "crm-data-quality-source-composition",
@@ -2818,7 +2806,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
+checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a727497632d5e377f7dceba"
 
 [[package]]
 name = "parking_lot"
@@ -4026,7 +4014,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 name = "unicase"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbc4bc3a9f746d862c45cb89d705aa10f187bb96c76001afab07a0d35ce60142"
+checksum = "dbc4bc3a9f746d862c45b89d705aa10f187bb96c76001afab07a0d35ce60142"
 
 [[package]]
 name = "unicode-bidi"
@@ -4077,7 +4065,7 @@ dependencies = [
 name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
+checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a885a5f0d494b5d52b6be"
 
 [[package]]
 name = "vcpkg"
