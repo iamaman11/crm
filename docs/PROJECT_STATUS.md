@@ -17,6 +17,8 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 **Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 remains in progress.**
 
+Phase 8A.11 / issue #126 is in progress.
+
 Repository Steps 1–14 are complete. Architecture Stages A, B, D, E and G are complete. Stages C, F, H and I remain incomplete or in progress according to the architecture plan.
 
 Repository Step 14 and Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
@@ -66,6 +68,12 @@ The earlier 113-package and 841-edge measurements remain immutable historical St
 
 ## Customer Privacy product boundary
 
+All nine authoritative owner implementations are accepted. The owner set includes Parties, Consents, Customer Accounts, Contact Points, Party Relationships, Identity Resolution, Customer Data Operations, Data Quality and Customer Enrichment.
+
+Customer Enrichment owner-scope evidence is accepted through PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / squash merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
+
+Scope discovery and immutable snapshot execution is accepted through PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / squash merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`.
+
 Latest accepted Customer Privacy public inventory remains:
 
 - seven public mutations: `case.create`, `case.submit`, `case.subject.verify`, `case.cancel`, `case.approve`, `restriction.place`, `legal_hold.place`;
@@ -74,7 +82,7 @@ Latest accepted Customer Privacy public inventory remains:
 
 Trusted-internal planning, retention evaluation, replay-safe exact-nine owner execution, access/export assembly and owner-specific action execution remain non-public.
 
-Accepted product/runtime evidence includes exact-nine discovery and immutable snapshots, deterministic planning, permission-aware reads, approval, restriction placement and final enforcement, legal-hold placement and retention precedence, durable owner execution/outcomes, governed access/export assembly and authoritative owner-specific anonymization/deletion.
+Accepted product/runtime evidence includes scope discovery and immutable snapshot execution, deterministic planning, permission-aware reads, approval, restriction placement and final enforcement, legal-hold placement and retention precedence, durable owner execution/outcomes, governed access/export assembly and authoritative owner-specific anonymization/deletion.
 
 Still required before Phase 8A.11 can close:
 
@@ -119,7 +127,8 @@ No Step 16 or later implementation may start while Step 15 remains unfinished.
 -> 20. Phase 8A frontend and operations evidence
 -> 21. Phase 8A closure
 -> 22. Phase 8A architecture remeasurement — checkpoint, not final 10/10
--> 23–24. two contrasting later expert-domain waves
+-> 23. first contrasting later expert-domain wave
+-> 24. second contrasting later expert-domain wave
 -> 25. final architecture 10/10 closure review only if every criterion is mechanically proven
 ```
 
