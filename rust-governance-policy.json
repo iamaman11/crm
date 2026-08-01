@@ -19,11 +19,11 @@
     }
   },
   "measured_baseline": {
-    "effective_workspace_packages": 113,
+    "effective_workspace_packages": 112,
     "minimum_rust_version_inherited_packages": 0,
     "minimum_workspace_lints_inherited_packages": 3,
-    "maximum_missing_rust_version_packages": 113,
-    "maximum_missing_workspace_lints_packages": 110,
+    "maximum_missing_rust_version_packages": 112,
+    "maximum_missing_workspace_lints_packages": 109,
     "maximum_direct_rust_version_declarations": 0,
     "maximum_direct_lint_tables": 0,
     "maximum_workspace_rustc_warnings": 0,
