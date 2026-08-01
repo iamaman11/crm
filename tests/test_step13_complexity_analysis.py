@@ -1,10 +1,14 @@
 """Tests for ADR-031 current-main complexity measurement."""
 
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
 from scripts.analyze_step13_complexity import dependency_depths, suppression_inventory
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class Step13ComplexityAnalysisTests(unittest.TestCase):
@@ -52,6 +56,38 @@ class Step13ComplexityAnalysisTests(unittest.TestCase):
                 "rust-expect": 1,
             },
         )
+
+    def test_measurement_files_use_existing_fail_closed_operations_scope(self) -> None:
+        policy = json.loads(
+            (ROOT / "affected-scope-policy.json").read_text(encoding="utf-8")
+        )
+        scopes = {scope["id"]: scope for scope in policy["scopes"]}
+        self.assertEqual(
+            set(scopes),
+            {
+                "contracts",
+                "protobuf_api_compatibility",
+                "database_migrations",
+                "postgresql_acceptance",
+                "process_runtime_acceptance",
+                "product_plane",
+                "frontend",
+                "operations",
+            },
+        )
+        operations = scopes["operations"]
+        self.assertIn("scripts/analyze_step13_complexity.py", operations["path_patterns"])
+        self.assertIn("step13-complexity-policy.json", operations["path_patterns"])
+        self.assertEqual(operations["required_workflows"], ["Governance CI"])
+
+        workflow = (ROOT / ".github/workflows/complexity-baseline.yml").read_text(
+            encoding="utf-8"
+        )
+        for path in (
+            '      - "scripts/analyze_step13_complexity.py"',
+            '      - "step13-complexity-policy.json"',
+        ):
+            self.assertGreaterEqual(workflow.count(path), 2)
 
 
 if __name__ == "__main__":
