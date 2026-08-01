@@ -7,12 +7,10 @@
     "ref": "main",
     "sha": "7dcda204be07209d9e4996fdc9c5fd364cea179e"
   },
-  "tracking_issues": [
-    194,
-    126
-  ],
+  "tracking_issues": [194, 126],
   "objective": "Synchronize all live normative repository and Phase 8 sources with accepted PR #253 measurement evidence, keep repository step 13 in progress, and define suppression registration, blocking anti-circumvention, direct-lint removal and calibrated governance as the next permitted implementation packet.",
   "allowed_paths": [
+    ".github/workflows/rust-generated-sync.yml",
     "docs/ACTIVE_PACKET.md",
     "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
     "docs/IMPLEMENTATION_ROADMAP.md",
@@ -20,11 +18,11 @@
     "docs/PHASE8_DELIVERY_PLAN.md",
     "docs/PROJECT_STATUS.md",
     "repository-packet.json",
+    "scripts/apply_step13_measurement_evidence_sync.py",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
     "Cargo.lock",
     "Cargo.toml",
     "affected-scope-policy.json",
@@ -39,7 +37,6 @@
     "proto/**",
     "rust-governance-policy.json",
     "schemas/**",
-    "scripts/**",
     "services/**",
     "step13-complexity-policy.json"
   ],
@@ -49,7 +46,8 @@
     "repository step 13 is represented as in progress rather than not started",
     "the next permitted implementation packet registers and enforces the accepted suppression baseline, removes the three direct lint exceptions and calibrates role-aware budgets",
     "repository step 14 remains blocked and Customer Privacy product readiness remains unchanged",
-    "permanent documentation and navigation guards reject regression to the pre-measurement state"
+    "permanent documentation and navigation guards reject regression to the pre-measurement state",
+    "the temporary evidence materializer and workflow hook are removed before acceptance"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -65,7 +63,8 @@
     "no source says repository step 13 is not started after accepted PR #253",
     "no arbitrary duration or packet-count cap is added to repository step 13",
     "the next implementation packet is bounded by evidence but repository step 13 completion remains tied only to ADR-031 exit criteria",
-    "the final diff changes no Rust/product code, dependency, package, route, contract, schema, migration, workflow or affected-scope policy"
+    "the final diff changes no Rust/product code, dependency, package, route, contract, schema, migration, workflow or affected-scope policy",
+    "the temporary materializer and workflow hook are absent from the accepted final tree"
   ],
   "non_goals": [
     "start suppression enforcement or lint remediation in this evidence packet",
