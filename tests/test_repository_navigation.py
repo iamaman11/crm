@@ -49,6 +49,8 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(set(packet["required_checks"]).issubset(workflow_paths))
         for check in packet["required_checks"]:
             self.assertTrue((ROOT / workflow_paths[check]).is_file())
+        current_claims = " ".join(packet["deliverables"] + packet["acceptance"]).lower()
+        self.assertNotIn("step 13 is not started", current_claims)
         self.assertIn(
             "the architecture plan, project status, roadmap, Phase 8 plan, module catalog and issues agree on accepted PR #253 evidence",
             packet["acceptance"],
