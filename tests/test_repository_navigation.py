@@ -21,19 +21,29 @@ from scripts.repo import build_parser
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/PROJECT_STATUS.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
-
+ALLOWED_PACKET_PATHS = [
+    ".github/workflows/complexity-baseline.yml",
+    "affected-scope-policy.json",
+    "docs/ACTIVE_PACKET.md",
+    "docs/MODULE_CATALOG.md",
+    "repository-packet.json",
+    "scripts/analyze_step13_complexity.py",
+    "step13-complexity-policy.json",
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_repository_navigation.py",
+    "tests/test_step13_complexity_analysis.py",
+]
 
 
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-13-plan-evidence-sync")
+        self.assertEqual(packet["packet_id"], "repository-step-13-current-main-measurement")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"]["ref"], "main")
         self.assertEqual(
             packet["baseline"]["sha"],
-            "be1411136fd36397b22e26737b441351894fdb66",
+            "222187d988c321aee4d2e7bf81ba01b3205fd14c",
         )
         self.assertEqual(packet["tracking_issues"], [194, 126])
         self.assertEqual(packet["allowed_paths"], ALLOWED_PACKET_PATHS)
@@ -41,15 +51,14 @@ class RepositoryNavigationTests(unittest.TestCase):
             packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
+                "Complexity Baseline CI",
                 "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
         self.assertIn(
-            "the live normative plan and project status agree with ADR-031 and accepted PR #251 evidence",
+            "the analyzer runs deterministically on the exact pull-request head with full git history",
             packet["acceptance"],
         )
 
@@ -277,8 +286,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 }
                 for name, path in (
                     ("Affected Scope CI", ".github/workflows/affected-scope.yml"),
-                    ("Customer Privacy Access Export CI", ".github/workflows/customer-privacy-access-export.yml"),
-                    ("Customer Privacy Owner Execution CI", ".github/workflows/customer-privacy-owner-execution.yml"),
+                    ("Complexity Baseline CI", ".github/workflows/complexity-baseline.yml"),
                     ("Governance CI", ".github/workflows/governance.yml"),
                     ("Rust CI", ".github/workflows/rust.yml"),
                     ("Rust Generated Sync", ".github/workflows/rust-generated-sync.yml"),
@@ -289,7 +297,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "be1411136fd36397b22e26737b441351894fdb66"
+                    "222187d988c321aee4d2e7bf81ba01b3205fd14c"
                 ),
             ),
             patch(
