@@ -20,6 +20,8 @@
     "repository-packet.json",
     "scripts/analyze_step13_complexity.py",
     "step13-complexity-policy.json",
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_repository_navigation.py",
     "tests/test_step13_complexity_analysis.py"
   ],
   "forbidden_paths": [
@@ -45,7 +47,8 @@
     "representative ordinary-capability, new-owner and contribution-aggregation change-cost measurements",
     "calibration policy records warning and blocking candidates without authorizing remediation",
     "new complexity-governance paths have exact affected-scope ownership and live workflow compatibility",
-    "MODULE_CATALOG current-state drift is removed"
+    "permanent navigation and documentation guards advance from the completed planning packet to the active measurement packet",
+    "MODULE_CATALOG current-state drift is removed while preserving accepted exact-head evidence"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -60,6 +63,7 @@
     "all equivalent Rust lint suppression forms currently required by ADR-031 are inventoried",
     "representative historical change costs are reported in files, packages, central files and workflow files",
     "affected-scope classification requires the real Complexity Baseline workflow for the new analyzer and policy",
+    "permanent guards validate the current measurement packet instead of freezing the completed plan-evidence packet",
     "the first packet changes no product behavior, dependency, package, route, contract, schema, migration or runtime composition",
     "repository step 13 remains in progress and structural remediation remains blocked until this measurement is accepted"
   ],
