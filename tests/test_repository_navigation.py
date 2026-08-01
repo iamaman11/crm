@@ -22,7 +22,6 @@ from scripts.repo import build_parser
 ROOT = Path(__file__).resolve().parents[1]
 
 ALLOWED_PACKET_PATHS = [
-    ".github/workflows/rust-generated-sync.yml",
     "docs/ACTIVE_PACKET.md",
     "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
     "docs/IMPLEMENTATION_ROADMAP.md",
@@ -30,7 +29,6 @@ ALLOWED_PACKET_PATHS = [
     "docs/PHASE8_DELIVERY_PLAN.md",
     "docs/PROJECT_STATUS.md",
     "repository-packet.json",
-    "scripts/fix_step13_evidence_checks.py",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py",
 ]
