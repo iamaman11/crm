@@ -172,6 +172,51 @@ class Step13ExitEvidenceTests(unittest.TestCase):
         errors = validate_exit_evidence(complexity, dependency, policy)
         self.assertTrue(any("ordinary files grew" in error for error in errors))
 
+    def test_live_step14_reduction_budgets_are_exact(self) -> None:
+        policy = json.loads(
+            (ROOT / "step13-complexity-policy.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(policy["calibration"]["expected_workspace_packages"], 112)
+
+        exit_policy = policy["exit_evidence"]
+        self.assertEqual(
+            exit_policy["workspace_budget"],
+            {
+                "expected_workspace_packages": 112,
+                "maximum_internal_dependency_edges": 835,
+                "maximum_dependency_depth": 18,
+                "maximum_public_rust_items": 5377,
+                "maximum_suppression_occurrences": 91,
+            },
+        )
+        self.assertEqual(
+            exit_policy["dependency_governance"]["maximum_declaration_count"],
+            270,
+        )
+
+        central = exit_policy["central_system_budgets"]
+        expected_reductions = {
+            "crm-module-sdk": (104, 105),
+            "crm-core-contracts": (15, 91),
+            "crm-proto-contracts": (69, 79),
+            "crm-capability-runtime": (74, 82),
+            "crm-query-runtime": (46, 80),
+            "crm-core-data": (70, 75),
+        }
+        for package, (consumers, reverse_impact) in expected_reductions.items():
+            self.assertEqual(central[package]["maximum_direct_consumers"], consumers)
+            self.assertEqual(
+                central[package]["maximum_transitive_reverse_impact"],
+                reverse_impact,
+            )
+
+        rust_policy = json.loads(
+            (ROOT / "rust-governance-policy.json").read_text(encoding="utf-8")
+        )["measured_baseline"]
+        self.assertEqual(rust_policy["effective_workspace_packages"], 112)
+        self.assertEqual(rust_policy["maximum_missing_rust_version_packages"], 112)
+        self.assertEqual(rust_policy["maximum_missing_workspace_lints_packages"], 109)
+
     def test_live_policy_and_permanent_workflow_are_wired(self) -> None:
         policy = json.loads(
             (ROOT / "step13-complexity-policy.json").read_text(encoding="utf-8")
