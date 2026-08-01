@@ -47,7 +47,7 @@ Phase 8A.11 / issue #126 remains **In progress**.
 
 Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244**. Public placement coordinates include `customer_privacy.restriction.place@1.0.0` and `customer_privacy.legal_hold.place@1.0.0`. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution have no public ingress.
 
-Scope discovery and immutable snapshot execution remain accepted through PR #206 and are the authoritative foundation for planning, owner execution and access/export evidence. Historical packet claims remain immutable, while this catalog records the latest merged aggregate state.
+Scope discovery and immutable snapshot execution remain accepted through PR #206 and are the authoritative foundation for planning, owner execution and access/export evidence. At the historical PR #206 boundary, planning and action execution remain not started; PR #209 and later accepted packets subsequently implemented those capabilities without rewriting the historical claim. This catalog records the latest merged aggregate state below.
 
 Nine owner-scope contribution coordinates are published as non-public owner-owned reads. **All nine authoritative implementations are accepted:**
 
