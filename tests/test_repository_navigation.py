@@ -50,31 +50,22 @@ class RepositoryNavigationTests(unittest.TestCase):
         for check in packet["required_checks"]:
             self.assertTrue((ROOT / workflow_paths[check]).is_file())
         self.assertIn(
-            "repository step 13 is represented as in progress rather than not started",
+            "repository step 13 remains in progress and the next bounded packet closes only remaining ADR-031 central process-host dependency and representative change-cost/dependency-version-feature exit evidence",
             packet["deliverables"],
         )
         self.assertIn(
-            "the architecture plan, project status, roadmap, Phase 8 plan, module catalog and issues agree on accepted PR #253 evidence",
+            "the architecture plan, project status, roadmap, Phase 8 delivery plan and module catalog agree on accepted PR #255 evidence; tracked issues are synchronized only after this exact-head documentation packet is accepted",
             packet["acceptance"],
         )
 
     def test_affected_scope_workflow_executes_real_packet_check(self) -> None:
-        workflow = (
-            ROOT / ".github/workflows/affected-scope.yml"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            "Test affected-scope policy and analyzer",
-            workflow,
+        workflow = (ROOT / ".github/workflows/affected-scope.yml").read_text(
+            encoding="utf-8"
         )
+        self.assertIn("Test affected-scope policy and analyzer", workflow)
         self.assertIn("Explain and enforce affected scope", workflow)
-        self.assertIn(
-            "Upload deterministic affected-scope report",
-            workflow,
-        )
-        self.assertIn(
-            "ref: ${{ github.event.pull_request.head.sha }}",
-            workflow,
-        )
+        self.assertIn("Upload deterministic affected-scope report", workflow)
+        self.assertIn("ref: ${{ github.event.pull_request.head.sha }}", workflow)
         self.assertIn("Validate active repository packet", workflow)
         self.assertIn(
             'python scripts/repo.py packet-check --base "${BASE_REF}"',
@@ -86,65 +77,31 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
 
     def test_rust_workflows_preserve_the_committed_lockfile(self) -> None:
-        generated_sync = (
-            ROOT / ".github/workflows/rust-generated-sync.yml"
-        ).read_text(encoding="utf-8")
-        rust_ci = (
-            ROOT / ".github/workflows/rust.yml"
-        ).read_text(encoding="utf-8")
-        repo_runner = (
-            ROOT / "scripts/repo.py"
-        ).read_text(encoding="utf-8")
+        generated_sync = (ROOT / ".github/workflows/rust-generated-sync.yml").read_text(
+            encoding="utf-8"
+        )
+        rust_ci = (ROOT / ".github/workflows/rust.yml").read_text(encoding="utf-8")
+        repo_runner = (ROOT / "scripts/repo.py").read_text(encoding="utf-8")
 
         for workflow in (generated_sync, rust_ci):
             self.assertNotIn("cargo generate-lockfile", workflow)
-            self.assertIn(
-                "cargo metadata --locked --format-version 1 --no-deps",
-                workflow,
-            )
+            self.assertIn("cargo metadata --locked --format-version 1 --no-deps", workflow)
             self.assertIn("lockfile_before=", workflow)
             self.assertIn("lockfile_after=", workflow)
-            self.assertIn(
-                "git diff --exit-code -- Cargo.lock",
-                workflow,
-            )
+            self.assertIn("git diff --exit-code -- Cargo.lock", workflow)
 
         self.assertNotIn("git add Cargo.lock", generated_sync)
-        self.assertIn(
-            "cargo run --locked -p crm-proto-contracts",
-            generated_sync,
-        )
-        self.assertIn(
-            "cargo clippy --locked --fix",
-            generated_sync,
-        )
-        self.assertIn(
-            "cargo clippy --locked --workspace",
-            generated_sync,
-        )
+        self.assertIn("cargo run --locked -p crm-proto-contracts", generated_sync)
+        self.assertIn("cargo clippy --locked --fix", generated_sync)
+        self.assertIn("cargo clippy --locked --workspace", generated_sync)
 
-        self.assertNotIn(
-            "Upload resolved Cargo lockfile",
-            rust_ci,
-        )
+        self.assertNotIn("Upload resolved Cargo lockfile", rust_ci)
         self.assertNotIn("name: cargo-lockfile", rust_ci)
-        self.assertIn(
-            "cargo check --locked --workspace",
-            rust_ci,
-        )
-        self.assertIn(
-            "cargo clippy --locked --workspace",
-            rust_ci,
-        )
-        self.assertIn(
-            "cargo test --locked --workspace",
-            rust_ci,
-        )
+        self.assertIn("cargo check --locked --workspace", rust_ci)
+        self.assertIn("cargo clippy --locked --workspace", rust_ci)
+        self.assertIn("cargo test --locked --workspace", rust_ci)
 
-        self.assertIn(
-            'run(["cargo", "generate-lockfile"])',
-            repo_runner,
-        )
+        self.assertIn('run(["cargo", "generate-lockfile"])', repo_runner)
         self.assertIn(
             '"lock", help="regenerate the committed Cargo lockfile"',
             repo_runner,
@@ -152,54 +109,27 @@ class RepositoryNavigationTests(unittest.TestCase):
 
     def test_module_explanation_traces_customer_privacy_owner(self) -> None:
         explanation = explain_target(ROOT, "crm.customer-privacy")
-        self.assertEqual(
-            explanation["schema_version"],
-            NAVIGATION_SCHEMA,
-        )
+        self.assertEqual(explanation["schema_version"], NAVIGATION_SCHEMA)
         self.assertEqual(explanation["kind"], "module")
         self.assertEqual(explanation["version"], "0.3.0")
-        self.assertEqual(
-            explanation["owner"]["team"],
-            "customer-platform",
-        )
+        self.assertEqual(explanation["owner"]["team"], "customer-platform")
         self.assertEqual(
             explanation["manifest_path"],
             "modules/crm-customer-privacy/module.yaml",
         )
         coordinates = {
-            capability["coordinate"]
-            for capability in explanation["capabilities"]
+            capability["coordinate"] for capability in explanation["capabilities"]
         }
-        self.assertIn(
-            "customer_privacy.case.submit@1.0.0",
-            coordinates,
-        )
-        self.assertIn(
-            "customer_privacy.restriction.place@1.0.0",
-            coordinates,
-        )
-        self.assertIn(
-            "customer_privacy.legal_hold.place@1.0.0",
-            coordinates,
-        )
+        self.assertIn("customer_privacy.case.submit@1.0.0", coordinates)
+        self.assertIn("customer_privacy.restriction.place@1.0.0", coordinates)
+        self.assertIn("customer_privacy.legal_hold.place@1.0.0", coordinates)
         self.assertTrue(explanation["references"])
 
-    def test_capability_explanation_resolves_exact_binding_and_runtime(
-        self,
-    ) -> None:
-        explanation = explain_target(
-            ROOT,
-            "customer_privacy.case.submit@1.0.0",
-        )
+    def test_capability_explanation_resolves_exact_binding_and_runtime(self) -> None:
+        explanation = explain_target(ROOT, "customer_privacy.case.submit@1.0.0")
         self.assertEqual(explanation["kind"], "capability")
-        self.assertEqual(
-            explanation["owner_module_id"],
-            "crm.customer-privacy",
-        )
-        self.assertEqual(
-            explanation["route"]["classification"],
-            "public_runtime",
-        )
+        self.assertEqual(explanation["owner_module_id"], "crm.customer-privacy")
+        self.assertEqual(explanation["route"]["classification"], "public_runtime")
         self.assertEqual(
             explanation["binding"]["rpc"],
             "crm.customer_privacy.v1.CustomerPrivacyCaseService.SubmitPrivacyCase",
@@ -207,45 +137,25 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(explanation["references"])
 
     def test_unknown_explanation_target_fails_closed(self) -> None:
-        with self.assertRaisesRegex(
-            NavigationError,
-            "unknown module or capability",
-        ):
-            explain_target(
-                ROOT,
-                "customer_privacy.unknown@1.0.0",
-            )
+        with self.assertRaisesRegex(NavigationError, "unknown module or capability"):
+            explain_target(ROOT, "customer_privacy.unknown@1.0.0")
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
         first = generated_documents(ROOT)
         second = generated_documents(ROOT)
         self.assertEqual(first, second)
-        self.assertEqual(
-            set(first),
-            {ACTIVE_PACKET_PATH, REPOSITORY_MAP_PATH},
-        )
+        self.assertEqual(set(first), {ACTIVE_PACKET_PATH, REPOSITORY_MAP_PATH})
         for content in first.values():
             self.assertIn(
                 "Generated by scripts/generate_repository_navigation.py",
                 content,
             )
-            self.assertIn(
-                "source-digest: sha256:",
-                content,
-            )
-        self.assertIn(
-            "**Workspace packages:** 113",
-            first[REPOSITORY_MAP_PATH],
-        )
-        self.assertIn(
-            "`crm.customer-privacy`",
-            first[REPOSITORY_MAP_PATH],
-        )
+            self.assertIn("source-digest: sha256:", content)
+        self.assertIn("**Workspace packages:** 113", first[REPOSITORY_MAP_PATH])
+        self.assertIn("`crm.customer-privacy`", first[REPOSITORY_MAP_PATH])
         self.assertEqual(stale_generated_documents(ROOT), [])
 
-    def test_path_policy_rejects_forbidden_and_unscoped_changes(
-        self,
-    ) -> None:
+    def test_path_policy_rejects_forbidden_and_unscoped_changes(self) -> None:
         forbidden, disallowed = evaluate_path_policy(
             [
                 "docs/README.md",
@@ -253,21 +163,13 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "proto/crm/customer/v1/customer.proto",
                 "unowned.txt",
             ],
-            [
-                "docs/**",
-                "scripts/repository_navigation.py",
-            ],
+            ["docs/**", "scripts/repository_navigation.py"],
             ["proto/**"],
         )
-        self.assertEqual(
-            forbidden,
-            ["proto/crm/customer/v1/customer.proto"],
-        )
+        self.assertEqual(forbidden, ["proto/crm/customer/v1/customer.proto"])
         self.assertEqual(disallowed, ["unowned.txt"])
 
-    def test_packet_check_reports_affected_scope_without_running_git_or_cargo(
-        self,
-    ) -> None:
+    def test_packet_check_reports_affected_scope_without_running_git_or_cargo(self) -> None:
         changed_paths = load_packet(ROOT)["allowed_paths"]
         affected = {
             "head_sha": "b" * 40,
@@ -297,9 +199,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value=(
-                    "3d51d03e809cfee5ebf418e82df8da3673ce6b92"
-                ),
+                return_value="393b60bdcfad6e92fc37eacabe0920645d530f6b",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
@@ -314,10 +214,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(report["ok"])
         self.assertEqual(report["changed_paths"], changed_paths)
         self.assertEqual(report["blockers"], [])
-        self.assertEqual(
-            report["selected_workflows"][0]["name"],
-            "Affected Scope CI",
-        )
+        self.assertEqual(report["selected_workflows"][0]["name"], "Affected Scope CI")
 
     def test_repo_parser_exposes_navigation_commands(self) -> None:
         parser = build_parser()
