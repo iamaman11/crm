@@ -14,6 +14,7 @@
   "objective": "Execute the first ADR-031 repository-step-13 packet: regenerate the exact 113-package complexity baseline, inventory equivalent manifest/source bypasses, classify central systems by role, measure representative change cost and publish calibration inputs without structural remediation.",
   "allowed_paths": [
     ".github/workflows/complexity-baseline.yml",
+    "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
     "docs/MODULE_CATALOG.md",
     "repository-packet.json",
@@ -24,7 +25,6 @@
   "forbidden_paths": [
     "Cargo.lock",
     "Cargo.toml",
-    "affected-scope-policy.json",
     "apps/**",
     "architecture-governance.json",
     "architecture-policy.json",
@@ -44,6 +44,7 @@
     "role-aware central-system map for contracts, SDK, runtimes, infrastructure, aggregation and process host",
     "representative ordinary-capability, new-owner and contribution-aggregation change-cost measurements",
     "calibration policy records warning and blocking candidates without authorizing remediation",
+    "new complexity-governance paths have exact affected-scope ownership and live workflow compatibility",
     "MODULE_CATALOG current-state drift is removed"
   ],
   "required_checks": [
@@ -58,6 +59,7 @@
     "the report distinguishes stable contract or SDK fan-out from mutable implementation and composition risk",
     "all equivalent Rust lint suppression forms currently required by ADR-031 are inventoried",
     "representative historical change costs are reported in files, packages, central files and workflow files",
+    "affected-scope classification requires the real Complexity Baseline workflow for the new analyzer and policy",
     "the first packet changes no product behavior, dependency, package, route, contract, schema, migration or runtime composition",
     "repository step 13 remains in progress and structural remediation remains blocked until this measurement is accepted"
   ],
