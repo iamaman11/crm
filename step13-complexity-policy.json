@@ -1,0 +1,47 @@
+{
+  "schema_version": "crm.step13-complexity-policy/v1",
+  "measurement_status": "initial-calibration",
+  "tracking_issue": "#194",
+  "governing_adr": "docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md",
+  "representative_changes": [
+    {
+      "id": "ordinary-owner-capability",
+      "kind": "ordinary-capability",
+      "commit": "a46460623e90c5649d36bedba055fb55023d9349",
+      "rationale": "Accepted Customer Privacy restriction placement and first protected-owner integration."
+    },
+    {
+      "id": "new-owner-production-wave",
+      "kind": "new-owner",
+      "commit": "150e44b95d9dbdc08c1792563de03ec73f34aed1",
+      "rationale": "Accepted Customer Enrichment owner domain production integration wave."
+    },
+    {
+      "id": "owner-contribution-aggregation",
+      "kind": "composition-remediation",
+      "commit": "f36592211bed3e0df7cf3771164b4bc24026eff3",
+      "rationale": "Accepted final first-party contribution aggregation batch."
+    }
+  ],
+  "calibration": {
+    "expected_workspace_packages": 113,
+    "new_workspace_package_growth": 0,
+    "unregistered_suppressions_after_baseline": 0,
+    "expired_architecture_exceptions": 0,
+    "ordinary_capability_new_crates": 0,
+    "ordinary_capability_generic_runtime_files": 0,
+    "ordinary_capability_unrelated_owner_packages": 0,
+    "process_host_owner_dependency_growth": 0,
+    "generic_composition_loc_growth_requires_rationale": 0,
+    "implementation_reverse_impact_growth_requires_rationale": 0,
+    "public_surface_growth_requires_rationale": 0,
+    "ci_regression_warning_percent": 15,
+    "ci_regression_blocking_percent": 25,
+    "thin_wrapper_maximum_non_comment_loc": 250
+  },
+  "initial_enforcement": {
+    "mode": "measurement-only",
+    "reason": "ADR-031 requires the first packet to inventory and calibrate before new unregistered equivalent bypasses become blocking.",
+    "next_packet": "Register the accepted exact-head suppression baseline and enforce zero new unregistered equivalent bypasses."
+  }
+}

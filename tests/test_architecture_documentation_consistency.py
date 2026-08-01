@@ -9,8 +9,18 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = ['docs/ACTIVE_PACKET.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/PROJECT_STATUS.md', 'repository-packet.json', 'scripts/generate_repository_navigation.py', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py']
-
+ALLOWED_PACKET_PATHS = [
+    ".github/workflows/complexity-baseline.yml",
+    "affected-scope-policy.json",
+    "docs/ACTIVE_PACKET.md",
+    "docs/MODULE_CATALOG.md",
+    "repository-packet.json",
+    "scripts/analyze_step13_complexity.py",
+    "step13-complexity-policy.json",
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_repository_navigation.py",
+    "tests/test_step13_complexity_analysis.py",
+]
 
 
 def read(path: str) -> str:
@@ -349,12 +359,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-13-plan-evidence-sync")
+        self.assertEqual(self.packet["packet_id"], "repository-step-13-current-main-measurement")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
         self.assertEqual(
             self.packet["baseline"]["sha"],
-            "be1411136fd36397b22e26737b441351894fdb66",
+            "222187d988c321aee4d2e7bf81ba01b3205fd14c",
         )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(self.packet["allowed_paths"], ALLOWED_PACKET_PATHS)
@@ -362,19 +372,18 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
+                "Complexity Baseline CI",
                 "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
             ],
         )
         self.assertIn(
-            "the phrase declaring repository step 12 as the next permitted repository packet is absent from live authoritative documents",
+            "the analyzer runs deterministically on the exact pull-request head with full git history",
             self.packet["acceptance"],
         )
-        self.assertIn("repository-step-13-plan-evidence-sync", self.active_packet)
-        self.assertIn("be1411136fd36397b22e26737b441351894fdb66", self.active_packet)
+        self.assertIn("repository-step-13-current-main-measurement", self.active_packet)
+        self.assertIn("222187d988c321aee4d2e7bf81ba01b3205fd14c", self.active_packet)
         for document in (self.plan, self.status):
             self.assertIn("PR #251", document)
             self.assertIn("22e515453e3ed66d0f059bd3c0fe926cee524620", document)
@@ -410,15 +419,15 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration", self.status.lower())
         self.assertIn("## Next permitted repository packet\n\nRepository step 13 is the current next permitted implementation step and is not started", self.status)
         self.assertIn("## Following permitted repository packet\n\nRepository step 14 follows only after repository step 13 is accepted and synchronized", self.status)
-        self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241", self.catalog)
+        self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244", self.catalog)
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
         self.assertIn(
             "Repository step 10 is accepted through PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head.",
             self.status,
         )
         self.assertNotIn("Repository step 10 is accepted through PR #244", self.status)
-        self.assertIn("Repository step 11", self.catalog)
-        self.assertNotIn("Repository step 5 — `repo.py explain`, `repo.py packet-check`, generated active packet and repository map — is the next repository packet", self.catalog)
+        self.assertIn("Repository steps 1–12", self.catalog)
+        self.assertNotIn("Repository step 11 is the only next implementation packet", self.catalog)
 
     def test_repository_map_matches_authoritative_inventory(self) -> None:
         members = self.workspace["workspace"]["members"]
@@ -579,6 +588,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Repository step 7 — reusable generic mutation and query conformance — Next",
             "repository step 7 — reusable generic mutation/query conformance — **next**",
             "Repository step 7 is reusable generic mutation and query conformance.",
+            "Repository step 11 is the only next implementation packet",
         )
         for statement in stale:
             for document in (
