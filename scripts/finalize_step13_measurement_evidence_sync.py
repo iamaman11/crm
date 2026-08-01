@@ -83,9 +83,10 @@ def patch_navigation() -> None:
                     ("Rust CI", ".github/workflows/rust.yml"),
                     ("Rust Generated Sync", ".github/workflows/rust-generated-sync.yml"),
                 )'''
-    if old_tuple not in text:
-        raise RuntimeError("navigation selected-workflow fixture not found")
-    text = text.replace(old_tuple, new_tuple, 1)
+    if old_tuple in text:
+        text = text.replace(old_tuple, new_tuple, 1)
+    elif new_tuple not in text:
+        raise RuntimeError("navigation selected-workflow fixture is neither old nor current")
     (ROOT / path).write_text(text, encoding="utf-8")
 
 
