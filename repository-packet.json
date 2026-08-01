@@ -13,6 +13,9 @@
   ],
   "objective": "Perform the first measured behavior-neutral repository-step-14 consolidation by moving the sole-consumer Customer Accounts production contribution from its transitional capability-composition package into the existing Customer Accounts query/production adapter, deleting exactly one redundant workspace package and preserving every product, ownership, security, persistence and route invariant.",
   "allowed_paths": [
+    ".github/workflows/customer-privacy-approval.yml",
+    ".github/workflows/customer-privacy-discovery.yml",
+    ".github/workflows/customer-privacy-planning.yml",
     "Cargo.lock",
     "Cargo.toml",
     "crates/crm-customer-accounts-capability-composition/Cargo.toml",
@@ -35,7 +38,6 @@
     "tests/test_step13_exit_evidence.py"
   ],
   "forbidden_paths": [
-    ".github/**",
     "apps/**",
     "architecture-governance.json",
     "architecture-policy.json",
@@ -65,6 +67,7 @@
     "reduce the measured workspace from 113 to 112 packages, internal dependency edges from 841 to 835 and conservative public Rust items from 5379 to 5377 while dependency declarations remain exactly 270",
     "preserve maximum dependency depth at no more than 18 and reduce rather than broaden the deleted package build/test closure and reverse impact",
     "lower the blocking reduction-only architecture budgets to the accepted post-consolidation values",
+    "synchronize the exact 112-package invariant in the three permanent Customer Privacy workflows that previously hard-coded the accepted 113-package baseline",
     "prove unchanged public mutation/query/worker inventory, contract and route classifications, owner/security boundaries and persistence/schema/migration state",
     "leave repository-step-14 completion and Stage G evidence synchronization to a separate post-merge documentation packet"
   ],
@@ -83,8 +86,9 @@
     "public capability, query and worker inventories plus route classifications are unchanged",
     "tenant isolation, FORCE RLS, live authorization, idempotency, audit, transaction and persistence guarantees are unchanged",
     "no contract, Protobuf, schema, migration, route, worker lifecycle or product behavior file changes",
+    "the Approval, Discovery and Planning permanent workflows assert the exact accepted 112-package workspace and retain all existing behavioral checks",
     "affected-scope ownership remains precise and the selected build/test closure contains no unrelated broadening",
-    "the final diff contains no temporary script, workflow, allowlist or suppression and every applicable permanent workflow succeeds on one unchanged user-authored exact head"
+    "the final diff contains no temporary script, new workflow, allowlist or suppression and every applicable permanent workflow succeeds on one unchanged user-authored exact head"
   ],
   "non_goals": [
     "start repository step 15",
