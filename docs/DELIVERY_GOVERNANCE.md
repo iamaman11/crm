@@ -2,21 +2,22 @@
 
 Status: **Normative delivery-control policy**
 
-This document defines how repository status, roadmap sequencing, issues, pull requests and exact-SHA acceptance evidence stay synchronized. It prevents stale parallel plans, ambiguous active work and completion claims not backed by merged code and reproducible evidence.
+This document defines how repository status, roadmap sequencing, issues, pull requests, permanent gates and exact-SHA acceptance evidence stay synchronized. It prevents stale parallel plans, ambiguous active work, governance growth without a failure model and completion claims not backed by merged code and reproducible evidence.
 
 ## 1. Source-of-truth hierarchy
 
 Use the following order when determining project state:
 
 1. `SYSTEM_INVARIANTS.md` — absolute architecture and conformance rules.
-2. `ARCHITECTURE_READINESS.md` — accepted native-composition non-regression baseline.
-3. `IMPLEMENTATION_ROADMAP.md` — normative phase map and dependency order.
-4. `PHASE8_DELIVERY_PLAN.md` — detailed packet sequence for the active expert-domain program.
-5. `CRM_CAPABILITY_COVERAGE.md` — completeness guardrail for the target CRM product.
-6. `MODULE_CATALOG.md` — business-module ownership and readiness accounting.
-7. `PROJECT_STATUS.md` — concise current snapshot for humans.
-8. GitHub parent/packet issues — executable scope and acceptance for a delivery packet.
-9. Pull requests — implementation state for one reviewable packet.
+2. Accepted ADRs — binding architecture decisions, including ADR-031 and ADR-032.
+3. `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` — the single repository-step order and architecture closure criteria.
+4. `IMPLEMENTATION_ROADMAP.md` — normative product phase map and dependency order.
+5. `PHASE8_DELIVERY_PLAN.md` — detailed packet sequence for the active expert-domain program.
+6. `CRM_CAPABILITY_COVERAGE.md` — completeness guardrail for the target CRM product.
+7. `MODULE_CATALOG.md` — business-module ownership and readiness accounting.
+8. `PROJECT_STATUS.md` — concise current snapshot for humans.
+9. `repository-packet.json` and generated navigation — the active bounded repository packet.
+10. GitHub parent/packet issues and pull requests — executable scope and accepted evidence.
 
 A lower-level source must not contradict a higher-level source. A pull request may be ahead of merged documentation while work is in progress, but merged `main` documentation must never claim unmerged functionality as complete.
 
@@ -38,40 +39,37 @@ Only merged work may be described as **Complete** in `main` documentation.
 
 ## 3. One active packet per dependency lane
 
-For a strict dependency chain, only one production packet is the active implementation target at a time. A later packet may have architecture notes or a stacked draft branch, but it must not be represented as the active merge candidate until its prerequisite packet is merged and it is rebased or retargeted onto the accepted baseline.
+For the strict repository sequence, only the first unfinished step in the architecture plan may be the active implementation target.
 
-Current customer-master lane:
+A numbered repository step may use multiple small atomic PRs when needed, but:
 
-1. **8A.7 / #120 / PR #121** — Customer Import — **Complete**.
-2. **8A.8 / #123 / PR #130** — Customer Export — **Complete**.
-3. **8A.9 / #124 / PR #132** — Customer Data Quality — **Complete**.
-4. **Architecture integrity / #134 / PR #135** — native composition/lifecycle gating — **Complete**.
-5. **8A.10 / #125 / PR #137** — Governed Customer Enrichment and Provenance — **Complete**.
-6. **8A.11 / #126** — Customer Privacy Lifecycle, Restriction, Deletion and Legal Hold — **In progress**; six runtime coordinates are merged through PR #152, owner-scope contracts through PR #155 and authoritative Parties, Consents, Customer Accounts, Contact Points and Party Relationships owner implementations through PR #183.
-7. **Shared owner-scope support / PR #176** — **Complete**; accepted source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`, merge `80411d54a3ca45a783d982152c5cd8317f1fd9bd`; PRs #179, #181 and #183 add only the third, fourth and fifth mechanically proven consumers.
-8. **Customer Accounts owner-scope packet / PR #179** — **Complete**; accepted source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, merge `5b5252a437c6bebbd7afdead0162063af4c0b7e4`, 23/23 applicable permanent workflows.
-9. **Contact Points owner-scope packet / PR #181** — **Complete**; accepted source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c`, merge `96cd0cf548310592a0718c97242a724a29717a72`, 24/24 applicable permanent workflows.
-10. **Party Relationships owner-scope packet / PR #183** — **Complete**; accepted source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, merge `9ad2aa91321e9edb54cab98218f93143923ef33f`, 25/25 applicable permanent workflows.
-11. **Next bounded owner-scope packet — Identity Resolution** — contract-only/non-runtime contribution across authoritative candidate-case and merge-operation families with bounded alias-aware lineage closure.
-12. **Remaining owner-scope packets** — one authoritative owner at a time on the accepted shared-support boundary.
-13. **Remaining 8A.11 lifecycle packets** — sufficient owner set, scope discovery/planning, approval, restrictions, legal-hold/retention precedence, plan/outcome reads, resumable execution, export/deletion and convergence.
-14. **Phase 8A closure** — after merged privacy interaction proof.
-15. **8B / #29** — Product Catalog, Pricing, CPQ and Quote-to-Revenue.
+- every PR has one coherent failure model and bounded outcome;
+- measurement, remediation and evidence synchronization remain separate when combining them would hide before/after evidence;
+- later repository steps do not begin until all implementation and required evidence packets for the earlier step are accepted;
+- a packet must not expand merely to absorb adjacent planned work.
 
 Parallel work is allowed only when ownership boundaries and dependencies are explicit and the work cannot invalidate another packet's exact candidate.
+
+Current strict sequence status:
+
+- Repository Steps 1–14 — **Complete**;
+- Repository Step 15 — **next and not started**;
+- Repository Steps 16–25 — blocked by the first earlier unfinished step.
 
 ## 4. Packet entry criteria
 
 A packet may move from **Planned** to **Ready** only when:
 
-- all named prerequisite packets are merged;
+- all named prerequisites are merged;
 - owner-domain and cross-owner boundaries are explicit;
 - module-owned route/validator/worker contributions and durable activation behavior are explicit;
 - public contract/versioning and production-route classification implications are identified;
 - persistence, migration and rollback implications are identified;
 - authorization, data-class, audit, idempotency and approval requirements are identified;
 - required process/browser/operational acceptance is defined;
-- the issue body is sufficient to reject out-of-scope implementation shortcuts.
+- exact allowed and forbidden paths are declared;
+- required permanent workflows are selected by the affected-scope policy;
+- the issue or packet declaration is sufficient to reject out-of-scope shortcuts.
 
 A packet moves to **In progress** when its implementation branch or draft PR exists.
 
@@ -81,32 +79,102 @@ A packet may move to **Gate review** only when:
 
 - the implementation boundary is complete;
 - packet documentation and machine-readable inventory/classification contracts are synchronized on the candidate branch;
-- all applicable checks pass on one unchanged candidate SHA;
+- all applicable checks pass on one unchanged meaningful candidate SHA;
 - every source or documentation commit after that evidence invalidates the evidence and requires a new exact-head gate;
 - source-changing automation has reached a stable head;
 - native composition readiness and route parity pass when module/runtime scope is affected;
-- no unresolved blocking review thread or known gate defect remains.
+- no unresolved blocking review thread or known gate defect remains;
+- the final changed-file set exactly matches the active packet.
 
 A packet becomes **Complete** only after merge to `main` and synchronization of the merged state.
 
 A post-merge integrity defect in inventory, classification or status documentation must be corrected before the dependent packet starts. Such correction does not retroactively invalidate the accepted implementation when the source checkpoint and merge remain unchanged, but the corrective branch itself requires applicable exact-head checks before merge.
 
-## 6. Documentation synchronization contract
+## 6. Permanent-gate entry contract
 
-Whenever implementation state changes, update the affected sources in the same delivery packet where practical:
+A permanent workflow, job or repository gate is an engineering control with an ongoing execution and maintenance cost. It must not be created merely because another governance mechanism exists.
 
-- `IMPLEMENTATION_ROADMAP.md` — phase and packet sequence;
+Every proposal for a new permanent gate must declare before acceptance:
+
+- stable gate identifier;
+- named owning team;
+- concrete failure mode it prevents;
+- why current gates do not already prevent that failure;
+- authoritative inputs and affected scope;
+- expected duration, runner cost, fan-out and expensive database/process/browser setup;
+- false-positive controls;
+- deterministic evidence emitted on success and failure;
+- compensating checks and escalation path;
+- review and retirement condition.
+
+A gate without a concrete failure mode is not eligible to become permanent.
+
+A gate that duplicates another gate must prove an independent failure mode or intentionally independent implementation path whose value exceeds its cost. Otherwise it must be simplified, merged or removed.
+
+Temporary inspection, migration or diagnostic workflows remain temporary and must be removed before exact-head acceptance unless they independently satisfy this permanent-gate entry contract.
+
+## 7. Permanent-gate change rules
+
+A change to an existing permanent gate must identify:
+
+- the failure mode affected by the change;
+- whether coverage becomes broader, narrower or merely reorganized;
+- execution-cost delta;
+- overlap introduced or removed;
+- whether the gate's retirement condition changed;
+- any required update to affected-scope ownership or workflow filters.
+
+A new governance abstraction must not be added solely to validate an existing governance abstraction. The packet must name the real product, architecture, security, persistence, compatibility or operational failure it prevents.
+
+## 8. Step 22 permanent-gate value review
+
+ADR-032 requires a complete value/cost review before Repository Step 22 architecture remeasurement can be accepted.
+
+Every permanent workflow, job and repository gate must appear in one machine-readable ledger and human-readable report containing:
+
+- concrete prevented failure mode;
+- defects actually detected, or a specific preventive rationale when no historical defect exists;
+- scope and authoritative inputs;
+- overlap and duplication analysis;
+- duration, runner/fan-out and expensive environment cost;
+- false-positive and maintenance history where measurable;
+- named owner;
+- `retain`, `simplify`, `merge` or `remove` decision;
+- independent value for any apparently duplicate retained gate;
+- retirement or re-review condition;
+- compensating checks for simplification, merge or removal.
+
+All immediately safe simplifications, merges and removals must be completed before Step 22 closes. A deferred action requires a named owner, exact rationale and deadline before Step 25. Known safe simplification cannot be deferred merely to preserve the current workflow or gate count.
+
+Step 22 cannot close with an unresolved permanent-gate value decision.
+
+## 9. Runtime fan-in decision governance
+
+The current `crm-application-runtime` non-growth budget prevents regression but does not prove that its broad direct dependency surface is irreducible.
+
+ADR-032 requires Step 22 to classify every internal direct dependency as `removed`, `platform-generic`, `owner-specific-unavoidable` or `test-only`.
+
+Every safely removable owner-specific dependency must be removed. Every retained owner-specific dependency must provide unavoidable-boundary evidence, a named owner and a removal/review condition. Mere non-growth is insufficient.
+
+Ordinary existing-owner capability changes and the Step 23–24 expert-domain waves must not modify `crm-application-runtime/Cargo.toml` or owner-specific process-composition source. Contrary evidence reopens the Step 22 decision and blocks Step 25.
+
+## 10. Documentation synchronization contract
+
+Whenever implementation or binding plan state changes, update the affected sources in the same delivery packet where practical:
+
+- `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` — repository order, architecture metrics and closure criteria;
+- `IMPLEMENTATION_ROADMAP.md` — product phase and packet sequence;
 - `PROJECT_STATUS.md` — current human-readable state;
 - `PHASE8_DELIVERY_PLAN.md` — detailed Phase 8 packet state and next dependency;
-- `MODULE_CATALOG.md` — module readiness/count only when merged implementation justifies it;
-- packet architecture/guardrail/acceptance documents;
+- `MODULE_CATALOG.md` — module readiness/count only when merged product evidence justifies it;
+- accepted ADRs and packet architecture/guardrail documents;
 - machine-readable production promotion and route classifications;
 - parent and packet GitHub issues;
 - pull request body with actual delivered scope and exact validation state.
 
 `README.md` remains stable orientation and must not become a second roadmap.
 
-## 7. Production inventory integrity
+## 11. Production inventory integrity
 
 For every manifest-bound capability coordinate exactly one classification applies:
 
@@ -124,52 +192,44 @@ Parity tests must fail when:
 - public runtime inventory differs from compiled route definitions;
 - promotion history contradicts current runtime state.
 
-## 8. PR hygiene
+## 12. PR and issue hygiene
 
 - One PR represents one natural architecture/delivery packet.
 - A superseded PR is closed promptly and linked to its replacement.
 - Draft PR bodies describe actual current implementation state, not only the initial skeleton.
 - A PR must not claim production completeness while required contracts, runtime composition, persistence or process acceptance remain absent.
-- Stacked PRs are retargeted/reverified after prerequisite merges.
-- Merge remains an explicit action after gate success.
-
-## 9. Issue hygiene
-
+- Stacked PRs are retargeted and reverified after prerequisite merges.
+- Merge remains an explicit action after gate success and must use the accepted expected head when supported.
 - Parent issues define program outcomes; child issues define reviewable packets.
-- Every active packet has explicit dependencies and acceptance gates.
-- Ambiguous “later work” is replaced by named issues when the sequence is known.
-- Closed/superseded paths remain historical evidence but are not shown as active execution.
-- Closed issue bodies and final comments record accepted source SHA and merge commit.
+- Closed issue bodies or final comments record accepted source SHA, applicable workflow count and merge commit.
 
-## 10. Completion claims
+## 13. Separate architecture and product ledgers
 
 The following claims are distinct:
 
-- platform foundation complete;
+- architecture/change-economics criteria are satisfied;
+- platform foundation is complete;
 - a module has a production vertical/integration slice;
 - a module is product complete;
 - a capability family is production complete;
 - the universal CRM product is complete.
 
-`CRM_CAPABILITY_COVERAGE.md` guards product completeness. A crate, schema, manifest or isolated backend path is insufficient.
+Architecture metrics and governance gates cannot raise product readiness. `CRM_CAPABILITY_COVERAGE.md` and `MODULE_CATALOG.md` guard product completeness. A crate, schema, manifest, architecture score or isolated backend path is insufficient.
 
-## 11. Current control baseline
+## 14. Current control baseline
 
-As of 2026-07-26:
+As of 2026-08-02:
 
 - Phases 0.1–7 are complete and Phase 8A is active.
-- Phase 8A.7 is complete through PR #121 / merge `5f60f24d6d3a3bb46720658f4e98d4a7ebb15637`.
-- Phase 8A.8 is complete through PR #130 / merge `0e7f9889362533446cc65d95dcf7969a60086a57`.
-- Phase 8A.9 is complete through PR #132 / merge `8a1664309be9dc0c5e3bf9014cf248b1c3680035`.
-- Native module composition/lifecycle integrity is complete through PR #135 / merge `023fa5ef1d510d5bcc32222c739e6d58e5696fb8`.
-- Phase 8A.10 is complete through PR #137; accepted source `f92d101206886e3ceaf94d0e56e52580cec21093`; merge `150e44b95d9dbdc08c1792563de03ec73f34aed1`.
-- Customer Enrichment runtime inventory is exactly 6 public mutations, 6 permission-aware queries and 5 activation-gated worker-only coordinates.
-- Phase 8A.11 / #126 is **In progress**. PR #152 established four runtime Customer Privacy mutations, two permission-aware queries, ten public non-runtime coordinates and zero Customer Privacy workers. PRs #156, #175, #179, #181 and #183 accepted Parties, Consents, Customer Accounts, Contact Points and Party Relationships privacy-scope owners; all remain contract-only/non-runtime.
-- PR #176 accepted shared owner-scope support on unchanged source `eb8e6b6f2edf038485e5c64014d7d28dba302ce8`, passed 21/21 applicable permanent workflows and merged as `80411d54a3ca45a783d982152c5cd8317f1fd9bd`. PRs #179, #181 and #183 added Customer Accounts, Contact Points and Party Relationships as the third, fourth and fifth mechanically restricted consumers without changing shared semantics.
-- PR #179 accepted unchanged user-authored source `7d3e44e6dede36f76dfe92145dea6129a2b4639e`, passed 23/23 applicable permanent workflows and merged as `5b5252a437c6bebbd7afdead0162063af4c0b7e4`.
-- PR #181 accepted unchanged user-authored source `00c5b940326b14f5e4aab7d8c8b467ee688f6c9c`, passed 24/24 applicable permanent workflows and merged as `96cd0cf548310592a0718c97242a724a29717a72`.
-- PR #183 accepted unchanged user-authored source `a431185e01e95dfeffcf7d9c9a440afc8f0c9a57`, passed 25/25 applicable permanent workflows and merged as `9ad2aa91321e9edb54cab98218f93143923ef33f`.
-- Identity Resolution is the next bounded owner-scope implementation; no Customer Privacy production coordinate is selected until the required owner set establishes a sufficient discovery/planning boundary.
-- Phase 8B / #29 remains planned after Phase 8A closure.
+- Phase 8A.1–8A.10 are complete.
+- Phase 8A.11 / issue #126 is **In progress**.
+- all nine Customer Privacy owner-scope implementations are accepted;
+- Customer Privacy public inventory remains seven mutations, four permission-aware queries and zero workers;
+- Repository Steps 1–14 are complete;
+- Repository Step 15 is next and not started;
+- current workspace packages are 112, internal dependency edges 835, maximum dependency depth 18, conservative public Rust items 5,377, dependency declarations 270 and suppression occurrences 91;
+- architecture 10/10 is unclaimed;
+- current product-complete expert modules are zero;
+- ADR-032 binds Step 22 to runtime fan-in and permanent-gate value decisions in addition to remeasurement.
 
 This baseline must be updated whenever the active packet or merged completion state changes.
