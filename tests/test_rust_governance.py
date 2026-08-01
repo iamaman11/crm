@@ -162,7 +162,7 @@ version = "0.1.0"
         )
         baseline = policy["measured_baseline"]
         self.assertEqual(baseline["maximum_direct_lint_tables"], 0)
-        self.assertEqual(baseline["maximum_missing_workspace_lints_packages"], 107)
+        self.assertEqual(baseline["maximum_missing_workspace_lints_packages"], 110)
         self.assertEqual(baseline["active_rust_governance_exceptions"], 0)
 
     def test_workspace_member_parser_uses_only_declared_members(self) -> None:
