@@ -26,13 +26,16 @@ class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "repository-step-14-exit-evidence-sync")
+        self.assertEqual(
+            packet["packet_id"],
+            "architecture-step-22-runtime-fanin-gate-value-hardening",
+        )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
             {
                 "ref": "main",
-                "sha": "2b0b558077c444d44691371c8a2bcca2c14ae426",
+                "sha": "fa55e50f356b9a54712843038f763741898534b8",
             },
         )
         self.assertEqual(packet["tracking_issues"], [194, 126])
@@ -41,10 +44,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             {
                 "docs/ACTIVE_PACKET.md",
                 "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/DELIVERY_GOVERNANCE.md",
                 "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/MODULE_CATALOG.md",
                 "docs/PHASE8_DELIVERY_PLAN.md",
                 "docs/PROJECT_STATUS.md",
+                "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
@@ -56,7 +60,11 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
         self.assertIn("start Repository Step 15", packet["non_goals"])
         self.assertIn(
-            "mark Repository Step 14 complete and architecture Stage G transitional consolidation complete",
+            "add ADR-032 as the binding decision for Step 22 runtime fan-in and permanent-gate value review",
+            packet["deliverables"],
+        )
+        self.assertIn(
+            "require every new permanent gate to declare the same value, cost, overlap, ownership and retirement fields before acceptance",
             packet["deliverables"],
         )
 
@@ -71,9 +79,12 @@ class RepositoryNavigationTests(unittest.TestCase):
                 content,
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
-        self.assertIn("repository-step-14-exit-evidence-sync", first[ACTIVE_PACKET_PATH])
         self.assertIn(
-            "2b0b558077c444d44691371c8a2bcca2c14ae426",
+            "architecture-step-22-runtime-fanin-gate-value-hardening",
+            first[ACTIVE_PACKET_PATH],
+        )
+        self.assertIn(
+            "fa55e50f356b9a54712843038f763741898534b8",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -122,7 +133,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(forbidden, ["proto/crm/customer/v1/customer.proto"])
         self.assertEqual(disallowed, ["unowned.txt"])
 
-    def test_packet_check_uses_exact_evidence_baseline(self) -> None:
+    def test_packet_check_uses_exact_planning_baseline(self) -> None:
         packet = load_packet(ROOT)
         changed_paths = packet["allowed_paths"]
         workflow_paths = {
@@ -139,7 +150,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["documentation evidence packet"],
+                    "reasons": ["architecture planning packet"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -147,7 +158,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="2b0b558077c444d44691371c8a2bcca2c14ae426",
+                return_value="fa55e50f356b9a54712843038f763741898534b8",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
