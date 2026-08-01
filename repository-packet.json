@@ -1,77 +1,80 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-13-suppression-evidence-sync",
-  "title": "Synchronize accepted repository step 13 suppression evidence",
+  "packet_id": "repository-step-13-exit-evidence-enforcement",
+  "title": "Enforce remaining repository step 13 exit evidence",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "393b60bdcfad6e92fc37eacabe0920645d530f6b"
+    "sha": "9ba5f3e1744a2c9896c4ea910266d971d16c230f"
   },
   "tracking_issues": [
     194,
     126
   ],
-  "objective": "Synchronize every live normative repository and Phase 8 source with accepted PR #255 suppression-enforcement evidence, keep repository step 13 in progress, and define the next bounded packet as closure of the remaining ADR-031 exit-evidence gaps.",
+  "objective": "Remeasure accepted main and mechanically enforce the remaining ADR-031 process-host dependency, representative change-cost and dependency/version/feature budgets without structural or product changes.",
   "allowed_paths": [
+    ".github/workflows/complexity-baseline.yml",
+    "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/MODULE_CATALOG.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
     "repository-packet.json",
+    "scripts/check_step13_exit_evidence.py",
+    "step13-complexity-policy.json",
     "tests/test_architecture_documentation_consistency.py",
-    "tests/test_repository_navigation.py"
+    "tests/test_repository_navigation.py",
+    "tests/test_step13_exit_evidence.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
     "Cargo.lock",
     "Cargo.toml",
-    "affected-scope-policy.json",
     "apps/**",
     "architecture-governance.json",
     "architecture-policy.json",
     "contracts/**",
     "crates/**",
     "database/**",
+    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+    "docs/IMPLEMENTATION_ROADMAP.md",
+    "docs/MODULE_CATALOG.md",
+    "docs/PHASE8_DELIVERY_PLAN.md",
+    "docs/PROJECT_STATUS.md",
     "modules/**",
     "packages/**",
     "proto/**",
     "rust-governance-policy.json",
     "schemas/**",
-    "scripts/**",
     "services/**",
-    "step13-complexity-policy.json",
-    "step13-suppression-baseline.json"
+    "step13-suppression-baseline.json",
+    "workspace-dependency-policy.json"
   ],
   "deliverables": [
-    "PR #255 accepted source 4c80546283af9c869a28c2da9c8697b203d0c327, squash merge 393b60bdcfad6e92fc37eacabe0920645d530f6b and 21-of-21 unchanged exact-head evidence are recorded in all live normative sources",
-    "blocking suppression-multiset enforcement, canonical formatting, zero direct lint tables, zero matching governance exceptions and no source-level replacement suppressions are represented consistently",
-    "the immutable PR #253 baseline remains historical evidence with 113 packages, 841 internal edges, depth 18, public surface 5377 and 94 accepted suppression occurrences across 66 stable keys",
-    "repository step 13 remains in progress and the next bounded packet closes only remaining ADR-031 central process-host dependency and representative change-cost/dependency-version-feature exit evidence",
-    "repository step 14 remains blocked, Customer Privacy and Phase 8A product readiness remain unchanged, and product-complete expert modules remain zero",
-    "generated active-packet navigation is synchronized with the source packet"
+    "the accepted PR #255 exact-head values are encoded as deterministic reduction-only workspace and role-aware central-system budgets",
+    "crm-application-runtime and crm-api aggregate and manifest-section allowlists block every unmeasured process-host dependency addition while permitting reductions",
+    "production and test-only process-host dependency surfaces are measured separately: crm-api remains one runtime dependency plus eighteen acceptance-only dev dependencies, while crm-application-runtime remains sixty-two runtime plus one dev dependency",
+    "ordinary capability, new owner and contribution-aggregation exemplars have machine-readable file, package, central-file and workflow-file budgets",
+    "new dependency requirement or feature divergence, heavy-feature growth, dependency-declaration growth and unmeasured workspace centralization are blocking",
+    "the permanent Complexity Baseline workflow runs the exit-evidence checker on the exact pull-request head and publishes diagnostics",
+    "operations affected-scope ownership and stable repository regression tests cover the new blocking checker and active packet"
   ],
   "required_checks": [
     "Affected Scope CI",
-    "Customer Privacy Access Export CI",
-    "Customer Privacy Owner Execution CI",
+    "Complexity Baseline CI",
     "Governance CI",
     "Rust CI",
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "the architecture plan, project status, roadmap, Phase 8 delivery plan and module catalog agree on accepted PR #255 evidence; tracked issues are synchronized only after this exact-head documentation packet is accepted",
-    "no live normative source says repository step 13 is not started, that three direct lint exceptions remain, or that suppression registration and direct-lint removal are the next packet",
-    "historical PR #253 measurements remain unchanged while PR #255 is represented as blocking remediation against that evidence",
-    "the next implementation packet is bounded by remaining ADR-031 exit evidence and repository step 13 completion remains tied only to mechanically proven exit criteria",
-    "the packet contract requires every workflow selected by affected-scope analysis for the final documentation diff",
-    "the final diff changes no Rust or product code, dependency, package, route, contract, schema, migration, workflow, affected-scope policy or runtime behavior"
+    "the checker passes the unchanged exact head and reports the accepted 113-package, 841-edge, aggregate process-host and section-aware manifest baseline",
+    "synthetic tests prove reductions are permitted while dependency, central-surface, change-cost and feature/version growth are rejected",
+    "the workflow invokes the checker with --check and uploads both JSON and Markdown evidence",
+    "the final diff contains only the nine allowed governance, workflow, packet and test files",
+    "no product behavior, dependency declaration, package, route, contract, schema, migration, persistence or worker behavior changes",
+    "repository step 13 remains in progress until a separate accepted evidence-synchronization packet; repository step 14 remains blocked"
   ],
   "non_goals": [
-    "perform remaining repository step 13 remediation inside this evidence packet",
+    "perform dependency centralization, crate consolidation or process-host refactoring",
+    "change any Rust product or runtime source, Cargo manifest or lockfile",
     "change Customer Privacy behavior, public inventory, workers or Phase 8A readiness",
-    "start repository step 14",
-    "claim repository step 13, Phase 8A, the product or architecture 10/10 complete"
+    "synchronize final step-13 completion evidence inside this implementation packet",
+    "start repository step 14 or claim architecture 10/10 complete"
   ]
 }

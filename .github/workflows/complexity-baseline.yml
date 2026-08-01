@@ -21,10 +21,12 @@ on:
       - "scripts/analyze_workspace.py"
       - "scripts/analyze_step13_complexity.py"
       - "scripts/analyze_workspace_governance.py"
+      - "scripts/check_step13_exit_evidence.py"
       - "scripts/check_step13_suppression_baseline.py"
       - "scripts/check_workspace_dependency_policy.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_step13_complexity_analysis.py"
+      - "tests/test_step13_exit_evidence.py"
       - "tests/test_step13_suppression_baseline.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
@@ -47,10 +49,12 @@ on:
       - "scripts/analyze_workspace.py"
       - "scripts/analyze_step13_complexity.py"
       - "scripts/analyze_workspace_governance.py"
+      - "scripts/check_step13_exit_evidence.py"
       - "scripts/check_step13_suppression_baseline.py"
       - "scripts/check_workspace_dependency_policy.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_step13_complexity_analysis.py"
+      - "tests/test_step13_exit_evidence.py"
       - "tests/test_step13_suppression_baseline.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
@@ -84,6 +88,7 @@ jobs:
           python -m unittest -v \
             tests.test_workspace_analysis \
             tests.test_step13_complexity_analysis \
+            tests.test_step13_exit_evidence \
             tests.test_step13_suppression_baseline \
             tests.test_workspace_governance \
             tests.test_workspace_dependency_policy \
@@ -121,6 +126,14 @@ jobs:
             --json-output artifacts/step13-complexity-baseline.json \
             --markdown-output artifacts/step13-complexity-baseline.md
           cat artifacts/step13-complexity-baseline.md >> "${GITHUB_STEP_SUMMARY}"
+      - name: Enforce ADR-031 remaining exit evidence
+        run: |
+          set -euo pipefail
+          python scripts/check_step13_exit_evidence.py \
+            --check \
+            --json-output artifacts/step13-exit-evidence.json \
+            --markdown-output artifacts/step13-exit-evidence.md
+          cat artifacts/step13-exit-evidence.md >> "${GITHUB_STEP_SUMMARY}"
       - name: Enforce registered suppression multiset
         run: |
           set -euo pipefail
