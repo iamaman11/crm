@@ -114,6 +114,7 @@
         "docs/DELIVERY_GOVERNANCE.md",
         "docs/POSTGRESQL_PROCESS_ISOLATION_PILOT.md",
         "docs/RUST_CI_CACHE_PILOT.md",
+        "rust-governance-policy.json",
         "scripts/analyze_step13_complexity.py",
         "scripts/check_native_module_composition.py",
         "scripts/check_step13_suppression_baseline.py",
