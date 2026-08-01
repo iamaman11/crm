@@ -10,7 +10,6 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
@@ -30,7 +29,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.catalog = read("docs/MODULE_CATALOG.md")
         cls.workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
         cls.module_development = read("docs/MODULE_DEVELOPMENT.md")
-        cls.adr31 = read("docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md")
+        cls.adr31 = read(
+            "docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md"
+        )
         cls.repo_runner = read("scripts/repo.py")
         cls.generator = read("scripts/generate_repository_navigation.py")
         cls.packet = json.loads(read("repository-packet.json"))
@@ -63,17 +64,28 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     def test_current_phase_and_next_packet_are_authoritative_and_consistent(self) -> None:
         for document in (self.status, self.roadmap, self.phase8):
             lowered = document.lower()
-            self.assertIn("phase 8a", lowered)
-            self.assertIn("approval", lowered)
-            self.assertIn("permission-aware", lowered)
-            self.assertIn("bounded contribution", lowered)
-            self.assertIn("final customer-subject policy", lowered)
-            self.assertIn("immediate deny-only", lowered)
-            self.assertIn("repository step 5", lowered)
-            self.assertIn("explain", lowered)
-            self.assertIn("packet-check", lowered)
-            self.assertIn("generated", lowered)
-            for pr in ("PR #218", "PR #220", "PR #222", "PR #224", "PR #226", "PR #230", "PR #235"):
+            for statement in (
+                "phase 8a",
+                "approval",
+                "permission-aware",
+                "bounded contribution",
+                "final customer-subject policy",
+                "immediate deny-only",
+                "repository step 5",
+                "explain",
+                "packet-check",
+                "generated",
+            ):
+                self.assertIn(statement, lowered)
+            for pr in (
+                "PR #218",
+                "PR #220",
+                "PR #222",
+                "PR #224",
+                "PR #226",
+                "PR #230",
+                "PR #235",
+            ):
                 self.assertIn(pr, document)
 
         self.assertIn("Phases 0.1–7 are complete", self.status)
@@ -81,13 +93,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("Current product-complete expert modules: **0**", document)
 
     def test_root_readme_is_orientation_not_a_second_live_roadmap(self) -> None:
-        self.assertIn("not duplicated in this orientation file", self.readme)
-        self.assertIn("docs/PROJECT_STATUS.md", self.readme)
-        self.assertIn("docs/ACTIVE_PACKET.md", self.readme)
-        self.assertIn("docs/generated/REPOSITORY_MAP.md", self.readme)
-        self.assertNotIn("The current bounded product packet is", self.readme)
-        self.assertNotIn("Phases 0.1–7 are complete", self.readme)
-        self.assertNotIn("Current product-complete expert modules", self.readme)
+        for statement in (
+            "not duplicated in this orientation file",
+            "docs/PROJECT_STATUS.md",
+            "docs/ACTIVE_PACKET.md",
+            "docs/generated/REPOSITORY_MAP.md",
+        ):
+            self.assertIn(statement, self.readme)
+        for statement in (
+            "The current bounded product packet is",
+            "Phases 0.1–7 are complete",
+            "Current product-complete expert modules",
+        ):
+            self.assertNotIn(statement, self.readme)
 
     def test_architecture_program_is_single_linked_execution_lane(self) -> None:
         for document in (self.readme, self.status, self.roadmap, self.phase8):
@@ -114,13 +132,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(stage, self.plan)
 
     def test_repository_execution_order_is_strict_and_mechanically_visible(self) -> None:
-        self.assertIn("### 2.4 Single repository execution order", self.plan)
-        self.assertIn("At most one implementation packet may be active", self.plan)
-        self.assertIn("The next permitted packet is the first unfinished item", self.plan)
-        self.assertIn(
+        for statement in (
+            "### 2.4 Single repository execution order",
+            "At most one implementation packet may be active",
+            "The next permitted packet is the first unfinished item",
             "No item may be described as “next” when an earlier unfinished item exists",
-            self.plan,
-        )
+        ):
+            self.assertIn(statement, self.plan)
 
         steps = (
             "1. supported Rust toolchain, workspace `rust-version` and measured lint baseline — **Complete through PR #218**;",
@@ -135,7 +153,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "10. governed Customer Privacy access/export assembly — **Complete through PR #241**;",
             "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Complete through PR #244**;",
             "12. complete first-party contribution aggregation for all currently active owners without behavior changes — **Complete through PR #249**;",
-            "13. complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions;",
+            "13. complete ADR-031 governance closure: measurement and blocking suppression/direct-lint governance are accepted through PRs #253 and #255; remaining central process-host dependency and representative change-cost/dependency-version-feature exit proof is unfinished;",
             "14. first measured behavior-neutral transitional domain-cluster consolidation;",
             "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;",
             "18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;",
@@ -153,34 +171,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("## Next permitted repository packet", self.status)
         self.assertIn("## Following permitted repository packet", self.status)
         self.assertIn("## 9. Binding repository continuation", self.phase8)
-        self.assertIn(
+        for statement in (
             "9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **complete through PR #239**;",
-            self.phase8,
-        )
-        self.assertIn(
             "10. repository step 10 — governed access/export assembly — **complete through PR #241**;",
-            self.phase8,
-        )
-        self.assertIn(
             "11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **complete through PR #244**;",
-            self.phase8,
-        )
-        self.assertIn(
             "12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **complete through PR #249**;",
-            self.phase8,
-        )
-        self.assertIn(
             "22. repository step 22 — Phase 8A architecture remeasurement and remaining-gate review, not a final 10/10 declaration;",
-            self.phase8,
-        )
+        ):
+            self.assertIn(statement, self.phase8)
         self.assertNotIn(
             "10. repository step 10 — governed access/export assembly — **next**;",
             self.phase8,
         )
-        self.assertIn(
-            "Repository step 13 remains in progress.",
-            self.phase8,
-        )
+        self.assertIn("Repository step 13 remains in progress.", self.phase8)
         for step in range(1, 6):
             self.assertIn(f"Repository step {step}", self.roadmap)
 
@@ -190,13 +193,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 document,
             )
         self.assertIn(
-            "Latest accepted repository implementation packet is PR #253",
+            "Latest accepted repository implementation packet is PR #255",
             self.status,
         )
-        self.assertIn(
-            "Repository step 13 remains in progress.",
-            self.status,
-        )
+        self.assertIn("Repository step 13 remains in progress.", self.status)
         self.assertIn(
             "Repository step 14 follows only after repository step 13 is accepted and synchronized.",
             self.status,
@@ -215,104 +215,21 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_accepted_repository_evidence_is_synchronized(self) -> None:
         evidence = (
-            (
-                self.authoritative_status_documents,
-                "PR #218",
-                "71c88f3e894f1fd943f373d8509e7569cf9aa291",
-                "e8fea1645fe108aa8334c40a445299dde8b444f0",
-                "30 of 30",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #220",
-                "98000b0c1c2c15e14c7ee0cd2a366020040567e6",
-                "01118df3b6349b6d854c4182c17f7eb9a6316b9c",
-                "21 of 21",
-            ),
-            (
-                self.privacy_status_documents,
-                "PR #222",
-                "b5651e784a156758b39eaa04abc1124c7c0832f9",
-                "fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1",
-                "16 of 16",
-            ),
-            (
-                self.privacy_status_documents,
-                "PR #224",
-                "e57307fcb1b5192d5e6340247cb6633f32b7ba34",
-                "67804d9478b2bbaf342a398b649e23bd5ead6c08",
-                "28 of 28",
-            ),
-            (
-                self.privacy_status_documents,
-                "PR #226",
-                "ad08a691ec759b8b3b523fa66a034cecf4138ff0",
-                "a46460623e90c5649d36bedba055fb55023d9349",
-                "34 of 34",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #228",
-                "a9aa0bef028d906b61e83803436167bf6f91e634",
-                "727a244fcf174dc517dec6fdbb6b8997eb205f14",
-                "5 of 5",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #230",
-                "131285e07ad7c36c00e399b65d55591db13f0948",
-                "18e6218a7e7495219ac9e8c71cafcda1be64a31b",
-                "32 of 32",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #235",
-                "7a0cd34dc17085ecd1a8ee233171c0463d91ceba",
-                "43d194231fbce1cee28c44e89726929e450f3d18",
-                "17 of 17",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #237",
-                "f926ece93dc2b24683f982828e72bf9170dc123a",
-                "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90",
-                "33 of 33",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #244",
-                "405d2dbb97bb371b51cfb1d4ffb5549a57262878",
-                "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db",
-                "34 of 34",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #246",
-                "3b4fe7cdf458daac9c12f816d0d6a87039e613f3",
-                "f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978",
-                "37 of 37",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #248",
-                "b15482361ab2b322591d488843ab9b46ff676dba",
-                "b4222364c21cb74127834f5ff4f0739343d26379",
-                "37 of 37",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #249",
-                "7876945586e5a6cc94f8d3b0f6ba2b57316484d2",
-                "f36592211bed3e0df7cf3771164b4bc24026eff3",
-                "37 of 37",
-            ),
-            (
-                self.authoritative_status_documents,
-                "PR #253",
-                "475533b185b871418273c1c1e3f63a1d62542677",
-                "7dcda204be07209d9e4996fdc9c5fd364cea179e",
-                "7 of 7",
-            ),
+            (self.authoritative_status_documents, "PR #218", "71c88f3e894f1fd943f373d8509e7569cf9aa291", "e8fea1645fe108aa8334c40a445299dde8b444f0", "30 of 30"),
+            (self.authoritative_status_documents, "PR #220", "98000b0c1c2c15e14c7ee0cd2a366020040567e6", "01118df3b6349b6d854c4182c17f7eb9a6316b9c", "21 of 21"),
+            (self.privacy_status_documents, "PR #222", "b5651e784a156758b39eaa04abc1124c7c0832f9", "fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1", "16 of 16"),
+            (self.privacy_status_documents, "PR #224", "e57307fcb1b5192d5e6340247cb6633f32b7ba34", "67804d9478b2bbaf342a398b649e23bd5ead6c08", "28 of 28"),
+            (self.privacy_status_documents, "PR #226", "ad08a691ec759b8b3b523fa66a034cecf4138ff0", "a46460623e90c5649d36bedba055fb55023d9349", "34 of 34"),
+            (self.authoritative_status_documents, "PR #228", "a9aa0bef028d906b61e83803436167bf6f91e634", "727a244fcf174dc517dec6fdbb6b8997eb205f14", "5 of 5"),
+            (self.authoritative_status_documents, "PR #230", "131285e07ad7c36c00e399b65d55591db13f0948", "18e6218a7e7495219ac9e8c71cafcda1be64a31b", "32 of 32"),
+            (self.authoritative_status_documents, "PR #235", "7a0cd34dc17085ecd1a8ee233171c0463d91ceba", "43d194231fbce1cee28c44e89726929e450f3d18", "17 of 17"),
+            (self.authoritative_status_documents, "PR #237", "f926ece93dc2b24683f982828e72bf9170dc123a", "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90", "33 of 33"),
+            (self.authoritative_status_documents, "PR #244", "405d2dbb97bb371b51cfb1d4ffb5549a57262878", "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db", "34 of 34"),
+            (self.authoritative_status_documents, "PR #246", "3b4fe7cdf458daac9c12f816d0d6a87039e613f3", "f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978", "37 of 37"),
+            (self.authoritative_status_documents, "PR #248", "b15482361ab2b322591d488843ab9b46ff676dba", "b4222364c21cb74127834f5ff4f0739343d26379", "37 of 37"),
+            (self.authoritative_status_documents, "PR #249", "7876945586e5a6cc94f8d3b0f6ba2b57316484d2", "f36592211bed3e0df7cf3771164b4bc24026eff3", "37 of 37"),
+            (self.authoritative_status_documents, "PR #253", "475533b185b871418273c1c1e3f63a1d62542677", "7dcda204be07209d9e4996fdc9c5fd364cea179e", "7 of 7"),
+            (self.privacy_status_documents, "PR #255", "4c80546283af9c869a28c2da9c8697b203d0c327", "393b60bdcfad6e92fc37eacabe0920645d530f6b", "21 of 21"),
         )
         for documents, pr, source, merge, workflows in evidence:
             self.assert_evidence_in_documents(
@@ -324,16 +241,21 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             )
 
         for document in self.authoritative_status_documents:
+            lowered = document.lower()
             self.assertIn("1.97.1", document)
-            self.assertIn("three exact expiring", document.lower())
+            self.assertTrue(
+                "zero direct lint tables" in lowered
+                or "removes all three direct lint tables" in lowered
+                or "removed all three historical direct-lint exceptions" in lowered
+            )
+            self.assertIn("94", document)
+            self.assertIn("66", document)
         for document in self.privacy_status_documents:
             self.assertIn("Customer Accounts", document)
             self.assertIn("restriction", document.lower())
 
-        self.assertIn("customer_privacy.restriction.place@1.0.0", self.status)
-        self.assertIn("customer_privacy.restriction.place@1.0.0", self.roadmap)
-        self.assertIn("customer_privacy.restriction.place@1.0.0", self.phase8)
-        self.assertIn("customer_privacy.restriction.place@1.0.0", self.catalog)
+        for document in (self.status, self.roadmap, self.phase8, self.catalog):
+            self.assertIn("customer_privacy.restriction.place@1.0.0", document)
         self.assertIn("7 mutations / 4 queries / 0 workers", self.plan)
         for document in self.authoritative_status_documents:
             self.assertIn("customer_privacy.legal_hold.place@1.0.0", document)
@@ -343,11 +265,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     def test_navigation_has_one_stable_human_index(self) -> None:
         self.assertIn("docs/README.md", self.readme)
         self.assertIn("docs/README.md", self.agents)
-        self.assertIn("Stable navigation index", self.docs_index)
-        self.assertIn("Source-of-truth hierarchy", self.docs_index)
-        self.assertIn("Choose by task", self.docs_index)
-        self.assertIn("## 6. Generated navigation", self.docs_index)
-        self.assertIn("not a source of runtime or delivery truth", self.docs_index)
+        for statement in (
+            "Stable navigation index",
+            "Source-of-truth hierarchy",
+            "Choose by task",
+            "## 6. Generated navigation",
+            "not a source of runtime or delivery truth",
+        ):
+            self.assertIn(statement, self.docs_index)
         self.assertIn("README is stable orientation", self.readme)
         self.assertIn("orientation only", self.plan)
         self.assertIn("navigation outputs, not sources of truth", self.workflow)
@@ -362,18 +287,16 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(126, self.packet["tracking_issues"])
         self.assertIn("repository-packet.json", self.packet["allowed_paths"])
         self.assertIn("docs/ACTIVE_PACKET.md", self.packet["allowed_paths"])
-        self.assertEqual(
-            len(self.packet["allowed_paths"]),
-            len(set(self.packet["allowed_paths"])),
-        )
-        self.assertEqual(
-            len(self.packet["required_checks"]),
-            len(set(self.packet["required_checks"])),
-        )
+        self.assertEqual(len(self.packet["allowed_paths"]), len(set(self.packet["allowed_paths"])))
+        self.assertEqual(len(self.packet["required_checks"]), len(set(self.packet["required_checks"])))
         self.assertTrue(self.packet["required_checks"])
         self.assertIn(
-            "the architecture plan, project status, roadmap, Phase 8 plan, module catalog and issues agree on accepted PR #253 evidence",
+            "the architecture plan, project status, roadmap, Phase 8 delivery plan and module catalog agree on accepted PR #255 evidence; tracked issues are synchronized only after this exact-head documentation packet is accepted",
             self.packet["acceptance"],
+        )
+        self.assertIn(
+            "repository step 13 remains in progress and the next bounded packet closes only remaining ADR-031 central process-host dependency and representative change-cost/dependency-version-feature exit evidence",
+            self.packet["deliverables"],
         )
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
@@ -387,10 +310,23 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.plan.lower(),
         )
         self.assertIn("## Repository step 13 plan-hardening evidence", self.plan)
-        self.assertIn("first bounded repository-step-13 packet is therefore limited to measurement and governance calibration", self.plan)
-        self.assertIn("## Accepted repository step 13 current-main measurement", self.status)
+        self.assertIn(
+            "first bounded repository-step-13 packet is therefore limited to measurement and governance calibration",
+            self.plan,
+        )
+        self.assertIn(
+            "## Repository step 13 measurement and suppression-enforcement evidence",
+            self.plan,
+        )
+        self.assertIn(
+            "## Accepted repository step 13 measurement and suppression enforcement",
+            self.status,
+        )
         self.assertIn("Repository step 14 remains blocked", self.status)
-        self.assertIn("Repository step 13 remains the next permitted implementation step", self.adr31)
+        self.assertIn(
+            "Repository step 13 remains the next permitted implementation step",
+            self.adr31,
+        )
 
     def test_stage_accountability_and_live_catalog_are_current(self) -> None:
         for stage in (
@@ -407,12 +343,27 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(stage, self.plan)
 
         self.assertIn("repository step 12", self.plan.lower())
-        self.assertIn("repository step 22 is a phase 8a architecture measurement checkpoint", self.plan.lower())
+        self.assertIn(
+            "repository step 22 is a phase 8a architecture measurement checkpoint",
+            self.plan.lower(),
+        )
         self.assertIn("repository step 25", self.plan.lower())
-        self.assertIn("repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration", self.status.lower())
-        self.assertIn("## Next permitted repository packet\n\nRepository step 13 remains in progress", self.status)
-        self.assertIn("## Following permitted repository packet\n\nRepository step 14 follows only after repository step 13 is accepted and synchronized", self.status)
-        self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244", self.catalog)
+        self.assertIn(
+            "repository step 13 owns the remaining central process-host dependency and representative change-cost/dependency-version-feature exit evidence",
+            self.status.lower(),
+        )
+        self.assertIn(
+            "## Next permitted repository packet\n\nRepository step 13 remains in progress",
+            self.status,
+        )
+        self.assertIn(
+            "## Following permitted repository packet\n\nRepository step 14 follows only after repository step 13 is accepted and synchronized",
+            self.status,
+        )
+        self.assertIn(
+            "seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244",
+            self.catalog,
+        )
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
         self.assertIn(
             "Repository step 10 is accepted through PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head.",
@@ -425,16 +376,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     def test_repository_map_matches_authoritative_inventory(self) -> None:
         members = self.workspace["workspace"]["members"]
         self.assertEqual(len(members), 113)
-        self.assertIn("Generated by scripts/generate_repository_navigation.py", self.repository_map)
-        self.assertIn("Workspace packages:** 113", self.repository_map)
-        self.assertIn("Business manifests:** 14", self.repository_map)
-        self.assertIn("Published capability coordinates:** 119", self.repository_map)
-        self.assertIn("Published event coordinates:** 70", self.repository_map)
-        self.assertIn("Platform runtime routes: 7", self.repository_map)
-        self.assertIn("Worker runtime routes: 5", self.repository_map)
-        self.assertIn("Non-runtime contract routes: 16", self.repository_map)
+        for statement in (
+            "Generated by scripts/generate_repository_navigation.py",
+            "Workspace packages:** 113",
+            "Business manifests:** 14",
+            "Published capability coordinates:** 119",
+            "Published event coordinates:** 70",
+            "Platform runtime routes: 7",
+            "Worker runtime routes: 5",
+            "Non-runtime contract routes: 16",
+            "orientation only",
+        ):
+            self.assertIn(statement, self.repository_map)
         self.assertRegex(self.repository_map, r"sha256:[0-9a-f]{64}")
-        self.assertIn("orientation only", self.repository_map)
         for member in members:
             self.assertIn(f"`{member}`", self.repository_map)
 
@@ -474,7 +428,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "not an absolute ban",
             "two contrasting later expert-domain waves",
             "contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement",
-            "removal of the three direct lint exceptions",
+            "zero direct lint tables",
+            "central process-host dependency",
+            "representative change-cost/dependency-version-feature",
             "step 25",
         )
         plan_lower = self.plan.lower()
@@ -483,17 +439,23 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_module_and_workflow_guides_match_target_cost_model(self) -> None:
         for document in (self.agents, self.workflow, self.module_development):
-            self.assertIn("zero new crates", document.lower())
-            self.assertIn("module-owned production contribution", document.lower())
-            self.assertIn("python scripts/repo.py explain", document)
-            self.assertIn("python scripts/repo.py packet-check", document)
-            self.assertIn("generate_repository_navigation.py --check", document)
+            for statement in (
+                "zero new crates",
+                "module-owned production contribution",
+                "python scripts/repo.py explain",
+                "python scripts/repo.py packet-check",
+                "generate_repository_navigation.py --check",
+            ):
+                self.assertIn(statement.lower(), document.lower())
 
-        self.assertIn("Current scaffold versus 10/10 target", self.module_development)
-        self.assertIn("crates/crm-<domain>-application/", self.module_development)
-        self.assertIn("crates/crm-<domain>-postgres/", self.module_development)
-        self.assertIn("crates/crm-<domain>-production/", self.module_development)
-        self.assertIn("python scripts/repo.py test --package crm-sales", self.module_development)
+        for statement in (
+            "Current scaffold versus 10/10 target",
+            "crates/crm-<domain>-application/",
+            "crates/crm-<domain>-postgres/",
+            "crates/crm-<domain>-production/",
+            "python scripts/repo.py test --package crm-sales",
+        ):
+            self.assertIn(statement, self.module_development)
         self.assertNotIn("python scripts/repo.py test crm-sales", self.module_development)
 
     def test_documented_repository_commands_match_implemented_surface(self) -> None:
@@ -551,7 +513,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
         self.assertIn("--write", self.generator)
         self.assertIn("--check", self.generator)
-        self.assertIn("Synchronize generated repository navigation", read(".github/workflows/rust-generated-sync.yml"))
+        self.assertIn(
+            "Synchronize generated repository navigation",
+            read(".github/workflows/rust-generated-sync.yml"),
+        )
 
     def test_stale_status_claims_are_absent(self) -> None:
         stale = (
@@ -584,6 +549,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Repository step 11 is the only next implementation packet",
             "Repository step 13 remains **not started**",
             "Repository step 13 is the **next permitted repository step** and is **not started**",
+            "Latest accepted repository implementation packet is PR #253",
+            "registers the accepted suppression baseline, mechanically blocks every new unregistered equivalent bypass",
+            "removes the three direct lint-table exceptions without hidden replacements and calibrates role-aware",
         )
         for statement in stale:
             for document in (
