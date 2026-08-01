@@ -113,6 +113,35 @@ class RepositoryNavigationTests(unittest.TestCase):
             repo_runner,
         )
 
+    def test_step14_permanent_workflow_package_baselines_are_exact(self) -> None:
+        workflow_expectations = {
+            ".github/workflows/customer-privacy-approval.yml": (
+                'test "${package_count}" = "112"',
+                "Verify real crm-api approval process",
+                "Repeat approval library and real-process acceptance",
+            ),
+            ".github/workflows/customer-privacy-discovery.yml": (
+                'if [ "${package_count}" != "112" ]; then',
+                "Verify discovery packages and production inventory",
+                "Reapply and repeat acceptance",
+            ),
+            ".github/workflows/customer-privacy-planning.yml": (
+                'test "${package_count}" = "112"',
+                "Verify planning and read packages and production inventory",
+                "Reapply and repeat acceptance",
+            ),
+        }
+        for path, required_markers in workflow_expectations.items():
+            workflow = (ROOT / path).read_text(encoding="utf-8")
+            with self.subTest(workflow=path):
+                for marker in required_markers:
+                    self.assertIn(marker, workflow)
+                self.assertNotIn('test "${package_count}" = "113"', workflow)
+                self.assertNotIn(
+                    'if [ "${package_count}" != "113" ]; then',
+                    workflow,
+                )
+
     def test_module_explanation_traces_customer_privacy_owner(self) -> None:
         explanation = explain_target(ROOT, "crm.customer-privacy")
         self.assertEqual(explanation["schema_version"], NAVIGATION_SCHEMA)
