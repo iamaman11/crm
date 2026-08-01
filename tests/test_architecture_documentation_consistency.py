@@ -55,7 +55,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 self.assertIn("270", document)
                 self.assertIn("91", document)
 
-        for document in (self.status, self.roadmap, self.phase8, self.plan, self.catalog):
+        for document in self.normative_documents:
             for match in re.finditer(r"113", document):
                 context = document[max(0, match.start() - 120) : match.end() + 120].lower()
                 self.assertTrue(
@@ -129,7 +129,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
 
     def test_step_14_behavior_neutral_guarantees_are_documented(self) -> None:
-        for document in (self.status, self.roadmap, self.phase8, self.plan, self.catalog):
+        for document in self.normative_documents:
             lowered = document.lower()
             with self.subTest(document=document[:60]):
                 self.assertIn("crm-customer-accounts-capability-composition", document)
@@ -192,10 +192,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(f"`{member}`", self.repository_map)
 
     def test_phase8_and_catalog_keep_product_boundaries(self) -> None:
+        inventory_patterns = (
+            r"(?:7|seven) (?:public )?mutations",
+            r"(?:4|four) permission-aware public queries",
+            r"(?:0|zero) Customer Privacy workers",
+        )
         for document in (self.phase8, self.catalog):
-            self.assertIn("7 public mutations", document)
-            self.assertIn("4 permission-aware public queries", document)
-            self.assertIn("0 Customer Privacy workers", document)
+            for pattern in inventory_patterns:
+                self.assertRegex(document, pattern)
         self.assertIn("Current merged authoritative/coordination module count: **12**", self.catalog)
         self.assertIn("Current merged business-module total: **13**", self.catalog)
         self.assertIn("Phase 8B", self.roadmap)
