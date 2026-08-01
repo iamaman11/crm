@@ -92,7 +92,7 @@ impl PostgresPartyExportExecutionSink {
         })
     }
 
-    pub fn commit_emitted<'a>(
+    pub(crate) fn commit_emitted<'a>(
         &'a self,
         context: &'a ModuleExecutionContext,
         job: &'a PartyExportJob,
