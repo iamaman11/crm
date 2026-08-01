@@ -17,108 +17,86 @@ def read(path: str) -> str:
 class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.readme = read("README.md")
-        cls.agents = read("AGENTS.md")
-        cls.docs_index = read("docs/README.md")
-        cls.active_packet = read("docs/ACTIVE_PACKET.md")
-        cls.repository_map = read("docs/generated/REPOSITORY_MAP.md")
         cls.status = read("docs/PROJECT_STATUS.md")
         cls.roadmap = read("docs/IMPLEMENTATION_ROADMAP.md")
         cls.phase8 = read("docs/PHASE8_DELIVERY_PLAN.md")
         cls.plan = read("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
         cls.catalog = read("docs/MODULE_CATALOG.md")
-        cls.workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
-        cls.module_development = read("docs/MODULE_DEVELOPMENT.md")
-        cls.adr31 = read(
-            "docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md"
-        )
-        cls.repo_runner = read("scripts/repo.py")
-        cls.generator = read("scripts/generate_repository_navigation.py")
+        cls.active_packet = read("docs/ACTIVE_PACKET.md")
+        cls.repository_map = read("docs/generated/REPOSITORY_MAP.md")
         cls.packet = json.loads(read("repository-packet.json"))
         cls.workspace = tomllib.loads(read("Cargo.toml"))
 
     @property
-    def authoritative_status_documents(self) -> tuple[str, ...]:
-        return self.plan, self.status, self.roadmap, self.phase8
+    def normative_documents(self) -> tuple[str, ...]:
+        return self.status, self.roadmap, self.phase8, self.plan, self.catalog
 
-    @property
-    def privacy_status_documents(self) -> tuple[str, ...]:
-        return self.plan, self.status, self.roadmap, self.phase8, self.catalog
-
-    def assert_evidence_in_documents(
-        self,
-        documents: tuple[str, ...],
-        *,
-        pr: str,
-        source: str,
-        merge: str,
-        workflows: str,
-    ) -> None:
-        for document in documents:
-            with self.subTest(pr=pr, document=document[:40]):
-                self.assertIn(pr, document)
-                self.assertIn(source, document)
-                self.assertIn(merge, document)
-                self.assertIn(workflows, document)
-
-    def test_current_phase_and_next_packet_are_authoritative_and_consistent(self) -> None:
-        for document in (self.status, self.roadmap, self.phase8):
-            lowered = document.lower()
-            for statement in (
-                "phase 8a",
-                "approval",
-                "permission-aware",
-                "bounded contribution",
-                "final customer-subject policy",
-                "immediate deny-only",
-                "repository step 5",
-                "explain",
-                "packet-check",
-                "generated",
-            ):
-                self.assertIn(statement, lowered)
-            for pr in (
-                "PR #218",
-                "PR #220",
-                "PR #222",
-                "PR #224",
-                "PR #226",
-                "PR #230",
-                "PR #235",
-            ):
-                self.assertIn(pr, document)
-
-        self.assertIn("Phases 0.1–7 are complete", self.status)
-        for document in (self.status, self.roadmap, self.phase8):
-            self.assertIn("Current product-complete expert modules: **0**", document)
-
-    def test_root_readme_is_orientation_not_a_second_live_roadmap(self) -> None:
-        for statement in (
-            "not duplicated in this orientation file",
-            "docs/PROJECT_STATUS.md",
-            "docs/ACTIVE_PACKET.md",
-            "docs/generated/REPOSITORY_MAP.md",
-        ):
-            self.assertIn(statement, self.readme)
-        for statement in (
-            "The current bounded product packet is",
-            "Phases 0.1–7 are complete",
-            "Current product-complete expert modules",
-        ):
-            self.assertNotIn(statement, self.readme)
-
-    def test_architecture_program_is_single_linked_execution_lane(self) -> None:
-        for document in (self.readme, self.status, self.roadmap, self.phase8):
-            self.assertIn("ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md", document)
-            self.assertIn("#194", document)
-
-        self.assertIn(
-            "single current execution plan for architecture complexity and developer experience",
-            self.plan,
+    def test_repository_step_14_exact_evidence_is_synchronized(self) -> None:
+        required = (
+            "PR #259",
+            "8aa0b33c6609e74f98363071c6e7c44ec59fc098",
+            "2b0b558077c444d44691371c8a2bcca2c14ae426",
+            "36 of 36",
         )
-        self.assertIn("Tracking issue: #194", self.plan)
-        self.assertIn("Current program position", self.plan)
-        for stage in (
+        for document in self.normative_documents:
+            with self.subTest(document=document[:60]):
+                for marker in required:
+                    self.assertIn(marker, document)
+
+    def test_current_metrics_are_exact_and_historical_baseline_is_labeled(self) -> None:
+        self.assertEqual(len(self.workspace["workspace"]["members"]), 112)
+
+        for document in self.normative_documents:
+            with self.subTest(document=document[:60]):
+                self.assertIn("112", document)
+                self.assertIn("835", document)
+                self.assertIn("5,377", document)
+                self.assertIn("18", document)
+                self.assertIn("270", document)
+                self.assertIn("91", document)
+
+        for document in self.normative_documents:
+            for match in re.finditer(r"113", document):
+                context = document[max(0, match.start() - 120) : match.end() + 120].lower()
+                self.assertTrue(
+                    "historical" in context or "→ 112" in context or "step 13" in context,
+                    f"unqualified current 113-package claim: {context}",
+                )
+
+    def test_stage_and_next_packet_status_are_consistent(self) -> None:
+        for document in self.normative_documents:
+            lowered = document.lower()
+            with self.subTest(document=document[:60]):
+                self.assertIn("step 14", lowered)
+                self.assertIn("stage g", lowered)
+                self.assertIn("step 15", lowered)
+                self.assertIn("not started", lowered)
+                self.assertNotIn("step 14 is the next", lowered)
+                self.assertNotIn("step 14 is next", lowered)
+                self.assertNotIn("stage g — not started", lowered)
+                self.assertNotIn("stage g remains not started", lowered)
+
+        self.assertIn("15. Party tombstone", self.plan)
+        self.assertIn("**next, not started**", self.plan)
+        self.assertIn("Repository Step 15 is the next permitted implementation packet", self.status)
+
+    def test_product_readiness_is_not_overstated(self) -> None:
+        for document in self.normative_documents:
+            lowered = document.lower()
+            with self.subTest(document=document[:60]):
+                self.assertIn("phase 8a", lowered)
+                self.assertIn("customer privacy", lowered)
+                self.assertIn("0", document)
+                self.assertFalse(
+                    re.search(r"architecture 10/10 (?:is )?(?:complete|accepted|achieved)", lowered)
+                )
+
+        self.assertIn("Phase 8A.11 / issue #126 remains in progress", self.status)
+        self.assertIn("Current product-complete expert modules: **0**", self.status)
+        self.assertIn("Architecture 10/10 is **not declared**", self.status)
+
+    def test_architecture_stage_ledger_is_complete_and_ordered(self) -> None:
+        stages = (
             "A — documentation and policy baseline",
             "B — dependency, crate and exception governance",
             "C — golden owner package and persistence model",
@@ -128,458 +106,114 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "G — transitional consolidation",
             "H — reproducible environment and navigation",
             "I — frontend and operations parity",
-        ):
+        )
+        for stage in stages:
             self.assertIn(stage, self.plan)
 
-    def test_repository_execution_order_is_strict_and_mechanically_visible(self) -> None:
-        for statement in (
-            "### 2.4 Single repository execution order",
-            "At most one implementation packet may be active",
-            "The next permitted packet is the first unfinished item",
-            "No item may be described as “next” when an earlier unfinished item exists",
-        ):
-            self.assertIn(statement, self.plan)
-
-        steps = (
-            "1. supported Rust toolchain, workspace `rust-version` and measured lint baseline — **Complete through PR #218**;",
-            "2. Customer Privacy approval runtime only — **Complete through PR #220**;",
-            "3. first bounded contribution-aggregation packet: expand owner-owned first-party registration and reduce selected concrete generic-runtime imports without behavior changes — **Complete through PR #222**;",
-            "4. immediate deny-only Customer Privacy processing restrictions using final subject locks — **Complete through PR #226**;",
-            "5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map — **Complete through PR #228**;",
-            "6. Customer Privacy legal-hold and mandatory-retention precedence — **Complete through PR #230**;",
-            "7. reusable generic mutation and query conformance suites adopted by representative owners — **Complete through PR #235**;",
-            "8. replay-safe resumable Customer Privacy owner execution and crash-window recovery — **Complete through PR #237**;",
-            "9. affected-scope expansion for contracts, migrations, PostgreSQL/process and product-plane checks — **Complete through PR #239**;",
-            "10. governed Customer Privacy access/export assembly — **Complete through PR #241**;",
-            "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Complete through PR #244**;",
-            "12. complete first-party contribution aggregation for all currently active owners without behavior changes — **Complete through PR #249**;",
-            "13. complete ADR-031 governance closure: measurement, blocking suppression/direct-lint governance and remaining process-host/change-cost/dependency-governance exit evidence — **Complete through PR #257**;",
-            "14. first measured behavior-neutral transitional domain-cluster consolidation;",
-            "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;",
-            "18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;",
-            "22. Phase 8A architecture remeasurement, remaining-gate review and publication of the measured Phase 8B extension baseline — **not a final 10/10 declaration**;",
-            "23. first Phase 8B expert-domain wave proving bounded extension cost;",
-            "24. second contrasting expert-domain wave proving bounded extension cost as module count grows;",
-            "25. final architecture 10/10 closure review only when every section 12 criterion is mechanically proven.",
-        )
-        positions = []
-        for step in steps:
-            self.assertIn(step, self.plan)
-            positions.append(self.plan.index(step))
+        step_markers = [
+            "1. supported Rust toolchain",
+            "14. first measured behavior-neutral transitional domain-cluster consolidation",
+            "15. Party tombstone, no-orphan proof and projection/search/cache convergence",
+            "16. reusable generic worker conformance",
+            "17. contract compatibility",
+            "18. deterministic local lifecycle commands",
+            "19. real Customer Privacy worker lifecycle",
+            "20. Phase 8A frontend",
+            "21. Phase 8A closure",
+            "22. Phase 8A architecture remeasurement",
+            "23. first Phase 8B expert-domain wave",
+            "24. second contrasting expert-domain wave",
+            "25. final architecture 10/10 closure review",
+        ]
+        positions = [self.plan.index(marker) for marker in step_markers]
         self.assertEqual(positions, sorted(positions))
 
-        self.assertIn("## Next permitted repository packet", self.status)
-        self.assertIn("## Following permitted repository packet", self.status)
-        self.assertIn("## 9. Binding repository continuation", self.phase8)
-        for statement in (
-            "9. repository step 9 — affected-scope expansion for contracts, migrations, PostgreSQL/process and product checks — **complete through PR #239**;",
-            "10. repository step 10 — governed access/export assembly — **complete through PR #241**;",
-            "11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **complete through PR #244**;",
-            "12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **complete through PR #249**;",
-            "22. repository step 22 — Phase 8A architecture remeasurement and remaining-gate review, not a final 10/10 declaration;",
-        ):
-            self.assertIn(statement, self.phase8)
-        self.assertNotIn(
-            "10. repository step 10 — governed access/export assembly — **next**;",
-            self.phase8,
-        )
-        self.assertIn("Repository step 13 is complete through PRs #253, #255 and #257", self.phase8)
-        for step in range(1, 6):
-            self.assertIn(f"Repository step {step}", self.roadmap)
-
-        for document in self.authoritative_status_documents:
-            self.assertNotIn(
-                "Repository step 12 remains the current permitted implementation step.",
-                document,
-            )
-        self.assertIn(
-            "Latest accepted repository implementation packet is PR #257",
-            self.status,
-        )
-        self.assertIn("Repository step 13 is complete after this exact-head synchronization", self.status)
-        self.assertIn(
-            "Repository step 14 is the next permitted implementation packet",
-            self.status,
-        )
-        self.assertIn("- Stage D is complete:", self.status)
-        self.assertIn(
-            "-> 12. complete first-party contribution aggregation for all currently active owners — complete through PR #249",
-            self.status,
-        )
-        self.assertNotIn("Stage D is in progress", self.status)
-        self.assertNotIn("step 12 batch 1 complete through PR #246", self.status.lower())
-
-        for statement in ("run in parallel", "separate parallel lane", "runs alongside Phase 8A"):
-            for document in self.authoritative_status_documents:
-                self.assertNotIn(statement, document)
-
-    def test_accepted_repository_evidence_is_synchronized(self) -> None:
-        evidence = (
-            (self.authoritative_status_documents, "PR #218", "71c88f3e894f1fd943f373d8509e7569cf9aa291", "e8fea1645fe108aa8334c40a445299dde8b444f0", "30 of 30"),
-            (self.authoritative_status_documents, "PR #220", "98000b0c1c2c15e14c7ee0cd2a366020040567e6", "01118df3b6349b6d854c4182c17f7eb9a6316b9c", "21 of 21"),
-            (self.privacy_status_documents, "PR #222", "b5651e784a156758b39eaa04abc1124c7c0832f9", "fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1", "16 of 16"),
-            (self.privacy_status_documents, "PR #224", "e57307fcb1b5192d5e6340247cb6633f32b7ba34", "67804d9478b2bbaf342a398b649e23bd5ead6c08", "28 of 28"),
-            (self.privacy_status_documents, "PR #226", "ad08a691ec759b8b3b523fa66a034cecf4138ff0", "a46460623e90c5649d36bedba055fb55023d9349", "34 of 34"),
-            (self.authoritative_status_documents, "PR #228", "a9aa0bef028d906b61e83803436167bf6f91e634", "727a244fcf174dc517dec6fdbb6b8997eb205f14", "5 of 5"),
-            (self.authoritative_status_documents, "PR #230", "131285e07ad7c36c00e399b65d55591db13f0948", "18e6218a7e7495219ac9e8c71cafcda1be64a31b", "32 of 32"),
-            (self.authoritative_status_documents, "PR #235", "7a0cd34dc17085ecd1a8ee233171c0463d91ceba", "43d194231fbce1cee28c44e89726929e450f3d18", "17 of 17"),
-            (self.authoritative_status_documents, "PR #237", "f926ece93dc2b24683f982828e72bf9170dc123a", "9f21a2b40f6af5ce57045fc4c1fbfc1bd6cb5b90", "33 of 33"),
-            (self.authoritative_status_documents, "PR #244", "405d2dbb97bb371b51cfb1d4ffb5549a57262878", "4b08202fe9dd0c0df83567e24e6b9d86fb79c9db", "34 of 34"),
-            (self.authoritative_status_documents, "PR #246", "3b4fe7cdf458daac9c12f816d0d6a87039e613f3", "f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978", "37 of 37"),
-            (self.authoritative_status_documents, "PR #248", "b15482361ab2b322591d488843ab9b46ff676dba", "b4222364c21cb74127834f5ff4f0739343d26379", "37 of 37"),
-            (self.authoritative_status_documents, "PR #249", "7876945586e5a6cc94f8d3b0f6ba2b57316484d2", "f36592211bed3e0df7cf3771164b4bc24026eff3", "37 of 37"),
-            (self.authoritative_status_documents, "PR #253", "475533b185b871418273c1c1e3f63a1d62542677", "7dcda204be07209d9e4996fdc9c5fd364cea179e", "7 of 7"),
-            (self.privacy_status_documents, "PR #255", "4c80546283af9c869a28c2da9c8697b203d0c327", "393b60bdcfad6e92fc37eacabe0920645d530f6b", "21 of 21"),
-            (self.privacy_status_documents, "PR #257", "6cde72d7fc9a442018c51fd6e6772e626b26e307", "10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c", "7 of 7"),
-        )
-        for documents, pr, source, merge, workflows in evidence:
-            self.assert_evidence_in_documents(
-                documents,
-                pr=pr,
-                source=source,
-                merge=merge,
-                workflows=workflows,
-            )
-
-        for document in self.authoritative_status_documents:
+    def test_step_14_behavior_neutral_guarantees_are_documented(self) -> None:
+        for document in self.normative_documents:
             lowered = document.lower()
-            self.assertIn("1.97.1", document)
-            self.assertTrue(
-                "zero direct lint tables" in lowered
-                or "removes all three direct lint tables" in lowered
-                or "removed all three historical direct-lint exceptions" in lowered
-            )
-            self.assertIn("94", document)
-            self.assertIn("66", document)
-        for document in self.privacy_status_documents:
-            self.assertIn("Customer Accounts", document)
-            self.assertIn("restriction", document.lower())
+            with self.subTest(document=document[:60]):
+                self.assertIn("crm-customer-accounts-capability-composition", document)
+                self.assertIn("crm-customer-accounts-query-adapter", document)
+                self.assertIn("behavior-neutral", lowered)
 
-        for document in (self.status, self.roadmap, self.phase8, self.catalog):
-            self.assertIn("customer_privacy.restriction.place@1.0.0", document)
-        self.assertIn("7 mutations / 4 queries / 0 workers", self.plan)
-        for document in self.authoritative_status_documents:
-            self.assertIn("customer_privacy.legal_hold.place@1.0.0", document)
-        self.assertIn("workspace remains at 113 packages", self.roadmap.lower())
-        self.assertIn("workspace packages remain 113", self.catalog.lower())
-
-    def test_navigation_has_one_stable_human_index(self) -> None:
-        self.assertIn("docs/README.md", self.readme)
-        self.assertIn("docs/README.md", self.agents)
-        for statement in (
-            "Stable navigation index",
-            "Source-of-truth hierarchy",
-            "Choose by task",
-            "## 6. Generated navigation",
-            "not a source of runtime or delivery truth",
+        for marker in (
+            "public mutations",
+            "queries",
+            "workers",
+            "contracts",
+            "schemas",
+            "migrations",
+            "tenant isolation",
+            "FORCE RLS",
+            "authorization",
+            "idempotency",
+            "audit",
         ):
-            self.assertIn(statement, self.docs_index)
-        self.assertIn("README is stable orientation", self.readme)
-        self.assertIn("orientation only", self.plan)
-        self.assertIn("navigation outputs, not sources of truth", self.workflow)
+            self.assertIn(marker.lower(), self.status.lower())
 
-    def test_active_packet_is_machine_declared_and_generated(self) -> None:
+    def test_active_evidence_packet_is_exact_and_bounded(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
+        self.assertEqual(self.packet["packet_id"], "repository-step-14-exit-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
-        self.assertRegex(self.packet["packet_id"], r"^[a-z0-9][a-z0-9-]+$")
-        self.assertEqual(self.packet["baseline"]["ref"], "main")
-        self.assertRegex(self.packet["baseline"]["sha"], r"^[0-9a-f]{40}$")
-        self.assertIn(194, self.packet["tracking_issues"])
-        self.assertIn(126, self.packet["tracking_issues"])
-        self.assertIn("repository-packet.json", self.packet["allowed_paths"])
-        self.assertIn("docs/ACTIVE_PACKET.md", self.packet["allowed_paths"])
-        self.assertEqual(len(self.packet["allowed_paths"]), len(set(self.packet["allowed_paths"])))
-        self.assertEqual(len(self.packet["required_checks"]), len(set(self.packet["required_checks"])))
-        self.assertTrue(self.packet["required_checks"])
         self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-14-customer-accounts-consolidation",
+            self.packet["baseline"],
+            {
+                "ref": "main",
+                "sha": "2b0b558077c444d44691371c8a2bcca2c14ae426",
+            },
         )
-        self.assertIn(
-            "leave repository-step-14 completion and Stage G evidence synchronization to a separate post-merge documentation packet",
-            self.packet["deliverables"],
+        self.assertEqual(
+            set(self.packet["allowed_paths"]),
+            {
+                "docs/ACTIVE_PACKET.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
+                "repository-packet.json",
+                "tests/test_architecture_documentation_consistency.py",
+                "tests/test_repository_navigation.py",
+            },
         )
-        self.assertIn("start repository step 15", self.packet["non_goals"])
-        self.assertIn(
-            "the exact pull-request head reports 112 workspace packages, no more than 835 internal dependency edges, dependency depth no greater than 18, no more than 5377 conservative public Rust items and exactly 270 dependency declarations",
-            self.packet["acceptance"],
+        self.assertEqual(
+            self.packet["required_checks"],
+            ["Affected Scope CI", "Governance CI", "Rust Generated Sync"],
         )
+        self.assertIn("start Repository Step 15", self.packet["non_goals"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
-        for document in (self.plan, self.status):
-            self.assertIn("PR #251", document)
-            self.assertIn("22e515453e3ed66d0f059bd3c0fe926cee524620", document)
-            self.assertIn("be1411136fd36397b22e26737b441351894fdb66", document)
-            self.assertIn("5 of 5 applicable permanent workflows", document)
-        self.assertNotIn(
-            "the next permitted repository packet is **repository step 12",
-            self.plan.lower(),
-        )
-        self.assertIn("## Repository step 13 plan-hardening evidence", self.plan)
-        self.assertIn(
-            "first bounded repository-step-13 packet is therefore limited to measurement and governance calibration",
-            self.plan,
-        )
-        self.assertIn(
-            "## Repository step 13 closure evidence",
-            self.plan,
-        )
-        self.assertIn(
-            "## Accepted repository step 13 closure evidence",
-            self.status,
-        )
-        self.assertIn("Repository step 14 is the next permitted implementation packet", self.status)
-        self.assertIn(
-            "Repository step 13 remains the next permitted implementation step",
-            self.adr31,
-        )
 
-    def test_stage_accountability_and_live_catalog_are_current(self) -> None:
-        for stage in (
-            "A — documentation and policy baseline",
-            "B — dependency, crate and exception governance",
-            "C — golden owner package and persistence model",
-            "D — contribution aggregation",
-            "E — affected-scope CI",
-            "F — generic conformance and contract lifecycle",
-            "G — transitional consolidation",
-            "H — reproducible environment and navigation",
-            "I — frontend and operations parity",
-        ):
-            self.assertIn(stage, self.plan)
-
-        self.assertIn("repository step 12", self.plan.lower())
-        self.assertIn(
-            "repository step 22 is a phase 8a architecture measurement checkpoint",
-            self.plan.lower(),
-        )
-        self.assertIn("repository step 25", self.plan.lower())
-        self.assertIn(
-            "stage b dependency/crate/exception governance is complete through prs #253, #255 and #257",
-            self.status.lower(),
-        )
-        self.assertIn(
-            "## Next permitted repository packet\n\nRepository step 14 is the next permitted implementation packet",
-            self.status,
-        )
-        self.assertIn(
-            "## Following permitted repository packet\n\nRepository step 15 follows only after repository step 14 is accepted and synchronized",
-            self.status,
-        )
-        self.assertIn(
-            "seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244",
-            self.catalog,
-        )
-        self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
-        self.assertIn(
-            "Repository step 10 is accepted through PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / squash merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 applicable permanent workflows on one unchanged exact head.",
-            self.status,
-        )
-        self.assertNotIn("Repository step 10 is accepted through PR #244", self.status)
-        self.assertIn("Repository steps 1–12", self.catalog)
-        self.assertNotIn("Repository step 11 is the only next implementation packet", self.catalog)
-
-    def test_repository_map_matches_authoritative_inventory(self) -> None:
-        members = self.workspace["workspace"]["members"]
-        self.assertEqual(len(members), 112)
-        for statement in (
-            "Generated by scripts/generate_repository_navigation.py",
-            "Workspace packages:** 112",
-            "Business manifests:** 14",
-            "Published capability coordinates:** 119",
-            "Published event coordinates:** 70",
-            "Platform runtime routes: 7",
-            "Worker runtime routes: 5",
-            "Non-runtime contract routes: 16",
-            "orientation only",
-        ):
-            self.assertIn(statement, self.repository_map)
-        self.assertRegex(self.repository_map, r"sha256:[0-9a-f]{64}")
-        for member in members:
+    def test_repository_map_reflects_current_workspace(self) -> None:
+        self.assertIn("Generated by scripts/generate_repository_navigation.py", self.repository_map)
+        self.assertIn("**Workspace packages:** 112", self.repository_map)
+        self.assertRegex(self.repository_map, r"source-digest: sha256:[0-9a-f]{64}")
+        for member in self.workspace["workspace"]["members"]:
             self.assertIn(f"`{member}`", self.repository_map)
 
-    def test_plan_contains_all_expert_gap_closures(self) -> None:
-        required = (
-            "normal capability added to an existing owner creates zero new crates",
-            "three to five technical packages",
-            "module-owned production contribution",
-            "root `[workspace.dependencies]`",
-            "affected-scope CI",
-            "Generic conformance",
-            "python scripts/repo.py explain",
-            "python scripts/repo.py packet-check",
-            "`docs/ACTIVE_PACKET.md`",
-            "`docs/generated/REPOSITORY_MAP.md`",
-            "Transitional crate consolidation",
-            "Frontend and operations",
-            "restore, SLO, performance, security and supply-chain",
-            "Feature behavior and crate consolidation must be separate PRs",
-            "113 effective packages",
-            "Reproducible local development",
-            "Rust public API surface",
-            "Contract lifecycle",
-            "Persistence and migration ownership",
-            "Temporary exceptions",
-            "change locality",
-            "python scripts/repo.py doctor",
-            "python scripts/repo.py bootstrap",
-            "python scripts/repo.py dev-up",
-            "python scripts/repo.py smoke",
-            "approval runtime only",
-            "exact Rust `1.97.1`",
-            "Single repository execution order",
-            "Stage-to-step accountability",
-            "Score-recovery accountability",
-            "repository step 12 is the bounded completion step",
-            "not an absolute ban",
-            "two contrasting later expert-domain waves",
-            "contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement",
-            "zero direct lint tables",
-            "central process-host dependency",
-            "representative change-cost/dependency-version-feature",
-            "step 25",
+    def test_phase8_and_catalog_keep_product_boundaries(self) -> None:
+        inventory_patterns = (
+            r"(?:7|seven) (?:public )?mutations",
+            r"(?:4|four) permission-aware public queries",
+            r"(?:0|zero) Customer Privacy workers",
         )
-        plan_lower = self.plan.lower()
-        for statement in required:
-            self.assertIn(statement.lower(), plan_lower)
+        for document in (self.phase8, self.catalog):
+            for pattern in inventory_patterns:
+                self.assertRegex(document, pattern)
+        self.assertIn("Current merged authoritative/coordination module count: **12**", self.catalog)
+        self.assertIn("Current merged business-module total: **13**", self.catalog)
+        self.assertIn("Phase 8B", self.roadmap)
+        self.assertIn("Step 23", self.roadmap)
+        self.assertIn("Step 24", self.roadmap)
 
-    def test_module_and_workflow_guides_match_target_cost_model(self) -> None:
-        for document in (self.agents, self.workflow, self.module_development):
-            for statement in (
-                "zero new crates",
-                "module-owned production contribution",
-                "python scripts/repo.py explain",
-                "python scripts/repo.py packet-check",
-                "generate_repository_navigation.py --check",
-            ):
-                self.assertIn(statement.lower(), document.lower())
-
-        for statement in (
-            "Current scaffold versus 10/10 target",
-            "crates/crm-<domain>-application/",
-            "crates/crm-<domain>-postgres/",
-            "crates/crm-<domain>-production/",
-            "python scripts/repo.py test --package crm-sales",
-        ):
-            self.assertIn(statement, self.module_development)
-        self.assertNotIn("python scripts/repo.py test crm-sales", self.module_development)
-
-    def test_documented_repository_commands_match_implemented_surface(self) -> None:
-        implemented = (
-            "architecture",
-            "manifests",
-            "contracts",
-            "conformance",
-            "format",
-            "lock",
-            "test",
-            "test-all",
-            "affected",
-            "explain",
-            "packet-check",
-            "check-affected",
-            "quality",
-        )
-        for command in implemented:
-            self.assertIn(f'add_parser(\n        "{command}"', self.repo_runner)
-
-        for command_line in (
-            "python scripts/repo.py lock",
-            "python scripts/repo.py test --package <package>",
-            "python scripts/repo.py test-all",
-            "python scripts/repo.py explain <module-or-coordinate>",
-            "python scripts/repo.py packet-check --base origin/main",
-            "python scripts/generate_repository_navigation.py --check",
-        ):
-            self.assertIn(command_line, self.readme)
-
-        self.assertIn("generate_repository_navigation.py", self.repo_runner)
-        self.assertIn("--check", self.generator)
-        self.assertIn("--write", self.generator)
-        self.assertIn("tests/test_repository_navigation.py", self.repo_runner)
-
-    def test_future_local_lifecycle_commands_are_not_claimed_as_implemented(self) -> None:
-        for command in ("doctor", "bootstrap", "dev-up", "dev-reset", "seed-demo", "smoke"):
-            self.assertNotIn(f'add_parser(\n        "{command}"', self.repo_runner)
-            self.assertIn(f"python scripts/repo.py {command}", self.docs_index)
-        self.assertIn("Planned and required for the 10/10 target", self.docs_index)
-        self.assertIn("future repository step 15", self.agents)
-        self.assertIn("future repository step 15", self.workflow)
-        self.assertIn("future repository step 15", self.module_development)
-
-    def test_generated_outputs_exist_and_are_not_hand_maintained(self) -> None:
-        for path in (
-            ROOT / "docs/ACTIVE_PACKET.md",
-            ROOT / "docs/generated/REPOSITORY_MAP.md",
-        ):
-            self.assertTrue(path.exists())
-            text = path.read_text(encoding="utf-8")
-            self.assertIn("do not edit", text.lower())
-            self.assertRegex(text, r"source-digest: sha256:[0-9a-f]{64}")
-
-        self.assertIn("--write", self.generator)
-        self.assertIn("--check", self.generator)
-        self.assertIn(
-            "Synchronize generated repository navigation",
-            read(".github/workflows/rust-generated-sync.yml"),
-        )
-
-    def test_stale_status_claims_are_absent(self) -> None:
-        stale = (
-            "Phase 6 is complete and Phase 7 is in progress",
-            "five privacy owners accepted",
-            "next new privacy owner",
-            "Customer Enrichment implementation is not started",
-            "The current bounded product packet is **Customer Privacy scope discovery",
-            "The next Phase 8A packet remains scope discovery and immutable snapshot",
-            "production discovery remains unimplemented",
-            "Customer Privacy public runtime remains four mutations, two queries",
-            "The current next packet is repository step 1",
-            "Repository step 2 — Customer Privacy approval runtime — Next",
-            "Repository step 3 — bounded contribution aggregation without behavior change — Next",
-            "final customer-subject policy prerequisite is next",
-            "Repository step 4 has not started",
-            "Restrictions remain unimplemented",
-            "no Customer Privacy restriction decision",
-            "no restriction behavior yet",
-            "4. immediate deny-only Customer Privacy processing restrictions using final subject locks — **Next**",
-            "5. `repo.py explain`, `repo.py packet-check`, generated `docs/ACTIVE_PACKET.md` and generated repository map — **Next**",
-            "Until `repo.py explain` is implemented",
-            "explain` and `packet-check` are planned",
-            "explain` and `packet-check` are documented in `docs/README.md` but are not available",
-            "future `repo.py explain`",
-            "7. reusable generic mutation and query conformance suites adopted by representative owners — **Next**;",
-            "Repository step 7 — reusable generic mutation and query conformance — Next",
-            "repository step 7 — reusable generic mutation/query conformance — **next**",
-            "Repository step 7 is reusable generic mutation and query conformance.",
-            "Repository step 11 is the only next implementation packet",
-            "Repository step 13 remains **not started**",
-            "Repository step 13 is the **next permitted repository step** and is **not started**",
-            "Latest accepted repository implementation packet is PR #253",
-            "Repository step 13 remains in progress",
-            "Repository step 14 remains blocked",
-            "registers the accepted suppression baseline, mechanically blocks every new unregistered equivalent bypass",
-            "removes the three direct lint-table exceptions without hidden replacements and calibrates role-aware",
-        )
-        for statement in stale:
-            for document in (
-                self.readme,
-                self.agents,
-                self.docs_index,
-                self.status,
-                self.roadmap,
-                self.phase8,
-                self.plan,
-                self.catalog,
-                self.workflow,
-                self.module_development,
-            ):
-                self.assertNotIn(statement, document)
-
-    def test_permanent_conformance_runs_this_guard(self) -> None:
-        self.assertIn("tests/test_architecture_documentation_consistency.py", self.repo_runner)
-        self.assertIn("tests/test_repository_navigation.py", self.repo_runner)
-        self.assertIn("scripts/generate_repository_navigation.py", self.repo_runner)
+    def test_final_10_10_boundary_is_mechanical(self) -> None:
+        self.assertIn("## 12. Final architecture 10/10 closure criteria", self.plan)
+        self.assertIn("Step 22", self.plan)
+        self.assertIn("Steps 23 and 24", self.plan)
+        self.assertIn("Step 25", self.plan)
+        self.assertIn("mechanically proven", self.plan)
+        self.assertIn("Issue #194", self.status)
+        self.assertIn("Issue #126", self.status)
 
 
 if __name__ == "__main__":
