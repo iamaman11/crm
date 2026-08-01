@@ -197,7 +197,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
         "marketing.contact-point-only",
         consents::CommunicationChannel::Email,
         Some(&email_a),
-        true,
     )
     .await
     .expect("evaluate verified/preferred Contact Point without Consent assertion");
@@ -502,7 +501,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
         "marketing.newsletter",
         consents::CommunicationChannel::Email,
         Some(&email_a),
-        true,
     )
     .await
     .expect("future grant evaluation");
@@ -522,7 +520,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.newsletter",
             consents::CommunicationChannel::Email,
             Some(&email_a),
-            true,
         )
         .await
         .expect("party-wide current grant authorizes exact purpose/channel"),
@@ -537,7 +534,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.unrelated",
             consents::CommunicationChannel::Email,
             Some(&email_a),
-            true,
         )
         .await
         .expect("unrelated purpose evaluation"),
@@ -552,7 +548,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.newsletter",
             consents::CommunicationChannel::Sms,
             Some(&phone_a),
-            true,
         )
         .await
         .expect("unrelated channel evaluation"),
@@ -568,7 +563,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.scoped",
             consents::CommunicationChannel::Email,
             Some(&email_a),
-            true,
         )
         .await
         .expect("exact Contact Point scope evaluation"),
@@ -584,7 +578,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
                 "marketing.scoped",
                 consents::CommunicationChannel::Email,
                 contact_point,
-                true,
             )
             .await
             .expect("nonmatching Contact Point scope evaluation"),
@@ -601,7 +594,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.denied",
             consents::CommunicationChannel::Email,
             Some(&email_a),
-            true,
         )
         .await
         .expect("active deny evaluation"),
@@ -616,7 +608,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.expiring",
             consents::CommunicationChannel::Email,
             None,
-            true,
         )
         .await
         .expect("unexpired grant evaluation"),
@@ -632,7 +623,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.expiring",
             consents::CommunicationChannel::Email,
             None,
-            true,
         )
         .await
         .expect("expired grant evaluation"),
@@ -648,7 +638,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.renewal",
             consents::CommunicationChannel::Email,
             None,
-            true,
         )
         .await
         .expect("old renewal grant evaluation"),
@@ -697,7 +686,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.renewal",
             consents::CommunicationChannel::Email,
             None,
-            true,
         )
         .await
         .expect("withdrawn grant evaluation"),
@@ -770,7 +758,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.renewal",
             consents::CommunicationChannel::Email,
             None,
-            true,
         )
         .await
         .expect("future renewed grant must not authorize early"),
@@ -786,7 +773,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.renewal",
             consents::CommunicationChannel::Email,
             None,
-            true,
         )
         .await
         .expect("later grant supersedes older withdrawal"),
@@ -801,7 +787,6 @@ async fn crm_api_process_proves_authoritative_consent_and_communication_authoriz
             "marketing.denied",
             consents::CommunicationChannel::Email,
             None,
-            true,
         )
         .await
         .expect("later grant supersedes older deny"),
@@ -1133,7 +1118,6 @@ async fn authorize(
     purpose: &str,
     channel: consents::CommunicationChannel,
     contact_point_id: Option<&str>,
-    authenticated: bool,
 ) -> Result<consents::CommunicationAuthorizationDecision, Status> {
     let response = query(
         client,
@@ -1154,7 +1138,7 @@ async fn authorize(
             },
         ),
         tenant_id,
-        authenticated,
+        true,
     )
     .await?;
     Ok(consents::AuthorizeCommunicationResponse::decode(

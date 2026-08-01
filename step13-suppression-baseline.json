@@ -1,0 +1,676 @@
+{
+  "accepted_evidence": {
+    "artifact": "step13-complexity-baseline.json",
+    "counts_by_kind": {
+      "direct-lint-table": 3,
+      "ignored-test": 4,
+      "rust-allow": 87
+    },
+    "entry_count": 94,
+    "merge_sha": "7dcda204be07209d9e4996fdc9c5fd364cea179e",
+    "pull_request": 253,
+    "source_sha": "475533b185b871418273c1c1e3f63a1d62542677",
+    "stable_key_count": 66
+  },
+  "enforcement": {
+    "expired_registration_count": 0,
+    "mode": "blocking",
+    "required_current_direct_lint_table_count": 0,
+    "required_current_unregistered_entry_count": 0
+  },
+  "matching": {
+    "line_number_is_evidence_only": true,
+    "manifest_to_source_replacement_is_blocked_unless_the_source_key_was_already_registered": true,
+    "new_keys_are_blocked": true,
+    "occurrence_growth_is_blocked": true,
+    "reductions_are_allowed": true,
+    "stable_key": [
+      "kind",
+      "path",
+      "detail"
+    ]
+  },
+  "policy_classes": {
+    "p1": {
+      "compensating_checks": [
+        "Rust CI canonical workspace Clippy -D warnings",
+        "Complexity Baseline CI exact bypass inventory",
+        "Affected Scope CI packet closure"
+      ],
+      "removal_condition": "the package inherits workspace lints and compiles under canonical Clippy without any equivalent source-level allow or expect replacement",
+      "review_condition": "retired by the first blocking repository-step-13 enforcement packet",
+      "risk": "high",
+      "scope": "package-local-manifest-lint-bypass"
+    },
+    "p2": {
+      "compensating_checks": [
+        "module-specific permanent PostgreSQL/process workflows",
+        "architecture documentation consistency guard",
+        "Complexity Baseline CI exact bypass inventory"
+      ],
+      "removal_condition": "replace the ignored foundation test with governed executable production acceptance or remove the obsolete test with equivalent evidence",
+      "review_condition": "review whenever the owning module readiness or production-acceptance evidence changes and no later than the relevant Phase 8 closure gate",
+      "risk": "high",
+      "scope": "ignored-foundation-acceptance-test"
+    },
+    "p3": {
+      "compensating_checks": [
+        "Rust CI canonical workspace Clippy -D warnings",
+        "Complexity Baseline CI exact bypass inventory",
+        "no-growth multiset enforcement"
+      ],
+      "removal_condition": "remove the suppression when the referenced compatibility/test scaffolding becomes directly used or is deleted",
+      "review_condition": "review on every modification of the owning file and during the next evidence-driven repository-step-13 remediation touching this boundary",
+      "risk": "low",
+      "scope": "source-level-rust-lint-suppression"
+    },
+    "p4": {
+      "compensating_checks": [
+        "Rust CI canonical workspace Clippy -D warnings",
+        "Complexity Baseline CI exact bypass inventory",
+        "no-growth multiset enforcement"
+      ],
+      "removal_condition": "replace broad parameter passing with a cohesive typed context/request boundary while preserving explicit authorization, tenant and audit inputs",
+      "review_condition": "review on every modification of the owning file and during the next evidence-driven repository-step-13 remediation touching this boundary",
+      "risk": "medium",
+      "scope": "source-level-rust-lint-suppression"
+    }
+  },
+  "registrations": [
+    {
+      "c": "p1",
+      "d": "package-local [lints] table",
+      "k": "direct-lint-table",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "crates/crm-application-runtime/Cargo.toml",
+      "t": 0
+    },
+    {
+      "c": "p1",
+      "d": "package-local [lints] table",
+      "k": "direct-lint-table",
+      "n": 1,
+      "o": "crm.customer-data-operations",
+      "p": "crates/crm-customer-data-operations-execution-composition/Cargo.toml",
+      "t": 0
+    },
+    {
+      "c": "p1",
+      "d": "package-local [lints] table",
+      "k": "direct-lint-table",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "services/crm-api/Cargo.toml",
+      "t": 0
+    },
+    {
+      "c": "p2",
+      "d": "foundation gate: replace with governed Contact Point production acceptance in Phase 8A.3",
+      "k": "ignored-test",
+      "n": 1,
+      "o": "crm.contact-points",
+      "p": "modules/crm-contact-points/tests/acceptance.rs",
+      "t": 1
+    },
+    {
+      "c": "p2",
+      "d": "foundation gate: replace with governed Account production acceptance in Phase 8A.3",
+      "k": "ignored-test",
+      "n": 1,
+      "o": "crm.customer-accounts",
+      "p": "modules/crm-customer-accounts/tests/acceptance.rs",
+      "t": 1
+    },
+    {
+      "c": "p2",
+      "d": "foundation gate: replace with governed production acceptance before raising readiness",
+      "k": "ignored-test",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "modules/crm-customer-privacy/tests/acceptance.rs",
+      "t": 1
+    },
+    {
+      "c": "p2",
+      "d": "foundation gate: replace with governed Party production acceptance in Phase 8A.2",
+      "k": "ignored-test",
+      "n": 1,
+      "o": "crm.parties",
+      "p": "modules/crm-parties/tests/acceptance.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "crates/crm-application-runtime/src/customer_enrichment_provider_registry.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "crates/crm-application-runtime/src/export_artifact_download.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "crates/crm-application-runtime/src/export_selection_bootstrap.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "unused_imports",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get/list.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "runtime-platform",
+      "p": "crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get/transport.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "crates/crm-capability-runtime/src/gateway.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.consents",
+      "p": "crates/crm-consents-privacy-scope-adapter/tests/postgres_scope/support.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.contact-points",
+      "p": "crates/crm-contact-points-privacy-scope-adapter/src/postgres.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 3,
+      "o": "crm.contact-points",
+      "p": "crates/crm-contact-points-privacy-scope-adapter/tests/postgres_scope/support.rs",
+      "t": 3
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-accounts",
+      "p": "crates/crm-customer-accounts-privacy-scope-adapter/src/postgres.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-accounts",
+      "p": "crates/crm-customer-accounts-privacy-scope-adapter/tests/postgres_scope/support.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-data-operations",
+      "p": "crates/crm-customer-data-operations-execution-composition/src/export_execution_worker.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-data-operations",
+      "p": "crates/crm-customer-data-operations-privacy-scope-adapter/tests/postgres_scope.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.customer-data-operations",
+      "p": "crates/crm-customer-data-operations-privacy-scope-adapter/tests/postgres_scope/support.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-enrichment",
+      "p": "crates/crm-customer-enrichment-application-composition/src/orchestration.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-enrichment",
+      "p": "crates/crm-customer-enrichment-application-composition/tests/postgres_application_orchestration_process.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-enrichment",
+      "p": "crates/crm-customer-enrichment-application-composition/tests/postgres_application_process.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.customer-enrichment",
+      "p": "crates/crm-customer-enrichment-capability-adapter/src/request_planner.rs",
+      "t": 2
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-enrichment",
+      "p": "crates/crm-customer-enrichment-privacy-scope-adapter/src/lib.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-enrichment",
+      "p": "crates/crm-customer-enrichment-privacy-scope-adapter/tests/postgres_scope.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.customer-enrichment",
+      "p": "crates/crm-customer-enrichment-suggestion-query-adapter/src/list/scan.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "crates/crm-customer-privacy-application/src/discovery.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "crates/crm-customer-privacy-application/src/reads.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "crates/crm-customer-privacy-capability-adapter/src/root.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.customer-privacy",
+      "p": "crates/crm-customer-privacy-capability-composition/tests/postgres_case_subject_verify.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.customer-privacy",
+      "p": "crates/crm-customer-privacy-capability-composition/tests/postgres_case_submit.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "crates/crm-customer-privacy-postgres/src/access_export.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "crates/crm-customer-privacy-postgres/src/execution.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "crates/crm-customer-privacy-postgres/src/retention.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.data-quality",
+      "p": "crates/crm-data-quality-privacy-scope-adapter/tests/postgres_scope.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.identity-resolution",
+      "p": "crates/crm-identity-resolution-capability-adapter/src/owner_planner.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.identity-resolution",
+      "p": "crates/crm-identity-resolution-privacy-scope-adapter/src/postgres.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.identity-resolution",
+      "p": "crates/crm-identity-resolution-privacy-scope-adapter/src/postgres.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.identity-resolution",
+      "p": "crates/crm-identity-resolution-privacy-scope-adapter/tests/postgres_scope.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 3,
+      "o": "crm.identity-resolution",
+      "p": "crates/crm-identity-resolution-privacy-scope-adapter/tests/postgres_scope/support.rs",
+      "t": 3
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.party-relationships",
+      "p": "crates/crm-party-relationships-privacy-scope-adapter/src/postgres.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 3,
+      "o": "crm.party-relationships",
+      "p": "crates/crm-party-relationships-privacy-scope-adapter/tests/postgres_scope/support.rs",
+      "t": 3
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.party-relationships",
+      "p": "crates/crm-party-relationships-projection/src/lib.rs",
+      "t": 1
+    },
+    {
+      "c": "p3",
+      "d": "dead_code, unused_imports",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-enrichment",
+      "p": "modules/crm-customer-enrichment/src/lib.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-enrichment",
+      "p": "modules/crm-customer-enrichment/src/lifecycle.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 4,
+      "o": "crm.customer-privacy",
+      "p": "modules/crm-customer-privacy/src/domain.rs",
+      "t": 4
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.customer-privacy",
+      "p": "modules/crm-customer-privacy/src/execution.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "modules/crm-customer-privacy/src/lib.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.customer-privacy",
+      "p": "modules/crm-customer-privacy/src/retention.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 3,
+      "o": "crm.customer-privacy",
+      "p": "modules/crm-customer-privacy/src/scope.rs",
+      "t": 3
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.customer-privacy",
+      "p": "modules/crm-customer-privacy/src/scope_discovery.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.customer-privacy",
+      "p": "modules/crm-customer-privacy/src/scope_planning.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.data-quality",
+      "p": "modules/crm-data-quality/src/lib.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "crm.data-quality",
+      "p": "modules/crm-data-quality/src/remediation.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "crm.identity-resolution",
+      "p": "modules/crm-identity-resolution/src/domain.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 3,
+      "o": "runtime-platform",
+      "p": "services/crm-api/tests/consent_process_e2e.rs",
+      "t": 3
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "services/crm-api/tests/contact_point_process_e2e.rs",
+      "t": 1
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "runtime-platform",
+      "p": "services/crm-api/tests/identity_resolution_process_e2e.rs",
+      "t": 2
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "runtime-platform",
+      "p": "services/crm-api/tests/party_relationship_process_e2e.rs",
+      "t": 2
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 3,
+      "o": "runtime-platform",
+      "p": "services/crm-api/tests/support/data_quality_evaluation_gateway.rs",
+      "t": 3
+    },
+    {
+      "c": "p4",
+      "d": "clippy::too_many_arguments",
+      "k": "rust-allow",
+      "n": 2,
+      "o": "runtime-platform",
+      "p": "services/crm-api/tests/support/data_quality_evaluation_registry.rs",
+      "t": 2
+    },
+    {
+      "c": "p3",
+      "d": "dead_code",
+      "k": "rust-allow",
+      "n": 1,
+      "o": "runtime-platform",
+      "p": "services/crm-api/tests/support/data_quality_evaluation_worker.rs",
+      "t": 1
+    }
+  ],
+  "schema_version": "crm.step13-suppression-baseline/v1"
+}

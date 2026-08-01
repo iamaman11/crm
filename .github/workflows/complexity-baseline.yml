@@ -10,6 +10,7 @@ on:
       - "architecture-governance.json"
       - "workspace-dependency-policy.json"
       - "step13-complexity-policy.json"
+      - "step13-suppression-baseline.json"
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
       - "services/**/Cargo.toml"
@@ -20,9 +21,11 @@ on:
       - "scripts/analyze_workspace.py"
       - "scripts/analyze_step13_complexity.py"
       - "scripts/analyze_workspace_governance.py"
+      - "scripts/check_step13_suppression_baseline.py"
       - "scripts/check_workspace_dependency_policy.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_step13_complexity_analysis.py"
+      - "tests/test_step13_suppression_baseline.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
@@ -33,6 +36,7 @@ on:
       - "architecture-governance.json"
       - "workspace-dependency-policy.json"
       - "step13-complexity-policy.json"
+      - "step13-suppression-baseline.json"
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
       - "services/**/Cargo.toml"
@@ -43,9 +47,11 @@ on:
       - "scripts/analyze_workspace.py"
       - "scripts/analyze_step13_complexity.py"
       - "scripts/analyze_workspace_governance.py"
+      - "scripts/check_step13_suppression_baseline.py"
       - "scripts/check_workspace_dependency_policy.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_step13_complexity_analysis.py"
+      - "tests/test_step13_suppression_baseline.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
@@ -78,9 +84,29 @@ jobs:
           python -m unittest -v \
             tests.test_workspace_analysis \
             tests.test_step13_complexity_analysis \
+            tests.test_step13_suppression_baseline \
             tests.test_workspace_governance \
             tests.test_workspace_dependency_policy \
             2>&1 | tee artifacts/workspace-analyzer-tests.log
+      - name: Enforce canonical suppression registry formatting
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = Path("step13-suppression-baseline.json")
+          current = source.read_text(encoding="utf-8")
+          canonical = json.dumps(
+              json.loads(current), indent=2, sort_keys=True
+          ) + "\n"
+          output = Path("artifacts/step13-suppression-baseline.canonical.json")
+          output.write_text(canonical, encoding="utf-8")
+          if current != canonical:
+              raise SystemExit(
+                  "step13-suppression-baseline.json is not canonical pretty-printed JSON"
+              )
+          PY
       - name: Generate measurement-only workspace and CI baseline
         run: |
           set -euo pipefail
@@ -95,6 +121,14 @@ jobs:
             --json-output artifacts/step13-complexity-baseline.json \
             --markdown-output artifacts/step13-complexity-baseline.md
           cat artifacts/step13-complexity-baseline.md >> "${GITHUB_STEP_SUMMARY}"
+      - name: Enforce registered suppression multiset
+        run: |
+          set -euo pipefail
+          python scripts/check_step13_suppression_baseline.py \
+            --check \
+            --json-output artifacts/step13-suppression-enforcement.json \
+            --markdown-output artifacts/step13-suppression-enforcement.md
+          cat artifacts/step13-suppression-enforcement.md >> "${GITHUB_STEP_SUMMARY}"
       - name: Validate dependency, crate and exception governance
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}

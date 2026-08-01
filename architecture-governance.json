@@ -1,55 +1,6 @@
 {
   "schema_version": "crm.architecture-governance/v1",
-  "exceptions": [
-    {
-      "id": "ARCH-RUST-001",
-      "owner": "application-runtime",
-      "rule": "rust-governance",
-      "reason_and_risk": "crm-application-runtime locally allows Clippy too_many_arguments at the compile-time composition boundary. Removing it inside the toolchain baseline packet would mix a constructor/API refactor into repository step 1; broadening the allowance would hide architecture debt.",
-      "scope": "crates/crm-application-runtime/Cargo.toml",
-      "created_date": "2026-07-28",
-      "expiry_date": "2027-01-31",
-      "removal_condition": "Refactor or group the affected composition arguments, then replace the direct lint table with [lints] workspace = true without changing runtime registration behavior.",
-      "compensating_checks": [
-        "tests/test_rust_governance.py freezes the exact direct lint table",
-        "cargo clippy --workspace --all-targets --all-features -- -D warnings",
-        "cargo test --workspace --all-features"
-      ],
-      "tracking_issue": "#194"
-    },
-    {
-      "id": "ARCH-RUST-002",
-      "owner": "customer-data-operations",
-      "rule": "rust-governance",
-      "reason_and_risk": "crm-customer-data-operations-execution-composition locally allows Clippy too_many_arguments at the immutable execution-evidence authorization boundary. Removing it here would mix an owner API refactor into the toolchain packet; broadening it would weaken lint governance.",
-      "scope": "crates/crm-customer-data-operations-execution-composition/Cargo.toml",
-      "created_date": "2026-07-28",
-      "expiry_date": "2027-01-31",
-      "removal_condition": "Introduce a behavior-preserving grouped execution context, then inherit workspace lints with no change to immutable evidence or authorization semantics.",
-      "compensating_checks": [
-        "tests/test_rust_governance.py freezes the exact direct lint table",
-        "cargo clippy --workspace --all-targets --all-features -- -D warnings",
-        "cargo test --workspace --all-features"
-      ],
-      "tracking_issue": "#194"
-    },
-    {
-      "id": "ARCH-RUST-003",
-      "owner": "crm-api",
-      "rule": "rust-governance",
-      "reason_and_risk": "crm-api locally allows Clippy too_many_arguments for process-acceptance helpers that pass explicit governed context. Removing it here would mix test/executable API cleanup into repository step 1; broadening it could conceal boundary complexity.",
-      "scope": "services/crm-api/Cargo.toml",
-      "created_date": "2026-07-28",
-      "expiry_date": "2027-01-31",
-      "removal_condition": "Group the process-acceptance context without weakening explicit governed values, then inherit workspace lints.",
-      "compensating_checks": [
-        "tests/test_rust_governance.py freezes the exact direct lint table",
-        "cargo clippy --workspace --all-targets --all-features -- -D warnings",
-        "cargo test --workspace --all-features"
-      ],
-      "tracking_issue": "#194"
-    }
-  ],
+  "exceptions": [],
   "new_crate_justifications": [
     {
       "package": "crm-identity-resolution-merge-query-adapter",

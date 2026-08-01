@@ -298,7 +298,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "7dcda204be07209d9e4996fdc9c5fd364cea179e"
+                    "3d51d03e809cfee5ebf418e82df8da3673ce6b92"
                 ),
             ),
             patch(

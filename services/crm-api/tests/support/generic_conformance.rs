@@ -146,6 +146,17 @@ impl MutationConformanceSuite {
     }
 }
 
+#[derive(Debug)]
+pub struct KeysetPageEvidence<'a> {
+    pub first_ids: &'a [String],
+    pub first_cursor: &'a str,
+    pub second_ids: &'a [String],
+    pub second_cursor: &'a str,
+    pub expected_ids: &'a BTreeSet<String>,
+    pub before: EvidenceSnapshot,
+    pub after: EvidenceSnapshot,
+}
+
 #[derive(Debug, Clone)]
 pub struct QueryConformanceSuite {
     safe_surface: SafeSurface,
@@ -176,16 +187,16 @@ impl QueryConformanceSuite {
         self.assert_no_writes(before, after);
     }
 
-    pub fn assert_keyset_pages(
-        &self,
-        first_ids: &[String],
-        first_cursor: &str,
-        second_ids: &[String],
-        second_cursor: &str,
-        expected_ids: &BTreeSet<String>,
-        before: EvidenceSnapshot,
-        after: EvidenceSnapshot,
-    ) {
+    pub fn assert_keyset_pages(&self, evidence: KeysetPageEvidence<'_>) {
+        let KeysetPageEvidence {
+            first_ids,
+            first_cursor,
+            second_ids,
+            second_cursor,
+            expected_ids,
+            before,
+            after,
+        } = evidence;
         assert_eq!(first_ids.len(), 1);
         assert_eq!(second_ids.len(), 1);
         assert!(!first_cursor.is_empty());

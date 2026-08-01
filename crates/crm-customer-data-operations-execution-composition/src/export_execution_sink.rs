@@ -22,6 +22,15 @@ use crm_module_sdk::{
 use crm_proto_contracts::crm::customer_data_operations::v1 as wire;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PartyExportEmittedOutcome {
+    pub(crate) manifest_position: u32,
+    pub(crate) artifact_chunk_index: u32,
+    pub(crate) chunk_sha256: [u8; 32],
+    pub(crate) chunk_size_bytes: u64,
+    pub(crate) redacted_fields: u32,
+}
+
 #[derive(Clone)]
 pub struct PostgresPartyExportExecutionSink {
     store: PostgresDataStore,
@@ -83,15 +92,11 @@ impl PostgresPartyExportExecutionSink {
         })
     }
 
-    pub fn commit_emitted<'a>(
+    pub(crate) fn commit_emitted<'a>(
         &'a self,
         context: &'a ModuleExecutionContext,
         job: &'a PartyExportJob,
-        manifest_position: u32,
-        artifact_chunk_index: u32,
-        chunk_sha256: [u8; 32],
-        chunk_size_bytes: u64,
-        redacted_fields: u32,
+        emitted: PartyExportEmittedOutcome,
     ) -> PortFuture<'a, Result<(), SdkError>> {
         Box::pin(async move {
             let command = wire::InternalCommitPartyExportExecutionOutcomeRequest {
@@ -99,14 +104,14 @@ impl PostgresPartyExportExecutionSink {
                     export_job_id: job.job_id().as_str().to_owned(),
                 }),
                 expected_job_version: job.version(),
-                manifest_position,
+                manifest_position: emitted.manifest_position,
                 result: Some(
                     wire::internal_commit_party_export_execution_outcome_request::Result::Emitted(
                         wire::InternalPartyExportEmittedOutcome {
-                            artifact_chunk_index,
-                            chunk_sha256: chunk_sha256.to_vec(),
-                            chunk_size_bytes,
-                            redacted_fields,
+                            artifact_chunk_index: emitted.artifact_chunk_index,
+                            chunk_sha256: emitted.chunk_sha256.to_vec(),
+                            chunk_size_bytes: emitted.chunk_size_bytes,
+                            redacted_fields: emitted.redacted_fields,
                         },
                     ),
                 ),

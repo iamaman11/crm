@@ -5,7 +5,9 @@ mod conformance;
 #[path = "support/customer_enrichment_process/mod.rs"]
 mod process_support;
 
-use conformance::{EvidenceSnapshot, MutationConformanceSuite, QueryConformanceSuite};
+use conformance::{
+    EvidenceSnapshot, KeysetPageEvidence, MutationConformanceSuite, QueryConformanceSuite,
+};
 use crm_application_runtime::gateway_v1::{
     MutateResponse, QueryResponse,
     application_gateway_service_client::ApplicationGatewayServiceClient,
@@ -363,15 +365,18 @@ async fn representative_owners_adopt_generic_mutation_and_query_conformance() {
     .await
     .expect("query second representative keyset page");
     let second_page = decode_list(&second_page);
-    query_suite.assert_keyset_pages(
-        &listed_ids(&first_page),
-        &first_page.next_cursor,
-        &listed_ids(&second_page),
-        &second_page.next_cursor,
-        &BTreeSet::from([privacy_case_a.clone(), privacy_case_b.clone()]),
-        query_baseline,
-        evidence_snapshot(&admin).await,
-    );
+    let first_ids = listed_ids(&first_page);
+    let second_ids = listed_ids(&second_page);
+    let expected_ids = BTreeSet::from([privacy_case_a.clone(), privacy_case_b.clone()]);
+    query_suite.assert_keyset_pages(KeysetPageEvidence {
+        first_ids: &first_ids,
+        first_cursor: &first_page.next_cursor,
+        second_ids: &second_ids,
+        second_cursor: &second_page.next_cursor,
+        expected_ids: &expected_ids,
+        before: query_baseline,
+        after: evidence_snapshot(&admin).await,
+    });
 
     let mut malformed_cursor = first_page.next_cursor.clone();
     malformed_cursor.push('x');

@@ -16,17 +16,11 @@ from scripts.check_rust_governance import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_LEGACY_DIRECT_LINTS = {
-    "crates/crm-application-runtime/Cargo.toml": {
-        "clippy": {"too_many_arguments": "allow"}
-    },
-    "crates/crm-customer-data-operations-execution-composition/Cargo.toml": {
-        "clippy": {"too_many_arguments": "allow"}
-    },
-    "services/crm-api/Cargo.toml": {
-        "clippy": {"too_many_arguments": "allow"}
-    },
-}
+RETIRED_DIRECT_LINT_MANIFESTS = (
+    "crates/crm-application-runtime/Cargo.toml",
+    "crates/crm-customer-data-operations-execution-composition/Cargo.toml",
+    "services/crm-api/Cargo.toml",
+)
 
 
 class RustGovernanceTests(unittest.TestCase):
@@ -145,35 +139,31 @@ version = "0.1.0"
         self.assertTrue(any("expired" in error for error in errors))
         self.assertTrue(any("exact Cargo.toml" in error for error in errors))
 
-    def test_repository_legacy_direct_lint_exceptions_are_exact(self) -> None:
+    def test_repository_has_zero_direct_lint_exceptions(self) -> None:
         registry = json.loads(
             (ROOT / "architecture-governance.json").read_text(encoding="utf-8")
         )
-        rust_exceptions = {
-            item["scope"]: item
+        rust_exceptions = [
+            item
             for item in registry["exceptions"]
             if item.get("rule") == "rust-governance"
-        }
-        self.assertEqual(set(rust_exceptions), set(EXPECTED_LEGACY_DIRECT_LINTS))
+        ]
+        self.assertEqual(rust_exceptions, [])
 
-        for relative, expected_lints in EXPECTED_LEGACY_DIRECT_LINTS.items():
+        for relative in RETIRED_DIRECT_LINT_MANIFESTS:
             with self.subTest(manifest=relative):
                 manifest = tomllib.loads(
                     (ROOT / relative).read_text(encoding="utf-8")
                 )
-                self.assertEqual(manifest.get("lints"), expected_lints)
-                self.assertEqual(
-                    rust_exceptions[relative]["expiry_date"],
-                    "2027-01-31",
-                )
+                self.assertEqual(manifest.get("lints"), {"workspace": True})
 
         policy = json.loads(
             (ROOT / "rust-governance-policy.json").read_text(encoding="utf-8")
         )
         baseline = policy["measured_baseline"]
-        self.assertEqual(baseline["maximum_direct_lint_tables"], 3)
+        self.assertEqual(baseline["maximum_direct_lint_tables"], 0)
         self.assertEqual(baseline["maximum_missing_workspace_lints_packages"], 110)
-        self.assertEqual(baseline["active_rust_governance_exceptions"], 3)
+        self.assertEqual(baseline["active_rust_governance_exceptions"], 0)
 
     def test_workspace_member_parser_uses_only_declared_members(self) -> None:
         text = """[workspace]
