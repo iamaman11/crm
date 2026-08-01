@@ -4,10 +4,8 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
-[lints.clippy]
-# Module-specific assembly contributes independent adapters through the generic composition runtime.
-# Keep constructor breadth local to this compile-time composition boundary.
-too_many_arguments = "allow"
+[lints]
+workspace = true
 
 [dependencies]
 axum = "0.8"
