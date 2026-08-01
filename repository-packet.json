@@ -19,6 +19,7 @@
     "docs/PROJECT_STATUS.md",
     "repository-packet.json",
     "scripts/apply_step13_measurement_evidence_sync.py",
+    "scripts/finalize_step13_measurement_evidence_sync.py",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
@@ -47,7 +48,7 @@
     "the next permitted implementation packet registers and enforces the accepted suppression baseline, removes the three direct lint exceptions and calibrates role-aware budgets",
     "repository step 14 remains blocked and Customer Privacy product readiness remains unchanged",
     "permanent documentation and navigation guards reject regression to the pre-measurement state",
-    "the temporary evidence materializer and workflow hook are removed before acceptance"
+    "the temporary evidence materializers and workflow hook are removed before acceptance"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -64,7 +65,7 @@
     "no arbitrary duration or packet-count cap is added to repository step 13",
     "the next implementation packet is bounded by evidence but repository step 13 completion remains tied only to ADR-031 exit criteria",
     "the final diff changes no Rust/product code, dependency, package, route, contract, schema, migration, workflow or affected-scope policy",
-    "the temporary materializer and workflow hook are absent from the accepted final tree"
+    "the temporary materializers and workflow hook are absent from the accepted final tree"
   ],
   "non_goals": [
     "start suppression enforcement or lint remediation in this evidence packet",
