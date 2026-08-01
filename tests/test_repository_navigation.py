@@ -39,6 +39,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(packet["required_checks"])
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
+            "Application Runtime CI": ".github/workflows/application-runtime.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
             "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
             "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
@@ -49,12 +50,17 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(set(packet["required_checks"]).issubset(workflow_paths))
         for check in packet["required_checks"]:
             self.assertTrue((ROOT / workflow_paths[check]).is_file())
-        self.assertIn(
-            "repository step 13 is marked complete only through the combined PR #253 measurement, PR #255 suppression/direct-lint enforcement, PR #257 remaining exit-evidence enforcement and this exact-head synchronization",
-            packet["deliverables"],
+        self.assertEqual(
+            packet["packet_id"],
+            "repository-step-14-customer-accounts-consolidation",
         )
         self.assertIn(
-            "all live normative sources agree that repository step 13 and Stage B are complete while repository step 14 is next and not started",
+            "leave repository-step-14 completion and Stage G evidence synchronization to a separate post-merge documentation packet",
+            packet["deliverables"],
+        )
+        self.assertIn("start repository step 15", packet["non_goals"])
+        self.assertIn(
+            "the exact pull-request head reports 112 workspace packages, no more than 835 internal dependency edges, dependency depth no greater than 18, no more than 5377 conservative public Rust items and exactly 270 dependency declarations",
             packet["acceptance"],
         )
 
@@ -151,7 +157,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 content,
             )
             self.assertIn("source-digest: sha256:", content)
-        self.assertIn("**Workspace packages:** 113", first[REPOSITORY_MAP_PATH])
+        self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
         self.assertIn("`crm.customer-privacy`", first[REPOSITORY_MAP_PATH])
         self.assertEqual(stale_generated_documents(ROOT), [])
 
@@ -186,6 +192,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 for path in [
                     {
                         "Affected Scope CI": ".github/workflows/affected-scope.yml",
+                        "Application Runtime CI": ".github/workflows/application-runtime.yml",
                         "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
                         "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
                         "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
