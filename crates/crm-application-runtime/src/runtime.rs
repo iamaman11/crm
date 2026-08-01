@@ -1,3 +1,4 @@
+use crate::export_selection_bootstrap::ExportSelectionWorkerAccess;
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
     CustomerEnrichmentApplicationWorkerDependencies,
@@ -267,30 +268,37 @@ impl ApplicationRuntime {
                 now,
                 &authorization_store,
                 &visibility_store,
-                &query_definitions,
-                &artifact_download_definition,
-                &internal_export_selection_definitions,
-                &export_selection_worker_actor_id,
+                ExportSelectionWorkerAccess {
+                    query_definitions: &query_definitions,
+                    artifact_download_definition: &artifact_download_definition,
+                    internal_definitions: &internal_export_selection_definitions,
+                    worker_actor_id: &export_selection_worker_actor_id,
+                },
             )?;
             bootstrap_customer_enrichment_application_worker_access(
                 &config,
                 now,
                 &authorization_store,
                 &visibility_store,
-                &mutation_definitions,
-                &query_definitions,
-                &customer_enrichment_application_outcome_definition,
-                &customer_enrichment_application_worker_actor_id,
+                CustomerEnrichmentApplicationWorkerAccess {
+                    mutation_definitions: &mutation_definitions,
+                    query_definitions: &query_definitions,
+                    application_outcome_definition:
+                        &customer_enrichment_application_outcome_definition,
+                    worker_actor_id: &customer_enrichment_application_worker_actor_id,
+                },
             )?;
             bootstrap_customer_enrichment_provider_process_access(
                 &config,
                 now,
                 &authorization_store,
                 &visibility_store,
-                &query_definitions,
-                &customer_enrichment_dispatch_definition,
-                &customer_enrichment_response_definition,
-                &customer_enrichment_provider_worker_actor_id,
+                CustomerEnrichmentProviderProcessAccess {
+                    query_definitions: &query_definitions,
+                    dispatch_definition: &customer_enrichment_dispatch_definition,
+                    response_definition: &customer_enrichment_response_definition,
+                    worker_actor_id: &customer_enrichment_provider_worker_actor_id,
+                },
             )?;
             bootstrap_customer_enrichment_materialization_process_access(
                 &config,
@@ -956,18 +964,23 @@ fn bootstrap_import_execution_worker_access(
     Ok(())
 }
 
+struct CustomerEnrichmentProviderProcessAccess<'a> {
+    query_definitions: &'a [CapabilityDefinition],
+    dispatch_definition: &'a CapabilityDefinition,
+    response_definition: &'a CapabilityDefinition,
+    worker_actor_id: &'a ActorId,
+}
+
 fn bootstrap_customer_enrichment_provider_process_access(
     config: &ApplicationConfig,
     now_unix_nanos: i64,
     authorization_store: &LiveAuthorizationStore,
     visibility_store: &LiveQueryVisibilityStore,
-    query_definitions: &[CapabilityDefinition],
-    dispatch_definition: &CapabilityDefinition,
-    response_definition: &CapabilityDefinition,
-    worker_actor_id: &ActorId,
+    access: CustomerEnrichmentProviderProcessAccess<'_>,
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = expiry(now_unix_nanos)?;
-    let party_get = query_definitions
+    let party_get = access
+        .query_definitions
         .iter()
         .find(|definition| {
             definition.owner_module_id.as_str() == PARTIES_MODULE_ID
@@ -979,11 +992,11 @@ fn bootstrap_customer_enrichment_provider_process_access(
             )
         })?;
     for tenant_id in &config.tenant_ids {
-        for definition in [dispatch_definition, response_definition, party_get] {
+        for definition in [access.dispatch_definition, access.response_definition, party_get] {
             authorization_store
                 .upsert(AuthorizationGrant {
                     tenant_id: tenant_id.clone(),
-                    actor_id: worker_actor_id.clone(),
+                    actor_id: access.worker_actor_id.clone(),
                     policy_id: definition.authorization_policy_id.clone(),
                     capability_id: definition.capability_id.clone(),
                     capability_version: definition.capability_version.clone(),
@@ -995,7 +1008,7 @@ fn bootstrap_customer_enrichment_provider_process_access(
         }
         upsert_bootstrap_visibility(
             visibility_store,
-            worker_actor_id,
+            access.worker_actor_id,
             tenant_id,
             party_get,
             BootstrapVisibilityResource {
@@ -1034,18 +1047,23 @@ fn bootstrap_customer_enrichment_materialization_process_access(
     Ok(())
 }
 
+struct CustomerEnrichmentApplicationWorkerAccess<'a> {
+    mutation_definitions: &'a [CapabilityDefinition],
+    query_definitions: &'a [CapabilityDefinition],
+    application_outcome_definition: &'a CapabilityDefinition,
+    worker_actor_id: &'a ActorId,
+}
+
 fn bootstrap_customer_enrichment_application_worker_access(
     config: &ApplicationConfig,
     now_unix_nanos: i64,
     authorization_store: &LiveAuthorizationStore,
     visibility_store: &LiveQueryVisibilityStore,
-    mutation_definitions: &[CapabilityDefinition],
-    query_definitions: &[CapabilityDefinition],
-    application_outcome_definition: &CapabilityDefinition,
-    worker_actor_id: &ActorId,
+    access: CustomerEnrichmentApplicationWorkerAccess<'_>,
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = expiry(now_unix_nanos)?;
-    let party_update = mutation_definitions
+    let party_update = access
+        .mutation_definitions
         .iter()
         .find(|definition| {
             definition.owner_module_id.as_str() == PARTIES_MODULE_ID
@@ -1056,7 +1074,8 @@ fn bootstrap_customer_enrichment_application_worker_access(
                 "Party update capability is missing from the production catalog".to_owned(),
             )
         })?;
-    let party_get = query_definitions
+    let party_get = access
+        .query_definitions
         .iter()
         .find(|definition| definition.capability_id.as_str() == PARTY_GET_CAPABILITY)
         .ok_or_else(|| {
@@ -1064,7 +1083,8 @@ fn bootstrap_customer_enrichment_application_worker_access(
                 "Party get capability is missing from the production catalog".to_owned(),
             )
         })?;
-    let consent_get = query_definitions
+    let consent_get = access
+        .query_definitions
         .iter()
         .find(|definition| definition.capability_id.as_str() == CONSENT_GET_CAPABILITY)
         .ok_or_else(|| {
@@ -1079,12 +1099,12 @@ fn bootstrap_customer_enrichment_application_worker_access(
             party_update,
             party_get,
             consent_get,
-            application_outcome_definition,
+            access.application_outcome_definition,
         ] {
             authorization_store
                 .upsert(AuthorizationGrant {
                     tenant_id: tenant_id.clone(),
-                    actor_id: worker_actor_id.clone(),
+                    actor_id: access.worker_actor_id.clone(),
                     policy_id: definition.authorization_policy_id.clone(),
                     capability_id: definition.capability_id.clone(),
                     capability_version: definition.capability_version.clone(),
@@ -1101,7 +1121,7 @@ fn bootstrap_customer_enrichment_application_worker_access(
             for resource in resources {
                 upsert_bootstrap_visibility(
                     visibility_store,
-                    worker_actor_id,
+                    access.worker_actor_id,
                     tenant_id,
                     definition,
                     resource,
