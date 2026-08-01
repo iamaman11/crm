@@ -39,11 +39,10 @@ def patch(path: str) -> str:
     target = ROOT / path
     text = target.read_text(encoding="utf-8")
     text, count = re.subn(
-        r"ALLOWED_PACKET_PATHS = \[.*?\]\n\n\nclass",
-        ALLOWED + "\n\n\nclass",
+        r"ALLOWED_PACKET_PATHS = \[\n(?:    .*\n)*?\]\n",
+        ALLOWED + "\n",
         text,
         count=1,
-        flags=re.DOTALL,
     )
     if count != 1:
         raise RuntimeError(f"could not replace allowed paths in {path}")
@@ -101,10 +100,6 @@ def patch_consistency() -> None:
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
-    text = text.replace(
-        'self.assertIn("repository step 13 remains the next permitted implementation step", self.adr31)',
-        'self.assertIn("repository step 13 remains the next permitted implementation step", self.adr31)',
-    )
     (ROOT / path).write_text(text, encoding="utf-8")
 
 
