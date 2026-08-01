@@ -48,5 +48,449 @@
     "workspace_package_growth": 0,
     "role_aware_budget_growth_requires_evidence": true,
     "remaining_step13_work": "Only evidence-driven bounded remediation and the remaining ADR-031 exit criteria may continue before repository step 14."
+  },
+  "exit_evidence": {
+    "accepted_source": "4c80546283af9c869a28c2da9c8697b203d0c327",
+    "workspace_budget": {
+      "expected_workspace_packages": 113,
+      "maximum_internal_dependency_edges": 841,
+      "maximum_dependency_depth": 18,
+      "maximum_public_rust_items": 5379,
+      "maximum_suppression_occurrences": 91
+    },
+    "central_system_budgets": {
+      "crm-module-sdk": {
+        "role": "sdk-ports",
+        "maximum_direct_dependencies": 0,
+        "maximum_direct_consumers": 105,
+        "maximum_transitive_reverse_impact": 106,
+        "maximum_dependency_depth": 0,
+        "maximum_public_items": 91,
+        "maximum_non_comment_loc": 1372
+      },
+      "crm-core-contracts": {
+        "role": "stable-contracts",
+        "maximum_direct_dependencies": 0,
+        "maximum_direct_consumers": 15,
+        "maximum_transitive_reverse_impact": 92,
+        "maximum_dependency_depth": 0,
+        "maximum_public_items": 31,
+        "maximum_non_comment_loc": 250
+      },
+      "crm-proto-contracts": {
+        "role": "stable-contracts",
+        "maximum_direct_dependencies": 0,
+        "maximum_direct_consumers": 69,
+        "maximum_transitive_reverse_impact": 80,
+        "maximum_dependency_depth": 0,
+        "maximum_public_items": 3,
+        "maximum_non_comment_loc": 207
+      },
+      "crm-capability-runtime": {
+        "role": "generic-runtime",
+        "maximum_direct_dependencies": 1,
+        "maximum_direct_consumers": 75,
+        "maximum_transitive_reverse_impact": 83,
+        "maximum_dependency_depth": 1,
+        "maximum_public_items": 36,
+        "maximum_non_comment_loc": 605
+      },
+      "crm-query-runtime": {
+        "role": "generic-runtime",
+        "maximum_direct_dependencies": 2,
+        "maximum_direct_consumers": 47,
+        "maximum_transitive_reverse_impact": 81,
+        "maximum_dependency_depth": 2,
+        "maximum_public_items": 37,
+        "maximum_non_comment_loc": 985
+      },
+      "crm-application-composition": {
+        "role": "generic-composition",
+        "maximum_direct_dependencies": 3,
+        "maximum_direct_consumers": 18,
+        "maximum_transitive_reverse_impact": 40,
+        "maximum_dependency_depth": 3,
+        "maximum_public_items": 60,
+        "maximum_non_comment_loc": 1239
+      },
+      "crm-core-data": {
+        "role": "infrastructure-ports",
+        "maximum_direct_dependencies": 11,
+        "maximum_direct_consumers": 71,
+        "maximum_transitive_reverse_impact": 76,
+        "maximum_dependency_depth": 5,
+        "maximum_public_items": 176,
+        "maximum_non_comment_loc": 9922
+      },
+      "crm-first-party-modules": {
+        "role": "first-party-aggregation",
+        "maximum_direct_dependencies": 16,
+        "maximum_direct_consumers": 1,
+        "maximum_transitive_reverse_impact": 2,
+        "maximum_dependency_depth": 15,
+        "maximum_public_items": 14,
+        "maximum_non_comment_loc": 204
+      },
+      "crm-application-runtime": {
+        "role": "process-composition",
+        "maximum_direct_dependencies": 63,
+        "maximum_direct_consumers": 1,
+        "maximum_transitive_reverse_impact": 1,
+        "maximum_dependency_depth": 17,
+        "maximum_public_items": 130,
+        "maximum_non_comment_loc": 7269
+      },
+      "crm-api": {
+        "role": "process-host",
+        "maximum_direct_dependencies": 19,
+        "maximum_direct_consumers": 0,
+        "maximum_transitive_reverse_impact": 0,
+        "maximum_dependency_depth": 18,
+        "maximum_public_items": 2,
+        "maximum_non_comment_loc": 9
+      }
+    },
+    "process_host_dependency_allowlists": {
+      "crm-application-runtime": [
+        "crm-application-composition",
+        "crm-capability-adapters",
+        "crm-capability-ingress",
+        "crm-capability-plan-support",
+        "crm-capability-runtime",
+        "crm-consents",
+        "crm-consents-capability-adapter",
+        "crm-consents-query-adapter",
+        "crm-contact-points-capability-adapter",
+        "crm-contact-points-capability-composition",
+        "crm-core-data",
+        "crm-core-events",
+        "crm-customer-360-composition",
+        "crm-customer-360-query-adapter",
+        "crm-customer-accounts-capability-adapter",
+        "crm-customer-data-operations-capability-adapter",
+        "crm-customer-data-operations-execution-composition",
+        "crm-customer-data-operations-query-adapter",
+        "crm-customer-data-operations-source-composition",
+        "crm-customer-enrichment",
+        "crm-customer-enrichment-application-adapter",
+        "crm-customer-enrichment-application-composition",
+        "crm-customer-enrichment-capability-adapter",
+        "crm-customer-enrichment-capability-composition",
+        "crm-customer-enrichment-materialization-adapter",
+        "crm-customer-enrichment-materialization-composition",
+        "crm-customer-enrichment-provider-process-composition",
+        "crm-customer-enrichment-provider-registry",
+        "crm-customer-enrichment-query-adapter",
+        "crm-customer-enrichment-registry-http-transport",
+        "crm-customer-enrichment-request-list-query-adapter",
+        "crm-customer-enrichment-review-adapter",
+        "crm-customer-enrichment-review-composition",
+        "crm-customer-enrichment-suggestion-query-adapter",
+        "crm-customer-enrichment-visibility",
+        "crm-customer-enrichment-worker-composition",
+        "crm-customer-privacy-production",
+        "crm-customer-privacy-query-adapter",
+        "crm-data-quality-capability-adapter",
+        "crm-data-quality-query-adapter",
+        "crm-data-quality-source-composition",
+        "crm-first-party-modules",
+        "crm-global-search-composition",
+        "crm-identity-resolution-capability-adapter",
+        "crm-identity-resolution-capability-composition",
+        "crm-identity-resolution-merge-composition",
+        "crm-identity-resolution-merge-query-adapter",
+        "crm-identity-resolution-query-adapter",
+        "crm-metadata-api-adapter",
+        "crm-metadata-query-adapter",
+        "crm-module-sdk",
+        "crm-parties-capability-adapter",
+        "crm-parties-query-adapter",
+        "crm-party-reference-composition",
+        "crm-party-relationships-capability-adapter",
+        "crm-party-relationships-projection",
+        "crm-proto-contracts",
+        "crm-query-runtime",
+        "crm-sales-activities-capability-composition",
+        "crm-sales-activities-link",
+        "crm-sales-activities-query-adapter",
+        "crm-search-query-adapter",
+        "crm-search-runtime"
+      ],
+      "crm-api": [
+        "crm-application-runtime",
+        "crm-capability-adapters",
+        "crm-capability-ingress",
+        "crm-capability-runtime",
+        "crm-core-data",
+        "crm-customer-360-composition",
+        "crm-customer-privacy-cancel-capability-adapter",
+        "crm-customer-privacy-capability-adapter",
+        "crm-customer-privacy-query-adapter",
+        "crm-customer-privacy-subject-capability-adapter",
+        "crm-data-quality",
+        "crm-data-quality-capability-adapter",
+        "crm-data-quality-source-composition",
+        "crm-module-sdk",
+        "crm-parties-query-adapter",
+        "crm-party-relationships-projection",
+        "crm-proto-contracts",
+        "crm-query-runtime",
+        "crm-sales-activities-capability-composition"
+      ]
+    },
+    "representative_change_cost_budgets": {
+      "ordinary-owner-capability": {
+        "kind": "ordinary-capability",
+        "maximum_files": 35,
+        "maximum_packages": 10,
+        "maximum_central_files": 6,
+        "maximum_workflow_files": 2
+      },
+      "new-owner-production-wave": {
+        "kind": "new-owner",
+        "maximum_files": 206,
+        "maximum_packages": 22,
+        "maximum_central_files": 52,
+        "maximum_workflow_files": 4
+      },
+      "owner-contribution-aggregation": {
+        "kind": "composition-remediation",
+        "maximum_files": 21,
+        "maximum_packages": 5,
+        "maximum_central_files": 5,
+        "maximum_workflow_files": 0
+      }
+    },
+    "dependency_governance": {
+      "maximum_declaration_count": 270,
+      "maximum_workspace_dependency_count": 4,
+      "maximum_heavy_feature_declarations": 65,
+      "accepted_version_divergence": {
+        "sqlx": [
+          "0.9",
+          "0.9.0"
+        ]
+      },
+      "accepted_feature_divergence": {
+        "reqwest": [
+          {
+            "features": [
+              "json"
+            ],
+            "default_features": false
+          },
+          {
+            "features": [
+              "json",
+              "rustls-tls",
+              "stream"
+            ],
+            "default_features": false
+          }
+        ],
+        "sqlx": [
+          {
+            "features": [
+              "json",
+              "postgres",
+              "runtime-tokio"
+            ],
+            "default_features": false
+          },
+          {
+            "features": [
+              "postgres",
+              "runtime-tokio"
+            ],
+            "default_features": false
+          }
+        ],
+        "tokio": [
+          {
+            "features": [
+              "macros",
+              "net",
+              "rt-multi-thread"
+            ],
+            "default_features": true
+          },
+          {
+            "features": [
+              "macros",
+              "net",
+              "rt-multi-thread",
+              "signal",
+              "sync",
+              "time"
+            ],
+            "default_features": true
+          },
+          {
+            "features": [
+              "macros",
+              "net",
+              "rt-multi-thread",
+              "time"
+            ],
+            "default_features": true
+          },
+          {
+            "features": [
+              "macros",
+              "process",
+              "rt-multi-thread",
+              "time"
+            ],
+            "default_features": true
+          },
+          {
+            "features": [
+              "macros",
+              "rt"
+            ],
+            "default_features": true
+          },
+          {
+            "features": [
+              "macros",
+              "rt",
+              "time"
+            ],
+            "default_features": true
+          },
+          {
+            "features": [
+              "macros",
+              "rt-multi-thread"
+            ],
+            "default_features": true
+          },
+          {
+            "features": [
+              "time"
+            ],
+            "default_features": true
+          }
+        ],
+        "tonic": [
+          {
+            "features": [],
+            "default_features": false
+          },
+          {
+            "features": [],
+            "default_features": true
+          }
+        ]
+      }
+    },
+    "process_host_manifest_budgets": {
+      "crm-application-runtime": {
+        "manifest_path": "crates/crm-application-runtime/Cargo.toml",
+        "maximum_runtime_internal_dependencies": 62,
+        "maximum_dev_internal_dependencies": 1,
+        "maximum_build_internal_dependencies": 0,
+        "accepted_runtime_internal_dependencies": [
+          "crm-application-composition",
+          "crm-capability-adapters",
+          "crm-capability-ingress",
+          "crm-capability-plan-support",
+          "crm-capability-runtime",
+          "crm-consents-capability-adapter",
+          "crm-consents-query-adapter",
+          "crm-contact-points-capability-adapter",
+          "crm-contact-points-capability-composition",
+          "crm-core-data",
+          "crm-core-events",
+          "crm-customer-360-composition",
+          "crm-customer-360-query-adapter",
+          "crm-customer-accounts-capability-adapter",
+          "crm-customer-data-operations-capability-adapter",
+          "crm-customer-data-operations-execution-composition",
+          "crm-customer-data-operations-query-adapter",
+          "crm-customer-data-operations-source-composition",
+          "crm-customer-enrichment",
+          "crm-customer-enrichment-application-adapter",
+          "crm-customer-enrichment-application-composition",
+          "crm-customer-enrichment-capability-adapter",
+          "crm-customer-enrichment-capability-composition",
+          "crm-customer-enrichment-materialization-adapter",
+          "crm-customer-enrichment-materialization-composition",
+          "crm-customer-enrichment-provider-process-composition",
+          "crm-customer-enrichment-provider-registry",
+          "crm-customer-enrichment-query-adapter",
+          "crm-customer-enrichment-registry-http-transport",
+          "crm-customer-enrichment-request-list-query-adapter",
+          "crm-customer-enrichment-review-adapter",
+          "crm-customer-enrichment-review-composition",
+          "crm-customer-enrichment-suggestion-query-adapter",
+          "crm-customer-enrichment-visibility",
+          "crm-customer-enrichment-worker-composition",
+          "crm-customer-privacy-production",
+          "crm-customer-privacy-query-adapter",
+          "crm-data-quality-capability-adapter",
+          "crm-data-quality-query-adapter",
+          "crm-data-quality-source-composition",
+          "crm-first-party-modules",
+          "crm-global-search-composition",
+          "crm-identity-resolution-capability-adapter",
+          "crm-identity-resolution-capability-composition",
+          "crm-identity-resolution-merge-composition",
+          "crm-identity-resolution-merge-query-adapter",
+          "crm-identity-resolution-query-adapter",
+          "crm-metadata-api-adapter",
+          "crm-metadata-query-adapter",
+          "crm-module-sdk",
+          "crm-parties-capability-adapter",
+          "crm-parties-query-adapter",
+          "crm-party-reference-composition",
+          "crm-party-relationships-capability-adapter",
+          "crm-party-relationships-projection",
+          "crm-proto-contracts",
+          "crm-query-runtime",
+          "crm-sales-activities-capability-composition",
+          "crm-sales-activities-link",
+          "crm-sales-activities-query-adapter",
+          "crm-search-query-adapter",
+          "crm-search-runtime"
+        ],
+        "accepted_dev_internal_dependencies": [
+          "crm-consents"
+        ],
+        "accepted_build_internal_dependencies": [],
+        "non_growth_justification": "The application runtime is the explicit process-composition root for already accepted owner and platform adapters. This packet authorizes no refactor, but freezes the exact production and test-only internal surfaces so future work may reduce them and cannot add hidden compile-time fan-in without a new measured policy decision."
+      },
+      "crm-api": {
+        "manifest_path": "services/crm-api/Cargo.toml",
+        "maximum_runtime_internal_dependencies": 1,
+        "maximum_dev_internal_dependencies": 18,
+        "maximum_build_internal_dependencies": 0,
+        "accepted_runtime_internal_dependencies": [
+          "crm-application-runtime"
+        ],
+        "accepted_dev_internal_dependencies": [
+          "crm-capability-adapters",
+          "crm-capability-ingress",
+          "crm-capability-runtime",
+          "crm-core-data",
+          "crm-customer-360-composition",
+          "crm-customer-privacy-cancel-capability-adapter",
+          "crm-customer-privacy-capability-adapter",
+          "crm-customer-privacy-query-adapter",
+          "crm-customer-privacy-subject-capability-adapter",
+          "crm-data-quality",
+          "crm-data-quality-capability-adapter",
+          "crm-data-quality-source-composition",
+          "crm-module-sdk",
+          "crm-parties-query-adapter",
+          "crm-party-relationships-projection",
+          "crm-proto-contracts",
+          "crm-query-runtime",
+          "crm-sales-activities-capability-composition"
+        ],
+        "accepted_build_internal_dependencies": [],
+        "non_growth_justification": "The deployable process host remains production-thin: its only runtime workspace dependency is crm-application-runtime. The remaining accepted internal fan-in is test-only process-acceptance support. Separate budgets prevent dev evidence from being mistaken for production coupling and block growth in either surface."
+      }
+    }
   }
 }
