@@ -22,7 +22,6 @@ from scripts.repo import build_parser
 ROOT = Path(__file__).resolve().parents[1]
 
 
-
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
@@ -38,6 +37,18 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(len(packet["allowed_paths"]), len(set(packet["allowed_paths"])))
         self.assertEqual(len(packet["required_checks"]), len(set(packet["required_checks"])))
         self.assertTrue(packet["required_checks"])
+        workflow_paths = {
+            "Affected Scope CI": ".github/workflows/affected-scope.yml",
+            "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
+            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
+            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
+            "Governance CI": ".github/workflows/governance.yml",
+            "Rust CI": ".github/workflows/rust.yml",
+            "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
+        }
+        self.assertTrue(set(packet["required_checks"]).issubset(workflow_paths))
+        for check in packet["required_checks"]:
+            self.assertTrue((ROOT / workflow_paths[check]).is_file())
         self.assertIn(
             "the architecture plan, project status, roadmap, Phase 8 plan, module catalog and issues agree on accepted PR #253 evidence",
             packet["acceptance"],
