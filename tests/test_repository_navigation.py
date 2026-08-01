@@ -206,7 +206,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c",
+                return_value="34469f37475d0268376414cf275a5f2cd9216655",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
