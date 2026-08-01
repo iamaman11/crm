@@ -24,7 +24,7 @@
     }
   ],
   "calibration": {
-    "expected_workspace_packages": 113,
+    "expected_workspace_packages": 112,
     "new_workspace_package_growth": 0,
     "unregistered_suppressions_after_baseline": 0,
     "expired_architecture_exceptions": 0,
@@ -52,18 +52,18 @@
   "exit_evidence": {
     "accepted_source": "4c80546283af9c869a28c2da9c8697b203d0c327",
     "workspace_budget": {
-      "expected_workspace_packages": 113,
-      "maximum_internal_dependency_edges": 841,
+      "expected_workspace_packages": 112,
+      "maximum_internal_dependency_edges": 835,
       "maximum_dependency_depth": 18,
-      "maximum_public_rust_items": 5379,
+      "maximum_public_rust_items": 5377,
       "maximum_suppression_occurrences": 91
     },
     "central_system_budgets": {
       "crm-module-sdk": {
         "role": "sdk-ports",
         "maximum_direct_dependencies": 0,
-        "maximum_direct_consumers": 105,
-        "maximum_transitive_reverse_impact": 106,
+        "maximum_direct_consumers": 104,
+        "maximum_transitive_reverse_impact": 105,
         "maximum_dependency_depth": 0,
         "maximum_public_items": 91,
         "maximum_non_comment_loc": 1372
@@ -72,7 +72,7 @@
         "role": "stable-contracts",
         "maximum_direct_dependencies": 0,
         "maximum_direct_consumers": 15,
-        "maximum_transitive_reverse_impact": 92,
+        "maximum_transitive_reverse_impact": 91,
         "maximum_dependency_depth": 0,
         "maximum_public_items": 31,
         "maximum_non_comment_loc": 250
@@ -81,7 +81,7 @@
         "role": "stable-contracts",
         "maximum_direct_dependencies": 0,
         "maximum_direct_consumers": 69,
-        "maximum_transitive_reverse_impact": 80,
+        "maximum_transitive_reverse_impact": 79,
         "maximum_dependency_depth": 0,
         "maximum_public_items": 3,
         "maximum_non_comment_loc": 207
@@ -89,8 +89,8 @@
       "crm-capability-runtime": {
         "role": "generic-runtime",
         "maximum_direct_dependencies": 1,
-        "maximum_direct_consumers": 75,
-        "maximum_transitive_reverse_impact": 83,
+        "maximum_direct_consumers": 74,
+        "maximum_transitive_reverse_impact": 82,
         "maximum_dependency_depth": 1,
         "maximum_public_items": 36,
         "maximum_non_comment_loc": 605
@@ -98,8 +98,8 @@
       "crm-query-runtime": {
         "role": "generic-runtime",
         "maximum_direct_dependencies": 2,
-        "maximum_direct_consumers": 47,
-        "maximum_transitive_reverse_impact": 81,
+        "maximum_direct_consumers": 46,
+        "maximum_transitive_reverse_impact": 80,
         "maximum_dependency_depth": 2,
         "maximum_public_items": 37,
         "maximum_non_comment_loc": 985
@@ -116,8 +116,8 @@
       "crm-core-data": {
         "role": "infrastructure-ports",
         "maximum_direct_dependencies": 11,
-        "maximum_direct_consumers": 71,
-        "maximum_transitive_reverse_impact": 76,
+        "maximum_direct_consumers": 70,
+        "maximum_transitive_reverse_impact": 75,
         "maximum_dependency_depth": 5,
         "maximum_public_items": 176,
         "maximum_non_comment_loc": 9922
