@@ -23,45 +23,50 @@ use std::collections::BTreeSet;
 const POLICY_VERSION: &str = "application-bootstrap/v1";
 const LIFETIME_NANOS: i64 = 365_i64 * 24 * 60 * 60 * 1_000_000_000;
 
+pub(crate) struct ExportSelectionWorkerAccess<'a> {
+    pub(crate) query_definitions: &'a [CapabilityDefinition],
+    pub(crate) artifact_download_definition: &'a CapabilityDefinition,
+    pub(crate) internal_definitions: &'a [CapabilityDefinition],
+    pub(crate) worker_actor_id: &'a ActorId,
+}
+
 pub(crate) fn bootstrap_export_selection_worker_access(
     config: &ApplicationConfig,
     now_unix_nanos: i64,
     authorization_store: &LiveAuthorizationStore,
     visibility_store: &LiveQueryVisibilityStore,
-    query_definitions: &[CapabilityDefinition],
-    artifact_download_definition: &CapabilityDefinition,
-    internal_definitions: &[CapabilityDefinition],
-    worker_actor_id: &ActorId,
+    access: ExportSelectionWorkerAccess<'_>,
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = now_unix_nanos.checked_add(LIFETIME_NANOS).ok_or_else(|| {
         ApplicationRuntimeError::Assembly("export worker grant expiry overflow".to_owned())
     })?;
     let party_list = find_query(
-        query_definitions,
+        access.query_definitions,
         PARTIES_MODULE_ID,
         PARTY_LIST_QUERY_CAPABILITY,
         "Party list",
     )?;
     let party_get = find_query(
-        query_definitions,
+        access.query_definitions,
         PARTIES_MODULE_ID,
         PARTY_GET_QUERY_CAPABILITY,
         "Party get",
     )?;
     let export_get = find_query(
-        query_definitions,
+        access.query_definitions,
         CUSTOMER_DATA_OPERATIONS_MODULE_ID,
         GET_EXPORT_JOB_CAPABILITY,
         "Party export get",
     )?;
     let export_list = find_query(
-        query_definitions,
+        access.query_definitions,
         CUSTOMER_DATA_OPERATIONS_MODULE_ID,
         LIST_EXPORT_JOBS_CAPABILITY,
         "Party export list",
     )?;
-    if artifact_download_definition.owner_module_id.as_str() != CUSTOMER_DATA_OPERATIONS_MODULE_ID
-        || artifact_download_definition.mutation
+    if access.artifact_download_definition.owner_module_id.as_str()
+        != CUSTOMER_DATA_OPERATIONS_MODULE_ID
+        || access.artifact_download_definition.mutation
     {
         return Err(ApplicationRuntimeError::Assembly(
             "Party export artifact disclosure capability is invalid".to_owned(),
@@ -76,14 +81,14 @@ pub(crate) fn bootstrap_export_selection_worker_access(
         grant_capabilities(
             authorization_store,
             tenant_id,
-            worker_actor_id,
-            std::iter::once(party_list).chain(internal_definitions.iter()),
+            access.worker_actor_id,
+            std::iter::once(party_list).chain(access.internal_definitions.iter()),
             expires_at,
         )?;
         grant_visibility(
             visibility_store,
             tenant_id,
-            worker_actor_id,
+            access.worker_actor_id,
             party_list,
             PARTIES_MODULE_ID,
             PARTY_RECORD_TYPE,
@@ -113,14 +118,14 @@ pub(crate) fn bootstrap_export_selection_worker_access(
             authorization_store,
             tenant_id,
             &config.actor_id,
-            std::iter::once(artifact_download_definition),
+            std::iter::once(access.artifact_download_definition),
             expires_at,
         )?;
         grant_visibility(
             visibility_store,
             tenant_id,
             &config.actor_id,
-            artifact_download_definition,
+            access.artifact_download_definition,
             CUSTOMER_DATA_OPERATIONS_MODULE_ID,
             EXPORT_JOB_RECORD_TYPE,
             ["artifact"],
