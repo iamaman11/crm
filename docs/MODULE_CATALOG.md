@@ -31,7 +31,7 @@ Architecture and governance steps 12–25 may reduce extension cost or prove pla
 | `crm.customer-data-operations` | Governed import/export coordination | **Expert expansion** | Resumable import, deterministic export and recovery | More profiles and privacy execution integration |
 | `crm.data-quality` | Customer-data quality coordinator | **Vertical slice** | Evaluation, findings/completeness, stewardship and remediation | Additional owner-resource profiles |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Provider boundary, provenance, review and deterministic owner application | Additional providers, fields, UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, approval, permission-aware get/list/plan/outcome reads, trusted-internal exact-nine discovery/immutable snapshots and deterministic planning, public deny-only restriction/legal-hold placement, retention adjudication, durable owner execution/outcomes and governed access/export assembly | Restriction/legal-hold release and reads where required, owner-specific deletion/anonymization/crypto-shred, tombstone/convergence, workers, frontend and operations proof |
+| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, approval, permission-aware get/list/plan/outcome reads, exact-nine discovery and immutable snapshots, deterministic planning, restriction/legal-hold placement, retention precedence, durable owner execution/outcomes, governed access/export assembly and authoritative owner-specific anonymization/deletion execution | Restriction/legal-hold release and reads where required, Party tombstone/convergence, workers, frontend and operations proof |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -45,9 +45,9 @@ Current merged business-module total: **13** — twelve authoritative/coordinati
 
 Phase 8A.11 / issue #126 remains **In progress**.
 
-Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #241**. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, repository-step-8 owner execution and `customer_privacy.access_export.request@1.0.0` have no public ingress.
+Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244**. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution have no public ingress.
 
-Scope discovery and immutable snapshot execution remain accepted through PR #206 and are the authoritative foundation for the later planning, owner-execution and access/export evidence. At that historical PR #206 boundary, planning and action execution remain not started; PR #209 and later accepted runtime packets subsequently implemented those capabilities without rewriting the historical claim.
+Scope discovery and immutable snapshot execution remain accepted through PR #206 and are the authoritative foundation for planning, owner execution and access/export evidence. Historical packet claims remain immutable, while this catalog records the latest merged aggregate state.
 
 Nine owner-scope contribution coordinates are published as non-public owner-owned reads. **All nine authoritative implementations are accepted:**
 
@@ -67,16 +67,18 @@ Accepted Customer Privacy architecture/runtime evidence now includes:
 - PR #209 — deterministic planning runtime;
 - PR #211 — permission-aware plan/outcome reads;
 - PR #220 — public approval;
-- PR #222 / source `b5651e784a156758b39eaa04abc1124c7c0832f9` / merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 — first bounded contribution aggregation;
-- PR #224 / source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 — final customer-subject policy prerequisite;
-- PR #226 / source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 — public `customer_privacy.restriction.place@1.0.0` and first protected-owner enforcement;
+- PR #222 — first bounded contribution aggregation;
+- PR #224 — final customer-subject policy prerequisite;
+- PR #226 — public restriction placement and first protected-owner enforcement;
 - PR #230 — public legal hold and mandatory-retention precedence;
 - PR #235 — reusable mutation/query conformance;
 - PR #237 — durable replay-safe owner execution, checkpoints and real owner outcomes;
 - PR #239 — multi-plane affected-scope enforcement;
-- PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 — governed access/export assembly with Customer Data Operations artifact ownership and crash recovery.
+- PR #241 — governed access/export assembly with Customer Data Operations artifact ownership and crash recovery;
+- PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 — authoritative owner-specific anonymization and supported deletion execution with immutable lineage and fail-closed unsupported actions;
+- PRs #246, #248 and #249 — complete first-party production contribution aggregation through `crm-first-party-modules` without behavior changes.
 
-Repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — is the only next implementation packet. Access/export assembly is accepted and must not be described as incomplete.
+Repository steps 1–12 and Stage D are complete. Repository step 13 is the only next permitted repository step and is in its current-main measurement and governance-calibration packet. Repository step 14 remains blocked. This architecture work does not advance Customer Privacy product readiness.
 
 ## 5. Phase 8A packet accounting
 
@@ -90,7 +92,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Discovery, immutable snapshots, deterministic planning, permission-aware reads, approval, restriction placement/final enforcement, legal-hold placement, mandatory-retention adjudication, durable owner execution/outcomes and governed access/export assembly are accepted. Remaining product work includes restriction and legal-hold release/read lifecycle where required, deletion/anonymization/supported crypto-shred, Party tombstone/no-orphan and convergence, Customer Privacy worker lifecycle, frontend/accessibility/browser proof and production operations evidence.
+- 8A.11 / #126 — Customer Privacy. Discovery, immutable snapshots, deterministic planning, permission-aware reads, approval, restriction placement/final enforcement, legal-hold placement, mandatory-retention adjudication, durable owner execution/outcomes, governed access/export assembly and authoritative owner-specific anonymization/deletion are accepted. Remaining product work includes restriction and legal-hold release/read lifecycle where required, Party tombstone/no-orphan and projection/search/cache convergence, Customer Privacy worker lifecycle, disable/uninstall fail-closed semantics, frontend/accessibility/browser proof and production operations evidence.
 
 Workspace packages remain 113. Current product-complete expert modules remain **0**.
 
